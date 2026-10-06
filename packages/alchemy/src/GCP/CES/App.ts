@@ -208,8 +208,7 @@ const resourceName = (project: string, location: string, appId: string) =>
   `${locationParent(project, location)}/apps/${appId}`;
 
 const timeZoneSettingsOf = (news: AppProps): ces.TimeZoneSettings | undefined =>
-  news.timeZoneSettings ??
-  (news.timeZone !== undefined ? { timeZone: news.timeZone } : undefined);
+  news.timeZoneSettings ?? (news.timeZone !== undefined ? { timeZone: news.timeZone } : undefined);
 
 const modelSettingsOf = (news: AppProps): ces.ModelSettings | undefined =>
   news.modelSettings ??
@@ -280,19 +279,13 @@ export const AppProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const appId =
         olds?.appId ??
         output?.appId ??
-        (output?.name
-          ? parseResourceName(output.name, "apps", env.region).id
-          : "");
+        (output?.name ? parseResourceName(output.name, "apps", env.region).id : "");
       const name =
-        output?.name ??
-        (appId.length > 0 ? resourceName(env.project, location, appId) : "");
+        output?.name ?? (appId.length > 0 ? resourceName(env.project, location, appId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -305,17 +298,12 @@ export const AppProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const apps = yield* listApps(locationParent(env.project, env.region));
-        return apps
-          .filter(isOwnedApp)
-          .map((app) => toAttrs(app, env.project, env.region));
+        return apps.filter(isOwnedApp).map((app) => toAttrs(app, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const appId = yield* toPhysicalId(id, news.appId, output?.appId);
       const name = output?.name ?? resourceName(env.project, location, appId);
       const parent = locationParent(env.project, location);
@@ -364,30 +352,16 @@ export const AppProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
       const metadataChanged = !sameJson(current.metadata, metadata);
-      const instructionChanged = !sameText(
-        current.globalInstruction,
-        news.globalInstruction,
-      );
-      const modeChanged = !sameText(
-        current.toolExecutionMode,
-        news.toolExecutionMode,
-      );
+      const instructionChanged = !sameText(current.globalInstruction, news.globalInstruction);
+      const modeChanged = !sameText(current.toolExecutionMode, news.toolExecutionMode);
       const zoneChanged = !sameJson(current.timeZoneSettings, timeZoneSettings);
       const modelChanged = !sameJson(current.modelSettings, modelSettings);
       const rootChanged = !sameText(current.rootAgent, news.rootAgent);
       const guardrailsChanged = !sameJson(current.guardrails, news.guardrails);
-      const lockedChanged =
-        (current.locked === true) !== (news.locked === true);
-      const pinnedChanged =
-        (current.pinned === true) !== (news.pinned === true);
-      const channelChanged = !sameJson(
-        current.defaultChannelProfile,
-        news.defaultChannelProfile,
-      );
-      const languageChanged = !sameJson(
-        current.languageSettings,
-        news.languageSettings,
-      );
+      const lockedChanged = (current.locked === true) !== (news.locked === true);
+      const pinnedChanged = (current.pinned === true) !== (news.pinned === true);
+      const channelChanged = !sameJson(current.defaultChannelProfile, news.defaultChannelProfile);
+      const languageChanged = !sameJson(current.languageSettings, news.languageSettings);
 
       if (
         displayChanged ||

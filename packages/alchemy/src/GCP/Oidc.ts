@@ -77,9 +77,7 @@ const loadKeys = (http: HttpClient.HttpClient, force: boolean) =>
     const response = yield* http
       .execute(HttpClientRequest.get(CERTS_URL))
       .pipe(Effect.mapError(keysUnavailable));
-    const body = (yield* response.json.pipe(
-      Effect.mapError(keysUnavailable),
-    )) as { keys?: Jwk[] };
+    const body = (yield* response.json.pipe(Effect.mapError(keysUnavailable))) as { keys?: Jwk[] };
     const keys = new Map<string, CryptoKey>();
     for (const jwk of body.keys ?? []) {
       if (jwk.kty !== "RSA") continue;

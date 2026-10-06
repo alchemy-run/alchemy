@@ -10,8 +10,8 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
-import { DeleteNotConfirmed } from "../Errors.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { DeleteNotConfirmed } from "../Errors.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
   hasAlchemyLabels,
@@ -169,8 +169,7 @@ const toPubsubName = (topic: string, project: string) => {
     : canonical;
 };
 
-const topicKey = (topic: string, project: string) =>
-  toPubsubName(topic, project);
+const topicKey = (topic: string, project: string) => toPubsubName(topic, project);
 
 const userAttributes = (
   attributes: Record<string, string | undefined> | null | undefined,
@@ -192,18 +191,10 @@ const sameAttributes = (
 const normalizeEventTypes = (eventTypes: string[] | undefined) =>
   [...(eventTypes ?? [])].map((event) => event.toUpperCase()).sort();
 
-const sameEventTypes = (
-  left: string[] | undefined,
-  right: string[] | undefined,
-) =>
-  normalizeEventTypes(left).join("\0") ===
-  normalizeEventTypes(right).join("\0");
+const sameEventTypes = (left: string[] | undefined, right: string[] | undefined) =>
+  normalizeEventTypes(left).join("\0") === normalizeEventTypes(right).join("\0");
 
-const toAttrs = (
-  notification: storage.Notification,
-  bucketName: string,
-  project: string,
-) => {
+const toAttrs = (notification: storage.Notification, bucketName: string, project: string) => {
   const topic = notification.topic ?? "";
   return {
     bucketName,
@@ -233,10 +224,7 @@ const matchesDesired = (
     (notification.payload_format ?? DEFAULT_PAYLOAD_FORMAT) === payloadFormat &&
     sameEventTypes(notification.event_types, news.eventTypes) &&
     (notification.object_name_prefix ?? "") === (news.objectNamePrefix ?? "") &&
-    sameAttributes(
-      userAttributes(notification.custom_attributes),
-      toLabels(news.customAttributes),
-    )
+    sameAttributes(userAttributes(notification.custom_attributes), toLabels(news.customAttributes))
   );
 };
 
@@ -257,18 +245,14 @@ const immutableChanged = (
   ) {
     return true;
   }
-  const previousPayload =
-    olds?.payloadFormat ?? output?.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;
+  const previousPayload = olds?.payloadFormat ?? output?.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;
   if ((news.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT) !== previousPayload) {
     return true;
   }
-  if (
-    !sameEventTypes(news.eventTypes, olds?.eventTypes ?? output?.eventTypes)
-  ) {
+  if (!sameEventTypes(news.eventTypes, olds?.eventTypes ?? output?.eventTypes)) {
     return true;
   }
-  const previousPrefix =
-    olds?.objectNamePrefix ?? output?.objectNamePrefix ?? "";
+  const previousPrefix = olds?.objectNamePrefix ?? output?.objectNamePrefix ?? "";
   if ((news.objectNamePrefix ?? "") !== previousPrefix) {
     return true;
   }
@@ -290,28 +274,18 @@ const getById = (bucketName: string, notificationId: string) =>
 const listOnBucket = (bucketName: string) =>
   storage.listNotifications({ bucket: bucketName }).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as Array<storage.Notification>),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as Array<storage.Notification>)),
   );
 
 /** A config on the bucket identical to the desired one (props match). */
-const findMatching = (
-  bucketName: string,
-  props: NotificationProps,
-  project: string,
-) =>
+const findMatching = (bucketName: string, props: NotificationProps, project: string) =>
   listOnBucket(bucketName).pipe(
-    Effect.map((items) =>
-      items.find((item) => matchesDesired(item, props, project)),
-    ),
+    Effect.map((items) => items.find((item) => matchesDesired(item, props, project))),
   );
 
 const waitUntilGone = (bucketName: string, notificationId: string) =>
   getById(bucketName, notificationId).pipe(
-    Effect.map((existing) =>
-      existing === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((existing) => (existing === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -345,11 +319,10 @@ const ensureGcsServiceIdentity = (project: string, email: string) =>
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
     if (operation === undefined) return;
-    yield* waitForOperation(
-      operation,
-      (name) => serviceusage.getOperations({ name }),
-      { budget: "2 minutes", interval: "2 seconds" },
-    );
+    yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
+      budget: "2 minutes",
+      interval: "2 seconds",
+    });
   });
 
 const ensureTopicPublisher = (project: string, topic: string) =>
@@ -372,9 +345,7 @@ const ensureTopicPublisher = (project: string, topic: string) =>
         ...binding,
         members: [...(binding.members ?? [])],
       }));
-      const publisher = bindings.find(
-        (binding) => binding.role === PUBLISHER_ROLE,
-      );
+      const publisher = bindings.find((binding) => binding.role === PUBLISHER_ROLE);
       if (publisher?.members?.includes(member)) {
         return;
       }
@@ -395,8 +366,7 @@ const ensureTopicPublisher = (project: string, topic: string) =>
     });
     yield* grant.pipe(
       Effect.retry({
-        while: (error) =>
-          error._tag === "Conflict" || error._tag === "IamMemberNotFound",
+        while: (error) => error._tag === "Conflict" || error._tag === "IamMemberNotFound",
         times: 8,
         schedule: Schedule.spaced("2 seconds"),
       }),
@@ -481,10 +451,7 @@ export const NotificationProvider = () =>
 
       let current: storage.Notification | undefined;
       if (output?.notificationId) {
-        current = yield* getById(
-          output.bucketName ?? bucketName,
-          output.notificationId,
-        );
+        current = yield* getById(output.bucketName ?? bucketName, output.notificationId);
       }
       if (current === undefined) {
         current = yield* findMatching(bucketName, news, env.project);
@@ -499,9 +466,7 @@ export const NotificationProvider = () =>
               topic: canonicalTopic,
               payload_format: payloadFormat,
               event_types:
-                news.eventTypes && news.eventTypes.length > 0
-                  ? news.eventTypes
-                  : undefined,
+                news.eventTypes && news.eventTypes.length > 0 ? news.eventTypes : undefined,
               object_name_prefix: news.objectNamePrefix,
               custom_attributes: desiredAttributes,
             },

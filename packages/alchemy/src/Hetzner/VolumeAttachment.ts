@@ -116,13 +116,9 @@ export type VolumeAttachment = Resource<
  * @resource
  * @product Volume
  */
-export const VolumeAttachment = Resource<VolumeAttachment>(
-  "Hetzner.VolumeAttachment",
-);
+export const VolumeAttachment = Resource<VolumeAttachment>("Hetzner.VolumeAttachment");
 
-class VolumeAttachmentError extends Data.TaggedError(
-  "Hetzner.VolumeAttachmentError",
-)<{
+class VolumeAttachmentError extends Data.TaggedError("Hetzner.VolumeAttachmentError")<{
   message: string;
 }> {}
 
@@ -247,9 +243,7 @@ const attach = (volumeId: number, serverId: number, automount: boolean) =>
     })
     .pipe(
       Effect.tap(({ action }) =>
-        waitForAction(action).pipe(
-          Effect.catchTag("ActionTimeout", () => Effect.void),
-        ),
+        waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
       ),
       Effect.catchTag("UnprocessableEntity", () => Effect.void),
       Effect.retry({
@@ -298,11 +292,9 @@ export const VolumeAttachmentProvider = () =>
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const volumeId =
-        output?.volumeId ??
-        (olds !== undefined ? volumeIdOf(olds.volume) : undefined);
+        output?.volumeId ?? (olds !== undefined ? volumeIdOf(olds.volume) : undefined);
       const serverId =
-        output?.serverId ??
-        (olds !== undefined ? serverIdOf(olds.server) : undefined);
+        output?.serverId ?? (olds !== undefined ? serverIdOf(olds.server) : undefined);
       if (volumeId === undefined || serverId === undefined) {
         return undefined;
       }
@@ -312,7 +304,7 @@ export const VolumeAttachmentProvider = () =>
       }
       return toAttrs(found, output?.automount ?? olds?.automount ?? false);
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const volumeId = volumeIdOf(news.volume);
       const serverId = serverIdOf(news.server);
       if (volumeId === undefined || serverId === undefined) {
@@ -337,9 +329,7 @@ export const VolumeAttachmentProvider = () =>
           current = (yield* waitUntilServer(current.id, null)) ?? current;
         }
         yield* attach(current.id, serverId, desiredAutomount);
-        current =
-          (yield* waitUntilServer(current.id, serverId)) ??
-          (yield* getById(volumeId));
+        current = (yield* waitUntilServer(current.id, serverId)) ?? (yield* getById(volumeId));
         if (current === undefined) {
           return yield* new VolumeNotFound({ volumeId });
         }

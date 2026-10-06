@@ -99,10 +99,9 @@ export type BrandsIdentityAwareProxyClient = Resource<
  * @resource
  * @category IAP
  */
-export const BrandsIdentityAwareProxyClient =
-  Resource<BrandsIdentityAwareProxyClient>(
-    "GCP.IAP.BrandsIdentityAwareProxyClient",
-  );
+export const BrandsIdentityAwareProxyClient = Resource<BrandsIdentityAwareProxyClient>(
+  "GCP.IAP.BrandsIdentityAwareProxyClient",
+);
 
 export class BrandsIdentityAwareProxyClientNotResolved extends Data.TaggedError(
   "GCP.IAP.BrandsIdentityAwareProxyClientNotResolved",
@@ -129,20 +128,12 @@ const toAttrs = (
 
 export const BrandsIdentityAwareProxyClientProvider = () =>
   Provider.succeed(BrandsIdentityAwareProxyClient, {
-    stables: [
-      "name",
-      "identityAwareProxyClientId",
-      "brand",
-      "project",
-      "secret",
-    ],
+    stables: ["name", "identityAwareProxyClientId", "brand", "project", "secret"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return replaceOnIdentity({
-        previousId:
-          olds?.identityAwareProxyClientId ??
-          output?.identityAwareProxyClientId,
+        previousId: olds?.identityAwareProxyClientId ?? output?.identityAwareProxyClientId,
         nextId: news.identityAwareProxyClientId,
         previousParent: olds?.brand ?? output?.brand,
         nextParent: news.brand,
@@ -155,10 +146,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const brand = brandNameOf(
-        env.project,
-        olds?.brand ?? output?.brand ?? "",
-      );
+      const brand = brandNameOf(env.project, olds?.brand ?? output?.brand ?? "");
       let existing = yield* getClient(output?.name ?? "");
       if (existing === undefined) {
         existing = yield* findOwnedClient(
@@ -170,9 +158,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, output?.secret);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -191,11 +177,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
         news.displayName,
         output?.displayName,
       );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        userDisplayName,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = encodeOwnershipLine(ownership, userDisplayName, MAX_DISPLAY_NAME_LENGTH);
       const name =
         output?.name ??
         (news.identityAwareProxyClientId
@@ -204,12 +186,7 @@ export const BrandsIdentityAwareProxyClientProvider = () =>
 
       let current = yield* getClient(name);
       if (current === undefined) {
-        current = yield* findOwnedClient(
-          env.project,
-          id,
-          brand,
-          userDisplayName,
-        );
+        current = yield* findOwnedClient(env.project, id, brand, userDisplayName);
       }
 
       if (current === undefined) {

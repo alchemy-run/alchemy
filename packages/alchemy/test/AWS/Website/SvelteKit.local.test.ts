@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -12,11 +12,7 @@ import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "sveltekit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-app");
 
 // Clone under the alchemy package so `@sveltejs/kit`/`svelte`/`vite`
 // resolve from the workspace's hoisted node_modules (the fixture has no
@@ -46,9 +42,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* AWS.Website.SvelteKit("SvelteKitSite", {
-                rootDir,
-              });
+              const site = yield* AWS.Website.SvelteKit("SvelteKitSite", { rootDir });
               return { site };
             }),
           );
@@ -56,9 +50,7 @@ describe(
           // The site is the framework's own dev server: a localhost URL and
           // no cloud rows at all (proof no AWS call ran).
           const url = deployed.site.url! as string;
-          expect(url).toMatch(
-            /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-          );
+          expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
           expect(deployed.site.distribution).toBeUndefined();
           expect(deployed.site.server).toBeUndefined();
           expect(deployed.site.bucket).toBeUndefined();
@@ -69,11 +61,9 @@ describe(
             label: "dev SSR home page",
           });
           // Server API route through the dev server.
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=dev`,
-            "SVELTEKIT_AWS_API_MARKER",
-            { label: "API route (dev)" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=dev`, "SVELTEKIT_AWS_API_MARKER", {
+            label: "API route (dev)",
+          });
           yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
             label: "API route query echo (dev)",
           });
@@ -81,31 +71,20 @@ describe(
           // ── HMR: edit the API route in place. The stack is NOT re-applied —
           // the kit/vite dev rebuild must pick the change up and serve it
           // through the same URL ───────────────────────────────────────────
-          const helloPath = path.join(
-            rootDir,
-            "src/routes/api/hello/+server.ts",
-          );
+          const helloPath = path.join(rootDir, "src/routes/api/hello/+server.ts");
           const hello = yield* fs.readFileString(helloPath);
           yield* fs.writeFileString(
             helloPath,
-            hello.replace(
-              "SVELTEKIT_AWS_API_MARKER",
-              "SVELTEKIT_AWS_API_MARKER_V2",
-            ),
+            hello.replace("SVELTEKIT_AWS_API_MARKER", "SVELTEKIT_AWS_API_MARKER_V2"),
           );
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=dev`,
-            "SVELTEKIT_AWS_API_MARKER_V2",
-            { timeout: "90 seconds", label: "API route after HMR edit" },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=dev`, "SVELTEKIT_AWS_API_MARKER_V2", {
+            timeout: "90 seconds",
+            label: "API route after HMR edit",
+          });
           // The route still round-trips its query after the reload.
-          yield* expectUrlContains(
-            `${url}/api/hello?echo=post-hmr`,
-            "post-hmr",
-            {
-              label: "API route query echo after HMR edit",
-            },
-          );
+          yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "post-hmr", {
+            label: "API route query echo after HMR edit",
+          });
 
           yield* stack.destroy();
         }),

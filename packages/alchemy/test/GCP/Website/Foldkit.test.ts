@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -37,12 +37,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.Foldkit("Web", {
             rootDir,
             memo: {
-              include: [
-                "index.html",
-                "src/**",
-                "package.json",
-                "vite.config.ts",
-              ],
+              include: ["index.html", "src/**", "package.json", "vite.config.ts"],
             },
           });
           return { site };

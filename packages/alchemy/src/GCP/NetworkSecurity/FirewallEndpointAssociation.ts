@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -153,22 +148,14 @@ export type FirewallEndpointAssociation = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const FirewallEndpointAssociation =
-  Resource<FirewallEndpointAssociation>(
-    "GCP.NetworkSecurity.FirewallEndpointAssociation",
-  );
+export const FirewallEndpointAssociation = Resource<FirewallEndpointAssociation>(
+  "GCP.NetworkSecurity.FirewallEndpointAssociation",
+);
 
-const resourceName = (
-  project: string,
-  location: string,
-  firewallEndpointAssociationId: string,
-) =>
+const resourceName = (project: string, location: string, firewallEndpointAssociationId: string) =>
   `projects/${project}/locations/${location}/firewallEndpointAssociations/${firewallEndpointAssociationId}`;
 
-const toAttrs = (
-  association: networksecurity.FirewallEndpointAssociation,
-  project: string,
-) => {
+const toAttrs = (association: networksecurity.FirewallEndpointAssociation, project: string) => {
   const name = association.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_ZONE);
   return {
@@ -179,9 +166,7 @@ const toAttrs = (
     firewallEndpoint: association.firewallEndpoint
       ? canonicalizeLink(association.firewallEndpoint)
       : undefined,
-    network: association.network
-      ? canonicalizeLink(association.network)
-      : undefined,
+    network: association.network ? canonicalizeLink(association.network) : undefined,
     tlsInspectionPolicy: association.tlsInspectionPolicy
       ? canonicalizeLink(association.tlsInspectionPolicy)
       : undefined,
@@ -214,32 +199,21 @@ export const FirewallEndpointAssociationProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId =
-        olds?.firewallEndpointAssociationId ??
-        output?.firewallEndpointAssociationId;
+        olds?.firewallEndpointAssociationId ?? output?.firewallEndpointAssociationId;
       const nextId = news.firewallEndpointAssociationId
-        ? rfc1035(
-            news.firewallEndpointAssociationId,
-            "firewall-endpoint-association",
-          )
+        ? rfc1035(news.firewallEndpointAssociationId, "firewall-endpoint-association")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         DEFAULT_ZONE,
       );
-      const previousEndpoint = linkKey(
-        olds?.firewallEndpoint ?? output?.firewallEndpoint,
-      );
+      const previousEndpoint = linkKey(olds?.firewallEndpoint ?? output?.firewallEndpoint);
       const nextEndpoint = linkKey(news.firewallEndpoint);
       const previousNetwork = linkKey(olds?.network ?? output?.network);
       const nextNetwork = linkKey(news.network);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousEndpoint.length > 0 && previousEndpoint !== nextEndpoint) ||
         (previousNetwork.length > 0 && previousNetwork !== nextNetwork)
@@ -257,31 +231,23 @@ export const FirewallEndpointAssociationProvider = () =>
         output?.firewallEndpointAssociationId,
         "firewall-endpoint-association",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       const name =
-        output?.name ??
-        resourceName(env.project, location, firewallEndpointAssociationId);
+        output?.name ?? resourceName(env.project, location, firewallEndpointAssociationId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* collectPages(
-          networksecurity.listProjectsLocationsFirewallEndpointAssociations.pages(
-            {
-              parent: parentOf(env.project, "-"),
-              pageSize: 1000,
-            },
-          ),
+          networksecurity.listProjectsLocationsFirewallEndpointAssociations.pages({
+            parent: parentOf(env.project, "-"),
+            pageSize: 1000,
+          }),
           (page) => page.firewallEndpointAssociations,
         );
         return items
@@ -297,15 +263,8 @@ export const FirewallEndpointAssociationProvider = () =>
         output?.firewallEndpointAssociationId,
         "firewall-endpoint-association",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        firewallEndpointAssociationId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, firewallEndpointAssociationId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -351,8 +310,7 @@ export const FirewallEndpointAssociationProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const disabledChanged = (current.disabled === true) !== disabled;
       const tlsChanged =
-        canonicalizeLink(current.tlsInspectionPolicy) !==
-        (tlsInspectionPolicy ?? "");
+        canonicalizeLink(current.tlsInspectionPolicy) !== (tlsInspectionPolicy ?? "");
       const updateMask = changedFields([
         ["labels", labelsChanged],
         ["disabled", disabledChanged],
@@ -360,24 +318,20 @@ export const FirewallEndpointAssociationProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networksecurity.patchProjectsLocationsFirewallEndpointAssociations(
-            {
+        const operation = yield* networksecurity.patchProjectsLocationsFirewallEndpointAssociations(
+          {
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                disabled,
-                tlsInspectionPolicy,
-              },
+              labels: desiredLabels,
+              disabled,
+              tlsInspectionPolicy,
             },
-          );
-        yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
+          },
         );
+        yield* waitForOperation(operation);
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

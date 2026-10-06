@@ -20,8 +20,7 @@ export const lastSegment = (value: string) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const normalize = (value: string | undefined) =>
-  (value ?? "").trim().toLowerCase();
+export const normalize = (value: string | undefined) => (value ?? "").trim().toLowerCase();
 
 export const toDomainName = (value: string) => {
   const trimmed = value.trim();
@@ -65,13 +64,9 @@ export const parentOfUserName = (name: string) => {
   return "";
 };
 
-export const userEmailOf = (user: gmailpostmastertools.User) =>
-  user.user ?? userIdOf(user.name);
+export const userEmailOf = (user: gmailpostmastertools.User) => user.user ?? userIdOf(user.name);
 
-export const fullUserName = (
-  parent: string,
-  user: gmailpostmastertools.User,
-) => {
+export const fullUserName = (parent: string, user: gmailpostmastertools.User) => {
   const name = user.name ?? "";
   if (name.startsWith(DOMAIN_PREFIX) && name.includes(USERS_SEGMENT)) {
     return name;
@@ -150,8 +145,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -161,8 +155,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -170,9 +163,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 export const getDomain = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        gmailpostmastertools.getDomains({ name: toDomainName(name) }),
-      );
+    : catchMissing(gmailpostmastertools.getDomains({ name: toDomainName(name) }));
 
 export const getUser = (name: string) =>
   name.length === 0
@@ -196,16 +187,12 @@ export const listUsers = (parent: string) =>
           Stream.flatMap((page) => Stream.fromIterable(page.users ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<gmailpostmastertools.User>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<gmailpostmastertools.User>()),
         );
 
 export const listOwnedDomains = () =>
   listDomains().pipe(
-    Effect.map((domains) =>
-      domains.filter((domain) => isAlchemyDomain(domain.name)),
-    ),
+    Effect.map((domains) => domains.filter((domain) => isAlchemyDomain(domain.name))),
   );
 
 export const listOwnedUsers = () =>
@@ -227,8 +214,6 @@ export const findUser = (parent: string, userId: string, name: string) =>
     const users = yield* listUsers(parent);
     const wanted = normalize(userId || userIdOf(name));
     return users.find(
-      (user) =>
-        normalize(userEmailOf(user)) === wanted ||
-        normalize(user.name) === normalize(name),
+      (user) => normalize(userEmailOf(user)) === wanted || normalize(user.name) === normalize(name),
     );
   });

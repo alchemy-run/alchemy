@@ -85,9 +85,7 @@ export type RepositoryProps = {
     /** Allow republishing the same snapshot versions. */
     allowSnapshotOverwrites?: boolean;
     /** Versions the registry will accept (`RELEASE`, `SNAPSHOT`). */
-    versionPolicy?:
-      | artifactregistry.MavenRepositoryConfigVersionPolicyEnum
-      | (string & {});
+    versionPolicy?: artifactregistry.MavenRepositoryConfigVersionPolicyEnum | (string & {});
   };
   /**
    * Cleanup policies keyed by user-provided policy id.
@@ -167,9 +165,7 @@ export type Repository = Resource<
  * @resource
  * @category ArtifactRegistry
  */
-export const Repository = Resource<Repository>(
-  "GCP.ArtifactRegistry.Repository",
-);
+export const Repository = Resource<Repository>("GCP.ArtifactRegistry.Repository");
 
 export class RepositoryNotResolved extends Data.TaggedError(
   "GCP.ArtifactRegistry.RepositoryNotResolved",
@@ -192,19 +188,15 @@ const lastSegment = (value: string) => {
 const normalizeLocation = (location: string | undefined, fallback: string) =>
   lastSegment(location ?? fallback).toLowerCase();
 
-const normalizeFormat = (format: string | undefined) =>
-  (format ?? DEFAULT_FORMAT).toUpperCase();
+const normalizeFormat = (format: string | undefined) => (format ?? DEFAULT_FORMAT).toUpperCase();
 
 const normalizeMode = (mode: string | undefined) => {
   const value = (mode ?? DEFAULT_MODE).toUpperCase();
   return value === "MODE_UNSPECIFIED" ? DEFAULT_MODE : value;
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  repositoryId: string,
-) => `projects/${project}/locations/${location}/repositories/${repositoryId}`;
+const resourceName = (project: string, location: string, repositoryId: string) =>
+  `projects/${project}/locations/${location}/repositories/${repositoryId}`;
 
 const parseName = (name: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -212,12 +204,9 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     repositoryId:
       repositoriesAt >= 0 && parts[repositoriesAt + 1]
         ? parts[repositoriesAt + 1]!
@@ -229,11 +218,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  repositoryId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, repositoryId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       repositoryId ??
@@ -246,11 +231,7 @@ const toId = (
     );
   });
 
-const toAttrs = (
-  repo: artifactregistry.Repository,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (repo: artifactregistry.Repository, project: string, region: string) => {
   const name = repo.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -282,9 +263,8 @@ const mavenKey = (config: RepositoryProps["mavenConfig"] | undefined) =>
     config?.versionPolicy ?? "VERSION_POLICY_UNSPECIFIED"
   ).toUpperCase()}`;
 
-const cleanupPoliciesJson = (
-  policies: artifactregistry.CleanupPolicyMap | undefined,
-) => JSON.stringify(policies ?? {});
+const cleanupPoliciesJson = (policies: artifactregistry.CleanupPolicyMap | undefined) =>
+  JSON.stringify(policies ?? {});
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -293,8 +273,7 @@ const waitUntilExists = (name: string) =>
       () => new RepositoryNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ArtifactRegistry.RepositoryNotResolved",
+      while: (error) => error._tag === "GCP.ArtifactRegistry.RepositoryNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -308,8 +287,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ArtifactRegistry.RepositoryStillExists",
+      while: (error) => error._tag === "GCP.ArtifactRegistry.RepositoryStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -334,27 +312,18 @@ export const RepositoryProvider = () =>
 
       const previousId = olds?.repositoryId ?? output?.repositoryId;
       const nextId = news.repositoryId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const previousFormat = normalizeFormat(olds?.format ?? output?.format);
       const nextFormat = normalizeFormat(news.format ?? output?.format);
       const previousMode = normalizeMode(olds?.mode ?? output?.mode);
       const nextMode = normalizeMode(news.mode ?? output?.mode);
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.kmsKeyName ?? previousKms;
-      const mavenChanged =
-        mavenKey(news.mavenConfig) !== mavenKey(olds?.mavenConfig);
+      const mavenChanged = mavenKey(news.mavenConfig) !== mavenKey(olds?.mavenConfig);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousFormat !== nextFormat ||
         previousMode !== nextMode ||
@@ -365,31 +334,19 @@ export const RepositoryProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const repositoryId = yield* toId(
-        id,
-        olds?.repositoryId,
-        output?.repositoryId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, repositoryId);
+      const repositoryId = yield* toId(id, olds?.repositoryId, output?.repositoryId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, repositoryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -404,9 +361,7 @@ export const RepositoryProvider = () =>
         return Array.from(pages).flatMap((page) =>
           (page.repositories ?? [])
             .filter((repo) =>
-              Object.keys(repo.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(repo.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map((repo) => toAttrs(repo, env.project, env.region)),
         );
@@ -414,15 +369,8 @@ export const RepositoryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const repositoryId = yield* toId(
-        id,
-        news.repositoryId,
-        output?.repositoryId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const repositoryId = yield* toId(id, news.repositoryId, output?.repositoryId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const format = normalizeFormat(news.format);
       const mode = normalizeMode(news.mode);
       const name = resourceName(env.project, location, repositoryId);
@@ -434,9 +382,7 @@ export const RepositoryProvider = () =>
       const desiredCleanupDryRun = news.cleanupPolicyDryRun === true;
       const desiredMaven = format === "MAVEN" ? news.mavenConfig : undefined;
       const desiredDocker =
-        format === "DOCKER"
-          ? { immutableTags: desiredImmutableTags }
-          : undefined;
+        format === "DOCKER" ? { immutableTags: desiredImmutableTags } : undefined;
 
       let current = yield* getByName(name);
 
@@ -471,16 +417,13 @@ export const RepositoryProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const dockerChanged =
         format === "DOCKER" &&
         (current.dockerConfig?.immutableTags === true) !== desiredImmutableTags;
-      const cleanupDryRunChanged =
-        (current.cleanupPolicyDryRun === true) !== desiredCleanupDryRun;
+      const cleanupDryRunChanged = (current.cleanupPolicyDryRun === true) !== desiredCleanupDryRun;
       const cleanupPoliciesChanged =
-        cleanupPoliciesJson(current.cleanupPolicies) !==
-        cleanupPoliciesJson(news.cleanupPolicies);
+        cleanupPoliciesJson(current.cleanupPolicies) !== cleanupPoliciesJson(news.cleanupPolicies);
 
       if (
         labelsChanged ||

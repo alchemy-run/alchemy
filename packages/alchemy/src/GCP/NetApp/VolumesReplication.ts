@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -117,9 +112,7 @@ export type VolumesReplicationProps = {
    * Replication interval.
    * @default "HOURLY"
    */
-  replicationSchedule?:
-    | netapp.ReplicationReplicationScheduleEnum
-    | (string & {});
+  replicationSchedule?: netapp.ReplicationReplicationScheduleEnum | (string & {});
   /**
    * Destination volume parameters. Input-only on create. Changing
    * `storagePool`, `volumeId`, or `shareName` replaces the replication.
@@ -265,15 +258,12 @@ export type VolumesReplication = Resource<
  * @resource
  * @category NetApp
  */
-export const VolumesReplication = Resource<VolumesReplication>(
-  "GCP.NetApp.VolumesReplication",
-);
+export const VolumesReplication = Resource<VolumesReplication>("GCP.NetApp.VolumesReplication");
 
 const resourceName = (volume: string, replicationId: string) =>
   `${volume}/replications/${replicationId}`;
 
-const desiredSchedule = (value: string | undefined) =>
-  (value ?? DEFAULT_SCHEDULE).toUpperCase();
+const desiredSchedule = (value: string | undefined) => (value ?? DEFAULT_SCHEDULE).toUpperCase();
 
 const destFingerprint = (params: DestinationVolumeParameters | undefined) =>
   fingerprint({
@@ -285,11 +275,7 @@ const destFingerprint = (params: DestinationVolumeParameters | undefined) =>
 const isMirrorRunning = (mirrorState: string | undefined) =>
   ENABLED_MIRROR_STATES.has((mirrorState ?? "").toUpperCase());
 
-const toAttrs = (
-  replication: netapp.Replication,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (replication: netapp.Replication, project: string, region: string) => {
   const name = replication.name ?? "";
   const parsed = parseName(name, "replications", region);
   return {
@@ -372,22 +358,12 @@ const waitUntilMirror = (name: string, enabled: boolean) =>
 
 export const VolumesReplicationProvider = () =>
   Provider.succeed(VolumesReplication, {
-    stables: [
-      "name",
-      "replicationId",
-      "volume",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "replicationId", "volume", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -408,8 +384,7 @@ export const VolumesReplicationProvider = () =>
           destFingerprint(olds.destinationVolumeParameters);
       return replaceOnIdentity({
         previousId: olds?.replicationId ?? output?.replicationId,
-        nextId:
-          news.replicationId ?? olds?.replicationId ?? output?.replicationId,
+        nextId: news.replicationId ?? olds?.replicationId ?? output?.replicationId,
         previousLocation,
         nextLocation,
         previousParent: previousVolume,
@@ -420,15 +395,8 @@ export const VolumesReplicationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const volume = volumeOf(
-        olds?.volume ?? output?.volume ?? "",
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const volume = volumeOf(olds?.volume ?? output?.volume ?? "", env.project, location);
       const replicationId = yield* toPhysicalId(
         id,
         olds?.replicationId,
@@ -439,9 +407,7 @@ export const VolumesReplicationProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -453,10 +419,7 @@ export const VolumesReplicationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const locationHint = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const locationHint = normalizeLocation(news.location ?? output?.location, env.region);
       const volume = volumeOf(news.volume, env.project, locationHint);
       const location = parseName(volume, "volumes", locationHint).location;
       const replicationId = yield* toPhysicalId(
@@ -514,12 +477,9 @@ export const VolumesReplicationProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const scheduleChanged =
-        desiredSchedule(current.replicationSchedule) !== schedule;
-      const clusterChanged =
-        (current.clusterLocation ?? "") !== (news.clusterLocation ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const scheduleChanged = desiredSchedule(current.replicationSchedule) !== schedule;
+      const clusterChanged = (current.clusterLocation ?? "") !== (news.clusterLocation ?? "");
       const mask = fieldMask([
         labelsChanged && "labels",
         descriptionChanged && "description",
@@ -528,18 +488,17 @@ export const VolumesReplicationProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* netapp.patchProjectsLocationsVolumesReplications({
+        const operation = yield* netapp.patchProjectsLocationsVolumesReplications({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              replicationSchedule: schedule,
-              clusterLocation: news.clusterLocation,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            replicationSchedule: schedule,
+            clusterLocation: news.clusterLocation,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),
@@ -557,11 +516,7 @@ export const VolumesReplicationProvider = () =>
             name: current.name ?? name,
             body: {},
           })
-          .pipe(
-            Effect.catchTag(["Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed(undefined)));
         if (resumed !== undefined) {
           yield* waitForOperation(resumed);
         }
@@ -578,11 +533,7 @@ export const VolumesReplicationProvider = () =>
             name: current.name ?? name,
             body: { force: news.forceStopping ?? true },
           })
-          .pipe(
-            Effect.catchTag(["Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed(undefined)));
         if (stopped !== undefined) {
           yield* waitForOperation(stopped);
         }
@@ -605,10 +556,7 @@ export const VolumesReplicationProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       if (!output.name || output.name.includes("//")) return;
       const current = yield* getByName(output.name);
-      if (
-        current !== undefined &&
-        (current.mirrorState ?? "").toUpperCase() !== STOPPED
-      ) {
+      if (current !== undefined && (current.mirrorState ?? "").toUpperCase() !== STOPPED) {
         const stopped = yield* netapp
           .stopProjectsLocationsVolumesReplications({
             name: output.name,
@@ -639,8 +587,7 @@ export const VolumesReplicationProvider = () =>
       }
       yield* waitUntilGone(getByName(output.name), output.name);
 
-      const destination =
-        output.destinationVolume ?? current?.destinationVolume;
+      const destination = output.destinationVolume ?? current?.destinationVolume;
       if (olds?.deleteDestinationVolume === true && destination) {
         const deleted = yield* netapp
           .deleteProjectsLocationsVolumes({

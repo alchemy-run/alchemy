@@ -1,12 +1,9 @@
-import { functionEnvironment, functionSlug } from "@/Neon/FunctionConfig";
 import { expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { functionEnvironment, functionSlug } from "@/Neon/FunctionConfig";
 
-const props = {
-  branch: { projectId: "project", branchId: "branch" },
-  main: "index.ts",
-};
+const props = { branch: { projectId: "project", branchId: "branch" }, main: "index.ts" };
 for (const key of [
   "NEON_API_KEY",
   "DATABASE_URL",
@@ -25,9 +22,7 @@ for (const key of [
           [],
         ).pipe(
           Effect.as(false),
-          Effect.catchTag("FunctionConfigurationError", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("FunctionConfigurationError", () => Effect.succeed(true)),
         );
         expect(rejected).toBe(true);
       }),
@@ -40,22 +35,14 @@ test.effect(
     Effect.gen(function* () {
       expect(
         yield* functionEnvironment(
-          {
-            ...props,
-            env: { APP_TOKEN: Redacted.make("test-token"), OMITTED: undefined },
-          },
+          { ...props, env: { APP_TOKEN: Redacted.make("test-token"), OMITTED: undefined } },
           [],
         ),
       ).toEqual({ APP_TOKEN: "test-token" });
     }),
   { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
-for (const slug of [
-  "contains-hyphen",
-  "Uppercase",
-  "morethan20characterslong",
-  "",
-]) {
+for (const slug of ["contains-hyphen", "Uppercase", "morethan20characterslong", ""]) {
   test.effect(
     `rejects invalid explicit slug ${JSON.stringify(slug)}`,
     () =>
@@ -63,9 +50,7 @@ for (const slug of [
         expect(
           yield* functionSlug("Api", slug).pipe(
             Effect.as(false),
-            Effect.catchTag("FunctionConfigurationError", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("FunctionConfigurationError", () => Effect.succeed(true)),
           ),
         ).toBe(true);
       }),

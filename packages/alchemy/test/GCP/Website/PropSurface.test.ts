@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import { describe, expect, it } from "alchemy-test";
+import * as GCP from "@/GCP";
 
 /**
  * Compile-time pins for GCP.Website prop surfaces: the shared Cloud Run

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { App } from "@/AWS/Amplify";
-import * as Test from "@/Test/Alchemy";
 import * as amplify from "@distilled.cloud/aws/amplify";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { App } from "@/AWS/Amplify";
+import * as Test from "@/Test/Alchemy";
 import { makeAmplifyTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -27,16 +27,11 @@ class AppStillExists extends Data.TaggedError("AppStillExists")<{
 const assertAppDeleted = (appId: string) =>
   findApp(appId).pipe(
     Effect.flatMap((app) =>
-      app === undefined
-        ? Effect.void
-        : Effect.fail(new AppStillExists({ appId })),
+      app === undefined ? Effect.void : Effect.fail(new AppStillExists({ appId })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AppStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 

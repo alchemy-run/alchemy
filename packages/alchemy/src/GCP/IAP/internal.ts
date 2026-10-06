@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_DEST_GROUP_ID_LENGTH = 63;
 export const MIN_DEST_GROUP_ID_LENGTH = 4;
@@ -30,10 +26,8 @@ export const parentOf = (name: string) => {
   return parts.slice(0, -2).join("/");
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -69,11 +63,7 @@ export const projectParent = (project: string) => `projects/${project}`;
 export const destGroupParent = (project: string, location: string) =>
   `projects/${project}/iap_tunnel/locations/${location}`;
 
-export const destGroupNameOf = (
-  project: string,
-  location: string,
-  destGroupId: string,
-) => {
+export const destGroupNameOf = (project: string, location: string, destGroupId: string) => {
   if (destGroupId.includes("/destGroups/")) {
     return destGroupId.replace(/\/+$/, "");
   }
@@ -90,16 +80,10 @@ export const parseDestGroupName = (
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1]
-        ? parts[projectsAt + 1]!
-        : fallbackProject,
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject,
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    destGroupId:
-      destAt >= 0 && parts[destAt + 1] ? parts[destAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    destGroupId: destAt >= 0 && parts[destAt + 1] ? parts[destAt + 1]! : lastSegment(name),
   };
 };
 
@@ -109,19 +93,14 @@ export const parseClientName = (name: string, fallbackProject: string) => {
   const brandsAt = parts.lastIndexOf("brands");
   const projectsAt = parts.lastIndexOf("projects");
   const project =
-    projectsAt >= 0 && parts[projectsAt + 1]
-      ? parts[projectsAt + 1]!
-      : fallbackProject;
-  const brandId =
-    brandsAt >= 0 && parts[brandsAt + 1] ? parts[brandsAt + 1]! : "";
+    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : fallbackProject;
+  const brandId = brandsAt >= 0 && parts[brandsAt + 1] ? parts[brandsAt + 1]! : "";
   return {
     project,
     brandId,
     brand: brandId.length > 0 ? `projects/${project}/brands/${brandId}` : "",
     identityAwareProxyClientId:
-      clientsAt >= 0 && parts[clientsAt + 1]
-        ? parts[clientsAt + 1]!
-        : lastSegment(name),
+      clientsAt >= 0 && parts[clientsAt + 1] ? parts[clientsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -174,10 +153,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -198,10 +174,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -229,14 +202,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -246,18 +215,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -274,8 +234,7 @@ export const ownershipFqdn = (labels: Record<string, string>) => {
   return `alc-${raw.length > 0 ? raw : "x"}.${OWNER_ZONE}`;
 };
 
-export const isOwnershipFqdn = (fqdn: string) =>
-  fqdn.toLowerCase().endsWith(`.${OWNER_ZONE}`);
+export const isOwnershipFqdn = (fqdn: string) => fqdn.toLowerCase().endsWith(`.${OWNER_ZONE}`);
 
 export const userFqdns = (fqdns: readonly string[] | undefined) =>
   uniqueStrings(fqdns).filter((fqdn) => !isOwnershipFqdn(fqdn));
@@ -283,10 +242,7 @@ export const userFqdns = (fqdns: readonly string[] | undefined) =>
 export const hasOwnershipFqdn = (fqdns: readonly string[] | undefined) =>
   (fqdns ?? []).some((fqdn) => isOwnershipFqdn(fqdn));
 
-export const ownedDestGroup = (
-  id: string,
-  fqdns: readonly string[] | undefined,
-) =>
+export const ownedDestGroup = (id: string, fqdns: readonly string[] | undefined) =>
   Effect.gen(function* () {
     if (!hasOwnershipFqdn(fqdns)) return false;
     const expected = ownershipFqdn(yield* createInternalLabels(id));
@@ -349,8 +305,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -364,8 +319,7 @@ const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -391,9 +345,7 @@ export const listDestGroups = (project: string) =>
 
 export const listOwnedDestGroups = (project: string) =>
   listDestGroups(project).pipe(
-    Effect.map((groups) =>
-      groups.filter((group) => hasOwnershipFqdn(group.fqdns)),
-    ),
+    Effect.map((groups) => groups.filter((group) => hasOwnershipFqdn(group.fqdns))),
   );
 
 export const listBrands = (project: string) =>
@@ -418,15 +370,10 @@ export const listOwnedClients = (project: string) =>
     const brands = yield* listBrands(project);
     const pages = yield* Effect.forEach(
       brands,
-      (brand) =>
-        brand.name
-          ? listClients(brand.name)
-          : emptyList<iap.IdentityAwareProxyClient>(),
+      (brand) => (brand.name ? listClients(brand.name) : emptyList<iap.IdentityAwareProxyClient>()),
       { concurrency: 4 },
     );
-    return pages
-      .flat()
-      .filter((client) => hasOwnershipMarker(client.displayName));
+    return pages.flat().filter((client) => hasOwnershipMarker(client.displayName));
   });
 
 export const findOwnedClient = (
@@ -443,11 +390,7 @@ export const findOwnedClient = (
     for (const client of clients) {
       if (!(yield* ownedByAlchemy(id, client.displayName))) continue;
       const parsed = parseOwnership(client.displayName);
-      if (
-        displayName !== undefined &&
-        parsed.text !== undefined &&
-        parsed.text !== displayName
-      ) {
+      if (displayName !== undefined && parsed.text !== undefined && parsed.text !== displayName) {
         continue;
       }
       return client;
@@ -455,14 +398,10 @@ export const findOwnedClient = (
     return undefined;
   });
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.IAP.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.IAP.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),

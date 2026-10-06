@@ -105,10 +105,7 @@ export interface Farm extends Resource<
  */
 export const Farm = Resource<Farm>("AWS.Deadline.Farm");
 
-const createFarmName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createFarmName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -118,17 +115,10 @@ interface FarmState {
   described: deadline.GetFarmResponse;
 }
 
-const readFarmById = Effect.fn(function* (
-  farmId: string,
-  arnOf: (path: string) => string,
-) {
+const readFarmById = Effect.fn(function* (farmId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getFarm({ farmId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const farmArn = arnOf(`farm/${described.farmId}`);
   const state: FarmState = {
@@ -153,9 +143,7 @@ const findFarmByDisplayName = Effect.fn(function* (
     EffectStream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
-  const match = summaries.find(
-    (summary) => summary.displayName === displayName,
-  );
+  const match = summaries.find((summary) => summary.displayName === displayName);
   if (!match) return undefined;
   return yield* readFarmById(match.farmId, arnOf);
 });
@@ -186,10 +174,7 @@ export const FarmProvider = () =>
           const arnOf = yield* deadlineArnOf;
           const state = output?.farmId
             ? yield* readFarmById(output.farmId, arnOf)
-            : yield* findFarmByDisplayName(
-                yield* createFarmName(id, olds ?? {}),
-                arnOf,
-              );
+            : yield* findFarmByDisplayName(yield* createFarmName(id, olds ?? {}), arnOf);
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -205,9 +190,7 @@ export const FarmProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(
-              new Error("AWS.Deadline.Farm requires props"),
-            );
+            return yield* Effect.fail(new Error("AWS.Deadline.Farm requires props"));
           }
           const arnOf = yield* deadlineArnOf;
           const displayName = yield* createFarmName(id, news);
@@ -229,14 +212,10 @@ export const FarmProvider = () =>
               costScaleFactor: news.costScaleFactor,
               tags: desiredTags,
             });
-            yield* session.note(
-              `Created farm ${displayName} (${created.farmId})`,
-            );
+            yield* session.note(`Created farm ${displayName} (${created.farmId})`);
             state = yield* readFarmById(created.farmId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created farm ${displayName}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created farm ${displayName}`));
             }
           }
 
@@ -264,9 +243,7 @@ export const FarmProvider = () =>
           yield* session.note(state.attrs.farmArn);
           const final = yield* readFarmById(state.attrs.farmId, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled farm ${displayName}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled farm ${displayName}`));
           }
           return final.attrs;
         }),
@@ -282,9 +259,7 @@ export const FarmProvider = () =>
           yield* reapFarmChildren(output.farmId);
           // Child deletion (queues, fleets) finishes asynchronously; the
           // farm rejects deletion with ConflictException until it settles.
-          yield* retryWhileConflict(
-            deadline.deleteFarm({ farmId: output.farmId }),
-          ).pipe(
+          yield* retryWhileConflict(deadline.deleteFarm({ farmId: output.farmId })).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
           // Deadline auto-creates log groups under /aws/deadline/{farmId}/

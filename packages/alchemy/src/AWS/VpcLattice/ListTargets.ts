@@ -41,12 +41,7 @@ export interface ListTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListTargetsRequest,
-    ) => Effect.Effect<
-      vpclattice.ListTargetsResponse,
-      vpclattice.ListTargetsError
-    >
+    ) => Effect.Effect<vpclattice.ListTargetsResponse, vpclattice.ListTargetsError>
   >
 > {}
-export const ListTargets = Binding.Service<ListTargets>(
-  "AWS.VpcLattice.ListTargets",
-);
+export const ListTargets = Binding.Service<ListTargets>("AWS.VpcLattice.ListTargets");

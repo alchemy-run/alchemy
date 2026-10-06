@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -11,15 +11,12 @@ import { serveProbes } from "../../bindingHost.ts";
  * The values are forwarded to the host's environment so the deployed
  * runtime binds the same set.
  */
-const githubTokenSecret =
-  process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_TOKEN_SECRET ?? "";
-const githubInstallationId =
-  process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID ?? "";
+const githubTokenSecret = process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_TOKEN_SECRET ?? "";
+const githubInstallationId = process.env.GCP_TEST_DEVELOPERCONNECT_GITHUB_INSTALLATION_ID ?? "";
 export const linkEnabled = !!githubTokenSecret && !!githubInstallationId;
 
 const cloneUri =
-  process.env.GCP_DEVELOPERCONNECT_CLONE_URI ??
-  "https://github.com/octocat/Hello-World.git";
+  process.env.GCP_DEVELOPERCONNECT_CLONE_URI ?? "https://github.com/octocat/Hello-World.git";
 
 /** GitHub connection; declared only when {@link linkEnabled}. */
 export const Github = GCP.DeveloperConnect.Connection("Github", {
@@ -41,13 +38,10 @@ export const Source = Effect.gen(function* () {
 
 const linkProbes = Effect.gen(function* () {
   const fetchReadToken = yield* GCP.DeveloperConnect.FetchReadToken(Source);
-  const fetchReadWriteToken =
-    yield* GCP.DeveloperConnect.FetchReadWriteToken(Source);
+  const fetchReadWriteToken = yield* GCP.DeveloperConnect.FetchReadWriteToken(Source);
   const fetchGitRefs = yield* GCP.DeveloperConnect.FetchGitRefs(Source);
   return {
-    fetchReadToken: fetchReadToken().pipe(
-      Effect.map((read) => ({ hasToken: !!read.token })),
-    ),
+    fetchReadToken: fetchReadToken().pipe(Effect.map((read) => ({ hasToken: !!read.token }))),
     fetchReadWriteToken: fetchReadWriteToken().pipe(
       Effect.map((write) => ({ hasToken: !!write.token })),
     ),

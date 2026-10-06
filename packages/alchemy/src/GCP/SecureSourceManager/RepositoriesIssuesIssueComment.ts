@@ -119,13 +119,11 @@ export type RepositoriesIssuesIssueComment = Resource<
  * @resource
  * @category SecureSourceManager
  */
-export const RepositoriesIssuesIssueComment =
-  Resource<RepositoriesIssuesIssueComment>(
-    "GCP.SecureSourceManager.RepositoriesIssuesIssueComment",
-  );
+export const RepositoriesIssuesIssueComment = Resource<RepositoriesIssuesIssueComment>(
+  "GCP.SecureSourceManager.RepositoriesIssuesIssueComment",
+);
 
-const resourceName = (issue: string, commentId: string) =>
-  `${issue}/issueComments/${commentId}`;
+const resourceName = (issue: string, commentId: string) => `${issue}/issueComments/${commentId}`;
 
 const expandIssue = (
   issue: string,
@@ -158,9 +156,7 @@ const toAttrs = (item: ssm.IssueComment, project: string, region: string) => {
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        ssm.getProjectsLocationsRepositoriesIssuesIssueComments({ name }),
-      );
+    : catchMissing(ssm.getProjectsLocationsRepositoriesIssuesIssueComments({ name }));
 
 const listOnIssue = (issue: string) =>
   collectPages(
@@ -207,22 +203,13 @@ const findMatching = (issue: string, id: string, body: string) =>
 const listOwned = (project: string, region: string) =>
   forEachRepository(project, region, (repository) =>
     listOnRepository(repository).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasOwnershipMarker(item.body)),
-      ),
+      Effect.map((items) => items.filter((item) => hasOwnershipMarker(item.body))),
     ),
   );
 
 export const RepositoriesIssuesIssueCommentProvider = () =>
   Provider.succeed(RepositoriesIssuesIssueComment, {
-    stables: [
-      "name",
-      "commentId",
-      "issue",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "commentId", "issue", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -234,42 +221,27 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.commentId ?? output?.commentId,
         nextId: news.commentId ?? olds?.commentId ?? output?.commentId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.issue ?? output?.issue,
-        nextParent: expandIssue(
-          news.issue,
-          news.repository,
-          env.project,
-          location,
-        ),
+        nextParent: expandIssue(news.issue, news.repository, env.project, location),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const issue = expandIssue(
         olds?.issue ?? output?.issue ?? "",
         olds?.repository ??
-          (output === undefined
-            ? undefined
-            : parseName(output.issue, "issues", env.region).parent),
+          (output === undefined ? undefined : parseName(output.issue, "issues", env.region).parent),
         env.project,
         location,
       );
       const commentId = olds?.commentId ?? output?.commentId;
       const name =
         output?.name ??
-        (commentId !== undefined && issue.length > 0
-          ? resourceName(issue, commentId)
-          : "");
+        (commentId !== undefined && issue.length > 0 ? resourceName(issue, commentId) : "");
       let existing = yield* getByName(name);
       const recorded = existing !== undefined && output !== undefined;
       if (existing === undefined && olds !== undefined) {
@@ -279,38 +251,23 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const { labels } = parseOwnership(existing.body);
       // A matching comment found without a recorded id could be anyone's.
-      return recorded || (yield* hasAlchemyLabels(id, labels))
-        ? attrs
-        : Unowned(attrs);
+      return recorded || (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item: ssm.IssueComment) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return items.map((item: ssm.IssueComment) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const issue = expandIssue(
-        news.issue,
-        news.repository,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const issue = expandIssue(news.issue, news.repository, env.project, location);
       const body = news.body;
       const name =
-        output?.name ??
-        (news.commentId !== undefined
-          ? resourceName(issue, news.commentId)
-          : "");
+        output?.name ?? (news.commentId !== undefined ? resourceName(issue, news.commentId) : "");
 
       let current = yield* getByName(name);
       if (current === undefined) {
@@ -328,10 +285,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
           if (createdName !== undefined) {
-            current = yield* waitUntilExists(
-              getByName(createdName),
-              createdName,
-            );
+            current = yield* waitUntilExists(getByName(createdName), createdName);
           }
         }
         if (current === undefined) {
@@ -346,12 +300,11 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
       const currentName = current.name ?? name;
       // Raw body: also rewrites a legacy ownership marker away.
       if (!sameText(current.body, body)) {
-        const operation =
-          yield* ssm.patchProjectsLocationsRepositoriesIssuesIssueComments({
-            name: currentName,
-            updateMask: "body",
-            body: { body },
-          });
+        const operation = yield* ssm.patchProjectsLocationsRepositoriesIssuesIssueComments({
+          name: currentName,
+          updateMask: "body",
+          body: { body },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);
       }

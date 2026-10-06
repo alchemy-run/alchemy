@@ -1,26 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { ChatTranscript } from "./transcript.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+import { ChatTranscript } from "./transcript.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   cci
-    .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
-      { name },
-    )
+    .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({ name })
     .pipe(
       Effect.as("found" as const),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
@@ -39,11 +34,9 @@ test.provider(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
-          {
-            name: `projects/${project}/locations/us-central1/authorizedViewSets/missing-set/authorizedViews/missing-view/conversations/missing-conv/feedbackLabels/missing-label`,
-          },
-        ),
+        cci.getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({
+          name: `projects/${project}/locations/us-central1/authorizedViewSets/missing-set/authorizedViews/missing-view/conversations/missing-conv/feedbackLabels/missing-label`,
+        }),
       );
       expect(error._tag).toEqual("NotFound");
 
@@ -58,9 +51,7 @@ test.provider(
 // Creating through an authorized view fails with BadRequest "subject length
 // must be at most 127" on the testing project (cause not yet isolated).
 // Set GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES=1 to run it.
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)(
   "create, update, and delete a feedback label through an authorized view",
   (stack) =>
     Effect.gen(function* () {
@@ -68,25 +59,20 @@ test.provider.skipIf(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet(
-            "QaViews",
-            { displayName: "qa" },
+          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet("QaViews", {
+            displayName: "qa",
+          });
+          const view = yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
+            "Reviewers",
+            { parent: set.name, displayName: "reviewers" },
           );
-          const view =
-            yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
-              "Reviewers",
-              { parent: set.name, displayName: "reviewers" },
-            );
-          const conversation = yield* GCP.ContactCenterInsights.Conversation(
-            "Chat",
-            {
-              dataSource: yield* ChatTranscript,
-              medium: "CHAT",
-              languageCode: "en-US",
-              agentId: "agent-1",
-              labels: { env: "test" },
-            },
-          );
+          const conversation = yield* GCP.ContactCenterInsights.Conversation("Chat", {
+            dataSource: yield* ChatTranscript,
+            medium: "CHAT",
+            languageCode: "en-US",
+            agentId: "agent-1",
+            labels: { env: "test" },
+          });
           const feedback =
             yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel(
               "Topic",
@@ -113,35 +99,28 @@ test.provider.skipIf(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet(
-            "QaViews",
+          const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet("QaViews", {
+            authorizedViewSetId: created.set.authorizedViewSetId,
+            location: "us-central1",
+            displayName: "qa",
+          });
+          const view = yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
+            "Reviewers",
             {
-              authorizedViewSetId: created.set.authorizedViewSetId,
-              location: "us-central1",
-              displayName: "qa",
+              parent: set.name,
+              authorizedViewId: created.view.authorizedViewId,
+              displayName: "reviewers",
             },
           );
-          const view =
-            yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView(
-              "Reviewers",
-              {
-                parent: set.name,
-                authorizedViewId: created.view.authorizedViewId,
-                displayName: "reviewers",
-              },
-            );
-          const conversation = yield* GCP.ContactCenterInsights.Conversation(
-            "Chat",
-            {
-              dataSource: yield* ChatTranscript,
-              conversationId: created.conversation.conversationId,
-              location: "us-central1",
-              medium: "CHAT",
-              languageCode: "en-US",
-              agentId: "agent-1",
-              labels: { env: "test" },
-            },
-          );
+          const conversation = yield* GCP.ContactCenterInsights.Conversation("Chat", {
+            dataSource: yield* ChatTranscript,
+            conversationId: created.conversation.conversationId,
+            location: "us-central1",
+            medium: "CHAT",
+            languageCode: "en-US",
+            agentId: "agent-1",
+            labels: { env: "test" },
+          });
           const feedback =
             yield* GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel(
               "Topic",

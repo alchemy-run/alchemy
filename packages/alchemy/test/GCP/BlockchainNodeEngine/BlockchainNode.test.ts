@@ -1,26 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bne from "@distilled.cloud/gcp/blockchainnodeengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Blockchain nodes bill hourly and take 15-45 minutes to provision, so the
 // lifecycle is opt-in: set GCP_TEST_BLOCKCHAIN_NODE=1 together with
 // GCP_TEST_SLOW.
 const runLifecycle =
-  !!process.env.GCP_TEST_BLOCKCHAIN_NODE &&
-  !!process.env.GCP_TEST_SLOW &&
-  !process.env.FAST;
+  !!process.env.GCP_TEST_BLOCKCHAIN_NODE && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bne.getProjectsLocationsBlockchainNodes({ name }).pipe(

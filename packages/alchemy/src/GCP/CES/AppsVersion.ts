@@ -108,21 +108,13 @@ export type AppsVersion = Resource<
  */
 export const AppsVersion = Resource<AppsVersion>("GCP.CES.AppsVersion");
 
-export class AppsVersionNotResolved extends Data.TaggedError(
-  "GCP.CES.AppsVersionNotResolved",
-)<{
+export class AppsVersionNotResolved extends Data.TaggedError("GCP.CES.AppsVersionNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (app: string, appVersionId: string) =>
-  `${app}/versions/${appVersionId}`;
+const resourceName = (app: string, appVersionId: string) => `${app}/versions/${appVersionId}`;
 
-const toAttrs = (
-  version: ces.AppVersion,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (version: ces.AppVersion, project: string, region: string, appHint?: string) => {
   const name = version.name ?? "";
   const parsed = parseResourceName(name, "versions", region);
   return {
@@ -160,15 +152,7 @@ const listAt = (parent: string, project: string, region: string) =>
 
 export const AppsVersionProvider = () =>
   Provider.succeed(AppsVersion, {
-    stables: [
-      "name",
-      "appVersionId",
-      "app",
-      "location",
-      "project",
-      "createTime",
-      "creator",
-    ],
+    stables: ["name", "appVersionId", "app", "location", "project", "createTime", "creator"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -182,27 +166,14 @@ export const AppsVersionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
-      const appVersionId = yield* toPhysicalId(
-        id,
-        olds?.appVersionId,
-        output?.appVersionId,
-      );
-      const name =
-        output?.name ??
-        (app !== undefined ? resourceName(app, appVersionId) : "");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
+      const appVersionId = yield* toPhysicalId(id, olds?.appVersionId, output?.appVersionId);
+      const name = output?.name ?? (app !== undefined ? resourceName(app, appVersionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -217,16 +188,9 @@ export const AppsVersionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
-      const appVersionId = yield* toPhysicalId(
-        id,
-        news.appVersionId,
-        output?.appVersionId,
-      );
+      const appVersionId = yield* toPhysicalId(id, news.appVersionId, output?.appVersionId);
       const name = output?.name ?? resourceName(app, appVersionId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -257,9 +221,9 @@ export const AppsVersionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryTransient(
-        ces.deleteProjectsLocationsAppsVersions({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryTransient(ces.deleteProjectsLocationsAppsVersions({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name));
     }),
   });

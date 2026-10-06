@@ -55,11 +55,20 @@ const Window = ({ children, header }: { children: React.ReactNode; header: React
  * A terminal: one command's output so far. Lines carried over from the previous
  * step stay put; only the new ones fade in, top to bottom.
  */
-export const TerminalPane = ({ step, prev, local }: { step: TerminalStep; prev?: IntroStep; local: number }) => {
+export const TerminalPane = ({
+  step,
+  prev,
+  local,
+}: {
+  step: TerminalStep;
+  prev?: IntroStep;
+  local: number;
+}) => {
   const same = prev?.kind === "terminal" && prev.group === step.group;
   const firstNew = step.lines.length - step.fresh;
   // 26px fits about 20 lines in the pane; longer output shrinks to fit.
-  const rows = step.lines.length + (step.progress ? step.progress.rows.length + step.progress.done.length : 0);
+  const rows =
+    step.lines.length + (step.progress ? step.progress.rows.length + step.progress.done.length : 0);
   const size = Math.min(26, Math.floor(850 / (rows * 1.5 + 2)));
   return (
     <Window
@@ -81,7 +90,15 @@ export const TerminalPane = ({ step, prev, local }: { step: TerminalStep; prev?:
         </div>
       }
     >
-      <div style={{ padding: "26px 32px", fontFamily: mono, fontSize: size, lineHeight: 1.5, whiteSpace: "pre" }}>
+      <div
+        style={{
+          padding: "26px 32px",
+          fontFamily: mono,
+          fontSize: size,
+          lineHeight: 1.5,
+          whiteSpace: "pre",
+        }}
+      >
         {step.lines.map((line, i) => {
           const isNew = i >= firstNew || !same;
           const at = (i - firstNew) * 2;
@@ -96,7 +113,9 @@ export const TerminalPane = ({ step, prev, local }: { step: TerminalStep; prev?:
             </div>
           );
         })}
-        {step.progress ? <DeployProgress progress={step.progress} local={local} size={size} /> : null}
+        {step.progress ? (
+          <DeployProgress progress={step.progress} local={local} size={size} />
+        ) : null}
       </div>
     </Window>
   );
@@ -117,7 +136,10 @@ const DeployProgress = ({
   // Resource rows: name, then (type). Binding rows are longer and span both columns.
   const nameW = Math.max(...progress.rows.filter((r) => !r.binding).map((r) => r.name.length)) + 2;
   const typeW = Math.max(...progress.rows.map((r) => (r.type ? r.type.length + 2 : 0))) + 2;
-  const totalW = Math.max(nameW + typeW, ...progress.rows.filter((r) => r.binding).map((r) => r.name.length + 4));
+  const totalW = Math.max(
+    nameW + typeW,
+    ...progress.rows.filter((r) => r.binding).map((r) => r.name.length + 4),
+  );
   return (
     <>
       {progress.rows.map((row) => {
@@ -133,14 +155,32 @@ const DeployProgress = ({
         const type = row.binding ? "" : (row.type ? `(${row.type})` : "").padEnd(totalW - nameW);
         return (
           <div key={row.name} style={{ minHeight: size * 1.5 }}>
-            <span style={{ color: state === "pending" ? brand.fgMuted : brand.fg, fontWeight: row.binding ? undefined : 700 }}>{name}</span>
+            <span
+              style={{
+                color: state === "pending" ? brand.fgMuted : brand.fg,
+                fontWeight: row.binding ? undefined : 700,
+              }}
+            >
+              {name}
+            </span>
             <span style={{ color: brand.fgMuted }}>{type}</span>
             <span style={{ color: state === "pending" ? brand.fgMuted : color }}>{label}</span>
           </div>
         );
       })}
       {progress.done.map((line, i) => (
-        <div key={`done-${i}`} style={{ opacity: interpolate(local, [progress.at + i * 2, progress.at + i * 2 + 5], [0, 1], clamp), minHeight: size * 1.5 }}>
+        <div
+          key={`done-${i}`}
+          style={{
+            opacity: interpolate(
+              local,
+              [progress.at + i * 2, progress.at + i * 2 + 5],
+              [0, 1],
+              clamp,
+            ),
+            minHeight: size * 1.5,
+          }}
+        >
           {line.map((t, k) => (
             <span key={k} style={{ color: t.color, fontWeight: t.bold ? 700 : undefined }}>
               {t.text}
@@ -153,7 +193,15 @@ const DeployProgress = ({
 };
 
 /** A browser window showing one screenshot. A new screenshot cross-fades in. */
-export const BrowserPane = ({ step, prev, local }: { step: BrowserStep; prev?: IntroStep; local: number }) => {
+export const BrowserPane = ({
+  step,
+  prev,
+  local,
+}: {
+  step: BrowserStep;
+  prev?: IntroStep;
+  local: number;
+}) => {
   const before = prev?.kind === "browser" && prev.image !== step.image ? prev.image : undefined;
   const p = interpolate(local, [0, 8], [0, 1], clamp);
   return (
@@ -179,7 +227,14 @@ export const BrowserPane = ({ step, prev, local }: { step: BrowserStep; prev?: I
       {before ? (
         <Img
           src={staticFile(`intro/assets/${before}`)}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "top",
+          }}
         />
       ) : null}
       <Img

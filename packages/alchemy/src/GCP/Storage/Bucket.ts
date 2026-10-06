@@ -208,9 +208,7 @@ export type Bucket = Resource<
  */
 export const Bucket = Resource<Bucket>("GCP.Storage.Bucket");
 
-export class BucketNotResolved extends Data.TaggedError(
-  "GCP.Storage.BucketNotResolved",
-)<{
+export class BucketNotResolved extends Data.TaggedError("GCP.Storage.BucketNotResolved")<{
   bucketName: string;
 }> {}
 
@@ -241,15 +239,12 @@ const toAttrs = (bucket: storage.Bucket) => ({
   selfLink: bucket.selfLink,
   projectNumber: bucket.projectNumber,
   timeCreated: bucket.timeCreated,
-  uniformBucketLevelAccess:
-    bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true,
+  uniformBucketLevelAccess: bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled === true,
   hierarchicalNamespace: bucket.hierarchicalNamespace?.enabled === true,
   website: toWebsite(bucket.website),
 });
 
-const toWebsite = (
-  website: storage.BucketWebsite | undefined,
-): BucketWebsite | undefined =>
+const toWebsite = (website: storage.BucketWebsite | undefined): BucketWebsite | undefined =>
   website === undefined ||
   (website.mainPageSuffix === undefined && website.notFoundPage === undefined)
     ? undefined
@@ -264,28 +259,26 @@ const getByName = (bucketName: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const emptyBucket = (bucketName: string) =>
-  storage.listObjects
-    .items({ bucket: bucketName, versions: true, maxResults: 1000 })
-    .pipe(
-      Stream.runCollect,
-      Effect.flatMap((chunk) =>
-        Effect.forEach(
-          chunk,
-          (object) =>
-            object.name
-              ? storage
-                  .deleteObjects({
-                    bucket: bucketName,
-                    object: object.name,
-                    generation: object.generation,
-                  })
-                  .pipe(Effect.catchTag("NotFound", () => Effect.void))
-              : Effect.void,
-          { concurrency: 8 },
-        ),
+  storage.listObjects.items({ bucket: bucketName, versions: true, maxResults: 1000 }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((chunk) =>
+      Effect.forEach(
+        chunk,
+        (object) =>
+          object.name
+            ? storage
+                .deleteObjects({
+                  bucket: bucketName,
+                  object: object.name,
+                  generation: object.generation,
+                })
+                .pipe(Effect.catchTag("NotFound", () => Effect.void))
+            : Effect.void,
+        { concurrency: 8 },
       ),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+    ),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 
 const emptyFolders = (bucketName: string) =>
   storage.listFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
@@ -333,14 +326,7 @@ const emptyManagedFolders = (bucketName: string) =>
 
 export const BucketProvider = () =>
   Provider.succeed(Bucket, {
-    stables: [
-      "bucketName",
-      "location",
-      "locationType",
-      "projectNumber",
-      "timeCreated",
-      "selfLink",
-    ],
+    stables: ["bucketName", "location", "locationType", "projectNumber", "timeCreated", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -368,8 +354,7 @@ export const BucketProvider = () =>
           deleteFirst: nextName !== undefined && nextName === previousName,
         };
       }
-      const previousHns =
-        olds?.hierarchicalNamespace ?? output?.hierarchicalNamespace;
+      const previousHns = olds?.hierarchicalNamespace ?? output?.hierarchicalNamespace;
       const nextHns = news.hierarchicalNamespace === true;
       if (previousHns !== undefined && previousHns !== nextHns) {
         const previousName = olds?.bucketName ?? output?.bucketName;
@@ -383,48 +368,36 @@ export const BucketProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const bucketName = yield* toName(
-        id,
-        olds?.bucketName,
-        output?.bucketName,
-      );
+      const bucketName = yield* toName(id, olds?.bucketName, output?.bucketName);
       const existing = yield* getByName(bucketName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* storage.listBuckets
-          .items({ project: env.project, projection: "full" })
-          .pipe(
-            Stream.filter((bucket) =>
-              Object.keys(bucket.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
-            ),
-            Stream.map(toAttrs),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        return yield* storage.listBuckets.items({ project: env.project, projection: "full" }).pipe(
+          Stream.filter((bucket) =>
+            Object.keys(bucket.labels ?? {}).some((key) => key.startsWith("alchemy-")),
+          ),
+          Stream.map(toAttrs),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = yield* toName(id, news.bucketName, output?.bucketName);
-      const location =
-        news.location ?? output?.location ?? env.region.toUpperCase();
+      const location = news.location ?? output?.location ?? env.region.toUpperCase();
       const storageClass = news.storageClass ?? "STANDARD";
       const versioning = news.versioning === true;
       const hierarchicalNamespace = news.hierarchicalNamespace === true;
       const uniformBucketLevelAccess =
         news.uniformBucketLevelAccess === true || hierarchicalNamespace;
-      const configureIam =
-        news.uniformBucketLevelAccess !== undefined || hierarchicalNamespace;
+      const configureIam = news.uniformBucketLevelAccess !== undefined || hierarchicalNamespace;
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -444,9 +417,7 @@ export const BucketProvider = () =>
               storageClass,
               versioning: { enabled: versioning },
               labels: desiredLabels,
-              hierarchicalNamespace: hierarchicalNamespace
-                ? { enabled: true }
-                : undefined,
+              hierarchicalNamespace: hierarchicalNamespace ? { enabled: true } : undefined,
               website: desiredWebsite,
               iamConfiguration: configureIam
                 ? {
@@ -468,14 +439,11 @@ export const BucketProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const storageClassChanged =
-        (current.storageClass ?? "STANDARD") !== storageClass;
-      const versioningChanged =
-        (current.versioning?.enabled === true) !== versioning;
+      const storageClassChanged = (current.storageClass ?? "STANDARD") !== storageClass;
+      const versioningChanged = (current.versioning?.enabled === true) !== versioning;
       const ublChanged =
         configureIam &&
-        (current.iamConfiguration?.uniformBucketLevelAccess?.enabled ===
-          true) !==
+        (current.iamConfiguration?.uniformBucketLevelAccess?.enabled === true) !==
           uniformBucketLevelAccess;
       const observedWebsite = toWebsite(current.website);
       const websiteChanged =

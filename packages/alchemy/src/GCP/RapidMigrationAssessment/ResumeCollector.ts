@@ -38,11 +38,7 @@ export interface ResumeCollector extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ResumeCollectorRequest,
-    ) => Effect.Effect<
-      rma.Operation,
-      rma.ResumeProjectsLocationsCollectorsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<rma.Operation, rma.ResumeProjectsLocationsCollectorsError, RuntimeContext>
   >
 > {}
 

@@ -12,8 +12,14 @@ export const FilesR2 = Layer.effect(
 
     return {
       upload: (name: string, body: string) =>
-        files.put(name, body)/*hide*/.pipe(Effect.asVoid, Effect.mapError((cause) => new UploadError({ cause })))/*end*/,
+        files
+          .put(name, body) /*hide*/
+          .pipe(
+            Effect.asVoid,
+            Effect.mapError((cause) => new UploadError({ cause })),
+          ) /*end*/,
     };
   }),
-)/*hide*/.pipe(Layer.provide(R2.ReadBucketBinding))/*end*/;
+) /*hide*/
+  .pipe(Layer.provide(R2.ReadBucketBinding)); /*end*/
 // #endregion show

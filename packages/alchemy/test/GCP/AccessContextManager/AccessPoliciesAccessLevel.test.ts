@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as acm from "@distilled.cloud/gcp/accesscontextmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, projectContext, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -47,30 +47,20 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       const ctx = yield* projectContext();
-      const scopes =
-        ctx.projectNumber.length > 0
-          ? [`projects/${ctx.projectNumber}`]
-          : undefined;
+      const scopes = ctx.projectNumber.length > 0 ? [`projects/${ctx.projectNumber}`] : undefined;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const policy = yield* GCP.AccessContextManager.AccessPolicy(
-            "LevelPolicy",
-            {
-              title: "access level policy",
-              scopes,
-            },
-          );
-          const level =
-            yield* GCP.AccessContextManager.AccessPoliciesAccessLevel(
-              "CorpUsers",
-              {
-                policy: policy.name,
-                title: "corp users",
-                description: "us region",
-                basic: { conditions: [{ regions: ["US"] }] },
-              },
-            );
+          const policy = yield* GCP.AccessContextManager.AccessPolicy("LevelPolicy", {
+            title: "access level policy",
+            scopes,
+          });
+          const level = yield* GCP.AccessContextManager.AccessPoliciesAccessLevel("CorpUsers", {
+            policy: policy.name,
+            title: "corp users",
+            description: "us region",
+            basic: { conditions: [{ regions: ["US"] }] },
+          });
           return { policy, level };
         }),
       );
@@ -90,24 +80,17 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const policy = yield* GCP.AccessContextManager.AccessPolicy(
-            "LevelPolicy",
-            {
-              title: "access level policy",
-              scopes,
-            },
-          );
-          const level =
-            yield* GCP.AccessContextManager.AccessPoliciesAccessLevel(
-              "CorpUsers",
-              {
-                policy: policy.name,
-                accessLevelId: created.level.accessLevelId,
-                title: "corp users prod",
-                description: "ca region",
-                basic: { conditions: [{ regions: ["CA"] }] },
-              },
-            );
+          const policy = yield* GCP.AccessContextManager.AccessPolicy("LevelPolicy", {
+            title: "access level policy",
+            scopes,
+          });
+          const level = yield* GCP.AccessContextManager.AccessPoliciesAccessLevel("CorpUsers", {
+            policy: policy.name,
+            accessLevelId: created.level.accessLevelId,
+            title: "corp users prod",
+            description: "ca region",
+            basic: { conditions: [{ regions: ["CA"] }] },
+          });
           return { policy, level };
         }),
       );

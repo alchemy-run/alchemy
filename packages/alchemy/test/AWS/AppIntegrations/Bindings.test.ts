@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
-import AppIntegrationsTestFunctionLive, {
-  AppIntegrationsTestFunction,
-} from "./fixtures/handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import AppIntegrationsTestFunctionLive, { AppIntegrationsTestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -16,10 +14,7 @@ const sharedStack = Core.scratchStack(testOptions, "AppIntegrationsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -35,10 +30,7 @@ const getJson = <T>(pathname: string) =>
     // First requests after deploy can hit IAM-propagation AccessDenied
     // surfaced as a 500 by the fixture's orDie — bounded retry.
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -52,10 +44,7 @@ const postJson = <T>(pathname: string) =>
     Effect.flatMap((response) => response.json),
     Effect.map((body) => body as T),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -89,9 +78,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -104,10 +91,9 @@ describe(
     describe("ListApplications", () => {
       test.provider("lists the fixture application", () =>
         Effect.gen(function* () {
-          const body = yield* getJson<{
-            self: string;
-            applications: { Id?: string }[];
-          }>("/applications");
+          const body = yield* getJson<{ self: string; applications: { Id?: string }[] }>(
+            "/applications",
+          );
           expect(Array.isArray(body.applications)).toBe(true);
           expect(body.applications.map((a) => a.Id)).toContain(body.self);
         }),
@@ -117,9 +103,7 @@ describe(
     describe("ListApplicationAssociations", () => {
       test.provider("lists the application's associations (empty)", () =>
         Effect.gen(function* () {
-          const body = yield* getJson<{ associations: unknown[] }>(
-            "/application-associations",
-          );
+          const body = yield* getJson<{ associations: unknown[] }>("/application-associations");
           // Nothing associates with the fixture application — the call
           // succeeding with an array proves the binding + IAM grant.
           expect(Array.isArray(body.associations)).toBe(true);
@@ -137,12 +121,8 @@ describe(
           expect(Array.isArray(body.dataIntegrations)).toBe(true);
           // The list API returns Arn/Name summaries; resolve self (an id) via
           // distilled to compare by name.
-          const observed = yield* appintegrations.getDataIntegration({
-            Identifier: body.self,
-          });
-          expect(body.dataIntegrations.map((d) => d.Name)).toContain(
-            observed.Name,
-          );
+          const observed = yield* appintegrations.getDataIntegration({ Identifier: body.self });
+          expect(body.dataIntegrations.map((d) => d.Name)).toContain(observed.Name);
         }),
       );
     });
@@ -184,8 +164,7 @@ describe(
                 // an unexpected success) is observed.
                 schedule: Schedule.spaced("5 seconds"),
                 until: (b): boolean =>
-                  b.created === "ok" ||
-                  (b.message ?? "").includes("explicit deny"),
+                  b.created === "ok" || (b.message ?? "").includes("explicit deny"),
                 times: 8,
               }),
             );
@@ -194,9 +173,7 @@ describe(
               "app-integrations:CreateDataIntegrationAssociation on resource: arn:aws:app-integrations",
             );
             expect(body.message).toContain(":data-integration/");
-            expect(body.message).toContain(
-              "explicit deny in a resource-based policy",
-            );
+            expect(body.message).toContain("explicit deny in a resource-based policy");
           }),
       );
 
@@ -216,10 +193,7 @@ describe(
                 times: 10,
               }),
             );
-            expect(body, JSON.stringify(body)).toMatchObject({
-              created: "ok",
-              updated: "ok",
-            });
+            expect(body, JSON.stringify(body)).toMatchObject({ created: "ok", updated: "ok" });
             expect(body.associationId).toBeTruthy();
 
             // The association is now visible through the list binding.
@@ -227,9 +201,7 @@ describe(
               associations: { DataIntegrationAssociationArn?: string }[];
             }>("/data-integration-associations");
             expect(
-              listed.associations.map((a) =>
-                a.DataIntegrationAssociationArn?.split("/").at(-1),
-              ),
+              listed.associations.map((a) => a.DataIntegrationAssociationArn?.split("/").at(-1)),
             ).toContain(body.associationId);
           }),
       );
@@ -238,14 +210,11 @@ describe(
     describe("ListEventIntegrations", () => {
       test.provider("lists the fixture event integration", () =>
         Effect.gen(function* () {
-          const body = yield* getJson<{
-            self: string;
-            eventIntegrations: { Name?: string }[];
-          }>("/event-integrations");
-          expect(Array.isArray(body.eventIntegrations)).toBe(true);
-          expect(body.eventIntegrations.map((e) => e.Name)).toContain(
-            body.self,
+          const body = yield* getJson<{ self: string; eventIntegrations: { Name?: string }[] }>(
+            "/event-integrations",
           );
+          expect(Array.isArray(body.eventIntegrations)).toBe(true);
+          expect(body.eventIntegrations.map((e) => e.Name)).toContain(body.self);
         }),
       );
     });
@@ -267,9 +236,7 @@ describe(
           // The fixture's event source created an EventIntegration on the
           // default bus — verify it out-of-band via distilled.
           const body = yield* getJson<{ self: string }>("/event-integrations");
-          const observed = yield* appintegrations.getEventIntegration({
-            Name: body.self,
-          });
+          const observed = yield* appintegrations.getEventIntegration({ Name: body.self });
           expect(observed.EventBridgeBus).toBe("default");
           expect(observed.EventFilter?.Source).toBe(
             "aws.partner/examplepartner.com/alchemy-bindings",

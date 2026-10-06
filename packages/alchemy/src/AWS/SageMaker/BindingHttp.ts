@@ -48,9 +48,7 @@ export const makeFeatureGroupHttpBinding = <Req, I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${featureGroup.LogicalId})`)(function* (
-        request: Req,
-      ) {
+      return Effect.fn(`${options.tag}(${featureGroup.LogicalId})`)(function* (request: Req) {
         const featureGroupName = yield* FeatureGroupName;
         return yield* op(options.prepare(request, featureGroupName));
       });
@@ -63,12 +61,7 @@ export const makeFeatureGroupHttpBinding = <Req, I, A, E, R>(options: {
  * endpoint's ARN, and the runtime half injects the endpoint's name into
  * every request.
  */
-export const makeEndpointHttpBinding = <
-  I extends { EndpointName?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeEndpointHttpBinding = <I extends { EndpointName?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SageMaker.DescribeEndpoint`. */
   tag: string;
   /** The distilled operation. */

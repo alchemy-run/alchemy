@@ -1,43 +1,29 @@
-import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import { createHash } from "node:crypto";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 
 /** Image name {@link pushDockerVersion} pushes into a repository. */
 export const IMAGE = "hello";
 
 const sha256 = (bytes: Uint8Array) =>
-  Effect.sync(
-    () => `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
-  );
+  Effect.sync(() => `sha256:${createHash("sha256").update(bytes).digest("hex")}`);
 
-const header = (
-  response: HttpClientResponse.HttpClientResponse,
-  name: string,
-) => {
+const header = (response: HttpClientResponse.HttpClientResponse, name: string) => {
   const headers = response.headers as {
     get?: (key: string) => string | undefined;
   } & Record<string, string | undefined>;
-  return (
-    headers.get?.(name) ?? headers[name] ?? headers[name.toLowerCase()] ?? ""
-  );
+  return headers.get?.(name) ?? headers[name] ?? headers[name.toLowerCase()] ?? "";
 };
 
-const failHttp = (
-  label: string,
-  response: HttpClientResponse.HttpClientResponse,
-) =>
+const failHttp = (label: string, response: HttpClientResponse.HttpClientResponse) =>
   Effect.gen(function* () {
-    const body = yield* response.text.pipe(
-      Effect.catch(() => Effect.succeed("")),
-    );
-    return yield* Effect.fail(
-      new Error(`${label} failed: ${response.status} ${body}`),
-    );
+    const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
+    return yield* Effect.fail(new Error(`${label} failed: ${response.status} ${body}`));
   });
 
 /**
@@ -61,9 +47,7 @@ export const pushDockerVersion = (
     const host = `https://${repository.location}-docker.pkg.dev`;
     const imagePath = `${repository.project}/${repository.repositoryId}/${IMAGE}`;
     const auth = (request: HttpClientRequest.HttpClientRequest) =>
-      request.pipe(
-        HttpClientRequest.setHeader("Authorization", `Bearer ${token}`),
-      );
+      request.pipe(HttpClientRequest.setHeader("Authorization", `Bearer ${token}`));
 
     const config = yield* Effect.sync(() =>
       new TextEncoder().encode(
@@ -114,9 +98,7 @@ export const pushDockerVersion = (
     const manifestDigest = yield* sha256(manifest);
     const published = yield* client.execute(
       auth(
-        HttpClientRequest.put(
-          `${host}/v2/${imagePath}/manifests/${marker}`,
-        ).pipe(
+        HttpClientRequest.put(`${host}/v2/${imagePath}/manifests/${marker}`).pipe(
           HttpClientRequest.bodyUint8Array(
             manifest,
             "application/vnd.docker.distribution.manifest.v2+json",

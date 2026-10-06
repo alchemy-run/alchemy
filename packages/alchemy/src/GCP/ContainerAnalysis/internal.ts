@@ -4,12 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_ID_LENGTH = 63;
 
@@ -57,10 +53,8 @@ export const toPhysicalId = (
     );
   });
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const projectParent = (project: string) => `projects/${project}`;
 
@@ -73,16 +67,9 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]
-        : undefined,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1] : undefined,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -90,11 +77,7 @@ export const parseName = (name: string, collection: string) => {
   };
 };
 
-export const expandNoteName = (
-  value: string,
-  project: string,
-  location?: string,
-) => {
+export const expandNoteName = (value: string, project: string, location?: string) => {
   if (value.includes("/")) return value.replace(/\/+$/, "");
   return location !== undefined
     ? `${locationParent(project, location)}/notes/${value}`
@@ -132,9 +115,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -183,8 +164,7 @@ export const ignoreGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -198,20 +178,14 @@ export const missingGet =
       ? Effect.succeed(undefined)
       : effect({ name }).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" } =>
-              error._tag === "NotFound",
+            (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
             () => Effect.succeed(undefined),
           ),
         );
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   pages: Stream.Stream<Page, E, R>,
   items: (page: Page) => readonly Item[] | null | undefined,
 ) =>
@@ -220,8 +194,7 @@ export const collectPages = <
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk) as Item[]),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<Item>(),
     ),
   );
@@ -330,9 +303,7 @@ export const noteKindFields = (news: NoteNews): containeranalysis.Note => {
   return body;
 };
 
-export const occurrenceKindFields = (
-  news: OccurrenceNews,
-): containeranalysis.Occurrence => {
+export const occurrenceKindFields = (news: OccurrenceNews): containeranalysis.Occurrence => {
   const body: containeranalysis.Occurrence = {
     attestation: news.attestation,
     build: news.build,
@@ -383,9 +354,7 @@ export type NoteAttrs = {
   compliance: containeranalysis.ComplianceNote | undefined;
   deployment: containeranalysis.DeploymentNote | undefined;
   upgrade: containeranalysis.UpgradeNote | undefined;
-  vulnerabilityAssessment:
-    | containeranalysis.VulnerabilityAssessmentNote
-    | undefined;
+  vulnerabilityAssessment: containeranalysis.VulnerabilityAssessmentNote | undefined;
   secret: containeranalysis.SecretNote | undefined;
   dsseAttestation: containeranalysis.DSSEAttestationNote | undefined;
   sbomReference: containeranalysis.SBOMReferenceNote | undefined;
@@ -394,10 +363,7 @@ export type NoteAttrs = {
   updateTime: string | undefined;
 };
 
-export const noteAttrs = (
-  note: containeranalysis.Note,
-  project: string,
-): NoteAttrs => {
+export const noteAttrs = (note: containeranalysis.Note, project: string): NoteAttrs => {
   const name = note.name ?? "";
   const parsed = parseName(name, "notes");
   const description = parseDescription(note.longDescription);
@@ -494,9 +460,7 @@ export const occurrenceAttrs = (
 };
 
 export type NoteOps<E = unknown, R = unknown> = {
-  get: (
-    name: string,
-  ) => Effect.Effect<containeranalysis.Note | undefined, E, R>;
+  get: (name: string) => Effect.Effect<containeranalysis.Note | undefined, E, R>;
   create: (input: {
     parent: string;
     noteId: string;
@@ -551,19 +515,10 @@ export const reconcileNote = Effect.fn(function* (input: {
   }
 
   const currentName = current.name ?? input.name;
-  const shortChanged = !sameText(
-    current.shortDescription,
-    input.news.shortDescription,
-  );
+  const shortChanged = !sameText(current.shortDescription, input.news.shortDescription);
   const longChanged = !sameText(current.longDescription, desiredLong);
-  const expirationChanged = !sameText(
-    current.expirationTime,
-    input.news.expirationTime,
-  );
-  const relatedUrlChanged = !sameJson(
-    current.relatedUrl ?? [],
-    input.news.relatedUrl ?? [],
-  );
+  const expirationChanged = !sameText(current.expirationTime, input.news.expirationTime);
+  const relatedUrlChanged = !sameJson(current.relatedUrl ?? [], input.news.relatedUrl ?? []);
   const relatedNotesChanged = !sameJson(
     [...(current.relatedNoteNames ?? [])].slice().sort(),
     [...(input.news.relatedNoteNames ?? [])].slice().sort(),
@@ -573,10 +528,7 @@ export const reconcileNote = Effect.fn(function* (input: {
   const discoveryChanged = !sameJson(current.discovery, kinds.discovery);
   const imageChanged = !sameJson(current.image, kinds.image);
   const packageChanged = !sameJson(current.package, kinds.package);
-  const vulnerabilityChanged = !sameJson(
-    current.vulnerability,
-    kinds.vulnerability,
-  );
+  const vulnerabilityChanged = !sameJson(current.vulnerability, kinds.vulnerability);
   const complianceChanged = !sameJson(current.compliance, kinds.compliance);
   const deploymentChanged = !sameJson(current.deployment, kinds.deployment);
   const upgradeChanged = !sameJson(current.upgrade, kinds.upgrade);
@@ -587,10 +539,7 @@ export const reconcileNote = Effect.fn(function* (input: {
   const secretChanged = !sameJson(current.secret, kinds.secret);
   const dsseChanged = !sameJson(current.dsseAttestation, kinds.dsseAttestation);
   const sbomChanged = !sameJson(current.sbomReference, kinds.sbomReference);
-  const skillChanged = !sameJson(
-    current.aiSkillAnalysis,
-    kinds.aiSkillAnalysis,
-  );
+  const skillChanged = !sameJson(current.aiSkillAnalysis, kinds.aiSkillAnalysis);
 
   const updateMask = updateMaskOf(
     shortChanged ? "shortDescription" : undefined,
@@ -598,36 +547,22 @@ export const reconcileNote = Effect.fn(function* (input: {
     expirationChanged ? "expirationTime" : undefined,
     relatedUrlChanged ? "relatedUrl" : undefined,
     relatedNotesChanged ? "relatedNoteNames" : undefined,
-    attestationChanged && kinds.attestation !== undefined
-      ? "attestation"
-      : undefined,
+    attestationChanged && kinds.attestation !== undefined ? "attestation" : undefined,
     buildChanged && kinds.build !== undefined ? "build" : undefined,
     discoveryChanged && kinds.discovery !== undefined ? "discovery" : undefined,
     imageChanged && kinds.image !== undefined ? "image" : undefined,
     packageChanged && kinds.package !== undefined ? "package" : undefined,
-    vulnerabilityChanged && kinds.vulnerability !== undefined
-      ? "vulnerability"
-      : undefined,
-    complianceChanged && kinds.compliance !== undefined
-      ? "compliance"
-      : undefined,
-    deploymentChanged && kinds.deployment !== undefined
-      ? "deployment"
-      : undefined,
+    vulnerabilityChanged && kinds.vulnerability !== undefined ? "vulnerability" : undefined,
+    complianceChanged && kinds.compliance !== undefined ? "compliance" : undefined,
+    deploymentChanged && kinds.deployment !== undefined ? "deployment" : undefined,
     upgradeChanged && kinds.upgrade !== undefined ? "upgrade" : undefined,
     assessmentChanged && kinds.vulnerabilityAssessment !== undefined
       ? "vulnerabilityAssessment"
       : undefined,
     secretChanged && kinds.secret !== undefined ? "secret" : undefined,
-    dsseChanged && kinds.dsseAttestation !== undefined
-      ? "dsseAttestation"
-      : undefined,
-    sbomChanged && kinds.sbomReference !== undefined
-      ? "sbomReference"
-      : undefined,
-    skillChanged && kinds.aiSkillAnalysis !== undefined
-      ? "aiSkillAnalysis"
-      : undefined,
+    dsseChanged && kinds.dsseAttestation !== undefined ? "dsseAttestation" : undefined,
+    sbomChanged && kinds.sbomReference !== undefined ? "sbomReference" : undefined,
+    skillChanged && kinds.aiSkillAnalysis !== undefined ? "aiSkillAnalysis" : undefined,
   );
 
   if (updateMask.length > 0) {
@@ -649,9 +584,7 @@ export const reconcileNote = Effect.fn(function* (input: {
 });
 
 export type OccurrenceOps<E = unknown, R = unknown> = {
-  get: (
-    name: string,
-  ) => Effect.Effect<containeranalysis.Occurrence | undefined, E, R>;
+  get: (name: string) => Effect.Effect<containeranalysis.Occurrence | undefined, E, R>;
   create: (input: {
     parent: string;
     body: containeranalysis.Occurrence;
@@ -673,15 +606,8 @@ export const reconcileOccurrence = Effect.fn(function* (input: {
   ops: OccurrenceOps;
 }) {
   const ownership = yield* createInternalLabels(input.id);
-  const desiredRemediation = encodeDescription(
-    ownership,
-    input.news.remediation,
-  );
-  const noteName = expandNoteName(
-    input.news.noteName,
-    input.project,
-    input.location,
-  );
+  const desiredRemediation = encodeDescription(ownership, input.news.remediation);
+  const noteName = expandNoteName(input.news.noteName, input.project, input.location);
   const kinds = occurrenceKindFields(input.news);
 
   let current =
@@ -716,51 +642,31 @@ export const reconcileOccurrence = Effect.fn(function* (input: {
   const discoveryChanged = !sameJson(current.discovery, kinds.discovery);
   const imageChanged = !sameJson(current.image, kinds.image);
   const packageChanged = !sameJson(current.package, kinds.package);
-  const vulnerabilityChanged = !sameJson(
-    current.vulnerability,
-    kinds.vulnerability,
-  );
+  const vulnerabilityChanged = !sameJson(current.vulnerability, kinds.vulnerability);
   const complianceChanged = !sameJson(current.compliance, kinds.compliance);
   const deploymentChanged = !sameJson(current.deployment, kinds.deployment);
   const upgradeChanged = !sameJson(current.upgrade, kinds.upgrade);
   const dsseChanged = !sameJson(current.dsseAttestation, kinds.dsseAttestation);
   const sbomChanged = !sameJson(current.sbomReference, kinds.sbomReference);
   const secretChanged = !sameJson(current.secret, kinds.secret);
-  const skillChanged = !sameJson(
-    current.aiSkillAnalysis,
-    kinds.aiSkillAnalysis,
-  );
+  const skillChanged = !sameJson(current.aiSkillAnalysis, kinds.aiSkillAnalysis);
 
   const updateMask = updateMaskOf(
     remediationChanged ? "remediation" : undefined,
     envelopeChanged && kinds.envelope !== undefined ? "envelope" : undefined,
-    attestationChanged && kinds.attestation !== undefined
-      ? "attestation"
-      : undefined,
+    attestationChanged && kinds.attestation !== undefined ? "attestation" : undefined,
     buildChanged && kinds.build !== undefined ? "build" : undefined,
     discoveryChanged && kinds.discovery !== undefined ? "discovery" : undefined,
     imageChanged && kinds.image !== undefined ? "image" : undefined,
     packageChanged && kinds.package !== undefined ? "package" : undefined,
-    vulnerabilityChanged && kinds.vulnerability !== undefined
-      ? "vulnerability"
-      : undefined,
-    complianceChanged && kinds.compliance !== undefined
-      ? "compliance"
-      : undefined,
-    deploymentChanged && kinds.deployment !== undefined
-      ? "deployment"
-      : undefined,
+    vulnerabilityChanged && kinds.vulnerability !== undefined ? "vulnerability" : undefined,
+    complianceChanged && kinds.compliance !== undefined ? "compliance" : undefined,
+    deploymentChanged && kinds.deployment !== undefined ? "deployment" : undefined,
     upgradeChanged && kinds.upgrade !== undefined ? "upgrade" : undefined,
-    dsseChanged && kinds.dsseAttestation !== undefined
-      ? "dsseAttestation"
-      : undefined,
-    sbomChanged && kinds.sbomReference !== undefined
-      ? "sbomReference"
-      : undefined,
+    dsseChanged && kinds.dsseAttestation !== undefined ? "dsseAttestation" : undefined,
+    sbomChanged && kinds.sbomReference !== undefined ? "sbomReference" : undefined,
     secretChanged && kinds.secret !== undefined ? "secret" : undefined,
-    skillChanged && kinds.aiSkillAnalysis !== undefined
-      ? "aiSkillAnalysis"
-      : undefined,
+    skillChanged && kinds.aiSkillAnalysis !== undefined ? "aiSkillAnalysis" : undefined,
   );
 
   if (updateMask.length > 0) {
@@ -779,11 +685,7 @@ export const reconcileOccurrence = Effect.fn(function* (input: {
   return current;
 });
 
-export const ownedNote = (
-  id: string,
-  note: containeranalysis.Note,
-  project: string,
-) =>
+export const ownedNote = (id: string, note: containeranalysis.Note, project: string) =>
   Effect.gen(function* () {
     const attrs = noteAttrs(note, project);
     const { labels } = parseDescription(note.longDescription);

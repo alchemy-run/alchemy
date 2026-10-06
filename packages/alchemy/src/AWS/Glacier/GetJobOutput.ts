@@ -43,6 +43,4 @@ export interface GetJobOutput extends Binding.Service<
     ) => Effect.Effect<glacier.GetJobOutputOutput, glacier.GetJobOutputError>
   >
 > {}
-export const GetJobOutput = Binding.Service<GetJobOutput>(
-  "AWS.Glacier.GetJobOutput",
-);
+export const GetJobOutput = Binding.Service<GetJobOutput>("AWS.Glacier.GetJobOutput");

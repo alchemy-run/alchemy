@@ -117,9 +117,7 @@ export type LicenseAssignment = Resource<
  * @resource
  * @category Licensing
  */
-export const LicenseAssignment = Resource<LicenseAssignment>(
-  "GCP.Licensing.LicenseAssignment",
-);
+export const LicenseAssignment = Resource<LicenseAssignment>("GCP.Licensing.LicenseAssignment");
 
 export class LicenseAssignmentNotResolved extends Data.TaggedError(
   "GCP.Licensing.LicenseAssignmentNotResolved",
@@ -154,29 +152,17 @@ const observeAssignment = (input: {
   previousSkuId?: string;
 }) =>
   Effect.gen(function* () {
-    const bySku = yield* getAssignment(
-      input.productId,
-      input.skuId,
-      input.userId,
-    );
+    const bySku = yield* getAssignment(input.productId, input.skuId, input.userId);
     if (bySku !== undefined) return bySku;
     if (
       input.previousSkuId !== undefined &&
       input.previousSkuId.length > 0 &&
       !sameText(input.previousSkuId, input.skuId)
     ) {
-      const previous = yield* getAssignment(
-        input.productId,
-        input.previousSkuId,
-        input.userId,
-      );
+      const previous = yield* getAssignment(input.productId, input.previousSkuId, input.userId);
       if (previous !== undefined) return previous;
     }
-    return yield* findAssignment(
-      input.productId,
-      input.userId,
-      input.customerId,
-    );
+    return yield* findAssignment(input.productId, input.userId, input.customerId);
   });
 
 export const LicenseAssignmentProvider = () =>
@@ -218,19 +204,11 @@ export const LicenseAssignmentProvider = () =>
         const customerId = yield* listCustomerId();
         const productId = yield* listProductId();
         const userId = yield* listUserId();
-        if (
-          customerId === undefined ||
-          productId === undefined ||
-          userId === undefined
-        ) {
+        if (customerId === undefined || productId === undefined || userId === undefined) {
           return [];
         }
         const env = yield* GcpEnvironment.current;
-        const items = yield* listAssignments(
-          productId,
-          customerId,
-          yield* listSkuId(),
-        );
+        const items = yield* listAssignments(productId, customerId, yield* listSkuId());
         return items
           .filter((item) => sameUser(item.userId, userId))
           .map((item) => toAttrs(item, env.project, customerId));

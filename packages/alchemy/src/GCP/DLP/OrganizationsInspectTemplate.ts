@@ -129,10 +129,9 @@ export type OrganizationsInspectTemplate = Resource<
  * @resource
  * @category DLP
  */
-export const OrganizationsInspectTemplate =
-  Resource<OrganizationsInspectTemplate>(
-    "GCP.DLP.OrganizationsInspectTemplate",
-  );
+export const OrganizationsInspectTemplate = Resource<OrganizationsInspectTemplate>(
+  "GCP.DLP.OrganizationsInspectTemplate",
+);
 
 const resourceName = (organization: string, templateId: string) =>
   `${organization}/inspectTemplates/${templateId}`;
@@ -154,8 +153,7 @@ const toAttrs = (
     displayName: template.displayName,
     description: ownership.text,
     inspectConfig: template.inspectConfig,
-    allowLimitedAvailabilityInfoTypes:
-      template.allowLimitedAvailabilityInfoTypes === true,
+    allowLimitedAvailabilityInfoTypes: template.allowLimitedAvailabilityInfoTypes === true,
     createTime: template.createTime,
     updateTime: template.updateTime,
   };
@@ -170,14 +168,7 @@ const getByName = (name: string) =>
 
 export const OrganizationsInspectTemplateProvider = () =>
   Provider.succeed(OrganizationsInspectTemplate, {
-    stables: [
-      "name",
-      "templateId",
-      "organization",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "templateId", "organization", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -193,18 +184,12 @@ export const OrganizationsInspectTemplateProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const templateId = yield* toPhysicalId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toPhysicalId(id, olds?.templateId, output?.templateId);
       const name = output?.name ?? resourceName(organization, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -215,15 +200,9 @@ export const OrganizationsInspectTemplateProvider = () =>
         return yield* dlp.listOrganizationsInspectTemplates
           .pages({ parent: organization, pageSize: 100 })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.inspectTemplates ?? []),
-            ),
-            Stream.filter((template) =>
-              hasOwnershipMarker(template.description),
-            ),
-            Stream.map((template) =>
-              toAttrs(template, organization, env.project),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.inspectTemplates ?? [])),
+            Stream.filter((template) => hasOwnershipMarker(template.description)),
+            Stream.map((template) => toAttrs(template, organization, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -232,22 +211,14 @@ export const OrganizationsInspectTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const templateId = yield* toPhysicalId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const templateId = yield* toPhysicalId(id, news.templateId, output?.templateId);
       const name = resourceName(organization, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(ownership, news.description);
       const displayName = news.displayName;
       const inspectConfig = news.inspectConfig;
-      const allowLimitedAvailabilityInfoTypes =
-        news.allowLimitedAvailabilityInfoTypes === true;
+      const allowLimitedAvailabilityInfoTypes = news.allowLimitedAvailabilityInfoTypes === true;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -276,11 +247,9 @@ export const OrganizationsInspectTemplateProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const configChanged =
-        fingerprint(current.inspectConfig) !== fingerprint(inspectConfig);
+      const configChanged = fingerprint(current.inspectConfig) !== fingerprint(inspectConfig);
       const limitedChanged =
-        (current.allowLimitedAvailabilityInfoTypes === true) !==
-        allowLimitedAvailabilityInfoTypes;
+        (current.allowLimitedAvailabilityInfoTypes === true) !== allowLimitedAvailabilityInfoTypes;
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
         descriptionChanged ? "description" : undefined,

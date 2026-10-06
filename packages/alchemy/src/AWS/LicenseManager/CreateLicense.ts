@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CreateLicense}.
  */
-export interface CreateLicenseRequest
-  extends licensemanager.CreateLicenseRequest {}
+export interface CreateLicenseRequest extends licensemanager.CreateLicenseRequest {}
 
 /**
  * Runtime binding for `license-manager:CreateLicense` — issue a
@@ -51,12 +50,7 @@ export interface CreateLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: CreateLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.CreateLicenseResponse,
-      licensemanager.CreateLicenseError
-    >
+    ) => Effect.Effect<licensemanager.CreateLicenseResponse, licensemanager.CreateLicenseError>
   >
 > {}
-export const CreateLicense = Binding.Service<CreateLicense>(
-  "AWS.LicenseManager.CreateLicense",
-);
+export const CreateLicense = Binding.Service<CreateLicense>("AWS.LicenseManager.CreateLicense");

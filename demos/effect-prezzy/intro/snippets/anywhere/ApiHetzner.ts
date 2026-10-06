@@ -1,9 +1,9 @@
 import * as Hetzner from "alchemy/Hetzner";
-import { Box } from "./Hosts.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Files, FilesVolume } from "./Files.ts";
+import { Box } from "./Hosts.ts";
 
 // #region show
 export default Hetzner.Service(
@@ -18,7 +18,8 @@ export default Hetzner.Service(
         const request = yield* HttpServerRequest;
         yield* files.upload(request.url, yield* request.text);
         return HttpServerResponse.empty({ status: 201 });
-      })/*hide*/.pipe(Effect.orDie)/*end*/,
+      }) /*hide*/
+        .pipe(Effect.orDie) /*end*/,
     };
   }).pipe(Effect.provide(FilesVolume)),
 );

@@ -147,9 +147,7 @@ export class ProductsReferenceImageNotResolved extends Data.TaggedError(
 const toParent = (project: string, location: string, parent: string) =>
   productNameOf(project, location, parent);
 
-const boundingPolysOf = (
-  polys: vision.BoundingPolyList | undefined,
-): BoundingPoly[] =>
+const boundingPolysOf = (polys: vision.BoundingPolyList | undefined): BoundingPoly[] =>
   (polys ?? []).map((poly) => ({
     vertices: poly.vertices?.map((vertex) => ({
       x: vertex.x,
@@ -177,21 +175,12 @@ const toAttrs = (image: vision.ReferenceImage, project: string) => {
 
 export const ProductsReferenceImageProvider = () =>
   Provider.succeed(ProductsReferenceImage, {
-    stables: [
-      "name",
-      "referenceImageId",
-      "parent",
-      "project",
-      "location",
-      "uri",
-    ],
+    stables: ["name", "referenceImageId", "parent", "project", "location", "uri"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const location = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousPolys = olds?.boundingPolys ?? output?.boundingPolys;
       return replaceOnIdentity({
         previousId: olds?.referenceImageId ?? output?.referenceImageId,
@@ -211,17 +200,10 @@ export const ProductsReferenceImageProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const parent = toParent(
-        env.project,
-        location,
-        olds?.parent ?? output?.parent ?? "",
-      );
+      const parent = toParent(env.project, location, olds?.parent ?? output?.parent ?? "");
       const name =
         output?.name ??
-        referenceImageNameOf(
-          parent,
-          olds?.referenceImageId ?? output?.referenceImageId ?? "",
-        );
+        referenceImageNameOf(parent, olds?.referenceImageId ?? output?.referenceImageId ?? "");
       const existing = yield* getReferenceImage(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -238,8 +220,7 @@ export const ProductsReferenceImageProvider = () =>
         news.referenceImageId,
         output?.referenceImageId,
       );
-      const name =
-        output?.name ?? referenceImageNameOf(parent, referenceImageId);
+      const name = output?.name ?? referenceImageNameOf(parent, referenceImageId);
 
       let current = yield* getReferenceImage(name);
 

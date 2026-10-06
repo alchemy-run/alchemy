@@ -11,6 +11,7 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { isJobTerminal } from "./internal.ts";
 import {
   alchemyIdFilter,
   createInternalLabels,
@@ -25,7 +26,6 @@ import {
   toLabels,
   userLabels,
 } from "./names.ts";
-import { isJobTerminal } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
 
 export type NasJobProps = {
@@ -125,22 +125,15 @@ export type NasJob = Resource<
  */
 export const NasJob = Resource<NasJob>("GCP.AIPlatform.NasJob");
 
-export class NasJobNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.NasJobNotResolved",
-)<{
+export class NasJobNotResolved extends Data.TaggedError("GCP.AIPlatform.NasJobNotResolved")<{
   name: string;
 }> {}
 
-export class NasJobStillExists extends Data.TaggedError(
-  "GCP.AIPlatform.NasJobStillExists",
-)<{
+export class NasJobStillExists extends Data.TaggedError("GCP.AIPlatform.NasJobStillExists")<{
   name: string;
 }> {}
 
-const toAttrs = (
-  job: aiplatform.GoogleCloudAiplatformV1NasJob,
-  project: string,
-) => {
+const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NasJob, project: string) => {
   const name = job.name ?? "";
   return {
     name,
@@ -163,31 +156,17 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listPage = (parent: string, filter?: string) =>
-  aiplatform.listProjectsLocationsNasJobs
-    .pages({ parent, pageSize: 100, filter })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.nasJobs ?? []),
-      ),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1NasJob[]),
-      ),
-    );
-
-const findOwned = (
-  project: string,
-  location: string,
-  labels: Record<string, string>,
-) =>
-  listPage(
-    `projects/${project}/locations/${location}`,
-    alchemyIdFilter(labels),
-  ).pipe(
-    Effect.map(
-      (items) =>
-        items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined,
+  aiplatform.listProjectsLocationsNasJobs.pages({ parent, pageSize: 100, filter }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.nasJobs ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1NasJob[]),
     ),
+  );
+
+const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+  listPage(`projects/${project}/locations/${location}`, alchemyIdFilter(labels)).pipe(
+    Effect.map((items) => items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined),
   );
 
 const waitUntilGone = (name: string) =>
@@ -211,10 +190,7 @@ export const NasJobProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -225,8 +201,7 @@ export const NasJobProvider = () =>
         previousDisplay !== undefined &&
         news.displayName !== previousDisplay;
       const specsChanged =
-        olds !== undefined &&
-        stableJson(olds.nasJobSpec) !== stableJson(news.nasJobSpec);
+        olds !== undefined && stableJson(olds.nasJobSpec) !== stableJson(news.nasJobSpec);
       if (previousLocation !== nextLocation || displayChanged || specsChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -235,20 +210,14 @@ export const NasJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const existing =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(env.project, location, ownership));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(env.project, location, ownership));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -256,8 +225,7 @@ export const NasJobProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listPage(`projects/${env.project}/locations/${location}`),
+          (location) => listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         return pages
@@ -268,24 +236,15 @@ export const NasJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ??
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
         (yield* findOwned(env.project, location, desiredLabels));
 
       if (current === undefined) {
@@ -296,14 +255,12 @@ export const NasJobProvider = () =>
               displayName,
               labels: desiredLabels,
               nasJobSpec: news.nasJobSpec,
-              enableRestrictedImageTraining:
-                news.enableRestrictedImageTraining === true,
+              enableRestrictedImageTraining: news.enableRestrictedImageTraining === true,
               encryptionSpec: news.encryptionSpec,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current =
-          created ?? (yield* findOwned(env.project, location, desiredLabels));
+        current = created ?? (yield* findOwned(env.project, location, desiredLabels));
       }
 
       if (current === undefined || current.name === undefined) {
@@ -321,12 +278,7 @@ export const NasJobProvider = () =>
           name: output.name,
           body: {},
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.void));
       // Running jobs reject deletes; wait for the cancel to land.
       yield* getByName(output.name).pipe(
         Effect.repeat({

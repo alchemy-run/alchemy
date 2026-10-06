@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -86,9 +81,7 @@ export type CustomInterceptProfile = {
 
 export type UrlFilter = {
   /** Action taken when this filter matches (`ALLOW` or `DENY`). */
-  filteringAction?:
-    | networksecurity.UrlFilterFilteringActionEnum
-    | (string & {});
+  filteringAction?: networksecurity.UrlFilterFilteringActionEnum | (string & {});
   /** URL strings that must match for this filter to apply. */
   urls?: string[];
   /**
@@ -242,9 +235,7 @@ export type SecurityProfile = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const SecurityProfile = Resource<SecurityProfile>(
-  "GCP.NetworkSecurity.SecurityProfile",
-);
+export const SecurityProfile = Resource<SecurityProfile>("GCP.NetworkSecurity.SecurityProfile");
 
 export class SecurityProfileNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileNotResolved",
@@ -287,10 +278,7 @@ const typeOf = (
 };
 
 const toThreatPrevention = (
-  value:
-    | networksecurity.ThreatPreventionProfile
-    | ThreatPreventionProfile
-    | undefined,
+  value: networksecurity.ThreatPreventionProfile | ThreatPreventionProfile | undefined,
 ): ThreatPreventionProfile | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -333,19 +321,15 @@ const toAttrs = (profile: networksecurity.SecurityProfile, project: string) => {
     type: profile.type,
     description: profile.description,
     labels: userLabels(profile.labels),
-    threatPreventionProfile: toThreatPrevention(
-      profile.threatPreventionProfile,
-    ),
+    threatPreventionProfile: toThreatPrevention(profile.threatPreventionProfile),
     customMirroringProfile: profile.customMirroringProfile
       ? {
-          mirroringEndpointGroup:
-            profile.customMirroringProfile.mirroringEndpointGroup,
+          mirroringEndpointGroup: profile.customMirroringProfile.mirroringEndpointGroup,
         }
       : undefined,
     customInterceptProfile: profile.customInterceptProfile
       ? {
-          interceptEndpointGroup:
-            profile.customInterceptProfile.interceptEndpointGroup,
+          interceptEndpointGroup: profile.customInterceptProfile.interceptEndpointGroup,
         }
       : undefined,
     urlFilteringProfile: toUrlFiltering(profile.urlFilteringProfile),
@@ -363,13 +347,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((profile) =>
-      profile
-        ? Effect.succeed(profile)
-        : Effect.fail(new SecurityProfileNotResolved({ name })),
+      profile ? Effect.succeed(profile) : Effect.fail(new SecurityProfileNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.SecurityProfileNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -378,13 +359,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((profile) =>
-      profile === undefined
-        ? Effect.void
-        : Effect.fail(new SecurityProfileStillExists({ name })),
+      profile === undefined ? Effect.void : Effect.fail(new SecurityProfileStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.SecurityProfileStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -397,13 +375,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.securityProfiles ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.securityProfiles ?? [])),
       Stream.filter((profile) =>
-        Object.keys(profile.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(profile.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((profile) => toAttrs(profile, project)),
       Stream.runCollect,
@@ -422,17 +396,14 @@ const toCreateBody = (
     type,
   };
   if (type === "THREAT_PREVENTION") {
-    body.threatPreventionProfile =
-      toThreatPrevention(news.threatPreventionProfile) ?? {};
+    body.threatPreventionProfile = toThreatPrevention(news.threatPreventionProfile) ?? {};
   } else if (type === "CUSTOM_MIRRORING") {
     body.customMirroringProfile = {
-      mirroringEndpointGroup:
-        news.customMirroringProfile?.mirroringEndpointGroup,
+      mirroringEndpointGroup: news.customMirroringProfile?.mirroringEndpointGroup,
     };
   } else if (type === "CUSTOM_INTERCEPT") {
     body.customInterceptProfile = {
-      interceptEndpointGroup:
-        news.customInterceptProfile?.interceptEndpointGroup,
+      interceptEndpointGroup: news.customInterceptProfile?.interceptEndpointGroup,
     };
   } else if (type === "URL_FILTERING") {
     body.urlFilteringProfile = toUrlFiltering(news.urlFilteringProfile) ?? {};
@@ -448,14 +419,10 @@ const immutableChanged = (
   const previousType = typeOf(
     {
       type: olds?.type ?? output?.type,
-      threatPreventionProfile:
-        olds?.threatPreventionProfile ?? output?.threatPreventionProfile,
-      customMirroringProfile:
-        olds?.customMirroringProfile ?? output?.customMirroringProfile,
-      customInterceptProfile:
-        olds?.customInterceptProfile ?? output?.customInterceptProfile,
-      urlFilteringProfile:
-        olds?.urlFilteringProfile ?? output?.urlFilteringProfile,
+      threatPreventionProfile: olds?.threatPreventionProfile ?? output?.threatPreventionProfile,
+      customMirroringProfile: olds?.customMirroringProfile ?? output?.customMirroringProfile,
+      customInterceptProfile: olds?.customInterceptProfile ?? output?.customInterceptProfile,
+      urlFilteringProfile: olds?.urlFilteringProfile ?? output?.urlFilteringProfile,
     },
     output?.type ?? DEFAULT_TYPE,
   );
@@ -466,8 +433,7 @@ const immutableChanged = (
       olds?.customMirroringProfile?.mirroringEndpointGroup ??
       output?.customMirroringProfile?.mirroringEndpointGroup ??
       "";
-    const next =
-      news.customMirroringProfile?.mirroringEndpointGroup ?? previous;
+    const next = news.customMirroringProfile?.mirroringEndpointGroup ?? previous;
     if (next !== previous) return true;
   }
   if (nextType === "CUSTOM_INTERCEPT") {
@@ -475,8 +441,7 @@ const immutableChanged = (
       olds?.customInterceptProfile?.interceptEndpointGroup ??
       output?.customInterceptProfile?.interceptEndpointGroup ??
       "";
-    const next =
-      news.customInterceptProfile?.interceptEndpointGroup ?? previous;
+    const next = news.customInterceptProfile?.interceptEndpointGroup ?? previous;
     if (next !== previous) return true;
   }
   return false;
@@ -484,29 +449,16 @@ const immutableChanged = (
 
 export const SecurityProfileProvider = () =>
   Provider.succeed(SecurityProfile, {
-    stables: [
-      "name",
-      "securityProfileId",
-      "project",
-      "location",
-      "type",
-      "createTime",
-    ],
+    stables: ["name", "securityProfileId", "project", "location", "type", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.securityProfileId ?? output?.securityProfileId;
       const nextId = news.securityProfileId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         immutableChanged(news, olds, output)
       ) {
@@ -525,14 +477,11 @@ export const SecurityProfileProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, securityProfileId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, securityProfileId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -551,12 +500,7 @@ export const SecurityProfileProvider = () =>
       );
       const location = normalizeLocation(news.location ?? output?.location);
       const type = typeOf(news, output?.type ?? DEFAULT_TYPE);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        securityProfileId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, securityProfileId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -592,8 +536,7 @@ export const SecurityProfileProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const threatChanged =
         type === "THREAT_PREVENTION" &&
         !sameJson(
@@ -614,25 +557,24 @@ export const SecurityProfileProvider = () =>
           threatChanged ? "threatPreventionProfile" : undefined,
           urlChanged ? "urlFilteringProfile" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsSecurityProfiles({
+        const operation = yield* networksecurity.patchProjectsLocationsSecurityProfiles({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              threatPreventionProfile:
-                type === "THREAT_PREVENTION"
-                  ? (toThreatPrevention(news.threatPreventionProfile) ?? {})
-                  : undefined,
-              urlFilteringProfile:
-                type === "URL_FILTERING"
-                  ? (toUrlFiltering(news.urlFilteringProfile) ?? {})
-                  : undefined,
-            },
-          });
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            threatPreventionProfile:
+              type === "THREAT_PREVENTION"
+                ? (toThreatPrevention(news.threatPreventionProfile) ?? {})
+                : undefined,
+            urlFilteringProfile:
+              type === "URL_FILTERING"
+                ? (toUrlFiltering(news.urlFilteringProfile) ?? {})
+                : undefined,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);
       }

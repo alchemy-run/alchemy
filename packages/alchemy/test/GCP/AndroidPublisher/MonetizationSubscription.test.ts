@@ -1,16 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as androidpublisher from "@distilled.cloud/gcp/androidpublisher_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  logLevel,
-  packageName,
-  probePackageName,
-  missingTag,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, packageName, probePackageName, missingTag, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -88,13 +82,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AndroidPublisher.MonetizationSubscription(
-            "Premium",
-            {
-              packageName: packageName!,
-              listings: [{ languageCode: "en-US", title: "Premium" }],
-            },
-          );
+          return yield* GCP.AndroidPublisher.MonetizationSubscription("Premium", {
+            packageName: packageName!,
+            listings: [{ languageCode: "en-US", title: "Premium" }],
+          });
         }),
       );
 
@@ -111,14 +102,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.AndroidPublisher.MonetizationSubscription(
-            "Premium",
-            {
-              packageName: created.packageName,
-              productId: created.productId,
-              listings: [{ languageCode: "en-US", title: "Premium Plus" }],
-            },
-          );
+          return yield* GCP.AndroidPublisher.MonetizationSubscription("Premium", {
+            packageName: created.packageName,
+            productId: created.productId,
+            listings: [{ languageCode: "en-US", title: "Premium Plus" }],
+          });
         }),
       );
 

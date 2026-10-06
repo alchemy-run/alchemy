@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -181,11 +176,8 @@ export type BackupVault = Resource<
  */
 export const BackupVault = Resource<BackupVault>("GCP.NetApp.BackupVault");
 
-const resourceName = (
-  project: string,
-  location: string,
-  backupVaultId: string,
-) => `projects/${project}/locations/${location}/backupVaults/${backupVaultId}`;
+const resourceName = (project: string, location: string, backupVaultId: string) =>
+  `projects/${project}/locations/${location}/backupVaults/${backupVaultId}`;
 
 const toRetention = (
   policy: netapp.BackupRetentionPolicy | undefined,
@@ -193,8 +185,7 @@ const toRetention = (
   policy === undefined
     ? undefined
     : {
-        backupMinimumEnforcedRetentionDays:
-          policy.backupMinimumEnforcedRetentionDays,
+        backupMinimumEnforcedRetentionDays: policy.backupMinimumEnforcedRetentionDays,
         dailyBackupImmutable: policy.dailyBackupImmutable,
         weeklyBackupImmutable: policy.weeklyBackupImmutable,
         monthlyBackupImmutable: policy.monthlyBackupImmutable,
@@ -254,12 +245,8 @@ export const BackupVaultProvider = () =>
       const previousKms = olds?.kmsConfig ?? output?.kmsConfig;
       return replaceOnIdentity({
         previousId: olds?.backupVaultId ?? output?.backupVaultId,
-        nextId:
-          news.backupVaultId ?? olds?.backupVaultId ?? output?.backupVaultId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.backupVaultId ?? olds?.backupVaultId ?? output?.backupVaultId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -285,18 +272,12 @@ export const BackupVaultProvider = () =>
         output?.backupVaultId,
         "backupvault",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backupVaultId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backupVaultId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -314,10 +295,7 @@ export const BackupVaultProvider = () =>
         output?.backupVaultId,
         "backupvault",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backupVaultId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -371,8 +349,7 @@ export const BackupVaultProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
+        (current.description ?? "") !== (news.description ?? "") && "description",
         fingerprint(toRetention(current.backupRetentionPolicy)) !==
           fingerprint(news.backupRetentionPolicy) && "backupRetentionPolicy",
       ]);

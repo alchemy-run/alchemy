@@ -11,6 +11,5 @@ import * as Semaphore from "effect/Semaphore";
 const slots = Semaphore.makeUnsafe(4);
 
 /** Run a Dataplex test body while holding one API-quota slot. */
-export const withDataplexSlot = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => slots.withPermits(1)(self);
+export const withDataplexSlot = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  slots.withPermits(1)(self);

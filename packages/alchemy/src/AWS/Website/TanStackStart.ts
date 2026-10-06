@@ -3,8 +3,7 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the TanStack Start build. */
-export const TANSTACK_START_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/tanstack-start";
+export const TANSTACK_START_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/tanstack-start";
 
 /** The AWS Lambda deploy target for the TanStack Start build. */
 export const TANSTACK_START_AWS_TARGET_SPECIFIER =
@@ -81,10 +80,7 @@ export interface TanStackStartProps extends FrameworkSiteProps {}
  *
  * @resource
  */
-export const TanStackStart = (
-  id: string,
-  props: InputProps<TanStackStartProps> = {},
-) =>
+export const TanStackStart = (id: string, props: InputProps<TanStackStartProps> = {}) =>
   makeFrameworkSite(id, props, {
     name: "TanStackStart",
     framework: TANSTACK_START_FRAMEWORK_SPECIFIER,

@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_AGENT_POOL_ID = 128;
 export const MAX_AGENT_POOL_DISPLAY_NAME = 127;
@@ -24,9 +20,7 @@ export class ResourceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.StorageTransfer.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.StorageTransfer.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -50,9 +44,7 @@ export const transferJobName = (jobId: string) =>
   jobId.startsWith(JOB_NAME_PREFIX) ? jobId : `${JOB_NAME_PREFIX}${jobId}`;
 
 export const jobIdOf = (name: string) =>
-  name.startsWith(JOB_NAME_PREFIX)
-    ? name.slice(JOB_NAME_PREFIX.length)
-    : lastSegment(name);
+  name.startsWith(JOB_NAME_PREFIX) ? name.slice(JOB_NAME_PREFIX.length) : lastSegment(name);
 
 export const agentPoolIdOf = (name: string) => lastSegment(name);
 
@@ -87,11 +79,7 @@ export const sanitizeJobId = (value: string) => {
   return next;
 };
 
-export const toAgentPoolId = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toAgentPoolId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return sanitizeAgentPoolId(explicit);
     if (existing !== undefined) return existing;
@@ -105,11 +93,7 @@ export const toAgentPoolId = (
     );
   });
 
-export const toJobId = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toJobId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return sanitizeJobId(explicit);
     if (existing !== undefined) return existing;
@@ -131,10 +115,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -155,10 +136,7 @@ export const encodeOwnership = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -186,14 +164,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -203,18 +177,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -241,16 +206,13 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const sameValue = (left: unknown, right: unknown) =>
   fingerprint(left) === fingerprint(right);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const retryApiDisabled = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
@@ -319,28 +281,20 @@ export const waitAgentPoolCreated = (name: string) =>
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("GCP.StorageTransfer.ResourceNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.StorageTransfer.ResourceNotResolved", () => Effect.succeed(undefined)),
   );
 
 export const waitAgentPoolGone = (name: string) =>
   getAgentPool(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.StorageTransfer.ResourceStillExists",
+      while: (error) => error._tag === "GCP.StorageTransfer.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.StorageTransfer.ResourceStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.StorageTransfer.ResourceStillExists", () => Effect.void),
   );
 
 export const listAgentPools = (projectId: string) =>
@@ -352,11 +306,7 @@ export const listAgentPools = (projectId: string) =>
       }),
       (page) => page.agentPools,
     ),
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as storagetransfer.AgentPool[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as storagetransfer.AgentPool[])));
 
 export const listTransferJobs = (projectId: string) =>
   retryApiDisabled(
@@ -367,8 +317,4 @@ export const listTransferJobs = (projectId: string) =>
       }),
       (page) => page.transferJobs,
     ),
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as storagetransfer.TransferJob[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as storagetransfer.TransferJob[])));

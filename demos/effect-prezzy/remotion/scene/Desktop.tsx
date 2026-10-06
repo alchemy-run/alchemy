@@ -74,10 +74,7 @@ export const AlchemyMark = ({ size, style }: { size: number; style?: CSSProperti
 const TrafficLights = () => (
   <div style={{ display: "flex", gap: 9 }}>
     {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
-      <div
-        key={color}
-        style={{ width: 13, height: 13, borderRadius: 7, background: color }}
-      />
+      <div key={color} style={{ width: 13, height: 13, borderRadius: 7, background: color }} />
     ))}
   </div>
 );
@@ -148,4 +145,3 @@ export const Window = ({
 );
 
 export { TrafficLights };
-

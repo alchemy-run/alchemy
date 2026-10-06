@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  currentProject,
-  runSlowLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
+import { logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,19 +44,16 @@ test.provider.skipIf(!runSlowLifecycle)(
           const network = yield* GCP.Compute.Network("DmsVpc", {
             autoCreateSubnetworks: false,
           });
-          const peering = yield* GCP.DataMigration.PrivateConnection(
-            "DmsPeer",
-            {
-              location: "us-central1",
-              displayName: "dms-peer",
-              labels: { env: "test" },
-              skipValidation: true,
-              vpcPeeringConfig: {
-                vpcName: network.networkName,
-                subnet: "10.8.0.0/29",
-              },
+          const peering = yield* GCP.DataMigration.PrivateConnection("DmsPeer", {
+            location: "us-central1",
+            displayName: "dms-peer",
+            labels: { env: "test" },
+            skipValidation: true,
+            vpcPeeringConfig: {
+              vpcName: network.networkName,
+              subnet: "10.8.0.0/29",
             },
-          );
+          });
           return { network, peering };
         }),
       );
@@ -75,10 +67,9 @@ test.provider.skipIf(!runSlowLifecycle)(
       expect(created.peering.labels).toMatchObject({ env: "test" });
       expect(created.peering.vpcPeeringConfig?.subnet).toEqual("10.8.0.0/29");
 
-      const fetched =
-        yield* datamigration.getProjectsLocationsPrivateConnections({
-          name: created.peering.name,
-        });
+      const fetched = yield* datamigration.getProjectsLocationsPrivateConnections({
+        name: created.peering.name,
+      });
       expect(fetched.name).toEqual(created.peering.name);
       expect(fetched.displayName).toEqual("dms-peer");
       expect(fetched.labels?.env).toEqual("test");

@@ -57,8 +57,10 @@ const ELBOWS: { from: LoopPart; to: LoopPart; label: string }[] = [
 ];
 
 const DIM = 0.26;
-const isShown = (step: LoopStep | undefined, id: LoopPart) => !!step && (!step.show || step.show.includes(id));
-const isLit = (step: LoopStep | undefined, id: LoopPart) => !step || !step.lit || step.lit.includes(id);
+const isShown = (step: LoopStep | undefined, id: LoopPart) =>
+  !!step && (!step.show || step.show.includes(id));
+const isLit = (step: LoopStep | undefined, id: LoopPart) =>
+  !step || !step.lit || step.lit.includes(id);
 const glows = (step: LoopStep | undefined, id: LoopPart) => !!step?.focus?.includes(id);
 /** The feedback arc runs from the last check drawn on your machine back to the edit. */
 const arcFrom = (step: LoopStep | undefined): LoopPart | undefined =>
@@ -69,7 +71,15 @@ const arcFrom = (step: LoopStep | undefined): LoopPart | undefined =>
  * drawing themselves in order; after that, only what's lit and what glows
  * changes between steps.
  */
-export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopStep; local: number }) => {
+export const LoopView = ({
+  step,
+  prev,
+  local,
+}: {
+  step: LoopStep;
+  prev?: LoopStep;
+  local: number;
+}) => {
   const t = interpolate(local, [0, 10], [0, 1], clamp);
   const level = (id: LoopPart) => {
     const now = isLit(step, id) ? 1 : DIM;
@@ -113,7 +123,14 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
         const isNew = !inLane.some((n) => isShown(prev, n.id));
         return (
           <g key={lane.label} opacity={isNew ? interpolate(local, [0, 6], [0, 1], clamp) : 1}>
-            <text x={120} y={ROWS[i]! + 14} fontFamily={hand} fontWeight={700} fontSize={46} fill={lane.color}>
+            <text
+              x={120}
+              y={ROWS[i]! + 14}
+              fontFamily={hand}
+              fontWeight={700}
+              fontSize={46}
+              fill={lane.color}
+            >
               {lane.label}
             </text>
           </g>
@@ -122,7 +139,11 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
 
       {/* The feedback arc: every failure goes back to the agent. */}
       {feedbackOn ? (
-        <g opacity={(feedbackNew ? drawProgress(local, fresh.length * 2 + 4, 10) : 1) * feedbackLevel}>
+        <g
+          opacity={
+            (feedbackNew ? drawProgress(local, fresh.length * 2 + 4, 10) : 1) * feedbackLevel
+          }
+        >
           <path
             d={`M ${a.x} ${a.y - NODE.h / 2 - 10} C ${a.x} ${arcTop}, ${b.x} ${arcTop}, ${b.x} ${b.y - NODE.h / 2 - 12}`}
             fill="none"
@@ -157,7 +178,15 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
         const on = Math.min(level(from), level(to));
         return (
           <g key={`${from}-${to}`} opacity={on}>
-            <Arrow x1={p.x + NODE.w / 2 + 8} y1={p.y} x2={q.x - NODE.w / 2 - 8} y2={q.y} color={brand.fgMuted} progress={draw(to)} bend={0} />
+            <Arrow
+              x1={p.x + NODE.w / 2 + 8}
+              y1={p.y}
+              x2={q.x - NODE.w / 2 - 8}
+              y2={q.y}
+              color={brand.fgMuted}
+              progress={draw(to)}
+              bend={0}
+            />
           </g>
         );
       })}
@@ -171,7 +200,15 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
         const progress = draw(elbow.to);
         return (
           <g key={elbow.label} opacity={on}>
-            <path d={d} fill="none" stroke={brand.fgMuted} strokeWidth={3} strokeDasharray={3000} strokeDashoffset={3000 * (1 - progress)} strokeLinejoin="round" />
+            <path
+              d={d}
+              fill="none"
+              stroke={brand.fgMuted}
+              strokeWidth={3}
+              strokeDasharray={3000}
+              strokeDashoffset={3000 * (1 - progress)}
+              strokeLinejoin="round"
+            />
             <path
               d={`M ${q.x - 10} ${q.y - NODE.h / 2 - 26} L ${q.x} ${q.y - NODE.h / 2 - 10} L ${q.x + 10} ${q.y - NODE.h / 2 - 26}`}
               fill="none"
@@ -180,7 +217,15 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
               opacity={progress >= 1 ? 1 : 0}
             />
             <rect x={p.x - 70} y={midY - 20} width={140} height={40} rx={20} fill={brand.bg} />
-            <text x={p.x} y={midY + 8} textAnchor="middle" fontFamily={mono} fontSize={22} fill={TONE.good} opacity={progress}>
+            <text
+              x={p.x}
+              y={midY + 8}
+              textAnchor="middle"
+              fontFamily={mono}
+              fontSize={22}
+              fill={TONE.good}
+              opacity={progress}
+            >
               {elbow.label}
             </text>
           </g>
@@ -193,7 +238,11 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
         const g = glow(n.id);
         const color = LANES[n.row]!.color;
         return (
-          <g key={n.id} opacity={q * level(n.id)} transform={`translate(${x} ${y}) scale(${0.9 + 0.1 * q})`}>
+          <g
+            key={n.id}
+            opacity={q * level(n.id)}
+            transform={`translate(${x} ${y}) scale(${0.9 + 0.1 * q})`}
+          >
             {g > 0 ? (
               <rect
                 x={-NODE.w / 2 - 8}
@@ -217,10 +266,25 @@ export const LoopView = ({ step, prev, local }: { step: LoopStep; prev?: LoopSte
               stroke={g > 0.5 ? "#7ee787" : color}
               strokeWidth={3}
             />
-            <text x={0} y={-4} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={31} fill={brand.fg}>
+            <text
+              x={0}
+              y={-4}
+              textAnchor="middle"
+              fontFamily={sans}
+              fontWeight={700}
+              fontSize={31}
+              fill={brand.fg}
+            >
               {n.title}
             </text>
-            <text x={0} y={32} textAnchor="middle" fontFamily={mono} fontSize={20} fill={brand.fgMuted}>
+            <text
+              x={0}
+              y={32}
+              textAnchor="middle"
+              fontFamily={mono}
+              fontSize={20}
+              fill={brand.fgMuted}
+            >
               {n.sub}
             </text>
           </g>

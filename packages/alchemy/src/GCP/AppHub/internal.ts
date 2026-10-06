@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export type Attributes = apphub.Attributes;
@@ -24,28 +20,20 @@ export const MAX_NAME_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 2048;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.AppHub.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.AppHub.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.AppHub.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.AppHub.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.AppHub.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.AppHub.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.AppHub.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.AppHub.ResourceFailed")<{
   name: string;
   state: string;
 }> {}
@@ -69,10 +57,8 @@ export const rfc1035 = (name: string, fallback = "apphub"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -96,35 +82,23 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   const applicationsAt = parts.lastIndexOf("applications");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     applicationId:
-      applicationsAt >= 0 && parts[applicationsAt + 1]
-        ? parts[applicationsAt + 1]!
-        : "",
+      applicationsAt >= 0 && parts[applicationsAt + 1] ? parts[applicationsAt + 1]! : "",
     application:
       applicationsAt >= 0
         ? parts.slice(0, applicationsAt + 2).join("/")
         : parts.slice(0, Math.max(0, parts.length - 2)).join("/"),
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -132,11 +106,7 @@ export const parseName = (
   };
 };
 
-export const expandApplication = (
-  value: string,
-  project: string,
-  location: string,
-) =>
+export const expandApplication = (value: string, project: string, location: string) =>
   value.includes("/applications/")
     ? value.replace(/\/+$/, "")
     : `${locationParent(project, location)}/applications/${value}`;
@@ -148,11 +118,7 @@ export const expandDiscovered = (
   collection: "discoveredServices" | "discoveredWorkloads",
 ) => {
   if (value.includes(`/${collection}/`)) return value.replace(/\/+$/, "");
-  if (
-    value.includes("/") ||
-    value.startsWith("https://") ||
-    value.includes(".googleapis.com")
-  ) {
+  if (value.includes("/") || value.startsWith("https://") || value.includes(".googleapis.com")) {
     return value.replace(/\/+$/, "");
   }
   return `projects/${project}/locations/${location}/${collection}/${value}`;
@@ -202,19 +168,15 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -248,12 +210,7 @@ export const replaceOnIdentity = (input: {
   };
 };
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -261,10 +218,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -315,14 +269,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -332,26 +282,14 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
 /** Wait for an operation through the shared GCP waiter. */
-export const waitForOperation = (
-  operation: apphub.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+export const waitForOperation = (operation: apphub.Operation, options?: { notFoundOk?: boolean }) =>
   waitForGcpOperation(
     operation,
     (name) =>
@@ -371,8 +309,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
   );
@@ -399,9 +336,7 @@ export const waitUntilGone = <A, E, R>(
 ): Effect.Effect<void, E | ResourceStillExists, R> =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -421,11 +356,7 @@ export const waitUntilReady = <A, E, R>(
     times?: number;
     interval?: `${number} seconds`;
   },
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceNotReady | ResourceFailed,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceNotReady | ResourceFailed, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
@@ -440,9 +371,7 @@ export const waitUntilReady = <A, E, R>(
       (value) => new ResourceNotReady({ name, state: stateOf(value) ?? "" }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ResourceNotReady ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ResourceNotReady || error instanceof ResourceNotResolved,
       times: options?.times ?? 10,
       schedule: Schedule.spaced(options?.interval ?? "2 seconds"),
     }),
@@ -521,12 +450,7 @@ export const resolveDiscoveredService = (
   location: string,
 ) =>
   Effect.gen(function* () {
-    const expanded = expandDiscovered(
-      value,
-      project,
-      location,
-      "discoveredServices",
-    );
+    const expanded = expandDiscovered(value, project, location, "discoveredServices");
     if (isDiscoveredName(expanded, "discoveredServices")) return expanded;
     const looked = yield* apphub
       .lookupProjectsLocationsDiscoveredServices({
@@ -548,12 +472,7 @@ export const resolveDiscoveredWorkload = (
   location: string,
 ) =>
   Effect.gen(function* () {
-    const expanded = expandDiscovered(
-      value,
-      project,
-      location,
-      "discoveredWorkloads",
-    );
+    const expanded = expandDiscovered(value, project, location, "discoveredWorkloads");
     if (isDiscoveredName(expanded, "discoveredWorkloads")) return expanded;
     const looked = yield* apphub
       .lookupProjectsLocationsDiscoveredWorkloads({

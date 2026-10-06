@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  currentProject,
-  runLifecycle,
-  waitUntilGone,
-  zone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, currentProject, runLifecycle, waitUntilGone, zone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -47,16 +41,13 @@ test.provider.skipIf(!runLifecycle)(
           const topic = yield* GCP.PubSubLite.AdminTopic("Events", {
             location: zone,
           });
-          const subscription = yield* GCP.PubSubLite.AdminSubscription(
-            "Inbox",
-            {
-              location: zone,
-              topic: topic.name,
-              deliveryConfig: {
-                deliveryRequirement: "DELIVER_IMMEDIATELY",
-              },
+          const subscription = yield* GCP.PubSubLite.AdminSubscription("Inbox", {
+            location: zone,
+            topic: topic.name,
+            deliveryConfig: {
+              deliveryRequirement: "DELIVER_IMMEDIATELY",
             },
-          );
+          });
           return { topic, subscription };
         }),
       );
@@ -74,9 +65,7 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetched.name).toEqual(created.subscription.name);
       expect(fetched.topic).toEqual(created.topic.name);
-      expect(fetched.deliveryConfig?.deliveryRequirement).toEqual(
-        "DELIVER_IMMEDIATELY",
-      );
+      expect(fetched.deliveryConfig?.deliveryRequirement).toEqual("DELIVER_IMMEDIATELY");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -84,17 +73,14 @@ test.provider.skipIf(!runLifecycle)(
             topicId: created.topic.topicId,
             location: zone,
           });
-          const subscription = yield* GCP.PubSubLite.AdminSubscription(
-            "Inbox",
-            {
-              subscriptionId: created.subscription.subscriptionId,
-              location: zone,
-              topic: topic.name,
-              deliveryConfig: {
-                deliveryRequirement: "DELIVER_AFTER_STORED",
-              },
+          const subscription = yield* GCP.PubSubLite.AdminSubscription("Inbox", {
+            subscriptionId: created.subscription.subscriptionId,
+            location: zone,
+            topic: topic.name,
+            deliveryConfig: {
+              deliveryRequirement: "DELIVER_AFTER_STORED",
             },
-          );
+          });
           return { topic, subscription };
         }),
       );
@@ -104,13 +90,10 @@ test.provider.skipIf(!runLifecycle)(
         "DELIVER_AFTER_STORED",
       );
 
-      const refetched =
-        yield* pubsublite.getAdminProjectsLocationsSubscriptions({
-          name: created.subscription.name,
-        });
-      expect(refetched.deliveryConfig?.deliveryRequirement).toEqual(
-        "DELIVER_AFTER_STORED",
-      );
+      const refetched = yield* pubsublite.getAdminProjectsLocationsSubscriptions({
+        name: created.subscription.name,
+      });
+      expect(refetched.deliveryConfig?.deliveryRequirement).toEqual("DELIVER_AFTER_STORED");
 
       yield* stack.destroy();
 

@@ -88,26 +88,24 @@ export const makeFunctionBundler = Effect.gen(function* () {
 
   // Recursively list every file under `root` as sorted POSIX-relative
   // paths (prebuilt-directory packaging).
-  const walkFiles = (
-    root: string,
-  ): Effect.Effect<string[], PlatformError, never> =>
+  const walkFiles = (root: string): Effect.Effect<string[], PlatformError, never> =>
     Effect.gen(function* () {
       const out: string[] = [];
-      const go: (rel: string) => Effect.Effect<void, PlatformError> = Effect.fn(
-        function* (rel: string) {
-          const absolute = rel === "" ? root : `${root}/${rel}`;
-          const entries = yield* fs.readDirectory(absolute);
-          for (const entry of entries) {
-            const childRel = rel === "" ? entry : `${rel}/${entry}`;
-            const info = yield* fs.stat(`${root}/${childRel}`);
-            if (info.type === "Directory") {
-              yield* go(childRel);
-            } else {
-              out.push(childRel);
-            }
+      const go: (rel: string) => Effect.Effect<void, PlatformError> = Effect.fn(function* (
+        rel: string,
+      ) {
+        const absolute = rel === "" ? root : `${root}/${rel}`;
+        const entries = yield* fs.readDirectory(absolute);
+        for (const entry of entries) {
+          const childRel = rel === "" ? entry : `${rel}/${entry}`;
+          const info = yield* fs.stat(`${root}/${childRel}`);
+          if (info.type === "Directory") {
+            yield* go(childRel);
+          } else {
+            out.push(childRel);
           }
-        },
-      );
+        }
+      });
       yield* go("");
       return out.sort();
     });
@@ -116,10 +114,8 @@ export const makeFunctionBundler = Effect.gen(function* () {
   // like nitro's `.output/server` are complete deployment units (entry +
   // chunks + their own `node_modules`); re-bundling them can orphan
   // CJS `require`s of exports-mapped subpaths.
-  const prebuiltCode: (
-    realMain: string,
-  ) => Effect.Effect<FunctionBundleResult, PlatformError> = Effect.fn(
-    function* (realMain: string) {
+  const prebuiltCode: (realMain: string) => Effect.Effect<FunctionBundleResult, PlatformError> =
+    Effect.fn(function* (realMain: string) {
       const lastSlash = realMain.lastIndexOf("/");
       const dir = realMain.slice(0, lastSlash);
       const files = yield* walkFiles(dir);
@@ -136,8 +132,7 @@ export const makeFunctionBundler = Effect.gen(function* () {
         return { archive, archiveHash: identityHash };
       });
       return { identityHash, buildArchive };
-    },
-  );
+    });
 
   const resolveBundlePlan: (
     props: FunctionZipProps,
@@ -177,12 +172,7 @@ export const makeFunctionBundler = Effect.gen(function* () {
       for (const root of installRoots) {
         if (matchesPackageRoot(moduleId, root)) return true;
       }
-      return matchesConfiguredExternal(
-        configuredExternal,
-        moduleId,
-        parentId,
-        isResolved,
-      );
+      return matchesConfiguredExternal(configuredExternal, moduleId, parentId, isResolved);
     };
 
     const entryPlugin = props.isExternal
@@ -211,8 +201,7 @@ export default await bootstrap(entrypoint);
         resolve: {
           ...inputOptions.resolve,
           conditionNames: [
-            ...(inputOptions.resolve?.conditionNames ??
-              Bundle.NODE_CONDITION_NAMES),
+            ...(inputOptions.resolve?.conditionNames ?? Bundle.NODE_CONDITION_NAMES),
           ],
         },
         plugins: [inputOptions.plugins, entryPlugin],
@@ -237,11 +226,8 @@ export default await bootstrap(entrypoint);
   const finishBundle: (
     plan: FunctionBundlePlan,
     bundleOutput: Bundle.BundleOutput,
-  ) => Effect.Effect<FunctionBundleResult, Bundle.BundleError, BundleServices> =
-    Effect.fn(function* (
-      plan: FunctionBundlePlan,
-      bundleOutput: Bundle.BundleOutput,
-    ) {
+  ) => Effect.Effect<FunctionBundleResult, Bundle.BundleError, BundleServices> = Effect.fn(
+    function* (plan: FunctionBundlePlan, bundleOutput: Bundle.BundleOutput) {
       const mainFile = bundleOutput.files[0];
       const code =
         typeof mainFile.content === "string"
@@ -249,19 +235,12 @@ export default await bootstrap(entrypoint);
           : mainFile.content;
 
       const includeSourceMaps =
-        plan.uploadSourceMap &&
-        (plan.sourcemap === true || plan.sourcemap === "hidden");
+        plan.uploadSourceMap && (plan.sourcemap === true || plan.sourcemap === "hidden");
 
       const extraFiles = bundleOutput.files
         .slice(1)
-        .filter(
-          (f: Bundle.BundleFile) =>
-            includeSourceMaps || !f.path.endsWith(".map"),
-        )
-        .map((f: Bundle.BundleFile) => ({
-          path: f.path,
-          content: f.content,
-        }));
+        .filter((f: Bundle.BundleFile) => includeSourceMaps || !f.path.endsWith(".map"))
+        .map((f: Bundle.BundleFile) => ({ path: f.path, content: f.content }));
 
       // Resolve install versions without running npm so `diff` can compare a
       // stable identity hash. The archive build performs the install.
@@ -293,42 +272,31 @@ export default await bootstrap(entrypoint);
             })
           : [];
         const archiveFiles = [...extraFiles, ...installedPackageFiles];
-        const archive = yield* zipCode(
-          code,
-          archiveFiles.length > 0 ? archiveFiles : undefined,
-        );
+        const archive = yield* zipCode(code, archiveFiles.length > 0 ? archiveFiles : undefined);
         // The S3 asset key is content-addressed, so the archive hash must be a
         // true hash of the bytes when native packages are present.
         const archiveHash =
-          installedPackageFiles.length > 0
-            ? yield* sha256(archive)
-            : bundleOutput.hash;
+          installedPackageFiles.length > 0 ? yield* sha256(archive) : bundleOutput.hash;
         return { archive, archiveHash };
       });
 
       return { identityHash, buildArchive };
-    });
+    },
+  );
 
   const bundleCode: (
     id: string,
     props: FunctionZipProps,
-  ) => Effect.Effect<
-    FunctionBundleResult,
-    Bundle.BundleError | PlatformError,
-    BundleServices
-  > = Effect.fn(function* (_id: string, props: FunctionZipProps) {
-    if (props.bundle === false) {
-      const realMain = yield* TempRoot.resolveMainPath(props.main);
-      return yield* prebuiltCode(realMain);
-    }
-    const plan = yield* resolveBundlePlan(props);
-    const bundleOutput = yield* Bundle.build(
-      plan.inputOptions,
-      plan.outputOptions,
-      plan.extra,
-    );
-    return yield* finishBundle(plan, bundleOutput);
-  });
+  ) => Effect.Effect<FunctionBundleResult, Bundle.BundleError | PlatformError, BundleServices> =
+    Effect.fn(function* (_id: string, props: FunctionZipProps) {
+      if (props.bundle === false) {
+        const realMain = yield* TempRoot.resolveMainPath(props.main);
+        return yield* prebuiltCode(realMain);
+      }
+      const plan = yield* resolveBundlePlan(props);
+      const bundleOutput = yield* Bundle.build(plan.inputOptions, plan.outputOptions, plan.extra);
+      return yield* finishBundle(plan, bundleOutput);
+    });
 
   return { bundleCode, prebuiltCode, resolveBundlePlan, finishBundle };
 });

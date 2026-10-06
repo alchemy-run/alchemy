@@ -20,13 +20,8 @@ const api = Effect.gen(function* () {
       yield* jobs.send({ size: file?.size });
       if (writeLogs) yield* writeLogs.put("last-read", "hello.txt");
       return HttpServerResponse.text("ok");
-    })/*hide*/.pipe(Effect.orDie)/*end*/,
+    }) /*hide*/
+      .pipe(Effect.orDie) /*end*/,
   };
-}).pipe(
-  Effect.provide([
-    R2.ReadBucketBinding,
-    Queues.WriteQueueBinding,
-    R2.WriteBucketBinding,
-  ]),
-);
+}).pipe(Effect.provide([R2.ReadBucketBinding, Queues.WriteQueueBinding, R2.WriteBucketBinding]));
 // #endregion show

@@ -31,49 +31,44 @@ export const TableStreamsHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Keyspaces.TableStreams(${table}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "cassandra:GetRecords",
-                    "cassandra:GetShardIterator",
-                    "cassandra:GetStream",
-                    "cassandra:ListStreams",
-                  ],
-                  Resource: [
-                    table.tableArn,
-                    Output.interpolate`${table.tableArn}/stream/*`,
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Keyspaces.TableStreams(${table}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "cassandra:GetRecords",
+                  "cassandra:GetShardIterator",
+                  "cassandra:GetStream",
+                  "cassandra:ListStreams",
+                ],
+                Resource: [table.tableArn, Output.interpolate`${table.tableArn}/stream/*`],
+              },
+            ],
+          });
         }
       }
       const logicalId = table.LogicalId;
       const client: TableStreamsClient = {
-        listStreams: Effect.fn(
-          `AWS.Keyspaces.TableStreams.listStreams(${logicalId})`,
-        )(function* (request?: ListTableStreamsRequest) {
+        listStreams: Effect.fn(`AWS.Keyspaces.TableStreams.listStreams(${logicalId})`)(function* (
+          request?: ListTableStreamsRequest,
+        ) {
           const keyspaceName = yield* KeyspaceName;
           const tableName = yield* TableName;
           return yield* listStreams({ ...request, keyspaceName, tableName });
         }),
-        getStream: Effect.fn(
-          `AWS.Keyspaces.TableStreams.getStream(${logicalId})`,
-        )(function* (request: keyspacesstreams.GetStreamInput) {
+        getStream: Effect.fn(`AWS.Keyspaces.TableStreams.getStream(${logicalId})`)(function* (
+          request: keyspacesstreams.GetStreamInput,
+        ) {
           return yield* getStream(request);
         }),
-        getShardIterator: Effect.fn(
-          `AWS.Keyspaces.TableStreams.getShardIterator(${logicalId})`,
-        )(function* (request: keyspacesstreams.GetShardIteratorInput) {
-          return yield* getShardIterator(request);
-        }),
-        getRecords: Effect.fn(
-          `AWS.Keyspaces.TableStreams.getRecords(${logicalId})`,
-        )(function* (request: keyspacesstreams.GetRecordsInput) {
+        getShardIterator: Effect.fn(`AWS.Keyspaces.TableStreams.getShardIterator(${logicalId})`)(
+          function* (request: keyspacesstreams.GetShardIteratorInput) {
+            return yield* getShardIterator(request);
+          },
+        ),
+        getRecords: Effect.fn(`AWS.Keyspaces.TableStreams.getRecords(${logicalId})`)(function* (
+          request: keyspacesstreams.GetRecordsInput,
+        ) {
           return yield* getRecords(request);
         }),
       };

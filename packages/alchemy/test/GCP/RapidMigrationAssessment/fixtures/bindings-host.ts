@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 export const OnPrem = GCP.RapidMigrationAssessment.Collector("BindOnPrem", {
@@ -21,8 +21,7 @@ export default class RmaBindingsHost extends GCP.Function<RmaBindingsHost>()(
   Effect.gen(function* () {
     const pause = yield* GCP.RapidMigrationAssessment.PauseCollector(OnPrem);
     const resume = yield* GCP.RapidMigrationAssessment.ResumeCollector(OnPrem);
-    const register =
-      yield* GCP.RapidMigrationAssessment.RegisterCollector(OnPrem);
+    const register = yield* GCP.RapidMigrationAssessment.RegisterCollector(OnPrem);
 
     return {
       fetch: serveProbes({

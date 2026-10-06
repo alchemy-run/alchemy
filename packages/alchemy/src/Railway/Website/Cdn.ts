@@ -15,13 +15,9 @@ import type { Providers } from "../Providers.ts";
 
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-export type CdnService = {
-  readonly serviceId: string;
-};
+export type CdnService = { readonly serviceId: string };
 
-export type CdnEnvironment = {
-  readonly environmentId: string;
-};
+export type CdnEnvironment = { readonly environmentId: string };
 
 export interface CdnProps {
   /**
@@ -54,12 +50,7 @@ export interface CdnProps {
 export interface Cdn extends Resource<
   "Railway.Website.Cdn",
   CdnProps,
-  {
-    serviceId: string;
-    environmentId: string;
-    edgeConfigId: string;
-    enabled: boolean;
-  },
+  { serviceId: string; environmentId: string; edgeConfigId: string; enabled: boolean },
   never,
   Providers
 > {}
@@ -73,18 +64,14 @@ export interface Cdn extends Resource<
  */
 export const Cdn = Resource<Cdn>("Railway.Website.Cdn");
 
-export class CdnServiceMissing extends Data.TaggedError(
-  "Railway.Website.CdnServiceMissing",
-)<{
+export class CdnServiceMissing extends Data.TaggedError("Railway.Website.CdnServiceMissing")<{
   message: string;
 }> {}
 
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { serviceId?: unknown };
-  return typeof rec.serviceId === "string" && rec.serviceId.length > 0
-    ? rec.serviceId
-    : undefined;
+  return typeof rec.serviceId === "string" && rec.serviceId.length > 0 ? rec.serviceId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -120,34 +107,28 @@ const readEdgeConfig = Query.fn((serviceId: string, environmentId: string) =>
   ),
 );
 
-const readEdgeConfigAndDomains = Query.fn(
-  (serviceId: string, environmentId: string) => {
-    const instance = Railway.serviceInstance({ serviceId, environmentId });
-    return {
-      edgeConfig: instance.edgeConfig.pipe(Query.map(edgeConfigFields)),
-      domains: {
-        serviceDomains: instance.domains.serviceDomains.pipe(
-          Query.map((domain) => ({ syncStatus: domain.syncStatus })),
-        ),
-        customDomains: instance.domains.customDomains.pipe(
-          Query.map((domain) => ({ syncStatus: domain.syncStatus })),
-        ),
-      },
-    };
-  },
-);
+const readEdgeConfigAndDomains = Query.fn((serviceId: string, environmentId: string) => {
+  const instance = Railway.serviceInstance({ serviceId, environmentId });
+  return {
+    edgeConfig: instance.edgeConfig.pipe(Query.map(edgeConfigFields)),
+    domains: {
+      serviceDomains: instance.domains.serviceDomains.pipe(
+        Query.map((domain) => ({ syncStatus: domain.syncStatus })),
+      ),
+      customDomains: instance.domains.customDomains.pipe(
+        Query.map((domain) => ({ syncStatus: domain.syncStatus })),
+      ),
+    },
+  };
+});
 
 const enableServiceCdn = Query.fn((serviceId: string, environmentId: string) =>
-  edgeConfigFields(
-    Railway.enableServiceCdn({ input: { environmentId, serviceId } }),
-  ),
+  edgeConfigFields(Railway.enableServiceCdn({ input: { environmentId, serviceId } })),
 );
 
-const updateServiceEdgeConfig = Query.fn(
-  (input: UpdateServiceEdgeConfigInput) => ({
-    id: Railway.updateServiceEdgeConfig({ input }).id,
-  }),
-);
+const updateServiceEdgeConfig = Query.fn((input: UpdateServiceEdgeConfigInput) => ({
+  id: Railway.updateServiceEdgeConfig({ input }).id,
+}));
 
 const disableServiceCdn = Query.fn((serviceId: string, environmentId: string) =>
   Railway.disableServiceCdn({ input: { environmentId, serviceId } }),
@@ -170,12 +151,8 @@ const getConfig = (serviceId: string, environmentId: string) =>
 const getReadyConfig = (serviceId: string, environmentId: string) =>
   readEdgeConfigAndDomains(serviceId, environmentId).pipe(
     Effect.flatMap((instance) =>
-      [
-        ...instance.domains.serviceDomains,
-        ...instance.domains.customDomains,
-      ].some(
-        (domain) =>
-          domain.syncStatus === "ACTIVE" || domain.syncStatus === "UNSPECIFIED",
+      [...instance.domains.serviceDomains, ...instance.domains.customDomains].some(
+        (domain) => domain.syncStatus === "ACTIVE" || domain.syncStatus === "UNSPECIFIED",
       )
         ? Effect.succeed(instance.edgeConfig ?? undefined)
         : Effect.fail(new CdnPublicDomainPending({ serviceId, environmentId })),
@@ -211,10 +188,8 @@ export const CdnProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const serviceId = output?.serviceId ?? serviceIdOf(olds?.service);
-      const environmentId =
-        output?.environmentId ?? environmentIdOf(olds?.environment);
-      if (serviceId === undefined || environmentId === undefined)
-        return undefined;
+      const environmentId = output?.environmentId ?? environmentIdOf(olds?.environment);
+      if (serviceId === undefined || environmentId === undefined) return undefined;
       const current = yield* getConfig(serviceId, environmentId);
       return current === undefined
         ? undefined
@@ -231,8 +206,7 @@ export const CdnProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const serviceId = serviceIdOf(news.service) ?? output?.serviceId ?? "";
-      const environmentId =
-        environmentIdOf(news.environment) ?? output?.environmentId ?? "";
+      const environmentId = environmentIdOf(news.environment) ?? output?.environmentId ?? "";
       if (serviceId.length === 0 || environmentId.length === 0) {
         return yield* new CdnServiceMissing({
           message: "Railway.Website.Cdn requires a Service and environment.",
@@ -262,26 +236,17 @@ export const CdnProvider = () =>
           observed.caching.mode.toLowerCase() !== "off" &&
           observed.caching.htmlCaching === config.caching.htmlCaching &&
           observed.caching.purgeOnDeploy === config.caching.purgeOnDeploy &&
-          observed.caching.defaultTtlSeconds ===
-            config.caching.defaultTtlSeconds
+          observed.caching.defaultTtlSeconds === config.caching.defaultTtlSeconds
             ? Effect.succeed(observed)
-            : Effect.fail(
-                new CdnConfigurationPending({ serviceId, environmentId }),
-              ),
+            : Effect.fail(new CdnConfigurationPending({ serviceId, environmentId })),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "Railway.Website.CdnConfigurationPending",
+          while: (error) => error._tag === "Railway.Website.CdnConfigurationPending",
           times: 8,
           schedule: Schedule.spaced("1 second"),
         }),
       );
-      return {
-        serviceId,
-        environmentId,
-        edgeConfigId: enabled.id,
-        enabled: enabled.enabled,
-      };
+      return { serviceId, environmentId, edgeConfigId: enabled.id, enabled: enabled.enabled };
     }),
 
     delete: Effect.fn(function* ({ output }) {

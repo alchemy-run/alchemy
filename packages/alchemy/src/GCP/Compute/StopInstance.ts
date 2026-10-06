@@ -33,14 +33,8 @@ export interface StopInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StopInstanceRequest,
-    ) => Effect.Effect<
-      compute.Operation,
-      compute.StopInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<compute.Operation, compute.StopInstancesError, RuntimeContext>
   >
 > {}
 
-export const StopInstance = Binding.Service<StopInstance>(
-  "GCP.Compute.StopInstance",
-);
+export const StopInstance = Binding.Service<StopInstance>("GCP.Compute.StopInstance");

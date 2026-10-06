@@ -43,6 +43,4 @@ export interface StopWorkstation extends Binding.Service<
   >
 > {}
 
-export const StopWorkstation = Binding.Service<StopWorkstation>(
-  "GCP.Workstations.StopWorkstation",
-);
+export const StopWorkstation = Binding.Service<StopWorkstation>("GCP.Workstations.StopWorkstation");

@@ -1,14 +1,12 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /**
  * `…/connections/{c}/entityTypes/{type}` of an existing Integration
  * Connectors connection (the test is gated on it being set).
  */
-export const ENTITY_TYPE_PARENT = (
-  process.env.GCP_TEST_CONNECTORS_PARENT ?? ""
-).trim();
+export const ENTITY_TYPE_PARENT = (process.env.GCP_TEST_CONNECTORS_PARENT ?? "").trim();
 
 /** Entity GetEntity reads. */
 export const Account = GCP.Connectors.ConnectionsEntityTypesEntity("Account", {

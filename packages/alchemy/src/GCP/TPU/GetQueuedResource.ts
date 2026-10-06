@@ -44,6 +44,4 @@ export interface GetQueuedResource extends Binding.Service<
   >
 > {}
 
-export const GetQueuedResource = Binding.Service<GetQueuedResource>(
-  "GCP.TPU.GetQueuedResource",
-);
+export const GetQueuedResource = Binding.Service<GetQueuedResource>("GCP.TPU.GetQueuedResource");

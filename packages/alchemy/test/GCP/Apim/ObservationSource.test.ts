@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The API Management API is not enabled in the testing project: every call
 // answers 403 SERVICE_DISABLED (typed `ServiceDisabled`). Set GCP_TEST_APIM=1
@@ -89,9 +86,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.source.name).toContain("/observationSources/");
       expect(created.source.observationSourceId).toEqual(expect.any(String));
       expect(created.source.location).toEqual(location);
-      expect(
-        created.source.gclbObservationSource?.pscNetworkConfigs.length,
-      ).toBeGreaterThan(0);
+      expect(created.source.gclbObservationSource?.pscNetworkConfigs.length).toBeGreaterThan(0);
 
       const fetched = yield* apim.getProjectsLocationsObservationSources({
         name: created.source.name,

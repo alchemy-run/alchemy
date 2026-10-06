@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,23 +9,17 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 const DEFAULT_PRIORITY = 1000;
 const MAX_NAME_LENGTH = 63;
 
-export type ZoneVmExtensionPolicyExtensionPolicy =
-  compute.VmExtensionPolicyExtensionPolicy;
-export type ZoneVmExtensionPolicyInstanceSelector =
-  compute.VmExtensionPolicyInstanceSelector;
-export type ZoneVmExtensionPolicyExtensionPolicyMap =
-  compute.VmExtensionPolicyExtensionPolicyMap;
+export type ZoneVmExtensionPolicyExtensionPolicy = compute.VmExtensionPolicyExtensionPolicy;
+export type ZoneVmExtensionPolicyInstanceSelector = compute.VmExtensionPolicyInstanceSelector;
+export type ZoneVmExtensionPolicyExtensionPolicyMap = compute.VmExtensionPolicyExtensionPolicyMap;
 
 export type ZoneVmExtensionPolicyProps = {
   /**
@@ -173,8 +166,7 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeZone = (zone: string | undefined) =>
-  lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
+const normalizeZone = (zone: string | undefined) => lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -185,9 +177,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `v${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `v${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -221,9 +211,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -240,9 +228,7 @@ const toBody = (
   name: vmExtensionPolicyName,
   description: encodeDescription(ownership, props.description),
   priority: props.priority ?? DEFAULT_PRIORITY,
-  instanceSelectors: props.instanceSelectors
-    ? [...props.instanceSelectors]
-    : undefined,
+  instanceSelectors: props.instanceSelectors ? [...props.instanceSelectors] : undefined,
   extensionPolicies: props.extensionPolicies ?? defaultExtensions(),
 });
 
@@ -274,16 +260,11 @@ const getByName = (project: string, zone: string, vmExtensionPolicy: string) =>
     .getZoneVmExtensionPolicies({ project, zone, vmExtensionPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitPolicyReady = (
-  project: string,
-  zone: string,
-  vmExtensionPolicyName: string,
-) =>
+const waitPolicyReady = (project: string, zone: string, vmExtensionPolicyName: string) =>
   getByName(project, zone, vmExtensionPolicyName).pipe(
     Effect.filterOrFail(
       (policy): policy is compute.VmExtensionPolicy =>
-        policy !== undefined &&
-        (policy.state === "ACTIVE" || policy.state === undefined),
+        policy !== undefined && (policy.state === "ACTIVE" || policy.state === undefined),
       (policy) =>
         new ZoneVmExtensionPolicyNotReady({
           vmExtensionPolicyName,
@@ -291,18 +272,13 @@ const waitPolicyReady = (
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.ZoneVmExtensionPolicyNotReady",
+      while: (error) => error._tag === "GCP.Compute.ZoneVmExtensionPolicyNotReady",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
-const waitPolicyGone = (
-  project: string,
-  zone: string,
-  vmExtensionPolicyName: string,
-) =>
+const waitPolicyGone = (project: string, zone: string, vmExtensionPolicyName: string) =>
   getByName(project, zone, vmExtensionPolicyName).pipe(
     Effect.flatMap((policy) =>
       policy === undefined
@@ -335,13 +311,10 @@ export const ZoneVmExtensionPolicyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      const previousName =
-        olds?.vmExtensionPolicyName ?? output?.vmExtensionPolicyName;
+      const previousName = olds?.vmExtensionPolicyName ?? output?.vmExtensionPolicyName;
       const nextName = news.vmExtensionPolicyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousZone = normalizeZone(olds?.zone ?? output?.zone);
       const nextZone = normalizeZone(news.zone ?? output?.zone);
@@ -350,9 +323,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            nextName === previousName &&
-            previousZone === nextZone,
+            previousName !== undefined && nextName === previousName && previousZone === nextZone,
         };
       }
       return undefined;
@@ -366,11 +337,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
         output?.vmExtensionPolicyName,
       );
       const zone = normalizeZone(olds?.zone ?? output?.zone);
-      const existing = yield* getByName(
-        env.project,
-        zone,
-        vmExtensionPolicyName,
-      );
+      const existing = yield* getByName(env.project, zone, vmExtensionPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, zone);
       const { labels } = parseDescription(existing.description);
@@ -401,12 +368,8 @@ export const ZoneVmExtensionPolicyProvider = () =>
                 returnPartialSuccess: true,
               })
               .pipe(
-                Stream.filter((policy) =>
-                  hasOwnershipMarker(policy.description),
-                ),
-                Stream.map((policy) =>
-                  toAttrs(policy, env.project, zone.name!),
-                ),
+                Stream.filter((policy) => hasOwnershipMarker(policy.description)),
+                Stream.map((policy) => toAttrs(policy, env.project, zone.name!)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
                 Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -446,11 +409,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
             ignore: ["RESOURCE_ALREADY_EXISTS"],
           });
         }
-        current = yield* waitPolicyReady(
-          env.project,
-          zone,
-          vmExtensionPolicyName,
-        );
+        current = yield* waitPolicyReady(env.project, zone, vmExtensionPolicyName);
       }
 
       if (current === undefined) {
@@ -460,26 +419,18 @@ export const ZoneVmExtensionPolicyProvider = () =>
         });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (desired.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (desired.description ?? "");
       const priorityChanged =
-        (current.priority ?? DEFAULT_PRIORITY) !==
-        (desired.priority ?? DEFAULT_PRIORITY);
+        (current.priority ?? DEFAULT_PRIORITY) !== (desired.priority ?? DEFAULT_PRIORITY);
       const selectorsChanged = !sameJson(
         current.instanceSelectors ?? [],
         desired.instanceSelectors ?? [],
       );
-      const extensionsChanged = !sameJson(
-        current.extensionPolicies,
-        desired.extensionPolicies,
-      );
+      const extensionsChanged = !sameJson(current.extensionPolicies, desired.extensionPolicies);
 
       if (
         !current.managedByGlobal &&
-        (descriptionChanged ||
-          priorityChanged ||
-          selectorsChanged ||
-          extensionsChanged)
+        (descriptionChanged || priorityChanged || selectorsChanged || extensionsChanged)
       ) {
         const patched = yield* compute.updateZoneVmExtensionPolicies({
           project: env.project,

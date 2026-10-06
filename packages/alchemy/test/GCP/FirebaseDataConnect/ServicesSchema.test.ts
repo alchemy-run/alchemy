@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -42,14 +42,11 @@ test.provider(
       );
       expect(error._tag).toEqual("NotFound");
 
-      const page =
-        yield* firebasedataconnect.listProjectsLocationsServicesSchemas({
-          parent: `projects/${project}/locations/${location}/services/-`,
-          pageSize: 10,
-        });
-      expect((page.schemas ?? []).map((item) => item.name)).not.toContain(
-        missing,
-      );
+      const page = yield* firebasedataconnect.listProjectsLocationsServicesSchemas({
+        parent: `projects/${project}/locations/${location}/services/-`,
+        pageSize: 10,
+      });
+      expect((page.schemas ?? []).map((item) => item.name)).not.toContain(missing);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -90,10 +87,9 @@ test.provider(
       expect(created.schema.service).toEqual(created.service.name);
       expect(created.schema.reconciling).toEqual(false);
 
-      const fetched =
-        yield* firebasedataconnect.getProjectsLocationsServicesSchemas({
-          name: created.schema.name,
-        });
+      const fetched = yield* firebasedataconnect.getProjectsLocationsServicesSchemas({
+        name: created.schema.name,
+      });
       expect(fetched.name).toEqual(created.schema.name);
       expect(fetched.displayName).toEqual("alchemy-test-schema");
       expect(fetched.labels?.env).toEqual("test");
@@ -124,10 +120,9 @@ test.provider(
         role: "schema",
       });
 
-      const refetched =
-        yield* firebasedataconnect.getProjectsLocationsServicesSchemas({
-          name: created.schema.name,
-        });
+      const refetched = yield* firebasedataconnect.getProjectsLocationsServicesSchemas({
+        name: created.schema.name,
+      });
       expect(refetched.displayName).toEqual("alchemy-prod-schema");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.source?.files?.[0]?.content).toContain("body: String");

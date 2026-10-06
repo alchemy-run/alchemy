@@ -11,10 +11,7 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 export type AttributeValues = apihub.GoogleCloudApihubV1AttributeValues;
 export type AttributeValuesMap = apihub.GoogleCloudApihubV1AttributeValuesMap;
@@ -24,15 +21,11 @@ export const MAX_ID_LENGTH = 63;
 export const MAX_INSTANCE_ID_LENGTH = 40;
 export const MAX_DISPLAY_NAME_LENGTH = 64;
 
-export class ApihubNotResolved extends Data.TaggedError(
-  "GCP.ApiHub.ResourceNotResolved",
-)<{
+export class ApihubNotResolved extends Data.TaggedError("GCP.ApiHub.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ApihubStillExists extends Data.TaggedError(
-  "GCP.ApiHub.StillExists",
-)<{
+export class ApihubStillExists extends Data.TaggedError("GCP.ApiHub.StillExists")<{
   name: string;
 }> {}
 
@@ -56,36 +49,22 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
-export const parseResourceName = (
-  name: string,
-  collection: string,
-  defaultLocation: string,
-) => {
+export const parseResourceName = (name: string, collection: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   const pluginsAt = parts.lastIndexOf("plugins");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
-    pluginId:
-      pluginsAt >= 0 && parts[pluginsAt + 1] ? parts[pluginsAt + 1]! : "",
-    plugin:
-      pluginsAt >= 0 ? parts.slice(0, pluginsAt + 2).join("/") : undefined,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
+    pluginId: pluginsAt >= 0 && parts[pluginsAt + 1] ? parts[pluginsAt + 1]! : "",
+    plugin: pluginsAt >= 0 ? parts.slice(0, pluginsAt + 2).join("/") : undefined,
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -126,19 +105,15 @@ export const toPhysicalId = (
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
-    return rfc1035(
-      yield* createPhysicalName({ id, maxLength, lowercase: true }),
-      maxLength,
-    );
+    return rfc1035(yield* createPhysicalName({ id, maxLength, lowercase: true }), maxLength);
   });
 
 export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 const markerOf = (labels: Record<string, string>) =>
   `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
@@ -152,10 +127,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
     [alchemyLabelKeys.stage]: stage,
     [alchemyLabelKeys.id]: id,
   });
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -189,10 +161,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -223,14 +192,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -240,18 +205,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -278,11 +234,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -290,9 +244,7 @@ export const sameText = (left: string | undefined, right: string | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -468,20 +420,18 @@ export const MAX_LONG_ID_LENGTH = 128;
 export const MAX_PLUGIN_DISPLAY_NAME_LENGTH = 50;
 export const MAX_PLUGIN_INSTANCE_DISPLAY_NAME_LENGTH = 255;
 
-export const DEFAULT_PLUGIN_ACTIONS: apihub.GoogleCloudApihubV1PluginActionConfigList =
-  [
-    {
-      id: "sync-metadata",
-      displayName: "Sync metadata",
-      description: "Sync API metadata into API hub",
-      triggerMode: "API_HUB_ON_DEMAND_TRIGGER",
-    },
-  ];
-
-export const DEFAULT_DEPLOYMENT_TYPE: apihub.GoogleCloudApihubV1AttributeValues =
+export const DEFAULT_PLUGIN_ACTIONS: apihub.GoogleCloudApihubV1PluginActionConfigList = [
   {
-    enumValues: { values: [{ id: "apigee" }] },
-  };
+    id: "sync-metadata",
+    displayName: "Sync metadata",
+    description: "Sync API metadata into API hub",
+    triggerMode: "API_HUB_ON_DEMAND_TRIGGER",
+  },
+];
+
+export const DEFAULT_DEPLOYMENT_TYPE: apihub.GoogleCloudApihubV1AttributeValues = {
+  enumValues: { values: [{ id: "apigee" }] },
+};
 
 export const projectIdOf = (value: string | undefined, fallback = "") =>
   lastSegment(value && value.length > 0 ? value : fallback);
@@ -491,9 +441,7 @@ export const projectNameOf = (value: string | undefined, fallback = "") => {
   return raw.startsWith("projects/") ? raw : `projects/${lastSegment(raw)}`;
 };
 
-export class ApihubInstanceFailed extends Data.TaggedError(
-  "GCP.ApiHub.InstanceFailed",
-)<{
+export class ApihubInstanceFailed extends Data.TaggedError("GCP.ApiHub.InstanceFailed")<{
   name: string;
   state?: string;
   message?: string;
@@ -507,13 +455,9 @@ const OPERATION_BUDGET = "20 minutes";
  * concurrent create won the race; reconcile observes the resource next.
  */
 export const waitForOperation = (operation: LongRunningOperation) =>
-  waitForLongRunning(
-    operation,
-    (name) => apihub.getProjectsLocationsOperations({ name }),
-    {
-      budget: OPERATION_BUDGET,
-    },
-  ).pipe(
+  waitForLongRunning(operation, (name) => apihub.getProjectsLocationsOperations({ name }), {
+    budget: OPERATION_BUDGET,
+  }).pipe(
     Effect.catchIf(
       (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
       () => Effect.succeed(operation),
@@ -528,8 +472,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

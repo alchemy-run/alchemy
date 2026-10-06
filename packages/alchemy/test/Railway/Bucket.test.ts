@@ -4,24 +4,22 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { projectBuckets } from "@/Railway/GraphQL.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { projectBuckets } from "@/Railway/GraphQL.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const OBJECT_KEY = "alchemy-marker.txt";
 const OBJECT_BODY = "hello-from-railway";
@@ -59,11 +57,7 @@ const findBucket = (projectId: string, bucketId: string, name: string) =>
     ),
   );
 
-const firstCredentials = (
-  bucketId: string,
-  environmentId: string,
-  projectId: string,
-) =>
+const firstCredentials = (bucketId: string, environmentId: string, projectId: string) =>
   readBucketCredentials(bucketId, environmentId, projectId).pipe(
     Effect.flatMap((items) => {
       const first = items[0];
@@ -71,33 +65,19 @@ const firstCredentials = (
         ? Effect.succeed(first)
         : Effect.fail(new Error("missing bucket credentials"));
     }),
-    Effect.retry({
-      schedule: Schedule.spaced("2 seconds"),
-      times: 8,
-    }),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 8 }),
   );
 
-const waitUntilBucketGone = (
-  environmentId: string,
-  projectId: string,
-  bucketId: string,
-) =>
+const waitUntilBucketGone = (environmentId: string, projectId: string, bucketId: string) =>
   readEnvironmentConfig(environmentId, projectId).pipe(
     Effect.map((env) => {
       const buckets =
-        env.config !== null &&
-        typeof env.config === "object" &&
-        !Array.isArray(env.config)
-          ? (
-              env.config as {
-                buckets?: Record<string, { isDeleted?: boolean | null } | null>;
-              }
-            ).buckets
+        env.config !== null && typeof env.config === "object" && !Array.isArray(env.config)
+          ? (env.config as { buckets?: Record<string, { isDeleted?: boolean | null } | null> })
+              .buckets
           : undefined;
       const row = buckets?.[bucketId];
-      return row == null || row.isDeleted === true
-        ? ("gone" as const)
-        : ("found" as const);
+      return row == null || row.isDeleted === true ? ("gone" as const) : ("found" as const);
     }),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -108,12 +88,7 @@ const waitUntilBucketGone = (
   );
 
 const withBucketS3 = <A, E, R>(
-  creds: {
-    accessKeyId: string;
-    secretAccessKey: string;
-    endpoint: string;
-    region: string;
-  },
+  creds: { accessKeyId: string; secretAccessKey: string; endpoint: string; region: string },
   operation: Effect.Effect<A, E, R>,
 ) =>
   operation.pipe(
@@ -121,8 +96,8 @@ const withBucketS3 = <A, E, R>(
       Layer.mergeAll(
         fromCredentials(
           {
-            accessKeyId: creds.accessKeyId,
-            secretAccessKey: creds.secretAccessKey,
+            accessKeyId: Redacted.make(creds.accessKeyId),
+            secretAccessKey: Redacted.make(creds.secretAccessKey),
           },
           creds.region as RegionName,
         ),
@@ -140,10 +115,7 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const { project, environment } = yield* suitePartition;
-          const bucket = yield* Railway.Bucket("Data", {
-            project,
-            environment,
-          });
+          const bucket = yield* Railway.Bucket("Data", { project, environment });
           return { project, environment, bucket };
         }),
       );
@@ -151,9 +123,7 @@ test.provider(
       expect(created.bucket.bucketId).toEqual(expect.any(String));
       expect(created.bucket.bucketId.length).toBeGreaterThan(0);
       expect(created.bucket.projectId).toEqual(created.project.projectId);
-      expect(created.bucket.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.bucket.environmentId).toEqual(created.environment.environmentId);
       expect(created.bucket.name).toEqual(expect.any(String));
       expect(created.bucket.name.length).toBeGreaterThan(0);
       expect(created.bucket.name.length).toBeLessThanOrEqual(32);
@@ -176,9 +146,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Bucket);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (bucket) => bucket.bucketId === created.bucket.bucketId,
-      );
+      const found = listed.find((bucket) => bucket.bucketId === created.bucket.bucketId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.bucket.name);
       expect(found?.projectId).toEqual(created.project.projectId);
@@ -206,48 +174,27 @@ test.provider(
 
       const got = yield* withBucketS3(
         creds,
-        S3.getObject({
-          Bucket: creds.bucketName,
-          Key: OBJECT_KEY,
-        }),
+        S3.getObject({ Bucket: creds.bucketName, Key: OBJECT_KEY }),
       );
       const text =
-        got.Body === undefined
-          ? ""
-          : yield* Stream.mkString(Stream.decodeText(got.Body));
+        got.Body === undefined ? "" : yield* Stream.mkString(Stream.decodeText(got.Body));
       expect(text).toEqual(OBJECT_BODY);
 
       const listedObjects = yield* withBucketS3(
         creds,
-        S3.listObjectsV2({
-          Bucket: creds.bucketName,
-          Prefix: OBJECT_KEY,
-        }),
+        S3.listObjectsV2({ Bucket: creds.bucketName, Prefix: OBJECT_KEY }),
       );
-      expect(
-        (listedObjects.Contents ?? []).some((item) => item.Key === OBJECT_KEY),
-      ).toEqual(true);
+      expect((listedObjects.Contents ?? []).some((item) => item.Key === OBJECT_KEY)).toEqual(true);
 
-      yield* withBucketS3(
-        creds,
-        S3.deleteObject({
-          Bucket: creds.bucketName,
-          Key: OBJECT_KEY,
-        }),
-      );
+      yield* withBucketS3(creds, S3.deleteObject({ Bucket: creds.bucketName, Key: OBJECT_KEY }));
 
       const nextName =
-        created.bucket.name.slice(0, -1) +
-        (created.bucket.name.endsWith("z") ? "y" : "z");
+        created.bucket.name.slice(0, -1) + (created.bucket.name.endsWith("z") ? "y" : "z");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const { project, environment } = yield* suitePartition;
-          const bucket = yield* Railway.Bucket("Data", {
-            project,
-            environment,
-            name: nextName,
-          });
+          const bucket = yield* Railway.Bucket("Data", { project, environment, name: nextName });
           return { project, environment, bucket };
         }),
       );
@@ -255,9 +202,7 @@ test.provider(
       expect(updated.bucket.bucketId).toEqual(created.bucket.bucketId);
       expect(updated.bucket.name).toEqual(nextName);
       expect(updated.bucket.projectId).toEqual(created.project.projectId);
-      expect(updated.bucket.environmentId).toEqual(
-        created.bucket.environmentId,
-      );
+      expect(updated.bucket.environmentId).toEqual(created.bucket.environmentId);
 
       const fetchedUpdate = yield* findBucket(
         updated.project.projectId,

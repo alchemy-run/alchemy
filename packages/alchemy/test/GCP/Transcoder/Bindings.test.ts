@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import TranscoderBindingsHost from "./fixtures/bindings-host.ts";
 
@@ -27,9 +27,7 @@ const projectRoles = () =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,
@@ -51,12 +49,7 @@ const waitUntilJobGone = (name: string) =>
 describe.skipIf(!dockerAvailable || !!process.env.FAST)(
   "Transcoder Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:transcoder",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:transcoder", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -100,15 +93,11 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
             });
             const gone = yield* waitUntilJobGone(started.name);
 
-            expect(started.name).toMatch(
-              /^projects\/[^/]+\/locations\/us-central1\/jobs\/[^/]+$/,
-            );
+            expect(started.name).toMatch(/^projects\/[^/]+\/locations\/us-central1\/jobs\/[^/]+$/);
             // The job runs the bound template's config.
             expect(started.muxStreams).toEqual(["sd"]);
             expect(live.name).toEqual(started.name);
-            expect(
-              (live.config?.muxStreams ?? []).map((stream) => stream.key),
-            ).toEqual(["sd"]);
+            expect((live.config?.muxStreams ?? []).map((stream) => stream.key)).toEqual(["sd"]);
             expect(gone).toEqual("gone");
 
             // No resource-level IAM and no narrower role with jobs.create.

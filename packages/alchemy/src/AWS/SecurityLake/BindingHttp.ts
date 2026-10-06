@@ -45,9 +45,7 @@ export const makeSecurityLakeDataLakeHttpBinding = <I, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`${options.tag}(${lake.LogicalId})`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`${options.tag}(${lake.LogicalId})`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

@@ -104,16 +104,11 @@ export type ConnectionsEntityTypesEntity = Resource<
  * @resource
  * @category Connectors
  */
-export const ConnectionsEntityTypesEntity =
-  Resource<ConnectionsEntityTypesEntity>(
-    "GCP.Connectors.ConnectionsEntityTypesEntity",
-  );
+export const ConnectionsEntityTypesEntity = Resource<ConnectionsEntityTypesEntity>(
+  "GCP.Connectors.ConnectionsEntityTypesEntity",
+);
 
-const toAttrs = (
-  entity: connectors.Entity,
-  project: string,
-  parent: string,
-) => {
+const toAttrs = (entity: connectors.Entity, project: string, parent: string) => {
   const name = entity.name ?? "";
   const parsed = parseEntityName(name || `${parent}/entities/`);
   return {
@@ -133,15 +128,7 @@ const refresh = (name: string, fallback: connectors.Entity) =>
 
 export const ConnectionsEntityTypesEntityProvider = () =>
   Provider.succeed(ConnectionsEntityTypesEntity, {
-    stables: [
-      "name",
-      "entityId",
-      "parent",
-      "project",
-      "location",
-      "connection",
-      "entityType",
-    ],
+    stables: ["name", "entityId", "parent", "project", "location", "connection", "entityType"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -150,11 +137,7 @@ export const ConnectionsEntityTypesEntityProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.entityId ?? output?.entityId;
-      if (
-        previousId !== undefined &&
-        news.entityId !== undefined &&
-        news.entityId !== previousId
-      ) {
+      if (previousId !== undefined && news.entityId !== undefined && news.entityId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -168,9 +151,7 @@ export const ConnectionsEntityTypesEntityProvider = () =>
       const entityId = olds?.entityId ?? output?.entityId;
       const name =
         output?.name ??
-        (entityId !== undefined && parent.length > 0
-          ? entityNameOf(parent, entityId)
-          : "");
+        (entityId !== undefined && parent.length > 0 ? entityNameOf(parent, entityId) : "");
       const existing = yield* getEntity(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, env.project, parent);
@@ -181,10 +162,7 @@ export const ConnectionsEntityTypesEntityProvider = () =>
       const parent = news.parent;
       const desiredFields = news.fields ?? {};
       const name =
-        output?.name ??
-        (news.entityId !== undefined
-          ? entityNameOf(parent, news.entityId)
-          : "");
+        output?.name ?? (news.entityId !== undefined ? entityNameOf(parent, news.entityId) : "");
 
       let current = yield* getEntity(name);
 
@@ -225,10 +203,7 @@ export const ConnectionsEntityTypesEntityProvider = () =>
         }),
       ).pipe(
         // A missing connection answers 501, so its entities are gone too.
-        Effect.catchTag(
-          ["NotFound", "EntitiesNotImplemented"],
-          () => Effect.void,
-        ),
+        Effect.catchTag(["NotFound", "EntitiesNotImplemented"], () => Effect.void),
       );
     }),
   });

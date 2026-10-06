@@ -132,11 +132,7 @@ export const toOrgDisplayName = (
     });
   });
 
-export const toDomain = (
-  id: string,
-  requested: string | undefined,
-  existing: string | undefined,
-) =>
+export const toDomain = (id: string, requested: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (requested !== undefined && requested.length > 0) return requested;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -204,9 +200,7 @@ export const listCustomers = (parent: string) =>
         }),
         (page) => page.customers,
       ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<cloudchannel.GoogleCloudChannelV1Customer>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<cloudchannel.GoogleCloudChannelV1Customer>()),
       );
 
 export const listPartnerCustomers = (parent: string) =>
@@ -219,9 +213,7 @@ export const listPartnerCustomers = (parent: string) =>
         }),
         (page) => page.customers,
       ).pipe(
-        Effect.catchTag("NotFound", () =>
-          emptyList<cloudchannel.GoogleCloudChannelV1Customer>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<cloudchannel.GoogleCloudChannelV1Customer>()),
       );
 
 export const listChannelPartnerLinks = (parent: string) =>
@@ -352,12 +344,10 @@ export const listChannelPartnerRepricingConfigs = (parent: string) =>
   parent.length === 0
     ? emptyList<cloudchannel.GoogleCloudChannelV1ChannelPartnerRepricingConfig>()
     : collectPages(
-        cloudchannel.listAccountsChannelPartnerLinksChannelPartnerRepricingConfigs.pages(
-          {
-            parent,
-            pageSize: 100,
-          },
-        ),
+        cloudchannel.listAccountsChannelPartnerLinksChannelPartnerRepricingConfigs.pages({
+          parent,
+          pageSize: 100,
+        }),
         (page) => page.channelPartnerRepricingConfigs,
       ).pipe(
         Effect.catchTag("NotFound", () =>
@@ -428,10 +418,7 @@ export const findCustomerRepricing = (
     if (month === undefined) return undefined;
     const wanted = normalizeDate(month);
     return configs.find((config) =>
-      jsonEqual(
-        normalizeDate(config.repricingConfig?.effectiveInvoiceMonth),
-        wanted,
-      ),
+      jsonEqual(normalizeDate(config.repricingConfig?.effectiveInvoiceMonth), wanted),
     );
   });
 
@@ -449,9 +436,6 @@ export const findChannelPartnerRepricing = (
     if (month === undefined) return undefined;
     const wanted = normalizeDate(month);
     return configs.find((config) =>
-      jsonEqual(
-        normalizeDate(config.repricingConfig?.effectiveInvoiceMonth),
-        wanted,
-      ),
+      jsonEqual(normalizeDate(config.repricingConfig?.effectiveInvoiceMonth), wanted),
     );
   });

@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -12,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type NetworkProps = {
   /**
@@ -170,9 +170,7 @@ export type Network = Resource<
  */
 export const Network = Resource<Network>("GCP.Compute.Network");
 
-export class NetworkNotResolved extends Data.TaggedError(
-  "GCP.Compute.NetworkNotResolved",
-)<{
+export class NetworkNotResolved extends Data.TaggedError("GCP.Compute.NetworkNotResolved")<{
   networkName: string;
 }> {}
 
@@ -181,19 +179,10 @@ const DEFAULT_MTU = 1460;
 const DEFAULT_ROUTING_MODE = "REGIONAL";
 const DEFAULT_ENFORCEMENT = "AFTER_CLASSIC_FIREWALL";
 
-const OWNERSHIP_KEYS = [
-  "alchemy-stack",
-  "alchemy-stage",
-  "alchemy-id",
-] as const;
+const OWNERSHIP_KEYS = ["alchemy-stack", "alchemy-stage", "alchemy-id"] as const;
 
-const encodeDescription = (
-  internal: Record<string, string>,
-  user?: string,
-): string => {
-  const marker = OWNERSHIP_KEYS.map(
-    (key) => `${key}=${internal[key] ?? ""}`,
-  ).join(" ");
+const encodeDescription = (internal: Record<string, string>, user?: string): string => {
+  const marker = OWNERSHIP_KEYS.map((key) => `${key}=${internal[key] ?? ""}`).join(" ");
   return user && user.length > 0 ? `${marker}\n${user}` : marker;
 };
 
@@ -221,15 +210,9 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasAlchemyMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toNetworkName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const toNetworkName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
@@ -245,10 +228,7 @@ const toNetworkName = (
     return rfc.length > 0 ? rfc : "n";
   });
 
-const toAttrs = (
-  network: compute.Network,
-  project: string,
-): Network["Attributes"] => {
+const toAttrs = (network: compute.Network, project: string): Network["Attributes"] => {
   const parsed = parseDescription(network.description);
   return {
     networkName: network.name ?? "",
@@ -264,8 +244,7 @@ const toAttrs = (
     bgpBestPathSelectionMode: network.routingConfig?.bgpBestPathSelectionMode,
     bgpAlwaysCompareMed: network.routingConfig?.bgpAlwaysCompareMed,
     bgpInterRegionCost: network.routingConfig?.bgpInterRegionCost,
-    networkFirewallPolicyEnforcementOrder:
-      network.networkFirewallPolicyEnforcementOrder,
+    networkFirewallPolicyEnforcementOrder: network.networkFirewallPolicyEnforcementOrder,
     enableUlaInternalIpv6: network.enableUlaInternalIpv6 === true,
     internalIpv6Range: network.internalIpv6Range,
     networkProfile: network.networkProfile,
@@ -292,9 +271,7 @@ const waitInsertedNetwork = (
     }).pipe(
       Effect.catchTag("GCP.OperationFailed", (error) =>
         getByName(project, networkName).pipe(
-          Effect.flatMap((network) =>
-            network !== undefined ? Effect.void : Effect.fail(error),
-          ),
+          Effect.flatMap((network) => (network !== undefined ? Effect.void : Effect.fail(error))),
         ),
       ),
     );
@@ -303,9 +280,7 @@ const waitInsertedNetwork = (
 const requireNetwork = (project: string, networkName: string) =>
   getByName(project, networkName).pipe(
     Effect.flatMap((network) =>
-      network
-        ? Effect.succeed(network)
-        : Effect.fail(new NetworkNotResolved({ networkName })),
+      network ? Effect.succeed(network) : Effect.fail(new NetworkNotResolved({ networkName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "GCP.Compute.NetworkNotResolved",
@@ -339,74 +314,52 @@ export const NetworkProvider = () =>
         (previousName !== undefined &&
           news.networkName !== undefined &&
           news.networkName !== previousName) ||
-        (olds?.autoCreateSubnetworks ??
-          output?.autoCreateSubnetworks ??
-          DEFAULT_AUTO_CREATE) !==
+        (olds?.autoCreateSubnetworks ?? output?.autoCreateSubnetworks ?? DEFAULT_AUTO_CREATE) !==
           (news.autoCreateSubnetworks ?? DEFAULT_AUTO_CREATE) ||
-        (olds?.enableUlaInternalIpv6 ??
-          output?.enableUlaInternalIpv6 ??
-          false) !== (news.enableUlaInternalIpv6 ?? false) ||
+        (olds?.enableUlaInternalIpv6 ?? output?.enableUlaInternalIpv6 ?? false) !==
+          (news.enableUlaInternalIpv6 ?? false) ||
         (news.internalIpv6Range !== undefined &&
-          (olds?.internalIpv6Range ?? output?.internalIpv6Range) !==
-            news.internalIpv6Range) ||
+          (olds?.internalIpv6Range ?? output?.internalIpv6Range) !== news.internalIpv6Range) ||
         (news.networkProfile !== undefined &&
-          (olds?.networkProfile ?? output?.networkProfile) !==
-            news.networkProfile) ||
+          (olds?.networkProfile ?? output?.networkProfile) !== news.networkProfile) ||
         (news.description !== undefined &&
-          (olds?.description ?? output?.description ?? "") !==
-            news.description);
+          (olds?.description ?? output?.description ?? "") !== news.description);
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          nextName !== undefined &&
-          previousName !== undefined &&
-          nextName === previousName,
+          nextName !== undefined && previousName !== undefined && nextName === previousName,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const networkName = yield* toNetworkName(
-        id,
-        olds?.networkName,
-        output?.networkName,
-      );
+      const networkName = yield* toNetworkName(id, olds?.networkName, output?.networkName);
       const existing = yield* getByName(env.project, networkName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* compute.listNetworks
-          .items({ project: env.project, maxResults: 500 })
-          .pipe(
-            Stream.filter((network) => hasAlchemyMarker(network.description)),
-            Stream.map((network) => toAttrs(network, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-          );
+        return yield* compute.listNetworks.items({ project: env.project, maxResults: 500 }).pipe(
+          Stream.filter((network) => hasAlchemyMarker(network.description)),
+          Stream.map((network) => toAttrs(network, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const networkName = yield* toNetworkName(
-        id,
-        news.networkName,
-        output?.networkName,
-      );
-      const autoCreateSubnetworks =
-        news.autoCreateSubnetworks ?? DEFAULT_AUTO_CREATE;
+      const networkName = yield* toNetworkName(id, news.networkName, output?.networkName);
+      const autoCreateSubnetworks = news.autoCreateSubnetworks ?? DEFAULT_AUTO_CREATE;
       const mtu = news.mtu ?? DEFAULT_MTU;
       const routingMode = news.routingMode ?? DEFAULT_ROUTING_MODE;
-      const enforcement =
-        news.networkFirewallPolicyEnforcementOrder ?? DEFAULT_ENFORCEMENT;
+      const enforcement = news.networkFirewallPolicyEnforcementOrder ?? DEFAULT_ENFORCEMENT;
       const enableUlaInternalIpv6 = news.enableUlaInternalIpv6 === true;
       const internal = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(internal, news.description);
@@ -418,8 +371,7 @@ export const NetworkProvider = () =>
           routingMode,
         };
         if (news.bgpBestPathSelectionMode !== undefined) {
-          routingConfig.bgpBestPathSelectionMode =
-            news.bgpBestPathSelectionMode;
+          routingConfig.bgpBestPathSelectionMode = news.bgpBestPathSelectionMode;
         }
         if (news.bgpAlwaysCompareMed !== undefined) {
           routingConfig.bgpAlwaysCompareMed = news.bgpAlwaysCompareMed;
@@ -451,13 +403,9 @@ export const NetworkProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.flatMap((inserted) =>
-              waitInsertedNetwork(env.project, networkName, inserted),
-            ),
+            Effect.flatMap((inserted) => waitInsertedNetwork(env.project, networkName, inserted)),
             Effect.retry({
-              while: (error) =>
-                error._tag === "NotFound" ||
-                error._tag === "GCP.OperationFailed",
+              while: (error) => error._tag === "NotFound" || error._tag === "GCP.OperationFailed",
               times: 6,
               schedule: Schedule.spaced("5 seconds"),
             }),
@@ -487,23 +435,16 @@ export const NetworkProvider = () =>
       }
 
       const patchBody: compute.Network = {};
-      if (
-        (current.networkFirewallPolicyEnforcementOrder ??
-          DEFAULT_ENFORCEMENT) !== enforcement
-      ) {
+      if ((current.networkFirewallPolicyEnforcementOrder ?? DEFAULT_ENFORCEMENT) !== enforcement) {
         patchBody.networkFirewallPolicyEnforcementOrder = enforcement;
       }
       const routingPatch: compute.NetworkRoutingConfig = {};
-      if (
-        (current.routingConfig?.routingMode ?? DEFAULT_ROUTING_MODE) !==
-        routingMode
-      ) {
+      if ((current.routingConfig?.routingMode ?? DEFAULT_ROUTING_MODE) !== routingMode) {
         routingPatch.routingMode = routingMode;
       }
       if (
         news.bgpBestPathSelectionMode !== undefined &&
-        current.routingConfig?.bgpBestPathSelectionMode !==
-          news.bgpBestPathSelectionMode
+        current.routingConfig?.bgpBestPathSelectionMode !== news.bgpBestPathSelectionMode
       ) {
         routingPatch.bgpBestPathSelectionMode = news.bgpBestPathSelectionMode;
       }

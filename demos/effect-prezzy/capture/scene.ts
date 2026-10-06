@@ -98,24 +98,39 @@ const locate = (code: string, anchor: string) => {
 /** Edit helpers. Anchors must match exactly once, so a stale edit fails loudly. */
 export const edit = {
   /** Replace the whole file. */
-  set: (text: string): Edit => () => text,
+  set:
+    (text: string): Edit =>
+    () =>
+      text,
   /** Add text at the end of the file. */
-  append: (text: string): Edit => (code) => code + text,
+  append:
+    (text: string): Edit =>
+    (code) =>
+      code + text,
   /** Insert `text` right after `anchor`. */
-  after: (anchor: string, text: string): Edit => (code) => {
-    const at = locate(code, anchor) + anchor.length;
-    return code.slice(0, at) + text + code.slice(at);
-  },
+  after:
+    (anchor: string, text: string): Edit =>
+    (code) => {
+      const at = locate(code, anchor) + anchor.length;
+      return code.slice(0, at) + text + code.slice(at);
+    },
   /** Insert `text` right before `anchor`. */
-  before: (anchor: string, text: string): Edit => (code) => {
-    const at = locate(code, anchor);
-    return code.slice(0, at) + text + code.slice(at);
-  },
+  before:
+    (anchor: string, text: string): Edit =>
+    (code) => {
+      const at = locate(code, anchor);
+      return code.slice(0, at) + text + code.slice(at);
+    },
   /** Replace `anchor` with `text`. */
-  replace: (anchor: string, text: string): Edit => (code) => {
-    const at = locate(code, anchor);
-    return code.slice(0, at) + text + code.slice(at + anchor.length);
-  },
+  replace:
+    (anchor: string, text: string): Edit =>
+    (code) => {
+      const at = locate(code, anchor);
+      return code.slice(0, at) + text + code.slice(at + anchor.length);
+    },
   /** Apply several edits as one patch. */
-  all: (...edits: Edit[]): Edit => (code) => edits.reduce((acc, e) => e(acc), code),
+  all:
+    (...edits: Edit[]): Edit =>
+    (code) =>
+      edits.reduce((acc, e) => e(acc), code),
 };

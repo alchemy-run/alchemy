@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   domainResourceOf,
@@ -179,10 +174,7 @@ export const PeeringProvider = () =>
         env.project,
       );
       const nextDomain = domainResourceOf(
-        news.domainResource ??
-          olds?.domainResource ??
-          output?.domainResource ??
-          "",
+        news.domainResource ?? olds?.domainResource ?? output?.domainResource ?? "",
         env.project,
       );
       const previousNetwork = networkOf(
@@ -190,40 +182,26 @@ export const PeeringProvider = () =>
         env.project,
       );
       const nextNetwork = networkOf(
-        news.authorizedNetwork ??
-          olds?.authorizedNetwork ??
-          output?.authorizedNetwork ??
-          "",
+        news.authorizedNetwork ?? olds?.authorizedNetwork ?? output?.authorizedNetwork ?? "",
         env.project,
       );
       return replaceOnIdentity({
         previousId: olds?.peeringId ?? output?.peeringId,
         nextId: news.peeringId ?? olds?.peeringId ?? output?.peeringId,
         extra:
-          (previousDomain.length > 0 &&
-            nextDomain.length > 0 &&
-            previousDomain !== nextDomain) ||
-          (previousNetwork.length > 0 &&
-            nextNetwork.length > 0 &&
-            previousNetwork !== nextNetwork),
+          (previousDomain.length > 0 && nextDomain.length > 0 && previousDomain !== nextDomain) ||
+          (previousNetwork.length > 0 && nextNetwork.length > 0 && previousNetwork !== nextNetwork),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const peeringId = yield* toPhysicalId(
-        id,
-        olds?.peeringId,
-        output?.peeringId,
-        "peering",
-      );
+      const peeringId = yield* toPhysicalId(id, olds?.peeringId, output?.peeringId, "peering");
       const name = output?.name ?? resourceName(env.project, peeringId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -235,12 +213,7 @@ export const PeeringProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const peeringId = yield* toPhysicalId(
-        id,
-        news.peeringId,
-        output?.peeringId,
-        "peering",
-      );
+      const peeringId = yield* toPhysicalId(id, news.peeringId, output?.peeringId, "peering");
       const name = resourceName(env.project, peeringId);
       const domainResource = domainResourceOf(news.domainResource, env.project);
       const authorizedNetwork = networkOf(news.authorizedNetwork, env.project);
@@ -282,20 +255,17 @@ export const PeeringProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const mask = fieldMask([
-        (upsert.length > 0 || removed.length > 0) && "labels",
-      ]);
+      const mask = fieldMask([(upsert.length > 0 || removed.length > 0) && "labels"]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* managedidentities.patchProjectsLocationsGlobalPeerings({
+        const operation = yield* managedidentities.patchProjectsLocationsGlobalPeerings({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-            },
-          });
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

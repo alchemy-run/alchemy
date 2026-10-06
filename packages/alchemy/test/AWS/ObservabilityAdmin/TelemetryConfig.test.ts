@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { TelemetryConfig } from "@/AWS/ObservabilityAdmin";
-import * as Test from "@/Test/Alchemy";
 import * as obs from "@distilled.cloud/aws/observabilityadmin";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { TelemetryConfig } from "@/AWS/ObservabilityAdmin";
+import * as Test from "@/Test/Alchemy";
 import { makeObservabilityAdminTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({

@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +18,8 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_TYPE = "CLOUD_ARMOR";
 const DEFAULT_RULE_PRIORITY = 2147483647;
@@ -28,16 +28,11 @@ const MAX_NAME_LENGTH = 63;
 export type SecurityPolicyType = compute.SecurityPolicyTypeEnum | (string & {});
 export type SecurityPolicyRule = compute.SecurityPolicyRule;
 export type SecurityPolicyRuleMatcher = compute.SecurityPolicyRuleMatcher;
-export type SecurityPolicyAdvancedOptionsConfig =
-  compute.SecurityPolicyAdvancedOptionsConfig;
-export type SecurityPolicyAdaptiveProtectionConfig =
-  compute.SecurityPolicyAdaptiveProtectionConfig;
-export type SecurityPolicyRecaptchaOptionsConfig =
-  compute.SecurityPolicyRecaptchaOptionsConfig;
-export type SecurityPolicyDdosProtectionConfig =
-  compute.SecurityPolicyDdosProtectionConfig;
-export type SecurityPolicyUserDefinedField =
-  compute.SecurityPolicyUserDefinedField;
+export type SecurityPolicyAdvancedOptionsConfig = compute.SecurityPolicyAdvancedOptionsConfig;
+export type SecurityPolicyAdaptiveProtectionConfig = compute.SecurityPolicyAdaptiveProtectionConfig;
+export type SecurityPolicyRecaptchaOptionsConfig = compute.SecurityPolicyRecaptchaOptionsConfig;
+export type SecurityPolicyDdosProtectionConfig = compute.SecurityPolicyDdosProtectionConfig;
+export type SecurityPolicyUserDefinedField = compute.SecurityPolicyUserDefinedField;
 
 export type SecurityPolicyProps = {
   /**
@@ -116,9 +111,7 @@ export type SecurityPolicy = Resource<
     /** Advanced WAF options, if configured. */
     advancedOptionsConfig: SecurityPolicyAdvancedOptionsConfig | undefined;
     /** Adaptive Protection config, if configured. */
-    adaptiveProtectionConfig:
-      | SecurityPolicyAdaptiveProtectionConfig
-      | undefined;
+    adaptiveProtectionConfig: SecurityPolicyAdaptiveProtectionConfig | undefined;
     /** reCAPTCHA options, if configured. */
     recaptchaOptionsConfig: SecurityPolicyRecaptchaOptionsConfig | undefined;
     /** DDoS protection config, if configured. */
@@ -197,9 +190,7 @@ export type SecurityPolicy = Resource<
  * @resource
  * @category Compute
  */
-export const SecurityPolicy = Resource<SecurityPolicy>(
-  "GCP.Compute.SecurityPolicy",
-);
+export const SecurityPolicy = Resource<SecurityPolicy>("GCP.Compute.SecurityPolicy");
 
 export class SecurityPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.SecurityPolicyNotResolved",
@@ -240,15 +231,13 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -277,9 +266,7 @@ const canonMatch = (match: SecurityPolicyRuleMatcher | undefined) => {
   if (match === undefined) return undefined;
   return {
     versionedExpr: match.versionedExpr,
-    config: match.config
-      ? { srcIpRanges: sorted(match.config.srcIpRanges) }
-      : undefined,
+    config: match.config ? { srcIpRanges: sorted(match.config.srcIpRanges) } : undefined,
     expr: match.expr,
     exprOptions: match.exprOptions,
   };
@@ -345,13 +332,8 @@ const desiredRules = (
     byPriority.set(rule.priority, rule);
   }
   if (!byPriority.has(DEFAULT_RULE_PRIORITY)) {
-    const observedDefault = observed.find(
-      (rule) => rule.priority === DEFAULT_RULE_PRIORITY,
-    );
-    byPriority.set(
-      DEFAULT_RULE_PRIORITY,
-      observedDefault ?? defaultAllowRule(),
-    );
+    const observedDefault = observed.find((rule) => rule.priority === DEFAULT_RULE_PRIORITY);
+    byPriority.set(DEFAULT_RULE_PRIORITY, observedDefault ?? defaultAllowRule());
   }
   return [...byPriority.values()].sort(
     (left, right) => (left.priority ?? 0) - (right.priority ?? 0),
@@ -525,13 +507,10 @@ export const SecurityPolicyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      const previousName =
-        olds?.securityPolicyName ?? output?.securityPolicyName;
+      const previousName = olds?.securityPolicyName ?? output?.securityPolicyName;
       const nextName = news.securityPolicyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? output?.type);
@@ -556,9 +535,7 @@ export const SecurityPolicyProvider = () =>
       const existing = yield* getByName(env.project, securityPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -573,9 +550,7 @@ export const SecurityPolicyProvider = () =>
           })
           .pipe(
             Stream.filter((policy) =>
-              Object.keys(policy.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(policy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((policy) => toAttrs(policy, env.project)),
             Stream.runCollect,
@@ -636,20 +611,14 @@ export const SecurityPolicyProvider = () =>
       }
       if (
         news.adaptiveProtectionConfig !== undefined &&
-        !subsetEqual(
-          current.adaptiveProtectionConfig,
-          news.adaptiveProtectionConfig,
-        )
+        !subsetEqual(current.adaptiveProtectionConfig, news.adaptiveProtectionConfig)
       ) {
         patch.adaptiveProtectionConfig = news.adaptiveProtectionConfig;
         needsPatch = true;
       }
       if (
         news.recaptchaOptionsConfig !== undefined &&
-        !subsetEqual(
-          current.recaptchaOptionsConfig,
-          news.recaptchaOptionsConfig,
-        )
+        !subsetEqual(current.recaptchaOptionsConfig, news.recaptchaOptionsConfig)
       ) {
         patch.recaptchaOptionsConfig = news.recaptchaOptionsConfig;
         needsPatch = true;
@@ -679,20 +648,13 @@ export const SecurityPolicyProvider = () =>
             body: patch,
           }),
         );
-        current =
-          (yield* getByName(env.project, securityPolicyName)) ?? current;
+        current = (yield* getByName(env.project, securityPolicyName)) ?? current;
       }
 
       const nextRules = desiredRules(news, current.rules ?? []);
       if (nextRules !== undefined) {
-        yield* syncRules(
-          env.project,
-          securityPolicyName,
-          current.rules ?? [],
-          nextRules,
-        );
-        current =
-          (yield* getByName(env.project, securityPolicyName)) ?? current;
+        yield* syncRules(env.project, securityPolicyName, current.rules ?? [], nextRules);
+        current = (yield* getByName(env.project, securityPolicyName)) ?? current;
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -710,8 +672,7 @@ export const SecurityPolicyProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, securityPolicyName)) ?? current;
+        current = (yield* getByName(env.project, securityPolicyName)) ?? current;
       }
 
       if (current === undefined) {

@@ -1,20 +1,17 @@
-import * as Schema from "effect/Schema";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as Schema from "effect/Schema";
 import { LinkNotFound } from "./Links.ts";
 
 export const LinkView = Schema.Struct({
   code: Schema.String,
   url: Schema.String,
   createdAt: Schema.Number,
-  preview: Schema.optional(
-    Schema.Struct({ title: Schema.String, fetchedAt: Schema.Number }),
-  ),
+  preview: Schema.optional(Schema.Struct({ title: Schema.String, fetchedAt: Schema.Number })),
   clicks: Schema.Number,
 });
 export type LinkView = typeof LinkView.Type;
-
 
 const Code = Schema.Struct({ code: Schema.String });
 

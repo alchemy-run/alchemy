@@ -32,10 +32,7 @@ export interface ListRotationOverrides extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.ListRotationOverridesRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.ListRotationOverridesResult,
-      ssm.ListRotationOverridesError
-    >
+    ) => Effect.Effect<ssm.ListRotationOverridesResult, ssm.ListRotationOverridesError>
   >
 > {}
 export const ListRotationOverrides = Binding.Service<ListRotationOverrides>(

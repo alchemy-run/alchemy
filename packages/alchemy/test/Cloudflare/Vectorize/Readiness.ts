@@ -1,7 +1,7 @@
-import { poll, PredicateFailed } from "@/Util/poll.ts";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { poll, PredicateFailed } from "@/Util/poll.ts";
 
 // Cloudflare reports p99 vector-write visibility below two minutes. Allow
 // 150 seconds including requests, with ten retries, and reserve separate
@@ -22,17 +22,12 @@ export const waitForVectorize = <A, E, R>(input: {
           }),
         ),
       ),
-      schedule: Schedule.max([
-        Schedule.spaced("12 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("12 seconds"), Schedule.recurs(10)]),
     }).pipe(
       Effect.timeoutOrElse({
         duration: "150 seconds",
         orElse: () =>
-          Effect.fail(
-            new PredicateFailed({ message: input.description, actual: latest }),
-          ),
+          Effect.fail(new PredicateFailed({ message: input.description, actual: latest })),
       }),
       Effect.catchTag("PredicateFailed", () =>
         Effect.fail(

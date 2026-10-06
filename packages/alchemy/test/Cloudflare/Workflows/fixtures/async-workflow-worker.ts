@@ -1,23 +1,13 @@
 import type { Workflow } from "@cloudflare/workers-types";
-import {
-  WorkflowEntrypoint,
-  type WorkflowEvent,
-  type WorkflowStep,
-} from "cloudflare:workers";
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
 interface Env {
   EXISTING_WORKFLOW: Workflow<{ value: string }>;
   WORKFLOW_NAME?: string;
 }
 
-export class ExistingWorkflow extends WorkflowEntrypoint<
-  Env,
-  { value: string }
-> {
-  async run(
-    event: Readonly<WorkflowEvent<{ value: string }>>,
-    step: WorkflowStep,
-  ) {
+export class ExistingWorkflow extends WorkflowEntrypoint<Env, { value: string }> {
+  async run(event: Readonly<WorkflowEvent<{ value: string }>>, step: WorkflowStep) {
     return step.do("greet", async () => ({
       greeting: `Hello, ${event.payload.value}!`,
       workflowName: event.workflowName,

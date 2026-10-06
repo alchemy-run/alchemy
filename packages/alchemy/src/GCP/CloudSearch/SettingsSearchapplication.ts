@@ -192,10 +192,7 @@ const toAttrs = (app: cloudsearch.SearchApplication, project: string) => {
   };
 };
 
-const lookupName = (
-  searchApplicationId: string | undefined,
-  existingName: string | undefined,
-) => {
+const lookupName = (searchApplicationId: string | undefined, existingName: string | undefined) => {
   if (searchApplicationId !== undefined && searchApplicationId.length > 0) {
     return toSearchApplicationName(searchApplicationId);
   }
@@ -211,15 +208,11 @@ export const SettingsSearchapplicationProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previous =
-        olds?.searchApplicationId ??
-        output?.searchApplicationId ??
-        output?.name;
+      const previous = olds?.searchApplicationId ?? output?.searchApplicationId ?? output?.name;
       if (
         previous !== undefined &&
         news.searchApplicationId !== undefined &&
-        toSearchApplicationName(news.searchApplicationId) !==
-          toSearchApplicationName(previous) &&
+        toSearchApplicationName(news.searchApplicationId) !== toSearchApplicationName(previous) &&
         news.searchApplicationId !== output?.searchApplicationId &&
         toSearchApplicationName(news.searchApplicationId) !== output?.name
       ) {
@@ -248,11 +241,10 @@ export const SettingsSearchapplicationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const displayName = (yield* toGeneratedName(
-        id,
-        news.displayName,
-        output?.displayName,
-      )).slice(0, MAX_DISPLAY_NAME_LENGTH);
+      const displayName = (yield* toGeneratedName(id, news.displayName, output?.displayName)).slice(
+        0,
+        MAX_DISPLAY_NAME_LENGTH,
+      );
       const name = lookupName(news.searchApplicationId, output?.name);
       const desiredEnableAuditLog = news.enableAuditLog === true;
       const desiredThumbnails = news.returnResultThumbnailUrls === true;
@@ -284,10 +276,7 @@ export const SettingsSearchapplicationProvider = () =>
           const done = yield* waitForOperation(created);
           const createdName = operationResourceName(done);
           if (createdName !== undefined) {
-            current = yield* waitUntilExists(
-              getSearchApplication(createdName),
-              createdName,
-            ).pipe(
+            current = yield* waitUntilExists(getSearchApplication(createdName), createdName).pipe(
               Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () =>
                 Effect.succeed(undefined),
               ),
@@ -307,38 +296,20 @@ export const SettingsSearchapplicationProvider = () =>
 
       const resourceName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
-      const auditChanged = !sameBoolean(
-        current.enableAuditLog,
-        desiredEnableAuditLog,
-      );
-      const thumbnailsChanged = !sameBoolean(
-        current.returnResultThumbnailUrls,
-        desiredThumbnails,
-      );
+      const auditChanged = !sameBoolean(current.enableAuditLog, desiredEnableAuditLog);
+      const thumbnailsChanged = !sameBoolean(current.returnResultThumbnailUrls, desiredThumbnails);
       const restrictionsChanged = !jsonEqual(
         current.dataSourceRestrictions ?? [],
         desiredRestrictions,
       );
-      const sortChanged = !jsonEqual(
-        current.defaultSortOptions,
-        news.defaultSortOptions,
-      );
+      const sortChanged = !jsonEqual(current.defaultSortOptions, news.defaultSortOptions);
       const interpretationChanged = !jsonEqual(
         current.queryInterpretationConfig,
         news.queryInterpretationConfig,
       );
-      const scoringChanged = !jsonEqual(
-        current.scoringConfig,
-        news.scoringConfig,
-      );
-      const sourceConfigChanged = !jsonEqual(
-        current.sourceConfig ?? [],
-        desiredSourceConfig,
-      );
-      const facetsChanged = !jsonEqual(
-        current.defaultFacetOptions ?? [],
-        desiredFacets,
-      );
+      const scoringChanged = !jsonEqual(current.scoringConfig, news.scoringConfig);
+      const sourceConfigChanged = !jsonEqual(current.sourceConfig ?? [], desiredSourceConfig);
+      const facetsChanged = !jsonEqual(current.defaultFacetOptions ?? [], desiredFacets);
 
       const updateMask = updateMaskOf(
         displayChanged ? "displayName" : undefined,
@@ -359,10 +330,7 @@ export const SettingsSearchapplicationProvider = () =>
           body: desired,
         });
         yield* waitForOperation(patched);
-        const refreshed = yield* waitUntilExists(
-          getSearchApplication(resourceName),
-          resourceName,
-        );
+        const refreshed = yield* waitUntilExists(getSearchApplication(resourceName), resourceName);
         current = refreshed;
       }
 
@@ -373,17 +341,13 @@ export const SettingsSearchapplicationProvider = () =>
       if (output.name.length === 0 && output.searchApplicationId.length === 0) {
         return;
       }
-      const name = toSearchApplicationName(
-        output.name || output.searchApplicationId,
-      );
+      const name = toSearchApplicationName(output.name || output.searchApplicationId);
       const operation = yield* cloudsearch
         .deleteSettingsSearchapplications({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }
-      yield* ignoreMissing(
-        cloudsearch.deleteSettingsSearchapplications({ name }),
-      );
+      yield* ignoreMissing(cloudsearch.deleteSettingsSearchapplications({ name }));
     }),
   });

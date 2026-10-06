@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  recordToTagList,
-  retryWhileConflict,
-  tagsToRecord,
-} from "./internal.ts";
+import { recordToTagList, retryWhileConflict, tagsToRecord } from "./internal.ts";
 
 export interface CollectionGroupCapacityLimits {
   /**
@@ -131,8 +127,7 @@ export const CollectionGroupProvider = () =>
         props: { groupName?: string | undefined },
       ) {
         return (
-          props.groupName ??
-          (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
+          props.groupName ?? (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
         );
       });
 
@@ -159,11 +154,9 @@ export const CollectionGroupProvider = () =>
         observed: aoss.CollectionGroupCapacityLimits | undefined,
       ): boolean =>
         desired !== undefined &&
-        (desired.maxIndexingCapacityInOCU !==
-          observed?.maxIndexingCapacityInOCU ||
+        (desired.maxIndexingCapacityInOCU !== observed?.maxIndexingCapacityInOCU ||
           desired.maxSearchCapacityInOCU !== observed?.maxSearchCapacityInOCU ||
-          desired.minIndexingCapacityInOCU !==
-            observed?.minIndexingCapacityInOCU ||
+          desired.minIndexingCapacityInOCU !== observed?.minIndexingCapacityInOCU ||
           desired.minSearchCapacityInOCU !== observed?.minSearchCapacityInOCU);
 
       // batchGetCollectionGroup does not return the group's tags — read them
@@ -183,9 +176,7 @@ export const CollectionGroupProvider = () =>
         if (upsert.length > 0) {
           yield* aoss.tagResource({
             resourceArn: arn,
-            tags: recordToTagList(
-              Object.fromEntries(upsert.map((t) => [t.Key, t.Value])),
-            ),
+            tags: recordToTagList(Object.fromEntries(upsert.map((t) => [t.Key, t.Value]))),
           });
         }
         if (removed.length > 0) {
@@ -194,25 +185,14 @@ export const CollectionGroupProvider = () =>
       });
 
       return CollectionGroup.Provider.of({
-        stables: [
-          "collectionGroupId",
-          "collectionGroupName",
-          "collectionGroupArn",
-        ],
+        stables: ["collectionGroupId", "collectionGroupName", "collectionGroupArn"],
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* aoss.listCollectionGroups
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* aoss.listCollectionGroups.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.collectionGroupSummaries ?? [])
-              .filter(
-                (s) =>
-                  s.id !== undefined &&
-                  s.name !== undefined &&
-                  s.arn !== undefined,
-              )
+              .filter((s) => s.id !== undefined && s.name !== undefined && s.arn !== undefined)
               .map((s) => ({
                 collectionGroupId: s.id!,
                 collectionGroupName: s.name!,
@@ -222,16 +202,13 @@ export const CollectionGroupProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.collectionGroupName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.collectionGroupName ?? (yield* createName(id, olds ?? {}));
           const detail = yield* observeByName(name);
           if (detail?.id === undefined || detail.arn === undefined) {
             return undefined;
           }
           const attrs = toAttributes(detail);
-          const tags = yield* observeTags(detail.arn).pipe(
-            Effect.catch(() => Effect.succeed({})),
-          );
+          const tags = yield* observeTags(detail.arn).pipe(Effect.catch(() => Effect.succeed({})));
           return (yield* hasAlchemyTags(
             id,
             Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
@@ -258,8 +235,7 @@ export const CollectionGroupProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.collectionGroupName ?? (yield* createName(id, news));
+          const name = output?.collectionGroupName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -278,23 +254,14 @@ export const CollectionGroupProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.createCollectionGroupDetail),
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
-            detail =
-              created !== undefined
-                ? { ...created }
-                : yield* observeByName(name);
+            detail = created !== undefined ? { ...created } : yield* observeByName(name);
           } else {
             // 3. SYNC — description/capacityLimits when observed drifts
             const descriptionDrift =
-              news.description !== undefined &&
-              news.description !== detail.description;
-            const limitsDrift = capacityDrift(
-              news.capacityLimits,
-              detail.capacityLimits,
-            );
+              news.description !== undefined && news.description !== detail.description;
+            const limitsDrift = capacityDrift(news.capacityLimits, detail.capacityLimits);
             if (descriptionDrift || limitsDrift) {
               yield* aoss.updateCollectionGroup({
                 id: detail.id!,
@@ -315,11 +282,7 @@ export const CollectionGroupProvider = () =>
           // 3b. SYNC TAGS — diff against observed cloud tags (read via
           // listTagsForResource on every path: adoption may bring foreign
           // tags, and a create race may have dropped ours).
-          yield* syncTags(
-            detail.arn,
-            yield* observeTags(detail.arn),
-            desiredTags,
-          );
+          yield* syncTags(detail.arn, yield* observeTags(detail.arn), desiredTags);
 
           yield* session.note(detail.id);
           return toAttributes(detail);
@@ -330,9 +293,7 @@ export const CollectionGroupProvider = () =>
           // ConflictException — retry through the teardown window.
           yield* retryWhileConflict(
             aoss.deleteCollectionGroup({ id: output.collectionGroupId }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

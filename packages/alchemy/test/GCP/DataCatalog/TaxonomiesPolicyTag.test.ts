@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datacatalog from "@distilled.cloud/gcp/datacatalog_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -69,10 +69,9 @@ test.provider(
       expect(created.tag.description).toEqual("email addresses");
       expect(created.tag.parentPolicyTag).toBeUndefined();
 
-      const fetched =
-        yield* datacatalog.getProjectsLocationsTaxonomiesPolicyTags({
-          name: created.tag.name,
-        });
+      const fetched = yield* datacatalog.getProjectsLocationsTaxonomiesPolicyTags({
+        name: created.tag.name,
+      });
       expect(fetched.name).toEqual(created.tag.name);
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("email addresses");

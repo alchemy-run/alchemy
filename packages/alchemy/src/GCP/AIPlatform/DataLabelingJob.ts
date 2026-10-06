@@ -12,7 +12,6 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
   hasAlchemyLabelKeys,
   isJobTerminal,
@@ -23,10 +22,10 @@ import {
   userLabels,
   waitForOperation,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
-export type ActiveLearningConfig =
-  aiplatform.GoogleCloudAiplatformV1ActiveLearningConfig;
+export type ActiveLearningConfig = aiplatform.GoogleCloudAiplatformV1ActiveLearningConfig;
 
 export type DataLabelingJobProps = {
   /**
@@ -150,9 +149,7 @@ export type DataLabelingJob = Resource<
  * @resource
  * @category AIPlatform
  */
-export const DataLabelingJob = Resource<DataLabelingJob>(
-  "GCP.AIPlatform.DataLabelingJob",
-);
+export const DataLabelingJob = Resource<DataLabelingJob>("GCP.AIPlatform.DataLabelingJob");
 
 export class DataLabelingJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.DataLabelingJobNotResolved",
@@ -172,10 +169,7 @@ const toId = (id: string, existing?: string) =>
     );
   });
 
-const toAttrs = (
-  job: aiplatform.GoogleCloudAiplatformV1DataLabelingJob,
-  project: string,
-) => {
+const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1DataLabelingJob, project: string) => {
   const name = job.name ?? "";
   const parsed = parseResourceName(name, "dataLabelingJobs");
   return {
@@ -194,9 +188,7 @@ const toAttrs = (
     kmsKeyName: job.encryptionSpec?.kmsKeyName,
     createTime: job.createTime,
     updateTime: job.updateTime,
-    error: job.error
-      ? { code: job.error.code, message: job.error.message }
-      : undefined,
+    error: job.error ? { code: job.error.code, message: job.error.message } : undefined,
   };
 };
 
@@ -207,16 +199,12 @@ const getByName = (name: string) =>
 
 const listJobs = (project: string, region: string) => {
   const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsDataLabelingJobs
-      .pages({ parent, pageSize: 100 })
-      .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.dataLabelingJobs ?? []),
-        ),
-        Stream.filter((job) => hasAlchemyLabelKeys(job.labels)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    aiplatform.listProjectsLocationsDataLabelingJobs.pages({ parent, pageSize: 100 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.dataLabelingJobs ?? [])),
+      Stream.filter((job) => hasAlchemyLabelKeys(job.labels)),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
@@ -224,12 +212,7 @@ const listJobs = (project: string, region: string) => {
   return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
-const findOwned = (
-  id: string,
-  project: string,
-  region: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, region: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -239,9 +222,7 @@ const findOwned = (
     for (const job of jobs) {
       if (yield* hasAlchemyLabels(id, tagRecord(job.labels))) return job;
     }
-    return undefined as
-      | aiplatform.GoogleCloudAiplatformV1DataLabelingJob
-      | undefined;
+    return undefined as aiplatform.GoogleCloudAiplatformV1DataLabelingJob | undefined;
   });
 
 const cancelAndDelete = (name: string) =>
@@ -258,28 +239,22 @@ const cancelAndDelete = (name: string) =>
           () => new DataLabelingJobNotResolved({ name }),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.AIPlatform.DataLabelingJobNotResolved",
+          while: (error) => error._tag === "GCP.AIPlatform.DataLabelingJobNotResolved",
           times: 8,
           schedule: Schedule.spaced("4 seconds"),
         }),
-        Effect.catchTag(
-          "GCP.AIPlatform.DataLabelingJobNotResolved",
-          () => Effect.void,
-        ),
+        Effect.catchTag("GCP.AIPlatform.DataLabelingJobNotResolved", () => Effect.void),
       );
     }
-    const operation = yield* aiplatform
-      .deleteProjectsLocationsDataLabelingJobs({ name })
-      .pipe(
-        Effect.retry({
-          while: (error) => error._tag === "Conflict",
-          times: 8,
-          schedule: Schedule.spaced("3 seconds"),
-        }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-      );
+    const operation = yield* aiplatform.deleteProjectsLocationsDataLabelingJobs({ name }).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "Conflict",
+        times: 8,
+        schedule: Schedule.spaced("3 seconds"),
+      }),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+    );
     if (operation !== undefined) {
       yield* waitForOperation(operation, { notFoundOk: true });
     }
@@ -292,10 +267,7 @@ export const DataLabelingJobProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -308,17 +280,10 @@ export const DataLabelingJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(
-        id,
-        env.project,
-        env.region,
-        output?.name,
-      );
+      const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -330,12 +295,8 @@ export const DataLabelingJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName =
-        news.displayName ?? (yield* toId(id, output?.dataLabelingJobId));
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = news.displayName ?? (yield* toId(id, output?.dataLabelingJobId));
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -361,11 +322,7 @@ export const DataLabelingJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, env.region),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;
       }
 

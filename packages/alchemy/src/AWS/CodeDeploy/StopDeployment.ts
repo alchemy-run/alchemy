@@ -31,6 +31,4 @@ export interface StopDeployment extends Binding.Service<
     ) => Effect.Effect<SVC.StopDeploymentOutput, SVC.StopDeploymentError>
   >
 > {}
-export const StopDeployment = Binding.Service<StopDeployment>(
-  "AWS.CodeDeploy.StopDeployment",
-);
+export const StopDeployment = Binding.Service<StopDeployment>("AWS.CodeDeploy.StopDeployment");

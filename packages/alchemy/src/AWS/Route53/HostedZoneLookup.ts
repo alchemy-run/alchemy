@@ -12,30 +12,26 @@ import * as Effect from "effect/Effect";
  * Shared by every provider that infers a hosted zone from a hostname
  * (Route 53 Record/Records, ACM Certificate validation, ECS Service DNS).
  */
-export const findPublicHostedZoneId = Effect.fn("findPublicHostedZoneId")(
-  function* (domainName: string) {
-    const labels = domainName
-      .replace(/\.$/, "")
-      .split(".")
-      .filter((label) => label.length > 0);
-    for (let i = 0; i < labels.length - 1; i++) {
-      const candidate = `${labels.slice(i).join(".")}.`;
-      const listed = yield* route53.listHostedZonesByName({
-        DNSName: candidate,
-        MaxItems: 1,
-      });
-      const zone = listed.HostedZones?.[0];
-      if (
-        zone?.Id !== undefined &&
-        zone.Name === candidate &&
-        zone.Config?.PrivateZone !== true
-      ) {
-        return zone.Id.replace(/^\/hostedzone\//, "");
-      }
+export const findPublicHostedZoneId = Effect.fn("findPublicHostedZoneId")(function* (
+  domainName: string,
+) {
+  const labels = domainName
+    .replace(/\.$/, "")
+    .split(".")
+    .filter((label) => label.length > 0);
+  for (let i = 0; i < labels.length - 1; i++) {
+    const candidate = `${labels.slice(i).join(".")}.`;
+    const listed = yield* route53.listHostedZonesByName({
+      DNSName: candidate,
+      MaxItems: 1,
+    });
+    const zone = listed.HostedZones?.[0];
+    if (zone?.Id !== undefined && zone.Name === candidate && zone.Config?.PrivateZone !== true) {
+      return zone.Id.replace(/^\/hostedzone\//, "");
     }
-    return undefined;
-  },
-);
+  }
+  return undefined;
+});
 
 /**
  * Resolve the hosted zone for `domainName`: the explicit id when given,

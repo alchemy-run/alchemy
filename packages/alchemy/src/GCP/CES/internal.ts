@@ -5,13 +5,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import {
   alchemyLabelKeys,
   createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
 } from "../Labels.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
 // CES resource ids must match `[a-zA-Z0-9][a-zA-Z0-9-_]{4,35}`.
 export const MAX_ID_LENGTH = 36;
@@ -36,34 +36,22 @@ export const parentOf = (name: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
-export const parseResourceName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseResourceName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   const appsAt = parts.lastIndexOf("apps");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     appId: appsAt >= 0 && parts[appsAt + 1] ? parts[appsAt + 1]! : "",
     app: appsAt >= 0 ? parts.slice(0, appsAt + 2).join("/") : parentOf(name),
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -100,11 +88,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -123,9 +109,7 @@ export const toPhysicalId = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `c${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `c${generated}`.slice(0, maxLength);
     return next.length >= 4 ? next : `${next}xxxx`.slice(0, maxLength);
   });
 
@@ -133,16 +117,10 @@ export const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(metadata));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const compactMarkerOf = (stack: string, stage: string, id: string) =>
@@ -157,10 +135,7 @@ const shrinkMarker = (
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = build(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -177,10 +152,8 @@ export const encodeOwnership = (
   labels: Record<string, string>,
   text: string | undefined,
 ): string => {
-  const marker = shrinkMarker(
-    labels,
-    MAX_DESCRIPTION_LENGTH,
-    (stack, stage, id) => markerOf(labels, stack, stage, id),
+  const marker = shrinkMarker(labels, MAX_DESCRIPTION_LENGTH, (stack, stage, id) =>
+    markerOf(labels, stack, stage, id),
   );
   const trimmed = text?.trim();
   return trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
@@ -193,15 +166,11 @@ export const encodeOwnershipLine = (
 ): string => {
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   // Shrink the marker, not the user text, so the display name round-trips.
-  const budget = trimmed
-    ? Math.max(maxLength - trimmed.length - 1, 16)
-    : maxLength;
+  const budget = trimmed ? Math.max(maxLength - trimmed.length - 1, 16) : maxLength;
   const marker =
     budget < 54
       ? shrinkMarker(labels, budget, compactMarkerOf)
-      : shrinkMarker(labels, budget, (stack, stage, id) =>
-          markerOf(labels, stack, stage, id),
-        );
+      : shrinkMarker(labels, budget, (stack, stage, id) => markerOf(labels, stack, stage, id));
   if (!trimmed) return marker;
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -240,14 +209,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -257,18 +222,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -283,18 +239,9 @@ export const ownedByAlchemyLabels = (
     const exact = yield* hasAlchemyLabels(id, observed);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        observed[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        observed[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        observed[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", observed[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", observed[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", observed[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -336,14 +283,10 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.CES.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.CES.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -355,9 +298,7 @@ export const waitUntilGone = <A, E, R>(
     ),
   );
 
-export const waitForVisible = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,

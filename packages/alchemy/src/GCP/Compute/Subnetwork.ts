@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type SubnetworkSecondaryRange = {
   /** Name of this secondary range. Must be unique within the subnetwork. */
@@ -206,9 +206,7 @@ export type Subnetwork = Resource<
  */
 export const Subnetwork = Resource<Subnetwork>("GCP.Compute.Subnetwork");
 
-export class SubnetworkNotResolved extends Data.TaggedError(
-  "GCP.Compute.SubnetworkNotResolved",
-)<{
+export class SubnetworkNotResolved extends Data.TaggedError("GCP.Compute.SubnetworkNotResolved")<{
   project: string;
   region: string;
   subnetworkName: string;
@@ -217,11 +215,7 @@ export class SubnetworkNotResolved extends Data.TaggedError(
 const DEFAULT_STACK_TYPE = "IPV4_ONLY";
 const DEFAULT_PRIVATE_GOOGLE_ACCESS = false;
 
-const OWNERSHIP_KEYS = [
-  "alchemy-stack",
-  "alchemy-stage",
-  "alchemy-id",
-] as const;
+const OWNERSHIP_KEYS = ["alchemy-stack", "alchemy-stage", "alchemy-id"] as const;
 
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -236,17 +230,10 @@ const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
 
 const networkRef = (project: string, network: string) =>
-  network.includes("/")
-    ? network
-    : `projects/${project}/global/networks/${network}`;
+  network.includes("/") ? network : `projects/${project}/global/networks/${network}`;
 
-const encodeDescription = (
-  internal: Record<string, string>,
-  user?: string,
-): string => {
-  const marker = OWNERSHIP_KEYS.map(
-    (key) => `${key}=${internal[key] ?? ""}`,
-  ).join(" ");
+const encodeDescription = (internal: Record<string, string>, user?: string): string => {
+  const marker = OWNERSHIP_KEYS.map((key) => `${key}=${internal[key] ?? ""}`).join(" ");
   return user && user.length > 0 ? `${marker}\n${user}` : marker;
 };
 
@@ -274,15 +261,9 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasAlchemyMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toSubnetworkName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const toSubnetworkName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
@@ -312,9 +293,7 @@ const toSecondaryRanges = (
       ipCidrRange: range.ipCidrRange,
     }));
 
-const rangesKey = (
-  ranges: ReadonlyArray<SubnetworkSecondaryRange> | undefined,
-) =>
+const rangesKey = (ranges: ReadonlyArray<SubnetworkSecondaryRange> | undefined) =>
   JSON.stringify(
     [...(ranges ?? [])]
       .map((range) => ({
@@ -367,10 +346,7 @@ const toLogConfig = (
   };
 };
 
-const toAttrs = (
-  subnetwork: compute.Subnetwork,
-  project: string,
-): Subnetwork["Attributes"] => {
+const toAttrs = (subnetwork: compute.Subnetwork, project: string): Subnetwork["Attributes"] => {
   const parsed = parseDescription(subnetwork.description);
   return {
     subnetworkName: subnetwork.name ?? "",
@@ -401,18 +377,12 @@ const getByName = (project: string, region: string, subnetworkName: string) =>
     .getSubnetworks({ project, region, subnetwork: subnetworkName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const requireSubnetwork = (
-  project: string,
-  region: string,
-  subnetworkName: string,
-) =>
+const requireSubnetwork = (project: string, region: string, subnetworkName: string) =>
   getByName(project, region, subnetworkName).pipe(
     Effect.flatMap((subnetwork) =>
       subnetwork
         ? Effect.succeed(subnetwork)
-        : Effect.fail(
-            new SubnetworkNotResolved({ project, region, subnetworkName }),
-          ),
+        : Effect.fail(new SubnetworkNotResolved({ project, region, subnetworkName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.SubnetworkNotResolved",
@@ -445,30 +415,19 @@ export const SubnetworkProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.subnetworkName ?? output?.subnetworkName;
       const nextName = news.subnetworkName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const identityChanged =
         previousRegion !== nextRegion ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName);
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName);
       const replace =
         identityChanged ||
         linkKey(news.network) !== linkKey(olds?.network ?? output?.network) ||
         news.ipCidrRange !== (olds?.ipCidrRange ?? output?.ipCidrRange ?? "") ||
-        (news.description ?? "") !==
-          (olds?.description ?? output?.description ?? "") ||
-        (news.purpose !== undefined &&
-          news.purpose !== (olds?.purpose ?? output?.purpose)) ||
+        (news.description ?? "") !== (olds?.description ?? output?.description ?? "") ||
+        (news.purpose !== undefined && news.purpose !== (olds?.purpose ?? output?.purpose)) ||
         (news.ipv6AccessType !== undefined &&
-          news.ipv6AccessType !==
-            (olds?.ipv6AccessType ?? output?.ipv6AccessType));
+          news.ipv6AccessType !== (olds?.ipv6AccessType ?? output?.ipv6AccessType));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -487,17 +446,12 @@ export const SubnetworkProvider = () =>
         olds?.subnetworkName,
         output?.subnetworkName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, subnetworkName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -533,8 +487,7 @@ export const SubnetworkProvider = () =>
       );
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const network = networkRef(env.project, news.network);
-      const privateIpGoogleAccess =
-        news.privateIpGoogleAccess ?? DEFAULT_PRIVATE_GOOGLE_ACCESS;
+      const privateIpGoogleAccess = news.privateIpGoogleAccess ?? DEFAULT_PRIVATE_GOOGLE_ACCESS;
       const stackType = news.stackType ?? DEFAULT_STACK_TYPE;
       const internal = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(internal, news.description);
@@ -610,8 +563,7 @@ export const SubnetworkProvider = () =>
         if (
           (observed?.enable === true) !== (news.logConfig.enable === true) ||
           (news.logConfig.aggregationInterval !== undefined &&
-            observed?.aggregationInterval !==
-              news.logConfig.aggregationInterval) ||
+            observed?.aggregationInterval !== news.logConfig.aggregationInterval) ||
           (news.logConfig.flowSampling !== undefined &&
             observed?.flowSampling !== news.logConfig.flowSampling) ||
           (news.logConfig.metadata !== undefined &&

@@ -29,6 +29,4 @@ export interface ListInstances extends Binding.Service<
     ) => Effect.Effect<SVC.ListInstancesOutput, SVC.ListInstancesError>
   >
 > {}
-export const ListInstances = Binding.Service<ListInstances>(
-  "AWS.EMR.ListInstances",
-);
+export const ListInstances = Binding.Service<ListInstances>("AWS.EMR.ListInstances");

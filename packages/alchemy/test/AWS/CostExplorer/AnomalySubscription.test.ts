@@ -1,12 +1,12 @@
+import * as ce from "@distilled.cloud/aws/cost-explorer";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AnomalyMonitor } from "@/AWS/CostExplorer/AnomalyMonitor.ts";
 import { AnomalySubscription } from "@/AWS/CostExplorer/AnomalySubscription.ts";
 import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
-import * as ce from "@distilled.cloud/aws/cost-explorer";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,13 +17,9 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const subscriptionName = "alchemy-test-anomaly-subscription";
 
 const getSubscription = (subscriptionArn: string) =>
-  pin(
-    ce.getAnomalySubscriptions({ SubscriptionArnList: [subscriptionArn] }),
-  ).pipe(
+  pin(ce.getAnomalySubscriptions({ SubscriptionArnList: [subscriptionArn] })).pipe(
     Effect.map((r) => r.AnomalySubscriptions[0]),
-    Effect.catchTag("UnknownSubscriptionException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("UnknownSubscriptionException", () => Effect.succeed(undefined)),
   );
 
 // Typed wait-until-gone on delete.
@@ -31,9 +27,7 @@ const assertSubscriptionGone = (subscriptionArn: string) =>
   Effect.gen(function* () {
     const found = yield* getSubscription(subscriptionArn);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`subscription '${subscriptionArn}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`subscription '${subscriptionArn}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -91,9 +85,7 @@ test.provider(
       expect(updated.subscriptionArn).toBe(deployed.subscriptionArn);
       const afterUpdate = yield* getSubscription(deployed.subscriptionArn);
       expect(afterUpdate?.Frequency).toBe("WEEKLY");
-      expect(afterUpdate?.ThresholdExpression?.Dimensions?.Values).toEqual([
-        "250",
-      ]);
+      expect(afterUpdate?.ThresholdExpression?.Dimensions?.Values).toEqual(["250"]);
 
       // Destroy — subscription and monitor are gone.
       yield* stack.destroy();

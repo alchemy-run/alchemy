@@ -1,3 +1,17 @@
+import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
+import * as KMS from "@distilled.cloud/aws/kms";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import * as AWS from "@/AWS";
@@ -6,26 +20,13 @@ import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import { BucketProvider } from "@/AWS/S3/Bucket.ts";
 import { InstanceId } from "@/InstanceId.ts";
+import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { inMemoryState } from "@/State";
-import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as KMS from "@distilled.cloud/aws/kms";
-import * as S3 from "@distilled.cloud/aws/s3";
-import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -40,9 +41,7 @@ test.provider(
         Bucket("OwnershipBucket", { tags: { revision: value } });
       const discovery = Effect.gen(function* () {
         yield* definition("updated");
-        return yield* Bucket("DiscoveryProbe", {
-          bucketName: bucket.bucketName,
-        });
+        return yield* Bucket("DiscoveryProbe", { bucketName: bucket.bucketName });
       });
 
       const deny = (action: string) =>
@@ -51,45 +50,30 @@ test.provider(
           Policy: JSON.stringify({
             Version: "2012-10-17",
             Statement: [
-              {
-                Effect: "Deny",
-                Principal: "*",
-                Action: action,
-                Resource: bucket.bucketArn,
-              },
+              { Effect: "Deny", Principal: "*", Action: action, Resource: bucket.bucketArn },
             ],
           }),
         });
-      const restorePolicy = S3.deleteBucketPolicy({
-        Bucket: bucket.bucketName,
-      });
+      const restorePolicy = S3.deleteBucketPolicy({ Bucket: bucket.bucketName });
 
       yield* Effect.gen(function* () {
         yield* deny("s3:ListBucket");
-        const listDenied = yield* S3.listObjectsV2({
-          Bucket: bucket.bucketName,
-        }).pipe(
+        const listDenied = yield* S3.listObjectsV2({ Bucket: bucket.bucketName }).pipe(
           Effect.as(false),
           Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
-          Effect.repeat({
-            until: Boolean,
-            schedule: Schedule.spaced("1 second"),
-            times: 8,
-          }),
+          Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 second"), times: 8 }),
         );
         expect(listDenied).toBe(true);
-        yield* S3.getBucketLocation({
-          Bucket: bucket.bucketName,
-          ExpectedBucketOwner: accountId,
-        });
+        yield* S3.getBucketLocation({ Bucket: bucket.bucketName, ExpectedBucketOwner: accountId });
 
         // The probe is planned, not applied: the original resource retains ownership.
         const plan = yield* stack.plan(discovery);
         expect(plan.resources.DiscoveryProbe?.action).toBe("adopted");
         yield* stack.deploy(definition("updated"));
-        expect(
-          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-        ).toContainEqual({ Key: "revision", Value: "updated" });
+        expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual({
+          Key: "revision",
+          Value: "updated",
+        });
 
         const wrongOwner = `${accountId.slice(0, -1)}${accountId.endsWith("0") ? "1" : "0"}`;
         const mismatch = yield* S3.getBucketLocation({
@@ -105,11 +89,7 @@ test.provider(
         }).pipe(
           Effect.as(false),
           Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
-          Effect.repeat({
-            until: Boolean,
-            schedule: Schedule.spaced("2 seconds"),
-            times: 10,
-          }),
+          Effect.repeat({ until: Boolean, schedule: Schedule.spaced("2 seconds"), times: 10 }),
         );
         expect(locationDenied).toBe(true);
         // HeadBucket remains allowed; treating this rejection as absence would plan a create.
@@ -146,16 +126,10 @@ test.provider(
       );
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
-      const absent = yield* S3.getBucketLocation({
-        Bucket: bucket.bucketName,
-      }).pipe(
+      const absent = yield* S3.getBucketLocation({ Bucket: bucket.bucketName }).pipe(
         Effect.as(false),
         Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
-        Effect.repeat({
-          until: Boolean,
-          schedule: Schedule.spaced("1 second"),
-          times: 8,
-        }),
+        Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 second"), times: 8 }),
       );
       expect(absent).toBe(true);
     }),
@@ -172,18 +146,10 @@ for (const aspect of ["tagging", "encryption"] as const) {
           tags: { revision: "before" },
           encryption: { sseAlgorithm: "AES256" as const },
         };
-        const bucket = yield* stack.deploy(
-          Bucket("ReadFailureBucket", initialProps),
-        );
-        const tagging = yield* S3.getBucketTagging({
-          Bucket: bucket.bucketName,
-        });
-        const encryption = yield* S3.getBucketEncryption({
-          Bucket: bucket.bucketName,
-        });
-        const restorePolicy = S3.deleteBucketPolicy({
-          Bucket: bucket.bucketName,
-        });
+        const bucket = yield* stack.deploy(Bucket("ReadFailureBucket", initialProps));
+        const tagging = yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
+        const encryption = yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
+        const restorePolicy = S3.deleteBucketPolicy({ Bucket: bucket.bucketName });
         const read = Effect.gen(function* () {
           if (aspect === "tagging") {
             yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
@@ -193,9 +159,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
         });
         const desired = Bucket("ReadFailureBucket", {
           tags: { revision: "after" },
-          encryption: {
-            sseAlgorithm: aspect === "encryption" ? "aws:kms" : "AES256",
-          },
+          encryption: { sseAlgorithm: aspect === "encryption" ? "aws:kms" : "AES256" },
         });
 
         yield* Effect.gen(function* () {
@@ -208,9 +172,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
                   Effect: "Deny",
                   Principal: "*",
                   Action:
-                    aspect === "tagging"
-                      ? "s3:GetBucketTagging"
-                      : "s3:GetEncryptionConfiguration",
+                    aspect === "tagging" ? "s3:GetBucketTagging" : "s3:GetEncryptionConfiguration",
                   Resource: bucket.bucketArn,
                 },
               ],
@@ -218,14 +180,8 @@ for (const aspect of ["tagging", "encryption"] as const) {
           });
           const denied = yield* read.pipe(
             Effect.as(false),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(true),
-            ),
-            Effect.repeat({
-              until: Boolean,
-              schedule: Schedule.spaced("1 second"),
-              times: 8,
-            }),
+            Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+            Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 second"), times: 8 }),
           );
           expect(denied).toBe(true);
           // Reapply the observed configuration to prove the write permission remains usable.
@@ -237,8 +193,7 @@ for (const aspect of ["tagging", "encryption"] as const) {
           } else {
             yield* S3.putBucketEncryption({
               Bucket: bucket.bucketName,
-              ServerSideEncryptionConfiguration:
-                encryption.ServerSideEncryptionConfiguration!,
+              ServerSideEncryptionConfiguration: encryption.ServerSideEncryptionConfiguration!,
             });
           }
           const planningFailure = yield* stack.plan(desired).pipe(Effect.flip);
@@ -255,9 +210,9 @@ for (const aspect of ["tagging", "encryption"] as const) {
           }),
         );
         if (aspect === "tagging") {
-          expect(
-            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-          ).toEqual(tagging.TagSet);
+          expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toEqual(
+            tagging.TagSet,
+          );
         } else {
           expect(
             (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
@@ -266,14 +221,14 @@ for (const aspect of ["tagging", "encryption"] as const) {
         }
         yield* stack.deploy(desired);
         if (aspect === "tagging") {
-          expect(
-            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-          ).toContainEqual({ Key: "revision", Value: "after" });
+          expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual(
+            { Key: "revision", Value: "after" },
+          );
         } else {
           expect(
             (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
-              .ServerSideEncryptionConfiguration?.Rules[0]
-              ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+              .ServerSideEncryptionConfiguration?.Rules[0]?.ApplyServerSideEncryptionByDefault
+              ?.SSEAlgorithm,
           ).toBe("aws:kms");
         }
         yield* stack.destroy();
@@ -289,16 +244,12 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const bucket = yield* stack.deploy(Bucket("UntaggedBucket", {}));
-      const absent = yield* S3.getBucketTagging({
-        Bucket: bucket.bucketName,
-      }).pipe(Effect.flip);
+      const absent = yield* S3.getBucketTagging({ Bucket: bucket.bucketName }).pipe(Effect.flip);
       expect(absent._tag).toBe("NoSuchTagSet");
-      yield* stack.deploy(
-        Bucket("UntaggedBucket", { tags: { initialized: "yes" } }),
-      );
-      expect(
-        (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-      ).toEqual([{ Key: "initialized", Value: "yes" }]);
+      yield* stack.deploy(Bucket("UntaggedBucket", { tags: { initialized: "yes" } }));
+      expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toEqual([
+        { Key: "initialized", Value: "yes" },
+      ]);
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
     }),
@@ -317,12 +268,8 @@ test.provider(
         policy?: AWS.IAM.PolicyStatement[],
       ) =>
         Effect.gen(function* () {
-          const first = yield* AWS.KMS.Key("FirstKey", {
-            deletionWindow: "7 days",
-          });
-          const second = yield* AWS.KMS.Key("SecondKey", {
-            deletionWindow: "7 days",
-          });
+          const first = yield* AWS.KMS.Key("FirstKey", { deletionWindow: "7 days" });
+          const second = yield* AWS.KMS.Key("SecondKey", { deletionWindow: "7 days" });
           const bucket = yield* Bucket("KmsIdentityBucket", {
             tags: { revision },
             policy,
@@ -331,8 +278,7 @@ test.provider(
                 ? undefined
                 : {
                     sseAlgorithm: "aws:kms",
-                    kmsMasterKeyId:
-                      key === "first" ? first.keyArn : second.keyArn,
+                    kmsMasterKeyId: key === "first" ? first.keyArn : second.keyArn,
                     bucketKeyEnabled,
                   },
           });
@@ -340,20 +286,15 @@ test.provider(
         });
       const initial = yield* stack.deploy(definition("before", "first"));
       const { bucket, first, second } = initial;
-      const observed = yield* S3.getBucketEncryption({
-        Bucket: bucket.bucketName,
-      });
+      const observed = yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
       const decoded =
-        observed.ServerSideEncryptionConfiguration!.Rules[0]!
-          .ApplyServerSideEncryptionByDefault!.KMSMasterKeyID;
+        observed.ServerSideEncryptionConfiguration!.Rules[0]!.ApplyServerSideEncryptionByDefault!
+          .KMSMasterKeyID;
       expect(Redacted.isRedacted(decoded)).toBe(true);
-      expect(
-        Redacted.isRedacted(decoded) ? Redacted.value(decoded) : decoded,
-      ).toBe(first.keyArn);
+      expect(Redacted.isRedacted(decoded) ? Redacted.value(decoded) : decoded).toBe(first.keyArn);
       const probeWrite = S3.putBucketEncryption({
         Bucket: bucket.bucketName,
-        ServerSideEncryptionConfiguration:
-          observed.ServerSideEncryptionConfiguration!,
+        ServerSideEncryptionConfiguration: observed.ServerSideEncryptionConfiguration!,
       }).pipe(
         Effect.as(false),
         Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
@@ -374,36 +315,26 @@ test.provider(
         });
         expect(
           yield* probeWrite.pipe(
-            Effect.repeat({
-              until: Boolean,
-              schedule: Schedule.spaced("1 second"),
-              times: 8,
-            }),
+            Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 second"), times: 8 }),
           ),
         ).toBe(true);
-        const plan = yield* stack.plan(
-          definition("after", "first", false, deny),
-        );
+        const plan = yield* stack.plan(definition("after", "first", false, deny));
         expect(plan.resources.KmsIdentityBucket?.action).toBe("update");
         // Tags force reconcile; an encryption PUT would fail under the proven deny.
         yield* stack.deploy(definition("after", "first", false, deny));
-        expect(
-          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
-        ).toContainEqual({ Key: "revision", Value: "after" });
+        expect((yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet).toContainEqual({
+          Key: "revision",
+          Value: "after",
+        });
         expect(yield* probeWrite).toBe(true);
       }).pipe(
-        Effect.ensuring(
-          S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(
-            Effect.orDie,
-          ),
-        ),
+        Effect.ensuring(S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(Effect.orDie)),
       );
 
       // Wait for removal using the original configuration, never the desired next key.
       yield* S3.putBucketEncryption({
         Bucket: bucket.bucketName,
-        ServerSideEncryptionConfiguration:
-          observed.ServerSideEncryptionConfiguration!,
+        ServerSideEncryptionConfiguration: observed.ServerSideEncryptionConfiguration!,
       }).pipe(
         Effect.retry({
           while: (error) => error._tag === "AccessDeniedException",
@@ -412,13 +343,10 @@ test.provider(
         }),
       );
       yield* stack.deploy(definition("different-key", "second"));
-      const changed = (yield* S3.getBucketEncryption({
-        Bucket: bucket.bucketName,
-      })).ServerSideEncryptionConfiguration!.Rules[0]!
-        .ApplyServerSideEncryptionByDefault!.KMSMasterKeyID;
-      expect(
-        Redacted.isRedacted(changed) ? Redacted.value(changed) : changed,
-      ).toBe(second.keyArn);
+      const changed = (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+        .ServerSideEncryptionConfiguration!.Rules[0]!.ApplyServerSideEncryptionByDefault!
+        .KMSMasterKeyID;
+      expect(Redacted.isRedacted(changed) ? Redacted.value(changed) : changed).toBe(second.keyArn);
       yield* stack.deploy(definition("bucket-key", "second", true));
       expect(
         (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
@@ -426,33 +354,22 @@ test.provider(
       ).toBe(true);
       const defaultsProgram = definition("bucket-key", undefined);
       yield* stack.deploy(defaultsProgram);
-      const defaults = (yield* S3.getBucketEncryption({
-        Bucket: bucket.bucketName,
-      })).ServerSideEncryptionConfiguration!.Rules[0]!;
-      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-        "AES256",
-      );
-      expect(
-        defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
-      ).toBeUndefined();
+      const defaults = (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+        .ServerSideEncryptionConfiguration!.Rules[0]!;
+      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
+      expect(defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
       expect(defaults.BucketKeyEnabled ?? false).toBe(false);
       expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
-      expect(
-        (yield* stack.plan(defaultsProgram)).resources.KmsIdentityBucket
-          ?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(defaultsProgram)).resources.KmsIdentityBucket?.action).toBe("noop");
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
       for (const key of [first, second]) {
-        expect(
-          (yield* KMS.describeKey({ KeyId: key.keyId })).KeyMetadata?.KeyState,
-        ).toBe("PendingDeletion");
+        expect((yield* KMS.describeKey({ KeyId: key.keyId })).KeyMetadata?.KeyState).toBe(
+          "PendingDeletion",
+        );
       }
     }),
-  {
-    tags: ["provider:aws", "provider:aws:kms", "provider:aws:s3", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:kms", "provider:aws:s3", "live"], timeout: 120_000 },
 );
 
 for (const blocked of ["SSE-C", "NONE"] as const) {
@@ -465,8 +382,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
         const bucket = yield* stack.deploy(desired);
         expect(
           (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
-            .ServerSideEncryptionConfiguration?.Rules[0]?.BlockedEncryptionTypes
-            ?.EncryptionType,
+            .ServerSideEncryptionConfiguration?.Rules[0]?.BlockedEncryptionTypes?.EncryptionType,
         ).toEqual(["NONE"]);
         yield* S3.putBucketEncryption({
           Bucket: bucket.bucketName,
@@ -479,32 +395,20 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
             ],
           },
         });
-        const before = (yield* S3.getBucketEncryption({
-          Bucket: bucket.bucketName,
-        })).ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([
-          blocked,
-        ]);
-        expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-          "aws:kms",
-        );
+        const before = (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+          .ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([blocked]);
+        expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
         const plan = yield* stack.plan(desired);
         expect(plan.resources.EncryptionBlocksBucket?.action).toBe("update");
         yield* stack.deploy(desired);
-        const after = (yield* S3.getBucketEncryption({
-          Bucket: bucket.bucketName,
-        })).ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-          "AES256",
-        );
-        expect(
-          after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
-        ).toBeUndefined();
+        const after = (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+          .ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
+        expect(after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
         expect(after.BucketKeyEnabled ?? false).toBe(false);
         expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
-        expect(
-          (yield* stack.plan(desired)).resources.EncryptionBlocksBucket?.action,
-        ).toBe("noop");
+        expect((yield* stack.plan(desired)).resources.EncryptionBlocksBucket?.action).toBe("noop");
         yield* stack.destroy();
         yield* assertBucketDeleted(bucket.bucketName);
       }),
@@ -528,16 +432,10 @@ test.provider(
           policy,
         });
       const bucket = yield* stack.deploy(program([], "managed"));
-      const readRule = S3.getBucketEncryption({
-        Bucket: bucket.bucketName,
-      }).pipe(
-        Effect.map(
-          (result) => result.ServerSideEncryptionConfiguration!.Rules[0]!,
-        ),
+      const readRule = S3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
+        Effect.map((result) => result.ServerSideEncryptionConfiguration!.Rules[0]!),
       );
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       const deny: AWS.IAM.PolicyStatement[] = [
         {
           Effect: "Deny",
@@ -555,9 +453,7 @@ test.provider(
               {
                 ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" },
                 BucketKeyEnabled: false,
-                BlockedEncryptionTypes: {
-                  EncryptionType: types.length ? types : ["NONE"],
-                },
+                BlockedEncryptionTypes: { EncryptionType: types.length ? types : ["NONE"] },
               },
             ],
           },
@@ -566,16 +462,13 @@ test.provider(
           Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
         );
         const desired = program(types, "managed");
-        expect(
-          (yield* stack.plan(desired)).resources.ManagedEncryptionBlocks
-            ?.action,
-        ).toBe("update");
+        expect((yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action).toBe(
+          "update",
+        );
         const updated = yield* stack.deploy(desired);
         expect(updated.bucketName).toBe(bucket.bucketName);
         const expected = types.length ? ["SSE-C"] : ["NONE"];
-        expect(
-          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(expected);
+        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
         yield* Effect.gen(function* () {
           yield* S3.putBucketPolicy({
             Bucket: bucket.bucketName,
@@ -583,11 +476,7 @@ test.provider(
           });
           expect(
             yield* probeWrite.pipe(
-              Effect.repeat({
-                until: Boolean,
-                schedule: Schedule.spaced("1 second"),
-                times: 8,
-              }),
+              Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 second"), times: 8 }),
             ),
           ).toBe(true);
           // Tags force reconcile while equivalent restrictions must skip the denied PUT.
@@ -596,15 +485,9 @@ test.provider(
             yield* stack.deploy(program(undefined, "omitted", deny));
           }
           expect(yield* probeWrite).toBe(true);
-          expect(
-            (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-          ).toEqual(expected);
+          expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(expected);
         }).pipe(
-          Effect.ensuring(
-            S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(
-              Effect.orDie,
-            ),
-          ),
+          Effect.ensuring(S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(Effect.orDie)),
         );
         expect(
           yield* probeWrite.pipe(
@@ -616,9 +499,7 @@ test.provider(
           ),
         ).toBe(false);
         yield* stack.deploy(program(undefined, "default"));
-        expect(
-          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(["NONE"]);
+        expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       }
       const desired = program([], "repair");
       yield* stack.deploy(desired);
@@ -633,28 +514,17 @@ test.provider(
           ],
         },
       });
-      expect(
-        (yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(desired)).resources.ManagedEncryptionBlocks?.action).toBe("update");
       yield* stack.deploy(desired);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       expect(
-        (yield* stack.plan(program([], "repair"))).resources
-          .ManagedEncryptionBlocks?.action,
+        (yield* stack.plan(program([], "repair"))).resources.ManagedEncryptionBlocks?.action,
       ).toBe("noop");
       yield* stack.destroy();
-      const absent = yield* S3.getBucketLocation({
-        Bucket: bucket.bucketName,
-      }).pipe(
+      const absent = yield* S3.getBucketLocation({ Bucket: bucket.bucketName }).pipe(
         Effect.as(false),
         Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
-        Effect.repeat({
-          until: Boolean,
-          schedule: Schedule.spaced("1 second"),
-          times: 8,
-        }),
+        Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 second"), times: 8 }),
       );
       expect(absent).toBe(true);
     }),
@@ -704,13 +574,8 @@ test.provider(
 
       yield* S3.headBucket({ Bucket: bucket.bucketName });
 
-      const tagging = yield* S3.getBucketTagging({
-        Bucket: bucket.bucketName,
-      });
-      expect(tagging.TagSet).toContainEqual({
-        Key: "Environment",
-        Value: "test",
-      });
+      const tagging = yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
+      expect(tagging.TagSet).toContainEqual({ Key: "Environment", Value: "test" });
 
       yield* stack.deploy(
         Effect.gen(function* () {
@@ -722,17 +587,9 @@ test.provider(
         }),
       );
 
-      const updatedTagging = yield* S3.getBucketTagging({
-        Bucket: bucket.bucketName,
-      });
-      expect(updatedTagging.TagSet).toContainEqual({
-        Key: "Environment",
-        Value: "production",
-      });
-      expect(updatedTagging.TagSet).toContainEqual({
-        Key: "Team",
-        Value: "platform",
-      });
+      const updatedTagging = yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
+      expect(updatedTagging.TagSet).toContainEqual({ Key: "Environment", Value: "production" });
+      expect(updatedTagging.TagSet).toContainEqual({ Key: "Team", Value: "platform" });
 
       yield* stack.destroy();
 
@@ -757,9 +614,7 @@ test.provider(
       );
 
       expect(bucket.bucketName).toEqual("alchemy-test-bucket-custom-name");
-      expect(bucket.bucketArn).toEqual(
-        "arn:aws:s3:::alchemy-test-bucket-custom-name",
-      );
+      expect(bucket.bucketArn).toEqual("arn:aws:s3:::alchemy-test-bucket-custom-name");
 
       yield* S3.headBucket({ Bucket: bucket.bucketName });
 
@@ -795,16 +650,10 @@ test.provider(
       // PutObject before the object is readable through a different S3
       // endpoint. Retry only the typed visibility miss, with a hard bound;
       // authorization and request-shape errors still fail immediately.
-      yield* S3.headObject({
-        Bucket: bucket.bucketName,
-        Key: "test-object.txt",
-      }).pipe(
+      yield* S3.headObject({ Bucket: bucket.bucketName, Key: "test-object.txt" }).pipe(
         Effect.retry({
           while: (error) => error._tag === "NotFound",
-          schedule: Schedule.max([
-            Schedule.exponential(100),
-            Schedule.recurs(6),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(6)]),
         }),
       );
 
@@ -864,12 +713,8 @@ test.provider(
         }),
       );
 
-      const objectLockConfig = yield* S3.getObjectLockConfiguration({
-        Bucket: bucket.bucketName,
-      });
-      expect(
-        objectLockConfig.ObjectLockConfiguration?.ObjectLockEnabled,
-      ).toEqual("Enabled");
+      const objectLockConfig = yield* S3.getObjectLockConfiguration({ Bucket: bucket.bucketName });
+      expect(objectLockConfig.ObjectLockConfiguration?.ObjectLockEnabled).toEqual("Enabled");
 
       yield* stack.destroy();
 
@@ -895,9 +740,7 @@ test.provider(
       );
       const bucketName = bucket.bucketName;
 
-      const tagging = yield* S3.getBucketTagging({
-        Bucket: bucketName,
-      });
+      const tagging = yield* S3.getBucketTagging({ Bucket: bucketName });
       expect(tagging.TagSet).toHaveLength(2);
 
       yield* stack.deploy(
@@ -909,13 +752,9 @@ test.provider(
         }),
       );
 
-      const result = yield* S3.getBucketTagging({
-        Bucket: bucketName,
-      }).pipe(
+      const result = yield* S3.getBucketTagging({ Bucket: bucketName }).pipe(
         Effect.map(() => "has-tags" as const),
-        Effect.catchTag("NoSuchTagSet", () =>
-          Effect.succeed("no-tags" as const),
-        ),
+        Effect.catchTag("NoSuchTagSet", () => Effect.succeed("no-tags" as const)),
       );
       expect(result).toEqual("no-tags");
 
@@ -932,8 +771,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const distributionArn =
-        "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
+      const distributionArn = "arn:aws:cloudfront::123456789012:distribution/TESTDIST";
       const bucketArn = "arn:aws:s3:::alchemy-test-bucket-policy-bindings";
 
       const bucket = yield* stack.deploy(
@@ -947,16 +785,10 @@ test.provider(
             policyStatements: [
               {
                 Effect: "Allow",
-                Principal: {
-                  Service: "cloudfront.amazonaws.com",
-                },
+                Principal: { Service: "cloudfront.amazonaws.com" },
                 Action: ["s3:GetObject"],
                 Resource: [`${bucketArn}/*`],
-                Condition: {
-                  StringEquals: {
-                    "AWS:SourceArn": distributionArn,
-                  },
-                },
+                Condition: { StringEquals: { "AWS:SourceArn": distributionArn } },
               },
             ],
           });
@@ -965,23 +797,17 @@ test.provider(
         }),
       );
 
-      const bucketPolicy = yield* S3.getBucketPolicy({
-        Bucket: bucket.bucketName,
-      }).pipe(Effect.map((response) => JSON.parse(response.Policy!)));
+      const bucketPolicy = yield* S3.getBucketPolicy({ Bucket: bucket.bucketName }).pipe(
+        Effect.map((response) => JSON.parse(response.Policy!)),
+      );
       const statement = bucketPolicy.Statement[0];
 
       expect(bucketPolicy.Version).toEqual("2012-10-17");
       expect(statement.Effect).toEqual("Allow");
-      expect(statement.Principal).toEqual({
-        Service: "cloudfront.amazonaws.com",
-      });
+      expect(statement.Principal).toEqual({ Service: "cloudfront.amazonaws.com" });
       expect(statement.Action).toEqual("s3:GetObject");
       expect(statement.Resource).toEqual(`${bucketArn}/*`);
-      expect(statement.Condition).toEqual({
-        StringEquals: {
-          "AWS:SourceArn": distributionArn,
-        },
-      });
+      expect(statement.Condition).toEqual({ StringEquals: { "AWS:SourceArn": distributionArn } });
 
       yield* stack.deploy(
         Effect.gen(function* () {
@@ -992,13 +818,9 @@ test.provider(
         }),
       );
 
-      const policyAfterRemoval = yield* S3.getBucketPolicy({
-        Bucket: bucket.bucketName,
-      }).pipe(
+      const policyAfterRemoval = yield* S3.getBucketPolicy({ Bucket: bucket.bucketName }).pipe(
         Effect.map(() => "has-policy" as const),
-        Effect.catchTag("NoSuchBucketPolicy", () =>
-          Effect.succeed("no-policy" as const),
-        ),
+        Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed("no-policy" as const)),
       );
 
       expect(policyAfterRemoval).toEqual("no-policy");
@@ -1033,10 +855,7 @@ test.provider(
       yield* Effect.gen(function* () {
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Bucket("AdoptableBucket", {
-              bucketName,
-              forceDestroy: true,
-            });
+            return yield* Bucket("AdoptableBucket", { bucketName, forceDestroy: true });
           }),
         );
         expect(initial.bucketName).toEqual(bucketName);
@@ -1056,35 +875,22 @@ test.provider(
         // Wipe state — bucket stays in S3.
         yield* Effect.gen(function* () {
           const state = yield* yield* State;
-          yield* state.delete({
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "AdoptableBucket",
-          });
+          yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableBucket" });
         }).pipe(Effect.provide(stack.state));
 
         const adopted = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Bucket("AdoptableBucket", {
-              bucketName,
-              forceDestroy: true,
-            });
+            return yield* Bucket("AdoptableBucket", { bucketName, forceDestroy: true });
           }),
         );
 
         expect(adopted.bucketArn).toEqual(initial.bucketArn);
         const defaults = (yield* S3.getBucketEncryption({ Bucket: bucketName }))
           .ServerSideEncryptionConfiguration!.Rules[0]!;
-        expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
-          "AES256",
-        );
-        expect(
-          defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
-        ).toBeUndefined();
+        expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("AES256");
+        expect(defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBeUndefined();
         expect(defaults.BucketKeyEnabled ?? false).toBe(false);
-        expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual([
-          "NONE",
-        ]);
+        expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
 
         yield* stack.destroy();
         yield* assertBucketDeleted(bucketName);
@@ -1138,11 +944,7 @@ test.provider(
 
       const name = "alchemy-test-bucket-versioning";
       const bucket = yield* stack.deploy(
-        Bucket("VersioningBucket", {
-          bucketName: name,
-          versioning: "Enabled",
-          forceDestroy: true,
-        }),
+        Bucket("VersioningBucket", { bucketName: name, versioning: "Enabled", forceDestroy: true }),
       );
 
       const v1 = yield* S3.getBucketVersioning({ Bucket: bucket.bucketName });
@@ -1182,8 +984,8 @@ test.provider(
 
       const e1 = yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
       expect(
-        e1.ServerSideEncryptionConfiguration?.Rules?.[0]
-          ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+        e1.ServerSideEncryptionConfiguration?.Rules?.[0]?.ApplyServerSideEncryptionByDefault
+          ?.SSEAlgorithm,
       ).toEqual("AES256");
 
       yield* stack.deploy(
@@ -1195,9 +997,7 @@ test.provider(
       );
 
       const e2 = yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
-      expect(
-        e2.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled,
-      ).toEqual(true);
+      expect(e2.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled).toEqual(true);
 
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
@@ -1227,9 +1027,7 @@ test.provider(
 
       const p1 = yield* S3.getPublicAccessBlock({ Bucket: bucket.bucketName });
       expect(p1.PublicAccessBlockConfiguration?.BlockPublicAcls).toEqual(true);
-      expect(p1.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(
-        true,
-      );
+      expect(p1.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(true);
 
       yield* stack.deploy(
         Bucket("PabBucket", {
@@ -1245,9 +1043,7 @@ test.provider(
       );
 
       const p2 = yield* S3.getPublicAccessBlock({ Bucket: bucket.bucketName });
-      expect(p2.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(
-        false,
-      );
+      expect(p2.PublicAccessBlockConfiguration?.RestrictPublicBuckets).toEqual(false);
 
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
@@ -1290,10 +1086,7 @@ test.provider(
               AllowedHeaders: ["*"],
               MaxAgeSeconds: 3000,
             },
-            {
-              AllowedMethods: ["PUT", "POST"],
-              AllowedOrigins: ["https://app.example.com"],
-            },
+            { AllowedMethods: ["PUT", "POST"], AllowedOrigins: ["https://app.example.com"] },
           ],
           forceDestroy: true,
         }),
@@ -1302,21 +1095,11 @@ test.provider(
       const c2 = yield* S3.getBucketCors({ Bucket: bucket.bucketName });
       expect(c2.CORSRules).toHaveLength(2);
 
-      yield* stack.deploy(
-        Bucket("CorsBucket", {
-          bucketName: name,
-          cors: [],
-          forceDestroy: true,
-        }),
-      );
+      yield* stack.deploy(Bucket("CorsBucket", { bucketName: name, cors: [], forceDestroy: true }));
 
-      const removed = yield* S3.getBucketCors({
-        Bucket: bucket.bucketName,
-      }).pipe(
+      const removed = yield* S3.getBucketCors({ Bucket: bucket.bucketName }).pipe(
         Effect.map(() => "has-cors" as const),
-        Effect.catchTag("NoSuchCORSConfiguration", () =>
-          Effect.succeed("no-cors" as const),
-        ),
+        Effect.catchTag("NoSuchCORSConfiguration", () => Effect.succeed("no-cors" as const)),
       );
       expect(removed).toEqual("no-cors");
 
@@ -1349,25 +1132,17 @@ test.provider(
         }),
       );
 
-      const l1 = yield* S3.getBucketLifecycleConfiguration({
-        Bucket: bucket.bucketName,
-      });
+      const l1 = yield* S3.getBucketLifecycleConfiguration({ Bucket: bucket.bucketName });
       expect(l1.Rules).toHaveLength(1);
       expect(l1.Rules?.[0]?.Expiration?.Days).toEqual(30);
 
       yield* stack.deploy(
-        Bucket("LifecycleBucket", {
-          bucketName: name,
-          lifecycleRules: [],
-          forceDestroy: true,
-        }),
+        Bucket("LifecycleBucket", { bucketName: name, lifecycleRules: [], forceDestroy: true }),
       );
 
       // Lifecycle config is eventually consistent — the rule can linger on reads
       // for a few seconds after deleteBucketLifecycle. Retry until it clears.
-      const removed = yield* S3.getBucketLifecycleConfiguration({
-        Bucket: bucket.bucketName,
-      }).pipe(
+      const removed = yield* S3.getBucketLifecycleConfiguration({ Bucket: bucket.bucketName }).pipe(
         Effect.map(() => "has-lifecycle" as const),
         Effect.catchTag("NoSuchLifecycleConfiguration", () =>
           Effect.succeed("no-lifecycle" as const),
@@ -1427,12 +1202,8 @@ test.provider(
         }),
       );
 
-      const own = yield* S3.getBucketOwnershipControls({
-        Bucket: bucket.bucketName,
-      });
-      expect(own.OwnershipControls?.Rules?.[0]?.ObjectOwnership).toEqual(
-        "BucketOwnerPreferred",
-      );
+      const own = yield* S3.getBucketOwnershipControls({ Bucket: bucket.bucketName });
+      expect(own.OwnershipControls?.Rules?.[0]?.ObjectOwnership).toEqual("BucketOwnerPreferred");
 
       const web = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
       expect(web.IndexDocument?.Suffix).toEqual("index.html");
@@ -1454,16 +1225,9 @@ test.provider(
         Effect.flatMap((response) =>
           response.status === 200
             ? response.text
-            : Effect.fail(
-                new Error(`website endpoint returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`website endpoint returned ${response.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(1000),
-            Schedule.recurs(8),
-          ]),
-        }),
+        Effect.retry({ schedule: Schedule.max([Schedule.exponential(1000), Schedule.recurs(8)]) }),
       );
       expect(body).toContain(marker);
 
@@ -1489,16 +1253,55 @@ test.provider(
               Resource: [`arn:aws:s3:::${name}/*`],
             },
           ],
-          website: {
-            indexDocument: { suffix: "home.html" },
-            errorDocument: { key: "error.html" },
-          },
+          website: { indexDocument: { suffix: "home.html" }, errorDocument: { key: "error.html" } },
           forceDestroy: true,
         }),
       );
 
       const web2 = yield* S3.getBucketWebsite({ Bucket: bucket.bucketName });
       expect(web2.IndexDocument?.Suffix).toEqual("home.html");
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 120_000 },
+);
+
+// IAM's grammar takes a bare `"*"` for `Principal` (not only a principal
+// map) — the usual form for resource-policy denies like "TLS only".
+test.provider(
+  "bucket policy with a wildcard string principal",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const definition = Effect.gen(function* () {
+        const bucket = yield* Bucket("TlsOnlyBucket", { forceDestroy: true });
+        yield* bucket.bind`DenyInsecureTransport`({
+          policyStatements: [
+            {
+              Sid: "DenyInsecureTransport",
+              Effect: "Deny",
+              Principal: "*",
+              Action: ["s3:*"],
+              Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
+              Condition: { Bool: { "aws:SecureTransport": "false" } },
+            },
+          ],
+        });
+        return bucket;
+      });
+
+      const bucket = yield* stack.deploy(definition);
+      const policy = yield* S3.getBucketPolicy({ Bucket: bucket.bucketName });
+      const statements = JSON.parse(policy.Policy ?? "{}").Statement as Array<{
+        Sid?: string;
+        Principal?: unknown;
+      }>;
+      expect(statements.find((s) => s.Sid === "DenyInsecureTransport")?.Principal).toBe("*");
+
+      const unchanged = yield* stack.plan(definition);
+      expect(unchanged.resources.TlsOnlyBucket?.action).toBe("noop");
 
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
@@ -1530,9 +1333,7 @@ test.provider(
                   Principal: { Service: "logging.s3.amazonaws.com" },
                   Action: ["s3:PutObject"],
                   Resource: [`arn:aws:s3:::${target}/*`],
-                  Condition: {
-                    ArnLike: { "aws:SourceArn": `arn:aws:s3:::${source}` },
-                  },
+                  Condition: { ArnLike: { "aws:SourceArn": `arn:aws:s3:::${source}` } },
                 },
               ],
               forceDestroy: true,
@@ -1553,18 +1354,14 @@ test.provider(
 
       const buckets = yield* deployWith("logs/");
 
-      const l1 = yield* S3.getBucketLogging({
-        Bucket: buckets.sourceBucket.bucketName,
-      });
+      const l1 = yield* S3.getBucketLogging({ Bucket: buckets.sourceBucket.bucketName });
       expect(l1.LoggingEnabled?.TargetBucket).toEqual(target);
       expect(l1.LoggingEnabled?.TargetPrefix).toEqual("logs/");
 
       // In-place update of the log prefix.
       yield* deployWith("access/");
 
-      const l2 = yield* S3.getBucketLogging({
-        Bucket: buckets.sourceBucket.bucketName,
-      });
+      const l2 = yield* S3.getBucketLogging({ Bucket: buckets.sourceBucket.bucketName });
       expect(l2.LoggingEnabled?.TargetPrefix).toEqual("access/");
 
       yield* stack.destroy();
@@ -1590,14 +1387,10 @@ test.provider(
         }),
       );
 
-      const a1 = yield* S3.getBucketAccelerateConfiguration({
-        Bucket: bucket.bucketName,
-      });
+      const a1 = yield* S3.getBucketAccelerateConfiguration({ Bucket: bucket.bucketName });
       expect(a1.Status).toEqual("Enabled");
 
-      const r1 = yield* S3.getBucketRequestPayment({
-        Bucket: bucket.bucketName,
-      });
+      const r1 = yield* S3.getBucketRequestPayment({ Bucket: bucket.bucketName });
       expect(r1.Payer).toEqual("Requester");
 
       yield* stack.deploy(
@@ -1609,14 +1402,10 @@ test.provider(
         }),
       );
 
-      const a2 = yield* S3.getBucketAccelerateConfiguration({
-        Bucket: bucket.bucketName,
-      });
+      const a2 = yield* S3.getBucketAccelerateConfiguration({ Bucket: bucket.bucketName });
       expect(a2.Status).toEqual("Suspended");
 
-      const r2 = yield* S3.getBucketRequestPayment({
-        Bucket: bucket.bucketName,
-      });
+      const r2 = yield* S3.getBucketRequestPayment({ Bucket: bucket.bucketName });
       expect(r2.Payer).toEqual("BucketOwner");
 
       yield* stack.destroy();
@@ -1641,15 +1430,9 @@ test.provider(
         }),
       );
 
-      const cfg = yield* S3.getObjectLockConfiguration({
-        Bucket: bucket.bucketName,
-      });
-      expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode).toEqual(
-        "GOVERNANCE",
-      );
-      expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Days).toEqual(
-        1,
-      );
+      const cfg = yield* S3.getObjectLockConfiguration({ Bucket: bucket.bucketName });
+      expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Mode).toEqual("GOVERNANCE");
+      expect(cfg.ObjectLockConfiguration?.Rule?.DefaultRetention?.Days).toEqual(1);
 
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
@@ -1697,9 +1480,7 @@ test.provider(
         Id: "archive",
       }).pipe(
         Effect.map(() => "has-config" as const),
-        Effect.catchTag("NoSuchConfiguration", () =>
-          Effect.succeed("no-config" as const),
-        ),
+        Effect.catchTag("NoSuchConfiguration", () => Effect.succeed("no-config" as const)),
       );
       expect(removed).toEqual("no-config");
 
@@ -1733,9 +1514,9 @@ test.provider(
         }),
       );
 
-      const policy = yield* S3.getBucketPolicy({
-        Bucket: bucket.bucketName,
-      }).pipe(Effect.map((r) => JSON.parse(r.Policy!)));
+      const policy = yield* S3.getBucketPolicy({ Bucket: bucket.bucketName }).pipe(
+        Effect.map((r) => JSON.parse(r.Policy!)),
+      );
       expect(policy.Statement[0].Sid).toEqual("AllowCloudFront");
 
       yield* stack.destroy();
@@ -1794,11 +1575,7 @@ test.provider(
                   },
                   {
                     Effect: "Allow",
-                    Action: [
-                      "s3:ReplicateObject",
-                      "s3:ReplicateDelete",
-                      "s3:ReplicateTags",
-                    ],
+                    Action: ["s3:ReplicateObject", "s3:ReplicateDelete", "s3:ReplicateTags"],
                     Resource: [`arn:aws:s3:::${dest}/*`],
                   },
                 ],
@@ -1827,9 +1604,7 @@ test.provider(
         }),
       );
 
-      const repl = yield* S3.getBucketReplication({
-        Bucket: buckets.srcBucket.bucketName,
-      });
+      const repl = yield* S3.getBucketReplication({ Bucket: buckets.srcBucket.bucketName });
       expect(repl.ReplicationConfiguration?.Role).toEqual(buckets.roleArn);
       expect(repl.ReplicationConfiguration?.Rules).toHaveLength(1);
 
@@ -1837,10 +1612,7 @@ test.provider(
       yield* assertBucketDeleted(buckets.srcBucket.bucketName);
       yield* assertBucketDeleted(buckets.destBucket.bucketName);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:iam", "provider:aws:s3", "live"],
-    timeout: 180_000,
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:s3", "live"], timeout: 180_000 },
 );
 
 // Idempotent out-of-band delete for the adoption test's deterministically
@@ -1850,9 +1622,7 @@ test.provider(
 const deleteBucketIfExists = Effect.fn(function* (bucketName: string) {
   yield* S3.deleteBucket({ Bucket: bucketName }).pipe(
     Effect.catchTag("NoSuchBucket", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(5)]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(5)]) }),
   );
 });
 
@@ -1892,10 +1662,7 @@ type Recorded = { method: string; url: string };
 /** Fetch transport that records every request and answers from `respond`. */
 const recordingTransport = (respond: (call: Recorded) => Response) => {
   const calls: Recorded[] = [];
-  const fetch = async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     calls.push({
       method: (input instanceof Request ? input.method : init?.method) ?? "GET",
       url: input instanceof Request ? input.url : String(input),
@@ -1905,9 +1672,7 @@ const recordingTransport = (respond: (call: Recorded) => Response) => {
   return {
     calls,
     layer: FetchHttpClient.layer.pipe(
-      Layer.provide(
-        Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch),
-      ),
+      Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch)),
     ),
   };
 };
@@ -1923,11 +1688,11 @@ const testStack: Omit<StackSpec, "output"> = {
   actions: {},
 };
 
-// Built with distilled's own helper: the signer reads credentials through
-// distilled's copy of `effect`, whose `Redacted` values a `Redacted.make`
-// from this package's copy cannot unwrap.
 const testCredentials = fromCredentials(
-  { accessKeyId: "AKIAIOSFODNN7EXAMPLE", secretAccessKey: "test-secret-key" },
+  {
+    accessKeyId: Redacted.make("AKIAIOSFODNN7EXAMPLE"),
+    secretAccessKey: Redacted.make("test-secret-key"),
+  },
   TEST_REGION,
 );
 
@@ -1936,11 +1701,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
     Layer.effect(
       AWSEnvironment,
       Effect.map(Credentials, (credentials) =>
-        Effect.succeed({
-          accountId: "123456789012",
-          region: TEST_REGION,
-          credentials,
-        } as never),
+        Effect.succeed({ accountId: "123456789012", region: TEST_REGION, credentials } as never),
       ),
     ).pipe(Layer.provide(testCredentials)),
     testCredentials,
@@ -1948,11 +1709,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
     Layer.succeed(Stack, testStack),
     Layer.succeed(Stage, testStack.stage),
     Layer.succeed(InstanceId, INSTANCE_ID),
-    Layer.succeed(AlchemyContext, {
-      dotAlchemy: "/tmp/.alchemy-test",
-      dev: false,
-      adopt: false,
-    }),
+    Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
     Layer.sync(ArtifactStore, createArtifactStore),
     inMemoryState(),
     NodeServices.layer,
@@ -1994,16 +1751,10 @@ const stubResponse = (call: Recorded) =>
          </ListVersionsResult>`,
         { status: 200, headers: { "content-type": "application/xml" } },
       )
-    : new Response("", {
-        status: 204,
-        headers: { "content-type": "application/xml" },
-      });
+    : new Response("", { status: 204, headers: { "content-type": "application/xml" } });
 
 /** Run the real provider delete; return every request it made. */
-const recordDelete = (
-  props: { forceDestroy?: boolean },
-  options?: { force?: boolean },
-) =>
+const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boolean }) =>
   Effect.gen(function* () {
     const transport = recordingTransport(stubResponse);
     yield* Effect.gen(function* () {
@@ -2015,17 +1766,10 @@ const recordDelete = (
         olds: props,
         output: stubbedOutput as never,
         bindings: [] as never,
-        session: {
-          emit: () => Effect.void,
-          done: () => Effect.void,
-          note: () => Effect.void,
-        },
+        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
         force: options?.force,
       });
-    }).pipe(
-      Effect.provide(BucketProvider()),
-      Effect.provide(stubbedEnv(transport.layer)),
-    );
+    }).pipe(Effect.provide(BucketProvider()), Effect.provide(stubbedEnv(transport.layer)));
     return transport.calls;
   });
 

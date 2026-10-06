@@ -15,10 +15,7 @@ interface Params {
 // reference form — the analogue of binding a class-based Durable Object.
 export class MyWorkflow extends WorkflowEntrypoint<AsyncWorkflowEnv, Params> {
   async run(event: Readonly<WorkflowEvent<Params>>, step: WorkflowStep) {
-    const greeting = await step.do(
-      "greet",
-      async () => `Hello, ${event.payload.value}!`,
-    );
+    const greeting = await step.do("greet", async () => `Hello, ${event.payload.value}!`);
 
     await step.sleep("cooldown", "1 second");
 
@@ -89,9 +86,7 @@ export default {
         config: env.CONFIG,
         effect: env.EFFECT,
         output: env.OUTPUT,
-        asset: await (
-          await env.ASSETS.fetch(new URL("/test.txt", request.url))
-        ).text(),
+        asset: await (await env.ASSETS.fetch(new URL("/test.txt", request.url))).text(),
       });
     }
     if (url.pathname === "/workflow/script-name") {

@@ -8,9 +8,6 @@ export const VerifySMSSandboxPhoneNumberHttp = Layer.effect(
   makeSnsAccountHttpBinding({
     tag: "AWS.SNS.VerifySMSSandboxPhoneNumber",
     operation: sns.verifySMSSandboxPhoneNumber,
-    actions: [
-      "sns:VerifySMSSandboxPhoneNumber",
-      "sms-voice:VerifyDestinationNumber",
-    ],
+    actions: ["sns:VerifySMSSandboxPhoneNumber", "sms-voice:VerifyDestinationNumber"],
   }),
 );

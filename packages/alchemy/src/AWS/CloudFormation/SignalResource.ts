@@ -34,12 +34,7 @@ export interface SignalResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<cloudformation.SignalResourceInput, "StackName">,
-    ) => Effect.Effect<
-      cloudformation.SignalResourceResponse,
-      cloudformation.SignalResourceError
-    >
+    ) => Effect.Effect<cloudformation.SignalResourceResponse, cloudformation.SignalResourceError>
   >
 > {}
-export const SignalResource = Binding.Service<SignalResource>(
-  "AWS.CloudFormation.SignalResource",
-);
+export const SignalResource = Binding.Service<SignalResource>("AWS.CloudFormation.SignalResource");

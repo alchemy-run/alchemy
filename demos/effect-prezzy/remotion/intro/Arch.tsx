@@ -15,7 +15,8 @@ const H = 124;
 export const ArchView = ({ step, local }: { step: ArchStep; local: number }) => {
   const byId = new Map(step.nodes.map((n) => [n.id, n]));
   const order = (id: string) => step.nodes.findIndex((n) => n.id === id);
-  const appear = (id: string) => interpolate(local, [order(id) * 5, order(id) * 5 + 8], [0, 1], clamp);
+  const appear = (id: string) =>
+    interpolate(local, [order(id) * 5, order(id) * 5 + 8], [0, 1], clamp);
   const width = (id: string) => byId.get(id)?.w ?? W;
   const height = (id: string) => byId.get(id)?.h ?? H;
 
@@ -37,7 +38,14 @@ export const ArchView = ({ step, local }: { step: ArchStep; local: number }) => 
     <svg width={1920} height={1080} style={{ position: "absolute", left: 0, top: 0 }}>
       {(step.lanes ?? []).map((lane, i) => (
         <g key={lane.label} opacity={interpolate(local, [i * 4, i * 4 + 8], [0, 1], clamp)}>
-          <text x={110} y={lane.y + 14} fontFamily={hand} fontWeight={700} fontSize={42} fill={lane.color}>
+          <text
+            x={110}
+            y={lane.y + 14}
+            fontFamily={hand}
+            fontWeight={700}
+            fontSize={42}
+            fill={lane.color}
+          >
             {lane.label}
           </text>
         </g>
@@ -59,7 +67,15 @@ export const ArchView = ({ step, local }: { step: ArchStep; local: number }) => 
           const dir = Math.sign(ty - p0.y);
           return (
             <g key={`${edge.from}-${edge.to}`}>
-              <path d={d} fill="none" stroke={color} strokeWidth={3} strokeDasharray={3000} strokeDashoffset={3000 * (1 - p)} strokeLinejoin="round" />
+              <path
+                d={d}
+                fill="none"
+                stroke={color}
+                strokeWidth={3}
+                strokeDasharray={3000}
+                strokeDashoffset={3000 * (1 - p)}
+                strokeLinejoin="round"
+              />
               <path
                 d={`M ${q0.x - 11} ${ty - dir * 16} L ${q0.x} ${ty} L ${q0.x + 11} ${ty - dir * 16}`}
                 fill="none"
@@ -100,9 +116,21 @@ export const ArchView = ({ step, local }: { step: ArchStep; local: number }) => 
               // Above a horizontal arrow, beside a vertical one: never on the line.
               <g opacity={interpolate(local, [start + 6, start + 12], [0, 1], clamp)}>
                 <text
-                  x={Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? mx : b.x < a.x - 20 ? mx - 18 : mx + 18}
+                  x={
+                    Math.abs(b.x - a.x) > Math.abs(b.y - a.y)
+                      ? mx
+                      : b.x < a.x - 20
+                        ? mx - 18
+                        : mx + 18
+                  }
                   y={Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? my - 18 : my + 8}
-                  textAnchor={Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? "middle" : b.x < a.x - 20 ? "end" : "start"}
+                  textAnchor={
+                    Math.abs(b.x - a.x) > Math.abs(b.y - a.y)
+                      ? "middle"
+                      : b.x < a.x - 20
+                        ? "end"
+                        : "start"
+                  }
                   fontFamily={mono}
                   fontSize={24}
                   fill={edge.dashed ? color : "#7ee787"}
@@ -120,13 +148,41 @@ export const ArchView = ({ step, local }: { step: ArchStep; local: number }) => 
         const w = width(node.id);
         const h = height(node.id);
         return (
-          <g key={node.id} opacity={q} transform={`translate(${node.x} ${node.y}) scale(${0.92 + 0.08 * q})`}>
-            <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={20} fill={brand.bgElevated} stroke={node.color} strokeWidth={3.5} />
-            <text x={0} y={node.sub ? -6 : 12} textAnchor="middle" fontFamily={sans} fontWeight={700} fontSize={36} fill={brand.fg}>
+          <g
+            key={node.id}
+            opacity={q}
+            transform={`translate(${node.x} ${node.y}) scale(${0.92 + 0.08 * q})`}
+          >
+            <rect
+              x={-w / 2}
+              y={-h / 2}
+              width={w}
+              height={h}
+              rx={20}
+              fill={brand.bgElevated}
+              stroke={node.color}
+              strokeWidth={3.5}
+            />
+            <text
+              x={0}
+              y={node.sub ? -6 : 12}
+              textAnchor="middle"
+              fontFamily={sans}
+              fontWeight={700}
+              fontSize={36}
+              fill={brand.fg}
+            >
               {node.title}
             </text>
             {node.sub ? (
-              <text x={0} y={34} textAnchor="middle" fontFamily={mono} fontSize={22} fill={brand.fgMuted}>
+              <text
+                x={0}
+                y={34}
+                textAnchor="middle"
+                fontFamily={mono}
+                fontSize={22}
+                fill={brand.fgMuted}
+              >
                 {node.sub}
               </text>
             ) : null}

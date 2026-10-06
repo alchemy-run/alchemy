@@ -1,18 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import KafkaBindingsHost, {
-  Brokers,
-  Connect,
-  Events,
-  Schemas,
-} from "./fixtures/bindings-host.ts";
+import KafkaBindingsHost, { Brokers, Connect, Events, Schemas } from "./fixtures/bindings-host.ts";
 import { releaseKafkaClusterSlot, takeKafkaClusterSlot } from "./quota.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -40,9 +35,7 @@ const hostProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -61,9 +54,7 @@ const expectScopedGrant = (role: string, name: string) =>
     const grants = yield* hostProjectGrants;
     expect(grants).toContainEqual({ role, condition: scopedTo(name) });
     expect(grants).toEqual(
-      expect.arrayContaining([
-        { role: SCHEMA_REGISTRY_ROLE, condition: undefined },
-      ]),
+      expect.arrayContaining([{ role: SCHEMA_REGISTRY_ROLE, condition: undefined }]),
     );
     // Every grant except the schema-registry viewer is condition-scoped.
     expect(
@@ -77,12 +68,7 @@ const expectScopedGrant = (role: string, name: string) =>
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "ManagedKafka Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:managedkafka",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:managedkafka", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -116,20 +102,16 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
       { timeout: 10_800_000 },
     );
 
-    afterAll(
-      sharedStack.destroy().pipe(Effect.ensuring(releaseKafkaClusterSlot)),
-      { timeout: 3_600_000 },
-    );
+    afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseKafkaClusterSlot)), {
+      timeout: 3_600_000,
+    });
 
     describe("GetCluster", () => {
       test.provider(
         "reads the cluster as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<kafka.Cluster>(
-              baseUrl,
-              "getCluster",
-            );
+            const out = yield* expectProbe<kafka.Cluster>(baseUrl, "getCluster");
             const direct = yield* kafka.getProjectsLocationsClusters({
               name: clusterName,
             });
@@ -169,10 +151,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the Connect cluster as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<kafka.ConnectCluster>(
-              baseUrl,
-              "getConnectCluster",
-            );
+            const out = yield* expectProbe<kafka.ConnectCluster>(baseUrl, "getConnectCluster");
             const direct = yield* kafka.getProjectsLocationsConnectClusters({
               name: connectName,
             });
@@ -192,10 +171,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the schema registry as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<kafka.SchemaRegistry>(
-              baseUrl,
-              "getSchemaRegistry",
-            );
+            const out = yield* expectProbe<kafka.SchemaRegistry>(baseUrl, "getSchemaRegistry");
             const direct = yield* kafka.getProjectsLocationsSchemaRegistries({
               name: registryName,
             });

@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const latencyFilter =
   'metric.type="serviceruntime.googleapis.com/api/request_latencies" AND resource.type="consumed_api"';
@@ -39,24 +36,21 @@ test.provider(
             displayName: "Checkout",
             labels: { env: "test" },
           });
-          const slo = yield* GCP.Monitoring.ServicesServiceLevelObjective(
-            "Latency",
-            {
-              service: checkout.name,
-              displayName: "99% latency",
-              goal: 0.99,
-              rollingPeriod: "86400s",
-              serviceLevelIndicator: {
-                requestBased: {
-                  distributionCut: {
-                    distributionFilter: latencyFilter,
-                    range: { max: 500 },
-                  },
+          const slo = yield* GCP.Monitoring.ServicesServiceLevelObjective("Latency", {
+            service: checkout.name,
+            displayName: "99% latency",
+            goal: 0.99,
+            rollingPeriod: "86400s",
+            serviceLevelIndicator: {
+              requestBased: {
+                distributionCut: {
+                  distributionFilter: latencyFilter,
+                  range: { max: 500 },
                 },
               },
-              labels: { env: "test" },
             },
-          );
+            labels: { env: "test" },
+          });
           return { checkout, slo };
         }),
       );
@@ -67,10 +61,9 @@ test.provider(
       expect(created.slo.goal).toEqual(0.99);
       expect(created.slo.rollingPeriod).toEqual("86400s");
       expect(created.slo.labels).toMatchObject({ env: "test" });
-      expect(
-        created.slo.serviceLevelIndicator?.requestBased?.distributionCut?.range
-          ?.max,
-      ).toEqual(500);
+      expect(created.slo.serviceLevelIndicator?.requestBased?.distributionCut?.range?.max).toEqual(
+        500,
+      );
 
       const fetched = yield* monitoring.getServicesServiceLevelObjectives({
         name: created.slo.name,
@@ -79,9 +72,7 @@ test.provider(
       expect(fetched.goal).toEqual(0.99);
       expect(fetched.userLabels?.env).toEqual("test");
       expect(
-        Object.keys(fetched.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(fetched.userLabels ?? {}).some((key) => key.startsWith("alchemy-")),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -91,25 +82,22 @@ test.provider(
             displayName: "Checkout",
             labels: { env: "test" },
           });
-          const slo = yield* GCP.Monitoring.ServicesServiceLevelObjective(
-            "Latency",
-            {
-              service: checkout.name,
-              serviceLevelObjectiveId: created.slo.serviceLevelObjectiveId,
-              displayName: "95% latency",
-              goal: 0.95,
-              rollingPeriod: "604800s",
-              serviceLevelIndicator: {
-                requestBased: {
-                  distributionCut: {
-                    distributionFilter: latencyFilter,
-                    range: { max: 1000 },
-                  },
+          const slo = yield* GCP.Monitoring.ServicesServiceLevelObjective("Latency", {
+            service: checkout.name,
+            serviceLevelObjectiveId: created.slo.serviceLevelObjectiveId,
+            displayName: "95% latency",
+            goal: 0.95,
+            rollingPeriod: "604800s",
+            serviceLevelIndicator: {
+              requestBased: {
+                distributionCut: {
+                  distributionFilter: latencyFilter,
+                  range: { max: 1000 },
                 },
               },
-              labels: { env: "prod" },
             },
-          );
+            labels: { env: "prod" },
+          });
           return { checkout, slo };
         }),
       );
@@ -118,17 +106,14 @@ test.provider(
       expect(updated.slo.displayName).toEqual("95% latency");
       expect(updated.slo.goal).toEqual(0.95);
       expect(updated.slo.rollingPeriod).toEqual("604800s");
-      expect(
-        updated.slo.serviceLevelIndicator?.requestBased?.distributionCut?.range
-          ?.max,
-      ).toEqual(1000);
+      expect(updated.slo.serviceLevelIndicator?.requestBased?.distributionCut?.range?.max).toEqual(
+        1000,
+      );
       expect(updated.slo.labels).toMatchObject({ env: "prod" });
 
-      const fetchedUpdate = yield* monitoring.getServicesServiceLevelObjectives(
-        {
-          name: updated.slo.name,
-        },
-      );
+      const fetchedUpdate = yield* monitoring.getServicesServiceLevelObjectives({
+        name: updated.slo.name,
+      });
       expect(fetchedUpdate.goal).toEqual(0.95);
       expect(fetchedUpdate.displayName).toEqual("95% latency");
       expect(fetchedUpdate.userLabels?.env).toEqual("prod");

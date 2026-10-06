@@ -14,10 +14,8 @@ export const MAX_LEADERBOARD_NAME_LENGTH = 100;
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameNumber = (
-  left: number | undefined,
-  right: number | undefined,
-) => (left ?? 0) === (right ?? 0);
+export const sameNumber = (left: number | undefined, right: number | undefined) =>
+  (left ?? 0) === (right ?? 0);
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -27,8 +25,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -38,8 +35,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -79,8 +75,7 @@ export const translationValue = (
 ): string | undefined => {
   const translations = translationsOf(bundle);
   const match =
-    translations.find((entry) => (entry.locale ?? locale) === locale) ??
-    translations[0];
+    translations.find((entry) => (entry.locale ?? locale) === locale) ?? translations[0];
   return match?.value;
 };
 
@@ -90,9 +85,7 @@ export const withTranslation = (
   value: string,
 ): gamesConfiguration.LocalizedStringBundle => {
   const translations = translationsOf(bundle);
-  const idx = translations.findIndex(
-    (entry) => (entry.locale ?? locale) === locale,
-  );
+  const idx = translations.findIndex((entry) => (entry.locale ?? locale) === locale);
   const next = { locale, value };
   if (idx >= 0) {
     translations[idx] = { ...translations[idx], ...next };
@@ -121,22 +114,17 @@ export const sameBundle = (
       .sort((a, b) => a.locale.localeCompare(b.locale)),
   );
 
-export const defaultScoreFormat =
-  (): gamesConfiguration.GamesNumberFormatConfiguration => ({
-    numberFormatType: "NUMERIC",
-    numDecimalPlaces: 0,
-  });
+export const defaultScoreFormat = (): gamesConfiguration.GamesNumberFormatConfiguration => ({
+  numberFormatType: "NUMERIC",
+  numDecimalPlaces: 0,
+});
 
 export const getAchievement = (achievementId: string) =>
   achievementId.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        gamesConfiguration.getAchievementConfigurations({ achievementId }),
-      );
+    : catchMissing(gamesConfiguration.getAchievementConfigurations({ achievementId }));
 
 export const getLeaderboard = (leaderboardId: string) =>
   leaderboardId.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        gamesConfiguration.getLeaderboardConfigurations({ leaderboardId }),
-      );
+    : catchMissing(gamesConfiguration.getLeaderboardConfigurations({ leaderboardId }));

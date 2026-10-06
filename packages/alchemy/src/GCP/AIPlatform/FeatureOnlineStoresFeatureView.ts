@@ -3,21 +3,14 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { listLocations } from "./names.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   expandParent,
   fingerprint,
@@ -29,6 +22,8 @@ import {
   toPhysicalSnake,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 60;
 
@@ -153,29 +148,19 @@ export type FeatureOnlineStoresFeatureView = Resource<
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
     /** BigQuery source. */
-    bigQuerySource:
-      | aiplatform.GoogleCloudAiplatformV1FeatureViewBigQuerySource
-      | undefined;
+    bigQuerySource: aiplatform.GoogleCloudAiplatformV1FeatureViewBigQuerySource | undefined;
     /** Feature Registry source. */
     featureRegistrySource:
       | aiplatform.GoogleCloudAiplatformV1FeatureViewFeatureRegistrySource
       | undefined;
     /** Vertex RAG source. */
-    vertexRagSource:
-      | aiplatform.GoogleCloudAiplatformV1FeatureViewVertexRagSource
-      | undefined;
+    vertexRagSource: aiplatform.GoogleCloudAiplatformV1FeatureViewVertexRagSource | undefined;
     /** Sync config. */
-    syncConfig:
-      | aiplatform.GoogleCloudAiplatformV1FeatureViewSyncConfig
-      | undefined;
+    syncConfig: aiplatform.GoogleCloudAiplatformV1FeatureViewSyncConfig | undefined;
     /** Vector index config. */
-    indexConfig:
-      | aiplatform.GoogleCloudAiplatformV1FeatureViewIndexConfig
-      | undefined;
+    indexConfig: aiplatform.GoogleCloudAiplatformV1FeatureViewIndexConfig | undefined;
     /** Optimized replica config. */
-    optimizedConfig:
-      | aiplatform.GoogleCloudAiplatformV1FeatureViewOptimizedConfig
-      | undefined;
+    optimizedConfig: aiplatform.GoogleCloudAiplatformV1FeatureViewOptimizedConfig | undefined;
     /** Service agent type. */
     serviceAgentType:
       | aiplatform.GoogleCloudAiplatformV1FeatureViewServiceAgentTypeEnum
@@ -215,10 +200,9 @@ export type FeatureOnlineStoresFeatureView = Resource<
  * @resource
  * @category AIPlatform
  */
-export const FeatureOnlineStoresFeatureView =
-  Resource<FeatureOnlineStoresFeatureView>(
-    "GCP.AIPlatform.FeatureOnlineStoresFeatureView",
-  );
+export const FeatureOnlineStoresFeatureView = Resource<FeatureOnlineStoresFeatureView>(
+  "GCP.AIPlatform.FeatureOnlineStoresFeatureView",
+);
 
 export class FeatureOnlineStoresFeatureViewNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
@@ -235,13 +219,9 @@ export class FeatureOnlineStoresFeatureViewStillExists extends Data.TaggedError(
 const parentOf = (project: string, location: string, store: string) =>
   expandParent(store, project, location, "featureOnlineStores");
 
-const resourceName = (parent: string, viewId: string) =>
-  `${parent}/featureViews/${viewId}`;
+const resourceName = (parent: string, viewId: string) => `${parent}/featureViews/${viewId}`;
 
-const toAttrs = (
-  view: aiplatform.GoogleCloudAiplatformV1FeatureView,
-  project: string,
-) => {
+const toAttrs = (view: aiplatform.GoogleCloudAiplatformV1FeatureView, project: string) => {
   const name = view.name ?? "";
   const parsed = parseResourceName(name, "featureViews");
   const store = parseResourceName(parsed.parent, "featureOnlineStores");
@@ -280,9 +260,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new FeatureOnlineStoresFeatureViewNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -296,9 +274,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new FeatureOnlineStoresFeatureViewStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.AIPlatform.FeatureOnlineStoresFeatureViewStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoresFeatureViewStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -333,24 +309,14 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.featureViewId ?? output?.featureViewId;
       const nextId = news.featureViewId ?? previousId;
-      const previousParent =
-        olds?.featureOnlineStore ?? output?.featureOnlineStore ?? "";
+      const previousParent = olds?.featureOnlineStore ?? output?.featureOnlineStore ?? "";
       const nextParent = news.featureOnlineStore ?? previousParent;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const parentChanged =
-        previousParent.length > 0 &&
-        lastSegment(nextParent) !== lastSegment(previousParent);
+        previousParent.length > 0 && lastSegment(nextParent) !== lastSegment(previousParent);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         parentChanged ||
         previousLocation !== nextLocation;
       if (!replace) return undefined;
@@ -359,10 +325,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parentRef = olds?.featureOnlineStore ?? output?.featureOnlineStore;
       // A create interrupted before its parent resolved has nothing to find.
       if (output?.name === undefined && typeof parentRef !== "string") {
@@ -379,9 +342,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -397,9 +358,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
             ),
           )
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.featureOnlineStores ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.featureOnlineStores ?? [])),
             Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -407,10 +366,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
           );
         const nested = yield* Effect.forEach(
           stores,
-          (store) =>
-            store.name
-              ? listViewsUnder(store.name, env.project)
-              : Effect.succeed([]),
+          (store) => (store.name ? listViewsUnder(store.name, env.project) : Effect.succeed([])),
           { concurrency: 4 },
         );
         return nested.flat();
@@ -418,10 +374,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = parentOf(env.project, location, news.featureOnlineStore);
       const viewId = yield* toPhysicalSnake(
         id,
@@ -473,10 +426,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
         !specifiedEquals(news.bigQuerySource, current.bigQuerySource);
       const registryChanged =
         news.featureRegistrySource !== undefined &&
-        !specifiedEquals(
-          news.featureRegistrySource,
-          current.featureRegistrySource,
-        );
+        !specifiedEquals(news.featureRegistrySource, current.featureRegistrySource);
       const syncChanged =
         news.syncConfig !== undefined &&
         fingerprint(current.syncConfig) !== fingerprint(news.syncConfig);

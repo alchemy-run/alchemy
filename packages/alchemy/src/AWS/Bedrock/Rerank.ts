@@ -53,9 +53,7 @@ export interface Rerank extends Binding.Service<
     model: string,
     ...additionalModels: string[]
   ) => Effect.Effect<
-    (
-      request: RerankRequest,
-    ) => Effect.Effect<bedrock.RerankResponse, bedrock.RerankError>
+    (request: RerankRequest) => Effect.Effect<bedrock.RerankResponse, bedrock.RerankError>
   >
 > {}
 export const Rerank = Binding.Service<Rerank>("AWS.Bedrock.Rerank");

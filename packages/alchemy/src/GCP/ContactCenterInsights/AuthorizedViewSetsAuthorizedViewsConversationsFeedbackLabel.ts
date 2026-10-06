@@ -67,35 +67,34 @@ export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProps = {
   qaAnswerLabel?: QaAnswerLabel;
 };
 
-export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel =
-  Resource<
-    "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel",
-    AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProps,
-    {
-      /** Full resource name. */
-      name: string;
-      /** Feedback label id (last path segment). */
-      feedbackLabelId: string;
-      /** Parent conversation under the AuthorizedView. */
-      parent: string;
-      /** Location id. */
-      location: string;
-      /** Project id. */
-      project: string;
-      /** User label with the Alchemy ownership prefix stripped. */
-      label: string | undefined;
-      /** Labeled resource name. */
-      labeledResource: string | undefined;
-      /** QA answer label. */
-      qaAnswerLabel: QaAnswerLabel | undefined;
-      /** RFC3339 creation timestamp. */
-      createTime: string | undefined;
-      /** RFC3339 last-update timestamp. */
-      updateTime: string | undefined;
-    },
-    never,
-    Providers
-  >;
+export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel = Resource<
+  "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel",
+  AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProps,
+  {
+    /** Full resource name. */
+    name: string;
+    /** Feedback label id (last path segment). */
+    feedbackLabelId: string;
+    /** Parent conversation under the AuthorizedView. */
+    parent: string;
+    /** Location id. */
+    location: string;
+    /** Project id. */
+    project: string;
+    /** User label with the Alchemy ownership prefix stripped. */
+    label: string | undefined;
+    /** Labeled resource name. */
+    labeledResource: string | undefined;
+    /** QA answer label. */
+    qaAnswerLabel: QaAnswerLabel | undefined;
+    /** RFC3339 creation timestamp. */
+    createTime: string | undefined;
+    /** RFC3339 last-update timestamp. */
+    updateTime: string | undefined;
+  },
+  never,
+  Providers
+>;
 
 /**
  * A Contact Center AI Insights feedback label on a conversation, created
@@ -146,10 +145,7 @@ const qaOf = (
   };
 };
 
-const toAttrs = (
-  label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel,
-  project: string,
-) => {
+const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, project: string) => {
   const name = label.name ?? "";
   const parsed = parseOwnership(label.label);
   return {
@@ -170,159 +166,129 @@ const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
     : cci
-        .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
-          { name },
-        )
+        .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAllAt = (parent: string, project: string) =>
-  cci.listAllFeedbackLabelsProjectsLocations
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.feedbackLabels ?? [])),
-      Stream.filter((label) => hasOwnershipMarker(label.label)),
-      Stream.map((label) => toAttrs(label, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listAllFeedbackLabelsProjectsLocations.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.feedbackLabels ?? [])),
+    Stream.filter((label) => hasOwnershipMarker(label.label)),
+    Stream.map((label) => toAttrs(label, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
-export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider =
-  () =>
-    Provider.succeed(
-      AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel,
-      {
-        stables: [
-          "name",
-          "feedbackLabelId",
-          "parent",
-          "location",
-          "project",
-          "createTime",
-        ],
+export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider = () =>
+  Provider.succeed(AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel, {
+    stables: ["name", "feedbackLabelId", "parent", "location", "project", "createTime"],
 
-        diff: Effect.fn(function* ({ news, olds, output }) {
-          if (!isResolved(news)) return undefined;
-          const previousParent = olds?.parent ?? output?.parent;
-          if (previousParent !== undefined && news.parent !== previousParent) {
-            return { action: "replace" as const, deleteFirst: false };
-          }
-          const previousId = olds?.feedbackLabelId ?? output?.feedbackLabelId;
-          if (
-            previousId !== undefined &&
-            news.feedbackLabelId !== undefined &&
-            news.feedbackLabelId !== previousId
-          ) {
-            return { action: "replace" as const, deleteFirst: false };
-          }
-          return undefined;
-        }),
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (!isResolved(news)) return undefined;
+      const previousParent = olds?.parent ?? output?.parent;
+      if (previousParent !== undefined && news.parent !== previousParent) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      const previousId = olds?.feedbackLabelId ?? output?.feedbackLabelId;
+      if (
+        previousId !== undefined &&
+        news.feedbackLabelId !== undefined &&
+        news.feedbackLabelId !== previousId
+      ) {
+        return { action: "replace" as const, deleteFirst: false };
+      }
+      return undefined;
+    }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const env = yield* GcpEnvironment.current;
-          const feedbackLabelId = yield* toResourceId(
-            id,
-            olds?.feedbackLabelId,
-            output?.feedbackLabelId,
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const env = yield* GcpEnvironment.current;
+      const feedbackLabelId = yield* toResourceId(
+        id,
+        olds?.feedbackLabelId,
+        output?.feedbackLabelId,
+      );
+      const name =
+        output?.name ??
+        (olds?.parent !== undefined ? `${olds.parent}/feedbackLabels/${feedbackLabelId}` : "");
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return (yield* ownedByAlchemy(id, existing.label)) ? attrs : Unowned(attrs);
+    }),
+
+    list: () =>
+      Effect.gen(function* () {
+        const env = yield* GcpEnvironment.current;
+        return yield* listAllAt(locationParent(env.project, env.region), env.project);
+      }),
+
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const env = yield* GcpEnvironment.current;
+      const feedbackLabelId = yield* toResourceId(
+        id,
+        news.feedbackLabelId,
+        output?.feedbackLabelId,
+      );
+      const name = `${news.parent}/feedbackLabels/${feedbackLabelId}`;
+      const ownership = yield* createInternalLabels(id);
+      const label = encodeOwnershipLine(ownership, news.label);
+
+      let current = yield* getByName(output?.name ?? name);
+
+      if (current === undefined) {
+        const created = yield* cci
+          .createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({
+            parent: news.parent,
+            feedbackLabelId,
+            body: {
+              label,
+              labeledResource: news.labeledResource,
+              qaAnswerLabel: news.qaAnswerLabel,
+            },
+          })
+          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
+        current = created ?? undefined;
+      }
+
+      if (current === undefined) {
+        return yield* new AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved({
+          name,
+        });
+      }
+
+      const currentName = current.name ?? name;
+      const labelChanged = (current.label ?? "") !== label;
+      const resourceChanged = !sameText(current.labeledResource, news.labeledResource);
+      const qaChanged = !jsonEqual(qaOf(current.qaAnswerLabel), news.qaAnswerLabel);
+
+      if (labelChanged || resourceChanged || qaChanged) {
+        current =
+          yield* cci.patchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
+            {
+              name: currentName,
+              updateMask: updateMaskOf(
+                labelChanged ? "label" : undefined,
+                resourceChanged ? "labeled_resource" : undefined,
+                qaChanged ? "qa_answer_label" : undefined,
+              ),
+              body: {
+                name: currentName,
+                label,
+                labeledResource: news.labeledResource,
+                qaAnswerLabel: news.qaAnswerLabel,
+              },
+            },
           );
-          const name =
-            output?.name ??
-            (olds?.parent !== undefined
-              ? `${olds.parent}/feedbackLabels/${feedbackLabelId}`
-              : "");
-          const existing = yield* getByName(name);
-          if (existing === undefined) return undefined;
-          const attrs = toAttrs(existing, env.project);
-          return (yield* ownedByAlchemy(id, existing.label))
-            ? attrs
-            : Unowned(attrs);
-        }),
+      }
 
-        list: () =>
-          Effect.gen(function* () {
-            const env = yield* GcpEnvironment.current;
-            return yield* listAllAt(
-              locationParent(env.project, env.region),
-              env.project,
-            );
-          }),
+      return toAttrs(current, env.project);
+    }),
 
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const env = yield* GcpEnvironment.current;
-          const feedbackLabelId = yield* toResourceId(
-            id,
-            news.feedbackLabelId,
-            output?.feedbackLabelId,
-          );
-          const name = `${news.parent}/feedbackLabels/${feedbackLabelId}`;
-          const ownership = yield* createInternalLabels(id);
-          const label = encodeOwnershipLine(ownership, news.label);
-
-          let current = yield* getByName(output?.name ?? name);
-
-          if (current === undefined) {
-            const created = yield* cci
-              .createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
-                {
-                  parent: news.parent,
-                  feedbackLabelId,
-                  body: {
-                    label,
-                    labeledResource: news.labeledResource,
-                    qaAnswerLabel: news.qaAnswerLabel,
-                  },
-                },
-              )
-              .pipe(Effect.catchTag("Conflict", () => getByName(name)));
-            current = created ?? undefined;
-          }
-
-          if (current === undefined) {
-            return yield* new AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved(
-              { name },
-            );
-          }
-
-          const currentName = current.name ?? name;
-          const labelChanged = (current.label ?? "") !== label;
-          const resourceChanged = !sameText(
-            current.labeledResource,
-            news.labeledResource,
-          );
-          const qaChanged = !jsonEqual(
-            qaOf(current.qaAnswerLabel),
-            news.qaAnswerLabel,
-          );
-
-          if (labelChanged || resourceChanged || qaChanged) {
-            current =
-              yield* cci.patchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
-                {
-                  name: currentName,
-                  updateMask: updateMaskOf(
-                    labelChanged ? "label" : undefined,
-                    resourceChanged ? "labeled_resource" : undefined,
-                    qaChanged ? "qa_answer_label" : undefined,
-                  ),
-                  body: {
-                    name: currentName,
-                    label,
-                    labeledResource: news.labeledResource,
-                    qaAnswerLabel: news.qaAnswerLabel,
-                  },
-                },
-              );
-          }
-
-          return toAttrs(current, env.project);
-        }),
-
-        delete: Effect.fn(function* ({ output }) {
-          yield* cci
-            .deleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
-              { name: output.name },
-            )
-            .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        }),
-      },
-    );
+    delete: Effect.fn(function* ({ output }) {
+      yield* cci
+        .deleteProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({
+          name: output.name,
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    }),
+  });

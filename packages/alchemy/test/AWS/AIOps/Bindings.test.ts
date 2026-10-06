@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AIOpsTestFunctionLive, { AIOpsTestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "AIOpsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,26 +34,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // AWS enforces ONE AIOps investigation group per account per Region, so this
 // file must never overlap with InvestigationGroup.test.ts (whose live
@@ -66,20 +56,12 @@ const getJson = (path: string) =>
 describe.sequential(
   "AIOps Bindings",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:aiops",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:aiops", "provider:aws:iam", "provider:aws:lambda", "live"],
   },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "AIOps test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("AIOps test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("AIOps test setup: deploying fixture");
@@ -93,21 +75,15 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `AIOps test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`AIOps test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `AIOps test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`AIOps test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -132,19 +108,17 @@ describe.sequential(
     });
 
     describe("GetInvestigationGroup", () => {
-      test.provider(
-        "reads the bound group's configuration (injected group ARN)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/group")) as {
-              name: string;
-              arn: string;
-              retentionInDays: number;
-            };
-            expect(response.arn).toContain(":investigation-group/");
-            expect(response.name).toBeTruthy();
-            expect(response.retentionInDays).toBe(7);
-          }),
+      test.provider("reads the bound group's configuration (injected group ARN)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/group")) as {
+            name: string;
+            arn: string;
+            retentionInDays: number;
+          };
+          expect(response.arn).toContain(":investigation-group/");
+          expect(response.name).toBeTruthy();
+          expect(response.retentionInDays).toBe(7);
+        }),
       );
     });
 
@@ -156,9 +130,7 @@ describe.sequential(
             // The fixture attaches no resource policy, so the runtime observes
             // the typed ResourceNotFoundException — proving both the IAM grant
             // and the injected group ARN end-to-end.
-            const response = (yield* getJson("/policy")) as {
-              hasPolicy: boolean;
-            };
+            const response = (yield* getJson("/policy")) as { hasPolicy: boolean };
             expect(response.hasPolicy).toBe(false);
           }),
       );
@@ -167,9 +139,7 @@ describe.sequential(
     describe("ListTagsForResource", () => {
       test.provider("reads the bound group's tags", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/tags")) as {
-            tags: Record<string, string>;
-          };
+          const response = (yield* getJson("/tags")) as { tags: Record<string, string> };
           expect(response.tags.Purpose).toBe("bindings-test");
           expect(response.tags["alchemy::id"]).toBe("BindingGroup");
         }),
@@ -177,16 +147,12 @@ describe.sequential(
     });
 
     describe("ListInvestigationGroups", () => {
-      test.provider(
-        "enumerates the Region's investigation groups (account-level)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const group = (yield* getJson("/group")) as { arn: string };
-            const response = (yield* getJson("/groups")) as {
-              groupArns: string[];
-            };
-            expect(response.groupArns).toContain(group.arn);
-          }),
+      test.provider("enumerates the Region's investigation groups (account-level)", (_stack) =>
+        Effect.gen(function* () {
+          const group = (yield* getJson("/group")) as { arn: string };
+          const response = (yield* getJson("/groups")) as { groupArns: string[] };
+          expect(response.groupArns).toContain(group.arn);
+        }),
       );
     });
   },

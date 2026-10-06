@@ -163,9 +163,7 @@ export const GlossariesGlossaryEntry = Resource<GlossariesGlossaryEntry>(
   "GCP.Translate.GlossariesGlossaryEntry",
 );
 
-const toTerm = (
-  term: translate.GlossaryTerm | undefined,
-): GlossaryTermProps | undefined => {
+const toTerm = (term: translate.GlossaryTerm | undefined): GlossaryTermProps | undefined => {
   if (term === undefined) return undefined;
   return {
     text: term.text,
@@ -241,17 +239,11 @@ export const GlossariesGlossaryEntryProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const parent = glossaryParentOf(
-        env.project,
-        location,
-        olds?.parent ?? output?.parent ?? "",
-      );
+      const parent = glossaryParentOf(env.project, location, olds?.parent ?? output?.parent ?? "");
       const glossaryEntryId = olds?.glossaryEntryId ?? output?.glossaryEntryId;
       const name =
         output?.name ??
-        (glossaryEntryId
-          ? resourceNameOf(parent, "glossaryEntries", glossaryEntryId)
-          : "");
+        (glossaryEntryId ? resourceNameOf(parent, "glossaryEntries", glossaryEntryId) : "");
       // Server-assigned id: only a recorded entry can be observed.
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -261,9 +253,7 @@ export const GlossariesGlossaryEntryProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = glossaryParentOf(env.project, location, news.parent);
       if (
         parent.length === 0 ||

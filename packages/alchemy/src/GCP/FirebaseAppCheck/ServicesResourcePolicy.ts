@@ -152,19 +152,11 @@ const toAttrs = (
 
 export const ServicesResourcePolicyProvider = () =>
   Provider.succeed(ServicesResourcePolicy, {
-    stables: [
-      "name",
-      "resourcePolicyId",
-      "parent",
-      "serviceId",
-      "project",
-      "targetResource",
-    ],
+    stables: ["name", "resourcePolicyId", "parent", "serviceId", "project", "targetResource"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousService =
-        olds?.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE_ID;
+      const previousService = olds?.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE_ID;
       const nextService = news.serviceId ?? previousService;
       const previousTarget = olds?.targetResource ?? output?.targetResource;
       return replaceOnIdentity({
@@ -183,8 +175,7 @@ export const ServicesResourcePolicyProvider = () =>
       const ownership = yield* createOwnership(id);
       let existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) {
-        const serviceId =
-          olds?.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE_ID;
+        const serviceId = olds?.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE_ID;
         existing = findOwnedResourcePolicy(
           yield* listResourcePolicies(env.project, serviceId),
           ownership,
@@ -193,8 +184,7 @@ export const ServicesResourcePolicyProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const owned =
-        output !== undefined || hasDummyAlchemyTarget(existing.targetResource);
+      const owned = output !== undefined || hasDummyAlchemyTarget(existing.targetResource);
       return owned ? attrs : Unowned(attrs);
     }),
 
@@ -207,8 +197,7 @@ export const ServicesResourcePolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const serviceId =
-        news.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE_ID;
+      const serviceId = news.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE_ID;
       const parent = serviceParent(env.project, serviceId);
       const ownership = yield* createOwnership(id);
       const targetResource =
@@ -239,9 +228,7 @@ export const ServicesResourcePolicyProvider = () =>
         ).pipe(
           Effect.catchTag("Conflict", () =>
             listResourcePolicies(env.project, serviceId).pipe(
-              Effect.map((policies) =>
-                findOwnedResourcePolicy(policies, ownership, output?.name),
-              ),
+              Effect.map((policies) => findOwnedResourcePolicy(policies, ownership, output?.name)),
             ),
           ),
         );

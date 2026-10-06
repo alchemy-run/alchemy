@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { ServiceDirectoryConfig } from "./Connection.ts";
 import {
@@ -50,9 +45,7 @@ export type CustomOAuthConfig = {
    * `BITBUCKET_DATA_CENTER`). Immutable — changing it replaces the
    * connector.
    */
-  scmProvider?:
-    | developerconnect.CustomOAuthConfigScmProviderEnum
-    | (string & {});
+  scmProvider?: developerconnect.CustomOAuthConfigScmProviderEnum | (string & {});
   /**
    * Host URI of the OAuth application. Immutable — changing it
    * replaces the connector.
@@ -93,9 +86,7 @@ export type ProviderOAuthConfig = {
    * `DATASTAX`, `DYNATRACE`). Immutable — changing it replaces the
    * connector.
    */
-  systemProviderId?:
-    | developerconnect.ProviderOAuthConfigSystemProviderIdEnum
-    | (string & {});
+  systemProviderId?: developerconnect.ProviderOAuthConfigSystemProviderIdEnum | (string & {});
   /**
    * User-selected OAuth scopes. Changing scopes deletes existing user
    * records under the connector so users re-auth.
@@ -244,15 +235,9 @@ export type AccountConnector = Resource<
  * @resource
  * @category DeveloperConnect
  */
-export const AccountConnector = Resource<AccountConnector>(
-  "GCP.DeveloperConnect.AccountConnector",
-);
+export const AccountConnector = Resource<AccountConnector>("GCP.DeveloperConnect.AccountConnector");
 
-const resourceName = (
-  project: string,
-  location: string,
-  accountConnectorId: string,
-) =>
+const resourceName = (project: string, location: string, accountConnectorId: string) =>
   `projects/${project}/locations/${location}/accountConnectors/${accountConnectorId}`;
 
 const toServiceDirectory = (
@@ -290,9 +275,7 @@ const toProviderOauth = (
   });
 };
 
-const toProxy = (
-  config: ProxyConfig | undefined,
-): developerconnect.ProxyConfig | undefined => {
+const toProxy = (config: ProxyConfig | undefined): developerconnect.ProxyConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({ enabled: config.enabled });
 };
@@ -326,18 +309,12 @@ const fromProviderOauth = (
   });
 };
 
-const fromProxy = (
-  config: developerconnect.ProxyConfig | undefined,
-): ProxyConfig | undefined => {
+const fromProxy = (config: developerconnect.ProxyConfig | undefined): ProxyConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({ enabled: config.enabled === true });
 };
 
-const toAttrs = (
-  item: developerconnect.AccountConnector,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: developerconnect.AccountConnector, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "accountConnectors", region);
   return {
@@ -385,14 +362,7 @@ const immutableCustomKey = (config: CustomOAuthConfig | undefined) =>
 
 export const AccountConnectorProvider = () =>
   Provider.succeed(AccountConnector, {
-    stables: [
-      "name",
-      "accountConnectorId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "accountConnectorId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -407,14 +377,8 @@ export const AccountConnectorProvider = () =>
       const nextCustom = immutableCustomKey(news.customOauthConfig);
       return replaceOnIdentity({
         previousId: olds?.accountConnectorId ?? output?.accountConnectorId,
-        nextId:
-          news.accountConnectorId ??
-          olds?.accountConnectorId ??
-          output?.accountConnectorId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.accountConnectorId ?? olds?.accountConnectorId ?? output?.accountConnectorId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -437,18 +401,12 @@ export const AccountConnectorProvider = () =>
         output?.accountConnectorId,
         "accountconnector",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, accountConnectorId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, accountConnectorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -466,10 +424,7 @@ export const AccountConnectorProvider = () =>
         output?.accountConnectorId,
         "accountconnector",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, accountConnectorId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -517,8 +472,7 @@ export const AccountConnectorProvider = () =>
             ...news.customOauthConfig,
             clientSecret: undefined,
           }) && "customOauthConfig",
-        !sameBool(current.proxyConfig?.enabled, news.proxyConfig?.enabled) &&
-          "proxyConfig",
+        !sameBool(current.proxyConfig?.enabled, news.proxyConfig?.enabled) && "proxyConfig",
       ]);
 
       if (mask.length > 0) {
@@ -546,10 +500,7 @@ export const AccountConnectorProvider = () =>
         } else {
           yield* waitForOperation(operation);
         }
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

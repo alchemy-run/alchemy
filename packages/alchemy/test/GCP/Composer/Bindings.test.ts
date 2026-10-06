@@ -1,18 +1,14 @@
+import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as composer from "@distilled.cloud/gcp/composer_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import * as composer from "@distilled.cloud/gcp/composer_v1";
-import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import ComposerBindingsHost, {
-  Airflow,
-  TaskConfig,
-  TaskSecret,
-} from "./fixtures/bindings-host.ts";
+import ComposerBindingsHost, { Airflow, TaskConfig, TaskSecret } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -40,9 +36,7 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const grants = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -95,10 +89,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the environment as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const environment = yield* expectProbe<composer.Environment>(
-              baseUrl,
-              "getEnvironment",
-            );
+            const environment = yield* expectProbe<composer.Environment>(baseUrl, "getEnvironment");
             const live = yield* composer.getProjectsLocationsEnvironments({
               name: environmentName,
             });
@@ -118,11 +109,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "runs `airflow version` as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const started =
-              yield* expectProbe<composer.ExecuteAirflowCommandResponse>(
-                baseUrl,
-                "executeAirflowCommand",
-              );
+            const started = yield* expectProbe<composer.ExecuteAirflowCommandResponse>(
+              baseUrl,
+              "executeAirflowCommand",
+            );
             expect(started.error ?? "").toEqual("");
             expect(started.executionId).toEqual(expect.any(String));
 
@@ -160,11 +150,10 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the ConfigMap as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const configMap =
-              yield* expectProbe<composer.UserWorkloadsConfigMap>(
-                baseUrl,
-                "getUserWorkloadsConfigMap",
-              );
+            const configMap = yield* expectProbe<composer.UserWorkloadsConfigMap>(
+              baseUrl,
+              "getUserWorkloadsConfigMap",
+            );
             expect(configMap.name).toEqual(configMapName);
             expect(configMap.data).toEqual({ LOG_LEVEL: "INFO" });
             yield* expectProjectGrants;

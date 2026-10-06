@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -35,8 +30,7 @@ import {
 } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
 
-export type DocumentSchemaSpec =
-  documentai.GoogleCloudDocumentaiV1DocumentSchema;
+export type DocumentSchemaSpec = documentai.GoogleCloudDocumentaiV1DocumentSchema;
 
 export type SchemasSchemaVersionProps = {
   /**
@@ -144,10 +138,7 @@ const schemaOf = (schema: string, project: string, location: string) =>
 const resourceName = (schema: string, schemaVersionId: string) =>
   `${schema}/schemaVersions/${schemaVersionId}`;
 
-const toAttrs = (
-  version: documentai.GoogleCloudDocumentaiV1SchemaVersion,
-  project: string,
-) => {
+const toAttrs = (version: documentai.GoogleCloudDocumentaiV1SchemaVersion, project: string) => {
   const name = version.name ?? "";
   const parsed = parseResourceName(name, "schemaVersions");
   return {
@@ -181,49 +172,31 @@ const listOwnedVersions = (project: string) =>
     return groups.flat();
   });
 
-const findOwned = (
-  id: string,
-  project: string,
-  parent: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
       if (existing !== undefined) return existing;
     }
-    const local = yield* findOwnedByLabels(
-      id,
-      yield* listSchemaVersionsAt(parent),
-    );
+    const local = yield* findOwnedByLabels(id, yield* listSchemaVersionsAt(parent));
     if (local !== undefined) return local;
     return yield* findOwnedByLabels(id, yield* listOwnedVersions(project));
   });
 
 export const SchemasSchemaVersionProvider = () =>
   Provider.succeed(SchemasSchemaVersion, {
-    stables: [
-      "name",
-      "schemaVersionId",
-      "schema",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "schemaVersionId", "schema", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const nextParent = schemaOf(news.schema, env.project, location);
       const previousParent = olds?.schema ?? output?.schema;
       const previousSchema = olds?.documentSchema ?? output?.documentSchema;
       const extra =
         (previousParent !== undefined && previousParent !== nextParent) ||
-        (previousSchema !== undefined &&
-          !sameJson(previousSchema, news.documentSchema));
+        (previousSchema !== undefined && !sameJson(previousSchema, news.documentSchema));
       return replaceOnIdentity({
         previousId: olds?.schemaVersionId ?? output?.schemaVersionId,
         nextId: news.schemaVersionId,
@@ -243,15 +216,11 @@ export const SchemasSchemaVersionProvider = () =>
           : (output?.schema ?? "");
       const name =
         output?.name ??
-        (schema.length > 0 && schemaVersionId
-          ? resourceName(schema, schemaVersionId)
-          : "");
+        (schema.length > 0 && schemaVersionId ? resourceName(schema, schemaVersionId) : "");
       const existing = yield* findOwned(id, env.project, schema, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -265,9 +234,7 @@ export const SchemasSchemaVersionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const schema = schemaOf(news.schema, env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -280,10 +247,7 @@ export const SchemasSchemaVersionProvider = () =>
       );
       const displayName = news.displayName ?? fallbackName;
       const hinted =
-        output?.name ??
-        (news.schemaVersionId
-          ? resourceName(schema, news.schemaVersionId)
-          : "");
+        output?.name ?? (news.schemaVersionId ? resourceName(schema, news.schemaVersionId) : "");
 
       let current = yield* findOwned(id, env.project, schema, hinted);
 
@@ -301,9 +265,7 @@ export const SchemasSchemaVersionProvider = () =>
           Effect.catchTag("Conflict", (error) =>
             findOwned(id, env.project, schema, hinted).pipe(
               Effect.flatMap((found) =>
-                found !== undefined
-                  ? Effect.succeed(found)
-                  : Effect.fail(error),
+                found !== undefined ? Effect.succeed(found) : Effect.fail(error),
               ),
             ),
           ),

@@ -120,9 +120,7 @@ export type FolderExclusion = Resource<
  * @resource
  * @category Logging
  */
-export const FolderExclusion = Resource<FolderExclusion>(
-  "GCP.Logging.FolderExclusion",
-);
+export const FolderExclusion = Resource<FolderExclusion>("GCP.Logging.FolderExclusion");
 
 export class FolderExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderExclusionNotResolved",
@@ -149,9 +147,7 @@ const toAttrs = (exclusion: logging.LogExclusion, folderId: string) => {
   const folder = folderIdOfName(exclusion.name ?? "", folderId);
   return {
     name:
-      exclusion.name?.includes("/") === true
-        ? exclusion.name
-        : resourceName(folder, exclusionId),
+      exclusion.name?.includes("/") === true ? exclusion.name : resourceName(folder, exclusionId),
     exclusionId,
     folderId: folder,
     filter: exclusion.filter ?? "",
@@ -189,12 +185,7 @@ export const FolderExclusionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const folderId = yield* resolveFolderId(olds?.folderId, output?.folderId);
-      const exclusionId = yield* toPhysicalId(
-        id,
-        olds?.exclusionId,
-        output?.exclusionId,
-        "e",
-      );
+      const exclusionId = yield* toPhysicalId(id, olds?.exclusionId, output?.exclusionId, "e");
       const name = output?.name ?? resourceName(folderId, exclusionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -214,12 +205,8 @@ export const FolderExclusionProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.exclusions ?? []),
-            ),
-            Stream.filter((exclusion) =>
-              hasOwnershipMarker(exclusion.description),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.exclusions ?? [])),
+            Stream.filter((exclusion) => hasOwnershipMarker(exclusion.description)),
             Stream.map((exclusion) => toAttrs(exclusion, folderId)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -231,12 +218,7 @@ export const FolderExclusionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const folderId = yield* resolveFolderId(news.folderId, output?.folderId);
-      const exclusionId = yield* toPhysicalId(
-        id,
-        news.exclusionId,
-        output?.exclusionId,
-        "e",
-      );
+      const exclusionId = yield* toPhysicalId(id, news.exclusionId, output?.exclusionId, "e");
       const name = resourceName(folderId, exclusionId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -264,8 +246,7 @@ export const FolderExclusionProvider = () =>
 
       const desiredDisabled = news.disabled === true;
       const filterChanged = (current.filter ?? "") !== news.filter;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
 
       const updateMask = [

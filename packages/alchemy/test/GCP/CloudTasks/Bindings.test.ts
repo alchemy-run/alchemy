@@ -1,14 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import CloudTasksBindingsHost, {
-  Jobs,
-  TASK_URL,
-} from "./fixtures/bindings-host.ts";
+import CloudTasksBindingsHost, { Jobs, TASK_URL } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -21,12 +18,7 @@ let hostAccount: string;
 describe.skipIf(!dockerAvailable)(
   "CloudTasks Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:cloudtasks",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:cloudtasks", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -57,10 +49,7 @@ describe.skipIf(!dockerAvailable)(
         "enqueues a task as the host's service account, granted on the queue only",
         (_stack) =>
           Effect.gen(function* () {
-            const task = yield* expectProbe<cloudtasks.Task>(
-              baseUrl,
-              "createTask",
-            );
+            const task = yield* expectProbe<cloudtasks.Task>(baseUrl, "createTask");
             expect(task.name?.startsWith(`${queueName}/tasks/`)).toBe(true);
             expect(task.httpRequest?.url).toEqual(TASK_URL);
 
@@ -71,15 +60,12 @@ describe.skipIf(!dockerAvailable)(
             expect(live.httpRequest?.url).toEqual(TASK_URL);
             expect(live.httpRequest?.httpMethod).toEqual("POST");
 
-            const policy =
-              yield* cloudtasks.getIamPolicyProjectsLocationsQueues({
-                resource: queueName,
-              });
+            const policy = yield* cloudtasks.getIamPolicyProjectsLocationsQueues({
+              resource: queueName,
+            });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>
-                (binding.members ?? []).includes(
-                  `serviceAccount:${hostAccount}`,
-                ),
+                (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
               )
               .map((binding) => binding.role)
               .sort();
