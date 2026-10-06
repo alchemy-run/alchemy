@@ -100,6 +100,31 @@ test(
   },
 );
 
+test(
+  "durable object RPC returns plain values and rejects undefined methods",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/plain-rpc`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as { label: string; missing: string };
+
+    expect(body.label).toBe("plain-value");
+    expect(body.missing).toContain('Method "missing" not found on Durable Object');
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
 class DurableObjectLocationNotReady extends Data.TaggedError("DurableObjectLocationNotReady")<{
   readonly message: string;
 }> {}
