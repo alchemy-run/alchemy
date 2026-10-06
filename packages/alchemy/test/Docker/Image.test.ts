@@ -7,9 +7,10 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { dotAlchemyDirectory } from "@/AlchemyContext";
 import * as Docker from "@/Docker";
 import { findImageManifest, resolveImageManifest } from "@/Docker/ImageRegistry";
-import { inMemoryState } from "@/State";
+import { inMemoryState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "./Runtime.ts";
 
@@ -183,7 +184,25 @@ describe(
           };
           const deploy = (overrides: Partial<Docker.DockerBuildOptions> = {}) =>
             stack.deploy(Docker.Image("Generated", { build: { ...build, ...overrides } }));
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
           const first = yield* deploy();
+          const row = yield* (yield* yield* State).get({
+            stack: stack.name,
+            stage: stack.stage,
+            fqn: "Generated",
+          });
+          assert(row?.status === "created" || row?.status === "updated");
+          const contexts = path.resolve(
+            yield* dotAlchemyDirectory,
+            "docker",
+            "contexts",
+            row.instanceId,
+          );
+          const contextDirs = fs
+            .readDirectory(contexts)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])));
+          expect(yield* contextDirs).toHaveLength(1);
           const same = yield* deploy();
           expect(same.hash).toBe(first.hash);
           expect(same.ref).toBe(first.ref);
@@ -198,8 +217,11 @@ describe(
             const changed = yield* deploy(overrides);
             expect(changed.hash).not.toBe(first.hash);
             if (!("extraHash" in overrides)) expect(changed.ref).not.toBe(first.ref);
+            // Only the current inputs' generated context survives an update.
+            expect(yield* contextDirs).toHaveLength(1);
           }
           yield* stack.destroy();
+          expect(yield* fs.exists(contexts)).toBe(false);
           const docker = yield* Docker.Docker;
           const remaining = yield* docker.run([
             "image",

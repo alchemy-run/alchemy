@@ -42,8 +42,38 @@ export interface DockerBuildOptions {
   extraHash?: string;
 }
 
-/** Hash and prepare Docker inputs without executing a Docker build. */
-export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions) {
+/** Root directory holding one subdirectory of generated build contexts per owner. */
+const generatedContextsRoot = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  const { dotAlchemy } = yield* AlchemyContext;
+  return path.resolve(dotAlchemy, "docker", "contexts");
+});
+
+/**
+ * Remove an owner's generated build contexts, keeping `keep` (the context the
+ * owner's current build uses) when given. Idempotent: a missing owner
+ * directory or entry is not an error.
+ */
+export const pruneGeneratedContexts = Effect.fn(function* (owner: string, keep?: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const dir = path.join(yield* generatedContextsRoot, owner);
+  if (keep === undefined) return yield* fs.remove(dir, { recursive: true, force: true });
+  const entries = yield* fs
+    .readDirectory(dir)
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed([])));
+  for (const entry of entries) {
+    const candidate = path.join(dir, entry);
+    if (candidate !== keep) yield* fs.remove(candidate, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Hash and prepare Docker inputs without executing a Docker build. Inline
+ * Dockerfiles are materialized under `.alchemy/docker/contexts/<owner>/<hash>`
+ * so the owning resource can prune contexts its earlier inputs produced.
+ */
+export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions, owner = "shared") {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const platform =
@@ -81,8 +111,7 @@ export const prepareImageBuild = Effect.fn(function* (build: DockerBuildOptions)
       seen.add(normalized);
     }
     const key = yield* sha256Object({ dockerfile: content, files });
-    const { dotAlchemy } = yield* AlchemyContext;
-    context = path.resolve(dotAlchemy, "docker", "contexts", key);
+    context = path.join(yield* generatedContextsRoot, owner, key);
     dockerfile = path.join(context, "Dockerfile");
     yield* fs.makeDirectory(context, { recursive: true });
     yield* fs.writeFileString(dockerfile, content);

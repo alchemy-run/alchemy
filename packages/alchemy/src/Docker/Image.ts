@@ -6,7 +6,11 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
-import { prepareImageBuild, type DockerBuildOptions } from "./ImageBuild.ts";
+import {
+  prepareImageBuild,
+  pruneGeneratedContexts,
+  type DockerBuildOptions,
+} from "./ImageBuild.ts";
 import { DockerImageOptionsConflict, DockerPublishedImageMissing } from "./ImageError.ts";
 import {
   ImagePublication,
@@ -240,7 +244,7 @@ const makeImageProvider = (localMode: boolean) =>
           const [target, previous, build] = yield* Effect.all([
             location(id, news, instanceId),
             location(id, olds, instanceId),
-            prepareImageBuild(news.build),
+            prepareImageBuild(news.build, instanceId),
           ]);
           if (
             output.hash !== build.hash ||
@@ -261,7 +265,7 @@ const makeImageProvider = (localMode: boolean) =>
         }),
         reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, session }) {
           const target = yield* location(id, news, instanceId);
-          const build = yield* prepareImageBuild(news.build);
+          const build = yield* prepareImageBuild(news.build, instanceId);
           const tag = build.hash;
           const inputRef = `${target.name}:${tag}`;
           const options = {
@@ -318,6 +322,8 @@ const makeImageProvider = (localMode: boolean) =>
               }),
             );
             yield* syncImageTags(published.ref, publish.tags ?? [], credentials);
+            // Generated contexts from earlier inputs (or plans) are no longer needed.
+            yield* pruneGeneratedContexts(instanceId, build.context);
             return {
               ref: published.ref,
               imageRef: news.registry ? `${target.name}:${news.tag ?? "latest"}` : published.ref,
@@ -328,7 +334,7 @@ const makeImageProvider = (localMode: boolean) =>
             };
           }
           yield* session.note(`Preparing local image ${inputRef}`);
-          return yield* ensureLocalImage(
+          const local = yield* ensureLocalImage(
             {
               name: target.name,
               build: news.build,
@@ -337,8 +343,12 @@ const makeImageProvider = (localMode: boolean) =>
             },
             build,
           ).pipe(Effect.provide(Layer.succeed(Docker, docker)));
+          // Keep only the context the current build (and dev reloads) reference.
+          yield* pruneGeneratedContexts(instanceId, build.context);
+          return local;
         }),
-        delete: Effect.fn(function* ({ olds, output }) {
+        delete: Effect.fn(function* ({ instanceId, olds, output }) {
+          yield* pruneGeneratedContexts(instanceId);
           if (!localMode && (olds.publish || (olds.registry && !olds.skipPush))) return;
           // Generated repositories belong to one resource instance, including dev reloads.
           const context = dockerContextName(olds.dockerContext ?? olds.context);
