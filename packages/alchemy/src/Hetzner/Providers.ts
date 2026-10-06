@@ -11,6 +11,11 @@ import {
 import { HetznerAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
+import {
+  AdapterLive as DnsAdapterLive,
+  RecordList as DnsRecordList,
+  RecordListProvider as DnsRecordListProvider,
+} from "./DNS.ts";
 import { fromCredentials } from "./Environment.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { FloatingIp, FloatingIpProvider } from "./FloatingIp.ts";
@@ -76,6 +81,7 @@ export const providers = () =>
       Network,
       PlacementGroup,
       PrimaryIp,
+      DnsRecordList,
       RecordSet,
       Server,
       Service,
@@ -97,6 +103,7 @@ export const providers = () =>
         NetworkProvider(),
         PlacementGroupProvider(),
         PrimaryIpProvider(),
+        DnsRecordListProvider(),
         RecordSetProvider(),
         ServerProvider(),
         ServiceProvider(),
@@ -107,6 +114,8 @@ export const providers = () =>
         ZoneProvider(),
       ),
     ),
+    // `domain.dns: Hetzner.DNS.Adapter()` on any platform's custom domain.
+    Layer.provideMerge(DnsAdapterLive),
     Layer.provideMerge(ReadDnsHttp),
     Layer.provideMerge(WriteDnsHttp),
     Layer.provideMerge(ReadWriteDnsHttp),

@@ -246,6 +246,7 @@ export const providers = () =>
         Account.Region,
         ACM.AccountConfiguration,
         ACM.Certificate,
+        ACM.CertificateValidation,
         ACMPCA.CertificateAuthority,
         ACMPCA.CertificateAuthorityPolicy,
         ACMPCA.Permission,
@@ -829,6 +830,7 @@ export const providers = () =>
         Route53.HostedZone,
         Route53.QueryLoggingConfig,
         Route53.Record,
+        Route53.RecordList,
         Route53.Records,
         Route53.VpcAssociationAuthorization,
         Route53.ZoneVpcAssociation,
@@ -993,6 +995,7 @@ export const providers = () =>
         Layer.mergeAll(
           flociDual(ACM.AccountConfiguration, () => ACM.AccountConfigurationProvider()),
           flociDual(ACM.Certificate, () => ACM.CertificateProvider()),
+          flociDual(ACM.CertificateValidation, () => ACM.CertificateValidationProvider()),
           AMP.AlertManagerDefinitionProvider(),
           AMP.AnomalyDetectorProvider(),
           AMP.LoggingConfigurationProvider(),
@@ -1447,6 +1450,7 @@ export const providers = () =>
           flociDual(Route53.HostedZone, () => Route53.HostedZoneProvider()),
           flociDual(Route53.QueryLoggingConfig, () => Route53.QueryLoggingConfigProvider()),
           flociDual(Route53.Record, () => Route53.RecordProvider()),
+          flociDual(Route53.RecordList, () => Route53.RecordListProvider()),
           flociDual(Route53.Records, () => Route53.RecordsProvider()),
           flociDual(Route53.VpcAssociationAuthorization, () =>
             Route53.VpcAssociationAuthorizationProvider(),
@@ -1790,6 +1794,8 @@ export const providers = () =>
         RandomProvider(),
         Assets.AssetsLive,
         DockerLive,
+        // `domain.dns: AWS.Route53.Adapter()` on any platform's custom domain.
+        Route53.AdapterLive,
       ),
     ),
     // Plan-executable data-source capabilities: registering the impl layers

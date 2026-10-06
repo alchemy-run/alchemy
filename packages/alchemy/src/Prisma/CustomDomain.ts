@@ -1,11 +1,19 @@
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { App } from "./App.ts";
-import { PrismaClient, isConflict, isNotFound, type PrismaManagementClient } from "./Client.ts";
+import {
+  PrismaApiError,
+  PrismaClient,
+  isConflict,
+  isNotFound,
+  type PrismaManagementClient,
+} from "./Client.ts";
 import type { Compute } from "./Compute.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
 import type { Providers } from "./Providers.ts";
@@ -83,9 +91,11 @@ export interface CustomDomain extends Resource<
  * A Prisma app custom domain.
  *
  * Domains can only attach to Apps on the project's current default branch.
- * Creating this resource starts asynchronous DNS and certificate provisioning;
- * configure the returned `dnsRecords` and inspect `status`, `foundryStatus`,
- * and `failureReason` before routing production traffic.
+ * Prisma verifies the hostname's `CNAME` to the app's regional switchboard
+ * (`switchboard.{region}.prisma.build`, listed in `dnsRecords`) when the
+ * domain is created, so publish it first. Creation then starts asynchronous
+ * certificate provisioning; inspect `status`, `foundryStatus`, and
+ * `failureReason` before routing production traffic.
  *
  * App and hostname changes are intentionally rejected because the Management
  * API cannot replace a live domain atomically. Create a second resource,
@@ -154,6 +164,82 @@ const findDomain = (client: PrismaManagementClient, appId: string, hostname: str
         : Effect.succeed(matches[0]);
     }),
   );
+
+/**
+ * Registration verifies the hostname's CNAME; a record published moments
+ * earlier may not be visible to Prisma's resolver yet.
+ */
+const isDnsNotConfigured = (error: unknown): boolean =>
+  error instanceof PrismaApiError &&
+  error.status === 400 &&
+  error.body !== undefined &&
+  Redacted.value(error.body).includes("DNS is not configured");
+
+interface NodeDns {
+  readonly resolveNs: (name: string) => Promise<string[]>;
+  readonly resolve4: (name: string) => Promise<string[]>;
+  readonly Resolver: new () => {
+    setServers(servers: string[]): void;
+    resolveCname(name: string): Promise<string[]>;
+  };
+}
+
+/**
+ * Prisma verifies the CNAME on registration through a caching resolver: a
+ * lookup that races a just-published record caches NXDOMAIN for the zone's
+ * SOA minimum (30 minutes on Cloudflare), failing every retry. Wait
+ * (bounded) until every authoritative nameserver answers a CNAME, plus a
+ * margin for anycast edges. Proceeds regardless, so an unpublished record
+ * still surfaces Prisma's own error.
+ */
+const waitForAuthoritativeCname = (hostname: string) =>
+  Effect.gen(function* () {
+    const dns = yield* Effect.tryPromise(
+      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
+    ).pipe(Effect.orElseSucceed(() => undefined));
+    if (dns === undefined || typeof dns.Resolver !== "function") return;
+    const labels = hostname.split(".");
+    let servers: string[] = [];
+    for (let i = 1; i < labels.length - 1 && servers.length === 0; i++) {
+      const names = yield* Effect.tryPromise(() => dns.resolveNs(labels.slice(i).join("."))).pipe(
+        Effect.orElseSucceed(() => [] as string[]),
+      );
+      const addresses = yield* Effect.forEach(
+        names,
+        (name) =>
+          Effect.tryPromise(() => dns.resolve4(name)).pipe(
+            Effect.orElseSucceed(() => [] as string[]),
+          ),
+        { concurrency: "unbounded" },
+      );
+      servers = addresses.flat();
+    }
+    if (servers.length === 0) return;
+    const answeredBy = (server: string) =>
+      Effect.gen(function* () {
+        const resolver = yield* Effect.sync(() => {
+          const instance = new dns.Resolver();
+          instance.setServers([server]);
+          return instance;
+        });
+        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname));
+        return answers.length > 0;
+      }).pipe(
+        Effect.timeout("3 seconds"),
+        Effect.orElseSucceed(() => false),
+      );
+    const visible = yield* Effect.forEach(servers, answeredBy, {
+      concurrency: "unbounded",
+    }).pipe(
+      Effect.map((seen) => seen.every(Boolean)),
+      Effect.repeat({
+        schedule: Schedule.spaced("3 seconds"),
+        until: (seen) => seen,
+        times: 20,
+      }),
+    );
+    if (visible) yield* Effect.sleep("10 seconds");
+  });
 
 const ensureDefaultBranchApp = (client: PrismaManagementClient, appId: string) =>
   Effect.gen(function* () {
@@ -267,12 +353,18 @@ const ProviderLive = () =>
           }
           if (!domain) {
             yield* ensureDefaultBranchApp(client, appId);
+            yield* waitForAuthoritativeCname(hostname);
           }
           const reconciled = domain
             ? domain.status === "failed"
               ? yield* client.retryCustomDomain(domain.id)
               : domain
             : yield* client.createAppDomain(appId, { hostname }).pipe(
+                Effect.retry({
+                  while: isDnsNotConfigured,
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 6,
+                }),
                 Effect.catchIf(isConflict, () =>
                   Effect.fail(
                     adoptionRequiredError(hostname, appId, "appeared after the adoption check"),

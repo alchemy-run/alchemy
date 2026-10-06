@@ -5,6 +5,8 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
+import * as DNS from "../../DNS/Adapter.ts";
+import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
@@ -37,6 +39,90 @@ export type { ServerDevProps, WebsiteAssetsProps, WebsiteNotFoundHandling };
 export { staticConfigFromAssets };
 
 /**
+ * Custom domain of a Hetzner website: the hostname itself (an `A`
+ * {@link RecordSet} in {@link FrameworkSiteProps.zone}), or `{ name, dns }`
+ * to publish the record through a DNS adapter instead.
+ */
+export type WebsiteDomain =
+  | string
+  | {
+      /** Hostname, e.g. `app.example.com`. */
+      name: string;
+      /**
+       * DNS host that publishes the `A` record at the Server's public
+       * IPv4 (see [DNS Adapters](/infrastructure-as-code/dns-adapters)),
+       * e.g. `Hetzner.DNS.Adapter()` or `Cloudflare.DNS.Adapter()`. When
+       * set, `zone` is not required (and is ignored). Omitted: the `A`
+       * {@link RecordSet} in `zone`.
+       */
+      dns?: DNS.DnsConfig;
+    };
+
+/** The hostname of a {@link WebsiteDomain}. */
+export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
+  domain === undefined || typeof domain === "string" ? domain : domain.name;
+
+/** The DNS adapter config of a {@link WebsiteDomain}, when it names one. */
+const websiteDomainDns = (domain: WebsiteDomain | undefined): DNS.DnsConfig | undefined =>
+  typeof domain === "object" ? domain.dns : undefined;
+
+/**
+ * Dies unless a custom domain can be published: `domain.dns` names a DNS
+ * host, or `zone` is set for the `A` {@link RecordSet}.
+ */
+export const requireWebsiteDomainZone = (
+  label: string,
+  props: {
+    readonly domain?: WebsiteDomain | undefined;
+    readonly zone?: Ref<Zone> | undefined;
+  },
+): Effect.Effect<void> =>
+  props.domain !== undefined &&
+  websiteDomainDns(props.domain) === undefined &&
+  props.zone === undefined
+    ? Effect.die(
+        `${label}: "domain" requires "zone" (an existing Hetzner.Zone) or "domain.dns" (a DNS adapter).`,
+      )
+    : Effect.void;
+
+/**
+ * Point a website's custom domain at its Server: through `domain.dns` when
+ * set (`Domain` alias, an address target), otherwise an `A`
+ * {@link RecordSet} named `Domain` in `zone` (unchanged from before DNS
+ * adapters existed).
+ */
+export const publishWebsiteDomain = Effect.fn("Hetzner.Website.publishDomain")(function* (props: {
+  readonly domain?: WebsiteDomain | undefined;
+  readonly zone?: Ref<Zone> | undefined;
+  readonly server: Server;
+  readonly tags?: Record<string, string> | undefined;
+}) {
+  const name = websiteDomainName(props.domain);
+  if (name === undefined) return;
+  const dnsConfig = websiteDomainDns(props.domain);
+  if (dnsConfig !== undefined) {
+    const dns = yield* DNS.resolve(dnsConfig);
+    yield* dns.alias("Domain", {
+      name,
+      target: {
+        ipv4: Output.map(props.server.ipv4, (ip) =>
+          ip === undefined ? [] : [ip],
+        ) as unknown as Input<string[]>,
+      },
+    });
+    return;
+  }
+  if (props.zone !== undefined) {
+    yield* bindWebsiteDomain({
+      domain: name,
+      zone: props.zone,
+      server: props.server,
+      tags: props.tags,
+    });
+  }
+});
+
+/**
  * Props shared by every Hetzner framework website composite.
  */
 export interface FrameworkSiteProps {
@@ -66,14 +152,21 @@ export interface FrameworkSiteProps {
    */
   assets?: WebsiteAssetsProps;
   /**
-   * Optional custom domain. Creates an A {@link RecordSet} on
-   * {@link zone} pointing at the Server's public IPv4. The site `url`
-   * becomes `http://{domain}:{port}` (no TLS on Service).
+   * Optional custom domain pointed at the Server's public IPv4. The site
+   * `url` becomes `http://{domain}:{port}` (no TLS on Service).
+   *
+   * A string (or `{ name }`) creates an `A` {@link RecordSet} in
+   * {@link zone}. Set `dns` (e.g.
+   * `{ name: "app.example.com", dns: Cloudflare.DNS.Adapter() }`) to
+   * publish the `A` record through that DNS host instead — any adapter
+   * works, including `Hetzner.DNS.Adapter()` and `AWS.Route53.Adapter()`.
+   * See [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
-  domain?: string;
+  domain?: WebsiteDomain;
   /**
    * Existing Hetzner DNS Zone `domain` is created in. Required when
-   * {@link domain} is set — v1 does not provision a Zone.
+   * {@link domain} is set without `dns` — v1 does not provision a Zone.
+   * Ignored when `domain.dns` is set.
    */
   zone?: Ref<Zone>;
   /**
@@ -231,11 +324,7 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
       `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page (200); "errorPage" answers them with a real 404.`,
     );
   }
-  if (props.domain !== undefined && props.zone === undefined) {
-    return yield* Effect.die(
-      `Hetzner.Website "${config.name}": "domain" requires "zone" (an existing Hetzner.Zone).`,
-    );
-  }
+  yield* requireWebsiteDomainZone(`Hetzner.Website "${config.name}"`, props);
 
   const build = yield* FrameworkServer("Build", {
     framework: config.framework,
@@ -323,17 +412,19 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
         : undefined,
   });
 
-  if (props.domain !== undefined && props.zone !== undefined) {
-    yield* bindWebsiteDomain({
-      domain: props.domain,
-      zone: props.zone,
-      server,
-      tags: props.tags,
-    });
-  }
+  yield* publishWebsiteDomain({
+    domain: props.domain,
+    zone: props.zone,
+    server,
+    tags: props.tags,
+  });
 
   return {
-    url: websiteUrl({ domain: props.domain, service, port }),
+    url: websiteUrl({
+      domain: websiteDomainName(props.domain),
+      service,
+      port,
+    }),
     server,
     service,
   };

@@ -11,10 +11,12 @@ import { initialCwd } from "../../Util/Node.ts";
 import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 import { Service } from "../Service.ts";
 import {
-  bindWebsiteDomain,
   DEFAULT_WEBSITE_PORT,
+  publishWebsiteDomain,
+  requireWebsiteDomainZone,
   resolveWebsiteServer,
   unwrapEnv,
+  websiteDomainName,
   websiteUrl,
   type FrameworkSiteProps,
   type Website,
@@ -150,11 +152,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page (200); "errorPage" answers them with a real 404.`,
       );
     }
-    if (props.domain !== undefined && props.zone === undefined) {
-      return yield* Effect.die(
-        `Hetzner.Website.StaticSite: "domain" requires "zone" (an existing Hetzner.Zone).`,
-      );
-    }
+    yield* requireWebsiteDomainZone("Hetzner.Website.StaticSite", props);
 
     if (isLocal && props.dev) {
       const dev = yield* Command.Dev("Dev", {
@@ -221,17 +219,19 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       isExternal: true,
     });
 
-    if (props.domain !== undefined && props.zone !== undefined) {
-      yield* bindWebsiteDomain({
-        domain: props.domain,
-        zone: props.zone,
-        server,
-        tags: props.tags,
-      });
-    }
+    yield* publishWebsiteDomain({
+      domain: props.domain,
+      zone: props.zone,
+      server,
+      tags: props.tags,
+    });
 
     return {
-      url: websiteUrl({ domain: props.domain, service, port }),
+      url: websiteUrl({
+        domain: websiteDomainName(props.domain),
+        service,
+        port,
+      }),
       server,
       service,
     } satisfies Website;

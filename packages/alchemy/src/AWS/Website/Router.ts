@@ -6,7 +6,6 @@ import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { Certificate } from "../ACM/Certificate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution, type DistributionBehavior } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -15,9 +14,8 @@ import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
 import { KvEntries } from "../CloudFront/KvEntries.ts";
 import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
 import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
+import { domainCertificate, resolveDomainDns } from "../CustomDomain.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
-import { Records as Route53Records } from "../Route53/Records.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
 import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
@@ -39,6 +37,16 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   domain: { name: "example.com", hostedZoneId },
+ * });
+ * ```
+ *
+ * **Example:** Router On A Cloudflare Domain
+ * ```typescript
+ * // The certificate, the Router's own CNAMEs, and hostnames bound by
+ * // attached sites all go through the Cloudflare zone. Requires
+ * // `Cloudflare.providers()` in the stack.
+ * const router = yield* Router("WebsiteRouter", {
+ *   domain: { name: "example.com", dns: Cloudflare.DNS.Adapter() },
  * });
  * ```
  *
@@ -94,17 +102,24 @@ export const Router = Effect.fn("AWS.Website.Router")(
     // The managed certificate (when the Router owns one) doubles as a bind
     // target for attached-site hostnames — keep the resource handle distinct
     // from the viewer-certificate value, which may be a user-provided ARN.
-    const managedCertificate =
+    const managed =
       domain && !domain.cert
-        ? yield* Certificate("Certificate", {
-            domainName: domain.name,
-            subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
-            hostedZoneId: domain.hostedZoneId,
-            tags: props.tags,
-          })
+        ? yield* domainCertificate(
+            "Certificate",
+            {
+              domainName: domain.name,
+              subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
+              hostedZoneId: domain.hostedZoneId,
+              tags: props.tags,
+            },
+            domain.dns,
+          )
         : undefined;
+    const managedCertificate = managed?.certificate;
     const certificate =
       managedCertificate ?? (domain?.cert ? { certificateArn: domain.cert } : undefined);
+    // Resolves once the certificate is issued (see `domainCertificate`).
+    const viewerCertificateArn = managed?.certificateArn ?? domain?.cert;
 
     const stack = yield* Stack;
     const stage = yield* Stage;
@@ -270,9 +285,9 @@ export const Router = Effect.fn("AWS.Website.Router")(
         originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
         functionAssociations,
       },
-      viewerCertificate: certificate
+      viewerCertificate: viewerCertificateArn
         ? {
-            acmCertificateArn: (certificate as any).certificateArn,
+            acmCertificateArn: viewerCertificateArn,
             sslSupportMethod: "sni-only",
             minimumProtocolVersion: "TLSv1.2_2021",
           }
@@ -302,21 +317,24 @@ export const Router = Effect.fn("AWS.Website.Router")(
       });
     });
 
-    const records =
+    const dns =
       domain && domain.dns !== false
+        ? yield* resolveDomainDns(domain.dns, domain.hostedZoneId)
+        : undefined;
+    const aliasTarget = {
+      hostname: distribution.domainName,
+      route53Alias: { hostedZoneId: distribution.hostedZoneId },
+    };
+    const records =
+      domain && dns
         ? yield* Effect.forEach(
             [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             (name, index) =>
-              Route53Record(`AliasRecord${index + 1}`, {
-                // Optional — the Record provider infers the most specific
-                // public zone containing `name` when omitted.
-                hostedZoneId: domain.hostedZoneId,
+              // The DNS host infers the zone containing `name` unless one
+              // is pinned.
+              dns.alias(`AliasRecord${index + 1}`, {
                 name,
-                type: "A",
-                aliasTarget: {
-                  hostedZoneId: distribution.hostedZoneId,
-                  dnsName: distribution.domainName,
-                },
+                target: aliasTarget,
               }),
             { concurrency: "unbounded" },
           )
@@ -324,21 +342,11 @@ export const Router = Effect.fn("AWS.Website.Router")(
 
     // Bind target for attached-site hostnames: a record set (initially
     // empty) that same-stack sites bind their concrete hostnames onto, each
-    // becoming an A-alias record pointing at this distribution (see
-    // `WebsiteRouterBindTargets`).
+    // becoming a record pointing at this distribution (see
+    // `WebsiteRouterBindTargets`). The set infers its zone from the first
+    // bound hostname when none is pinned.
     const siteRecords =
-      domain && domain.dns !== false
-        ? yield* Route53Records("SiteAliasRecords", {
-            // Optional — the Records provider infers the zone from the
-            // first bound hostname when omitted.
-            hostedZoneId: domain.hostedZoneId,
-            type: "A",
-            aliasTarget: {
-              hostedZoneId: distribution.hostedZoneId,
-              dnsName: distribution.domainName,
-            },
-          })
-        : undefined;
+      domain && dns ? yield* dns.aliasSet("SiteAliasRecords", { target: aliasTarget }) : undefined;
 
     const invalidation =
       props.invalidation === false || !props.invalidation
