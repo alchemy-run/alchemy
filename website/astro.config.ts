@@ -640,6 +640,7 @@ export default defineConfig({
               label: "Messaging & events",
               items: [
                 { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
                 { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
                 {
                   label: "GitHub events",
