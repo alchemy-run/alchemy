@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 import type { Attributes, Zone } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-export type Phase = rulesets.CreateRulesetForZoneRequest["phase"];
+export type Phase = NonNullable<rulesets.CreateRulesetForZoneRequest["phase"]>;
 export type Rule = NonNullable<rulesets.PutPhasForZoneRequest["rules"]>[number];
 export type OutputRule = Omit<
   NonNullable<rulesets.GetPhasResponse["rules"]>[number],

@@ -823,7 +823,11 @@ async function dispatchInner(
   const screenError = screenHeaders(c, detected.operation, detected.rules);
   if (screenError !== undefined) return screenError;
 
-  return detected.run();
+  try {
+    return await detected.run();
+  } catch (error) {
+    return bindingError(error);
+  }
 }
 
 interface BoundOperation {
@@ -1364,6 +1368,11 @@ const BINDING_ERRORS: Partial<Record<number, S3Error>> = {
     status: 400,
     code: "EntityTooSmall",
     message: "Your proposed upload is smaller than the minimum allowed object size.",
+  },
+  10012: {
+    status: 400,
+    code: "MetadataTooLarge",
+    message: "Your metadata headers exceed the maximum allowed metadata size.",
   },
   10024: NO_SUCH_UPLOAD,
   10025: {

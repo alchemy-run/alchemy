@@ -17,9 +17,21 @@ interface NextConfigModule {
   createRscCompatibilityId(config: unknown): string;
 }
 
+/** The `vinext()` options that locate the app and its build outputs. */
+export interface VinextRouteRootConfig {
+  readonly appDir?: string;
+  readonly clientOutDir?: string;
+  readonly rscOutDir?: string;
+  readonly ssrOutDir?: string;
+}
+
 interface PrerenderConfigModule {
-  findVinextPrerenderConfigInPlugins(plugins: PluginOption[] | undefined): Promise<unknown>;
-  findVinextRouteRootConfigInPlugins(plugins: PluginOption[] | undefined): Promise<unknown>;
+  findVinextPrerenderConfigInPlugins(
+    plugins: PluginOption[] | undefined,
+  ): Promise<{ readonly concurrency?: number } | null>;
+  findVinextRouteRootConfigInPlugins(
+    plugins: PluginOption[] | undefined,
+  ): Promise<VinextRouteRootConfig | null>;
   findVinextCacheConfigInPlugins(plugins: PluginOption[] | undefined): Promise<unknown>;
   hasBuildIdentityResponseHeader(cache: unknown): boolean;
   hasVerbatimResponseVary(cache: unknown): boolean;
@@ -42,6 +54,9 @@ export const loadVinextBuildConfig = Effect.fn(function* (
     const nextConfig = await next.resolveNextConfig(raw, root);
     const cache = await prerender.findVinextCacheConfigInPlugins(plugins);
     return {
+      /** Inline `vinext({ nextConfig })` before resolution, or undefined for a next.config file. */
+      nextConfigInput: input ?? undefined,
+      cacheConfig: cache,
       nextConfig,
       rscCompatibilityId: next.createRscCompatibilityId(nextConfig),
       prerenderConfig: await prerender.findVinextPrerenderConfigInPlugins(plugins),

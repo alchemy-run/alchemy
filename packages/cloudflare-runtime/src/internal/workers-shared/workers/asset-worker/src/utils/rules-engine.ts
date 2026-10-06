@@ -4,8 +4,8 @@
 // which is everything from the tc39 proposal, plus the following two characters: ^/
 // It's also everything included in the URLPattern escape (https://wicg.github.io/urlpattern/#escape-a-regexp-string), plus the following: -
 
-import type { AssetConfig } from "../../../../shared/types.ts";
 import { REDIRECTS_VERSION } from "../handler.ts";
+import type { NormalizedAssetConfig } from "../types.ts";
 
 // As the answer says, there's no downside to escaping these extra characters, so better safe than sorry
 const ESCAPE_REGEX_CHARACTERS = /[-/\\^$*+?.()|[\]{}]/g;
@@ -112,7 +112,7 @@ export const generateRulesMatcher = <T>(
 };
 
 export const staticRedirectsMatcher = (
-  configuration: Required<AssetConfig>,
+  configuration: NormalizedAssetConfig,
   host: string,
   pathname: string,
 ) => {
@@ -130,7 +130,7 @@ export const staticRedirectsMatcher = (
   return withHostMatch || withoutHostMatch;
 };
 
-export const generateRedirectsMatcher = (configuration: Required<AssetConfig>) =>
+export const generateRedirectsMatcher = (configuration: NormalizedAssetConfig) =>
   generateRulesMatcher(
     configuration.redirects.version === REDIRECTS_VERSION ? configuration.redirects.rules : {},
     ({ status, to }, replacements) => {

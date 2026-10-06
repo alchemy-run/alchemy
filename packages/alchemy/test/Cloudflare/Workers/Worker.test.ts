@@ -13,6 +13,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import * as Command from "@/Command/index.ts";
+import * as Drift from "@/Drift";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
@@ -113,6 +114,76 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "live"] },
+    );
+
+    test.provider(
+      "zero-traffic upload receipts do not cause drift or hide live changes",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (marker: string, traffic?: number) =>
+            Cloudflare.Worker("ReceiptWorker", {
+              script: `export default { fetch() { return new Response(${JSON.stringify(marker)}); } };`,
+              workersDev: false,
+              version: traffic === undefined ? undefined : { traffic },
+            });
+
+          // Establish a compatible live deployment before uploading the
+          // candidate; a greenfield gradual rollout takes 100% of traffic.
+          const stable = yield* stack.deploy(program("stable"));
+          const beforeUpload = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: stable.workerName,
+          });
+          expect(beforeUpload.deployments[0]).toBeDefined();
+
+          const candidate = yield* stack.deploy(program("candidate", 0));
+          expect(candidate.workerName).toEqual(stable.workerName);
+          expect(candidate.versionId).toBeDefined();
+          expect(candidate.deploymentId).toBeUndefined();
+          const uploaded = yield* workers.getScriptVersion({
+            accountId,
+            scriptName: candidate.workerName,
+            versionId: candidate.versionId!,
+          });
+          expect(uploaded.id).toEqual(candidate.versionId);
+
+          const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+          const unchanged = yield* detectDrift();
+          expect(unchanged.resources.ReceiptWorker?.action).toBe("unchanged");
+          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+
+          const afterRead = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: candidate.workerName,
+          });
+          expect(afterRead.deployments[0]).toEqual(beforeUpload.deployments[0]);
+          expect(
+            afterRead.deployments[0]?.versions.some(
+              (version) => version.versionId === candidate.versionId,
+            ),
+          ).toBe(false);
+
+          // Change real script settings outside Alchemy. Keeping the upload
+          // receipt must not mask genuine drift in the live configuration.
+          yield* workers.createScriptSubdomain({
+            accountId,
+            scriptName: candidate.workerName,
+            enabled: true,
+            previewsEnabled: false,
+          });
+          const changed = yield* detectDrift();
+          expect(changed.resources.ReceiptWorker?.action).toBe("drifted");
+          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+          expect(changed.resources.ReceiptWorker?.attr.url).toBeDefined();
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
     );
 
     test.provider(
@@ -1184,6 +1255,85 @@ describe.concurrent(
             ].map((name) => waitForWorkerToBeDeleted(name, accountId)),
             { concurrency: "unbounded" },
           );
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 360_000 },
+    );
+
+    // Precreate publishes the URLs known before the first upload, so a cycle
+    // of Workers binding each other's `url` resolves on the first deploy.
+    // Worker A serves only on a custom domain (`workersDev: false`): its
+    // precreate `url` must be the domain, not `undefined`.
+    const circularUrlZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
+    test.provider.skipIf(!circularUrlZone)(
+      "circular Worker URL bindings resolve custom-domain and workers.dev URLs on the first deploy",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const domainA = `alchemy-circular-url-${suffix}.${circularUrlZone}`;
+
+          yield* stack.destroy();
+
+          const program = () =>
+            Effect.gen(function* () {
+              const a = yield* Cloudflare.Worker("CircularUrlA", {
+                main,
+                workersDev: false,
+                domain: domainA,
+              });
+              const b = yield* Cloudflare.Worker("CircularUrlB", { main });
+              yield* a.bind`B_URL`({
+                bindings: [
+                  {
+                    type: "plain_text",
+                    name: "B_URL",
+                    text: b.url.as<string>(),
+                  },
+                ],
+              });
+              yield* b.bind`A_URL`({
+                bindings: [
+                  {
+                    type: "plain_text",
+                    name: "A_URL",
+                    text: a.url.as<string>(),
+                  },
+                ],
+              });
+              return { a, b };
+            });
+
+          const deployed = yield* stack.deploy(program());
+          expect(deployed.a.url).toEqual(`https://${domainA}`);
+          expect(deployed.b.url).toMatch(/^https:\/\/.*\.workers\.dev$/);
+          for (const [worker, name, peerUrl] of [
+            [deployed.a, "B_URL", deployed.b.url],
+            [deployed.b, "A_URL", deployed.a.url],
+          ] as const) {
+            const settings = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(settings.bindings).toContainEqual(
+              expect.objectContaining({
+                type: "plain_text",
+                name,
+                text: peerUrl,
+              }),
+            );
+          }
+
+          const settled = yield* stack.plan(program());
+          for (const logicalId of ["CircularUrlA", "CircularUrlB"]) {
+            const node = (Object.values(settled.resources) as any[]).find(
+              (candidate) => candidate.resource.LogicalId === logicalId,
+            );
+            expect(node?.action).toBe("noop");
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(deployed.a.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(deployed.b.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
     );

@@ -14,15 +14,16 @@ const binDir = path.dirname(import.meta.filename);
 const entry = path.join(binDir, "alchemy.js");
 const isDev = !(binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\"));
 
-const execpath = (process.env.npm_execpath ?? "").toLowerCase();
-const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
-
 const runningInBun =
   // @ts-ignore
   "Bun" in globalThis && typeof globalThis.Bun !== "undefined";
 
-const runtime =
-  runningInBun || execpath.includes("bun") || userAgent.startsWith("bun/") ? "bun" : "node";
+// `bun run`/`bunx` start a node-shebang bin under Node but always point
+// npm_execpath at bun. npm_config_user_agent only names the package-manager
+// role (e.g. nub reports `bun/<v>` for a bun project while running Node).
+const launchedByBun = path.basename(process.env.npm_execpath ?? "").startsWith("bun");
+
+const runtime = runningInBun || launchedByBun ? "bun" : "node";
 
 if (runtime === "node") {
   // Oxc's loader requires module.registerHooks. Keep this gate in sync with

@@ -986,6 +986,16 @@ const makeDatabaseCloud = () => {
       return data(toWireCreatedDatabase(database), { status: 201 });
     }
 
+    // No branches: the logical-ID lookup resolves no branch and falls back to the name.
+    if (
+      segments.length === 4 &&
+      segments[1] === "projects" &&
+      segments[3] === "branches" &&
+      request.method === "GET"
+    ) {
+      return page([]);
+    }
+
     if (
       segments.length === 4 &&
       segments[1] === "projects" &&

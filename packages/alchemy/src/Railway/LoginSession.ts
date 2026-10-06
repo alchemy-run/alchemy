@@ -8,6 +8,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 /** Dashboard host used by `railway login --browserless` pairing URLs. */
@@ -51,7 +52,7 @@ export const loginSessionUrl = (
  * mutations are public: they run before the user has a token.
  */
 const anonymousRailwayCredentials = (apiBaseUrl?: string) =>
-  CredentialsFromToken({ token: "", tokenKind: "account", apiBaseUrl });
+  CredentialsFromToken({ token: Redacted.make(""), tokenKind: "account", apiBaseUrl });
 
 const anonymousRailway = (apiBaseUrl?: string) =>
   Layer.mergeAll(GraphQLLive, anonymousRailwayCredentials(apiBaseUrl), FetchHttpClient.layer);
