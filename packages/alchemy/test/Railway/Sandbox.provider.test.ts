@@ -5,6 +5,7 @@ import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 import { RailwayEnvironment } from "@/Railway/Environment.ts";
 import { Sandbox, SandboxProvider, type SandboxProps } from "@/Railway/Sandbox.ts";
@@ -15,9 +16,12 @@ const testLayer = (client: HttpClient.HttpClient) =>
       Layer.mergeAll(
         Layer.succeed(
           RailwayEnvironment,
-          Effect.succeed({ ...toConfig({ token: "fixture" }), workspaceId: "workspace" }),
+          Effect.succeed({
+            ...toConfig({ token: Redacted.make("fixture") }),
+            workspaceId: "workspace",
+          }),
         ),
-        CredentialsFromToken({ token: "fixture" }),
+        CredentialsFromToken({ token: Redacted.make("fixture") }),
         GraphQLLive,
         Layer.succeed(HttpClient.HttpClient, client),
       ),

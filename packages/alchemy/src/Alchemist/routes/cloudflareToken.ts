@@ -73,7 +73,7 @@ const withGlobalKey = (credentials: GlobalCredentials) =>
     CloudflareCredentials.Credentials,
     Effect.succeed(
       apiKeyCredentials({
-        apiKey: Redacted.value(credentials.apiKey),
+        apiKey: credentials.apiKey,
         email: credentials.email,
       }),
     ),
@@ -174,7 +174,7 @@ export const create = Effect.fn("Alchemist.cloudflare.token.create")(
     const verificationStatus = yield* user.verifyToken({}).pipe(
       Effect.provideService(
         CloudflareCredentials.Credentials,
-        Effect.succeed(apiTokenCredentials({ apiToken: result.value })),
+        Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make(result.value) })),
       ),
       Effect.map(({ status }) => status),
       Effect.catch(() => Effect.succeed(undefined)),
