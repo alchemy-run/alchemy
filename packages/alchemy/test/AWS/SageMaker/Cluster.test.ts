@@ -1,13 +1,13 @@
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import { Cluster } from "@/AWS/SageMaker";
 import * as Test from "@/Test/Alchemy";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,12 +18,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        sagemaker.describeCluster({
-          ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe",
-        }),
+        sagemaker.describeCluster({ ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe" }),
       );
       expect(error._tag).toBe("ResourceNotFound");
     }),
+  { tags: ["provider:aws", "provider:aws:sagemaker", "live"] },
 );
 
 const findCluster = (name: string) =>
@@ -46,10 +45,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       const bucketName = `sagemaker-alchemy-hyperpod-test-${accountId}`;
 
       const supporting = Effect.gen(function* () {
-        const bucket = yield* Bucket("HyperPodLifecycleBucket", {
-          bucketName,
-          forceDestroy: true,
-        });
+        const bucket = yield* Bucket("HyperPodLifecycleBucket", { bucketName, forceDestroy: true });
         const role = yield* Role("HyperPodInstanceRole", {
           assumeRolePolicyDocument: {
             Version: "2012-10-17",
@@ -61,9 +57,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
               },
             ],
           },
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy",
-          ],
+          managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy"],
         });
         return { bucket, role };
       });
@@ -112,14 +106,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       // Out-of-band verification via distilled.
       const described = yield* findCluster(cluster.clusterName);
       expect(described?.ClusterStatus).toBe("InService");
-      expect(
-        described?.InstanceGroups?.map((g) => g.InstanceGroupName),
-      ).toEqual(["controller"]);
+      expect(described?.InstanceGroups?.map((g) => g.InstanceGroupName)).toEqual(["controller"]);
 
       // Destroy and verify gone.
       yield* stack.destroy();
       const gone = yield* findCluster(cluster.clusterName);
       expect(gone).toBeUndefined();
     }),
-  { timeout: 3_600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:s3", "provider:aws:sagemaker", "live"],
+    timeout: 3_600_000,
+  },
 );

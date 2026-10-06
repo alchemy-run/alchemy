@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ACL, Cluster, SubnetGroup, User } from "@/AWS/MemoryDB";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ACL, Cluster, SubnetGroup, User } from "@/AWS/MemoryDB";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -18,12 +18,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        memorydb.describeClusters({
-          ClusterName: "alchemy-nonexistent-memorydb-probe",
-        }),
+        memorydb.describeClusters({ ClusterName: "alchemy-nonexistent-memorydb-probe" }),
       );
       expect(error._tag).toBe("ClusterNotFoundFault");
     }),
+  { tags: ["provider:aws", "provider:aws:memorydb", "live"] },
 );
 
 // Resolve two default-for-AZ subnets and the default security group.
@@ -62,22 +61,13 @@ const assertClusterDeleting = (name: string) =>
   Effect.gen(function* () {
     const status = yield* memorydb.describeClusters({ ClusterName: name }).pipe(
       Effect.map((r) => r.Clusters?.[0]?.Status ?? "gone"),
-      Effect.catchTag("ClusterNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
-      return yield* Effect.fail(
-        new Error(`cluster '${name}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`cluster '${name}' still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // MemoryDB clusters take ~10-15 minutes to provision and are billed per node
@@ -100,9 +90,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             },
             accessString: "on ~* +@all",
           });
-          const acl = yield* ACL("ClusterAcl", {
-            userNames: [user.userName],
-          });
+          const acl = yield* ACL("ClusterAcl", { userNames: [user.userName] });
           const subnetGroup = yield* SubnetGroup("ClusterSubnets", {
             description: "alchemy memorydb cluster subnets",
             subnetIds: network.subnetIds,
@@ -130,9 +118,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(cluster.endpointAddress).toContain("memorydb");
 
       // Out-of-band verification via distilled.
-      const described = yield* memorydb.describeClusters({
-        ClusterName: cluster.clusterName,
-      });
+      const described = yield* memorydb.describeClusters({ ClusterName: cluster.clusterName });
       const observed = described.Clusters?.[0];
       expect(observed?.Status).toBe("available");
       expect(observed?.TLSEnabled).toBe(true);
@@ -144,5 +130,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertClusterDeleting(cluster.clusterName);
     }),
   // create (~10-15 min) + delete initiation, one test.
-  { timeout: 1_500_000 },
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:memorydb", "live"],
+    timeout: 1_500_000,
+  },
 );

@@ -1,21 +1,19 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { noopSession } from "@/Report";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { noopSession } from "@/Report";
+import * as Test from "@/Test/Alchemy";
 import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const NetworkConfig = Schema.Struct({
   privateNetworkDisabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
@@ -28,9 +26,7 @@ const NetworkConfig = Schema.Struct({
             networking: Schema.optional(
               Schema.NullOr(
                 Schema.Struct({
-                  privateNetworkEndpoint: Schema.optional(
-                    Schema.NullOr(Schema.String),
-                  ),
+                  privateNetworkEndpoint: Schema.optional(Schema.NullOr(Schema.String)),
                   serviceDomains: Schema.optional(
                     Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown)),
                   ),
@@ -44,15 +40,68 @@ const NetworkConfig = Schema.Struct({
   ),
 });
 
-const readConfig = Effect.fn(function* (environmentId: string) {
-  const environment = yield* railway.environment(
-    { id: environmentId },
-    { config: { where: { decryptVariables: false } }, configEtag: true },
-  );
-  return {
-    config: yield* Schema.decodeUnknownEffect(NetworkConfig)(
-      environment.config,
+const readEnvironmentConfig = Query.fn((id: string) => {
+  const environment = RailwayApi.environment({ id });
+  return { config: environment.config, configEtag: environment.configEtag };
+});
+
+const createService = Query.fn(
+  (input: { projectId: string; environmentId: string; name: string; image: string }) => {
+    const service = RailwayApi.serviceCreate({
+      input: {
+        projectId: input.projectId,
+        environmentId: input.environmentId,
+        name: input.name,
+        source: { image: input.image },
+      },
+    });
+    return { id: service.id, name: service.name };
+  },
+);
+
+const deleteService = Query.fn((id: string) => RailwayApi.serviceDelete({ id }));
+
+const commitEnvironmentPatch = Query.fn((environmentId: string, patch: unknown) =>
+  RailwayApi.environmentPatchCommit({ environmentId, patch }),
+);
+
+const deployServiceInstance = Query.fn((environmentId: string, serviceId: string) =>
+  RailwayApi.serviceInstanceDeploy({ environmentId, serviceId }),
+);
+
+const readPrivateNetworks = Query.fn((environmentId: string) =>
+  RailwayApi.privateNetworks({ environmentId }).pipe(
+    Query.map((network) => ({
+      publicId: network.publicId,
+      name: network.name,
+      dnsName: network.dnsName,
+      deletedAt: network.deletedAt,
+    })),
+  ),
+);
+
+const readEnvironmentPatches = Query.fn((environmentId: string) =>
+  RailwayApi.environmentPatches({ environmentId, first: 5 }).pipe(
+    Query.map((patch) => ({ status: patch.status, lastAppliedError: patch.lastAppliedError })),
+  ),
+);
+
+const readPrivateNetworkEndpoint = Query.fn(
+  (input: { environmentId: string; privateNetworkId: string; serviceId: string }) =>
+    RailwayApi.privateNetworkEndpoint(input).pipe(
+      Query.map((endpoint) => ({
+        publicId: endpoint.publicId,
+        dnsName: endpoint.dnsName,
+        deletedAt: endpoint.deletedAt,
+        syncStatus: endpoint.syncStatus,
+      })),
     ),
+);
+
+const readConfig = Effect.fn(function* (environmentId: string) {
+  const environment = yield* readEnvironmentConfig(environmentId);
+  return {
+    config: yield* Schema.decodeUnknownEffect(NetworkConfig)(environment.config),
     etag: environment.configEtag,
   };
 });
@@ -76,35 +125,24 @@ const readEndpoint = (input: {
   privateNetworkId: string;
   serviceId: string;
 }) =>
-  railway
-    .privateNetworkEndpoint(input, {
-      publicId: true,
-      dnsName: true,
-      deletedAt: true,
-      syncStatus: true,
-    })
-    .pipe(
-      railway.catchTags("RailwayNotFound", () => Effect.succeed(null)),
-      Effect.map((endpoint) =>
-        endpoint?.deletedAt == null &&
-        endpoint?.syncStatus !== "DELETED" &&
-        endpoint?.syncStatus !== "DELETING"
-          ? endpoint
-          : null,
-      ),
-    );
+  readPrivateNetworkEndpoint(input).pipe(
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(null)),
+    Effect.map((endpoint) =>
+      endpoint?.deletedAt == null &&
+      endpoint?.syncStatus !== "DELETED" &&
+      endpoint?.syncStatus !== "DELETING"
+        ? endpoint
+        : null,
+    ),
+  );
 
-const waitForEndpoint = (
-  input: Parameters<typeof readEndpoint>[0],
-  dnsName?: string,
-) =>
+const waitForEndpoint = (input: Parameters<typeof readEndpoint>[0], dnsName?: string) =>
   readEndpoint(input).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       times: 8,
       until: (endpoint) =>
-        endpoint != null &&
-        (dnsName === undefined || endpoint.dnsName === dnsName),
+        endpoint != null && (dnsName === undefined || endpoint.dnsName === dnsName),
     }),
     Effect.tap((endpoint) =>
       Effect.sync(() => {
@@ -114,18 +152,9 @@ const waitForEndpoint = (
     ),
   );
 
-const setPrefix = (
-  environmentId: string,
-  serviceId: string,
-  prefix: string | null,
-) =>
-  railway.environmentPatchCommit({
-    environmentId,
-    patch: {
-      services: {
-        [serviceId]: { networking: { privateNetworkEndpoint: prefix } },
-      },
-    },
+const setPrefix = (environmentId: string, serviceId: string, prefix: string | null) =>
+  commitEnvironmentPatch(environmentId, {
+    services: { [serviceId]: { networking: { privateNetworkEndpoint: prefix } } },
   });
 
 test.provider(
@@ -136,35 +165,26 @@ test.provider(
       const partition = yield* stack.deploy(suitePartition);
       const environmentId = partition.environment.environmentId;
       const service = yield* Effect.acquireRelease(
-        railway.createService(
-          {
-            input: {
-              projectId: partition.project.projectId,
-              environmentId,
-              name: "private-network-disable-fixture",
-              source: { image: "nginx:alpine" },
-            },
-          },
-          { id: true },
-        ),
+        createService({
+          projectId: partition.project.projectId,
+          environmentId,
+          name: "private-network-disable-fixture",
+          image: "nginx:alpine",
+        }),
         (service) =>
-          railway.deleteService({ id: service.id }).pipe(
-            railway.catchTags("RailwayNotFound", () => Effect.void),
+          deleteService(service.id).pipe(
+            Effect.catchTag("RailwayNotFound", () => Effect.void),
             Effect.orDie,
           ),
       );
-      const [platformNetwork] = yield* railway.privateNetworks(
-        { environmentId },
-        { publicId: true },
-      );
+      const [platformNetwork] = yield* readPrivateNetworks(environmentId);
       yield* waitForEndpoint({
         environmentId,
         privateNetworkId: platformNetwork!.publicId,
         serviceId: service.id,
       });
-      const disablePatch = yield* railway.environmentPatchCommit({
-        environmentId,
-        patch: { privateNetworkDisabled: true },
+      const disablePatch = yield* commitEnvironmentPatch(environmentId, {
+        privateNetworkDisabled: true,
       });
       yield* Effect.logInfo("Private-network disable commit", { disablePatch });
       const disabled = yield* readConfig(environmentId).pipe(
@@ -176,14 +196,8 @@ test.provider(
       );
       yield* Effect.logInfo("Private-network disabled state", {
         privateNetworkDisabled: disabled.config.privateNetworkDisabled,
-        patches: yield* railway.environmentPatches(
-          { environmentId, first: 5 },
-          { edges: { node: { status: true, lastAppliedError: true } } },
-        ),
-        networks: yield* railway.privateNetworks(
-          { environmentId },
-          { name: true, publicId: true, deletedAt: true },
-        ),
+        patches: yield* readEnvironmentPatches(environmentId),
+        networks: yield* readPrivateNetworks(environmentId),
       });
       expect(disabled.config.privateNetworkDisabled).toBe(true);
 
@@ -211,15 +225,10 @@ test.provider(
       expect(created.network.previousPrivateNetworkDisabled).toBe(true);
       const enabled = yield* readConfig(environmentId);
       expect(enabled.config.privateNetworkDisabled).toBe(false);
-      const networks = yield* railway.privateNetworks(
-        { environmentId },
-        { publicId: true, name: true, dnsName: true, deletedAt: true },
-      );
+      const networks = yield* readPrivateNetworks(environmentId);
       expect(
         networks.find(
-          (network) =>
-            network.publicId === created.network.publicId &&
-            network.deletedAt == null,
+          (network) => network.publicId === created.network.publicId && network.deletedAt == null,
         ),
       ).toMatchObject({ name: "railway", dnsName: created.network.dnsName });
 
@@ -237,34 +246,29 @@ test.provider(
 
       // Legacy state cannot establish what the environment used to contain.
       const { previousPrivateNetworkDisabled: _, ...legacy } = repeated.network;
-      yield* provider.delete({
-        ...lifecycle("Mesh"),
-        olds: props,
-        output: legacy,
-      });
+      yield* provider.delete({ ...lifecycle("Mesh"), olds: props, output: legacy });
       expect((yield* readConfig(environmentId)).etag).toBe(enabled.etag);
-      expect(
-        (yield* readConfig(environmentId)).config.privateNetworkDisabled,
-      ).toBe(false);
+      expect((yield* readConfig(environmentId)).config.privateNetworkDisabled).toBe(false);
 
       const retained = yield* stack.deploy(suitePartition);
       expect(retained.environment.environmentId).toBe(environmentId);
       const restored = yield* readConfig(environmentId);
       expect(restored.config.privateNetworkDisabled).toBe(true);
       for (let attempt = 0; attempt < 2; attempt++) {
-        yield* provider.delete({
-          ...lifecycle("Mesh"),
-          olds: props,
-          output: repeated.network,
-        });
+        yield* provider.delete({ ...lifecycle("Mesh"), olds: props, output: repeated.network });
       }
       expect((yield* readConfig(environmentId)).etag).toBe(restored.etag);
-    }).pipe(
-      Effect.scoped,
-      Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
-      logLevel,
-    ),
-  { timeout: 120_000 },
+    }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.orDie)), logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:privatenetwork",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -276,17 +280,12 @@ test.provider(
       const environmentId = base.environment.environmentId;
 
       yield* Effect.acquireUseRelease(
-        railway.createService(
-          {
-            input: {
-              projectId: base.project.projectId,
-              environmentId,
-              name: "private-network-fixture",
-              source: { image: "nginx:alpine" },
-            },
-          },
-          { id: true, name: true },
-        ),
+        createService({
+          projectId: base.project.projectId,
+          environmentId,
+          name: "private-network-fixture",
+          image: "nginx:alpine",
+        }),
         (service) =>
           Effect.gen(function* () {
             const serviceRef = { serviceId: service.id, name: service.name };
@@ -296,22 +295,16 @@ test.provider(
               serviceId: service.id,
             };
             if ((yield* readEndpoint(input)) === null) {
-              yield* railway.serviceInstanceDeploy({
-                environmentId,
-                serviceId: service.id,
-              });
+              yield* deployServiceInstance(environmentId, service.id);
             }
             const platformEndpoint = yield* waitForEndpoint(input);
             const domainKey = yield* Effect.sync(() => crypto.randomUUID());
-            yield* railway.environmentPatchCommit({
-              environmentId,
-              patch: {
-                services: {
-                  [service.id]: {
-                    networking: {
-                      privateNetworkEndpoint: "original",
-                      serviceDomains: { [domainKey]: {} },
-                    },
+            yield* commitEnvironmentPatch(environmentId, {
+              services: {
+                [service.id]: {
+                  networking: {
+                    privateNetworkEndpoint: "original",
+                    serviceDomains: { [domainKey]: {} },
                   },
                 },
               },
@@ -319,26 +312,20 @@ test.provider(
             yield* waitForEndpoint(input, "original");
             const baseline = yield* readConfig(environmentId);
             const baselineDomains =
-              baseline.config.services?.[service.id]?.networking
-                ?.serviceDomains;
+              baseline.config.services?.[service.id]?.networking?.serviceDomains;
             expect(baselineDomains).toBeDefined();
-            expect(Object.keys(baselineDomains ?? {}).length).toBeGreaterThan(
-              0,
-            );
+            expect(Object.keys(baselineDomains ?? {}).length).toBeGreaterThan(0);
 
             const deployEndpoint = (name?: string) =>
               stack
                 .deploy(
                   Effect.gen(function* () {
                     const partition = yield* networkStack;
-                    const endpoint = yield* Railway.PrivateNetworkEndpoint(
-                      "ApiDns",
-                      {
-                        network: partition.network,
-                        service: serviceRef,
-                        ...(name === undefined ? {} : { name }),
-                      },
-                    );
+                    const endpoint = yield* Railway.PrivateNetworkEndpoint("ApiDns", {
+                      network: partition.network,
+                      service: serviceRef,
+                      ...(name === undefined ? {} : { name }),
+                    });
                     return { ...partition, endpoint };
                   }),
                 )
@@ -349,8 +336,8 @@ test.provider(
                         Effect.logInfo("Endpoint configuration after failure", {
                           requested: name ?? null,
                           observed:
-                            config.services?.[service.id]?.networking
-                              ?.privateNetworkEndpoint ?? null,
+                            config.services?.[service.id]?.networking?.privateNetworkEndpoint ??
+                            null,
                         }),
                       ),
                     ),
@@ -362,30 +349,20 @@ test.provider(
                 const networking = config.services?.[service.id]?.networking;
                 expect(networking?.privateNetworkEndpoint ?? null).toBe(prefix);
                 expect(networking?.serviceDomains).toEqual(baselineDomains);
-                expect(config.privateNetworkDisabled).toBe(
-                  baseline.config.privateNetworkDisabled,
-                );
+                expect(config.privateNetworkDisabled).toBe(baseline.config.privateNetworkDisabled);
               });
-            const provider = yield* Provider.findProvider(
-              Railway.PrivateNetworkEndpoint,
-            );
+            const provider = yield* Provider.findProvider(Railway.PrivateNetworkEndpoint);
             const created = yield* deployEndpoint("api");
             expect(created.endpoint.publicId).toBe(platformEndpoint?.publicId);
             expect(created.endpoint.serviceId).toBe(service.id);
             expect(created.endpoint.environmentId).toBe(environmentId);
-            expect(created.endpoint.privateNetworkId).toBe(
-              base.network.publicId,
-            );
+            expect(created.endpoint.privateNetworkId).toBe(base.network.publicId);
             expect(created.endpoint.previousDnsPrefix).toBe("original");
             expect(created.endpoint.dnsName).toBe("api");
             yield* waitForEndpoint(input, created.endpoint.dnsName);
             yield* assertConfig("api");
 
-            const props = {
-              network: created.network,
-              service: serviceRef,
-              name: "api",
-            };
+            const props = { network: created.network, service: serviceRef, name: "api" };
             const refreshed = yield* provider.read!({
               ...lifecycle("ApiDns"),
               olds: props,
@@ -400,21 +377,13 @@ test.provider(
             const beforeLegacyDelete = yield* readConfig(environmentId);
             const { previousDnsPrefix: _, ...legacy } = repeated.endpoint;
             const legacyDeletion = yield* provider
-              .delete({
-                ...lifecycle("ApiDns"),
-                olds: props,
-                output: legacy,
-              })
+              .delete({ ...lifecycle("ApiDns"), olds: props, output: legacy })
               .pipe(Effect.result);
             expect(legacyDeletion).toMatchObject({
               _tag: "Failure",
-              failure: {
-                _tag: "Railway.PrivateNetworkEndpointRestoreUnavailable",
-              },
+              failure: { _tag: "Railway.PrivateNetworkEndpointRestoreUnavailable" },
             });
-            expect((yield* readConfig(environmentId)).etag).toBe(
-              beforeLegacyDelete.etag,
-            );
+            expect((yield* readConfig(environmentId)).etag).toBe(beforeLegacyDelete.etag);
             yield* assertConfig("api");
 
             const renamed = yield* deployEndpoint("gateway");
@@ -446,9 +415,7 @@ test.provider(
                 output: reset.endpoint,
               });
             }
-            expect((yield* readConfig(environmentId)).etag).toBe(
-              afterRestore.etag,
-            );
+            expect((yield* readConfig(environmentId)).etag).toBe(afterRestore.etag);
             yield* assertConfig("original");
 
             const managedAgain = yield* deployEndpoint("api");
@@ -461,11 +428,20 @@ test.provider(
             expect(external?.publicId).toBe(created.endpoint.publicId);
           }),
         (service) =>
-          railway.deleteService({ id: service.id }).pipe(
-            railway.catchTags("RailwayNotFound", () => Effect.void),
+          deleteService(service.id).pipe(
+            Effect.catchTag("RailwayNotFound", () => Effect.void),
             Effect.orDie,
           ),
       );
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)), logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:privatenetwork",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

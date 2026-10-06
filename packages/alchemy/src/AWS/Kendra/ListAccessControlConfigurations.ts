@@ -44,7 +44,6 @@ export interface ListAccessControlConfigurations extends Binding.Service<
     >
   >
 > {}
-export const ListAccessControlConfigurations =
-  Binding.Service<ListAccessControlConfigurations>(
-    "AWS.Kendra.ListAccessControlConfigurations",
-  );
+export const ListAccessControlConfigurations = Binding.Service<ListAccessControlConfigurations>(
+  "AWS.Kendra.ListAccessControlConfigurations",
+);

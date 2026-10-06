@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { IssuingCard } from "./IssuingCard.ts";
 
-export interface UpdateIssuingCardRequest extends Omit<
-  DistilledUpdateIssuingCardRequest,
-  "card"
-> {}
+export interface UpdateIssuingCardRequest extends Omit<DistilledUpdateIssuingCardRequest, "card"> {}
 
 /**
  * Update a bound Stripe Issuing Card over HTTP.
@@ -24,6 +21,7 @@ export interface UpdateIssuingCardRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Issuing
  */
 export interface UpdateIssuingCard extends Binding.Service<
   UpdateIssuingCard,
@@ -33,14 +31,8 @@ export interface UpdateIssuingCard extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateIssuingCardRequest,
-    ) => Effect.Effect<
-      StripeIssuingCard,
-      UpdateIssuingCardError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeIssuingCard, UpdateIssuingCardError, RuntimeContext>
   >
 > {}
 
-export const UpdateIssuingCard = Binding.Service<UpdateIssuingCard>(
-  "Stripe.UpdateIssuingCard",
-);
+export const UpdateIssuingCard = Binding.Service<UpdateIssuingCard>("Stripe.UpdateIssuingCard");

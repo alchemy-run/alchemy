@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { RealtimeLogConfig } from "@/AWS/CloudFront";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { RealtimeLogConfig } from "@/AWS/CloudFront";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -42,16 +42,11 @@ const logDeliveryRole = (stream: AWS.Kinesis.Stream) =>
 
 const assertConfigGone = (name: string) =>
   cloudfront.getRealtimeLogConfig({ Name: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error("realtime log config still exists")),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error("realtime log config still exists"))),
     Effect.catchTag("NoSuchRealtimeLogConfig", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -117,7 +112,16 @@ test.provider(
       yield* stack.destroy();
       yield* assertConfigGone(created.name);
     }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudfront",
+      "provider:aws:iam",
+      "provider:aws:kinesis",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test.provider(
@@ -179,5 +183,14 @@ test.provider(
       yield* stack.destroy();
       yield* assertConfigGone("alchemy-test-rtlc-b");
     }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:cloudfront",
+      "provider:aws:iam",
+      "provider:aws:kinesis",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );

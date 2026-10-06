@@ -1,5 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare";
 
 export const RollbackResults = Cloudflare.R2.Bucket("WorkflowRollbackResults", {
   forceDestroy: true,
@@ -31,25 +31,21 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
 
     return Effect.fn(function* (input: {
       value: string;
+      ready?: boolean;
       rollback?: boolean;
       scenario?: (typeof failureScenarios)[number];
     }) {
+      if (input.ready) return { ready: true };
       const event = yield* Cloudflare.Workflows.WorkflowEvent;
       const triggerRollback = Cloudflare.Workflows.task(
         "fail-after-reservation",
-        Effect.die(new Error("rollback requested")),
+        Effect.fail(new Error("rollback requested")),
         { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" },
       );
 
-      if (
-        input.scenario === "timeout-zero" ||
-        input.scenario === "rollback-timeout-zero"
-      ) {
+      if (input.scenario === "timeout-zero" || input.scenario === "rollback-timeout-zero") {
         const protectedEffect = results
-          .put(
-            `${event.instanceId}/protected`,
-            JSON.stringify({ executed: true }),
-          )
+          .put(`${event.instanceId}/protected`, JSON.stringify({ executed: true }))
           .pipe(Effect.asVoid, Effect.orDie);
         yield* Cloudflare.Workflows.task(
           "zero-timeout",
@@ -72,7 +68,7 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
             yield* results
               .put(`${event.instanceId}/attempts`, JSON.stringify({ attempt }))
               .pipe(Effect.orDie);
-            return yield* Effect.die(new Error("retry budget exhausted"));
+            return yield* Effect.fail(new Error("retry budget exhausted"));
           }),
           { retries: { limit: 1, delay: "1 second", backoff: "constant" } },
         );
@@ -94,14 +90,9 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
                 const previous = object
                   ? yield* object.json<{ attempt: number }>()
                   : { attempt: 0 };
-                yield* results.put(
-                  key,
-                  JSON.stringify({ attempt: previous.attempt + 1 }),
-                );
-                return yield* Effect.die(
-                  new Error("rollback budget exhausted"),
-                );
-              }).pipe(Effect.orDie),
+                yield* results.put(key, JSON.stringify({ attempt: previous.attempt + 1 }));
+                return yield* Effect.fail(new Error("rollback budget exhausted"));
+              }),
           },
         );
         yield* triggerRollback;
@@ -135,9 +126,8 @@ export default class LocalTestWorkflow extends Cloudflare.Workflow<LocalTestWork
       const retried = yield* Cloudflare.Workflows.task(
         "retry-only",
         Effect.gen(function* () {
-          const { attempt, config } =
-            yield* Cloudflare.Workflows.WorkflowStepContext;
-          if (attempt === 1) return yield* Effect.die(new Error("retry once"));
+          const { attempt, config } = yield* Cloudflare.Workflows.WorkflowStepContext;
+          if (attempt === 1) return yield* Effect.fail(new Error("retry once"));
           return { attempt, config };
         }),
         { retries: { limit: 2, delay: "1 second", backoff: "constant" } },

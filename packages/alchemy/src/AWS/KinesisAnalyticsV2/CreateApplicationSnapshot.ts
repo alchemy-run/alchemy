@@ -32,13 +32,9 @@ export interface CreateApplicationSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateApplicationSnapshotRequest,
-    ) => Effect.Effect<
-      SVC.CreateApplicationSnapshotResponse,
-      SVC.CreateApplicationSnapshotError
-    >
+    ) => Effect.Effect<SVC.CreateApplicationSnapshotResponse, SVC.CreateApplicationSnapshotError>
   >
 > {}
-export const CreateApplicationSnapshot =
-  Binding.Service<CreateApplicationSnapshot>(
-    "AWS.KinesisAnalyticsV2.CreateApplicationSnapshot",
-  );
+export const CreateApplicationSnapshot = Binding.Service<CreateApplicationSnapshot>(
+  "AWS.KinesisAnalyticsV2.CreateApplicationSnapshot",
+);

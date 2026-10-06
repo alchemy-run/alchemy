@@ -42,13 +42,8 @@ export interface SubscribeToShard extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SubscribeToShardRequest,
-    ) => Effect.Effect<
-      Kinesis.SubscribeToShardOutput,
-      Kinesis.SubscribeToShardError
-    >
+    ) => Effect.Effect<Kinesis.SubscribeToShardOutput, Kinesis.SubscribeToShardError>
   >
 > {}
 
-export const SubscribeToShard = Binding.Service<SubscribeToShard>(
-  "AWS.Kinesis.SubscribeToShard",
-);
+export const SubscribeToShard = Binding.Service<SubscribeToShard>("AWS.Kinesis.SubscribeToShard");

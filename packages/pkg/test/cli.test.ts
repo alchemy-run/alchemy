@@ -2,21 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as UrlParams from "effect/http/UrlParams";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import * as UrlParams from "effect/unstable/http/UrlParams";
-import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
-import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
-import { Policy } from "../src/Registry.ts";
 import {
-  installTag,
-  parseInstallPath,
-  tagsFor,
-} from "../src/Registry/Handler.ts";
-import {
+  selectPackages,
   dependencyLevels,
   expandBraces,
   Group,
@@ -24,6 +17,10 @@ import {
   tarballFile,
 } from "../src/cli/pack.ts";
 import { publish } from "../src/cli/publish.ts";
+import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
+import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
+import { Policy } from "../src/Registry.ts";
+import { installTag, parseInstallPath, tagsFor } from "../src/Registry/Handler.ts";
 
 describe("registry", () => {
   const run = {
@@ -37,22 +34,14 @@ describe("registry", () => {
   };
 
   test("runs on the repository's own commits get every tag", () => {
-    expect(tagsFor(run)).toEqual([
-      run.headSha,
-      "abcdef0",
-      "pr:7",
-      "pr:7:abcdef0",
-      "branch:feat/x",
-    ]);
+    expect(tagsFor(run)).toEqual([run.headSha, "abcdef0", "pr:7", "pr:7:abcdef0", "branch:feat/x"]);
     expect(tagsFor({ ...run, pr: null, headBranch: "main" })).toEqual([
       run.headSha,
       "abcdef0",
       "branch:main",
     ]);
     expect(installTag(run)).toBe("pr:7:abcdef0");
-    expect(installTag({ ...run, pr: null, headBranch: "main" })).toBe(
-      "abcdef0",
-    );
+    expect(installTag({ ...run, pr: null, headBranch: "main" })).toBe("abcdef0");
   });
 
   test("runs from forks get only their pull request revision tag", () => {
@@ -68,17 +57,21 @@ describe("registry", () => {
       name: "alchemy",
       tag: "pr:7:abcdef0",
     });
-    expect(
-      parseInstallPath("/@alchemy.run/pkg/branch:feat/x", undefined),
-    ).toEqual({ kind: "tag", name: "@alchemy.run/pkg", tag: "branch:feat/x" });
+    expect(parseInstallPath("/@alchemy.run/pkg/branch:feat/x", undefined)).toEqual({
+      kind: "tag",
+      name: "@alchemy.run/pkg",
+      tag: "branch:feat/x",
+    });
     expect(parseInstallPath("/core/abc1234", "@distilled.cloud")).toEqual({
       kind: "tag",
       name: "@distilled.cloud/core",
       tag: "abc1234",
     });
-    expect(
-      parseInstallPath(`/alchemy/-/${"a".repeat(64)}.tgz`, undefined),
-    ).toEqual({ kind: "tarball", name: "alchemy", sha256: "a".repeat(64) });
+    expect(parseInstallPath(`/alchemy/-/${"a".repeat(64)}.tgz`, undefined)).toEqual({
+      kind: "tarball",
+      name: "alchemy",
+      sha256: "a".repeat(64),
+    });
     for (const path of ["/", "/alchemy", "/alchemy/", "/alchemy/%E0%A4%A"]) {
       expect(parseInstallPath(path, undefined)).toBeUndefined();
     }
@@ -170,9 +163,9 @@ describe("workspace", () => {
       pattern: "./packages/{a,b}",
       collapsed: true,
     });
-    expect(
-      encode({ name: "Distilled", pattern: "./submodules/*", collapsed: true }),
-    ).toBe("Distilled[Collapsed]=./submodules/*");
+    expect(encode({ name: "Distilled", pattern: "./submodules/*", collapsed: true })).toBe(
+      "Distilled[Collapsed]=./submodules/*",
+    );
     for (const spec of ["Distilled[Hidden]=./x", "=x", "Alchemy=", "Alchemy"]) {
       expect(() => decode(spec)).toThrow("NAME=GLOB or NAME[Collapsed]=GLOB");
     }
@@ -198,12 +191,7 @@ describe("tarball", () => {
         ]),
       ),
     );
-    expect(levels).toEqual([
-      ["core", "utils"],
-      ["runtime"],
-      ["alchemy"],
-      ["better-auth"],
-    ]);
+    expect(levels).toEqual([["core", "utils"], ["runtime"], ["alchemy"], ["better-auth"]]);
     const cycle = await Effect.runPromise(
       Effect.result(
         dependencyLevels(
@@ -228,18 +216,13 @@ describe("tarball", () => {
       exports: { ".": "./src/index.ts" },
     });
     const links = new Map([
-      [
-        "@distilled.cloud/core",
-        "https://pkg.ing/@distilled.cloud/core/-/aa.tgz",
-      ],
+      ["@distilled.cloud/core", "https://pkg.ing/@distilled.cloud/core/-/aa.tgz"],
       [
         "@alchemy.run/frontend-frameworks",
         "https://pkg.ing/@alchemy.run/frontend-frameworks/-/bb.tgz",
       ],
     ]);
-    const result = await Effect.runPromise(
-      rewriteDependencies(manifest, links),
-    );
+    const result = await Effect.runPromise(rewriteDependencies(manifest, links));
     const rewritten = JSON.parse(result.text);
     expect(Object.keys(rewritten)).toEqual(Object.keys(JSON.parse(manifest)));
     expect(rewritten.dependencies).toEqual({
@@ -260,9 +243,7 @@ describe("tarball", () => {
 
 describe("Api", () => {
   test("manifest artifact name carries the manifest hash", () => {
-    expect(manifestArtifactName("ab".repeat(32))).toBe(
-      `pkg-manifest-${"ab".repeat(32)}`,
-    );
+    expect(manifestArtifactName("ab".repeat(32))).toBe(`pkg-manifest-${"ab".repeat(32)}`);
   });
 });
 
@@ -271,9 +252,7 @@ const env = {
   GITHUB_RUN_ID: "123",
   GITHUB_RUN_ATTEMPT: "2",
 };
-const previous = Object.fromEntries(
-  Object.keys(env).map((key) => [key, process.env[key]]),
-);
+const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
 beforeAll(() => Object.assign(process.env, env));
 afterAll(() => {
   for (const [key, value] of Object.entries(previous)) {
@@ -299,9 +278,7 @@ const manifest: Manifest = {
 };
 const missing = {
   _tag: "MissingTarballs",
-  missing: [
-    { name: manifest.packages[1]!.name, sha256: manifest.packages[1]!.sha256 },
-  ],
+  missing: [{ name: manifest.packages[1]!.name, sha256: manifest.packages[1]!.sha256 }],
 };
 const published = {
   packages: manifest.packages.map(({ name, group }) => ({
@@ -312,12 +289,7 @@ const published = {
   })),
 };
 
-for (const scenario of [
-  "already present",
-  "upload",
-  "still missing",
-  "rejected",
-] as const) {
+for (const scenario of ["already present", "upload", "still missing", "rejected"] as const) {
   test(`publish: ${scenario}`, async () => {
     const requests: string[] = [];
     const reads: string[] = [];
@@ -325,9 +297,7 @@ for (const scenario of [
     const http = HttpClient.make((request) =>
       Effect.sync(() => {
         const query = UrlParams.toString(request.urlParams);
-        requests.push(
-          `${request.method} ${request.url}${query ? `?${query}` : ""}`,
-        );
+        requests.push(`${request.method} ${request.url}${query ? `?${query}` : ""}`);
         if (request.method === "PUT") {
           expect(request.headers["content-length"]).toBe("3");
           return HttpClientResponse.fromWeb(
@@ -345,8 +315,7 @@ for (const scenario of [
                 { _tag: "RunNotInProgress", message: "run is not in progress" },
                 { status: 409 },
               )
-            : scenario === "still missing" ||
-                (scenario === "upload" && attempts === 1)
+            : scenario === "still missing" || (scenario === "upload" && attempts === 1)
               ? Response.json(missing, { status: 409 })
               : Response.json(published);
         return HttpClientResponse.fromWeb(request, response);
@@ -400,3 +369,93 @@ for (const scenario of [
     }
   });
 }
+
+describe("partial publication", () => {
+  const packages = ["core", "aws", "cloudflare", "app", "unrelated"].map((name) => ({
+    name,
+    version: "1.0.0",
+    dir: `packages/${name}`,
+    absDir: `/workspace/packages/${name}`,
+    group: "SDKs",
+  }));
+  const deps = new Map([
+    ["core", new Set<string>()],
+    ["aws", new Set(["core"])],
+    ["cloudflare", new Set(["core"])],
+    ["app", new Set(["cloudflare"])],
+    ["unrelated", new Set<string>()],
+  ]);
+  const names = (files: string[], extra: string[] = []) =>
+    selectPackages(packages, deps, files, extra).map((pkg) => pkg.name);
+
+  test("includes transitive dependents and dependencies without unrelated siblings", () => {
+    expect(names(["packages/cloudflare/src/r2.ts"])).toEqual(["core", "cloudflare", "app"]);
+    expect(names(["packages/aws/src/s3.ts", "packages/cloudflare/src/r2.ts"])).toEqual([
+      "core",
+      "aws",
+      "cloudflare",
+      "app",
+    ]);
+    expect(names(["packages/core/src/index.ts"])).toEqual(["core", "aws", "cloudflare", "app"]);
+  });
+
+  test("ignores unrelated paths and respects directory boundaries", () => {
+    expect(names(["README.md", "packages/aws-other/index.ts"])).toEqual([]);
+    expect(names([])).toEqual([]);
+  });
+
+  test("shared build inputs and configured prefixes select everything", () => {
+    for (const file of [
+      "pnpm-lock.yaml",
+      "package.json",
+      ".github/workflows/pkg.yml",
+      "scripts/build.ts",
+    ]) {
+      expect(names([file], ["scripts/**"])).toEqual(packages.map((pkg) => pkg.name));
+    }
+    expect(names(["scripts-other/build.ts"], ["scripts/**"])).toEqual([]);
+  });
+
+  test("submodule gitlink changes select contained packages", () => {
+    expect(
+      selectPackages(
+        packages.map((pkg) => ({ ...pkg, dir: `submodules/sdk/${pkg.dir}` })),
+        deps,
+        ["submodules/sdk"],
+      ).length,
+    ).toBe(packages.length);
+  });
+
+  test("dependency cycles terminate selection and are rejected by packing order", async () => {
+    const cycle = new Map([
+      ["core", new Set(["aws"])],
+      ["aws", new Set(["core"])],
+    ]);
+    expect(
+      selectPackages(packages, cycle, ["packages/aws/index.ts"]).map((pkg) => pkg.name),
+    ).toEqual(["core", "aws"]);
+    expect((await Effect.runPromise(Effect.result(dependencyLevels(cycle))))._tag).toBe("Failure");
+  });
+
+  test("empty manifests do not contact the registry", async () => {
+    const result = await Effect.runPromise(
+      publish({
+        cwd: "/workspace",
+        dir: ".pkg",
+        registry: manifest.registry,
+      }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.die("Unexpected registry request")),
+        ),
+        Effect.provide(
+          FileSystem.layerNoop({
+            readFileString: () => Effect.succeed(JSON.stringify({ ...manifest, packages: [] })),
+          }),
+        ),
+        Effect.provide(Path.layer),
+      ),
+    );
+    expect(result).toEqual({ packages: [] });
+  });
+});

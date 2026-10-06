@@ -82,6 +82,28 @@ so you can only *use* them in the inner (runtime) Effect. That's why
 `state` is yielded above but `state.storage.get(...)` lives below.
 :::
 
+## SQL migrations
+
+For objects that use SQL tables, generate and commit migration files with your
+schema changes before deploying. Load them in the outer Effect and apply them
+in the inner Effect:
+
+```typescript
+Effect.gen(function* () {
+  const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
+
+  return Effect.gen(function* () {
+    yield* migrations.apply().pipe(Effect.orDie);
+    return {};
+  });
+});
+```
+
+Pending SQL runs when each object activates, before its public methods are
+available. See [SQL migrations](/sql/effect-sql/migrations#durable-object-migrations)
+for the full setup, or pass the same `migrations` to
+[`Drizzle.DurableObject({ migrations, relations })`](/sql/drizzle/migrations#durable-object-migrations).
+
 ## Add `increment` and `get`
 
 Any function you return from the inner Effect that produces an
@@ -120,7 +142,7 @@ namespace handle:
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
@@ -151,8 +173,8 @@ by calling `getByName(...)` to obtain a typed stub, then invoking
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
@@ -202,7 +224,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
@@ -283,8 +305,8 @@ Forward the stream from the Worker's `fetch` handler. Use
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
@@ -330,7 +352,7 @@ import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({

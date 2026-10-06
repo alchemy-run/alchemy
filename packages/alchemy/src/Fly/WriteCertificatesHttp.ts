@@ -1,17 +1,10 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
-import {
-  type SecretAuth,
-  makeHttpAppBinding,
-  unwrapSecretValue,
-} from "./SecretHttp.ts";
-import {
-  WriteCertificates,
-  type WriteCertificatesClient,
-} from "./WriteCertificates.ts";
+import { type SecretAuth, makeHttpAppBinding, unwrapSecretValue } from "./SecretHttp.ts";
+import { WriteCertificates, type WriteCertificatesClient } from "./WriteCertificates.ts";
 
 /**
  * HTTP implementation of {@link WriteCertificates}. Provide it on the
@@ -27,6 +20,7 @@ import {
  * ```
  *
  * @layer
+ * @product Certificate
  * @provides Fly.WriteCertificates
  */
 export const WriteCertificatesHttp = Layer.effect(
@@ -36,10 +30,7 @@ export const WriteCertificatesHttp = Layer.effect(
       makeClient: certificatesWriteClient,
     }),
   ),
-).pipe(
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(CredentialsFromAmbientOrEnv),
-);
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromAmbientOrEnv));
 
 /** Build the client over an injectable auth and App name. */
 export const certificatesWriteClient = (
@@ -81,9 +72,7 @@ export const certificatesWriteClient = (
       );
     }),
     check: Effect.fn("Fly.Certificates.check")(function* (hostname) {
-      return yield* authorize(
-        machines.checkAppCertificate({ app_name: yield* appName, hostname }),
-      );
+      return yield* authorize(machines.checkAppCertificate({ app_name: yield* appName, hostname }));
     }),
     get: Effect.fn("Fly.Certificates.get")(function* (hostname) {
       return yield* authorize(
@@ -94,12 +83,10 @@ export const certificatesWriteClient = (
     }),
     remove: Effect.fn("Fly.Certificates.remove")(function* (hostname) {
       return yield* authorize(
-        machines
-          .deleteAppCertificate({ app_name: yield* appName, hostname })
-          .pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.asVoid,
-          ),
+        machines.deleteAppCertificate({ app_name: yield* appName, hostname }).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.asVoid,
+        ),
       );
     }),
   };

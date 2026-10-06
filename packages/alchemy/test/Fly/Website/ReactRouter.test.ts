@@ -1,20 +1,17 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
@@ -81,19 +78,18 @@ test.provider(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "REACT_ROUTER_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "REACT_ROUTER_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
 
       const appName = deployed.site.app!.appName;
       yield* stack.destroy();
       const gone = yield* waitUntilGone(appName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180000 },
+  {
+    tags: ["provider:fly", "provider:fly:machine", "provider:fly:website", "live"],
+    timeout: 180000,
+  },
 );

@@ -1,28 +1,31 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { suiteProject } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwaySdk } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
+import { suiteProject } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const readEnvironment = Query.fn((id: string, projectId: string) => {
+  const env = RailwaySdk.environment({ id, projectId });
+  return { id: env.id, name: env.name, projectId: env.projectId, deletedAt: env.deletedAt };
+});
+
+const readEnvironmentDeletedAt = Query.fn((id: string) => ({
+  deletedAt: RailwaySdk.environment({ id }).deletedAt,
+}));
 
 const waitUntilEnvGone = (environmentId: string) =>
-  railway.environment({ id: environmentId }, { deletedAt: true }).pipe(
-    Effect.map((env) =>
-      env.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+  readEnvironmentDeletedAt(environmentId).pipe(
+    Effect.map((env) => (env.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -39,9 +42,7 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const project = yield* suiteProject;
-          const environment = yield* Railway.Environment("Staging", {
-            project,
-          });
+          const environment = yield* Railway.Environment("Staging", { project });
           return { project, environment };
         }),
       );
@@ -50,9 +51,7 @@ test.provider(
       expect(created.project.environmentId).toEqual(expect.any(String));
       expect(created.environment.environmentId).toEqual(expect.any(String));
       expect(created.environment.environmentId.length).toBeGreaterThan(0);
-      expect(created.environment.environmentId).not.toEqual(
-        created.project.environmentId,
-      );
+      expect(created.environment.environmentId).not.toEqual(created.project.environmentId);
       expect(created.environment.projectId).toEqual(created.project.projectId);
       expect(created.environment.name).toEqual(expect.any(String));
       expect(created.environment.name.length).toBeGreaterThan(0);
@@ -63,40 +62,30 @@ test.provider(
         `https://railway.com/project/${created.project.projectId}?environmentId=${created.environment.environmentId}`,
       );
 
-      const fetched = yield* railway.environment(
-        {
-          id: created.environment.environmentId,
-          projectId: created.project.projectId,
-        },
-        { id: true, name: true, projectId: true, deletedAt: true },
+      const fetched = yield* readEnvironment(
+        created.environment.environmentId,
+        created.project.projectId,
       );
       expect(fetched.id).toEqual(created.environment.environmentId);
       expect(fetched.name).toEqual(created.environment.name);
       expect(fetched.projectId).toEqual(created.project.projectId);
       expect(fetched.deletedAt).toBeNull();
 
-      const production = yield* railway.environment(
-        {
-          id: created.project.environmentId,
-          projectId: created.project.projectId,
-        },
-        { id: true, deletedAt: true },
+      const production = yield* readEnvironment(
+        created.project.environmentId,
+        created.project.projectId,
       );
       expect(production.id).toEqual(created.project.environmentId);
       expect(production.deletedAt).toBeNull();
 
       const provider = yield* Provider.findProvider(Railway.Environment);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (env) => env.environmentId === created.environment.environmentId,
-      );
+      const found = listed.find((env) => env.environmentId === created.environment.environmentId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.environment.name);
       expect(found?.projectId).toEqual(created.project.projectId);
       expect(
-        listed.find(
-          (env) => env.environmentId === created.project.environmentId,
-        ),
+        listed.find((env) => env.environmentId === created.project.environmentId),
       ).toBeUndefined();
 
       const nextName =
@@ -106,40 +95,36 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const project = yield* suiteProject;
-          const environment = yield* Railway.Environment("Staging", {
-            project,
-            name: nextName,
-          });
+          const environment = yield* Railway.Environment("Staging", { project, name: nextName });
           return { project, environment };
         }),
       );
 
       expect(updated.project.projectId).toEqual(created.project.projectId);
-      expect(updated.environment.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(updated.environment.environmentId).toEqual(created.environment.environmentId);
       expect(updated.environment.name).toEqual(nextName);
       expect(updated.environment.projectId).toEqual(created.project.projectId);
-      expect(updated.environment.environmentId).not.toEqual(
-        updated.project.environmentId,
-      );
+      expect(updated.environment.environmentId).not.toEqual(updated.project.environmentId);
 
-      const fetchedUpdate = yield* railway.environment(
-        {
-          id: updated.environment.environmentId,
-          projectId: updated.project.projectId,
-        },
-        { id: true, name: true },
+      const fetchedUpdate = yield* readEnvironment(
+        updated.environment.environmentId,
+        updated.project.projectId,
       );
       expect(fetchedUpdate.id).toEqual(updated.environment.environmentId);
       expect(fetchedUpdate.name).toEqual(nextName);
 
       yield* stack.destroy();
 
-      const envGone = yield* waitUntilEnvGone(
-        created.environment.environmentId,
-      );
+      const envGone = yield* waitUntilEnvGone(created.environment.environmentId);
       expect(envGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

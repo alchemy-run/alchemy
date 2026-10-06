@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Application } from "@/AWS/AppIntegrations";
-import * as Test from "@/Test/Alchemy";
 import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Application } from "@/AWS/AppIntegrations";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,26 +15,18 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        appintegrations.getApplication({
-          Arn: "00000000-0000-0000-0000-000000000000",
-        }),
+        appintegrations.getApplication({ Arn: "00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:appintegrations", "live"] },
 );
 
 const assertGone = (arn: string) =>
   appintegrations.getApplication({ Arn: arn }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`application '${arn}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`application '${arn}' still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -61,15 +53,13 @@ test.provider(
       expect(app.namespace).toBe("com.alchemy.testapp");
 
       // Out-of-band verification via distilled.
-      const observed = yield* appintegrations.getApplication({
-        Arn: app.applicationArn,
-      });
+      const observed = yield* appintegrations.getApplication({ Arn: app.applicationArn });
       expect(observed.Name).toBe(app.applicationName);
       expect(observed.Namespace).toBe("com.alchemy.testapp");
       expect(observed.Description).toBe("alchemy application");
-      expect(
-        observed.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl,
-      ).toBe("https://example.com");
+      expect(observed.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl).toBe(
+        "https://example.com",
+      );
       expect(observed.Tags?.purpose).toBe("alchemy-test");
 
       // Update description, access URL, and permissions in place (arn/id
@@ -89,13 +79,11 @@ test.provider(
       expect(updated.applicationArn).toBe(app.applicationArn);
       expect(updated.applicationId).toBe(app.applicationId);
 
-      const reobserved = yield* appintegrations.getApplication({
-        Arn: app.applicationArn,
-      });
+      const reobserved = yield* appintegrations.getApplication({ Arn: app.applicationArn });
       expect(reobserved.Description).toBe("alchemy application v2");
-      expect(
-        reobserved.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl,
-      ).toBe("https://updated.example.com");
+      expect(reobserved.ApplicationSourceConfig?.ExternalUrlConfig?.AccessUrl).toBe(
+        "https://updated.example.com",
+      );
       expect(reobserved.Permissions).toEqual(["User.Details.View"]);
       expect(reobserved.Tags?.phase).toBe("two");
 
@@ -119,5 +107,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertGone(replaced.applicationArn);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:appintegrations", "live"], timeout: 240_000 },
 );

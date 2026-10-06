@@ -28,8 +28,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const NAME_MAX_LENGTH = 1000;
 const LIST_PAGE_SIZE = 100;
@@ -245,10 +245,9 @@ export type TerminalLocation = Resource<
  * ```
  *
  * @resource
+ * @product Terminal
  */
-export const TerminalLocation = Resource<TerminalLocation>(
-  "Stripe.TerminalLocation",
-);
+export const TerminalLocation = Resource<TerminalLocation>("Stripe.TerminalLocation");
 
 export class TerminalLocationNotResolved extends Data.TaggedError(
   "Stripe.TerminalLocationNotResolved",
@@ -262,27 +261,18 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const optionalString = (
-  value: string | null | undefined,
-): string | undefined => (value == null || value === "" ? undefined : value);
+const optionalString = (value: string | null | undefined): string | undefined =>
+  value == null || value === "" ? undefined : value;
 
 const fromObservedAddress = (address: Address): TerminalLocationAddress => ({
   country: address.country ?? "",
-  ...(optionalString(address.city) !== undefined
-    ? { city: optionalString(address.city) }
-    : {}),
-  ...(optionalString(address.line1) !== undefined
-    ? { line1: optionalString(address.line1) }
-    : {}),
-  ...(optionalString(address.line2) !== undefined
-    ? { line2: optionalString(address.line2) }
-    : {}),
+  ...(optionalString(address.city) !== undefined ? { city: optionalString(address.city) } : {}),
+  ...(optionalString(address.line1) !== undefined ? { line1: optionalString(address.line1) } : {}),
+  ...(optionalString(address.line2) !== undefined ? { line2: optionalString(address.line2) } : {}),
   ...(optionalString(address.postal_code) !== undefined
     ? { postalCode: optionalString(address.postal_code) }
     : {}),
-  ...(optionalString(address.state) !== undefined
-    ? { state: optionalString(address.state) }
-    : {}),
+  ...(optionalString(address.state) !== undefined ? { state: optionalString(address.state) } : {}),
 });
 
 const fromObservedJapanAddress = (
@@ -290,9 +280,7 @@ const fromObservedJapanAddress = (
 ): TerminalLocationJapanAddress | undefined => {
   if (address === undefined) return undefined;
   const mapped: TerminalLocationJapanAddress = {
-    ...(optionalString(address.city) !== undefined
-      ? { city: optionalString(address.city) }
-      : {}),
+    ...(optionalString(address.city) !== undefined ? { city: optionalString(address.city) } : {}),
     ...(optionalString(address.country) !== undefined
       ? { country: optionalString(address.country) }
       : {}),
@@ -308,23 +296,17 @@ const fromObservedJapanAddress = (
     ...(optionalString(address.state) !== undefined
       ? { state: optionalString(address.state) }
       : {}),
-    ...(optionalString(address.town) !== undefined
-      ? { town: optionalString(address.town) }
-      : {}),
+    ...(optionalString(address.town) !== undefined ? { town: optionalString(address.town) } : {}),
   };
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 };
 
-const toWireAddress = (
-  address: TerminalLocationAddress,
-): CreateTerminalLocationRequestAddress => ({
+const toWireAddress = (address: TerminalLocationAddress): CreateTerminalLocationRequestAddress => ({
   country: address.country,
   ...(address.city !== undefined ? { city: address.city } : {}),
   ...(address.line1 !== undefined ? { line1: address.line1 } : {}),
   ...(address.line2 !== undefined ? { line2: address.line2 } : {}),
-  ...(address.postalCode !== undefined
-    ? { postal_code: address.postalCode }
-    : {}),
+  ...(address.postalCode !== undefined ? { postal_code: address.postalCode } : {}),
   ...(address.state !== undefined ? { state: address.state } : {}),
 });
 
@@ -335,17 +317,14 @@ const toWireJapanAddress = (
   ...(address.country !== undefined ? { country: address.country } : {}),
   ...(address.line1 !== undefined ? { line1: address.line1 } : {}),
   ...(address.line2 !== undefined ? { line2: address.line2 } : {}),
-  ...(address.postalCode !== undefined
-    ? { postal_code: address.postalCode }
-    : {}),
+  ...(address.postalCode !== undefined ? { postal_code: address.postalCode } : {}),
   ...(address.state !== undefined ? { state: address.state } : {}),
   ...(address.town !== undefined ? { town: address.town } : {}),
 });
 
 const isDeletedLocation = (
   value: StripeTerminalLocation | DeletedTerminalLocation,
-): value is DeletedTerminalLocation =>
-  "deleted" in value && value.deleted === true;
+): value is DeletedTerminalLocation => "deleted" in value && value.deleted === true;
 
 const asLocation = (
   value: StripeTerminalLocation | DeletedTerminalLocation | undefined,
@@ -354,9 +333,7 @@ const asLocation = (
   return value;
 };
 
-const toAttrs = (
-  location: StripeTerminalLocation,
-): TerminalLocationAttributes => ({
+const toAttrs = (location: StripeTerminalLocation): TerminalLocationAttributes => ({
   id: location.id,
   displayName: location.display_name,
   address: fromObservedAddress(location.address),
@@ -370,16 +347,10 @@ const toAttrs = (
   livemode: location.livemode,
 });
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
-      displayName ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
+      displayName ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
     );
   });
 
@@ -422,10 +393,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -470,9 +438,7 @@ export const TerminalLocationProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -486,11 +452,7 @@ export const TerminalLocationProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const metadata = yield* desiredMetadata(id, news.metadata);
       const desiredPhone = news.phone ?? "";
       const desiredConfig = news.configurationOverrides ?? "";
@@ -517,9 +479,7 @@ export const TerminalLocationProvider = () =>
           ...(news.addressKanji !== undefined
             ? { address_kanji: toWireJapanAddress(news.addressKanji) }
             : {}),
-          ...(desiredConfig.length > 0
-            ? { configuration_overrides: desiredConfig }
-            : {}),
+          ...(desiredConfig.length > 0 ? { configuration_overrides: desiredConfig } : {}),
           ...(desiredDisplayNameKana.length > 0
             ? { display_name_kana: desiredDisplayNameKana }
             : {}),
@@ -542,30 +502,22 @@ export const TerminalLocationProvider = () =>
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = current.display_name !== displayName;
-      const addressChanged = !deepEqual(
-        fromObservedAddress(current.address),
-        news.address,
-        { stripNullish: true },
-      );
+      const addressChanged = !deepEqual(fromObservedAddress(current.address), news.address, {
+        stripNullish: true,
+      });
       const addressKanaChanged =
         news.addressKana !== undefined &&
-        !deepEqual(
-          fromObservedJapanAddress(current.address_kana),
-          news.addressKana,
-          { stripNullish: true },
-        );
+        !deepEqual(fromObservedJapanAddress(current.address_kana), news.addressKana, {
+          stripNullish: true,
+        });
       const addressKanjiChanged =
         news.addressKanji !== undefined &&
-        !deepEqual(
-          fromObservedJapanAddress(current.address_kanji),
-          news.addressKanji,
-          { stripNullish: true },
-        );
+        !deepEqual(fromObservedJapanAddress(current.address_kanji), news.addressKanji, {
+          stripNullish: true,
+        });
       const phoneChanged = (current.phone ?? "") !== desiredPhone;
-      const configChanged =
-        (current.configuration_overrides ?? "") !== desiredConfig;
-      const displayNameKanaChanged =
-        (current.display_name_kana ?? "") !== desiredDisplayNameKana;
+      const configChanged = (current.configuration_overrides ?? "") !== desiredConfig;
+      const displayNameKanaChanged = (current.display_name_kana ?? "") !== desiredDisplayNameKana;
       const displayNameKanjiChanged =
         (current.display_name_kanji ?? "") !== desiredDisplayNameKanji;
 
@@ -594,19 +546,13 @@ export const TerminalLocationProvider = () =>
           ? { address_kanji: toWireJapanAddress(news.addressKanji) }
           : {}),
         ...(configChanged ? { configuration_overrides: desiredConfig } : {}),
-        ...(displayNameKanaChanged
-          ? { display_name_kana: desiredDisplayNameKana }
-          : {}),
-        ...(displayNameKanjiChanged
-          ? { display_name_kanji: desiredDisplayNameKanji }
-          : {}),
+        ...(displayNameKanaChanged ? { display_name_kana: desiredDisplayNameKana } : {}),
+        ...(displayNameKanjiChanged ? { display_name_kanji: desiredDisplayNameKanji } : {}),
         ...(phoneChanged ? { phone: desiredPhone } : {}),
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

@@ -18,6 +18,7 @@ import {
  * `name` and `scope`.
  *
  * @layer
+ * @product Secrets
  * @provides Stripe.RetrieveAppsSecret
  */
 export const RetrieveAppsSecretHttp = Layer.effect(
@@ -35,24 +36,23 @@ export const RetrieveAppsSecretHttp = Layer.effect(
       const name = yield* asStringEffect(secret.name);
       const scopeType = yield* asStringEffect(secret.scope.type);
       const scopeUser = yield* asOptionalStringEffect(secret.scope.user);
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
-      return Effect.fn(`Stripe.RetrieveAppsSecret(${secret.LogicalId})`)(
-        function* (request?: { expand?: string[] }) {
-          const user = yield* scopeUser;
-          return yield* auth(
-            GetAppsSecretsFind({
-              ...(request ?? {}),
-              name: yield* name,
-              scope: {
-                type: (yield* scopeType) as AppsSecretScopeType,
-                ...(user !== undefined && user.length > 0 ? { user } : {}),
-              },
-            }),
-          );
-        },
-      );
+      return Effect.fn(`Stripe.RetrieveAppsSecret(${secret.LogicalId})`)(function* (request?: {
+        expand?: string[];
+      }) {
+        const user = yield* scopeUser;
+        return yield* auth(
+          GetAppsSecretsFind({
+            ...(request ?? {}),
+            name: yield* name,
+            scope: {
+              type: (yield* scopeType) as AppsSecretScopeType,
+              ...(user !== undefined && user.length > 0 ? { user } : {}),
+            },
+          }),
+        );
+      });
     });
   }),
 );

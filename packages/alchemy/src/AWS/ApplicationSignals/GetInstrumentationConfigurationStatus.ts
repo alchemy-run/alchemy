@@ -11,11 +11,7 @@ import type { InstrumentationConfiguration } from "./InstrumentationConfiguratio
  */
 export interface GetInstrumentationConfigurationStatusRequest extends Omit<
   appsignals.GetInstrumentationConfigurationStatusRequest,
-  | "InstrumentationType"
-  | "Service"
-  | "Environment"
-  | "SignalType"
-  | "LocationIdentifier"
+  "InstrumentationType" | "Service" | "Environment" | "SignalType" | "LocationIdentifier"
 > {}
 
 /**

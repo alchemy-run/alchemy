@@ -1,10 +1,10 @@
+import * as NodeChildProcess from "node:child_process";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as NodeChildProcess from "node:child_process";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
 import { serializeConfig } from "./internal/config.serialize.ts";
@@ -20,6 +20,14 @@ export interface WorkerdPorts {
  */
 export type OutputSink = (chunk: string, stream: "stdout" | "stderr") => void;
 
+/** How a workerd process ended after it had finished starting. */
+export interface WorkerdExit {
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  /** The last output workerd wrote to stderr before it exited. */
+  readonly stderr: string;
+}
+
 export interface ServeOptions {
   /**
    * Capture the workerd process's output instead of piping it to the parent
@@ -28,7 +36,26 @@ export interface ServeOptions {
    * instead.
    */
   readonly onOutput?: OutputSink;
+  /**
+   * Called once when the process exits after it finished starting, for
+   * example when V8 aborts on heap exhaustion. Not called when the scope
+   * closes and the process is killed on purpose.
+   */
+  readonly onExit?: (exit: WorkerdExit) => void;
 }
+
+/** How much trailing stderr output is kept for {@link WorkerdExit}. */
+const STDERR_TAIL_BYTES = 4096;
+
+const makeTail = () => {
+  let text = "";
+  return {
+    push: (chunk: string) => {
+      text = (text + chunk).slice(-STDERR_TAIL_BYTES);
+    },
+    read: () => text.trim(),
+  };
+};
 
 export class Workerd extends Context.Service<
   Workerd,
@@ -57,11 +84,11 @@ interface ProcessHandle {
   /** Writes the config to the process's stdin. This can be omitted if the config is passed as an argument to the process. */
   readonly configure?: () => Effect.Effect<void, SystemError>;
   /** Waits for the process to listen on the given number of sockets. */
-  readonly control: (
-    count: number,
-  ) => Effect.Effect<Array<ControlMessage>, SystemError>;
+  readonly control: (count: number) => Effect.Effect<Array<ControlMessage>, SystemError>;
   /** Resumes with an error if the process fails to start. */
   readonly error: () => Effect.Effect<never, ConfigError | SystemError>;
+  /** Resolves once the process has exited, with the tail of its stderr. */
+  readonly exited: () => Effect.Effect<WorkerdExit>;
   /**
    * Pipes the process's stdout/stderr to the console, or to `sink` when one
    * is provided. Called after initialization is complete.
@@ -70,6 +97,23 @@ interface ProcessHandle {
   /** Kills the process. */
   readonly kill: () => void;
 }
+
+/**
+ * Environment variable holding extra V8 flags for every workerd process this
+ * package spawns, separated by whitespace. workerd runs V8 with its default
+ * heap limit (about 1.4 GB), which a large application's dev module graph
+ * can exhaust after a few hours of edits. `ALCHEMY_WORKERD_V8_FLAGS=--max-old-space-size=4096`
+ * raises that limit. Flags from the config come last, so they win when V8
+ * sees the same flag twice.
+ */
+export const V8_FLAGS_ENV = "ALCHEMY_WORKERD_V8_FLAGS";
+
+/** Splits the value of {@link V8_FLAGS_ENV} into individual flags. */
+export const parseV8Flags = (value: string | undefined): Array<string> =>
+  (value ?? "").split(/\s+/).filter((flag) => flag.length > 0);
+
+const withV8Flags = (config: Config, flags: Array<string>): Config =>
+  flags.length === 0 ? config : { ...config, v8Flags: [...flags, ...(config.v8Flags ?? [])] };
 
 const make = (
   spawn: (
@@ -82,7 +126,8 @@ const make = (
   Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
-      function* (config, args, options) {
+      function* (serveConfig, args, options) {
+        const config = withV8Flags(serveConfig, parseV8Flags(process.env[V8_FLAGS_ENV]));
         // Debug facility: dump each serve's full workerd config as JSON.
         // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
         const dumpDir = process.env.WORKERD_DUMP_CONFIG;
@@ -98,8 +143,7 @@ const make = (
           });
         }
         const socketOverride = args?.["socket-addr"];
-        const override =
-          typeof socketOverride === "string" ? socketOverride.indexOf("=") : -1;
+        const override = typeof socketOverride === "string" ? socketOverride.indexOf("=") : -1;
         const configuredAddresses = (config.sockets ?? []).flatMap((socket) => {
           const address =
             typeof socketOverride === "string" &&
@@ -130,8 +174,10 @@ const make = (
           Buffer.from(serializeConfig(config)),
           configuredAddresses,
         );
+        let killed = false;
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
+            killed = true;
             handle.kill();
           }),
         );
@@ -142,11 +188,20 @@ const make = (
           (config.sockets?.length ?? 0) +
           (typeof args?.["debug-port"] !== "undefined" ? 1 : 0) +
           (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
-        const control = yield* Effect.raceAllFirst([
-          handle.control(count),
-          handle.error(),
-        ]);
+        const control = yield* Effect.raceAllFirst([handle.control(count), handle.error()]);
         yield* handle.pipe(options?.onOutput);
+        const onExit = options?.onExit;
+        if (onExit) {
+          // The scope's finalizers run in reverse order, so this fiber is
+          // interrupted before the kill finalizer above runs; `killed` also
+          // covers an exit that lands while the scope is closing.
+          yield* handle.exited().pipe(
+            Effect.map((exit) => {
+              if (!killed) onExit(exit);
+            }),
+            Effect.forkScoped,
+          );
+        }
         const ports: WorkerdPorts = {};
         for (const message of control) {
           if (message.event === "listen") {
@@ -180,6 +235,7 @@ const makeStreamPump = (
   sink: (chunk: string) => void,
 ) => {
   const chunks: Array<string> = [];
+  const tail = makeTail();
   let target = sink;
   let forwarded = 0;
   let forwarding = false;
@@ -187,6 +243,7 @@ const makeStreamPump = (
     try {
       for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
         chunks.push(chunk);
+        tail.push(chunk);
         if (forwarding) {
           target(chunk);
           forwarded = chunks.length;
@@ -199,6 +256,8 @@ const makeStreamPump = (
   })();
   return {
     done,
+    /** The most recent output, for reporting an unexpected exit. */
+    tail: tail.read,
     /** Start forwarding, optionally redirecting to a capture sink. */
     forward: (override?: (chunk: string) => void) => {
       if (override) target = override;
@@ -235,50 +294,41 @@ const makeBun = () =>
         });
         return {
           control: (count) =>
-            Effect.callback<Array<ControlMessage>, SystemError>(
-              (resume, signal) => {
-                if (!child.stdio[3]) {
-                  return resume(
-                    new SystemError({
-                      subtag: "WorkerdSpawn",
-                      message: "The workerd process did not have a control fd.",
-                    }),
-                  );
-                }
-                const file = Bun.file(child.stdio[3]);
-                const collect = async () => {
-                  let lines = "";
-                  for await (const chunk of file
-                    .stream()
-                    .pipeThrough(new TextDecoderStream(), {
-                      signal,
-                    })) {
-                    lines += chunk;
-                    const messages = lines
-                      .split("\n")
-                      .filter((line) => line.trim() !== "")
-                      .map((line) => JSON.parse(line) as ControlMessage);
-                    if (messages.length === count) {
-                      return resume(Effect.succeed(messages));
-                    }
+            Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
+              if (!child.stdio[3]) {
+                return resume(
+                  new SystemError({
+                    subtag: "WorkerdSpawn",
+                    message: "The workerd process did not have a control fd.",
+                  }),
+                );
+              }
+              const file = Bun.file(child.stdio[3]);
+              const collect = async () => {
+                let lines = "";
+                for await (const chunk of file.stream().pipeThrough(new TextDecoderStream(), {
+                  signal,
+                })) {
+                  lines += chunk;
+                  const messages = lines
+                    .split("\n")
+                    .filter((line) => line.trim() !== "")
+                    .map((line) => JSON.parse(line) as ControlMessage);
+                  if (messages.length === count) {
+                    return resume(Effect.succeed(messages));
                   }
-                };
-                // Ignore errors here and let the error callback handle it instead.
-                // Errors here are a symptom; the error callback reports the actual cause.
-                void collect().catch(() => null);
-              },
-            ),
+                }
+              };
+              // Ignore errors here and let the error callback handle it instead.
+              // Errors here are a symptom; the error callback reports the actual cause.
+              void collect().catch(() => null);
+            }),
           error: () =>
             Effect.callback<never, ConfigError | SystemError>((resume) => {
               void stderr.done.then(async (text) => {
                 await child.exited.catch(() => null);
                 resume(
-                  classifyWorkerdError(
-                    text,
-                    child.exitCode,
-                    child.signalCode,
-                    configuredAddresses,
-                  ),
+                  classifyWorkerdError(text, child.exitCode, child.signalCode, configuredAddresses),
                 );
               });
             }),
@@ -287,6 +337,18 @@ const makeBun = () =>
               stdout.forward(sink && ((chunk) => sink(chunk, "stdout")));
               stderr.forward(sink && ((chunk) => sink(chunk, "stderr")));
             }),
+          exited: () =>
+            Effect.promise(async () => {
+              await child.exited.catch(() => null);
+              // The pipes close right after the process does; give the last
+              // stderr chunk (the fatal message) a moment to land in the tail.
+              await Promise.race([stderr.done, new Promise((resolve) => setTimeout(resolve, 500))]);
+              return {
+                exitCode: child.exitCode,
+                signal: child.signalCode,
+                stderr: stderr.tail(),
+              };
+            }),
           kill: () => child.kill("SIGKILL"),
         };
       }),
@@ -294,8 +356,9 @@ const makeBun = () =>
   );
 
 const makeNode = () =>
-  make((command, args, config, configuredAddresses) =>
-    Effect.try({
+  make((command, args, config, configuredAddresses) => {
+    const stderrTail = makeTail();
+    return Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
           env: externalEnv(),
@@ -319,8 +382,7 @@ const makeNode = () =>
             resume(
               new SystemError({
                 subtag: "WorkerdStart",
-                message:
-                  "Failed to start the Workers runtime (workerd) process.",
+                message: "Failed to start the Workers runtime (workerd) process.",
                 cause: error,
               }),
             );
@@ -334,6 +396,13 @@ const makeNode = () =>
           });
         }),
       ),
+      Effect.tap((child) =>
+        Effect.sync(() => {
+          child.stderr.on("data", (chunk: Buffer) => {
+            stderrTail.push(chunk.toString());
+          });
+        }),
+      ),
       Effect.map((child) => ({
         configure: () =>
           Effect.callback((resume) => {
@@ -341,15 +410,10 @@ const makeNode = () =>
               cause: unknown,
               message: string = "Failed to write to the workerd process stdin.",
             ) => {
-              resume(
-                new SystemError({ subtag: "WorkerdSpawn", message, cause }),
-              );
+              resume(new SystemError({ subtag: "WorkerdSpawn", message, cause }));
             };
             if (!child.stdin) {
-              return onError(
-                undefined,
-                "The workerd process did not have a stdin.",
-              );
+              return onError(undefined, "The workerd process did not have a stdin.");
             }
             child.stdin.on("error", onError);
             child.stdin.end(config, () => {
@@ -424,13 +488,11 @@ const makeNode = () =>
           const stdoutDecoder = new TextDecoder();
           const stderrDecoder = new TextDecoder();
           const onStdout = (chunk: Buffer) => {
-            if (sink)
-              sink(stdoutDecoder.decode(chunk, { stream: true }), "stdout");
+            if (sink) sink(stdoutDecoder.decode(chunk, { stream: true }), "stdout");
             else process.stdout.write(chunk);
           };
           const onStderr = (chunk: Buffer) => {
-            if (sink)
-              sink(stderrDecoder.decode(chunk, { stream: true }), "stderr");
+            if (sink) sink(stderrDecoder.decode(chunk, { stream: true }), "stderr");
             else process.stderr.write(chunk);
           };
           return Effect.acquireRelease(
@@ -445,10 +507,26 @@ const makeNode = () =>
               }),
           );
         },
+        exited: () =>
+          Effect.callback<WorkerdExit>((resume) => {
+            const onClose = (exitCode: number | null, signal: NodeJS.Signals | null) => {
+              resume(
+                Effect.succeed({
+                  exitCode,
+                  signal,
+                  stderr: stderrTail.read(),
+                }),
+              );
+            };
+            child.once("close", onClose);
+            return Effect.sync(() => {
+              child.off("close", onClose);
+            });
+          }),
         kill: () => child.kill("SIGKILL"),
       })),
-    ),
-  );
+    );
+  });
 
 // On Windows, `Bun.spawn` cannot surface extra stdio pipes: `child.stdio[3]`
 // is a numeric fd that neither `Bun.file(fd)` (EMFILE dup) nor `node:fs`
@@ -456,9 +534,7 @@ const makeNode = () =>
 // `serve` waits forever. Bun's `node:child_process` implementation handles
 // stdio[3] correctly on Windows, so route Windows through the Node spawn path.
 export const WorkerdLive = Layer.sync(Workerd, () =>
-  typeof globalThis.Bun !== "undefined" && process.platform !== "win32"
-    ? makeBun()
-    : makeNode(),
+  typeof globalThis.Bun !== "undefined" && process.platform !== "win32" ? makeBun() : makeNode(),
 );
 
 const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
@@ -492,9 +568,7 @@ const classifyWorkerdError = (
     return new ConfigError({
       subtag: "WorkerdUserScript",
       message: message ?? serviceLine,
-      hint: service
-        ? `Check the configuration for service "${service}".`
-        : undefined,
+      hint: service ? `Check the configuration for service "${service}".` : undefined,
       detail: { ...detail, service },
     });
   }
@@ -533,9 +607,7 @@ export const isAddressInUseError = (error: ConfigError | SystemError) => {
     error.subtag === "WorkerdStartFailed" &&
     Predicate.hasProperty(error.detail, "stderr") &&
     Predicate.isString(error.detail.stderr) &&
-    error.detail.stderr.includes(
-      "*** std::terminate() called with no exception",
-    )
+    error.detail.stderr.includes("*** std::terminate() called with no exception")
   ) {
     return true;
   }

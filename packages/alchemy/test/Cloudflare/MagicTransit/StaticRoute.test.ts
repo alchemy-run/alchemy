@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Transit is an entitlement-gated product — see GreTunnel.test.ts.
 // The probe test always runs and pins the typed gate tag; the lifecycle
@@ -33,10 +30,7 @@ const expectGone = (accountId: string, routeId: string) =>
     Effect.catchTag("RouteNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "RouteNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -50,59 +44,47 @@ test.provider(
 
       const canList = yield* magicTransit.listRoutes({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
-          Effect.succeed(false),
-        ),
+        Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () => Effect.succeed(false)),
       );
       if (canList) {
-        yield* Effect.logInfo(
-          "account is Magic Transit-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is Magic Transit-entitled; probe test is a no-op");
         return;
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* magicTransit
-        .listRoutes({ accountId })
-        .pipe(Effect.flip);
+      const error = yield* magicTransit.listRoutes({ accountId }).pipe(Effect.flip);
       expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(error._tag);
 
       const createError = yield* magicTransit
-        .createRoute({
-          accountId,
-          prefix: "10.100.0.0/24",
-          nexthop: "10.213.10.11",
-          priority: 100,
-        })
+        .createRoute({ accountId, prefix: "10.100.0.0/24", nexthop: "10.213.10.11", priority: 100 })
         .pipe(Effect.flip);
-      expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(
-        createError._tag,
-      );
+      expect(["MagicTransitNotOnboarded", "Forbidden"]).toContain(createError._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magictransit", "live"], timeout: 120_000 },
 );
 
 // Read-only: list() must resolve via the typed provider and return a
 // well-typed array even on unentitled accounts (the account-scoped
 // `MagicTransitNotOnboarded` gate is mapped to `[]`).
-test.provider("list returns a well-typed array of routes", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list returns a well-typed array of routes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.MagicTransit.MagicStaticRoute,
-    );
-    const all = yield* provider.list();
-    expect(Array.isArray(all)).toBe(true);
-    for (const route of all) {
-      expect(typeof route.routeId).toBe("string");
-      expect(typeof route.accountId).toBe("string");
-    }
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicStaticRoute);
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+      for (const route of all) {
+        expect(typeof route.routeId).toBe("string");
+        expect(typeof route.accountId).toBe("string");
+      }
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:magictransit", "live"] },
 );
 
 test.provider.skipIf(!entitled)(
@@ -130,9 +112,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicStaticRoute,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicStaticRoute);
       const all = yield* provider.list();
 
       const found = all.find((r) => r.routeId === route.routeId);
@@ -145,7 +125,7 @@ test.provider.skipIf(!entitled)(
 
       yield* expectGone(accountId, route.routeId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magictransit", "live"], timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitled)(
@@ -205,16 +185,12 @@ test.provider.skipIf(!entitled)(
       yield* expectGone(accountId, route.routeId);
       // The tunnel is destroyed alongside the route.
       const tunnelGone = yield* magicTransit
-        .getGreTunnel({
-          accountId,
-          greTunnelId: tunnel.tunnelId,
-          xMagicNewHcTarget: true,
-        })
+        .getGreTunnel({ accountId, greTunnelId: tunnel.tunnelId, xMagicNewHcTarget: true })
         .pipe(
           Effect.as(false),
           Effect.catchTag("GreTunnelNotFound", () => Effect.succeed(true)),
         );
       expect(tunnelGone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magictransit", "live"], timeout: 120_000 },
 );

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Studio } from "@/AWS/EMR/Studio.ts";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as emr from "@distilled.cloud/aws/emr";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Studio } from "@/AWS/EMR/Studio.ts";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -22,6 +22,7 @@ test.provider(
       );
       expect(error._tag).toBe("StudioNotFound");
     }),
+  { tags: ["provider:aws", "provider:aws:emr", "live"] },
 );
 
 // Resolve a subnet of the account's default VPC.
@@ -51,9 +52,7 @@ test.provider(
       const deploy = (description: string, s3Suffix: string) =>
         stack.deploy(
           Effect.gen(function* () {
-            const bucket = yield* AWS.S3.Bucket("StudioBackup", {
-              forceDestroy: true,
-            });
+            const bucket = yield* AWS.S3.Bucket("StudioBackup", { forceDestroy: true });
             const role = yield* AWS.IAM.Role("StudioServiceRole", {
               assumeRolePolicyDocument: {
                 Version: "2012-10-17",
@@ -74,10 +73,7 @@ test.provider(
                       // the default S3 location (incl. GetEncryptionConfiguration).
                       Effect: "Allow",
                       Action: ["s3:*"],
-                      Resource: [
-                        bucket.bucketArn,
-                        Output.interpolate`${bucket.bucketArn}/*`,
-                      ],
+                      Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
                     },
                     {
                       Effect: "Allow",
@@ -139,9 +135,7 @@ test.provider(
       expect(studio.url).toBeDefined();
 
       // Out-of-band verification via distilled.
-      const created = yield* emr.describeStudio({
-        StudioId: studio.studioId,
-      });
+      const created = yield* emr.describeStudio({ StudioId: studio.studioId });
       expect(created.Studio?.AuthMode).toBe("IAM");
       expect(created.Studio?.Description).toBe("alchemy test studio");
       expect(created.Studio?.DefaultS3Location).toContain("/studio/");
@@ -152,23 +146,26 @@ test.provider(
 
       // Update — description and default S3 location sync in place (same
       // StudioId, no replacement).
-      const { studio: updated } = yield* deploy(
-        "alchemy test studio v2",
-        "studio-v2",
-      );
+      const { studio: updated } = yield* deploy("alchemy test studio v2", "studio-v2");
       expect(updated.studioId).toBe(studio.studioId);
-      const afterUpdate = yield* emr.describeStudio({
-        StudioId: studio.studioId,
-      });
+      const afterUpdate = yield* emr.describeStudio({ StudioId: studio.studioId });
       expect(afterUpdate.Studio?.Description).toBe("alchemy test studio v2");
       expect(afterUpdate.Studio?.DefaultS3Location).toContain("/studio-v2/");
 
       // Destroy — verify gone out of band.
       yield* stack.destroy();
-      const afterDestroy = yield* Effect.flip(
-        emr.describeStudio({ StudioId: studio.studioId }),
-      );
+      const afterDestroy = yield* Effect.flip(emr.describeStudio({ StudioId: studio.studioId }));
       expect(afterDestroy._tag).toBe("StudioNotFound");
     }),
-  { timeout: 300_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ec2",
+      "provider:aws:emr",
+      "provider:aws:iam",
+      "provider:aws:s3",
+      "live",
+    ],
+    timeout: 300_000,
+  },
 );

@@ -30,12 +30,7 @@ export interface StopDiscoverer extends Binding.Service<
   (
     discoverer: Discoverer,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      schemas.StopDiscovererResponse,
-      schemas.StopDiscovererError
-    >
+    () => Effect.Effect<schemas.StopDiscovererResponse, schemas.StopDiscovererError>
   >
 > {}
-export const StopDiscoverer = Binding.Service<StopDiscoverer>(
-  "AWS.Schemas.StopDiscoverer",
-);
+export const StopDiscoverer = Binding.Service<StopDiscoverer>("AWS.Schemas.StopDiscoverer");

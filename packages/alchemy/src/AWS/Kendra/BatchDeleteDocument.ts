@@ -38,10 +38,7 @@ export interface BatchDeleteDocument extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchDeleteDocumentRequest,
-    ) => Effect.Effect<
-      kendra.BatchDeleteDocumentResponse,
-      kendra.BatchDeleteDocumentError
-    >
+    ) => Effect.Effect<kendra.BatchDeleteDocumentResponse, kendra.BatchDeleteDocumentError>
   >
 > {}
 export const BatchDeleteDocument = Binding.Service<BatchDeleteDocument>(

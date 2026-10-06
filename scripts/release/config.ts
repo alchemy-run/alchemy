@@ -68,17 +68,11 @@ function parseJsonArray(name: string, value: string): string[] {
 }
 
 export function publishableDirs(): string[] {
-  return parseJsonArray(
-    "ALCHEMY_PUBLISHABLE_DIRS",
-    required("ALCHEMY_PUBLISHABLE_DIRS"),
-  );
+  return parseJsonArray("ALCHEMY_PUBLISHABLE_DIRS", required("ALCHEMY_PUBLISHABLE_DIRS"));
 }
 
 export function publishableNames(): string[] {
-  return parseJsonArray(
-    "ALCHEMY_PUBLISHABLE_NAMES",
-    required("ALCHEMY_PUBLISHABLE_NAMES"),
-  );
+  return parseJsonArray("ALCHEMY_PUBLISHABLE_NAMES", required("ALCHEMY_PUBLISHABLE_NAMES"));
 }
 
 export function currentVersion(): string {

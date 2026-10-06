@@ -143,10 +143,7 @@ export interface EnvironmentProps {
    * `Redacted.Redacted<string>` so they never appear in logs. Updateable in
    * place.
    */
-  airflowConfigurationOptions?: Record<
-    string,
-    string | Redacted.Redacted<string>
-  >;
+  airflowConfigurationOptions?: Record<string, string | Redacted.Redacted<string>>;
   /**
    * Relative path to the plugins `.zip` in the source bucket. Updateable in
    * place.
@@ -270,19 +267,12 @@ export interface Environment extends Resource<
 export const Environment = Resource<Environment>("AWS.MWAA.Environment");
 
 // Terminal states: environment stopped converging.
-const FAILED_STATES = new Set([
-  "CREATE_FAILED",
-  "UPDATE_FAILED",
-  "UNAVAILABLE",
-  "ROLLBACK_FAILED",
-]);
+const FAILED_STATES = new Set(["CREATE_FAILED", "UPDATE_FAILED", "UNAVAILABLE", "ROLLBACK_FAILED"]);
 
 const toModuleInput = (
   config: ModuleLoggingConfig | undefined,
 ): mwaa.ModuleLoggingConfigurationInput | undefined =>
-  config === undefined
-    ? undefined
-    : { Enabled: config.enabled, LogLevel: config.logLevel };
+  config === undefined ? undefined : { Enabled: config.enabled, LogLevel: config.logLevel };
 
 const toLoggingInput = (
   config: EnvironmentLoggingConfig | undefined,
@@ -303,9 +293,8 @@ const sameStringSet = (a: string[], b: string[]): boolean => {
   return a.every((v) => setB.has(v));
 };
 
-const configValue = (
-  v: string | Redacted.Redacted<string> | undefined,
-): string | undefined => (Redacted.isRedacted(v) ? Redacted.value(v) : v);
+const configValue = (v: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  Redacted.isRedacted(v) ? Redacted.value(v) : v;
 
 // Compare desired Airflow configuration options against the observed ones.
 // Both sides may carry Redacted values (the props by choice, the observed
@@ -313,9 +302,7 @@ const configValue = (
 // comparison only.
 const sameConfigOptions = (
   a: Record<string, string | Redacted.Redacted<string>> | undefined,
-  b:
-    | { [key: string]: string | Redacted.Redacted<string> | undefined }
-    | undefined,
+  b: { [key: string]: string | Redacted.Redacted<string> | undefined } | undefined,
 ): boolean => {
   const ea = Object.entries(a ?? {});
   const eb = Object.entries(b ?? {}).filter(([, v]) => v !== undefined);
@@ -336,11 +323,7 @@ export const EnvironmentProvider = () =>
       const readEnvironment = Effect.fn(function* (name: string) {
         const response = yield* mwaa
           .getEnvironment({ Name: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.Environment;
       });
 
@@ -359,10 +342,7 @@ export const EnvironmentProvider = () =>
       // typically completes in 20-30 minutes; budget ~45 min (90 * 30s). A
       // FAILED terminal state stops the wait immediately (non-retryable).
       const waitForAvailable = Effect.fn(function* (name: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("30 seconds"),
-          Schedule.recurs(90),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(90)]);
         return yield* readEnvironment(name).pipe(
           Effect.flatMap((env) => {
             if (!env?.Arn) {
@@ -371,23 +351,18 @@ export const EnvironmentProvider = () =>
             const status = env.Status ?? "CREATING";
             if (FAILED_STATES.has(status)) {
               return Effect.fail(
-                new Error(
-                  `Environment '${name}' reached terminal state '${status}'`,
-                ),
+                new Error(`Environment '${name}' reached terminal state '${status}'`),
               );
             }
             if (status !== "AVAILABLE") {
               return Effect.fail(
-                new Error(
-                  `Environment '${name}' not available (status: ${status})`,
-                ),
+                new Error(`Environment '${name}' not available (status: ${status})`),
               );
             }
             return Effect.succeed(env);
           }),
           Effect.retry({
-            while: (e) =>
-              e instanceof Error && !e.message.includes("terminal state"),
+            while: (e) => e instanceof Error && !e.message.includes("terminal state"),
             schedule: policy,
           }),
         );
@@ -395,9 +370,7 @@ export const EnvironmentProvider = () =>
 
       const toAttrs = Effect.fn(function* (env: mwaa.Environment) {
         if (!env.Name || !env.Arn) {
-          return yield* Effect.fail(
-            new Error(`Environment '${env.Name}' is missing its ARN`),
-          );
+          return yield* Effect.fail(new Error(`Environment '${env.Name}' is missing its ARN`));
         }
         return {
           environmentName: env.Name,
@@ -435,23 +408,17 @@ export const EnvironmentProvider = () =>
           if ((n.kmsKey ?? undefined) !== (o.kmsKey ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.endpointManagement ?? undefined) !==
-            (o.endpointManagement ?? undefined)
-          ) {
+          if ((n.endpointManagement ?? undefined) !== (o.endpointManagement ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.environmentName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.environmentName ?? (yield* toName(id, olds ?? {}));
           const env = yield* readEnvironment(name);
           if (!env?.Arn) return undefined;
           const attrs = yield* toAttrs(env);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -521,10 +488,7 @@ export const EnvironmentProvider = () =>
             update.SourceBucketArn = props.sourceBucketArn;
             mutated = true;
           }
-          if (
-            props.dagS3Path !== undefined &&
-            props.dagS3Path !== observed.DagS3Path
-          ) {
+          if (props.dagS3Path !== undefined && props.dagS3Path !== observed.DagS3Path) {
             update.DagS3Path = props.dagS3Path;
             mutated = true;
           }
@@ -542,38 +506,23 @@ export const EnvironmentProvider = () =>
             update.EnvironmentClass = props.environmentClass;
             mutated = true;
           }
-          if (
-            props.maxWorkers !== undefined &&
-            props.maxWorkers !== observed.MaxWorkers
-          ) {
+          if (props.maxWorkers !== undefined && props.maxWorkers !== observed.MaxWorkers) {
             update.MaxWorkers = props.maxWorkers;
             mutated = true;
           }
-          if (
-            props.minWorkers !== undefined &&
-            props.minWorkers !== observed.MinWorkers
-          ) {
+          if (props.minWorkers !== undefined && props.minWorkers !== observed.MinWorkers) {
             update.MinWorkers = props.minWorkers;
             mutated = true;
           }
-          if (
-            props.maxWebservers !== undefined &&
-            props.maxWebservers !== observed.MaxWebservers
-          ) {
+          if (props.maxWebservers !== undefined && props.maxWebservers !== observed.MaxWebservers) {
             update.MaxWebservers = props.maxWebservers;
             mutated = true;
           }
-          if (
-            props.minWebservers !== undefined &&
-            props.minWebservers !== observed.MinWebservers
-          ) {
+          if (props.minWebservers !== undefined && props.minWebservers !== observed.MinWebservers) {
             update.MinWebservers = props.minWebservers;
             mutated = true;
           }
-          if (
-            props.schedulers !== undefined &&
-            props.schedulers !== observed.Schedulers
-          ) {
+          if (props.schedulers !== undefined && props.schedulers !== observed.Schedulers) {
             update.Schedulers = props.schedulers;
             mutated = true;
           }
@@ -586,11 +535,9 @@ export const EnvironmentProvider = () =>
           }
           if (
             props.weeklyMaintenanceWindowStart !== undefined &&
-            props.weeklyMaintenanceWindowStart !==
-              observed.WeeklyMaintenanceWindowStart
+            props.weeklyMaintenanceWindowStart !== observed.WeeklyMaintenanceWindowStart
           ) {
-            update.WeeklyMaintenanceWindowStart =
-              props.weeklyMaintenanceWindowStart;
+            update.WeeklyMaintenanceWindowStart = props.weeklyMaintenanceWindowStart;
             mutated = true;
           }
           const observedSg = observed.NetworkConfiguration?.SecurityGroupIds;
@@ -603,10 +550,7 @@ export const EnvironmentProvider = () =>
             };
             mutated = true;
           }
-          if (
-            props.pluginsS3Path !== undefined &&
-            props.pluginsS3Path !== observed.PluginsS3Path
-          ) {
+          if (props.pluginsS3Path !== undefined && props.pluginsS3Path !== observed.PluginsS3Path) {
             update.PluginsS3Path = props.pluginsS3Path;
             update.PluginsS3ObjectVersion = props.pluginsS3ObjectVersion;
             mutated = true;
@@ -616,8 +560,7 @@ export const EnvironmentProvider = () =>
             props.requirementsS3Path !== observed.RequirementsS3Path
           ) {
             update.RequirementsS3Path = props.requirementsS3Path;
-            update.RequirementsS3ObjectVersion =
-              props.requirementsS3ObjectVersion;
+            update.RequirementsS3ObjectVersion = props.requirementsS3ObjectVersion;
             mutated = true;
           }
           if (
@@ -625,8 +568,7 @@ export const EnvironmentProvider = () =>
             props.startupScriptS3Path !== observed.StartupScriptS3Path
           ) {
             update.StartupScriptS3Path = props.startupScriptS3Path;
-            update.StartupScriptS3ObjectVersion =
-              props.startupScriptS3ObjectVersion;
+            update.StartupScriptS3ObjectVersion = props.startupScriptS3ObjectVersion;
             mutated = true;
           }
           if (
@@ -636,14 +578,11 @@ export const EnvironmentProvider = () =>
               observed.AirflowConfigurationOptions,
             )
           ) {
-            update.AirflowConfigurationOptions =
-              props.airflowConfigurationOptions;
+            update.AirflowConfigurationOptions = props.airflowConfigurationOptions;
             mutated = true;
           }
           if (props.loggingConfiguration !== undefined) {
-            update.LoggingConfiguration = toLoggingInput(
-              props.loggingConfiguration,
-            );
+            update.LoggingConfiguration = toLoggingInput(props.loggingConfiguration);
             mutated = true;
           }
 
@@ -660,9 +599,7 @@ export const EnvironmentProvider = () =>
             if (upsert.length > 0) {
               yield* mwaa.tagResource({
                 ResourceArn: arn,
-                Tags: Object.fromEntries(
-                  upsert.map(({ Key, Value }) => [Key, Value]),
-                ),
+                Tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
               });
             }
             if (removed.length > 0) {
@@ -677,17 +614,13 @@ export const EnvironmentProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* mwaa
             .deleteEnvironment({ Name: output.environmentName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           mwaa.listEnvironments.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Environments ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Environments ?? [])),
             Effect.flatMap(
               Effect.forEach((name) => readEnvironment(name), {
                 concurrency: 4,
@@ -699,9 +632,7 @@ export const EnvironmentProvider = () =>
                   env !== undefined && env.Name !== undefined && !!env.Arn,
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((env) => toAttrs(env), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((env) => toAttrs(env), { concurrency: 4 })),
           ),
       };
     }),

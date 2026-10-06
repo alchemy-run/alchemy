@@ -3,7 +3,7 @@ import * as D1Client from "@effect/sql-d1/D1Client";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Sql from "effect/unstable/sql/SqlClient";
+import * as Sql from "effect/sql/SqlClient";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
 
@@ -50,10 +50,7 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  *
  * @binding
  */
-export const D1 = <E = never, R = never>(
-  database: D1DatabaseSource<E, R>,
-  config?: D1Config,
-) =>
+export const D1 = <E = never, R = never>(database: D1DatabaseSource<E, R>, config?: D1Config) =>
   Effect.map(
     makeExecutionMemo(
       Effect.gen(function* () {
@@ -90,6 +87,4 @@ export const D1Layer = <E = never, R = never>(
     Effect.gen(function* () {
       return yield* D1Client.D1Client;
     }),
-  ).pipe(
-    Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))),
-  );
+  ).pipe(Layer.provideMerge(Layer.effect(D1Client.D1Client, D1(database, config))));

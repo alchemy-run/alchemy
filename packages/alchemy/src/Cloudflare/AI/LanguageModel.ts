@@ -1,10 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import {
   AiError,
   LanguageModel as AiLanguageModel,
@@ -12,8 +7,13 @@ import {
   Prompt,
   Response,
   Tool,
-} from "effect/unstable/ai";
-import * as Sse from "effect/unstable/encoding/Sse";
+} from "effect/ai";
+import * as Effect from "effect/Effect";
+import * as Sse from "effect/encoding/Sse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 
 /**
@@ -74,11 +74,7 @@ export const makeLanguageModel = ({
   client,
   model,
   parameters,
-}: LanguageModelOptions): Effect.Effect<
-  AiLanguageModel.LanguageModel,
-  never,
-  RuntimeContext
-> =>
+}: LanguageModelOptions): Effect.Effect<AiLanguageModel.LanguageModel, never, RuntimeContext> =>
   Effect.gen(function* () {
     const ai = yield* client.raw;
     const gatewayId = client.id === undefined ? undefined : yield* client.id;
@@ -89,16 +85,10 @@ export const makeLanguageModel = ({
     ): Effect.Effect<Response, AiError.AiError> =>
       Effect.tryPromise({
         try: () =>
-          ai.run(
-            model as keyof AiModels,
-            body as unknown as AiModels[keyof AiModels]["inputs"],
-            {
-              ...(gatewayId === undefined
-                ? {}
-                : { gateway: { id: gatewayId } }),
-              returnRawResponse: true,
-            },
-          ),
+          ai.run(model as keyof AiModels, body as unknown as AiModels[keyof AiModels]["inputs"], {
+            ...(gatewayId === undefined ? {} : { gateway: { id: gatewayId } }),
+            returnRawResponse: true,
+          }),
         catch: (cause) => toAiError(cause, method),
       });
 
@@ -119,8 +109,7 @@ export const makeLanguageModel = ({
             const idGen = yield* IdGenerator.IdGenerator;
             const body = toRequestBody({ options, parameters, stream: true });
             const resp = yield* callRaw(body, "streamText");
-            const hasTools =
-              options.tools.length > 0 && options.toolChoice !== "none";
+            const hasTools = options.tools.length > 0 && options.toolChoice !== "none";
             return parseStreamText(resp, idGen, hasTools);
           }),
         ),
@@ -194,10 +183,7 @@ const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
   return btoa(binary);
 };
 
-const fileToImageUrl = (
-  data: string | Uint8Array | URL,
-  mediaType: string,
-): string => {
+const fileToImageUrl = (data: string | Uint8Array | URL, mediaType: string): string => {
   if (data instanceof URL) return data.toString();
   if (data instanceof Uint8Array) {
     return `data:${mediaType};base64,${uint8ArrayToBase64(data)}`;
@@ -206,9 +192,7 @@ const fileToImageUrl = (
   return `data:${mediaType};base64,${data}`;
 };
 
-const convertPromptToMessages = (
-  prompt: Prompt.Prompt,
-): ReadonlyArray<WorkersAiMessage> =>
+const convertPromptToMessages = (prompt: Prompt.Prompt): ReadonlyArray<WorkersAiMessage> =>
   prompt.content.flatMap((m): ReadonlyArray<WorkersAiMessage> => {
     switch (m.role) {
       case "system":
@@ -222,12 +206,8 @@ const convertPromptToMessages = (
     }
   });
 
-const toUserMessage = (
-  parts: Prompt.UserMessage["content"],
-): WorkersAiMessage => {
-  const text = parts
-    .flatMap((p) => (p.type === "text" ? [p.text] : []))
-    .join("\n");
+const toUserMessage = (parts: Prompt.UserMessage["content"]): WorkersAiMessage => {
+  const text = parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n");
   const images = parts.flatMap((p) =>
     p.type === "file"
       ? [
@@ -241,22 +221,13 @@ const toUserMessage = (
   if (images.length === 0) return { role: "user", content: text };
   return {
     role: "user",
-    content: [
-      ...(text.length > 0 ? [{ type: "text" as const, text }] : []),
-      ...images,
-    ],
+    content: [...(text.length > 0 ? [{ type: "text" as const, text }] : []), ...images],
   };
 };
 
-const toAssistantMessage = (
-  parts: Prompt.AssistantMessage["content"],
-): WorkersAiMessage => {
-  const text = parts
-    .flatMap((p) => (p.type === "text" ? [p.text] : []))
-    .join("");
-  const reasoning = parts
-    .flatMap((p) => (p.type === "reasoning" ? [p.text] : []))
-    .join("");
+const toAssistantMessage = (parts: Prompt.AssistantMessage["content"]): WorkersAiMessage => {
+  const text = parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("");
+  const reasoning = parts.flatMap((p) => (p.type === "reasoning" ? [p.text] : [])).join("");
   const toolCalls = parts.flatMap((p) =>
     p.type === "tool-call"
       ? [
@@ -265,10 +236,7 @@ const toAssistantMessage = (
             type: "function" as const,
             function: {
               name: p.name,
-              arguments:
-                typeof p.params === "string"
-                  ? p.params
-                  : JSON.stringify(p.params ?? {}),
+              arguments: typeof p.params === "string" ? p.params : JSON.stringify(p.params ?? {}),
             },
           },
         ]
@@ -291,10 +259,7 @@ const toToolMessage = (
           role: "tool",
           name: part.name,
           tool_call_id: part.id,
-          content:
-            typeof part.result === "string"
-              ? part.result
-              : JSON.stringify(part.result),
+          content: typeof part.result === "string" ? part.result : JSON.stringify(part.result),
         },
       ]
     : [];
@@ -357,10 +322,7 @@ const toRequestBody = ({
   readonly stream: boolean;
 }): WorkersAiInputs => {
   const messages = convertPromptToMessages(options.prompt);
-  const { tools, tool_choice } = prepareTools(
-    options.tools,
-    options.toolChoice,
-  );
+  const { tools, tool_choice } = prepareTools(options.tools, options.toolChoice);
   return {
     messages,
     ...(tools !== undefined ? { tools } : {}),
@@ -369,15 +331,9 @@ const toRequestBody = ({
     // usage tokens to appear in the final streamed chunk. Without it most
     // Workers AI models omit `usage` from the stream entirely, leaving the
     // `finish` part with zeroed counts.
-    ...(stream
-      ? { stream: true, stream_options: { include_usage: true } }
-      : {}),
-    ...(parameters?.maxTokens !== undefined
-      ? { max_tokens: parameters.maxTokens }
-      : {}),
-    ...(parameters?.temperature !== undefined
-      ? { temperature: parameters.temperature }
-      : {}),
+    ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
+    ...(parameters?.maxTokens !== undefined ? { max_tokens: parameters.maxTokens } : {}),
+    ...(parameters?.temperature !== undefined ? { temperature: parameters.temperature } : {}),
     ...(parameters?.topP !== undefined ? { top_p: parameters.topP } : {}),
     ...(parameters?.topK !== undefined ? { top_k: parameters.topK } : {}),
     ...(parameters?.seed !== undefined ? { random_seed: parameters.seed } : {}),
@@ -441,9 +397,7 @@ const finishMetadata = (
 export const finishNeurons = (part: {
   readonly metadata: Response.FinishPartMetadata;
 }): number | undefined =>
-  Option.getOrUndefined(
-    Option.map(decodeNeurons(part.metadata), (m) => m.cloudflare.neurons),
-  );
+  Option.getOrUndefined(Option.map(decodeNeurons(part.metadata), (m) => m.cloudflare.neurons));
 
 const decodeNeurons = Schema.decodeUnknownOption(
   Schema.Struct({ cloudflare: Schema.Struct({ neurons: Schema.Number }) }),
@@ -453,18 +407,14 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   const usage = (raw?.usage as Record<string, unknown> | undefined) ?? {};
   const promptTokens = (usage.prompt_tokens as number | undefined) ?? 0;
   const completionTokens = (usage.completion_tokens as number | undefined) ?? 0;
-  const cached = (
-    usage.prompt_tokens_details as { cached_tokens?: number } | undefined
-  )?.cached_tokens;
+  const cached = (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
+    ?.cached_tokens;
   // Construct an actual `Response.Usage` instance — `Schema.Class<Usage>`
   // encodes by going through the class constructor / `isInstance` check, so a
   // plain struct that "matches" the encoded shape isn't enough.
   return new Response.Usage({
     inputTokens: {
-      uncached:
-        cached !== undefined
-          ? Math.max(0, promptTokens - cached)
-          : promptTokens,
+      uncached: cached !== undefined ? Math.max(0, promptTokens - cached) : promptTokens,
       total: promptTokens,
       cacheRead: cached ?? 0,
       cacheWrite: 0,
@@ -529,8 +479,7 @@ const decodeResponse = (raw: Record<string, unknown>): DecodedResponse => {
     text,
     reasoning: reasoning && reasoning.length > 0 ? reasoning : undefined,
     toolCalls: rawToolCalls.flatMap(decodeToolCall),
-    finishReason:
-      choice?.finish_reason ?? (raw.finish_reason as string | undefined),
+    finishReason: choice?.finish_reason ?? (raw.finish_reason as string | undefined),
   };
 };
 
@@ -541,9 +490,7 @@ const nativeTextOf = (raw: unknown): string | undefined => {
   return text.length > 0 ? text : undefined;
 };
 
-const decodeToolCall = (
-  tc: Record<string, unknown>,
-): ReadonlyArray<DecodedToolCall> => {
+const decodeToolCall = (tc: Record<string, unknown>): ReadonlyArray<DecodedToolCall> => {
   const fn = tc.function as { name?: string; arguments?: unknown } | undefined;
   const rawId = (tc.id as string | undefined) ?? "";
   if (fn?.name) {
@@ -583,8 +530,7 @@ const parseGenerateText = Effect.fn(function* (raw: Record<string, unknown>) {
   );
 
   const finish = mapFinishReason(
-    decoded.finishReason ??
-      (decoded.toolCalls.length > 0 ? "tool_calls" : "stop"),
+    decoded.finishReason ?? (decoded.toolCalls.length > 0 ? "tool_calls" : "stop"),
   );
 
   return [
@@ -657,9 +603,7 @@ type StreamParts = Array<Response.StreamPartEncoded>;
 const tryParseJson = (data: string): Record<string, unknown> | undefined => {
   try {
     const v = JSON.parse(data);
-    return v && typeof v === "object"
-      ? (v as Record<string, unknown>)
-      : undefined;
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
   } catch {
     return undefined;
   }
@@ -673,20 +617,13 @@ const isNullFinalizationToolCall = (tc: Record<string, unknown>): boolean => {
   return !id && !name && (!args || args === "");
 };
 
-const closeReasoning = (
-  state: StreamState,
-  parts: StreamParts,
-): StreamState => {
+const closeReasoning = (state: StreamState, parts: StreamParts): StreamState => {
   if (state.reasoningId === undefined) return state;
   parts.push({ type: "reasoning-end", id: state.reasoningId });
   return { ...state, reasoningId: undefined };
 };
 
-const closeToolCall = (
-  state: StreamState,
-  index: number,
-  parts: StreamParts,
-): StreamState => {
+const closeToolCall = (state: StreamState, index: number, parts: StreamParts): StreamState => {
   if (state.closedToolIndices.has(index)) return state;
   const tc = state.toolCalls.get(index);
   if (!tc) return state;
@@ -746,9 +683,7 @@ const handleToolDeltas = (
         continue;
       }
       const idx = (d.index as number | undefined) ?? 0;
-      const fn = d.function as
-        | { name?: string; arguments?: string }
-        | undefined;
+      const fn = d.function as { name?: string; arguments?: string } | undefined;
       const name = fn?.name ?? (d.name as string | undefined) ?? "";
       const args = fn?.arguments ?? (d.arguments as string | undefined) ?? "";
       const rawId = (d.id as string | undefined) ?? "";
@@ -774,9 +709,7 @@ const handleToolDeltas = (
         const delta = args.startsWith(existing.arguments)
           ? args.slice(existing.arguments.length)
           : args;
-        const accumulated = args.startsWith(existing.arguments)
-          ? args
-          : existing.arguments + args;
+        const accumulated = args.startsWith(existing.arguments) ? args : existing.arguments + args;
         const next = new Map(s.toolCalls);
         next.set(idx, { ...existing, arguments: accumulated });
         s = { ...s, toolCalls: next, lastToolIndex: idx };
@@ -801,10 +734,7 @@ const hasNonZeroUsage = (raw: unknown): boolean => {
   return prompt > 0 || completion > 0 || total > 0;
 };
 
-const updateChunkMeta = (
-  state: StreamState,
-  chunk: Record<string, unknown>,
-): StreamState => {
+const updateChunkMeta = (state: StreamState, chunk: Record<string, unknown>): StreamState => {
   let s = state;
   // Workers AI's native stream emits the real usage chunk, then a
   // "zero-valued terminator" chunk where every count is 0 (it also re-emits
@@ -813,11 +743,8 @@ const updateChunkMeta = (
   if (chunk.usage !== undefined && hasNonZeroUsage(chunk.usage)) {
     s = { ...s, usage: chunk };
   }
-  const choices = chunk.choices as
-    | Array<{ finish_reason?: string }>
-    | undefined;
-  const finish =
-    choices?.[0]?.finish_reason ?? (chunk.finish_reason as string | undefined);
+  const choices = chunk.choices as Array<{ finish_reason?: string }> | undefined;
+  const finish = choices?.[0]?.finish_reason ?? (chunk.finish_reason as string | undefined);
   if (finish != null) s = { ...s, finishReason: finish };
   return s;
 };
@@ -831,8 +758,7 @@ const handleNativeText = (
 ): Effect.Effect<StreamState> => {
   const native = chunk.response;
   if (native == null || native === "") return Effect.succeed(state);
-  const text =
-    typeof native === "object" ? JSON.stringify(native) : String(native);
+  const text = typeof native === "object" ? JSON.stringify(native) : String(native);
   if (text.length === 0) return Effect.succeed(state);
   // When tools were requested, the native `response` stream is the
   // tool-call JSON, not prose — buffer it and decide on finalize. We
@@ -857,9 +783,7 @@ const handleNativeToolCalls = (
   idGen: IdGenerator.Service,
 ): Effect.Effect<StreamState> => {
   const openAiToolCalls = (
-    chunk.choices as
-      | Array<{ delta?: { tool_calls?: ReadonlyArray<unknown> } }>
-      | undefined
+    chunk.choices as Array<{ delta?: { tool_calls?: ReadonlyArray<unknown> } }> | undefined
   )?.[0]?.delta?.tool_calls;
   // Workers AI can mirror the same fragments in both its top-level native
   // field and the OpenAI-compatible delta. Prefer the latter so every
@@ -883,15 +807,12 @@ const handleOpenAiDelta = (
   parts: StreamParts,
   idGen: IdGenerator.Service,
 ): Effect.Effect<StreamState> => {
-  const delta = (
-    chunk.choices as Array<{ delta?: Record<string, unknown> }> | undefined
-  )?.[0]?.delta;
+  const delta = (chunk.choices as Array<{ delta?: Record<string, unknown> }> | undefined)?.[0]
+    ?.delta;
   if (!delta) return Effect.succeed(state);
   return Effect.gen(function* () {
     let s = state;
-    const reasoning = (delta.reasoning_content ?? delta.reasoning) as
-      | string
-      | undefined;
+    const reasoning = (delta.reasoning_content ?? delta.reasoning) as string | undefined;
     if (reasoning && reasoning.length > 0) {
       s = yield* emitReasoningDelta(s, reasoning, parts, idGen);
     }
@@ -899,9 +820,7 @@ const handleOpenAiDelta = (
     if (text && text.length > 0) {
       s = yield* emitTextDelta(s, text, parts, idGen);
     }
-    const toolDeltas = delta.tool_calls as
-      | ReadonlyArray<Record<string, unknown>>
-      | undefined;
+    const toolDeltas = delta.tool_calls as ReadonlyArray<Record<string, unknown>> | undefined;
     if (Array.isArray(toolDeltas)) {
       s = closeReasoning(s, parts);
       s = yield* handleToolDeltas(s, toolDeltas, parts, idGen);
@@ -915,9 +834,7 @@ const handleStreamChunk = (
   data: string,
   idGen: IdGenerator.Service,
   hasTools: boolean,
-): Effect.Effect<
-  readonly [StreamState, ReadonlyArray<Response.StreamPartEncoded>]
-> =>
+): Effect.Effect<readonly [StreamState, ReadonlyArray<Response.StreamPartEncoded>]> =>
   Effect.gen(function* () {
     if (data === "") return [state, []] as const;
     if (data === "[DONE]") {
@@ -969,18 +886,14 @@ const decodeNativeToolBuffer = (
       const name = (fn?.name ?? rec.name) as string | undefined;
       if (typeof name !== "string" || name.length === 0) return [];
       const rawArgs = fn?.arguments ?? rec.arguments ?? rec.parameters ?? {};
-      const args =
-        typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs);
+      const args = typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs);
       return [{ name, args }];
     },
   );
   return calls.length > 0 ? calls : undefined;
 };
 
-const flushNativeToolBuffer = (
-  state: StreamState,
-  parts: StreamParts,
-): StreamState => {
+const flushNativeToolBuffer = (state: StreamState, parts: StreamParts): StreamState => {
   if (state.nativeToolBuffer.length === 0) return state;
   const calls = decodeNativeToolBuffer(state.nativeToolBuffer);
   // Not a tool-call document — the model returned prose despite tools being
@@ -1004,9 +917,7 @@ const flushNativeToolBuffer = (
   return { ...state, nativeToolBuffer: "", nativeToolId: undefined };
 };
 
-const finalizeStream = (
-  state: StreamState,
-): ReadonlyArray<Response.StreamPartEncoded> => {
+const finalizeStream = (state: StreamState): ReadonlyArray<Response.StreamPartEncoded> => {
   const parts: StreamParts = [];
   let s = state;
   for (const [idx] of s.toolCalls) s = closeToolCall(s, idx, parts);
@@ -1049,9 +960,7 @@ const parseStreamText = (
 ): Stream.Stream<Response.StreamPartEncoded, AiError.AiError> => {
   const body = resp.body;
   if (body === null) {
-    return Stream.fromIterable<Response.StreamPartEncoded>(
-      finalizeStream(initialStreamState()),
-    );
+    return Stream.fromIterable<Response.StreamPartEncoded>(finalizeStream(initialStreamState()));
   }
   return Stream.fromReadableStream<Uint8Array, AiError.AiError>({
     evaluate: () => body,
@@ -1060,9 +969,7 @@ const parseStreamText = (
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode<AiError.AiError, unknown>()),
     Stream.catchTag("Retry", (retry) => Stream.die(retry)),
-    Stream.catchTag("SseError", (error) =>
-      Stream.fail(toAiError(error, "streamText")),
-    ),
+    Stream.catchTag("SseError", (error) => Stream.fail(toAiError(error, "streamText"))),
     Stream.mapAccumEffect(
       initialStreamState,
       (state, event) => handleStreamChunk(state, event.data, idGen, hasTools),
@@ -1075,15 +982,11 @@ const parseStreamText = (
 // Error mapping
 // ---------------------------------------------------------------------------
 
-const toAiError = (
-  cause: unknown,
-  method: "generateText" | "streamText",
-): AiError.AiError =>
+const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiError.AiError =>
   AiError.AiError.make({
     module: "Cloudflare.AI.LanguageModel",
     method,
     reason: new AiError.UnknownError({
-      description:
-        cause instanceof Error ? cause.message : "AI Gateway request failed",
+      description: cause instanceof Error ? cause.message : "AI Gateway request failed",
     }),
   });

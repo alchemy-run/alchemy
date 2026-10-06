@@ -5,9 +5,7 @@ const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 export default {
   async fetch(request: Request, env: AiAsyncWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
-    const prompt =
-      url.searchParams.get("prompt") ??
-      "Say the single word 'pong' and nothing else.";
+    const prompt = url.searchParams.get("prompt") ?? "Say the single word 'pong' and nothing else.";
 
     if (url.pathname === "/run") {
       const result = await env.AI.run(MODEL, {

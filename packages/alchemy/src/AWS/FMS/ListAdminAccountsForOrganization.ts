@@ -39,7 +39,6 @@ export interface ListAdminAccountsForOrganization extends Binding.Service<
   >
 > {}
 
-export const ListAdminAccountsForOrganization =
-  Binding.Service<ListAdminAccountsForOrganization>(
-    "AWS.FMS.ListAdminAccountsForOrganization",
-  );
+export const ListAdminAccountsForOrganization = Binding.Service<ListAdminAccountsForOrganization>(
+  "AWS.FMS.ListAdminAccountsForOrganization",
+);
