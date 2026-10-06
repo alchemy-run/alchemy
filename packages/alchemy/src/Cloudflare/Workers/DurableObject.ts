@@ -80,6 +80,16 @@ export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape>
     id: DurableObjectId,
     options?: DurableObjectGetDurableObjectOptions,
   ) => DurableObjectStub<Shape>;
+  /**
+   * A view of this namespace whose objects are created and stored only inside
+   * the given jurisdiction (e.g. `"eu"`). The same name addresses a different
+   * object than it does in the unrestricted namespace.
+   *
+   * @example
+   * ```typescript
+   * const room = rooms.jurisdiction("eu").getByName(roomId);
+   * ```
+   */
   jurisdiction: (jurisdiction: DurableObjectJurisdiction) => DurableObject<Shape>;
 }
 
