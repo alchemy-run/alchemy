@@ -1,12 +1,23 @@
+import { getService, updateService } from "@distilled.cloud/prisma/management";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Unowned } from "@/AdoptPolicy";
+import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
+import * as Prisma from "@/Prisma";
 import { App as PrismaApp, AppProvider } from "@/Prisma/App";
 import { PrismaApiError, PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { dispatchTo, makeFakeManagementApi, unhandled } from "./fixtures/FakeManagementApi.ts";
+import {
+  expectGone,
+  expectProjectGone,
+  failureOf,
+  forgetState,
+  markCreating,
+  patchStateAttr,
+} from "./fixtures/Live.ts";
 import { testStackContext } from "./fixtures/StackContext.ts";
 
 const app = (id: string, branchId: string | null = "branch-main") => ({
@@ -453,51 +464,55 @@ describe(
       }).pipe(provide(client));
     });
 
-    it.effect("cold read owns the App with the logical ID and ignores a same-named one", () => {
-      const apps = [
-        app("app-named"),
-        { ...app("app-declared"), name: "renamed", logicalId: "web" },
-      ];
-      const client = {
-        listApps: (query: { logicalId?: string }) =>
-          Effect.succeed(
-            apps.filter(
-              (item) =>
-                query.logicalId === undefined ||
-                ("logicalId" in item && item.logicalId === query.logicalId),
+    it.effect(
+      "cold read finds the App by its logical ID as unowned and ignores a same-named one",
+      () => {
+        const apps = [
+          app("app-named"),
+          { ...app("app-declared"), name: "renamed", logicalId: "web" },
+        ];
+        const client = {
+          listApps: (query: { logicalId?: string }) =>
+            Effect.succeed(
+              apps.filter(
+                (item) =>
+                  query.logicalId === undefined ||
+                  ("logicalId" in item && item.logicalId === query.logicalId),
+              ),
             ),
-          ),
-        listBranches: () => Effect.succeed([branch("branch-main")]),
-      } as unknown as PrismaManagementClient;
-      const read = (logicalId?: string) =>
-        Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(PrismaApp);
-          return yield* provider.read!({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            olds: {
-              project: "project-1",
-              displayName: "api",
-              ...(logicalId === undefined ? {} : { logicalId }),
-            },
-            output: undefined,
+          listBranches: () => Effect.succeed([branch("branch-main")]),
+        } as unknown as PrismaManagementClient;
+        const read = (logicalId?: string) =>
+          Effect.gen(function* () {
+            const provider = yield* Provider.findProvider(PrismaApp);
+            return yield* provider.read!({
+              id: "App",
+              fqn: "App",
+              instanceId: "00000000000000000000000000000000",
+              olds: {
+                project: "project-1",
+                displayName: "api",
+                ...(logicalId === undefined ? {} : { logicalId }),
+              },
+              output: undefined,
+            });
           });
-        });
 
-      return Effect.gen(function* () {
-        const owned = yield* read("web");
-        expect(Unowned.is(owned)).toBe(false);
-        expect(owned?.appId).toBe("app-declared");
-        expect(owned?.logicalId).toBe("web");
+        return Effect.gen(function* () {
+          // A logical ID does not prove ownership; adoption is required.
+          const found = yield* read("web");
+          expect(Unowned.is(found)).toBe(true);
+          expect(found?.appId).toBe("app-declared");
+          expect(found?.logicalId).toBe("web");
 
-        expect(yield* read("other")).toBeUndefined();
+          expect(yield* read("other")).toBeUndefined();
 
-        const byName = yield* read();
-        expect(Unowned.is(byName)).toBe(true);
-        expect(byName?.appId).toBe("app-named");
-      }).pipe(provide(client));
-    });
+          const byName = yield* read();
+          expect(Unowned.is(byName)).toBe(true);
+          expect(byName?.appId).toBe("app-named");
+        }).pipe(provide(client));
+      },
+    );
 
     it.effect("names the logical ID and branch when another App holds it", () => {
       const client = {
@@ -548,4 +563,231 @@ describe(
       }).pipe(provide(client));
     });
   },
+);
+
+const live = Test.make({ providers: Prisma.providers() });
+
+const liveTags = ["provider:prisma", "provider:prisma:app", "provider:prisma:project", "live"];
+
+const observeApp = (appId: string) =>
+  getService({ serviceId: appId }).pipe(Effect.map((response) => response.data));
+
+const expectAppGone = (appId: string) =>
+  expectGone(
+    getService({ serviceId: appId }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
+  );
+
+const appStack = (props: { displayName?: string; logicalId?: string } = {}) =>
+  Effect.gen(function* () {
+    const project = yield* Prisma.Project("Project", { createDatabase: false });
+    const app = yield* Prisma.App("Web", { project, ...props });
+    return { project, app };
+  });
+
+live.test.provider(
+  "creates an App under its fqn logical ID and converges name and logical ID in place",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(appStack());
+    expect(initial.app.logicalId).toBe("Web");
+    const created = yield* observeApp(initial.app.appId);
+    expect(created.projectId).toBe(initial.project.projectId);
+    expect(created.name).toBe(initial.app.name);
+    expect(created.logicalId).toBe("Web");
+
+    const renamed = yield* stack.deploy(appStack({ displayName: "renamed-web" }));
+    expect(renamed.app.appId).toBe(initial.app.appId);
+    expect((yield* observeApp(initial.app.appId)).name).toBe("renamed-web");
+
+    const overridden = yield* stack.deploy(
+      appStack({ displayName: "renamed-web", logicalId: "web-override" }),
+    );
+    expect(overridden.app.appId).toBe(initial.app.appId);
+    expect(overridden.app.logicalId).toBe("web-override");
+    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("web-override");
+
+    // Removing the override returns to the fqn.
+    const reverted = yield* stack.deploy(appStack({ displayName: "renamed-web" }));
+    expect(reverted.app.appId).toBe(initial.app.appId);
+    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+
+    const repeated = yield* stack.deploy(appStack({ displayName: "renamed-web" }));
+    expect(repeated.app.appId).toBe(initial.app.appId);
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "after lost state, adoption finds the App by its logical ID despite a Console rename",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(appStack());
+    yield* updateService({ serviceId: initial.app.appId, displayName: "renamed-in-console" });
+    // Lost state also loses the instance ID, so nothing proves the App is ours.
+    yield* forgetState(stack, "Web");
+
+    const refused = yield* failureOf(stack.deploy(appStack()));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    expect((yield* observeApp(initial.app.appId)).name).toBe("renamed-in-console");
+
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const app = yield* Prisma.App("Web", { project }).pipe(adopt(true));
+        return { project, app };
+      }),
+    );
+    expect(adopted.app.appId).toBe(initial.app.appId);
+    const observed = yield* observeApp(initial.app.appId);
+    expect(observed.name).toBe(adopted.app.name);
+    expect(observed.logicalId).toBe("Web");
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "recovers an interrupted App create as owned",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(appStack());
+    // The App exists, but the create never committed its attributes.
+    yield* markCreating(stack, "Web");
+
+    const recovered = yield* stack.deploy(appStack());
+    expect(recovered.app.appId).toBe(initial.app.appId);
+    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "a later declaration reusing a held logical ID does not take over the App",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (withSecond: boolean) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const first = yield* Prisma.App("First", { project, logicalId: "shared" });
+        const second = withSecond
+          ? yield* Prisma.App("Second", { project, logicalId: "shared" })
+          : undefined;
+        return { project, first, second };
+      });
+
+    const initial = yield* stack.deploy(resources(false));
+    const refused = yield* failureOf(stack.deploy(resources(true)));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+
+    // First's App survives a deploy that drops the failed declaration.
+    yield* stack.deploy(resources(false));
+    expect((yield* observeApp(initial.first.appId)).logicalId).toBe("shared");
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.first.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "sets the logical ID on an App deployed before logical IDs existed",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(appStack({ displayName: "legacy-web" }));
+    // What an earlier provider version left behind: no logical ID in the
+    // cloud or in the persisted attributes.
+    yield* updateService({ serviceId: initial.app.appId, logicalId: null });
+    yield* patchStateAttr(stack, "Web", { logicalId: null });
+    expect((yield* observeApp(initial.app.appId)).logicalId).toBeNull();
+
+    const stamped = yield* stack.deploy(appStack({ displayName: "legacy-web" }));
+    expect(stamped.app.appId).toBe(initial.app.appId);
+    expect(stamped.app.logicalId).toBe("Web");
+    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "requires adoption for an App without a logical ID after lost state, then sets it",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(appStack({ displayName: "legacy-web" }));
+    yield* updateService({ serviceId: initial.app.appId, logicalId: null });
+    yield* forgetState(stack, "Web");
+
+    // Found only by display name, so it is not provably ours.
+    const refused = yield* failureOf(stack.deploy(appStack({ displayName: "legacy-web" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const app = yield* Prisma.App("Web", { project, displayName: "legacy-web" }).pipe(
+          adopt(true),
+        );
+        return { project, app };
+      }),
+    );
+    expect(adopted.app.appId).toBe(initial.app.appId);
+    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "rejects a logical ID that another App on the branch holds",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (secondLogicalId: string) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const first = yield* Prisma.App("First", { project, logicalId: "shared" });
+        const second = yield* Prisma.App("Second", { project, logicalId: secondLogicalId });
+        return { project, first, second };
+      });
+
+    const initial = yield* stack.deploy(resources("second"));
+    expect(initial.second.appId).not.toBe(initial.first.appId);
+
+    const failure = yield* failureOf(stack.deploy(resources("shared")));
+    expect(failure.text).toContain("logical ID 'shared'");
+    expect((yield* observeApp(initial.first.appId)).logicalId).toBe("shared");
+
+    yield* stack.destroy();
+    yield* expectAppGone(initial.first.appId);
+    yield* expectAppGone(initial.second.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
 );

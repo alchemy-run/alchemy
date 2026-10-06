@@ -4077,7 +4077,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
   );
 
   it.effect(
-    "cold read owns the database with the logical ID and ignores a same-named one",
+    "cold read finds the database by its logical ID as unowned and ignores a same-named one",
     () => {
       const named = logicalIdDatabase("database-named", "main", null);
       const declared = logicalIdDatabase("database-declared", "renamed-in-console", "main-db");
@@ -4105,10 +4105,11 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         });
 
       return Effect.gen(function* () {
-        const owned = yield* read("main-db");
-        expect(Unowned.is(owned)).toBe(false);
-        expect(owned?.databaseId).toBe("database-declared");
-        expect(owned?.logicalId).toBe("main-db");
+        // A logical ID does not prove ownership; adoption is required.
+        const found = yield* read("main-db");
+        expect(Unowned.is(found)).toBe(true);
+        expect(found?.databaseId).toBe("database-declared");
+        expect(found?.logicalId).toBe("main-db");
 
         expect(yield* read("other")).toBeUndefined();
 

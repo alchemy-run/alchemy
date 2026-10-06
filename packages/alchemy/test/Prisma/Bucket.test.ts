@@ -1,9 +1,11 @@
+import { getBucket, updateBucket } from "@distilled.cloud/prisma/management";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { Unowned } from "@/AdoptPolicy";
+import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext";
+import * as Prisma from "@/Prisma";
 import { Bucket, BucketProvider, type BucketProps } from "@/Prisma/Bucket";
 import {
   BucketAccessKey,
@@ -17,7 +19,15 @@ import type {
   BucketKeyWithSecret,
 } from "@/Prisma/Types";
 import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { dispatchTo, makeFakeManagementApi, unhandled } from "./fixtures/FakeManagementApi.ts";
+import {
+  expectGone,
+  expectProjectGone,
+  failureOf,
+  forgetState,
+  patchStateAttr,
+} from "./fixtures/Live.ts";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -370,70 +380,74 @@ describe(
       }).pipe(Effect.provide(bucketLayer(client)));
     });
 
-    it.effect("cold read owns the bucket with the logical ID and ignores a same-named one", () => {
-      const listed: unknown[] = [];
-      const buckets = [
-        { ...apiBucket("bucket-named", "uploads"), branchId: "branch-1", logicalId: null },
-        {
-          ...apiBucket("bucket-declared", "renamed-in-console"),
-          branchId: "branch-1",
-          logicalId: "uploads",
-        },
-      ];
-      const client = {
-        listBuckets: (query: { logicalId?: string }) =>
-          Effect.sync(() => {
-            listed.push(query);
-            return buckets.filter(
-              (bucket) =>
-                query.logicalId === undefined ||
-                ("logicalId" in bucket && bucket.logicalId === query.logicalId),
-            );
-          }),
-      } as unknown as PrismaManagementClient;
-      const read = (logicalId?: string) =>
-        Effect.gen(function* () {
-          const provider = yield* Provider.findProvider(Bucket);
-          return yield* provider.read!({
-            id: "Bucket",
-            fqn: "Bucket",
-            instanceId,
-            olds: {
-              project: "project-1",
-              name: "uploads",
-              branchId: "branch-1",
-              ...(logicalId === undefined ? {} : { logicalId }),
-            },
-            output: undefined,
-          });
-        });
-
-      return Effect.gen(function* () {
-        const owned = yield* read("uploads");
-        expect(Unowned.is(owned)).toBe(false);
-        expect(owned).toEqual({
-          ...bucketAttrs("bucket-declared", "renamed-in-console"),
-          logicalId: "uploads",
-        });
-        expect(listed).toEqual([
+    it.effect(
+      "cold read finds the bucket by its logical ID as unowned and ignores a same-named one",
+      () => {
+        const listed: unknown[] = [];
+        const buckets = [
+          { ...apiBucket("bucket-named", "uploads"), branchId: "branch-1", logicalId: null },
           {
-            projectId: "project-1",
-            logicalId: "uploads",
+            ...apiBucket("bucket-declared", "renamed-in-console"),
             branchId: "branch-1",
+            logicalId: "uploads",
           },
-        ]);
+        ];
+        const client = {
+          listBuckets: (query: { logicalId?: string }) =>
+            Effect.sync(() => {
+              listed.push(query);
+              return buckets.filter(
+                (bucket) =>
+                  query.logicalId === undefined ||
+                  ("logicalId" in bucket && bucket.logicalId === query.logicalId),
+              );
+            }),
+        } as unknown as PrismaManagementClient;
+        const read = (logicalId?: string) =>
+          Effect.gen(function* () {
+            const provider = yield* Provider.findProvider(Bucket);
+            return yield* provider.read!({
+              id: "Bucket",
+              fqn: "Bucket",
+              instanceId,
+              olds: {
+                project: "project-1",
+                name: "uploads",
+                branchId: "branch-1",
+                ...(logicalId === undefined ? {} : { logicalId }),
+              },
+              output: undefined,
+            });
+          });
 
-        expect(yield* read("other")).toBeUndefined();
-        // Without an explicit logical ID the lookup uses the fqn, never the name.
-        expect(yield* read()).toBeUndefined();
-        expect(listed).toHaveLength(3);
-        expect(listed[2]).toEqual({
-          projectId: "project-1",
-          logicalId: "Bucket",
-          branchId: "branch-1",
-        });
-      }).pipe(Effect.provide(bucketLayer(client)));
-    });
+        return Effect.gen(function* () {
+          // A logical ID does not prove ownership; adoption is required.
+          const found = yield* read("uploads");
+          expect(Unowned.is(found)).toBe(true);
+          expect({ ...found }).toEqual({
+            ...bucketAttrs("bucket-declared", "renamed-in-console"),
+            logicalId: "uploads",
+          });
+          expect(listed).toEqual([
+            {
+              projectId: "project-1",
+              logicalId: "uploads",
+              branchId: "branch-1",
+            },
+          ]);
+
+          expect(yield* read("other")).toBeUndefined();
+          // Without an explicit logical ID the lookup uses the fqn, never the name.
+          expect(yield* read()).toBeUndefined();
+          expect(listed).toHaveLength(3);
+          expect(listed[2]).toEqual({
+            projectId: "project-1",
+            logicalId: "Bucket",
+            branchId: "branch-1",
+          });
+        }).pipe(Effect.provide(bucketLayer(client)));
+      },
+    );
 
     it.effect("moves and renames in place, then sets the logical ID in a second call", () => {
       const patches: unknown[] = [];
@@ -814,4 +828,195 @@ describe(
       }).pipe(Effect.provide(bucketKeyLayer(client)));
     });
   },
+);
+
+const live = Test.make({ providers: Prisma.providers() });
+
+const liveTags = [
+  "provider:prisma",
+  "provider:prisma:bucket",
+  "provider:prisma:branch",
+  "provider:prisma:project",
+  "live",
+];
+
+const observeBucket = (bucketId: string) =>
+  getBucket({ bucketId }).pipe(Effect.map((response) => response.data));
+
+const expectBucketGone = (bucketId: string) =>
+  expectGone(
+    getBucket({ bucketId }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
+  );
+
+const bucketStack = (props: { name?: string; logicalId?: string; onBranch?: boolean } = {}) =>
+  Effect.gen(function* () {
+    const project = yield* Prisma.Project("Project", { createDatabase: false });
+    const branch = yield* Prisma.Branch("Feature", { project, gitName: "feature/bucket" });
+    const bucket = yield* Prisma.Bucket("Uploads", {
+      project,
+      ...(props.name === undefined ? {} : { name: props.name }),
+      ...(props.logicalId === undefined ? {} : { logicalId: props.logicalId }),
+      ...(props.onBranch ? { branchId: branch.branchId } : {}),
+    });
+    return { project, branch, bucket };
+  });
+
+live.test.provider(
+  "creates a bucket under its fqn logical ID and renames, moves, and rebinds it in place",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    expect(initial.bucket.logicalId).toBe("Uploads");
+    const created = yield* observeBucket(initial.bucket.bucketId);
+    expect(created.project.id).toBe(initial.project.projectId);
+    expect(created.name).toBe("uploads");
+    expect(created.logicalId).toBe("Uploads");
+
+    const renamed = yield* stack.deploy(bucketStack({ name: "uploads-renamed" }));
+    expect(renamed.bucket.bucketId).toBe(initial.bucket.bucketId);
+    expect((yield* observeBucket(initial.bucket.bucketId)).name).toBe("uploads-renamed");
+
+    // A branch move keeps the bucket and its logical ID.
+    const moved = yield* stack.deploy(bucketStack({ name: "uploads-renamed", onBranch: true }));
+    expect(moved.bucket.bucketId).toBe(initial.bucket.bucketId);
+    const onBranch = yield* observeBucket(initial.bucket.bucketId);
+    expect(onBranch.branchId).toBe(initial.branch.branchId);
+    expect(onBranch.logicalId).toBe("Uploads");
+
+    const overridden = yield* stack.deploy(
+      bucketStack({ name: "uploads-renamed", onBranch: true, logicalId: "media" }),
+    );
+    expect(overridden.bucket.bucketId).toBe(initial.bucket.bucketId);
+    expect((yield* observeBucket(initial.bucket.bucketId)).logicalId).toBe("media");
+
+    const reverted = yield* stack.deploy(bucketStack({ name: "uploads-renamed", onBranch: true }));
+    expect(reverted.bucket.bucketId).toBe(initial.bucket.bucketId);
+    expect((yield* observeBucket(initial.bucket.bucketId)).logicalId).toBe("Uploads");
+
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.bucket.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "after lost state, adoption finds the bucket by its logical ID despite a Console rename",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    yield* updateBucket({ bucketId: initial.bucket.bucketId, displayName: "renamed-in-console" });
+    yield* forgetState(stack, "Uploads");
+
+    // A bucket has no generated name, so nothing proves it is ours.
+    const refused = yield* failureOf(stack.deploy(bucketStack({ name: "uploads" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const branch = yield* Prisma.Branch("Feature", { project, gitName: "feature/bucket" });
+        const bucket = yield* Prisma.Bucket("Uploads", { project, name: "uploads" }).pipe(
+          adopt(true),
+        );
+        return { project, branch, bucket };
+      }),
+    );
+    expect(adopted.bucket.bucketId).toBe(initial.bucket.bucketId);
+    const observed = yield* observeBucket(initial.bucket.bucketId);
+    expect(observed.name).toBe("uploads");
+    expect(observed.logicalId).toBe("Uploads");
+
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.bucket.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "sets the logical ID on a bucket deployed before logical IDs existed",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    yield* updateBucket({ bucketId: initial.bucket.bucketId, logicalId: null });
+    yield* patchStateAttr(stack, "Uploads", { logicalId: null });
+    expect((yield* observeBucket(initial.bucket.bucketId)).logicalId).toBeNull();
+
+    const stamped = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    expect(stamped.bucket.bucketId).toBe(initial.bucket.bucketId);
+    expect(stamped.bucket.logicalId).toBe("Uploads");
+    expect((yield* observeBucket(initial.bucket.bucketId)).logicalId).toBe("Uploads");
+
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.bucket.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "replaces the bucket when its project changes",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    // Both projects exist before the move, so the new project ID is known at plan time.
+    const resources = (target: "first" | "second") =>
+      Effect.gen(function* () {
+        const first = yield* Prisma.Project("First", { createDatabase: false });
+        const second = yield* Prisma.Project("Second", { createDatabase: false });
+        const bucket = yield* Prisma.Bucket("Uploads", {
+          project: target === "first" ? first : second,
+          name: "uploads",
+        });
+        return { first, second, bucket };
+      });
+
+    const initial = yield* stack.deploy(resources("first"));
+    const replaced = yield* stack.deploy(resources("second"));
+    expect(replaced.bucket.bucketId).not.toBe(initial.bucket.bucketId);
+    expect(replaced.bucket.projectId).toBe(initial.second.projectId);
+    const observed = yield* observeBucket(replaced.bucket.bucketId);
+    expect(observed.project.id).toBe(initial.second.projectId);
+    expect(observed.logicalId).toBe("Uploads");
+    yield* expectBucketGone(initial.bucket.bucketId);
+
+    yield* stack.destroy();
+    yield* expectBucketGone(replaced.bucket.bucketId);
+    yield* expectProjectGone(initial.first.projectId);
+    yield* expectProjectGone(initial.second.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "rejects a logical ID that another bucket on the branch holds",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (secondLogicalId: string) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const first = yield* Prisma.Bucket("First", { project, logicalId: "shared" });
+        const second = yield* Prisma.Bucket("Second", { project, logicalId: secondLogicalId });
+        return { project, first, second };
+      });
+
+    const initial = yield* stack.deploy(resources("second"));
+    const failure = yield* failureOf(stack.deploy(resources("shared")));
+    expect(failure.text).toContain("logical ID 'shared'");
+    expect((yield* observeBucket(initial.first.bucketId)).logicalId).toBe("shared");
+
+    yield* stack.destroy();
+    yield* expectBucketGone(initial.first.bucketId);
+    yield* expectBucketGone(initial.second.bucketId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
 );

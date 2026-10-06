@@ -169,9 +169,10 @@ export interface DatabaseProps {
   branchGitName?: string;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
-   * branch. The provider finds the database by it within the project and
-   * branch, so lost state or a rename in the Console does not create a second
-   * database. Changing it updates the database in place.
+   * branch. A rename in the Console does not change it. After lost state, the
+   * provider finds the database by it instead of creating a second one, and
+   * `--adopt` (or `adopt(true)`) takes it back over, because a logical ID alone
+   * does not prove which stack owns it. Changing it updates the database in place.
    * @default the resource's fully qualified logical ID, e.g. `"db"` or `"App/Db"`
    */
   logicalId?: string;
@@ -683,7 +684,6 @@ const ProviderLive = () =>
         read: Effect.fn(function* ({ id, fqn, output, olds }) {
           const databaseId = isPrismaDevId(output?.databaseId) ? undefined : output?.databaseId;
           let generatedIdentityMatch = false;
-          let matchedByLogicalId = false;
           let database = databaseId
             ? yield* getDatabase({ databaseId }).pipe(
                 Effect.map((response) => response.data),
@@ -694,7 +694,13 @@ const ProviderLive = () =>
             const projectId = unresolvedProjectIdOf(olds.project);
             if (projectId) {
               database = yield* findDatabaseByLogicalId(projectId, olds.logicalId ?? fqn, olds);
-              matchedByLogicalId = database !== undefined;
+              // A logical ID alone does not prove ownership: another
+              // declaration, stage, or stack on the branch can hold it. Only
+              // the generated name, which embeds this instance's ID, does.
+              generatedIdentityMatch =
+                database !== undefined &&
+                olds.name === undefined &&
+                database.name === (yield* createName(id, undefined));
             }
             // An explicit logical ID is the only identity. A derived one falls
             // back to the name for databases created before logical IDs existed.
@@ -725,9 +731,7 @@ const ProviderLive = () =>
             password: cachedSecrets?.password,
           });
           // Only a declaration assigns a logical ID, so a match is this database.
-          return databaseId === undefined && !generatedIdentityMatch && !matchedByLogicalId
-            ? Unowned(attrs)
-            : attrs;
+          return databaseId === undefined && !generatedIdentityMatch ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, fqn, news, olds, output }) {
           yield* validateDatabaseProps(news);
@@ -888,6 +892,10 @@ const ProviderLive = () =>
           }
           if (database.logicalId !== logicalId) {
             const { branchId } = database;
+            // The API refuses to rebind a logical ID; it must be cleared first.
+            if (database.logicalId) {
+              database = (yield* updateDatabase({ databaseId: database.id, logicalId: null })).data;
+            }
             // The API refuses logicalId in the same request as a branch
             // move, so it is set only after the move above.
             database = (yield* updateDatabase({

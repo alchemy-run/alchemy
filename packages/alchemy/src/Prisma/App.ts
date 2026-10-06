@@ -55,9 +55,10 @@ export interface AppProps {
   branchGitName?: string;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
-   * branch. The provider finds the App by it within the project and branch,
-   * so lost state or a rename in the Console does not create a second App.
-   * Changing it updates the App in place.
+   * branch. A rename in the Console does not change it. After lost state, the
+   * provider finds the App by it instead of creating a second one, and
+   * `--adopt` (or `adopt(true)`) takes it back over, because a logical ID alone
+   * does not prove which stack owns it. Changing it updates the App in place.
    * @default the resource's fully qualified logical ID, e.g. `"web"` or `"Site/Web"`
    */
   logicalId?: string;
@@ -314,7 +315,7 @@ const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ id, fqn, output, olds }) {
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
-          let matchedByLogicalId = false;
+          let provenOwned = false;
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
@@ -329,7 +330,13 @@ const ProviderLive = () =>
                   olds,
                 );
                 if (byLogicalId) {
-                  matchedByLogicalId = true;
+                  // A logical ID alone does not prove ownership: another
+                  // declaration, stage, or stack on the branch can hold it.
+                  // The generated display name embeds this instance's ID,
+                  // so a match on it is this resource's interrupted create.
+                  provenOwned =
+                    olds.displayName === undefined &&
+                    byLogicalId.name === (yield* createDisplayName(id, undefined));
                   return byLogicalId;
                 }
                 // An explicit logical ID is the only identity. A derived one
@@ -344,8 +351,7 @@ const ProviderLive = () =>
               });
           if (!app) return undefined;
           const attrs = attrsFrom(app);
-          // Only a declaration assigns a logical ID, so a match is this App.
-          return appId || matchedByLogicalId ? attrs : Unowned(attrs);
+          return appId || provenOwned ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, fqn, news, output }) {
           yield* validateAppProps(news);
@@ -420,6 +426,12 @@ const ProviderLive = () =>
             }).pipe(Effect.map((response) => response.data));
           }
           if (app.logicalId !== logicalId) {
+            // The API refuses to rebind a logical ID; it must be cleared first.
+            if (app.logicalId) {
+              app = yield* updateService({ serviceId: app.id, logicalId: null }).pipe(
+                Effect.map((response) => response.data),
+              );
+            }
             // The API refuses logicalId in the same request as a branch
             // move, so it is set only after the move above.
             app = yield* updateService({ serviceId: app.id, logicalId }).pipe(

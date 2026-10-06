@@ -9,6 +9,7 @@ import {
 } from "@distilled.cloud/prisma/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
@@ -47,9 +48,10 @@ export interface BucketProps {
   branchId?: string;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
-   * branch. The provider finds the bucket by it within the project and
-   * branch, so lost state or a rename in the Console does not create a second
-   * bucket. Changing it updates the bucket in place.
+   * branch. A rename in the Console does not change it. After lost state, the
+   * provider finds the bucket by it instead of creating a second one, and
+   * `--adopt` (or `adopt(true)`) takes it back over, because a logical ID alone
+   * does not prove which stack owns it. Changing it updates the bucket in place.
    * @default the resource's fully qualified logical ID, e.g. `"uploads"` or `"App/Uploads"`
    */
   logicalId?: string;
@@ -233,14 +235,15 @@ const ProviderLive = () =>
           if (!bucketId) {
             const projectId = unresolvedProjectIdOf(olds.project);
             if (!projectId) return undefined;
-            // Only a declaration assigns a logical ID, so a match is this
-            // bucket.
+            // A logical ID alone does not prove ownership: another
+            // declaration, stage, or stack on the branch can hold it, and a
+            // bucket has no Alchemy-generated name to confirm it.
             const bucket = yield* findBucketByLogicalId(
               projectId,
               olds.logicalId ?? fqn,
               olds.branchId,
             );
-            return bucket ? attrsFrom(bucket) : undefined;
+            return bucket ? Unowned(attrsFrom(bucket)) : undefined;
           }
           const bucket = yield* getBucket({ bucketId }).pipe(
             Effect.map((response) => response.data),
@@ -310,6 +313,12 @@ const ProviderLive = () =>
           }
           if (observed.logicalId !== logicalId) {
             const { branchId } = observed;
+            // The API refuses to rebind a logical ID; it must be cleared first.
+            if (observed.logicalId) {
+              observed = yield* updateBucket({ bucketId: observed.id, logicalId: null }).pipe(
+                Effect.map((response) => response.data),
+              );
+            }
             // The API refuses logicalId in the same request as a branch
             // move, so it is set only after the move above.
             observed = yield* updateBucket({
