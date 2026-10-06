@@ -30,17 +30,13 @@ export const makeWrite = ({
   wrapR2Object,
   wrapR2ObjectOrBody,
 }: ReturnType<typeof makeHelpers>): WriteBucketClient => {
-  const wrapR2MultipartUpload = (
-    upload: runtime.R2MultipartUpload,
-  ): MultipartUpload => ({
+  const wrapR2MultipartUpload = (upload: runtime.R2MultipartUpload): MultipartUpload => ({
     ...upload,
     raw: upload,
     uploadId: upload.uploadId,
     abort: () => tryPromise(() => upload.abort()),
     complete: (uploadedParts: UploadedPart[]) =>
-      tryPromise(() => upload.complete(uploadedParts)).pipe(
-        Effect.map(wrapR2Object),
-      ),
+      tryPromise(() => upload.complete(uploadedParts)).pipe(Effect.map(wrapR2Object)),
     uploadPart: (
       partNumber: number,
       value:
@@ -55,9 +51,7 @@ export const makeWrite = ({
       tryPromise(() =>
         upload.uploadPart(
           partNumber,
-          Stream.isStream(value)
-            ? value.pipe(Stream.toReadableStream())
-            : (value as any),
+          Stream.isStream(value) ? value.pipe(Stream.toReadableStream()) : (value as any),
           options,
         ),
       ),
@@ -102,9 +96,7 @@ export const makeWrite = ({
       }).pipe(Effect.map(wrapR2ObjectOrBody)) as any,
     delete: (keys: string | string[]) => use((raw) => raw.delete(keys)),
     createMultipartUpload: (key: string, options?: MultipartOptions) =>
-      use((raw) => raw.createMultipartUpload(key, options)).pipe(
-        Effect.map(wrapR2MultipartUpload),
-      ),
+      use((raw) => raw.createMultipartUpload(key, options)).pipe(Effect.map(wrapR2MultipartUpload)),
     resumeMultipartUpload: (key: string, uploadId: string) =>
       raw.pipe(
         Effect.map((raw) => raw.resumeMultipartUpload(key, uploadId)),

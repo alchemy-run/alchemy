@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { Volume } from "@/AWS/EC2";
-import { Alias, Key, type AliasName } from "@/AWS/KMS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as kms from "@distilled.cloud/aws/kms";
 import { expect } from "alchemy-test";
@@ -10,13 +5,15 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Volume } from "@/AWS/EC2";
+import { Alias, Key, type AliasName } from "@/AWS/KMS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The testing account is in us-west-2.
 const AZ = "us-west-2a";
@@ -51,9 +48,7 @@ test.provider(
       expect(v?.Size).toBe(1);
       expect(v?.AvailabilityZone).toBe(AZ);
       expect(v?.State === "available" || v?.State === "creating").toBe(true);
-      expect(
-        v?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value,
-      ).toBeTruthy();
+      expect(v?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBeTruthy();
 
       // list() enumerates the deployed volume.
       const provider = yield* Provider.findProvider(Volume);
@@ -69,10 +64,7 @@ test.provider(
 class AliasStillExists extends Data.TaggedError("AliasStillExists") {}
 class KeyNotPendingDeletion extends Data.TaggedError("KeyNotPendingDeletion") {}
 
-const kmsObservationSchedule = Schedule.max([
-  Schedule.fixed("1 second"),
-  Schedule.recurs(30),
-]);
+const kmsObservationSchedule = Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(30)]);
 
 /**
  * Idempotent out-of-band backstop for the stack-managed fixture. KMS keys
@@ -80,10 +72,7 @@ const kmsObservationSchedule = Schedule.max([
  * key PendingDeletion. The stack provider remains the owner; this finalizer
  * closes failure/timeout gaps and observes both terminal states before return.
  */
-const releaseManagedKey = (
-  aliasName: AliasName | undefined,
-  keyId: string | undefined,
-) =>
+const releaseManagedKey = (aliasName: AliasName | undefined, keyId: string | undefined) =>
   Effect.gen(function* () {
     let targetKeyId = keyId;
     if (aliasName !== undefined) {
@@ -96,12 +85,8 @@ const releaseManagedKey = (
       yield* kms.deleteAlias({ AliasName: aliasName }).pipe(
         Effect.retry({
           while: (error) =>
-            error._tag === "DependencyTimeoutException" ||
-            error._tag === "KMSInternalException",
-          schedule: Schedule.max([
-            Schedule.fixed("500 millis"),
-            Schedule.recurs(8),
-          ]),
+            error._tag === "DependencyTimeoutException" || error._tag === "KMSInternalException",
+          schedule: Schedule.max([Schedule.fixed("500 millis"), Schedule.recurs(8)]),
         }),
         Effect.catchTag("NotFoundException", () => Effect.void),
       );
@@ -132,15 +117,9 @@ const releaseManagedKey = (
               while: (error) =>
                 error._tag === "DependencyTimeoutException" ||
                 error._tag === "KMSInternalException",
-              schedule: Schedule.max([
-                Schedule.fixed("500 millis"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("500 millis"), Schedule.recurs(8)]),
             }),
-            Effect.catchTag(
-              ["KMSInvalidStateException", "NotFoundException"],
-              () => Effect.void,
-            ),
+            Effect.catchTag(["KMSInvalidStateException", "NotFoundException"], () => Effect.void),
           );
       }
 
@@ -212,9 +191,7 @@ test.provider(
           yield* stack.destroy().pipe(Effect.ignore);
           // Finalizers require a `never` error channel. Escalate a cleanup
           // failure to a visible defect instead of swallowing it.
-          yield* releaseManagedKey(fixtureAliasName, fixtureKeyId).pipe(
-            Effect.orDie,
-          );
+          yield* releaseManagedKey(fixtureAliasName, fixtureKeyId).pipe(Effect.orDie);
         }).pipe(logLevel),
       ),
     );

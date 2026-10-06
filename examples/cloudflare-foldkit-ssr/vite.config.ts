@@ -7,8 +7,7 @@ import { defineConfig } from "vite";
 // fails without one, so a build must always have it: CI supplies a real
 // per-deployment value and a local build falls back to a fresh one rather
 // than a constant, which would make a stale page look current.
-const buildId =
-  process.env.FOLDKIT_BUILD_ID ?? `local-${Date.now().toString(36)}`;
+const buildId = process.env.FOLDKIT_BUILD_ID ?? `local-${Date.now().toString(36)}`;
 
 export default defineConfig({
   // Client and server must receive the same buildId from this config evaluation.

@@ -1,3 +1,5 @@
+import * as Argument from "effect/cli/Argument";
+import * as Flag from "effect/cli/Flag";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -5,8 +7,6 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Argument from "effect/unstable/cli/Argument";
-import * as Flag from "effect/unstable/cli/Flag";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { UserInputError } from "./errors.ts";
 
@@ -31,9 +31,7 @@ const STAGE_NAME_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
 
 const makeStageFlag = (kind: "live" | "dev") =>
   Flag.String("stage").pipe(
-    Flag.withSchema(
-      Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
-    ),
+    Flag.withSchema(Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
     Flag.withDescription(
       kind === "live"
         ? "Stage to deploy to. Defaults to $ALCHEMY_STAGE or live_${USER}"
@@ -81,9 +79,7 @@ export const resolveStage = Effect.fn(function* (
 
 export const envFile = Flag.File("env-file").pipe(
   Flag.optional,
-  Flag.withDescription(
-    "File to load environment variables from, defaults to .env",
-  ),
+  Flag.withDescription("File to load environment variables from, defaults to .env"),
 );
 
 export const dryRun = Flag.Boolean("dry-run").pipe(
@@ -98,9 +94,7 @@ export const yes = Flag.Boolean("yes").pipe(
 );
 
 export const force = Flag.Boolean("force").pipe(
-  Flag.withDescription(
-    "Force updates for resources that would otherwise no-op",
-  ),
+  Flag.withDescription("Force updates for resources that would otherwise no-op"),
   Flag.withDefault(false),
 );
 
@@ -132,8 +126,7 @@ export const validateSelectionOptions = (options: {
   (options.destroy || options.detectDrift)
     ? Effect.fail(
         new UserInputError({
-          message:
-            "--include/--exclude cannot be combined with destroy or --detect-drift.",
+          message: "--include/--exclude cannot be combined with destroy or --detect-drift.",
         }),
       )
     : Effect.void;
@@ -168,8 +161,7 @@ export const resolveConfig = <
   Effect.gen(function* () {
     if (args.config !== undefined && args.configPath !== undefined) {
       return yield* new UserInputError({
-        message:
-          "Pass the config path either positionally or with --config, not both.",
+        message: "Pass the config path either positionally or with --config, not both.",
       });
     }
     return {
@@ -197,9 +189,7 @@ export const resolveStackArgs =
     });
 
 export const profile = Flag.String("profile").pipe(
-  Flag.withDescription(
-    "Auth profile to use. Defaults to $ALCHEMY_PROFILE or 'default'.",
-  ),
+  Flag.withDescription("Auth profile to use. Defaults to $ALCHEMY_PROFILE or 'default'."),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );

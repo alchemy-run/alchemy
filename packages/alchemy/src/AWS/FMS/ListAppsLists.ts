@@ -35,6 +35,4 @@ export interface ListAppsLists extends Binding.Service<
   >
 > {}
 
-export const ListAppsLists = Binding.Service<ListAppsLists>(
-  "AWS.FMS.ListAppsLists",
-);
+export const ListAppsLists = Binding.Service<ListAppsLists>("AWS.FMS.ListAppsLists");

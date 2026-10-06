@@ -1,3 +1,6 @@
+import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import {
   Trail,
@@ -7,9 +10,6 @@ import {
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import * as Test from "@/Test/Alchemy";
-import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -92,9 +92,7 @@ test.provider(
         });
 
       // 1. Create — logging on by default.
-      const { trail } = yield* stack.deploy(
-        make({ tags: { fixture: "cloudtrail-trail" } }),
-      );
+      const { trail } = yield* stack.deploy(make({ tags: { fixture: "cloudtrail-trail" } }));
       expect(trail.trailName).toBe(TRAIL_NAME);
       expect(trail.trailArn).toBe(trailArn);
       expect(trail.homeRegion).toBe(region);
@@ -111,10 +109,7 @@ test.provider(
       expect(status.IsLogging).toBe(true);
       const tags = yield* cloudtrail.listTags({ ResourceIdList: [trailArn] });
       const tagRecord = Object.fromEntries(
-        (tags.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (tags.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(tagRecord.fixture).toBe("cloudtrail-trail");
       expect(tagRecord["alchemy::id"]).toBe("Audit");
@@ -126,27 +121,19 @@ test.provider(
           advancedEventSelectors: [
             {
               name: "Management events",
-              fieldSelectors: [
-                { field: "eventCategory", equals: ["Management"] },
-              ],
+              fieldSelectors: [{ field: "eventCategory", equals: ["Management"] }],
             },
           ],
           insightSelectors: [{ insightType: "ApiCallRateInsight" }],
         }),
       );
       expect(withSelectors.trailArn).toBe(trailArn);
-      const selectors = yield* cloudtrail.getEventSelectors({
-        TrailName: trailArn,
-      });
-      expect(selectors.AdvancedEventSelectors?.[0]?.Name).toBe(
-        "Management events",
+      const selectors = yield* cloudtrail.getEventSelectors({ TrailName: trailArn });
+      expect(selectors.AdvancedEventSelectors?.[0]?.Name).toBe("Management events");
+      const insights = yield* cloudtrail.getInsightSelectors({ TrailName: trailArn });
+      expect((insights.InsightSelectors ?? []).map((s) => s.InsightType)).toContain(
+        "ApiCallRateInsight",
       );
-      const insights = yield* cloudtrail.getInsightSelectors({
-        TrailName: trailArn,
-      });
-      expect(
-        (insights.InsightSelectors ?? []).map((s) => s.InsightType),
-      ).toContain("ApiCallRateInsight");
 
       // 3. Update in place — stop logging, flip settings, swap tags,
       // disable Insights (`[]`). Omitted event selectors stay untouched.
@@ -167,14 +154,9 @@ test.provider(
       expect(observedAfter.Trail?.S3KeyPrefix).toBe("audit");
       const statusAfter = yield* cloudtrail.getTrailStatus({ Name: trailArn });
       expect(statusAfter.IsLogging).toBe(false);
-      const tagsAfter = yield* cloudtrail.listTags({
-        ResourceIdList: [trailArn],
-      });
+      const tagsAfter = yield* cloudtrail.listTags({ ResourceIdList: [trailArn] });
       const tagRecordAfter = Object.fromEntries(
-        (tagsAfter.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [
-          t.Key,
-          t.Value,
-        ]),
+        (tagsAfter.ResourceTagList?.[0]?.TagsList ?? []).map((t) => [t.Key, t.Value]),
       );
       expect(tagRecordAfter.team).toBe("security");
       expect(tagRecordAfter.fixture).toBeUndefined();
@@ -182,37 +164,24 @@ test.provider(
 
       // Insights disabled: reads back as the typed InsightNotEnabledException
       // (or an empty list, depending on propagation).
-      const insightsAfter = yield* cloudtrail
-        .getInsightSelectors({ TrailName: trailArn })
-        .pipe(
-          Effect.map((r) => r.InsightSelectors ?? []),
-          Effect.catchTag("InsightNotEnabledException", () =>
-            Effect.succeed([] as cloudtrail.InsightSelector[]),
-          ),
-        );
+      const insightsAfter = yield* cloudtrail.getInsightSelectors({ TrailName: trailArn }).pipe(
+        Effect.map((r) => r.InsightSelectors ?? []),
+        Effect.catchTag("InsightNotEnabledException", () =>
+          Effect.succeed([] as cloudtrail.InsightSelector[]),
+        ),
+      );
       expect(insightsAfter).toEqual([]);
       // Omitted event selectors were left untouched by the update.
-      const selectorsAfter = yield* cloudtrail.getEventSelectors({
-        TrailName: trailArn,
-      });
-      expect(selectorsAfter.AdvancedEventSelectors?.[0]?.Name).toBe(
-        "Management events",
-      );
+      const selectorsAfter = yield* cloudtrail.getEventSelectors({ TrailName: trailArn });
+      expect(selectorsAfter.AdvancedEventSelectors?.[0]?.Name).toBe("Management events");
 
       // 4. Delete — trail deletion is synchronous.
       yield* stack.destroy();
-      const gone = yield* Effect.flip(
-        cloudtrail.getTrail({ Name: TRAIL_NAME }),
-      );
+      const gone = yield* Effect.flip(cloudtrail.getTrail({ Name: TRAIL_NAME }));
       expect(gone._tag).toBe("TrailNotFoundException");
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:cloudtrail",
-      "provider:aws:s3",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:cloudtrail", "provider:aws:s3", "live"],
     timeout: 240_000,
   },
 );

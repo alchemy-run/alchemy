@@ -9,12 +9,8 @@ import type {
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-
-import type { Input } from "../Input.ts";
-import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
-
 import { deepEqual, isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
@@ -31,11 +27,9 @@ import {
   toFlyContainers,
   validateMachineContainers,
 } from "./MachineContainers.ts";
-import {
-  createFlyResourceName,
-  diffMachineMetadata,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
+import { createFlyResourceName, diffMachineMetadata, sanitizeFlyAppName } from "./Metadata.ts";
+import type { DiskSpec, MountedDisk, ServiceBinding } from "./MountVolume.ts";
+import type { Providers } from "./Providers.ts";
 import {
   deleteReplicaSet,
   listReplicaSets,
@@ -377,11 +371,6 @@ export type Machine = Resource<
     imageRef: MachineImageRef | undefined;
     /** Observed guest size. */
     guest: MachineGuest | undefined;
-    /**
-     * Public `https://{appName}.fly.dev` URL when this Machine publishes
-     * a proxy service. `undefined` when no services are configured.
-     */
-    url: string | undefined;
     /** Number of Machines in the replica set. */
     count: number;
     /** Disks mounted on replica 0. */
@@ -542,9 +531,9 @@ export type Machine = Resource<
  * ```
  *
  * ### Publish a proxy service
- * `services` publishes ports on Fly's proxy. `{app}.fly.dev` over IPv4
- * still needs an {@link IpAssignment} on the parent App. `url` is
- * `https://{appName}.fly.dev` when a proxy service is configured.
+ * `services` publishes ports on Fly's proxy. The App needs an
+ * {@link IpAssignment} before `{app}.fly.dev` answers. For a public
+ * endpoint without managing Apps and addresses, use a {@link Service}.
  *
  * Handlers are `http`, `tls`, `pg_tls`, and similar. Set `forceHttps`
  * to redirect HTTP to HTTPS. Use `startPort` / `endPort` for a
@@ -854,16 +843,12 @@ export type Machine = Resource<
  */
 export const Machine = Resource<Machine>("Fly.Machine");
 
-export class MachineNotCreated extends Data.TaggedError(
-  "Fly.MachineNotCreated",
-)<{
+export class MachineNotCreated extends Data.TaggedError("Fly.MachineNotCreated")<{
   name: string;
   appName: string;
 }> {}
 
-export class MachineAppNotResolved extends Data.TaggedError(
-  "Fly.MachineAppNotResolved",
-)<{
+export class MachineAppNotResolved extends Data.TaggedError("Fly.MachineAppNotResolved")<{
   message: string;
 }> {}
 
@@ -886,20 +871,14 @@ const compactRecord = (
 
 const toEnv = toEnvRecord;
 
-const resolveMachineName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveMachineName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyAppName(name);
     if (existing !== undefined) return existing;
     return yield* createFlyResourceName(id);
   });
 
-const mergeBindings = (
-  bindings: readonly ResourceBinding<MachineBinding>[],
-) => {
+const mergeBindings = (bindings: readonly ResourceBinding<MachineBinding>[]) => {
   const env: Record<string, any> = {};
   const mounts: DiskSpec[] = [];
   for (const binding of bindings) {
@@ -909,10 +888,7 @@ const mergeBindings = (
   return { env, mounts };
 };
 
-const mergeDisks = (
-  props: DiskSpec[] | undefined,
-  bindingMounts: DiskSpec[],
-): DiskSpec[] => {
+const mergeDisks = (props: DiskSpec[] | undefined, bindingMounts: DiskSpec[]): DiskSpec[] => {
   const byPath = new Map<string, DiskSpec>();
   for (const disk of [...(props ?? []), ...bindingMounts]) {
     byPath.set(disk.path, disk);
@@ -970,10 +946,7 @@ const buildConfig = (input: {
   containers: input.containers,
   guest: input.guest,
   env: Object.keys(input.env).length > 0 ? input.env : undefined,
-  services:
-    input.services !== undefined && input.services.length > 0
-      ? input.services
-      : undefined,
+  services: input.services !== undefined && input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
   restart: input.restart,
@@ -995,10 +968,7 @@ const sameImage = (machine: FlyMachine, image: string) => {
   return observedRepo === repo || observedRepo.endsWith(`/${repo}`);
 };
 
-const sameGuest = (
-  observed: FlyMachineGuest | undefined,
-  desired: FlyMachineGuest,
-) =>
+const sameGuest = (observed: FlyMachineGuest | undefined, desired: FlyMachineGuest) =>
   (observed?.cpu_kind ?? DEFAULT_CPU_KIND) === desired.cpu_kind &&
   (observed?.cpus ?? DEFAULT_CPUS) === desired.cpus &&
   (observed?.memory_mb ?? DEFAULT_MEMORY_MB) === desired.memory_mb &&
@@ -1010,12 +980,8 @@ const sameEnv = (
   desired: Record<string, string>,
 ) => deepEqual(compactRecord(observed), desired);
 
-const sameMounts = (
-  observed: FlyMachineMount[] | undefined,
-  desired: FlyMachineMount[],
-) => {
-  const key = (mount: FlyMachineMount) =>
-    `${mount.volume ?? ""}:${mount.path ?? ""}`;
+const sameMounts = (observed: FlyMachineMount[] | undefined, desired: FlyMachineMount[]) => {
+  const key = (mount: FlyMachineMount) => `${mount.volume ?? ""}:${mount.path ?? ""}`;
   const left = [...(observed ?? [])].map(key).sort();
   const right = desired.map(key).sort();
   return deepEqual(left, right);
@@ -1026,35 +992,20 @@ const sameRestart = (
   desired: FlyMachineRestart | undefined,
 ) =>
   deepEqual(
-    {
-      policy: observed?.policy ?? "on-failure",
-      max_retries: observed?.max_retries ?? 10,
-    },
-    {
-      policy: desired?.policy ?? "on-failure",
-      max_retries: desired?.max_retries ?? 10,
-    },
+    { policy: observed?.policy ?? "on-failure", max_retries: observed?.max_retries ?? 10 },
+    { policy: desired?.policy ?? "on-failure", max_retries: desired?.max_retries ?? 10 },
     { stripNullish: true },
   );
 
-const sameInit = (
-  observed: FlyMachineInit | undefined,
-  desired: FlyMachineInit | undefined,
-) => deepEqual(observed ?? {}, desired ?? {}, { stripNullish: true });
+const sameInit = (observed: FlyMachineInit | undefined, desired: FlyMachineInit | undefined) =>
+  deepEqual(observed ?? {}, desired ?? {}, { stripNullish: true });
 
 const metadataChanged = (
   observed: Record<string, string | undefined> | undefined,
   desired: Record<string, string>,
 ) => {
-  const { removed, added, updated } = diffMachineMetadata(
-    compactRecord(observed),
-    desired,
-  );
-  return (
-    removed.length > 0 ||
-    Object.keys(added).length > 0 ||
-    Object.keys(updated).length > 0
-  );
+  const { removed, added, updated } = diffMachineMetadata(compactRecord(observed), desired);
+  return removed.length > 0 || Object.keys(added).length > 0 || Object.keys(updated).length > 0;
 };
 
 const configDrifted = (
@@ -1103,7 +1054,6 @@ const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
   privateIp: set.privateIp,
   imageRef: set.imageRef,
   guest: set.guest,
-  url: set.url,
   count: set.count,
   mounts: set.mounts,
   replicas: set.replicas,
@@ -1111,9 +1061,7 @@ const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
 
 const machineIdsOf = (output: Machine["Attributes"] | undefined) =>
   output?.machineIds ??
-  (output?.machineId !== undefined && output.machineId.length > 0
-    ? [output.machineId]
-    : []);
+  (output?.machineId !== undefined && output.machineId.length > 0 ? [output.machineId] : []);
 
 export const MachineProvider = () =>
   Provider.succeed(Machine, {
@@ -1123,15 +1071,9 @@ export const MachineProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined) return;
       if ("app" in news) {
-        const imageMode = {
-          image: news.image,
-          containers: news.containers,
-          init: news.init,
-        };
+        const imageMode = { image: news.image, containers: news.containers, init: news.init };
         const imageModeResolved =
-          isResolved<Pick<MachineProps, "image" | "containers" | "init">>(
-            imageMode,
-          );
+          isResolved<Pick<MachineProps, "image" | "containers" | "init">>(imageMode);
         if (imageModeResolved) yield* validateMachineContainers(imageMode);
         const settings: Input<
           Pick<
@@ -1192,18 +1134,13 @@ export const MachineProvider = () =>
         }
       }
       if (!isResolved(news))
-        return output?.rolloutPending
-          ? { action: "update" as const }
-          : undefined;
+        return output?.rolloutPending ? { action: "update" as const } : undefined;
       yield* validateMachineContainers(news);
       if (output === undefined) return undefined;
       const desiredAppName = appNameOf(news.app);
-      const appChanged =
-        desiredAppName !== undefined && desiredAppName !== output.appName;
+      const appChanged = desiredAppName !== undefined && desiredAppName !== output.appName;
       const desiredName =
-        news.name !== undefined
-          ? sanitizeFlyAppName(news.name)
-          : (output.baseName ?? output.name);
+        news.name !== undefined ? sanitizeFlyAppName(news.name) : (output.baseName ?? output.name);
       const nameChanged = desiredName !== (output.baseName ?? output.name);
       const desiredRegion = news.region ?? DEFAULT_REGION;
       const regionChanged = desiredRegion !== output.region;
@@ -1219,11 +1156,7 @@ export const MachineProvider = () =>
 
     read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
       const appName = appNameOf(olds?.app) ?? output?.appName;
-      const name = yield* resolveMachineName(
-        id,
-        olds?.name,
-        output?.baseName ?? output?.name,
-      );
+      const name = yield* resolveMachineName(id, olds?.name, output?.baseName ?? output?.name);
       const found = yield* observeReplicaSet({
         appName,
         id,
@@ -1242,14 +1175,7 @@ export const MachineProvider = () =>
       return sets.map(toAttrs);
     }),
 
-    reconcile: Effect.fn(function* ({
-      id,
-      fqn,
-      instanceId,
-      news,
-      output,
-      bindings,
-    }) {
+    reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output, bindings }) {
       const props = news;
       yield* validateMachineContainers(props);
       const policy = yield* deploymentPolicy(props.deploy, props.shutdown);
@@ -1259,11 +1185,7 @@ export const MachineProvider = () =>
           message: "Fly.Machine requires a resolved App with appName.",
         });
       }
-      const name = yield* resolveMachineName(
-        id,
-        props.name,
-        output?.baseName ?? output?.name,
-      );
+      const name = yield* resolveMachineName(id, props.name, output?.baseName ?? output?.name);
       const region = props.region ?? output?.region ?? DEFAULT_REGION;
       const count = resolveCount(props.count);
       const skipLaunch = props.skipLaunch === true;
@@ -1275,9 +1197,7 @@ export const MachineProvider = () =>
       const restart = props.restart ? toFlyRestart(props.restart) : undefined;
       const init = props.init ? toFlyInit(props.init) : undefined;
       const containers =
-        props.containers === undefined
-          ? undefined
-          : toFlyContainers(props.containers);
+        props.containers === undefined ? undefined : toFlyContainers(props.containers);
 
       const set = yield* reconcileReplicas({
         id,
@@ -1288,7 +1208,7 @@ export const MachineProvider = () =>
         checks: props.checks,
         appName,
         baseName: name,
-        region,
+        regions: [region],
         count,
         disks,
         skipLaunch,
@@ -1325,9 +1245,7 @@ export const MachineProvider = () =>
           }),
       }).pipe(
         Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
-          Effect.fail(
-            new MachineNotCreated({ name: error.name, appName: error.appName }),
-          ),
+          Effect.fail(new MachineNotCreated({ name: error.name, appName: error.appName })),
         ),
       );
       return toAttrs(set);

@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as guardduty from "@distilled.cloud/aws/guardduty";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import GuardDutyTestFunctionLive, { GuardDutyTestFunction } from "./handler";
 import { makeGuardDutyTestLease } from "./TestLease.ts";
 
@@ -21,10 +21,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let accountId: string;
@@ -49,31 +46,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -90,24 +78,14 @@ const skipForeign = () =>
 
 describe.sequential(
   "GuardDuty Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:guardduty",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:guardduty", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
         // Never take over a detector this fixture did not create.
-        const preexisting = (yield* aws(guardduty.listDetectors({})))
-          .DetectorIds?.[0];
+        const preexisting = (yield* aws(guardduty.listDetectors({}))).DetectorIds?.[0];
         if (preexisting) {
-          const detector = yield* aws(
-            guardduty.getDetector({ DetectorId: preexisting }),
-          );
+          const detector = yield* aws(guardduty.getDetector({ DetectorId: preexisting }));
           if (detector.Tags?.["fixture"] !== "guardduty-bindings") {
             foreignDetectorId = preexisting;
             yield* Effect.logInfo(
@@ -117,9 +95,7 @@ describe.sequential(
           }
         }
 
-        yield* Effect.logInfo(
-          "GuardDuty test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("GuardDuty test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("GuardDuty test setup: deploying fixture");
@@ -134,21 +110,15 @@ describe.sequential(
         accountId = attrs.roleArn.split(":")[4]!;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `GuardDuty test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`GuardDuty test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `GuardDuty test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`GuardDuty test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -209,17 +179,14 @@ describe.sequential(
             const stats = (yield* getJson("/stats").pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
-                until: (r): boolean =>
-                  (r as { severities: string[] }).severities.length > 0,
+                until: (r): boolean => (r as { severities: string[] }).severities.length > 0,
                 times: 10,
               }),
             )) as { severities: string[] };
             expect(stats.severities.length).toBeGreaterThan(0);
 
             // Archive everything we generated — a real write.
-            const archived = (yield* postJson("/archive")) as {
-              archived: number;
-            };
+            const archived = (yield* postJson("/archive")) as { archived: number };
             expect(archived.archived).toBeGreaterThan(0);
           }),
         { timeout: 120_000 },
@@ -249,10 +216,7 @@ describe.sequential(
             if (response.errorTag) {
               // GuardDuty rejects the call outright for a standalone
               // (non-member) account.
-              expect([
-                "BadRequestException",
-                "AccessDeniedException",
-              ]).toContain(response.errorTag);
+              expect(["BadRequestException", "AccessDeniedException"]).toContain(response.errorTag);
             } else {
               expect(response.administrator ?? null).toBeNull();
             }
@@ -282,9 +246,7 @@ describe.sequential(
       test.provider("reports usage grouped by data source", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const response = (yield* getJson("/usage")) as {
-            dataSources: number;
-          };
+          const response = (yield* getJson("/usage")) as { dataSources: number };
           expect(response.dataSources).toBeGreaterThanOrEqual(0);
         }),
       );
@@ -294,14 +256,10 @@ describe.sequential(
       test.provider("reads coverage and free-trial state", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const coverage = (yield* getJson("/coverage")) as {
-            resources: number;
-          };
+          const coverage = (yield* getJson("/coverage")) as { resources: number };
           expect(coverage.resources).toBeGreaterThanOrEqual(0);
 
-          const freeTrial = (yield* getJson(
-            `/free-trial?account=${accountId}`,
-          )) as {
+          const freeTrial = (yield* getJson(`/free-trial?account=${accountId}`)) as {
             accounts: number;
           };
           expect(freeTrial.accounts).toBeGreaterThanOrEqual(0);
@@ -319,9 +277,7 @@ describe.sequential(
           };
           if (response.errorTag) {
             // Extended Threat Detection may be unavailable for the account.
-            expect(["BadRequestException", "AccessDeniedException"]).toContain(
-              response.errorTag,
-            );
+            expect(["BadRequestException", "AccessDeniedException"]).toContain(response.errorTag);
           } else {
             expect(response.count).toBe(0);
           }
@@ -340,10 +296,7 @@ describe.sequential(
               errorTag?: string;
             };
             if (response.errorTag) {
-              expect([
-                "BadRequestException",
-                "AccessDeniedException",
-              ]).toContain(response.errorTag);
+              expect(["BadRequestException", "AccessDeniedException"]).toContain(response.errorTag);
             } else {
               expect(typeof response.autoEnable).toBe("boolean");
             }
@@ -362,10 +315,7 @@ describe.sequential(
               errorTag?: string;
             };
             if (admins.errorTag) {
-              expect([
-                "BadRequestException",
-                "AccessDeniedException",
-              ]).toContain(admins.errorTag);
+              expect(["BadRequestException", "AccessDeniedException"]).toContain(admins.errorTag);
             } else {
               expect(admins.admins).toBeGreaterThanOrEqual(0);
             }
@@ -375,10 +325,7 @@ describe.sequential(
               errorTag?: string;
             };
             if (stats.errorTag) {
-              expect([
-                "BadRequestException",
-                "AccessDeniedException",
-              ]).toContain(stats.errorTag);
+              expect(["BadRequestException", "AccessDeniedException"]).toContain(stats.errorTag);
             } else {
               expect(stats.activeAccounts).toBeGreaterThanOrEqual(0);
             }
@@ -390,14 +337,10 @@ describe.sequential(
       test.provider("reads this account's invitation state", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const count = (yield* getJson("/invitations-count")) as {
-            count: number;
-          };
+          const count = (yield* getJson("/invitations-count")) as { count: number };
           expect(count.count).toBeGreaterThanOrEqual(0);
 
-          const invitations = (yield* getJson("/invitations")) as {
-            count: number;
-          };
+          const invitations = (yield* getJson("/invitations")) as { count: number };
           expect(invitations.count).toBeGreaterThanOrEqual(0);
         }),
       );

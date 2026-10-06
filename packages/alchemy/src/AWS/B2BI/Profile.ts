@@ -124,9 +124,7 @@ export const ProfileProvider = () =>
               ? b2bi
                   .getProfile({ profileId: head.value.profileId })
                   .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   )
               : Effect.succeed(undefined),
           ),
@@ -149,11 +147,7 @@ export const ProfileProvider = () =>
           const found = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -169,11 +163,7 @@ export const ProfileProvider = () =>
           let live = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : yield* findByName(news.name);
 
           // 2. Ensure — create if missing.
@@ -191,14 +181,12 @@ export const ProfileProvider = () =>
             // 3. Sync — converge mutable settings (name/businessName/phone/
             // email). logging is immutable after create (diff replaces).
             // phone/email are sensitive members that may decode as Redacted.
-            const unwrap = (
-              v: string | Redacted.Redacted<string> | undefined,
-            ) => (Redacted.isRedacted(v) ? Redacted.value(v) : v);
+            const unwrap = (v: string | Redacted.Redacted<string> | undefined) =>
+              Redacted.isRedacted(v) ? Redacted.value(v) : v;
             const nameDrift = live.name !== news.name;
             const bizDrift = live.businessName !== news.businessName;
             const phoneDrift = unwrap(live.phone) !== news.phone;
-            const emailDrift =
-              news.email !== undefined && unwrap(live.email) !== news.email;
+            const emailDrift = news.email !== undefined && unwrap(live.email) !== news.email;
             if (nameDrift || bizDrift || phoneDrift || emailDrift) {
               yield* b2bi.updateProfile({
                 profileId: live.profileId,
@@ -221,21 +209,16 @@ export const ProfileProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* b2bi
             .deleteProfile({ profileId: output.profileId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // B2BI auto-creates /aws/vendedlogs/b2bi/profile/{profileId} when
           // logging is ENABLED and deleteProfile does NOT remove it — every
           // deleted profile would leak an orphaned log group. Reap it
           // (idempotently) using the service-reported name when available.
           const logGroupName =
-            output.logGroupName ??
-            `/aws/vendedlogs/b2bi/profile/${output.profileId}`;
+            output.logGroupName ?? `/aws/vendedlogs/b2bi/profile/${output.profileId}`;
           yield* logs
             .deleteLogGroup({ logGroupName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           // NOTE: profile creation also auto-creates the shared account-level
           // /aws/vendedlogs/b2bi/default log group. That group is a
           // service-managed singleton and MUST NOT be reaped here: B2BI's
@@ -250,9 +233,7 @@ export const ProfileProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getProfile({ profileId: s.profileId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               ),
             ),
             Stream.filter((item) => item !== undefined),

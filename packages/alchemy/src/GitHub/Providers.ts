@@ -3,17 +3,14 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
-import {
-  BranchProtection,
-  BranchProtectionProvider,
-} from "./BranchProtection.ts";
+import { BranchProtection, BranchProtectionProvider } from "./BranchProtection.ts";
 import { Collaborator, CollaboratorProvider } from "./Collaborator.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
+import { Issue, IssueProvider } from "./Issue.ts";
 import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
-import { Issue, IssueProvider } from "./Issue.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
@@ -26,9 +23,7 @@ import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
 export { GitHubCredentials } from "./Credentials.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "GitHub",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("GitHub") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

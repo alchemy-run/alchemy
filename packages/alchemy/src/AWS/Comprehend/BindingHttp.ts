@@ -107,17 +107,15 @@ export const makeComprehendStartJobHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(
-        function* (
-          request: Omit<I, "DataAccessRoleArn"> & {
-            DataAccessRoleArn?: string;
-          },
-        ) {
-          return yield* op({
-            ...request,
-            DataAccessRoleArn: request.DataAccessRoleArn ?? (yield* RoleArn),
-          } as I);
+      return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(function* (
+        request: Omit<I, "DataAccessRoleArn"> & {
+          DataAccessRoleArn?: string;
         },
-      );
+      ) {
+        return yield* op({
+          ...request,
+          DataAccessRoleArn: request.DataAccessRoleArn ?? (yield* RoleArn),
+        } as I);
+      });
     });
   });

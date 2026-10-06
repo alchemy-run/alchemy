@@ -28,11 +28,7 @@ export interface AcceptPage extends Binding.Service<
   AcceptPage,
   "AWS.SSMContacts.AcceptPage",
   () => Effect.Effect<
-    (
-      request: ssm.AcceptPageRequest,
-    ) => Effect.Effect<ssm.AcceptPageResult, ssm.AcceptPageError>
+    (request: ssm.AcceptPageRequest) => Effect.Effect<ssm.AcceptPageResult, ssm.AcceptPageError>
   >
 > {}
-export const AcceptPage = Binding.Service<AcceptPage>(
-  "AWS.SSMContacts.AcceptPage",
-);
+export const AcceptPage = Binding.Service<AcceptPage>("AWS.SSMContacts.AcceptPage");

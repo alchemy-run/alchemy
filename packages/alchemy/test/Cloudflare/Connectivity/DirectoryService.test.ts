@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -59,19 +56,13 @@ test.provider(
             ingress: [{ service: "http://localhost:8080" }],
             adopt: true,
           });
-          const service = yield* Cloudflare.Connectivity.DirectoryService(
-            "PgService",
-            {
-              name: "alchemy-connectivity-dirsvc-tcp",
-              type: "tcp",
-              tcpPort: 5432,
-              appProtocol: "postgresql",
-              host: {
-                ipv4: "10.10.0.21",
-                network: { tunnelId: tunnel.tunnelId },
-              },
-            },
-          );
+          const service = yield* Cloudflare.Connectivity.DirectoryService("PgService", {
+            name: "alchemy-connectivity-dirsvc-tcp",
+            type: "tcp",
+            tcpPort: 5432,
+            appProtocol: "postgresql",
+            host: { ipv4: "10.10.0.21", network: { tunnelId: tunnel.tunnelId } },
+          });
           return { tunnel, service };
         }),
       );
@@ -104,10 +95,7 @@ test.provider(
             type: "tcp",
             tcpPort: 5433,
             appProtocol: "postgresql",
-            host: {
-              ipv4: "10.10.0.21",
-              network: { tunnelId: tunnel.tunnelId },
-            },
+            host: { ipv4: "10.10.0.21", network: { tunnelId: tunnel.tunnelId } },
           });
         }),
       );
@@ -132,10 +120,7 @@ test.provider(
             type: "tcp",
             tcpPort: 5433,
             appProtocol: "postgresql",
-            host: {
-              hostname: "db.internal",
-              resolverNetwork: { tunnelId: tunnel.tunnelId },
-            },
+            host: { hostname: "db.internal", resolverNetwork: { tunnelId: tunnel.tunnelId } },
           });
         }),
       );
@@ -158,10 +143,7 @@ test.provider(
             type: "tcp",
             tcpPort: 5433,
             appProtocol: "postgresql",
-            host: {
-              hostname: "db.internal",
-              resolverNetwork: { tunnelId: tunnel.tunnelId },
-            },
+            host: { hostname: "db.internal", resolverNetwork: { tunnelId: tunnel.tunnelId } },
           });
         }),
       );
@@ -197,21 +179,15 @@ test.provider(
             ingress: [{ service: "http://localhost:8080" }],
             adopt: true,
           });
-          return yield* Cloudflare.Connectivity.DirectoryService(
-            "HttpService",
-            {
-              type: "http",
-              httpPort: 8080,
-              httpsPort: 8443,
-              host: {
-                hostname: "api.internal",
-                resolverNetwork: {
-                  tunnelId: tunnel.tunnelId,
-                  resolverIps: ["10.0.0.53"],
-                },
-              },
+          return yield* Cloudflare.Connectivity.DirectoryService("HttpService", {
+            type: "http",
+            httpPort: 8080,
+            httpsPort: 8443,
+            host: {
+              hostname: "api.internal",
+              resolverNetwork: { tunnelId: tunnel.tunnelId, resolverIps: ["10.0.0.53"] },
             },
-          );
+          });
         }),
       );
 
@@ -236,21 +212,15 @@ test.provider(
             ingress: [{ service: "http://localhost:8080" }],
             adopt: true,
           });
-          return yield* Cloudflare.Connectivity.DirectoryService(
-            "HttpService",
-            {
-              type: "http",
-              httpPort: 3000,
-              httpsPort: 3001,
-              host: {
-                hostname: "api.internal",
-                resolverNetwork: {
-                  tunnelId: tunnel.tunnelId,
-                  resolverIps: ["10.0.0.53"],
-                },
-              },
+          return yield* Cloudflare.Connectivity.DirectoryService("HttpService", {
+            type: "http",
+            httpPort: 3000,
+            httpsPort: 3001,
+            host: {
+              hostname: "api.internal",
+              resolverNetwork: { tunnelId: tunnel.tunnelId, resolverIps: ["10.0.0.53"] },
             },
-          );
+          });
         }),
       );
 
@@ -283,24 +253,16 @@ test.provider(
             ingress: [{ service: "http://localhost:8080" }],
             adopt: true,
           });
-          return yield* Cloudflare.Connectivity.DirectoryService(
-            "ListService",
-            {
-              name: "alchemy-connectivity-dirsvc-list",
-              type: "tcp",
-              tcpPort: 5432,
-              host: {
-                ipv4: "10.20.0.21",
-                network: { tunnelId: tunnel.tunnelId },
-              },
-            },
-          );
+          return yield* Cloudflare.Connectivity.DirectoryService("ListService", {
+            name: "alchemy-connectivity-dirsvc-list",
+            type: "tcp",
+            tcpPort: 5432,
+            host: { ipv4: "10.20.0.21", network: { tunnelId: tunnel.tunnelId } },
+          });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Connectivity.DirectoryService,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Connectivity.DirectoryService);
       const all = yield* provider.list();
 
       expect(all.some((s) => s.serviceId === service.serviceId)).toBe(true);
@@ -335,32 +297,24 @@ test.provider(
             ingress: [{ service: "http://localhost:8080" }],
             adopt: true,
           });
-          return yield* Cloudflare.Connectivity.DirectoryService(
-            "HealService",
-            {
-              name: "alchemy-connectivity-dirsvc-heal",
-              type: "http",
-              httpPort: 8080,
-              host: {
-                hostname: "heal.internal",
-                resolverNetwork: { tunnelId: tunnel.tunnelId },
-              },
-            },
-          );
+          return yield* Cloudflare.Connectivity.DirectoryService("HealService", {
+            name: "alchemy-connectivity-dirsvc-heal",
+            type: "http",
+            httpPort: 8080,
+            host: { hostname: "heal.internal", resolverNetwork: { tunnelId: tunnel.tunnelId } },
+          });
         }),
       );
 
       // Delete the service out-of-band; a redeploy with changed props must
       // observe it as missing and recreate instead of failing on a 404.
-      yield* connectivity
-        .deleteDirectoryService({ accountId, serviceId: service.serviceId })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
-            times: 8,
-          }),
-        );
+      yield* connectivity.deleteDirectoryService({ accountId, serviceId: service.serviceId }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
 
       const healed = yield* stack.deploy(
         Effect.gen(function* () {
@@ -368,18 +322,12 @@ test.provider(
             ingress: [{ service: "http://localhost:8080" }],
             adopt: true,
           });
-          return yield* Cloudflare.Connectivity.DirectoryService(
-            "HealService",
-            {
-              name: "alchemy-connectivity-dirsvc-heal",
-              type: "http",
-              httpPort: 9090,
-              host: {
-                hostname: "heal.internal",
-                resolverNetwork: { tunnelId: tunnel.tunnelId },
-              },
-            },
-          );
+          return yield* Cloudflare.Connectivity.DirectoryService("HealService", {
+            name: "alchemy-connectivity-dirsvc-heal",
+            type: "http",
+            httpPort: 9090,
+            host: { hostname: "heal.internal", resolverNetwork: { tunnelId: tunnel.tunnelId } },
+          });
         }),
       );
 

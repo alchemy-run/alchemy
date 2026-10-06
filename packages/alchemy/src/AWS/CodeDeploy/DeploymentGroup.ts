@@ -70,8 +70,7 @@ const toWireBlueGreen = (
             : {
                 action: props.terminateBlueInstancesOnDeploymentSuccess.action,
                 terminationWaitTimeInMinutes: toWireMinutes(
-                  props.terminateBlueInstancesOnDeploymentSuccess
-                    .terminationWaitTime,
+                  props.terminateBlueInstancesOnDeploymentSuccess.terminationWaitTime,
                 ),
               },
         deploymentReadyOption:
@@ -79,9 +78,7 @@ const toWireBlueGreen = (
             ? undefined
             : {
                 actionOnTimeout: props.deploymentReadyOption.actionOnTimeout,
-                waitTimeInMinutes: toWireMinutes(
-                  props.deploymentReadyOption.waitTime,
-                ),
+                waitTimeInMinutes: toWireMinutes(props.deploymentReadyOption.waitTime),
               },
         greenFleetProvisioningOption: props.greenFleetProvisioningOption,
       };
@@ -199,9 +196,7 @@ export interface DeploymentGroup extends Resource<
  *
  * @resource
  */
-export const DeploymentGroup = Resource<DeploymentGroup>(
-  "AWS.CodeDeploy.DeploymentGroup",
-);
+export const DeploymentGroup = Resource<DeploymentGroup>("AWS.CodeDeploy.DeploymentGroup");
 
 /** Build the ARN for a CodeDeploy deployment group. */
 const deploymentGroupArn = (
@@ -209,8 +204,7 @@ const deploymentGroupArn = (
   account: string,
   appName: string,
   groupName: string,
-): string =>
-  `arn:aws:codedeploy:${region}:${account}:deploymentgroup:${appName}/${groupName}`;
+): string => `arn:aws:codedeploy:${region}:${account}:deploymentgroup:${appName}/${groupName}`;
 
 /**
  * Retry an effect while CodeDeploy reports that it cannot yet assume the
@@ -252,10 +246,7 @@ export const DeploymentGroupProvider = () =>
           ? Effect.succeed(props.deploymentGroupName)
           : createPhysicalName({ id, maxLength: 100 });
 
-      const getGroup = Effect.fn(function* (
-        appName: string,
-        groupName: string,
-      ) {
+      const getGroup = Effect.fn(function* (appName: string, groupName: string) {
         const response = yield* codedeploy
           .getDeploymentGroup({
             applicationName: appName,
@@ -263,27 +254,18 @@ export const DeploymentGroupProvider = () =>
           })
           .pipe(
             Effect.catchTag(
-              [
-                "DeploymentGroupDoesNotExistException",
-                "ApplicationDoesNotExistException",
-              ],
+              ["DeploymentGroupDoesNotExistException", "ApplicationDoesNotExistException"],
               () => Effect.succeed(undefined),
             ),
           );
         return response?.deploymentGroupInfo;
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const observed = yield* codedeploy
           .listTagsForResource({ ResourceArn: arn })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
-        const { removed, upsert } = diffTags(
-          toTagRecord(observed?.Tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(toTagRecord(observed?.Tags), desiredTags);
         if (upsert.length > 0) {
           yield* codedeploy.tagResource({ ResourceArn: arn, Tags: upsert });
         }
@@ -296,17 +278,11 @@ export const DeploymentGroupProvider = () =>
       });
 
       return {
-        stables: [
-          "deploymentGroupName",
-          "deploymentGroupId",
-          "applicationName",
-        ],
+        stables: ["deploymentGroupName", "deploymentGroupId", "applicationName"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // The parent application is immutable — replace on change.
@@ -319,8 +295,7 @@ export const DeploymentGroupProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const appName = output?.applicationName ?? olds?.applicationName;
           if (appName === undefined) return undefined;
-          const name =
-            output?.deploymentGroupName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.deploymentGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* getGroup(appName, name);
           if (group?.deploymentGroupId === undefined) return undefined;
           const arn = deploymentGroupArn(region, accountId, appName, name);
@@ -331,12 +306,10 @@ export const DeploymentGroupProvider = () =>
             applicationName: group.applicationName ?? appName,
             serviceRoleArn: group.serviceRoleArn ?? "",
           };
-          const tags = yield* codedeploy
-            .listTagsForResource({ ResourceArn: arn })
-            .pipe(
-              Effect.map((res) => toTagRecord(res.Tags)),
-              Effect.catch(() => Effect.succeed({})),
-            );
+          const tags = yield* codedeploy.listTagsForResource({ ResourceArn: arn }).pipe(
+            Effect.map((res) => toTagRecord(res.Tags)),
+            Effect.catch(() => Effect.succeed({})),
+          );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 

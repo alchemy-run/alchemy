@@ -29,12 +29,7 @@ export interface DescribeEndpoint extends Binding.Service<
   <E extends Endpoint>(
     endpoint: E,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      sagemaker.DescribeEndpointOutput,
-      sagemaker.DescribeEndpointError
-    >
+    () => Effect.Effect<sagemaker.DescribeEndpointOutput, sagemaker.DescribeEndpointError>
   >
 > {}
-export const DescribeEndpoint = Binding.Service<DescribeEndpoint>(
-  "AWS.SageMaker.DescribeEndpoint",
-);
+export const DescribeEndpoint = Binding.Service<DescribeEndpoint>("AWS.SageMaker.DescribeEndpoint");

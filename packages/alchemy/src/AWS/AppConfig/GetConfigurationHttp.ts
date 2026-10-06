@@ -11,10 +11,7 @@ import { isBindingHost } from "../Lambda/Function.ts";
 import type { Application } from "./Application.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { Environment } from "./Environment.ts";
-import {
-  GetConfiguration,
-  type GetConfigurationOptions,
-} from "./GetConfiguration.ts";
+import { GetConfiguration, type GetConfigurationOptions } from "./GetConfiguration.ts";
 
 interface SessionCache {
   token: string | undefined;
@@ -63,17 +60,15 @@ export const GetConfigurationHttp = Layer.effect(
       // Outputs yield DEFERRED effects — resolve again per invocation below.
       const ApplicationId = yield* application.applicationId;
       const EnvironmentId = yield* environment.environmentId;
-      const ConfigurationProfileId =
-        yield* configurationProfile.configurationProfileId;
+      const ConfigurationProfileId = yield* configurationProfile.configurationProfileId;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          const { accountId, region } =
-            yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-              region: string;
-            }>;
+          const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+            accountId: string;
+            region: string;
+          }>;
           yield* host.bind`Allow(${host}, AWS.AppConfig.GetConfiguration(${application}, ${environment}, ${configurationProfile}))`(
             {
               policyStatements: [
@@ -130,9 +125,7 @@ export const GetConfigurationHttp = Layer.effect(
         // Decoding the (already-buffered) config body only fails on a
         // corrupt payload — a defect, not part of the operation's typed union.
         const fetched = response.Configuration
-          ? yield* Stream.mkString(
-              Stream.decodeText(response.Configuration),
-            ).pipe(Effect.orDie)
+          ? yield* Stream.mkString(Stream.decodeText(response.Configuration)).pipe(Effect.orDie)
           : "";
 
         // An empty body means "unchanged" — keep the last-seen content.

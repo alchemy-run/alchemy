@@ -49,9 +49,7 @@ export const inlineSqlParams = (
   if (dialect === "postgres") {
     return sql.replace(/\$(\d+)/g, (match, n: string) => {
       const index = Number.parseInt(n, 10) - 1;
-      return index >= 0 && index < params.length
-        ? sqlLiteral(params[index])
-        : match;
+      return index >= 0 && index < params.length ? sqlLiteral(params[index]) : match;
     });
   }
   let out = "";
@@ -79,10 +77,7 @@ export const inlineSqlParams = (
 };
 
 /** Quote an identifier for the given dialect. */
-export const quoteIdentifier = (
-  identifier: string,
-  dialect: MigrationDialect,
-): string =>
+export const quoteIdentifier = (identifier: string, dialect: MigrationDialect): string =>
   dialect === "mysql"
     ? `\`${identifier.replaceAll("`", "``")}\``
     : `"${identifier.replaceAll('"', '""')}"`;

@@ -109,10 +109,7 @@ export const makeSuite = (
   parent,
 });
 
-export const makeFileSuite = (file: string): FileSuite => ({
-  ...makeSuite(file, undefined),
-  file,
-});
+export const makeFileSuite = (file: string): FileSuite => ({ ...makeSuite(file, undefined), file });
 
 /** Full title path from the file root down to (and including) this node. */
 export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
@@ -130,14 +127,10 @@ export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
   return parts;
 };
 
-export const fullTitle = (node: Suite | TestCase): string =>
-  titlePath(node).join(" > ");
+export const fullTitle = (node: Suite | TestCase): string => titlePath(node).join(" > ");
 
 /** Walk every test in a suite subtree (depth-first, registration order). */
-export const forEachTest = (
-  suite: Suite,
-  f: (test: TestCase) => void,
-): void => {
+export const forEachTest = (suite: Suite, f: (test: TestCase) => void): void => {
   for (const child of suite.children) {
     if (child.type === "test") f(child);
     else forEachTest(child, f);

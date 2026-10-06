@@ -5,20 +5,14 @@ export const contract = defineContract(
   ({ field, model, rel }) => {
     const User = model("User", {
       fields: {
-        id: field
-          .int()
-          .id()
-          .default({ kind: "function", expression: "autoincrement()" }),
+        id: field.int().id().default({ kind: "function", expression: "autoincrement()" }),
         email: field.text().unique(),
         name: field.text().optional(),
       },
     }).sql({ table: "user" });
     const Post = model("Post", {
       fields: {
-        id: field
-          .int()
-          .id()
-          .default({ kind: "function", expression: "autoincrement()" }),
+        id: field.int().id().default({ kind: "function", expression: "autoincrement()" }),
         title: field.text(),
         authorId: field.int(),
       },

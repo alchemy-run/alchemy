@@ -1,5 +1,3 @@
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import {
   getBranch,
   getDatabase,
@@ -10,6 +8,10 @@ import {
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
+import { failureOf, forgetState, markCreating, patchStateAttr } from "./fixtures/Live.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
@@ -110,12 +112,7 @@ test.provider(
     yield* expectProjectGone(initial.project.projectId);
   }),
   {
-    tags: [
-      "provider:prisma",
-      "provider:prisma:database",
-      "provider:prisma:project",
-      "live",
-    ],
+    tags: ["provider:prisma", "provider:prisma:database", "provider:prisma:project", "live"],
     timeout: 120_000,
   },
 );
@@ -125,10 +122,7 @@ test.provider(
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
-    const resources = (
-      attachment: "id" | "gitName" | "omitted",
-      name?: string,
-    ) =>
+    const resources = (attachment: "id" | "gitName" | "omitted", name?: string) =>
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", {
           createDatabase: false,
@@ -196,4 +190,178 @@ test.provider(
     ],
     timeout: 120_000,
   },
+);
+
+const logicalIdTags = [
+  "provider:prisma",
+  "provider:prisma:database",
+  "provider:prisma:project",
+  "live",
+];
+
+const observeDatabase = (databaseId: string) =>
+  getDatabase({ databaseId }).pipe(Effect.map((response) => response.data));
+
+const databaseStack = (props: { name?: string; logicalId?: string } = {}) =>
+  Effect.gen(function* () {
+    const project = yield* Prisma.Project("Project", { createDatabase: false });
+    const database = yield* Prisma.Database("Main", { project, ...props });
+    return { project, database };
+  });
+
+test.provider(
+  "creates a database under its fqn logical ID and rebinds the logical ID in place",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStack());
+    expect(initial.database.logicalId).toBe("Main");
+    expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBe("Main");
+
+    const overridden = yield* stack.deploy(databaseStack({ logicalId: "main-db" }));
+    expect(overridden.database.databaseId).toBe(initial.database.databaseId);
+    expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBe("main-db");
+
+    const reverted = yield* stack.deploy(databaseStack());
+    expect(reverted.database.databaseId).toBe(initial.database.databaseId);
+    expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBe("Main");
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
+  "after lost state, adoption finds the database by its logical ID despite a Console rename",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStack({ name: "main-db" }));
+    yield* updateDatabase({ databaseId: initial.database.databaseId, name: "renamed-in-console" });
+    yield* forgetState(stack, "Main");
+
+    const refused = yield* failureOf(stack.deploy(databaseStack({ name: "main-db" })));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+
+    const adopted = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const database = yield* Prisma.Database("Main", { project, name: "main-db" }).pipe(
+          adopt(true),
+        );
+        return { project, database };
+      }),
+    );
+    expect(adopted.database.databaseId).toBe(initial.database.databaseId);
+    const observed = yield* observeDatabase(initial.database.databaseId);
+    expect(observed.name).toBe("main-db");
+    expect(observed.logicalId).toBe("Main");
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
+  "recovers an interrupted database create as owned",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStack());
+    yield* markCreating(stack, "Main");
+
+    const recovered = yield* stack.deploy(databaseStack());
+    expect(recovered.database.databaseId).toBe(initial.database.databaseId);
+    expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBe("Main");
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
+  "sets the logical ID on a database deployed before logical IDs existed",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(databaseStack());
+    yield* updateDatabase({ databaseId: initial.database.databaseId, logicalId: null });
+    yield* patchStateAttr(stack, "Main", { logicalId: null });
+    expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBeNull();
+
+    const stamped = yield* stack.deploy(databaseStack());
+    expect(stamped.database.databaseId).toBe(initial.database.databaseId);
+    expect((yield* observeDatabase(initial.database.databaseId)).logicalId).toBe("Main");
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
+  "creates a database on a git branch that does not exist yet, then sets its logical ID",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = Effect.gen(function* () {
+      const project = yield* Prisma.Project("Project", { createDatabase: false });
+      const database = yield* Prisma.Database("Preview", {
+        project,
+        branchGitName: "feature/preview",
+      });
+      return { project, database };
+    });
+
+    const initial = yield* stack.deploy(resources);
+    const branches = yield* getProjectBranches({
+      projectId: initial.project.projectId,
+      gitName: "feature/preview",
+    });
+    expect(branches.data).toHaveLength(1);
+    const observed = yield* observeDatabase(initial.database.databaseId);
+    expect(observed.branchId).toBe(branches.data[0]!.id);
+    expect(observed.logicalId).toBe("Preview");
+
+    const repeated = yield* stack.deploy(resources);
+    expect(repeated.database.databaseId).toBe(initial.database.databaseId);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
+  "rejects a logical ID that another database on the branch holds",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (secondLogicalId: string) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const first = yield* Prisma.Database("First", { project, logicalId: "shared" });
+        const second = yield* Prisma.Database("Second", { project, logicalId: secondLogicalId });
+        return { project, first, second };
+      });
+
+    const initial = yield* stack.deploy(resources("second"));
+    const failure = yield* failureOf(stack.deploy(resources("shared")));
+    expect(failure.text).toContain("logical ID 'shared'");
+    expect((yield* observeDatabase(initial.first.databaseId)).logicalId).toBe("shared");
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.first.databaseId);
+    yield* expectDatabaseGone(initial.second.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
 );

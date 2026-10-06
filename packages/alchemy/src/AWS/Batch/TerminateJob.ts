@@ -28,6 +28,4 @@ export interface TerminateJob extends Binding.Service<
     ) => Effect.Effect<batch.TerminateJobResponse, batch.TerminateJobError>
   >
 > {}
-export const TerminateJob = Binding.Service<TerminateJob>(
-  "AWS.Batch.TerminateJob",
-);
+export const TerminateJob = Binding.Service<TerminateJob>("AWS.Batch.TerminateJob");

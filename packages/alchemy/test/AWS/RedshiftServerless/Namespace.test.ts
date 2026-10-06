@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Namespace, Workgroup } from "@/AWS/RedshiftServerless";
-import * as Test from "@/Test/Alchemy";
 import * as redshiftserverless from "@distilled.cloud/aws/redshift-serverless";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Namespace, Workgroup } from "@/AWS/RedshiftServerless";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        redshiftserverless.getWorkgroup({
-          workgroupName: "alchemy-nonexistent-probe-wg",
-        }),
+        redshiftserverless.getWorkgroup({ workgroupName: "alchemy-nonexistent-probe-wg" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -29,9 +27,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        redshiftserverless.getNamespace({
-          namespaceName: "alchemy-nonexistent-probe-ns",
-        }),
+        redshiftserverless.getNamespace({ namespaceName: "alchemy-nonexistent-probe-ns" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
@@ -40,50 +36,28 @@ test.provider(
 
 const assertNamespaceGone = (name: string) =>
   Effect.gen(function* () {
-    const status = yield* redshiftserverless
-      .getNamespace({ namespaceName: name })
-      .pipe(
-        Effect.map((r) => (r.namespace?.status ?? "UNKNOWN").toUpperCase()),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
-      );
+    const status = yield* redshiftserverless.getNamespace({ namespaceName: name }).pipe(
+      Effect.map((r) => (r.namespace?.status ?? "UNKNOWN").toUpperCase()),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+    );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`Redshift namespace still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Redshift namespace still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );
 
 const assertWorkgroupGone = (name: string) =>
   Effect.gen(function* () {
-    const status = yield* redshiftserverless
-      .getWorkgroup({ workgroupName: name })
-      .pipe(
-        Effect.map((r) => (r.workgroup?.status ?? "UNKNOWN").toUpperCase()),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("GONE" as const),
-        ),
-      );
+    const status = yield* redshiftserverless.getWorkgroup({ workgroupName: name }).pipe(
+      Effect.map((r) => (r.workgroup?.status ?? "UNKNOWN").toUpperCase()),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as const)),
+    );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`Redshift workgroup still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Redshift workgroup still exists (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]) }),
   );
 
 // A namespace is cheap but a workgroup bills against its RPU floor while it
@@ -146,8 +120,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       yield* assertNamespaceGone(namespace.namespaceName);
     }),
   // namespace (~1 min) + workgroup create (~2-5 min) + delete (~3-5 min).
-  {
-    tags: ["provider:aws", "provider:aws:redshiftserverless", "live"],
-    timeout: 1_200_000,
-  },
+  { tags: ["provider:aws", "provider:aws:redshiftserverless", "live"], timeout: 1_200_000 },
 );

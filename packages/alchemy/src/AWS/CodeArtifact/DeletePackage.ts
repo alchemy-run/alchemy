@@ -39,13 +39,8 @@ export interface DeletePackage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeletePackageRequest,
-    ) => Effect.Effect<
-      codeartifact.DeletePackageResult,
-      codeartifact.DeletePackageError
-    >
+    ) => Effect.Effect<codeartifact.DeletePackageResult, codeartifact.DeletePackageError>
   >
 > {}
 
-export const DeletePackage = Binding.Service<DeletePackage>(
-  "AWS.CodeArtifact.DeletePackage",
-);
+export const DeletePackage = Binding.Service<DeletePackage>("AWS.CodeArtifact.DeletePackage");

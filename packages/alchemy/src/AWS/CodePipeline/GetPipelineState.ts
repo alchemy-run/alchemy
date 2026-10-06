@@ -25,9 +25,7 @@ export interface GetPipelineState extends Binding.Service<
   "AWS.CodePipeline.GetPipelineState",
   <P extends Pipeline>(
     pipeline: P,
-  ) => Effect.Effect<
-    () => Effect.Effect<SVC.GetPipelineStateOutput, SVC.GetPipelineStateError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<SVC.GetPipelineStateOutput, SVC.GetPipelineStateError>>
 > {}
 export const GetPipelineState = Binding.Service<GetPipelineState>(
   "AWS.CodePipeline.GetPipelineState",

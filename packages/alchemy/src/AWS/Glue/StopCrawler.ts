@@ -33,9 +33,7 @@ export interface StopCrawler extends Binding.Service<
   "AWS.Glue.StopCrawler",
   (
     crawler: Crawler,
-  ) => Effect.Effect<
-    () => Effect.Effect<glue.StopCrawlerResponse, glue.StopCrawlerError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<glue.StopCrawlerResponse, glue.StopCrawlerError>>
 > {}
 
 export const StopCrawler = Binding.Service<StopCrawler>("AWS.Glue.StopCrawler");

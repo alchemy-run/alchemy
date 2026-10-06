@@ -136,14 +136,10 @@ export const consumeDataSetEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.dataexchange"],
       "detail-type": [
-        ...(props.kinds ?? (["revision-published"] as const)).map(
-          (kind) => DETAIL_TYPES[kind],
-        ),
+        ...(props.kinds ?? (["revision-published"] as const)).map((kind) => DETAIL_TYPES[kind]),
         ...(props.detailTypes ?? []),
       ],
-      ...(props.dataSetIds !== undefined
-        ? { resources: [...props.dataSetIds] }
-        : {}),
+      ...(props.dataSetIds !== undefined ? { resources: [...props.dataSetIds] } : {}),
     },
     { description: props.description, state: props.state },
     process,

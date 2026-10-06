@@ -37,10 +37,7 @@ export interface DeleteRecoveryPoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteRecoveryPointRequest,
-    ) => Effect.Effect<
-      backup.DeleteRecoveryPointResponse,
-      backup.DeleteRecoveryPointError
-    >
+    ) => Effect.Effect<backup.DeleteRecoveryPointResponse, backup.DeleteRecoveryPointError>
   >
 > {}
 export const DeleteRecoveryPoint = Binding.Service<DeleteRecoveryPoint>(
