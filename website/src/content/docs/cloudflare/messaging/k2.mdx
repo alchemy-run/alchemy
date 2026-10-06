@@ -243,7 +243,7 @@ every record. To split records between hosts instead, declare a
 
 ```typescript
 export const FraudWorkers = Cloudflare.K2.Subscription("FraudWorkers", {
-  streamId: Orders.streamId,
+  stream: Orders,
   startAt: "latest",
 });
 ```

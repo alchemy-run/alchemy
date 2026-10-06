@@ -63,7 +63,7 @@ const program = (
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("TableBucket", { forceDestroy: true });
     const catalog = yield* Cloudflare.R2.DataCatalog("TableCatalog", {
-      bucketName: bucket.bucketName,
+      bucket,
       token,
       ...catalogMaintenance,
     });

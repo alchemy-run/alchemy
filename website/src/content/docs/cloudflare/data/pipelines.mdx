@@ -148,7 +148,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const lake = yield* Cloudflare.R2.Bucket("Lake");
     const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
-      bucketName: lake.bucketName,
+      bucket: lake,
     });
     const views = yield* PageViews;
 

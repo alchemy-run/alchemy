@@ -98,7 +98,7 @@ test.provider(
       const lakehouse = Effect.gen(function* () {
         const bucket = yield* Cloudflare.R2.Bucket("LakeBucket", { forceDestroy: true });
         const catalog = yield* Cloudflare.Basin.Catalog("Catalog", {
-          bucketName: bucket.bucketName,
+          bucket,
         });
         return { bucket, catalog };
       });

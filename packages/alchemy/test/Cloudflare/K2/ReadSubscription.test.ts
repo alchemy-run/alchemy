@@ -49,11 +49,11 @@ test.provider(
         Effect.gen(function* () {
           const events = yield* Cloudflare.K2.Stream("LocalEvents", { http: true, schema: Event });
           const poller = yield* Cloudflare.K2.Subscription("Poller", {
-            streamId: events.streamId,
+            stream: events,
             startAt: "earliest",
           });
           const reader = yield* Cloudflare.K2.Subscription("Reader", {
-            streamId: events.streamId,
+            stream: events,
             startAt: "earliest",
           });
 

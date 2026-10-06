@@ -71,7 +71,7 @@ export const StreamEventSourcePolling = Layer.effect(
         (yield* Namespace.push(
           hostId,
           Subscription(`${stream.LogicalId}Subscription`, {
-            streamId: stream.streamId,
+            stream,
             startAt: props.startAt,
           }),
         ));

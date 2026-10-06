@@ -26,7 +26,7 @@ const lakehouse = (sql: (stream: string, sink: string) => string) =>
     const token = yield* apiToken;
     const bucket = yield* Cloudflare.R2.Bucket("LakeBucket", { forceDestroy: true });
     const catalog = yield* Cloudflare.Basin.Catalog("Catalog", {
-      bucketName: bucket.bucketName,
+      bucket,
     });
     const stream = yield* Cloudflare.Basin.Stream("PageViews", { schema: PageView });
     const sink = yield* Cloudflare.Basin.Sink("PageViewTable", {

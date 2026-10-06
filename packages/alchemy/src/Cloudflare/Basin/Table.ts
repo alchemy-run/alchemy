@@ -177,11 +177,12 @@ export interface TableMaintenance {
 
 export interface TableProps {
   /**
-   * The Basin (R2 Data) catalog that owns the table. Pass the catalog
-   * resource; the table is created in its warehouse. Changing the catalog
-   * fails the plan.
+   * The catalog that owns the table: a `Cloudflare.Basin.Catalog` resource
+   * (orders the table after the catalog) or the name of the bucket the
+   * catalog is enabled on. The table is created in its warehouse. Changing
+   * the catalog fails the plan.
    */
-  catalog: DataCatalog;
+  catalog: string | DataCatalog;
   /**
    * Iceberg namespace of the table. Created if it does not exist; never
    * deleted (other tables may share it). Changing the namespace fails the
@@ -325,7 +326,7 @@ const toProps = <P>(props: P): Effect.Effect<P> =>
  *
  * const bucket = yield* Cloudflare.R2.Bucket("Analytics");
  * const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
- *   bucketName: bucket.bucketName,
+ *   bucket,
  * });
  * const orders = yield* Cloudflare.Basin.Table("Orders", {
  *   catalog,
@@ -369,7 +370,7 @@ const toProps = <P>(props: P): Effect.Effect<P> =>
  * ```typescript
  * // Table maintenance needs the jobs enabled on the catalog first.
  * const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
- *   bucketName: bucket.bucketName,
+ *   bucket,
  *   compaction: { state: "enabled" },
  *   snapshotExpiration: { state: "enabled" },
  *   token: maintenanceToken,
@@ -436,12 +437,21 @@ const CATALOG_HOST = "https://catalog.cloudflarestorage.com";
  * The catalog prop is resolved to the DataCatalog's attributes before a
  * lifecycle operation runs. During plan it may still be unresolved.
  */
-const catalogRefOf = (catalog: unknown): CatalogRef | undefined => {
+const catalogRefOf = (catalog: unknown, defaultAccountId?: string): CatalogRef | undefined => {
+  if (typeof catalog === "string") {
+    if (catalog.length === 0 || defaultAccountId === undefined) return undefined;
+    return {
+      accountId: defaultAccountId,
+      bucketName: catalog,
+      catalogUri: `${CATALOG_HOST}/${defaultAccountId}/${catalog}`,
+      warehouse: `${defaultAccountId}_${catalog}`,
+    };
+  }
   if (catalog === null || typeof catalog !== "object") return undefined;
   const c = catalog as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.length > 0 ? v : undefined);
   const fromUri = str(c.catalogUri)?.match(/\/([^/]+)\/([^/]+)\/?$/);
-  const accountId = str(c.accountId) ?? fromUri?.[1];
+  const accountId = str(c.accountId) ?? fromUri?.[1] ?? defaultAccountId;
   const bucketName = str(c.bucketName) ?? str(c.bucket) ?? fromUri?.[2];
   if (!accountId || !bucketName) return undefined;
   return {
@@ -784,7 +794,8 @@ export const TableProvider = () =>
         if (typeof news.name === "string" && news.name !== output.tableName) {
           reasons.push(`renames the table from '${output.tableName}' to '${news.name}'`);
         }
-        const ref = isResolved(news.catalog) ? catalogRefOf(news.catalog) : undefined;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const ref = isResolved(news.catalog) ? catalogRefOf(news.catalog, accountId) : undefined;
         if (ref !== undefined && ref.warehouse !== output.warehouse) {
           reasons.push(
             `moves the table from warehouse '${output.warehouse}' to '${ref.warehouse}'`,
@@ -812,7 +823,8 @@ export const TableProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const ref = output ? refFromOutput(output) : catalogRefOf(olds?.catalog);
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const ref = output ? refFromOutput(output) : catalogRefOf(olds?.catalog, accountId);
       const namespace = output?.namespace ?? olds?.namespace;
       if (ref === undefined || typeof namespace !== "string") return undefined;
       const tableName = output?.tableName ?? (yield* tableNameFor(id, olds?.name));
@@ -833,13 +845,17 @@ export const TableProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
-      const ref = catalogRefOf(news.catalog) ?? (output ? refFromOutput(output) : undefined);
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const ref =
+        catalogRefOf(news.catalog, accountId) ?? (output ? refFromOutput(output) : undefined);
       const namespace = news.namespace;
       const tableName = yield* tableNameFor(id, news.name ?? output?.tableName);
       const identifier = `${namespace}.${tableName}`;
       if (ref === undefined) {
         return yield* Effect.fail(
-          rejected(identifier, ["has no resolved catalog (pass a Cloudflare.R2.DataCatalog)"]),
+          rejected(identifier, [
+            "has no resolved catalog (pass a Cloudflare.Basin.Catalog or a bucket name)",
+          ]),
         );
       }
       if (output !== undefined && output.identifier !== identifier) {

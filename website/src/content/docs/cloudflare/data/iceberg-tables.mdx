@@ -26,7 +26,7 @@ engines.
 const lake = yield* Cloudflare.R2.Bucket("Lake");
 
 const catalog = yield* Cloudflare.Basin.Catalog("Catalog", {
-  bucketName: lake.bucketName,
+  bucket: lake,
 });
 ```
 
@@ -44,7 +44,7 @@ compact files and expire snapshots for every table in the warehouse:
 
 ```typescript
 const catalog = yield* Cloudflare.Basin.Catalog("Catalog", {
-  bucketName: lake.bucketName,
+  bucket: lake,
   compaction: { state: "enabled", targetSizeMb: "128" },
   snapshotExpiration: { state: "enabled", maxSnapshotAge: "7d", minSnapshotsToKeep: 10 },
   token: yield* Config.Redacted("CATALOG_MAINTENANCE_TOKEN"),

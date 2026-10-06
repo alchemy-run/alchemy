@@ -1,4 +1,5 @@
 import * as k2 from "@distilled.cloud/cloudflare/k2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -8,16 +9,18 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { StartAt } from "./K2Types.ts";
+import type { Stream } from "./Stream.ts";
 
 const SubscriptionTypeId = "Cloudflare.K2.Subscription" as const;
 type SubscriptionTypeId = typeof SubscriptionTypeId;
 
 export interface SubscriptionProps {
   /**
-   * ID of the stream to read from, e.g. `stream.streamId`. Changing it
-   * replaces the subscription.
+   * The stream to read from: a `Cloudflare.K2.Stream` resource (orders the
+   * subscription after the stream) or a stream ID. Changing it replaces the
+   * subscription.
    */
-  streamId: string;
+  stream: string | Stream<any>;
   /**
    * Name of the subscription: 1 to 128 letters, numbers, underscores, or
    * hyphens, unique within the stream (not case-sensitive). If omitted, a
@@ -71,14 +74,14 @@ export type Subscription = Resource<
  * ```typescript
  * const orders = yield* Cloudflare.K2.Stream("Orders");
  * const analytics = yield* Cloudflare.K2.Subscription("Analytics", {
- *   streamId: orders.streamId,
+ *   stream: orders,
  * });
  * ```
  *
  * **Example:** Read from the oldest retained record
  * ```typescript
  * const backfill = yield* Cloudflare.K2.Subscription("Backfill", {
- *   streamId: orders.streamId,
+ *   stream: orders,
  *   startAt: "earliest",
  * });
  * ```
@@ -113,7 +116,8 @@ export const SubscriptionProvider = () =>
       const oldName = output?.subscriptionName ?? (yield* subscriptionName(id, olds?.name));
       const newName = news.name ?? oldName;
       const oldStartAt = output?.startAt ?? olds?.startAt ?? "latest";
-      const streamChanged = (output?.streamId ?? olds?.streamId) !== news.streamId;
+      const streamChanged =
+        (output?.streamId ?? streamIdOf(olds?.stream)) !== streamIdOf(news.stream);
       if (
         streamChanged ||
         newName.toLowerCase() !== oldName.toLowerCase() ||
@@ -130,7 +134,7 @@ export const SubscriptionProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
-      const streamId = output?.streamId ?? olds?.streamId;
+      const streamId = output?.streamId ?? streamIdOf(olds?.stream);
       if (!streamId) return undefined;
       if (output?.subscriptionId) {
         const observed = yield* getSubscription(streamId, output.subscriptionId);
@@ -146,7 +150,12 @@ export const SubscriptionProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const streamId = news.streamId;
+      const streamId = streamIdOf(news.stream);
+      if (streamId === undefined) {
+        return yield* Effect.fail(
+          new SubscriptionStreamUnresolved({ message: "`stream` did not resolve to a stream ID" }),
+        );
+      }
       const name =
         output?.streamId === streamId
           ? output.subscriptionName
@@ -198,6 +207,24 @@ const subscriptionName = (id: string, name: string | undefined) =>
     const generated = yield* createPhysicalName({ id, maxLength: 128 });
     return generated.replaceAll(/[^a-zA-Z0-9_-]/g, "-");
   });
+
+/** The `stream` prop did not resolve to a stream ID. */
+export class SubscriptionStreamUnresolved extends Data.TaggedError(
+  "K2SubscriptionStreamUnresolved",
+)<{ message: string }> {}
+
+/**
+ * The stream ID behind a `stream` prop: the string itself, or the `streamId`
+ * attribute of a resolved `Cloudflare.K2.Stream`.
+ */
+const streamIdOf = (stream: unknown): string | undefined =>
+  typeof stream === "string"
+    ? stream
+    : stream !== null &&
+        typeof stream === "object" &&
+        typeof (stream as { streamId?: unknown }).streamId === "string"
+      ? (stream as { streamId: string }).streamId
+      : undefined;
 
 const getSubscription = (streamId: string, subscriptionId: string) =>
   k2.getSubscription({ streamId, subscriptionId }).pipe(

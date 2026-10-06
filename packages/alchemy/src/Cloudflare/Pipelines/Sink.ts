@@ -11,6 +11,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type { Bucket } from "../R2/Bucket.ts";
+import type { DataCatalog } from "../R2/DataCatalog.ts";
 
 const TypeId = "Cloudflare.Pipelines.Sink" as const;
 type TypeId = typeof TypeId;
@@ -40,9 +42,10 @@ export interface SinkRollingPolicy {
  */
 export interface SinkR2Config {
   /**
-   * Name of the destination R2 bucket. The bucket must already exist.
+   * The destination R2 bucket: a `Cloudflare.R2.Bucket` resource (orders the
+   * sink after the bucket) or a bucket name. The bucket must already exist.
    */
-  bucket: string;
+  bucket: string | Bucket;
   /**
    * R2 S3-compatible credentials the sink uses to write objects.
    * Write-only — Cloudflare never echoes them back, and sinks cannot be
@@ -99,10 +102,10 @@ export interface SinkR2Config {
  */
 export interface SinkR2DataCatalogConfig {
   /**
-   * Name of the R2 bucket backing the catalog. The bucket must already
-   * exist and have the catalog enabled.
+   * The R2 bucket backing the catalog: a `Cloudflare.R2.Bucket` resource or a
+   * bucket name. The bucket must already exist and have the catalog enabled.
    */
-  bucket: string;
+  bucket: string | Bucket;
   /**
    * Name of the Iceberg table to write.
    */
@@ -125,13 +128,25 @@ export interface SinkR2DataCatalogConfig {
 }
 
 /**
- * The catalog a catalog sink writes to — pass a `Cloudflare.Basin.Catalog`
- * (`Cloudflare.R2.DataCatalog`) resource so the sink is ordered after it.
+ * The catalog a catalog sink writes to: a `Cloudflare.Basin.Catalog`
+ * (`Cloudflare.R2.DataCatalog`) resource, which orders the sink after the
+ * catalog, or the name of the bucket the catalog is enabled on.
  */
-export interface SinkCatalogReference {
-  /** Name of the R2 bucket backing the catalog. */
-  bucketName: string;
-}
+export type SinkCatalogReference = string | DataCatalog;
+
+/**
+ * The bucket name behind a bucket or catalog reference: the string itself,
+ * or the `bucketName` attribute of a resolved `Cloudflare.R2.Bucket` or
+ * `Cloudflare.Basin.Catalog`.
+ */
+const bucketNameOf = (ref: unknown): string =>
+  typeof ref === "string"
+    ? ref
+    : ref !== null &&
+        typeof ref === "object" &&
+        typeof (ref as { bucketName?: unknown }).bucketName === "string"
+      ? (ref as { bucketName: string }).bucketName
+      : "";
 
 /**
  * The Iceberg table a catalog sink writes to.
@@ -220,7 +235,8 @@ export type SinkProps =
        */
       type: SinkCatalogType;
       /**
-       * The catalog to write to — a `Cloudflare.Basin.Catalog` resource.
+       * The catalog to write to: a `Cloudflare.Basin.Catalog` resource or
+       * the name of the bucket the catalog is enabled on.
        */
       catalog: SinkCatalogReference;
       /**
@@ -301,7 +317,7 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  * const sink = yield* Cloudflare.Basin.Sink("events-sink", {
  *   type: "r2",
  *   config: {
- *     bucket: bucket.bucketName,
+ *     bucket,
  *     credentials: {
  *       accessKeyId: yield* Config.Redacted("R2_ACCESS_KEY_ID"),
  *       secretAccessKey: yield* Config.Redacted("R2_SECRET_ACCESS_KEY"),
@@ -316,7 +332,7 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  * ```typescript
  * const sink = yield* Cloudflare.Basin.Sink("parquet-sink", {
  *   type: "r2",
- *   config: { bucket: bucket.bucketName, credentials },
+ *   config: { bucket, credentials },
  *   format: { type: "parquet", compression: "zstd" },
  * });
  * ```
@@ -326,7 +342,7 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Lakehouse", {});
  * const catalog = yield* Cloudflare.Basin.Catalog("Catalog", {
- *   bucketName: bucket.bucketName,
+ *   bucket,
  * });
  *
  * const sink = yield* Cloudflare.Basin.Sink("PageViewTable", {
@@ -342,7 +358,7 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  * const sink = yield* Cloudflare.Basin.Sink("iceberg-sink", {
  *   type: "r2_data_catalog",
  *   config: {
- *     bucket: bucket.bucketName,
+ *     bucket,
  *     tableName: "events",
  *     namespace: "default",
  *     token: yield* Config.Redacted("CATALOG_TOKEN"),
@@ -519,14 +535,14 @@ const isCatalogType = (type: string) => type === "r2_data_catalog" || type === "
 const catalogTarget = (props: Exclude<SinkProps, { type: "r2" }>): CatalogTarget =>
   "config" in props && props.config !== undefined
     ? {
-        bucket: props.config.bucket,
+        bucket: bucketNameOf(props.config.bucket),
         tableName: props.config.tableName,
         namespace: props.config.namespace,
         token: props.config.token,
         rollingPolicy: props.config.rollingPolicy,
       }
     : {
-        bucket: (props as { catalog: SinkCatalogReference }).catalog.bucketName,
+        bucket: bucketNameOf((props as { catalog: SinkCatalogReference }).catalog),
         tableName: (props as { table: SinkCatalogTable }).table.name,
         namespace: (props as { table: SinkCatalogTable }).table.namespace,
         token: (props as { token: Redacted.Redacted<string> }).token,
@@ -585,7 +601,7 @@ const sinkDrifted = (observed: ObservedSink, news: SinkProps): boolean => {
   const cfg = observed.config;
   if (!cfg) return false;
   if (news.type === "r2") {
-    if (cfg.bucket !== news.config.bucket) return true;
+    if (cfg.bucket !== bucketNameOf(news.config.bucket)) return true;
     const observedPath = "path" in cfg ? (cfg.path ?? undefined) : undefined;
     return news.config.path !== undefined && news.config.path !== observedPath;
   }
@@ -615,7 +631,7 @@ const toRequestConfig = (accountId: string, news: SinkProps) => {
     const c = news.config;
     return {
       accountId,
-      bucket: c.bucket,
+      bucket: bucketNameOf(c.bucket),
       credentials: {
         accessKeyId: Redacted.value(c.credentials.accessKeyId),
         secretAccessKey: Redacted.value(c.credentials.secretAccessKey),
@@ -672,7 +688,7 @@ const canonicalSink = (props: SinkProps): unknown => {
     return {
       kind: "r2",
       format,
-      bucket: c.bucket,
+      bucket: bucketNameOf(c.bucket),
       path: c.path,
       partitioning: c.partitioning,
       fileNaming: c.fileNaming

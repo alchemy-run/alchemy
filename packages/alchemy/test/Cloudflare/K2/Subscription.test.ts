@@ -15,7 +15,7 @@ const program = (startAt: "earliest" | "latest") =>
   Effect.gen(function* () {
     const stream = yield* Cloudflare.K2.Stream("SubscriptionStream");
     const subscription = yield* Cloudflare.K2.Subscription("Analytics", {
-      streamId: stream.streamId,
+      stream,
       startAt,
     });
     return { stream, subscription };
@@ -75,7 +75,7 @@ test.provider(
         Effect.gen(function* () {
           const stream = yield* Cloudflare.K2.Stream("NamedSubscriptionStream");
           const subscription = yield* Cloudflare.K2.Subscription("Named", {
-            streamId: stream.streamId,
+            stream,
             name: "alchemy-k2-named",
             startAt,
           });

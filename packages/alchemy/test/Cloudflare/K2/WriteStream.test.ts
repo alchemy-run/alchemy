@@ -79,7 +79,7 @@ test.provider(
         Effect.gen(function* () {
           const orders = yield* BindingOrders;
           const verifier = yield* Cloudflare.K2.Subscription("BindingVerifier", {
-            streamId: orders.streamId,
+            stream: orders,
             startAt: "earliest",
           });
           const worker = yield* K2BindingWorker;
@@ -114,7 +114,7 @@ test.provider(
         Effect.gen(function* () {
           const orders = yield* AsyncOrders;
           const verifier = yield* Cloudflare.K2.Subscription("AsyncVerifier", {
-            streamId: orders.streamId,
+            stream: orders,
             startAt: "earliest",
           });
           const worker = yield* K2AsyncWorker;
@@ -163,7 +163,7 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_K2_HTTP)(
         Effect.gen(function* () {
           const orders = yield* HttpOrders;
           const verifier = yield* Cloudflare.K2.Subscription("HttpVerifier", {
-            streamId: orders.streamId,
+            stream: orders,
             startAt: "earliest",
           });
           const worker = yield* K2HttpWorker;

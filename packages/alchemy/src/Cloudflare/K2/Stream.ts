@@ -250,7 +250,7 @@ const constructStream = (id: string, props: unknown) =>
  * **Example:** A subscription reading from the start of the stream
  * ```typescript
  * const analytics = yield* Cloudflare.K2.Subscription("Analytics", {
- *   streamId: orders.streamId,
+ *   stream: orders,
  *   startAt: "earliest",
  * });
  * ```
