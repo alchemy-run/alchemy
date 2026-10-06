@@ -22,6 +22,7 @@ import {
   makeContainerEnv,
   materializeInlineDockerfileContext,
   prepareContainerBuildContext,
+  withImageLayers,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
@@ -130,7 +131,14 @@ export const LocalContainerProvider = () =>
               dockerfile: dockerfileContent,
             }),
           };
-        }).pipe(Artifacts.cached(`container-image:${id}`));
+        }).pipe(
+          // Binding-contributed image layers are part of the key: `precreate`
+          // warms this cache before bindings resolve, and reconcile must not
+          // reuse that layer-less image.
+          Artifacts.cached(
+            `container-image:${id}${news.imageLayers?.length ? `:${news.imageLayers.map((l) => l.id).join(",")}` : ""}`,
+          ),
+        );
 
       /**
        * The props that decide what the dev IMAGE is, picked off the
@@ -201,7 +209,7 @@ export const LocalContainerProvider = () =>
       }) {
         const accountId = yield* localAccountId;
         const env = makeContainerEnv(news, accountId, bindings);
-        const { dev, hash } = yield* prepareImage(id, news);
+        const { dev, hash } = yield* prepareImage(id, withImageLayers(news, bindings));
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),

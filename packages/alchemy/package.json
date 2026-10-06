@@ -408,9 +408,12 @@
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
     "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/acp": "workspace:*",
+    "@distilled.cloud/anthropic": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
+    "@distilled.cloud/codex": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/doppler": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
@@ -418,6 +421,9 @@
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/infisical": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
+    "@distilled.cloud/openai": "workspace:*",
+    "@distilled.cloud/opencode": "workspace:*",
+    "@distilled.cloud/openrouter": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
@@ -442,6 +448,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "0.3.284",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "catalog:",
@@ -515,6 +522,7 @@
   },
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.284",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -583,6 +591,9 @@
       "optional": true
     },
     "ws": {
+      "optional": true
+    },
+    "@anthropic-ai/claude-agent-sdk": {
       "optional": true
     }
   }
