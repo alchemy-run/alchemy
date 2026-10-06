@@ -56,6 +56,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Prisma: c("prisma"),
+  DigitalOcean: b("digitalocean"),
   // Brand-colored prism for marketing surfaces (see `prismaColor` above).
   PrismaColor: c("prismaColor"),
   Axiom: c("axiom"),
@@ -116,6 +117,8 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: c("prisma"),
+  DigitalOcean: b("digitalocean"),
+  Digitalocean: b("digitalocean"),
   Axiom: c("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),

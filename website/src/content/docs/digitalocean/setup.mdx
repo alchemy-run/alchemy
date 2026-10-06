@@ -1,0 +1,66 @@
+---
+title: Setup
+description: Connect Alchemy to DigitalOcean — create an API token and store it in a profile.
+---
+
+Everything you need before deploying to DigitalOcean: an account and
+a personal access token stored in a profile.
+
+## Generate an API token
+
+In the [DigitalOcean control panel](https://cloud.digitalocean.com/account/api/tokens):
+
+1. Go to **API** → **Tokens**.
+2. Click **Generate New Token**.
+3. Select **Full Access**, or custom scopes with read and write on
+   **droplet**, **ssh_key**, **firewall**, and **tag**.
+4. Copy the token — DigitalOcean shows it **only once**.
+
+The **tag** scope is required. Alchemy tags every droplet it creates
+to find it again, see
+[Ownership and adoption](/digitalocean#ownership-and-adoption).
+
+## Add the provider
+
+```typescript
+// alchemy.run.ts
+import * as DigitalOcean from "alchemy/DigitalOcean";
+
+providers: DigitalOcean.providers(),
+```
+
+## Connect Alchemy to DigitalOcean
+
+There is no separate credentials step. The first time you run
+`alchemy deploy` (or `plan`, `destroy`) on a stack that uses
+`DigitalOcean.providers()`, Alchemy prompts for the token you
+generated above (and, optionally, an API base URL override). It is
+saved under `~/.alchemy/credentials/<profile>/` in the selected
+[profile](/environments/profiles) and reused on subsequent commands.
+
+In CI (`CI=true`) Alchemy skips the prompt and reads the token from
+the environment instead:
+
+| Variable | Purpose |
+| --- | --- |
+| `DIGITALOCEAN_TOKEN` | The token. The name the Terraform provider reads. |
+| `DIGITALOCEAN_ACCESS_TOKEN` | Read when `DIGITALOCEAN_TOKEN` is not set. The name `doctl` reads. |
+| `DIGITALOCEAN_API_BASE_URL` | Optional. Overrides the API base URL. |
+
+To re-run the setup later:
+
+```sh
+# Re-run the interactive setup (e.g. to rotate the token)
+alchemy profile edit --reconfigure DigitalOcean
+
+# Or connect DigitalOcean in a separate `prod` profile
+alchemy profile create prod
+alchemy profile edit --profile prod --add DigitalOcean
+
+# Non-interactive (scripts, agents)
+alchemy profile edit --add DigitalOcean --method stored --set apiToken=env:DIGITALOCEAN_TOKEN
+```
+
+## Next steps
+
+- [DigitalOcean overview](/digitalocean) — resources and compositions.

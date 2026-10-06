@@ -41,6 +41,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
+      { label: "DigitalOcean", link: "/digitalocean" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
@@ -1368,6 +1369,14 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Stripe"),
+          ],
+        },
+        {
+          label: "DigitalOcean",
+          items: [
+            { label: "Overview", link: "/digitalocean" },
+            { label: "Setup", link: "/digitalocean/setup" },
+            providerResourcesEntry("DigitalOcean"),
           ],
         },
         {
