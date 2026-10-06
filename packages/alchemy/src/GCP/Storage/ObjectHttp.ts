@@ -20,11 +20,7 @@ export const grantOnBucket = (tag: string, bucket: Bucket, role: string) =>
  * construction and injects the bound bucket's name.
  * NOT exported from index.ts.
  */
-export const makeObjectHttpBinding = <
-  I extends { bucket?: string },
-  A,
-  E,
->(options: {
+export const makeObjectHttpBinding = <I extends { bucket?: string }, A, E>(options: {
   tag: string;
   role: string;
   operation: GcpHttpOp<I, A, E>;

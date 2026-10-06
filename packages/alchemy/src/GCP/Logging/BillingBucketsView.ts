@@ -133,9 +133,7 @@ export type BillingBucketsView = Resource<
  * @resource
  * @category Logging
  */
-export const BillingBucketsView = Resource<BillingBucketsView>(
-  "GCP.Logging.BillingBucketsView",
-);
+export const BillingBucketsView = Resource<BillingBucketsView>("GCP.Logging.BillingBucketsView");
 
 export class BillingBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketsViewNotResolved",
@@ -178,10 +176,7 @@ const toAttrs = (
   const resolvedBucket = parsedName?.bucketId ?? bucketId;
   return {
     name:
-      view.name ??
-      (viewId
-        ? resourceName(account, resolvedLocation, resolvedBucket, viewId)
-        : ""),
+      view.name ?? (viewId ? resourceName(account, resolvedLocation, resolvedBucket, viewId) : ""),
     viewId,
     bucketId: resolvedBucket,
     billingAccountId: account,
@@ -200,37 +195,25 @@ const getByName = (name: string) =>
 
 export const BillingBucketsViewProvider = () =>
   Provider.succeed(BillingBucketsView, {
-    stables: [
-      "name",
-      "viewId",
-      "bucketId",
-      "billingAccountId",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "viewId", "bucketId", "billingAccountId", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.viewId ?? output?.viewId;
       const idChanged =
-        previousId !== undefined &&
-        news.viewId !== undefined &&
-        news.viewId !== previousId;
+        previousId !== undefined && news.viewId !== undefined && news.viewId !== previousId;
       const previousBucket = olds?.bucketId ?? output?.bucketId;
-      const bucketChanged =
-        previousBucket !== undefined && news.bucketId !== previousBucket;
+      const bucketChanged = previousBucket !== undefined && news.bucketId !== previousBucket;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
         news.location !== previousLocation;
-      const previousAccount =
-        olds?.billingAccountId ?? output?.billingAccountId;
+      const previousAccount = olds?.billingAccountId ?? output?.billingAccountId;
       const accountChanged =
         previousAccount !== undefined &&
         news.billingAccountId !== undefined &&
-        billingAccountIdOf(news.billingAccountId) !==
-          billingAccountIdOf(previousAccount);
+        billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !bucketChanged && !locationChanged && !accountChanged) {
         return undefined;
       }
@@ -245,9 +228,7 @@ export const BillingBucketsViewProvider = () =>
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
       const bucketId = olds?.bucketId ?? output?.bucketId ?? "";
       const viewId = yield* toPhysicalId(id, olds?.viewId, output?.viewId, "v");
-      const name =
-        output?.name ??
-        resourceName(billingAccountId, location, bucketId, viewId);
+      const name = output?.name ?? resourceName(billingAccountId, location, bucketId, viewId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, billingAccountId, location, bucketId);
@@ -258,9 +239,7 @@ export const BillingBucketsViewProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const billingAccountId = yield* lookupProjectBillingAccountId(
-          env.project,
-        );
+        const billingAccountId = yield* lookupProjectBillingAccountId(env.project);
         if (billingAccountId === undefined) return [];
         const buckets = yield* logging.listBillingAccountsLocationsBuckets
           .pages({
@@ -271,9 +250,7 @@ export const BillingBucketsViewProvider = () =>
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as logging.LogBucket[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as logging.LogBucket[])),
           );
         const listed: BillingBucketsView["Attributes"][] = [];
         for (const bucket of buckets) {
@@ -284,12 +261,7 @@ export const BillingBucketsViewProvider = () =>
               Stream.flatMap((page) => Stream.fromIterable(page.views ?? [])),
               Stream.filter((view) => hasOwnershipMarker(view.description)),
               Stream.map((view) =>
-                toAttrs(
-                  view,
-                  billingAccountId,
-                  DEFAULT_LOCATION,
-                  lastSegment(bucket.name ?? ""),
-                ),
+                toAttrs(view, billingAccountId, DEFAULT_LOCATION, lastSegment(bucket.name ?? "")),
               ),
               Stream.runCollect,
               Effect.map((chunk) => Array.from(chunk)),
@@ -336,8 +308,7 @@ export const BillingBucketsViewProvider = () =>
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const updateMask = [
         filterChanged ? "filter" : undefined,
         descriptionChanged ? "description" : undefined,

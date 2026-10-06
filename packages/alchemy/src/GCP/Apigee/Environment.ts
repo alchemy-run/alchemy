@@ -28,9 +28,7 @@ import {
   waitForOperation,
 } from "./operations.ts";
 
-export type EnvironmentType =
-  | apigee.GoogleCloudApigeeV1EnvironmentTypeEnum
-  | (string & {});
+export type EnvironmentType = apigee.GoogleCloudApigeeV1EnvironmentTypeEnum | (string & {});
 export type EnvironmentApiProxyType =
   | apigee.GoogleCloudApigeeV1EnvironmentApiProxyTypeEnum
   | (string & {});
@@ -170,19 +168,14 @@ export type Environment = Resource<
  */
 export const Environment = Resource<Environment>("GCP.Apigee.Environment");
 
-export class EnvironmentNotResolved extends Data.TaggedError(
-  "GCP.Apigee.EnvironmentNotResolved",
-)<{
+export class EnvironmentNotResolved extends Data.TaggedError("GCP.Apigee.EnvironmentNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (organization: string, environmentId: string) =>
   `${orgNameOf(organization)}/environments/${environmentId}`;
 
-const toAttrs = (
-  environment: apigee.GoogleCloudApigeeV1Environment,
-  organization: string,
-) => {
+const toAttrs = (environment: apigee.GoogleCloudApigeeV1Environment, organization: string) => {
   const name = environment.name ?? "";
   const parsed = parseDescription(environment.description);
   return {
@@ -208,11 +201,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvironments({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
@@ -242,9 +231,7 @@ export const EnvironmentProvider = () =>
         news.organization !== undefined &&
         orgIdOf(news.organization) !== orgIdOf(previousOrg);
       const typeChanged =
-        previousType !== undefined &&
-        news.type !== undefined &&
-        news.type !== previousType;
+        previousType !== undefined && news.type !== undefined && news.type !== previousType;
       const proxyChanged =
         previousProxy !== undefined &&
         news.apiProxyType !== undefined &&
@@ -253,13 +240,7 @@ export const EnvironmentProvider = () =>
         previousDeploy !== undefined &&
         news.deploymentType !== undefined &&
         news.deploymentType !== previousDeploy;
-      if (
-        idChanged ||
-        orgChanged ||
-        typeChanged ||
-        proxyChanged ||
-        deployChanged
-      ) {
+      if (idChanged || orgChanged || typeChanged || proxyChanged || deployChanged) {
         return {
           action: "replace" as const,
           deleteFirst: idChanged && !orgChanged,
@@ -270,10 +251,7 @@ export const EnvironmentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
       const environmentId = yield* letterPrefixedId(
         id,
         olds?.environmentId,
@@ -301,13 +279,8 @@ export const EnvironmentProvider = () =>
               ),
             );
           for (const environmentId of org?.environments ?? []) {
-            const existing = yield* getByName(
-              `${organization}/environments/${environmentId}`,
-            );
-            if (
-              existing !== undefined &&
-              hasOwnershipMarker(existing.description)
-            ) {
+            const existing = yield* getByName(`${organization}/environments/${environmentId}`);
+            if (existing !== undefined && hasOwnershipMarker(existing.description)) {
               rows.push(toAttrs(existing, organization));
             }
           }
@@ -361,16 +334,10 @@ export const EnvironmentProvider = () =>
       }
 
       const observedProperties = propertiesToRecord(current.properties);
-      const displayChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const proxyUriChanged =
-        (current.forwardProxyUri ?? "") !== (news.forwardProxyUri ?? "");
-      const ipChanged = !jsonEqual(
-        current.clientIpResolutionConfig,
-        news.clientIpResolutionConfig,
-      );
+      const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const proxyUriChanged = (current.forwardProxyUri ?? "") !== (news.forwardProxyUri ?? "");
+      const ipChanged = !jsonEqual(current.clientIpResolutionConfig, news.clientIpResolutionConfig);
       const propertiesChanged = !sameRecord(observedProperties, properties);
       const nodeChanged = !jsonEqual(current.nodeConfig, news.nodeConfig);
 
@@ -406,9 +373,7 @@ export const EnvironmentProvider = () =>
       const operation = yield* apigee
         .deleteOrganizationsEnvironments({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

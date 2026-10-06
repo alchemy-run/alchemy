@@ -80,36 +80,23 @@ export default function TypePolicy() {
 
   const swapped = t >= T_NARROW && t < T_WIDEN;
   const rolling =
-    (t >= T_NARROW && t < T_NARROW + ROLL_MS) ||
-    (t >= T_WIDEN && t < T_WIDEN + ROLL_MS);
+    (t >= T_NARROW && t < T_NARROW + ROLL_MS) || (t >= T_WIDEN && t < T_WIDEN + ROLL_MS);
   const now = swapped ? GET : PUT;
   const was = rolling ? (swapped ? PUT : GET) : now;
   const rollKey = swapped ? 1 : 0;
   const checking =
-    (t >= T_NARROW + ROLL_MS && t < T_ERROR) ||
-    (t >= T_WIDEN + ROLL_MS && t < T_CLEAN);
+    (t >= T_NARROW + ROLL_MS && t < T_ERROR) || (t >= T_WIDEN + ROLL_MS && t < T_CLEAN);
   const error = t >= T_ERROR && t < T_WIDEN + ROLL_MS;
 
   return (
     <div className="tp" aria-hidden>
       <div className="tp-editor">
         <div className="tp-bar">
-          <span
-            className="tp-dot"
-            style={{ background: "var(--alc-dot-red)" }}
-          />
-          <span
-            className="tp-dot"
-            style={{ background: "var(--alc-dot-yellow)" }}
-          />
-          <span
-            className="tp-dot"
-            style={{ background: "var(--alc-dot-green)" }}
-          />
+          <span className="tp-dot" style={{ background: "var(--alc-dot-red)" }} />
+          <span className="tp-dot" style={{ background: "var(--alc-dot-yellow)" }} />
+          <span className="tp-dot" style={{ background: "var(--alc-dot-green)" }} />
           <span className="tp-bar__file">src/Photos.ts</span>
-          <span
-            className={`tp-check ${error ? "is-error" : checking ? "is-checking" : "is-ok"}`}
-          >
+          <span className={`tp-check ${error ? "is-error" : checking ? "is-checking" : "is-ok"}`}>
             {error ? "✗ 1 error" : checking ? "type-checking…" : "✓ no errors"}
           </span>
         </div>
@@ -120,24 +107,15 @@ export default function TypePolicy() {
             )}
           />
           <span className={`tp-line ${rolling || swapped ? "is-lit" : ""}`}>
-            <span
-              dangerouslySetInnerHTML={hl("    const write = yield* AWS.S3.")}
-            />
+            <span dangerouslySetInnerHTML={hl("    const write = yield* AWS.S3.")} />
             <Slot was={was} now={now} k={rollKey} />
             <span dangerouslySetInnerHTML={hl("(bucket);")} />
           </span>
           {"\n"}
-          <span
-            dangerouslySetInnerHTML={hl(
-              "    return {\n      upload: (name, body) =>\n",
-            )}
-          />
+          <span dangerouslySetInnerHTML={hl("    return {\n      upload: (name, body) =>\n")} />
           <span className={`tp-line ${error ? "is-error" : ""}`}>
             <span dangerouslySetInnerHTML={hl("        write({ Key: name, ")} />
-            <span
-              className={error ? "tp-squiggle" : ""}
-              dangerouslySetInnerHTML={hl("Body")}
-            />
+            <span className={error ? "tp-squiggle" : ""} dangerouslySetInnerHTML={hl("Body")} />
             <span dangerouslySetInnerHTML={hl(": body }),")} />
           </span>
           {"\n"}
@@ -158,8 +136,7 @@ export default function TypePolicy() {
           {"\n"}
           <span className="tp-y-k">Statement</span>:{"\n"}
           {"  - "}
-          <span className="tp-y-k">Effect</span>:{" "}
-          <span className="tp-y-v">Allow</span>
+          <span className="tp-y-k">Effect</span>: <span className="tp-y-v">Allow</span>
           {"\n    "}
           <span className="tp-y-k">Action</span>:{"\n"}
           <span className={`tp-line ${rolling || swapped ? "is-lit" : ""}`}>

@@ -59,10 +59,8 @@ export const rfc1035 = (name: string, fallback = "collector"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -92,14 +90,9 @@ export const parseName = (name: string, collection = "collectors") => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -107,26 +100,20 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
-export const expectedAssetCountOf = (
-  value: number | string | undefined,
-): string | undefined => (value === undefined ? undefined : String(value));
+export const expectedAssetCountOf = (value: number | string | undefined): string | undefined =>
+  value === undefined ? undefined : String(value);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameNumber = (
-  left: number | undefined,
-  right: number | undefined,
-) => (left ?? 0) === (right ?? 0);
+export const sameNumber = (left: number | undefined, right: number | undefined) =>
+  (left ?? 0) === (right ?? 0);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -175,11 +162,7 @@ export const isPausedState = (state: string | undefined) =>
 
 export const isRegisteredState = (state: string | undefined) => {
   const next = (state ?? "").toUpperCase();
-  return (
-    next === "STATE_REGISTERED" ||
-    next === "STATE_ACTIVE" ||
-    next === "STATE_PAUSED"
-  );
+  return next === "STATE_REGISTERED" || next === "STATE_ACTIVE" || next === "STATE_PAUSED";
 };
 
 /**
@@ -187,10 +170,7 @@ export const isRegisteredState = (state: string | undefined) => {
  * that finished with `ALREADY_EXISTS` (6) is a lost create race;
  * `notFoundOk` also accepts `NOT_FOUND` (5).
  */
-export const waitForOperation = (
-  operation: rma.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+export const waitForOperation = (operation: rma.Operation, options?: { notFoundOk?: boolean }) =>
   waitForGcpOperation(
     operation,
     (name) =>
@@ -208,8 +188,7 @@ export const waitForOperation = (
     Effect.catchIf(
       (error) =>
         error._tag === "GCP.OperationFailed" &&
-        (error.code === 6 ||
-          (options?.notFoundOk === true && error.code === 5)),
+        (error.code === 6 || (options?.notFoundOk === true && error.code === 5)),
       () => Effect.void,
     ),
     Effect.asVoid,
@@ -225,8 +204,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.RapidMigrationAssessment.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.RapidMigrationAssessment.ResourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -242,8 +220,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.RapidMigrationAssessment.ResourceStillExists",
+      while: (error) => error._tag === "GCP.RapidMigrationAssessment.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -254,11 +231,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
   stateOf: (value: NonNullable<A>) => string | undefined,
-): Effect.Effect<
-  NonNullable<A>,
-  E | ResourceNotResolved | ResourceFailed | ResourceNotReady,
-  R
-> =>
+): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceFailed | ResourceNotReady, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
@@ -293,16 +266,14 @@ const emptyCollectors = Effect.succeed<rma.Collector[]>([]);
 export const listCollectors = (parent: string) =>
   parent.length === 0
     ? emptyCollectors
-    : rma.listProjectsLocationsCollectors
-        .pages({ parent, pageSize: 1000 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.collectors ?? [])),
-          Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.provide(noRetryLayer),
-          Effect.catchTag("NotFound", () => emptyCollectors),
-        );
+    : rma.listProjectsLocationsCollectors.pages({ parent, pageSize: 1000 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.collectors ?? [])),
+        Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.provide(noRetryLayer),
+        Effect.catchTag("NotFound", () => emptyCollectors),
+      );
 
 export const listOwnedCollectors = (project: string, _region: string) =>
   listCollectors(`projects/${project}/locations/-`);

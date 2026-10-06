@@ -123,10 +123,9 @@ export type OrganizationsNotificationConfig = Resource<
  * @resource
  * @category SecurityCenter
  */
-export const OrganizationsNotificationConfig =
-  Resource<OrganizationsNotificationConfig>(
-    "GCP.SecurityCenter.OrganizationsNotificationConfig",
-  );
+export const OrganizationsNotificationConfig = Resource<OrganizationsNotificationConfig>(
+  "GCP.SecurityCenter.OrganizationsNotificationConfig",
+);
 
 export class OrganizationsNotificationConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.OrganizationsNotificationConfigNotResolved",
@@ -139,14 +138,9 @@ const resourceName = (organization: string, configId: string) =>
 
 const streamingOf = (
   config: scc.StreamingConfig | StreamingConfig | undefined,
-): StreamingConfig | undefined =>
-  config === undefined ? undefined : { filter: config.filter };
+): StreamingConfig | undefined => (config === undefined ? undefined : { filter: config.filter });
 
-const toAttrs = (
-  config: scc.NotificationConfig,
-  organization: string,
-  project: string,
-) => {
+const toAttrs = (config: scc.NotificationConfig, organization: string, project: string) => {
   const name = config.name ?? "";
   const parsed = parseOwnership(config.description);
   return {
@@ -171,14 +165,7 @@ const getByName = (name: string) =>
 
 export const OrganizationsNotificationConfigProvider = () =>
   Provider.succeed(OrganizationsNotificationConfig, {
-    stables: [
-      "name",
-      "configId",
-      "organization",
-      "organizationId",
-      "project",
-      "serviceAccount",
-    ],
+    stables: ["name", "configId", "organization", "organizationId", "project", "serviceAccount"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -186,9 +173,7 @@ export const OrganizationsNotificationConfigProvider = () =>
         replaceOn(olds?.configId ?? output?.configId, news.configId) ??
         replaceOn(
           olds?.organization ?? output?.organization,
-          news.organization === undefined
-            ? undefined
-            : organizationParent(news.organization),
+          news.organization === undefined ? undefined : organizationParent(news.organization),
         )
       );
     }),
@@ -199,19 +184,12 @@ export const OrganizationsNotificationConfigProvider = () =>
         olds?.organization ?? output?.organization,
         output?.organization,
       );
-      const configId = yield* toResourceId(
-        id,
-        olds?.configId,
-        output?.configId,
-        "n",
-      );
+      const configId = yield* toResourceId(id, olds?.configId, output?.configId, "n");
       const name = output?.name ?? resourceName(organization, configId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -225,11 +203,7 @@ export const OrganizationsNotificationConfigProvider = () =>
             pageSize: 100,
           }),
           (page) => page.notificationConfigs,
-        ).pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed([] as scc.NotificationConfig[]),
-          ),
-        );
+        ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as scc.NotificationConfig[])));
         return items
           .filter((config) => hasOwnershipMarker(config.description))
           .map((config) => toAttrs(config, organization, env.project));
@@ -237,16 +211,8 @@ export const OrganizationsNotificationConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
-      const configId = yield* toResourceId(
-        id,
-        news.configId,
-        output?.configId,
-        "n",
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const configId = yield* toResourceId(id, news.configId, output?.configId, "n");
       const name = resourceName(organization, configId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

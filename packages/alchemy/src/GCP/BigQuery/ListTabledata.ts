@@ -33,14 +33,8 @@ export interface ListTabledata extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTabledataRequest,
-    ) => Effect.Effect<
-      bigquery.TableDataList,
-      bigquery.ListTabledataError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<bigquery.TableDataList, bigquery.ListTabledataError, RuntimeContext>
   >
 > {}
 
-export const ListTabledata = Binding.Service<ListTabledata>(
-  "GCP.BigQuery.ListTabledata",
-);
+export const ListTabledata = Binding.Service<ListTabledata>("GCP.BigQuery.ListTabledata");

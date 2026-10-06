@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Neon from "@/Neon/index.ts";
-import * as Effect from "effect/Effect";
 
 /**
  * Shared Neon Postgres origin + Hyperdrive Connection bound by both
@@ -12,11 +12,8 @@ import * as Effect from "effect/Effect";
  */
 export const HyperdriveConnection = Effect.gen(function* () {
   const project = yield* Neon.Project("HyperdriveBindingProject");
-  const connection = yield* Cloudflare.Hyperdrive.Connection(
-    "HyperdriveBindingConnection",
-    {
-      origin: project.origin,
-    },
-  );
+  const connection = yield* Cloudflare.Hyperdrive.Connection("HyperdriveBindingConnection", {
+    origin: project.origin,
+  });
   return { project, connection };
 });

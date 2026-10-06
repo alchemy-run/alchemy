@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsGatewaySecurityPolicies({ name }).pipe(
@@ -68,10 +65,9 @@ test.provider(
       expect(created.description).toEqual("gateway policy a");
       expect(created.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networksecurity.getProjectsLocationsGatewaySecurityPolicies({
-          name: created.name,
-        });
+      const fetched = yield* networksecurity.getProjectsLocationsGatewaySecurityPolicies({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toContain("alchemy-id=");
       expect(fetched.description).toContain("gateway policy a");
@@ -89,10 +85,9 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.description).toEqual("gateway policy b");
 
-      const refetched =
-        yield* networksecurity.getProjectsLocationsGatewaySecurityPolicies({
-          name: created.name,
-        });
+      const refetched = yield* networksecurity.getProjectsLocationsGatewaySecurityPolicies({
+        name: created.name,
+      });
       expect(refetched.description).toContain("gateway policy b");
       expect(refetched.description).toContain("alchemy-id=");
 

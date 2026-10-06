@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import { quotaTolerant } from "./parent.ts";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -59,23 +56,17 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              location: "global",
-              displayName: "engine-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "docs search",
-              solutionType: "SOLUTION_TYPE_SEARCH",
-              industryVertical: "GENERIC",
-            },
-          );
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            location: "global",
+            displayName: "engine-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "docs search",
+            solutionType: "SOLUTION_TYPE_SEARCH",
+            industryVertical: "GENERIC",
+          });
           return { store, engine };
         }),
       );
@@ -85,34 +76,27 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.engine.solutionType).toEqual("SOLUTION_TYPE_SEARCH");
       expect(created.engine.dataStoreIds).toContain(created.store.dataStoreId);
 
-      const fetched =
-        yield* discoveryengine.getProjectsLocationsCollectionsEngines({
-          name: created.engine.name,
-        });
+      const fetched = yield* discoveryengine.getProjectsLocationsCollectionsEngines({
+        name: created.engine.name,
+      });
       expect(fetched.name).toEqual(created.engine.name);
       expect(fetched.displayName).toEqual("docs search");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              dataStoreId: created.store.dataStoreId,
-              location: "global",
-              displayName: "engine-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              engineId: created.engine.engineId,
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "docs search prod",
-              solutionType: "SOLUTION_TYPE_SEARCH",
-              industryVertical: "GENERIC",
-            },
-          );
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            dataStoreId: created.store.dataStoreId,
+            location: "global",
+            displayName: "engine-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            engineId: created.engine.engineId,
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "docs search prod",
+            solutionType: "SOLUTION_TYPE_SEARCH",
+            industryVertical: "GENERIC",
+          });
           return { store, engine };
         }),
       );

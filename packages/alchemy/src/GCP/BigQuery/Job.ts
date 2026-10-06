@@ -161,9 +161,7 @@ export type Job = Resource<
  */
 export const Job = Resource<Job>("GCP.BigQuery.Job");
 
-export class JobNotResolved extends Data.TaggedError(
-  "GCP.BigQuery.JobNotResolved",
-)<{
+export class JobNotResolved extends Data.TaggedError("GCP.BigQuery.JobNotResolved")<{
   name: string;
 }> {}
 
@@ -176,8 +174,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const resourceName = (project: string, jobId: string) =>
-  `projects/${project}/jobs/${jobId}`;
+const resourceName = (project: string, jobId: string) => `projects/${project}/jobs/${jobId}`;
 
 const normalizeLocation = (location: string | undefined, fallback: string) =>
   (location ?? fallback).toUpperCase();
@@ -193,20 +190,14 @@ const toId = (id: string, jobId: string | undefined, existing?: string) =>
     });
   });
 
-const jobIdOf = (
-  job: bigquery.Job | bigquery.JobListJobsItem,
-  fallback: string,
-) => job.jobReference?.jobId ?? fallback;
+const jobIdOf = (job: bigquery.Job | bigquery.JobListJobsItem, fallback: string) =>
+  job.jobReference?.jobId ?? fallback;
 
-const projectOf = (
-  job: bigquery.Job | bigquery.JobListJobsItem,
-  fallback: string,
-) => job.jobReference?.projectId ?? fallback;
+const projectOf = (job: bigquery.Job | bigquery.JobListJobsItem, fallback: string) =>
+  job.jobReference?.projectId ?? fallback;
 
-const locationOf = (
-  job: bigquery.Job | bigquery.JobListJobsItem,
-  fallback: string,
-) => job.jobReference?.location ?? fallback;
+const locationOf = (job: bigquery.Job | bigquery.JobListJobsItem, fallback: string) =>
+  job.jobReference?.location ?? fallback;
 
 const stateOf = (job: bigquery.Job | bigquery.JobListJobsItem) => {
   const full = job as bigquery.Job;
@@ -230,8 +221,7 @@ const toAttrs = (
     labels: userLabels(job.configuration?.labels),
     jobType: job.configuration?.jobType,
     state: stateOf(job),
-    errorResult:
-      full.status?.errorResult ?? (job as bigquery.JobListJobsItem).errorResult,
+    errorResult: full.status?.errorResult ?? (job as bigquery.JobListJobsItem).errorResult,
     query: job.configuration?.query?.query,
     selfLink: full.selfLink,
     userEmail: full.user_email ?? (job as bigquery.JobListJobsItem).user_email,
@@ -299,13 +289,9 @@ const stable = (value: unknown): unknown => {
 };
 
 const jsonEqual = (left: unknown, right: unknown) =>
-  JSON.stringify(stable(left ?? null)) ===
-  JSON.stringify(stable(right ?? null));
+  JSON.stringify(stable(left ?? null)) === JSON.stringify(stable(right ?? null));
 
-const pickDefined = (
-  news: Record<string, unknown>,
-  observed: Record<string, unknown>,
-) => {
+const pickDefined = (news: Record<string, unknown>, observed: Record<string, unknown>) => {
   const next: Record<string, unknown> = {};
   const previous: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(news)) {
@@ -337,20 +323,14 @@ export const JobProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobId ?? output?.jobId;
       const jobIdChanged =
-        news.jobId !== undefined &&
-        previousId !== undefined &&
-        news.jobId !== previousId;
+        news.jobId !== undefined && previousId !== undefined && news.jobId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const locationChanged =
-        output !== undefined && previousLocation !== nextLocation;
+      const locationChanged = output !== undefined && previousLocation !== nextLocation;
 
       const labelsChanged =
         news.labels !== undefined &&
@@ -358,11 +338,9 @@ export const JobProvider = () =>
         !jsonEqual(toLabels(news.labels), output.labels);
 
       const timeoutChanged =
-        news.jobTimeoutMs !== undefined &&
-        (olds?.jobTimeoutMs ?? "") !== news.jobTimeoutMs;
+        news.jobTimeoutMs !== undefined && (olds?.jobTimeoutMs ?? "") !== news.jobTimeoutMs;
       const reservationChanged =
-        news.reservation !== undefined &&
-        (olds?.reservation ?? "") !== news.reservation;
+        news.reservation !== undefined && (olds?.reservation ?? "") !== news.reservation;
 
       const replaced =
         jobIdChanged ||
@@ -405,10 +383,7 @@ export const JobProvider = () =>
       const existing = yield* getByRef(project, jobId, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, project, env.region);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.configuration?.labels),
-      ))
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.configuration?.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -441,9 +416,7 @@ export const JobProvider = () =>
                   projection: "full",
                 })
                 .pipe(
-                  Stream.flatMap((page) =>
-                    Stream.fromIterable(page.jobs ?? []),
-                  ),
+                  Stream.flatMap((page) => Stream.fromIterable(page.jobs ?? [])),
                   Stream.filter((job) =>
                     Object.keys(job.configuration?.labels ?? {}).some((key) =>
                       key.startsWith("alchemy-"),
@@ -454,9 +427,7 @@ export const JobProvider = () =>
                   Effect.map((chunk) => Array.from(chunk)),
                 ),
             ),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as ReturnType<typeof toAttrs>[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as ReturnType<typeof toAttrs>[])),
           );
       }),
 
@@ -479,11 +450,7 @@ export const JobProvider = () =>
             projectId: project,
             body: toJobBody(project, jobId, location, news, desiredLabels),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByRef(project, jobId, location),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByRef(project, jobId, location)));
         current = created ?? undefined;
       }
 
@@ -512,11 +479,9 @@ export const JobProvider = () =>
             Effect.catchTag("NotFound", () => Effect.void),
             Effect.catchTag("BadRequest", () => Effect.void),
           );
-        yield* waitUntilDone(
-          output.project,
-          output.jobId,
-          output.location,
-        ).pipe(Effect.catchTag("GCP.BigQuery.JobNotDone", () => Effect.void));
+        yield* waitUntilDone(output.project, output.jobId, output.location).pipe(
+          Effect.catchTag("GCP.BigQuery.JobNotDone", () => Effect.void),
+        );
       }
       yield* bigquery
         .deleteJobs({
@@ -526,8 +491,7 @@ export const JobProvider = () =>
         })
         .pipe(
           Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "BadRequest",
+            while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),

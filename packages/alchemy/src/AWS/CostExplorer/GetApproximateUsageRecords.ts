@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetApproximateUsageRecords}.
  */
-export interface GetApproximateUsageRecordsRequest
-  extends ce.GetApproximateUsageRecordsRequest {}
+export interface GetApproximateUsageRecordsRequest extends ce.GetApproximateUsageRecordsRequest {}
 
 /**
  * Runtime binding for `ce:GetApproximateUsageRecords`.
@@ -37,14 +36,10 @@ export interface GetApproximateUsageRecords extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetApproximateUsageRecordsRequest,
-    ) => Effect.Effect<
-      ce.GetApproximateUsageRecordsResponse,
-      ce.GetApproximateUsageRecordsError
-    >
+    ) => Effect.Effect<ce.GetApproximateUsageRecordsResponse, ce.GetApproximateUsageRecordsError>
   >
 > {}
 
-export const GetApproximateUsageRecords =
-  Binding.Service<GetApproximateUsageRecords>(
-    "AWS.CostExplorer.GetApproximateUsageRecords",
-  );
+export const GetApproximateUsageRecords = Binding.Service<GetApproximateUsageRecords>(
+  "AWS.CostExplorer.GetApproximateUsageRecords",
+);

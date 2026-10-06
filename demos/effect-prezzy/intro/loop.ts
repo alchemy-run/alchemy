@@ -9,7 +9,15 @@
  * Code comes from `snippets/chat/` and is type-checked; `*.error.ts` must fail.
  */
 import type { LoopPart, MiniGraph, MiniNode, PyramidLayer } from "../shared/intro.ts";
-import type { CodeSpec, CommentSpec, LoopSpec, PyramidSpec, RollSpec, StepSpec, TerminalSpec } from "./steps.ts";
+import type {
+  CodeSpec,
+  CommentSpec,
+  LoopSpec,
+  PyramidSpec,
+  RollSpec,
+  StepSpec,
+  TerminalSpec,
+} from "./steps.ts";
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -73,10 +81,20 @@ const inline = (s: Omit<CodeSpec, "kind" | "src"> & { code: string }): CodeSpec 
 };
 
 // ── terminal output, in the CLI's own colors ─────────────────────────────
-const T = { ok: "\x1b[38;5;113m", soft: "\x1b[38;5;150m", accent: "\x1b[38;5;173m", grey: "\x1b[38;5;102m", red: "\x1b[38;5;203m", dim: "\x1b[2m", bold: "\x1b[1m", reset: "\x1b[0m" };
+const T = {
+  ok: "\x1b[38;5;113m",
+  soft: "\x1b[38;5;150m",
+  accent: "\x1b[38;5;173m",
+  grey: "\x1b[38;5;102m",
+  red: "\x1b[38;5;203m",
+  dim: "\x1b[2m",
+  bold: "\x1b[1m",
+  reset: "\x1b[0m",
+};
 const RULE = `${T.grey}${T.dim}${"─".repeat(52)}${T.reset}`;
 const $ = (cmd: string) => `${T.dim}$${T.reset} ${cmd}`;
-const res = (name: string, type: string) => `${T.bold}${name}${T.reset} ${T.dim}(${type})${T.reset}`;
+const res = (name: string, type: string) =>
+  `${T.bold}${name}${T.reset} ${T.dim}(${type})${T.reset}`;
 /** The test run's bracketing phases: what it stands up before the tests and tears down after. */
 const DEPLOYED = [
   `${T.ok}${T.bold}▲ deploy${T.reset}   ${T.dim}Chat → stage${T.reset} ${T.bold}test_sam${T.reset}`,
@@ -94,7 +112,12 @@ const term = (s: Omit<TerminalSpec, "kind" | "lines"> & { lines: string[] }): Te
 });
 
 // ── diagram helper (the shared-staging drawing) ─────────────────────────
-const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]): MiniNode => ({
+const at = (
+  node: { id: string; title: string; color: string },
+  x: number,
+  y: number,
+  notes?: string[],
+): MiniNode => ({
   ...node,
   x,
   y,
@@ -103,9 +126,24 @@ const at = (node: { id: string; title: string; color: string }, x: number, y: nu
 
 // ── the stack: what "the code" actually is ─────────────────────────────
 const LAYER = {
-  infra: { id: "infra", title: "Infrastructure", detail: "compute · databases · buckets · queues · networks", color: "#8b9cf6" },
-  config: { id: "config", title: "Configuration & policies", detail: "IAM · env vars · secrets · DNS", color: "#e0a86b" },
-  api: { id: "api", title: "APIs & business logic", detail: "domain models · rules · workflows", color: "#a3c473" },
+  infra: {
+    id: "infra",
+    title: "Infrastructure",
+    detail: "compute · databases · buckets · queues · networks",
+    color: "#8b9cf6",
+  },
+  config: {
+    id: "config",
+    title: "Configuration & policies",
+    detail: "IAM · env vars · secrets · DNS",
+    color: "#e0a86b",
+  },
+  api: {
+    id: "api",
+    title: "APIs & business logic",
+    detail: "domain models · rules · workflows",
+    color: "#a3c473",
+  },
   web: { id: "web", title: "Frontend", detail: "websites · CDN · domains", color: "#e06c9f" },
 } satisfies Record<string, PyramidLayer>;
 const ALL_LAYERS = [LAYER.infra, LAYER.config, LAYER.api, LAYER.web];
@@ -116,8 +154,14 @@ const CHAT_LAYERS: PyramidLayer[] = [
   { ...LAYER.web, detail: "the chat page, over WebSockets" },
 ];
 /** Observability: beside the pyramid, spanning every layer. */
-const OBSERVE = { title: "Observability", lines: ["traces", "logs", "metrics", "dashboards", "alarms"], color: "#56b6c2" };
-const pyramid = (s: Omit<PyramidSpec, "kind" | "layers"> & { layers?: PyramidLayer[] }): PyramidSpec => ({
+const OBSERVE = {
+  title: "Observability",
+  lines: ["traces", "logs", "metrics", "dashboards", "alarms"],
+  color: "#56b6c2",
+};
+const pyramid = (
+  s: Omit<PyramidSpec, "kind" | "layers"> & { layers?: PyramidLayer[] },
+): PyramidSpec => ({
   kind: "pyramid",
   layers: ALL_LAYERS,
   frames: 24,
@@ -131,7 +175,8 @@ const opening: StepSpec[] = [
     title: "The tightest feedback loop from edit to production",
     eyebrow: "Alchemy",
     heading: "The tightest feedback loop\nfrom edit to production",
-    subtitle: "Cloud programs composed from Layers:\ntype-checked, emulated locally, tested live, deployed per pull request",
+    subtitle:
+      "Cloud programs composed from Layers:\ntype-checked, emulated locally, tested live, deployed per pull request",
     footer: "alchemy.run",
     notes:
       "I'm Sam, I work on Alchemy. This talk is about what an AI agent needs to go fast and still ship things that work.",
@@ -148,12 +193,14 @@ const theStack: StepSpec[] = [
   pyramid({
     title: "…wired together with configuration and policies",
     layers: [LAYER.infra, LAYER.config],
-    notes: "On top of that is the glue: who can access what, environment variables, secrets, DNS records.",
+    notes:
+      "On top of that is the glue: who can access what, environment variables, secrets, DNS records.",
   }),
   pyramid({
     title: "…running the APIs and business logic",
     layers: [LAYER.infra, LAYER.config, LAYER.api],
-    notes: "Then the part we usually call the code: the APIs and business logic. The domain itself: its models, its rules, its workflows.",
+    notes:
+      "Then the part we usually call the code: the APIs and business logic. The domain itself: its models, its rules, its workflows.",
   }),
   pyramid({
     title: "…behind a frontend served from a CDN",
@@ -178,7 +225,14 @@ const theStack: StepSpec[] = [
       { id: "chat", title: "Chat", sub: "Cloudflare Worker", color: "#f38020", x: 900, y: 460 },
       { id: "rooms", title: "Rooms", sub: "Durable Objects", color: "#e06c9f", x: 900, y: 670 },
       { id: "files", title: "Files", sub: "R2 bucket", color: "#8b7cf6", x: 480, y: 890 },
-      { id: "messages", title: "Messages", sub: "Cloudflare Queue", color: "#e0a86b", x: 900, y: 890 },
+      {
+        id: "messages",
+        title: "Messages",
+        sub: "Cloudflare Queue",
+        color: "#e0a86b",
+        x: 900,
+        y: 890,
+      },
       { id: "history", title: "History", sub: "Neon Postgres", color: "#34d399", x: 1320, y: 890 },
     ],
     edges: [
@@ -233,7 +287,12 @@ const sst = (s: Omit<CodeSpec, "kind" | "group" | "file" | "src" | "fontSize">):
 const CUT = { under: "api", above: "runtime program", below: "infrastructure program" };
 const UPLOAD = {
   label: "upload a file",
-  items: { infra: "Files bucket", config: "s3:PutObject · $BUCKET", api: "upload handler", web: "upload button" },
+  items: {
+    infra: "Files bucket",
+    config: "s3:PutObject · $BUCKET",
+    api: "upload handler",
+    web: "upload button",
+  },
 };
 const twoPrograms: StepSpec[] = [
   sst({
@@ -259,14 +318,38 @@ const twoPrograms: StepSpec[] = [
     title: "Code generation bridges the two, but it's an extra step to keep in sync",
     beside: {
       ...SST_BESIDE,
-      marks: [{ kind: "underline", find: "Resource.Files.name", label: "only as fresh as the last codegen", side: "right", tone: "bad" }],
+      marks: [
+        {
+          kind: "underline",
+          find: "Resource.Files.name",
+          label: "only as fresh as the last codegen",
+          side: "right",
+          tone: "bad",
+        },
+      ],
     },
-    marks: [{ kind: "circle", find: "link: [bucket]", label: "grants s3:* on the bucket", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "link: [bucket]",
+        label: "grants s3:* on the bucket",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     under: {
       file: "sst-env.d.ts",
       src: { code: SST_ENV },
       label: "code generation",
-      marks: [{ kind: "underline", find: "export interface Resource", label: "one type for the whole app", side: "right", tone: "bad" }],
+      marks: [
+        {
+          kind: "underline",
+          find: "export interface Resource",
+          label: "one type for the whole app",
+          side: "right",
+          tone: "bad",
+        },
+      ],
     },
     notes:
       "So the two programs are connected, but only through code generation. That's friction: a generated file that has to be regenerated whenever the config changes, and until it is, the handler is typed against a stale picture. It describes the whole app, not what this function can use. And link can't know what the handler does, so it grants s3:* on the bucket and every object in it, even though the handler only calls PutObject. That's a lot of machinery for an agent to keep in its head.",
@@ -305,8 +388,22 @@ const twoPrograms: StepSpec[] = [
 ];
 
 const BRICKS = {
-  files: { row: 0, col: 1, of: 2, title: "Files", detail: "R2 bucket · upload()", color: "#8b7cf6" },
-  database: { row: 0, col: 0, of: 2, title: "Database", detail: "Neon · Hyperdrive", color: "#34d399" },
+  files: {
+    row: 0,
+    col: 1,
+    of: 2,
+    title: "Files",
+    detail: "R2 bucket · upload()",
+    color: "#8b7cf6",
+  },
+  database: {
+    row: 0,
+    col: 0,
+    of: 2,
+    title: "Database",
+    detail: "Neon · Hyperdrive",
+    color: "#34d399",
+  },
   history: { row: 1, title: "History", detail: "append() · list()", color: "#e0a86b" },
   rooms: { row: 2, title: "Rooms", detail: "Durable Objects · join()", color: "#e06c9f" },
   chat: { row: 3, title: "Chat", detail: "Worker · routes", color: "#f38020" },
@@ -333,8 +430,12 @@ const WIRED = [
   { layer: "infra", text: "    Layer.provide([DatabaseLive, FilesR2]),\n  ),\n)", code: true },
 ];
 /** The chat app's pyramid, rebuilt from the modules implemented so far. */
-const built = (title: string, bricks: typeof ALL_BRICKS, notes: string, side?: PyramidSpec["side"]): PyramidSpec =>
-  pyramid({ title, layers: CHAT_LAYERS, bricks, notes, side });
+const built = (
+  title: string,
+  bricks: typeof ALL_BRICKS,
+  notes: string,
+  side?: PyramidSpec["side"],
+): PyramidSpec => pyramid({ title, layers: CHAT_LAYERS, bricks, notes, side });
 
 // ── modules: effectful constructors ─────────────────────────────────────
 const FILES = { snippet: "Files.ts", file: "src/Files.ts", group: "files", fontSize: 25 };
@@ -466,7 +567,7 @@ $BUCKET_NAME: chat-dev-sam-files`,
     error: { pick: (lines) => lines.filter((line) => line.includes("'put'")).slice(0, 1) },
     emphasize: ["R2.ReadBucket(bucket)"],
     notes:
-      "Back on R2. Because every binding is a policy, the types the binding hands back are exactly what that policy allows. Ask for read-only access and you get a read-only client, with no put, so upload stops compiling. Least privilege isn't something to review after the fact. The type checker guarantees the policy and the code agree, and the agent finds out in milliseconds, in the editor."
+      "Back on R2. Because every binding is a policy, the types the binding hands back are exactly what that policy allows. Ask for read-only access and you get a read-only client, with no put, so upload stops compiling. Least privilege isn't something to review after the fact. The type checker guarantees the policy and the code agree, and the agent finds out in milliseconds, in the editor.",
   }),
 ];
 
@@ -522,16 +623,15 @@ const compose: StepSpec[] = [
     ...HISTORY,
     title: "History starts as an empty Layer",
     omit: ["service", "deps", "queue", "consume", "append", "list"],
-    notes: "Chat history is the next module. Like the others, it's a Layer: a constructor that returns the methods the rest of the app calls. It starts empty.",
+    notes:
+      "Chat history is the next module. Like the others, it's a Layer: a constructor that returns the methods the rest of the app calls. It starts empty.",
   }),
   chat({
     ...HISTORY,
     title: "It asks for the Database",
     omit: ["service", "queue", "consume", "append", "list"],
     beside: HISTORY_BESIDE_CLASS,
-    links: [
-      { from: "yield* Database", to: "private sql: Database", tone: "construct" },
-    ],
+    links: [{ from: "yield* Database", to: "private sql: Database", tone: "construct" }],
     notes:
       "Unlike Files, History doesn't create anything yet: its constructor asks for the Database module we just built. As a class, that would be a constructor parameter. It only names what it needs. It doesn't say which implementation, or where the database lives. That gets decided once, at the top.",
   }),
@@ -562,7 +662,8 @@ const compose: StepSpec[] = [
     title: "append puts a message on that queue",
     omit: ["service", "consume"],
     layer: "api",
-    notes: "append sends a room name and the text onto the queue. That's what every chat room will call.",
+    notes:
+      "append sends a room name and the text onto the queue. That's what every chat room will call.",
   }),
   chat({
     ...HISTORY,
@@ -647,7 +748,14 @@ FunctionName: chat-dev-sam-history`,
   chat({
     ...WORKER,
     title: "The Chat Worker wires up the whole stack of Layers",
-    emphasize: ["yield* Room;", "yield* History;", "yield* Files;", "Effect.provide(", "HistoryLive.pipe(Layer.provide(DatabaseLive))", "      FilesR2,"],
+    emphasize: [
+      "yield* Room;",
+      "yield* History;",
+      "yield* Files;",
+      "Effect.provide(",
+      "HistoryLive.pipe(Layer.provide(DatabaseLive))",
+      "      FilesR2,",
+    ],
     notes:
       "The Worker asks for the rooms, History and Files. join hands the WebSocket to that room's Durable Object, uploads go to Files, and history comes from History. At the bottom it wires the Layers: HistoryLive on DatabaseLive, and FilesR2. That one expression is the whole app's wiring, and it's the only place that decides which implementation each module gets. The rooms get History from here too.",
   }),
@@ -657,7 +765,11 @@ FunctionName: chat-dev-sam-history`,
     group: WORKER.group,
     fontSize: WORKER.fontSize,
     title: "Forget a Layer and the Worker doesn't compile",
-    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'Files' is not assignable")).slice(0, 1), below: true },
+    error: {
+      pick: (lines) =>
+        lines.filter((line) => line.startsWith("Type 'Files' is not assignable")).slice(0, 1),
+      below: true,
+    },
     showRemoved: true,
     notes:
       "Leave FilesR2 out of the stack, and the Worker doesn't compile. The type says exactly which module is missing. That's the agent's fastest feedback: it can't deploy an app with a hole in it.",
@@ -682,12 +794,14 @@ FunctionName: chat-dev-sam-history`,
     {
       omit: ["monitor"],
       title: "…with a dashboard that plots the errors…",
-      notes: "Its constructor declares a dashboard, with a chart of errors over time. It's a resource like any other, so it's deployed and versioned with the app.",
+      notes:
+        "Its constructor declares a dashboard, with a chart of errors over time. It's a resource like any other, so it's deployed and versioned with the app.",
     },
     {
       omit: [],
       title: "…and a monitor that alerts on them",
-      notes: "And a monitor that fires when errors pass a threshold. In production, that alert is one more failure that goes back to the agent.",
+      notes:
+        "And a monitor that fires when errors pass a threshold. In production, that alert is one more failure that goes back to the agent.",
     },
   ].map((step) =>
     chat({
@@ -774,7 +888,11 @@ const program: StepSpec[] = [
     fontSize: 30,
     omit: ["ret"],
     title: "Leave out the providers and the Stack doesn't compile",
-    error: { pick: (lines) => lines.filter((line) => line.startsWith("Type 'Layer<never, never, never>'")).slice(0, 1), below: true },
+    error: {
+      pick: (lines) =>
+        lines.filter((line) => line.startsWith("Type 'Layer<never, never, never>'")).slice(0, 1),
+      below: true,
+    },
     showRemoved: true,
     notes:
       "Take the providers away and it's a type error. Because the body yields the Chat Worker, the Stack's type knows every kind of resource underneath it: a Cloudflare Worker, an R2 bucket, a queue, a Neon project. So it knows exactly which providers it needs, and it won't compile until you configure all of them.",
@@ -842,7 +960,10 @@ const program: StepSpec[] = [
         { name: "Cloudflare.DurableObject(Room)", binding: true, from: 99, to: 107 },
         { name: "Axiom.Telemetry(Ingest)", binding: true, from: 99, to: 109 },
       ],
-      done: [RULE, `${T.ok}Stack deployed (10/10)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`].join("\n"),
+      done: [
+        RULE,
+        `${T.ok}Stack deployed (10/10)${T.reset} ${T.dim}{ url: "https://chat-dev-sam.workers.dev" }${T.reset}`,
+      ].join("\n"),
       at: 112,
     },
     notes:
@@ -851,7 +972,12 @@ const program: StepSpec[] = [
   term({
     group: "cli",
     title: "Running it again changes nothing",
-    lines: [$("alchemy deploy"), `${T.ok}✓${T.reset} Plan ready`, RULE, `${T.dim}No changes${T.reset}`],
+    lines: [
+      $("alchemy deploy"),
+      `${T.ok}✓${T.reset} Plan ready`,
+      RULE,
+      `${T.dim}No changes${T.reset}`,
+    ],
     notes:
       "Run it again and nothing happens. The program describes the end state, not the steps to get there, so it's always safe to run. An agent can't break anything by deploying twice.",
   }),
@@ -873,7 +999,8 @@ const program: StepSpec[] = [
       RULE,
       `${T.ok}Stack destroyed (10/10)${T.reset}`,
     ],
-    notes: "And destroy removes everything the Stack created, in reverse dependency order: the Worker first, then what it used, down to the bucket, the queue and the database. Nothing left behind to clean up by hand.",
+    notes:
+      "And destroy removes everything the Stack created, in reverse dependency order: the Worker first, then what it used, down to the bucket, the queue and the database. Nothing left behind to clean up by hand.",
   }),
   term({
     group: "cli",
@@ -887,7 +1014,6 @@ const program: StepSpec[] = [
       "And alchemy dev runs the same program locally, with emulated Cloudflare services. Because the whole app is one declarative program, an agent can stand it up, tear it down, and run it locally, all by itself. Which brings us back to the question we started with: how does it know the app works?",
   }),
 ];
-
 
 // ── act 0: the loop, introduced one piece at a time ─────────────────────
 /** A map step that draws only `show`, everything lit. */
@@ -983,7 +1109,16 @@ const tests: StepSpec[] = [
   term({
     group: "test-run",
     title: "pnpm test runs it against the real cloud",
-    lines: [$("pnpm test"), ...DEPLOYED, ``, PASSED, ``, ...DESTROYED, ``, `${T.ok}1 passed${T.reset}`],
+    lines: [
+      $("pnpm test"),
+      ...DEPLOYED,
+      ``,
+      PASSED,
+      ``,
+      ...DESTROYED,
+      ``,
+      `${T.ok}1 passed${T.reset}`,
+    ],
     notes:
       "Run it, and the test deploys the whole app to a stage of its own, test_sam, in the real cloud: real Workers, real queues, a real Neon database. The test runs against it, and afterwards every resource is destroyed. Nothing shared with your dev stage or anyone else's, and nothing left behind.",
   }),
@@ -1019,14 +1154,7 @@ const tests: StepSpec[] = [
   term({
     group: "test-run",
     title: "Emulated for speed, live for the real thing",
-    lines: [
-      ...LOCAL_RUN,
-      ``,
-      $("pnpm test"),
-      ...DEPLOYED,
-      PASSED,
-      ...DESTROYED,
-    ],
+    lines: [...LOCAL_RUN, ``, $("pnpm test"), ...DEPLOYED, PASSED, ...DESTROYED],
     fresh: 7,
     notes:
       "Without it, the same command runs live. Both are one command away: emulated after every change, live to catch what emulation can't, like permissions and real network behavior.",
@@ -1097,8 +1225,10 @@ const ci: StepSpec[] = [
 
 // ── act 5: shared infrastructure, by reference ───────────────────────────
 const DB_FILE = { snippet: "DbBranch.ts", file: "src/Db.ts", group: "db", fontSize: 25 };
-const staging = (id: string, title: string, color: string, x: number) => at({ id, title, color }, x, 110);
-const pr = (id: string, title: string, color: string, x: number, y: number) => at({ id, title, color }, x, y);
+const staging = (id: string, title: string, color: string, x: number) =>
+  at({ id, title, color }, x, 110);
+const pr = (id: string, title: string, color: string, x: number, y: number) =>
+  at({ id, title, color }, x, y);
 const SHARED: MiniGraph = {
   nodes: [
     staging("sChat", "Chat", "#f38020", 360),
@@ -1211,7 +1341,18 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     group: "stack",
     fontSize: 22,
     title: "The Stack comments the preview link on the pull request",
-    emphasize: ["GitHub.Comment", "Config.Int", "Config.option", "Config.map", "if (pullRequest)", "owner:", "repository:", "issueNumber: pullRequest", "Preview deployed", "GitHub.providers"],
+    emphasize: [
+      "GitHub.Comment",
+      "Config.Int",
+      "Config.option",
+      "Config.map",
+      "if (pullRequest)",
+      "owner:",
+      "repository:",
+      "issueNumber: pullRequest",
+      "Preview deployed",
+      "GitHub.providers",
+    ],
     notes:
       "A GitHub Comment is a resource too. When the Stack deploys for a PR, it posts the preview URL on it, and updates the same comment on every push.",
   }),
@@ -1238,7 +1379,8 @@ Neon.Project.ref("Db", { stage: "staging" })`,
     title: "Closing the pull request destroys that copy",
     code: PR_YAML_CLOSE,
     emphasize: ["closed", "cleanup", "alchemy destroy"],
-    notes: "And when the PR is merged or closed, the copy goes away: destroy that stage, and every resource the PR created goes with it.",
+    notes:
+      "And when the PR is merged or closed, the copy goes away: destroy that stage, and every resource the PR created goes with it.",
   }),
   term({
     group: "ci-run",
@@ -1287,13 +1429,12 @@ const release: StepSpec[] = [
     title: "Merging to main runs the same tests against staging",
     code: MAIN_YAML,
     emphasize: ["branches: [main]", "STAGE: staging"],
-    notes: "On main, the same command runs with STAGE set to staging. Staging is updated and tested in one step.",
+    notes:
+      "On main, the same command runs with STAGE set to staging. Staging is updated and tested in one step.",
   }),
-  loop(
-    "Last box: prod, only when staging is green",
-    "And the last box on the map: prod.",
-    ["prod"],
-  ),
+  loop("Last box: prod, only when staging is green", "And the last box on the map: prod.", [
+    "prod",
+  ]),
   inline({
     group: "main",
     file: ".github/workflows/main.yml",
@@ -1309,7 +1450,21 @@ const release: StepSpec[] = [
     "One program and one test file, all the way to prod",
     "That's the loop. One program describes the whole app. One test file checks it on your machine, emulated or live, on every pull request's copy, and on staging. Every failure along the way is feedback the agent can act on.",
     undefined,
-    ["edit", "types", "local", "live", "push", "pr", "prTest", "comment", "merge", "staging", "stagingTest", "prod", "feedback"],
+    [
+      "edit",
+      "types",
+      "local",
+      "live",
+      "push",
+      "pr",
+      "prTest",
+      "comment",
+      "merge",
+      "staging",
+      "stagingTest",
+      "prod",
+      "feedback",
+    ],
   ),
 ];
 
@@ -1333,7 +1488,14 @@ const HOST_TEMPLATE = `export default ⟨0⟩(
   }).pipe(Effect.provide(⟨2⟩)),
 );`;
 const HOSTS = ["Workers", "Lambda", "ECS", "Cloud Run", "GKE", "Fly", "Railway", "Hetzner", "Neon"];
-const host = (at: number, title: string, values: string[], check: string, generated: string, notes: string) =>
+const host = (
+  at: number,
+  title: string,
+  values: string[],
+  check: string,
+  generated: string,
+  notes: string,
+) =>
   roll({
     group: "hosts",
     file: "src/Api.ts",
@@ -1363,7 +1525,14 @@ const JOB_TEMPLATE = `export default ⟨0⟩(
   }).pipe(Effect.provide(⟨2⟩)),
 );`;
 const JOBS = ["ECS Task", "Cloud Run Job", "Kubernetes Job"];
-const job = (at: number, title: string, values: string[], check: string, generated: string, notes: string) =>
+const job = (
+  at: number,
+  title: string,
+  values: string[],
+  check: string,
+  generated: string,
+  notes: string,
+) =>
   roll({
     group: "jobs",
     file: "src/Report.ts",
@@ -1388,7 +1557,20 @@ const WEB_TEMPLATE = `export const Web = Effect.gen(function* () {
   });
 });`;
 const CLOUDS = ["Cloudflare", "AWS", "Fly", "Hetzner", "Railway", "Prisma", "Neon"];
-const FRAMEWORKS = ["Astro", "Nextjs", "Nuxt", "SvelteKit", "ReactRouter", "SolidStart", "TanStackStart", "Vite", "Waku", "Vocs", "Octane", "Foldkit"];
+const FRAMEWORKS = [
+  "Astro",
+  "Nextjs",
+  "Nuxt",
+  "SvelteKit",
+  "ReactRouter",
+  "SolidStart",
+  "TanStackStart",
+  "Vite",
+  "Waku",
+  "Vocs",
+  "Octane",
+  "Foldkit",
+];
 const web = (cloud: string, framework: string, title: string, notes: string) =>
   roll({
     group: "web",
@@ -1398,7 +1580,10 @@ const web = (cloud: string, framework: string, title: string, notes: string) =>
     template: WEB_TEMPLATE,
     values: [cloud, framework],
     check: `anywhere/Web${cloud}${framework === "Astro" ? "" : framework}.ts`,
-    reel: framework === "Astro" ? { items: CLOUDS, at: CLOUDS.indexOf(cloud) } : { items: FRAMEWORKS, at: FRAMEWORKS.indexOf(framework) },
+    reel:
+      framework === "Astro"
+        ? { items: CLOUDS, at: CLOUDS.indexOf(cloud) }
+        : { items: FRAMEWORKS, at: FRAMEWORKS.indexOf(framework) },
     notes,
   });
 
@@ -1606,7 +1791,13 @@ resource: chat-dev-sam-files`,
     {
       snippet: "FlowDurable.ts",
       title: "…on AWS, the same workflow is a Lambda durable function…",
-      emphasize: ["AWS.Lambda.DurableFunction", "Durable.step", "Durable.sleep", "{ main: import.meta.url }", "FilesS3"],
+      emphasize: [
+        "AWS.Lambda.DurableFunction",
+        "Durable.step",
+        "Durable.sleep",
+        "{ main: import.meta.url }",
+        "FilesS3",
+      ],
       notes:
         "On AWS it's a Lambda durable function, with almost the same code: step instead of task, and the S3 Files Layer instead of R2. Lambda checkpoints each step and resumes the function after the sleep.",
     },
@@ -1638,12 +1829,14 @@ resource: chat-dev-sam-files`,
     {
       snippet: "DbNeon.ts",
       title: "The database can be Neon…",
-      notes: "Down to the database. This is the Database Layer from the chat app, on Neon: a project and a branch, fronted by Hyperdrive.",
+      notes:
+        "Down to the database. This is the Database Layer from the chat app, on Neon: a project and a branch, fronted by Hyperdrive.",
     },
     {
       snippet: "DbPlanetscale.ts",
       title: "…PlanetScale…",
-      notes: "Swap in PlanetScale: a Postgres database and a role. Its origin feeds Hyperdrive the same way.",
+      notes:
+        "Swap in PlanetScale: a Postgres database and a role. Its origin feeds Hyperdrive the same way.",
     },
     {
       snippet: "DbPrisma.ts",
@@ -1717,7 +1910,8 @@ Enabled: true
 BatchSize: 10
 FunctionResponseTypes: [ReportBatchItemFailures]
 MetricsConfig: { Metrics: [EventCount] }`,
-      notes: "Back on AWS, event sources all look alike. Consume an SQS queue: the call grants the three consumer permissions and creates the event source mapping that invokes the Lambda.",
+      notes:
+        "Back on AWS, event sources all look alike. Consume an SQS queue: the call grants the three consumer permissions and creates the event source mapping that invokes the Lambda.",
     },
     {
       snippet: "EventsKinesis.ts",
@@ -1740,7 +1934,8 @@ StartingPosition: LATEST
 BatchSize: 100
 FunctionResponseTypes: [ReportBatchItemFailures]
 MetricsConfig: { Metrics: [EventCount] }`,
-      notes: "A Kinesis stream: swap the resource and the consume call. The permissions and the mapping change to match, the handler doesn't.",
+      notes:
+        "A Kinesis stream: swap the resource and the consume call. The permissions and the mapping change to match, the handler doesn't.",
     },
     {
       snippet: "EventsDynamo.ts",
@@ -1771,7 +1966,8 @@ StartingPosition: LATEST
 BatchSize: 100
 FunctionResponseTypes: [ReportBatchItemFailures]
 MetricsConfig: { Metrics: [EventCount] }`,
-      notes: "Or every change to a DynamoDB table. This one also changes the table itself: it turns on the table's stream with the view type you asked for, then grants the stream permissions and creates the mapping on the stream's ARN. Four event sources, one shape.",
+      notes:
+        "Or every change to a DynamoDB table. This one also changes the table itself: it turns on the table's stream with the view type you asked for, then grants the stream permissions and creates the mapping on the stream's ARN. Four event sources, one shape.",
     },
   ].map((ev, at) =>
     chat({
@@ -1802,8 +1998,18 @@ MetricsConfig: { Metrics: [EventCount] }`,
   web("Hetzner", "Astro", "…a Hetzner server…", "To a Hetzner box."),
   web("Railway", "Astro", "…Railway…", "To Railway."),
   web("Prisma", "Astro", "…Prisma…", "To Prisma."),
-  web("Neon", "Astro", "…or Neon, with the same props every time", "Or Neon. Seven clouds, the same props every time."),
-  web("Neon", "Nextjs", "The framework is one word too", "And the framework is one word too: Next.js…"),
+  web(
+    "Neon",
+    "Astro",
+    "…or Neon, with the same props every time",
+    "Or Neon. Seven clouds, the same props every time.",
+  ),
+  web(
+    "Neon",
+    "Nextjs",
+    "The framework is one word too",
+    "And the framework is one word too: Next.js…",
+  ),
   web("Neon", "Nuxt", "The framework is one word too", "…Nuxt…"),
   web("Neon", "SvelteKit", "The framework is one word too", "…SvelteKit…"),
   web("Neon", "ReactRouter", "…and the rest", "…React Router…"),
@@ -1873,7 +2079,21 @@ MetricsConfig: { Metrics: [EventCount] }`,
     "Whatever you pick, it's the same loop",
     "And whichever of these you pick, it's the same program, the same test file, and the same loop from edit to production.",
     undefined,
-    ["edit", "types", "local", "live", "push", "pr", "prTest", "comment", "merge", "staging", "stagingTest", "prod", "feedback"],
+    [
+      "edit",
+      "types",
+      "local",
+      "live",
+      "push",
+      "pr",
+      "prTest",
+      "comment",
+      "merge",
+      "staging",
+      "stagingTest",
+      "prod",
+      "feedback",
+    ],
   ),
 ];
 

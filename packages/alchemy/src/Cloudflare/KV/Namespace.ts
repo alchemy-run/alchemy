@@ -114,11 +114,7 @@ export const ProviderLive = () =>
             accountId: acct,
             namespaceId: output.namespaceId,
           })
-          .pipe(
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -208,9 +204,7 @@ export const ProviderLive = () =>
               supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
               accountId: output.accountId,
             })),
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
           );
       }
       const title = yield* createTitle(id, olds?.title);

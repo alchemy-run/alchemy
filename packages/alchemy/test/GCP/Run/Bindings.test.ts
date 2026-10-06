@@ -1,17 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import RunBindingsHost, {
-  Api,
-  Callee,
-  Migrate,
-  Workers,
-} from "./fixtures/bindings-host.ts";
+import RunBindingsHost, { Api, Callee, Migrate, Workers } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -87,9 +82,7 @@ describe.skipIf(!dockerAvailable)(
             expect(live.template?.containers?.[0]?.image).toEqual(
               "us-docker.pkg.dev/cloudrun/container/hello",
             );
-            expect(yield* serviceRoles(names.api)).toEqual([
-              "roles/run.viewer",
-            ]);
+            expect(yield* serviceRoles(names.api)).toEqual(["roles/run.viewer"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:run", "live"],
@@ -103,18 +96,16 @@ describe.skipIf(!dockerAvailable)(
         "reads the worker pool, granted viewer on the pool only",
         (_stack) =>
           Effect.gen(function* () {
-            const live =
-              yield* expectProbe<cloudrun.GoogleCloudRunV2WorkerPool>(
-                baseUrl,
-                "getWorkerPool",
-              );
+            const live = yield* expectProbe<cloudrun.GoogleCloudRunV2WorkerPool>(
+              baseUrl,
+              "getWorkerPool",
+            );
             expect(live.name).toEqual(names.workers);
 
-            const policy =
-              yield* cloudrun.getIamPolicyProjectsLocationsWorkerPools({
-                resource: names.workers,
-                "options.requestedPolicyVersion": 3,
-              });
+            const policy = yield* cloudrun.getIamPolicyProjectsLocationsWorkerPools({
+              resource: names.workers,
+              "options.requestedPolicyVersion": 3,
+            });
             expect(rolesOf(policy)).toEqual(["roles/run.viewer"]);
           }),
         {
@@ -129,29 +120,25 @@ describe.skipIf(!dockerAvailable)(
         "starts an execution, granted jobsExecutorWithOverrides on the job only",
         (_stack) =>
           Effect.gen(function* () {
-            const operation =
-              yield* expectProbe<cloudrun.GoogleLongrunningOperation>(
-                baseUrl,
-                "runJob",
-              );
+            const operation = yield* expectProbe<cloudrun.GoogleLongrunningOperation>(
+              baseUrl,
+              "runJob",
+            );
             const executionName = operation.metadata?.name;
             expect(typeof executionName).toEqual("string");
             expect(String(executionName)).toContain(`${names.job}/executions/`);
 
             // Out of band: the execution exists under the bound job.
-            const execution =
-              yield* cloudrun.getProjectsLocationsJobsExecutions({
-                name: String(executionName),
-              });
+            const execution = yield* cloudrun.getProjectsLocationsJobsExecutions({
+              name: String(executionName),
+            });
             expect(execution.name).toEqual(executionName);
 
             const policy = yield* cloudrun.getIamPolicyProjectsLocationsJobs({
               resource: names.job,
               "options.requestedPolicyVersion": 3,
             });
-            expect(rolesOf(policy)).toEqual([
-              "roles/run.jobsExecutorWithOverrides",
-            ]);
+            expect(rolesOf(policy)).toEqual(["roles/run.jobsExecutorWithOverrides"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:run", "live"],
@@ -176,9 +163,7 @@ describe.skipIf(!dockerAvailable)(
             const direct = yield* HttpClient.get(names.calleeUri);
             expect(direct.status).toEqual(403);
 
-            expect(yield* serviceRoles(names.callee)).toEqual([
-              "roles/run.invoker",
-            ]);
+            expect(yield* serviceRoles(names.callee)).toEqual(["roles/run.invoker"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:run", "live"],

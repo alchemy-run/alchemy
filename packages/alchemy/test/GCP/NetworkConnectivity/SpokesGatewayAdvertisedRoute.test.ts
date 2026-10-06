@@ -1,35 +1,30 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Gateway spokes provision managed routers and take well over 5 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  networkconnectivity
-    .getProjectsLocationsSpokesGatewayAdvertisedRoutes({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  networkconnectivity.getProjectsLocationsSpokesGatewayAdvertisedRoutes({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsSpokesGatewayAdvertisedRoutes on a missing route fails with a typed tag",
@@ -75,17 +70,13 @@ test.provider.skipIf(!runLifecycle)(
               ipRangeReservations: [{ ipRange: "10.200.0.0/23" }],
             },
           });
-          const route =
-            yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute(
-              "OnPrem",
-              {
-                parent: spoke.name,
-                ipRange: "192.168.0.0/16",
-                recipient: "ADVERTISE_TO_HUB",
-                description: "route a",
-                labels: { env: "test" },
-              },
-            );
+          const route = yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute("OnPrem", {
+            parent: spoke.name,
+            ipRange: "192.168.0.0/16",
+            recipient: "ADVERTISE_TO_HUB",
+            description: "route a",
+            labels: { env: "test" },
+          });
           return { hub, spoke, route };
         }),
       );
@@ -95,18 +86,15 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.route.ipRange).toEqual("192.168.0.0/16");
       expect(created.route.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networkconnectivity.getProjectsLocationsSpokesGatewayAdvertisedRoutes(
-          { name: created.route.name },
-        );
+      const fetched = yield* networkconnectivity.getProjectsLocationsSpokesGatewayAdvertisedRoutes({
+        name: created.route.name,
+      });
       expect(fetched.name).toEqual(created.route.name);
       expect(fetched.ipRange).toEqual("192.168.0.0/16");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -126,20 +114,15 @@ test.provider.skipIf(!runLifecycle)(
               ipRangeReservations: [{ ipRange: "10.200.0.0/23" }],
             },
           });
-          const route =
-            yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute(
-              "OnPrem",
-              {
-                parent: spoke.name,
-                gatewayAdvertisedRouteId:
-                  created.route.gatewayAdvertisedRouteId,
-                ipRange: "192.168.0.0/16",
-                recipient: "ADVERTISE_TO_HUB",
-                priority: 200,
-                description: "route a",
-                labels: { env: "test" },
-              },
-            );
+          const route = yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute("OnPrem", {
+            parent: spoke.name,
+            gatewayAdvertisedRouteId: created.route.gatewayAdvertisedRouteId,
+            ipRange: "192.168.0.0/16",
+            recipient: "ADVERTISE_TO_HUB",
+            priority: 200,
+            description: "route a",
+            labels: { env: "test" },
+          });
           return { hub, spoke, route };
         }),
       );
@@ -168,20 +151,15 @@ test.provider.skipIf(!runLifecycle)(
               ipRangeReservations: [{ ipRange: "10.200.0.0/23" }],
             },
           });
-          const route =
-            yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute(
-              "OnPrem",
-              {
-                parent: spoke.name,
-                gatewayAdvertisedRouteId:
-                  created.route.gatewayAdvertisedRouteId,
-                ipRange: "192.168.0.0/16",
-                recipient: "ADVERTISE_TO_HUB",
-                priority: 200,
-                description: "route b",
-                labels: { env: "prod", role: "gw" },
-              },
-            );
+          const route = yield* GCP.NetworkConnectivity.SpokesGatewayAdvertisedRoute("OnPrem", {
+            parent: spoke.name,
+            gatewayAdvertisedRouteId: created.route.gatewayAdvertisedRouteId,
+            ipRange: "192.168.0.0/16",
+            recipient: "ADVERTISE_TO_HUB",
+            priority: 200,
+            description: "route b",
+            labels: { env: "prod", role: "gw" },
+          });
           return { hub, spoke, route };
         }),
       );
@@ -193,9 +171,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(replaced.route.labels).toMatchObject({ env: "prod", role: "gw" });
 
       const refetched =
-        yield* networkconnectivity.getProjectsLocationsSpokesGatewayAdvertisedRoutes(
-          { name: replaced.route.name },
-        );
+        yield* networkconnectivity.getProjectsLocationsSpokesGatewayAdvertisedRoutes({
+          name: replaced.route.name,
+        });
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("gw");
       expect(refetched.priority).toEqual(200);

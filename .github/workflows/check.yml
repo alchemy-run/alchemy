@@ -1,40 +1,12 @@
 name: Check
 
-# Validates the repository type graph and website docs.
+# Validates repository formatting, the type graph, and website docs.
 
 on:
   push:
     branches: [main]
-    paths:
-      - "submodules/distilled"
-      - "benchmark/**"
-      - "examples/**"
-      - "packages/**"
-      - "website/**"
-      - "scripts/**"
-      - "patches/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "tsconfig.json"
-      - ".github/workflows/check.yml"
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - "submodules/distilled"
-      - "benchmark/**"
-      - "examples/**"
-      - "packages/**"
-      - "website/**"
-      - "scripts/**"
-      - "patches/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "tsconfig.json"
-      - ".github/workflows/check.yml"
   workflow_dispatch:
 
 permissions:
@@ -81,14 +53,17 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Build
+        run: pnpm tsc -b
+
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
 
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
-
-      - name: Run Typecheck
-        run: pnpm tsc -b
 
       # Must run after `tsc -b`: it reads distilled's emitted `lib/*.d.ts`,
       # and stale/missing declarations resolve to `any`.
@@ -110,3 +85,6 @@ jobs:
           github.event.pull_request.head.repo.full_name != github.repository ||
           !contains(github.event.pull_request.labels.*.name, 'deploy-website')
         run: pnpm docs:check
+
+      - name: Run Lint
+        run: pnpm lint

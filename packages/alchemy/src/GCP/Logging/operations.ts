@@ -2,10 +2,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
 const getOperation = (name: string) =>
   name.includes("/billingAccounts/") || name.startsWith("billingAccounts/")
@@ -19,28 +16,26 @@ const getOperation = (name: string) =>
           : logging.getLocationsOperations({ name });
 
 export const deleteBucketLinks = (bucketName: string) =>
-  logging.listLocationsBucketsLinks
-    .pages({ parent: bucketName, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
-      Stream.runCollect,
-      Effect.flatMap((links) =>
-        Effect.forEach(
-          links,
-          (link) => {
-            const name = link.name;
-            if (name === undefined) return Effect.void;
-            return logging.deleteLocationsBucketsLinks({ name }).pipe(
-              Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
-              Effect.asVoid,
-            );
-          },
-          { concurrency: 4 },
-        ),
+  logging.listLocationsBucketsLinks.pages({ parent: bucketName, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
+    Stream.runCollect,
+    Effect.flatMap((links) =>
+      Effect.forEach(
+        links,
+        (link) => {
+          const name = link.name;
+          if (name === undefined) return Effect.void;
+          return logging.deleteLocationsBucketsLinks({ name }).pipe(
+            Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
+            Effect.asVoid,
+          );
+        },
+        { concurrency: 4 },
       ),
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.asVoid,
-    );
+    ),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.asVoid,
+  );
 
 export const listProjectBuckets = () =>
   Effect.gen(function* () {
@@ -83,8 +78,7 @@ export const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

@@ -22,8 +22,7 @@ const TAG = "GCP.AIPlatform.GenerateContent";
 export const GenerateContentHttp = Layer.effect(
   GenerateContent,
   Effect.gen(function* () {
-    const generateContent =
-      yield* aiplatform.generateContentProjectsLocationsPublishersModels;
+    const generateContent = yield* aiplatform.generateContentProjectsLocationsPublishersModels;
     // The project is the caller's own: deploy credentials at plan time,
     // the metadata server inside Cloud Run / Cloud Functions.
     const credentials = yield* Credentials;
@@ -55,9 +54,7 @@ export const GenerateContentHttp = Layer.effect(
         iam: [{ role: "roles/aiplatform.user" }],
       });
 
-      const generate = Effect.fn(`${TAG}(${id})`)(function* (
-        request: GenerateContentRequest,
-      ) {
+      const generate = Effect.fn(`${TAG}(${id})`)(function* (request: GenerateContentRequest) {
         return yield* generateContent({
           model: `projects/${yield* project}/locations/${location}/publishers/${publisher}/models/${model}`,
           body: request,

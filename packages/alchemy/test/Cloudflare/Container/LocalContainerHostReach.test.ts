@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as NodeHttp from "node:http";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as NodeHttp from "node:http";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import {
   HOST_PROBE_PORT,
   NEON_URL,
@@ -21,10 +21,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // First request has to wait for the local runtime to `docker build` the image
 // and boot the container, so give it plenty of room.
@@ -51,9 +48,7 @@ const hostServer = Effect.acquireRelease(
     // host-gateway reaches 127.0.0.1. Native Linux cannot SYN the
     // bridge IP (UFW INPUT); the sidecar unix-socket-tunnels this
     // port into the container netns instead.
-    server.listen(HOST_PROBE_PORT, "127.0.0.1", () =>
-      resume(Effect.succeed(server)),
-    );
+    server.listen(HOST_PROBE_PORT, "127.0.0.1", () => resume(Effect.succeed(server)));
     server.on("error", (err) => resume(Effect.die(err)));
   }),
   (server) =>
@@ -71,18 +66,10 @@ const hostServer = Effect.acquireRelease(
  */
 describe(
   "local container reaches host services",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:container",
-      "provider:cloudflare:worker",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:container", "provider:cloudflare:worker"] },
   () => {
     const stack = beforeAll(deploy(HostReachStack), { timeout: HOOK_TIMEOUT });
-    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(HostReachStack), {
-      timeout: HOOK_TIMEOUT,
-    });
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(HostReachStack), { timeout: HOOK_TIMEOUT });
 
     test(
       "container env loopback URLs are rewritten and reach the host",
@@ -94,9 +81,7 @@ describe(
         const get = (path: string) =>
           client.get(new URL(path, url)).pipe(
             Effect.flatMap((r) =>
-              r.status !== 200
-                ? Effect.fail(new Error(`not ready: ${r.status}`))
-                : r.text,
+              r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
             ),
             Effect.timeout("30 seconds"),
             Effect.retry({ schedule: readinessSchedule, times: 30 }),

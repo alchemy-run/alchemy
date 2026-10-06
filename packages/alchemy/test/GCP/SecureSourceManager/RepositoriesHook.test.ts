@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ssm from "@distilled.cloud/gcp/securesourcemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  currentProject,
-  logLevel,
-  missingRepoOf,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { currentProject, logLevel, missingRepoOf, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -87,8 +82,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.SecureSourceManager.RepositoriesHook("Notify", {
-            repository:
-              process.env.GCP_TEST_SECURE_SOURCE_MANAGER_REPO ?? missingRepo,
+            repository: process.env.GCP_TEST_SECURE_SOURCE_MANAGER_REPO ?? missingRepo,
             targetUri: "https://example.com/hooks/ssm",
             events: ["PUSH"],
           });

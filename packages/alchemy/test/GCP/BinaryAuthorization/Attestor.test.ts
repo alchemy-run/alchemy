@@ -1,14 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  logLevel,
-  currentProject,
-  TEST_PKIX_PUBLIC_KEY_PEM,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, currentProject, TEST_PKIX_PUBLIC_KEY_PEM } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -77,9 +73,7 @@ test.provider(
       expect(fetched.name).toEqual(created.attestor.name);
       expect(fetched.description).toContain("[alchemy ");
       expect(fetched.description).toContain("initial");
-      expect(fetched.userOwnedGrafeasNote?.noteReference).toEqual(
-        created.note.name,
-      );
+      expect(fetched.userOwnedGrafeasNote?.noteReference).toEqual(created.note.name);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

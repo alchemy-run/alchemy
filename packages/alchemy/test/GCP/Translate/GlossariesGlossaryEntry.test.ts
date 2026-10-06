@@ -1,13 +1,13 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentParent } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -47,20 +47,13 @@ const uploadObject = (bucketName: string, object: string, body: string) =>
       `?uploadType=media&name=${encodeURIComponent(object)}`;
     const response = yield* client.execute(
       HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeader(
-          "Authorization",
-          `Bearer ${Redacted.value(creds.accessToken)}`,
-        ),
+        HttpClientRequest.setHeader("Authorization", `Bearer ${Redacted.value(creds.accessToken)}`),
         HttpClientRequest.bodyUint8Array(bytes, "text/tab-separated-values"),
       ),
     );
     if (response.status < 200 || response.status >= 300) {
-      const text = yield* response.text.pipe(
-        Effect.catch(() => Effect.succeed("")),
-      );
-      return yield* Effect.fail(
-        new Error(`object upload failed: ${response.status} ${text}`),
-      );
+      const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
+      return yield* Effect.fail(new Error(`object upload failed: ${response.status} ${text}`));
     }
   });
 
@@ -103,9 +96,7 @@ const createGlossary = (glossaryId: string, inputUri?: string) =>
 
 const deleteGlossary = (name: string) =>
   translate.deleteProjectsLocationsGlossaries({ name }).pipe(
-    Effect.flatMap((operation) =>
-      GCP.Translate.waitForOperation(operation, { notFoundOk: true }),
-    ),
+    Effect.flatMap((operation) => GCP.Translate.waitForOperation(operation, { notFoundOk: true })),
     Effect.catchTag("NotFound", () => Effect.void),
   );
 
@@ -145,10 +136,7 @@ test.provider(
       );
       yield* uploadObject(bucket.bucketName, "glossary.tsv", "hello\thola\n");
 
-      const glossary = yield* createGlossary(
-        GLOSSARY_ID,
-        `gs://${bucket.bucketName}/glossary.tsv`,
-      );
+      const glossary = yield* createGlossary(GLOSSARY_ID, `gs://${bucket.bucketName}/glossary.tsv`);
       const glossaryName =
         typeof glossary === "string"
           ? glossary
@@ -180,10 +168,9 @@ test.provider(
       expect(created.entry.termsPair?.sourceTerm?.text).toEqual("hello");
       expect(created.entry.termsPair?.targetTerm?.text).toEqual("hola");
 
-      const fetched =
-        yield* translate.getProjectsLocationsGlossariesGlossaryEntries({
-          name: created.entry.name,
-        });
+      const fetched = yield* translate.getProjectsLocationsGlossariesGlossaryEntries({
+        name: created.entry.name,
+      });
       expect(fetched.name).toEqual(created.entry.name);
       expect(fetched.description).toEqual("greeting");
       expect(fetched.termsPair?.targetTerm?.text).toEqual("hola");
@@ -212,10 +199,9 @@ test.provider(
       expect(updated.entry.name).toEqual(created.entry.name);
       expect(updated.entry.termsPair?.targetTerm?.text).toEqual("buenas");
 
-      const patched =
-        yield* translate.getProjectsLocationsGlossariesGlossaryEntries({
-          name: created.entry.name,
-        });
+      const patched = yield* translate.getProjectsLocationsGlossariesGlossaryEntries({
+        name: created.entry.name,
+      });
       expect(patched.termsPair?.targetTerm?.text).toEqual("buenas");
 
       yield* stack.destroy();

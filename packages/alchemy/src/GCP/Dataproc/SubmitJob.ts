@@ -46,11 +46,7 @@ export interface SubmitJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SubmitJobRequest,
-    ) => Effect.Effect<
-      dataproc.Job,
-      dataproc.SubmitProjectsRegionsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<dataproc.Job, dataproc.SubmitProjectsRegionsJobsError, RuntimeContext>
   >
 > {}
 

@@ -19,7 +19,7 @@ export interface LiveStep {
   notes: string;
 }
 
-const fetchJson = async <T,>(file: string): Promise<T | undefined> => {
+const fetchJson = async <T>(file: string): Promise<T | undefined> => {
   const response = await fetch(`/${file}?t=${Date.now()}`);
   return response.ok ? ((await response.json()) as T) : undefined;
 };
@@ -53,22 +53,39 @@ export const loadDeck = async (name = "loop") => {
     const index = items.length;
     if (item.kind === "slide") {
       const frames = Math.round((item.seconds ?? 2) * VIDEO.fps);
-      items.push({ item, durationInFrames: frames, inputProps: { layout: item.layout, props: item.props } });
+      items.push({
+        item,
+        durationInFrames: frames,
+        inputProps: { layout: item.layout, props: item.props },
+      });
       steps.push({ item: index, from: 0, to: frames, title: item.title, notes: item.notes });
     } else if (item.kind === "intro") {
       const intro = await fetchJson<IntroJson>(`${item.id}/intro.json`);
       if (!intro) continue;
       const ranges = introTimeline(intro.steps);
-      items.push({ item, durationInFrames: Math.max(1, ranges.at(-1)?.to ?? 1), inputProps: { intro, source: item.id } });
+      items.push({
+        item,
+        durationInFrames: Math.max(1, ranges.at(-1)?.to ?? 1),
+        inputProps: { intro, source: item.id },
+      });
       ranges.forEach((range, k) =>
-        steps.push({ item: index, ...range, title: intro.steps[k]!.title, notes: intro.steps[k]!.notes }),
+        steps.push({
+          item: index,
+          ...range,
+          title: intro.steps[k]!.title,
+          notes: intro.steps[k]!.notes,
+        }),
       );
     } else {
       const capture = await fetchJson<SceneCapture>(`${item.id}/scene.json`);
       if (!capture) continue;
       if (capture.terminal) capture.terminal.pauses ??= await terminalPauses(item.id);
       const plan = await schedule(capture, VIDEO.fps);
-      items.push({ item, durationInFrames: plan.durationInFrames, inputProps: { id: item.id, capture, plan } });
+      items.push({
+        item,
+        durationInFrames: plan.durationInFrames,
+        inputProps: { id: item.id, capture, plan },
+      });
       for (const step of plan.steps) steps.push({ item: index, ...step });
     }
   }

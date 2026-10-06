@@ -19,13 +19,13 @@ import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Logger from "effect/Logger";
-import * as Scope from "effect/Scope";
 import * as EffectHttp from "effect/http/HttpEffect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Scope from "effect/Scope";
 import { fromMetadataServer } from "../../GCP/MetadataCredentials.ts";
 import { HttpServer, safeHttpEffect } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
@@ -95,16 +95,13 @@ const captureServer = (dispatch: Deferred.Deferred<Dispatch>) =>
               yield* EffectHttp.toHandled(safe, (req, response) =>
                 Deferred.succeed(
                   out,
-                  HttpServerResponse.toWeb(
-                    EffectHttp.scopeTransferToStream(response),
-                    { withoutBody: req.method === "HEAD", context },
-                  ),
+                  HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
+                    withoutBody: req.method === "HEAD",
+                    context,
+                  }),
                 ),
               ).pipe(
-                Effect.provideService(
-                  HttpServerRequest.HttpServerRequest,
-                  request,
-                ),
+                Effect.provideService(HttpServerRequest.HttpServerRequest, request),
                 Effect.provideService(Scope.Scope, scope),
               );
               const response = yield* Deferred.await(out);
@@ -148,16 +145,11 @@ export const makeHandler = (entrypoint: unknown) => {
     );
     Effect.runFork(
       program.pipe(
-        Effect.tapCause((cause) =>
-          Effect.logError("Cloud Function program failed", cause),
-        ),
+        Effect.tapCause((cause) => Effect.logError("Cloud Function program failed", cause)),
         // A program that ends (or fails) without serving never answers;
         // fail pending and future requests instead of hanging them.
         Effect.onExit(() =>
-          Deferred.die(
-            dispatch,
-            new Error("Cloud Function program exited without serving HTTP"),
-          ),
+          Deferred.die(dispatch, new Error("Cloud Function program exited without serving HTTP")),
         ),
       ) as Effect.Effect<unknown>,
     );

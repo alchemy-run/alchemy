@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,23 +9,17 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
-export type SnapshotSchedulePolicy =
-  compute.ResourcePolicySnapshotSchedulePolicy;
-export type InstanceSchedulePolicy =
-  compute.ResourcePolicyInstanceSchedulePolicy;
+export type SnapshotSchedulePolicy = compute.ResourcePolicySnapshotSchedulePolicy;
+export type InstanceSchedulePolicy = compute.ResourcePolicyInstanceSchedulePolicy;
 export type GroupPlacementPolicy = compute.ResourcePolicyGroupPlacementPolicy;
 export type WorkloadPolicy = compute.ResourcePolicyWorkloadPolicy;
-export type DiskConsistencyGroupPolicy =
-  compute.ResourcePolicyDiskConsistencyGroupPolicy;
+export type DiskConsistencyGroupPolicy = compute.ResourcePolicyDiskConsistencyGroupPolicy;
 
 export type ResourcePolicyProps = {
   /**
@@ -178,9 +171,7 @@ export type ResourcePolicy = Resource<
  * @resource
  * @category Compute
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "GCP.Compute.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("GCP.Compute.ResourcePolicy");
 
 export class ResourcePolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.ResourcePolicyNotResolved",
@@ -189,16 +180,12 @@ export class ResourcePolicyNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class ResourcePolicyNotReady extends Data.TaggedError(
-  "GCP.Compute.ResourcePolicyNotReady",
-)<{
+export class ResourcePolicyNotReady extends Data.TaggedError("GCP.Compute.ResourcePolicyNotReady")<{
   resourcePolicyName: string;
   status: string;
 }> {}
 
-export class ResourcePolicyFailed extends Data.TaggedError(
-  "GCP.Compute.ResourcePolicyFailed",
-)<{
+export class ResourcePolicyFailed extends Data.TaggedError("GCP.Compute.ResourcePolicyFailed")<{
   resourcePolicyName: string;
   status: string;
 }> {}
@@ -210,13 +197,7 @@ export class ResourcePolicyStillExists extends Data.TaggedError(
   status: string;
 }> {}
 
-type PolicyKind =
-  | "snapshot"
-  | "instance"
-  | "placement"
-  | "workload"
-  | "consistency"
-  | "none";
+type PolicyKind = "snapshot" | "instance" | "placement" | "workload" | "consistency" | "none";
 
 const lastSegment = (value: string | undefined): string => {
   if (value === undefined || value.length === 0) return "";
@@ -237,9 +218,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `p${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `p${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -273,9 +252,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const policyKindOf = (props: {
   snapshotSchedulePolicy?: unknown;
@@ -432,11 +409,7 @@ const immutablePolicyChanged = (
 ) => {
   const previousKind = policyKindOf(olds ?? output ?? {});
   const nextKind = policyKindOf(news);
-  if (
-    nextKind !== "none" &&
-    previousKind !== "none" &&
-    previousKind !== nextKind
-  ) {
+  if (nextKind !== "none" && previousKind !== "none" && previousKind !== nextKind) {
     return true;
   }
   if (nextKind === "placement") {
@@ -446,14 +419,10 @@ const immutablePolicyChanged = (
     );
   }
   if (nextKind === "workload") {
-    return !sameJson(
-      news.workloadPolicy,
-      olds?.workloadPolicy ?? output?.workloadPolicy,
-    );
+    return !sameJson(news.workloadPolicy, olds?.workloadPolicy ?? output?.workloadPolicy);
   }
   if (nextKind === "consistency") {
-    const previous =
-      olds?.diskConsistencyGroupPolicy ?? output?.diskConsistencyGroupPolicy;
+    const previous = olds?.diskConsistencyGroupPolicy ?? output?.diskConsistencyGroupPolicy;
     const next = news.diskConsistencyGroupPolicy;
     return (previous === undefined) !== (next === undefined);
   }
@@ -465,11 +434,7 @@ const getByName = (project: string, region: string, resourcePolicy: string) =>
     .getResourcePolicies({ project, region, resourcePolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitPolicyReady = (
-  project: string,
-  region: string,
-  resourcePolicyName: string,
-) =>
+const waitPolicyReady = (project: string, region: string, resourcePolicyName: string) =>
   getByName(project, region, resourcePolicyName).pipe(
     Effect.flatMap((policy) =>
       policy?.status === "INVALID"
@@ -497,11 +462,7 @@ const waitPolicyReady = (
     }),
   );
 
-const waitPolicyGone = (
-  project: string,
-  region: string,
-  resourcePolicyName: string,
-) =>
+const waitPolicyGone = (project: string, region: string, resourcePolicyName: string) =>
   getByName(project, region, resourcePolicyName).pipe(
     Effect.flatMap((policy) =>
       policy === undefined
@@ -535,22 +496,13 @@ export const ResourcePolicyProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousName =
-        olds?.resourcePolicyName ?? output?.resourcePolicyName;
+      const previousName = olds?.resourcePolicyName ?? output?.resourcePolicyName;
       const nextName = news.resourcePolicyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
       if (nameChanged || regionChanged) {
@@ -569,15 +521,8 @@ export const ResourcePolicyProvider = () =>
         olds?.resourcePolicyName,
         output?.resourcePolicyName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        resourcePolicyName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, resourcePolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -633,11 +578,7 @@ export const ResourcePolicyProvider = () =>
             ignore: ["RESOURCE_ALREADY_EXISTS"],
           });
         }
-        current = yield* waitPolicyReady(
-          env.project,
-          region,
-          resourcePolicyName,
-        );
+        current = yield* waitPolicyReady(env.project, region, resourcePolicyName);
       }
 
       if (current === undefined) {
@@ -648,11 +589,7 @@ export const ResourcePolicyProvider = () =>
       }
 
       if (current.status === "CREATING") {
-        current = yield* waitPolicyReady(
-          env.project,
-          region,
-          resourcePolicyName,
-        );
+        current = yield* waitPolicyReady(env.project, region, resourcePolicyName);
       }
 
       if (current === undefined) {
@@ -662,8 +599,7 @@ export const ResourcePolicyProvider = () =>
         });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (desired.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (desired.description ?? "");
       const snapshotNeedsPatch = snapshotChanged(
         current.snapshotSchedulePolicy,
         news.snapshotSchedulePolicy,

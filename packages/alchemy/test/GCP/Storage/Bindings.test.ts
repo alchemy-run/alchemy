@@ -1,12 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
 import StorageBindingsHost, {
   DeleteAssets,
@@ -39,18 +39,14 @@ let buckets: {
 
 /** Roles the host's service account holds on one bucket's IAM policy. */
 const bucketRoles = (bucket: string) =>
-  storage
-    .getIamPolicyBuckets({ bucket, optionsRequestedPolicyVersion: 3 })
-    .pipe(
-      Effect.map((policy) =>
-        (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-          )
-          .map((binding) => binding.role)
-          .sort(),
-      ),
-    );
+  storage.getIamPolicyBuckets({ bucket, optionsRequestedPolicyVersion: 3 }).pipe(
+    Effect.map((policy) =>
+      (policy.bindings ?? [])
+        .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
+        .map((binding) => binding.role)
+        .sort(),
+    ),
+  );
 
 const objectOf = (bucket: string, object: string) =>
   storage
@@ -123,9 +119,7 @@ describe.skipIf(!dockerAvailable)(
             expect(out.missingHead).toEqual(true);
             expect(out.missingGet).toEqual(true);
 
-            expect(yield* bucketRoles(buckets.read)).toEqual([
-              "roles/storage.objectViewer",
-            ]);
+            expect(yield* bucketRoles(buckets.read)).toEqual(["roles/storage.objectViewer"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
@@ -139,30 +133,18 @@ describe.skipIf(!dockerAvailable)(
         "put and delete as the host, with objectUser on the bucket only",
         (_stack) =>
           Effect.gen(function* () {
-            const put = yield* expectProbe<{ name: string }>(
-              baseUrl,
-              "writeBucketPut",
-            );
+            const put = yield* expectProbe<{ name: string }>(baseUrl, "writeBucketPut");
             expect(put.name).toEqual("written.txt");
             const written = yield* objectOf(buckets.write, "written.txt");
-            expect(written?.size).toEqual(
-              String("hello from WriteBucket".length),
-            );
+            expect(written?.size).toEqual(String("hello from WriteBucket".length));
             expect(written?.contentType).toEqual("text/plain");
             expect(written?.metadata).toEqual({ source: "write-bucket" });
 
-            const deleted = yield* expectProbe<{ deleted: string }>(
-              baseUrl,
-              "writeBucketDelete",
-            );
+            const deleted = yield* expectProbe<{ deleted: string }>(baseUrl, "writeBucketDelete");
             expect(deleted.deleted).toEqual("written.txt");
-            expect(yield* objectOf(buckets.write, "written.txt")).toEqual(
-              undefined,
-            );
+            expect(yield* objectOf(buckets.write, "written.txt")).toEqual(undefined);
 
-            expect(yield* bucketRoles(buckets.write)).toEqual([
-              "roles/storage.objectUser",
-            ]);
+            expect(yield* bucketRoles(buckets.write)).toEqual(["roles/storage.objectUser"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
@@ -184,26 +166,14 @@ describe.skipIf(!dockerAvailable)(
             expect(out.putName).toEqual("round-trip.txt");
             expect(out.text).toEqual("hello from ReadWriteBucket");
             expect(out.listed).toEqual(["round-trip.txt"]);
-            const written = yield* objectOf(
-              buckets.readWrite,
-              "round-trip.txt",
-            );
-            expect(written?.size).toEqual(
-              String("hello from ReadWriteBucket".length),
-            );
+            const written = yield* objectOf(buckets.readWrite, "round-trip.txt");
+            expect(written?.size).toEqual(String("hello from ReadWriteBucket".length));
 
-            const deleted = yield* expectProbe<{ gone: boolean }>(
-              baseUrl,
-              "readWriteBucketDelete",
-            );
+            const deleted = yield* expectProbe<{ gone: boolean }>(baseUrl, "readWriteBucketDelete");
             expect(deleted.gone).toEqual(true);
-            expect(
-              yield* objectOf(buckets.readWrite, "round-trip.txt"),
-            ).toEqual(undefined);
+            expect(yield* objectOf(buckets.readWrite, "round-trip.txt")).toEqual(undefined);
 
-            expect(yield* bucketRoles(buckets.readWrite)).toEqual([
-              "roles/storage.objectUser",
-            ]);
+            expect(yield* bucketRoles(buckets.readWrite)).toEqual(["roles/storage.objectUser"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
@@ -229,9 +199,7 @@ describe.skipIf(!dockerAvailable)(
               "GCP.Storage.ObjectNotFound",
             );
 
-            expect(yield* bucketRoles(buckets.get)).toEqual([
-              "roles/storage.objectViewer",
-            ]);
+            expect(yield* bucketRoles(buckets.get)).toEqual(["roles/storage.objectViewer"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
@@ -253,15 +221,11 @@ describe.skipIf(!dockerAvailable)(
             expect(out.metadata).toEqual({ source: "put-object" });
 
             const written = yield* objectOf(buckets.put, "put.bin");
-            expect(written?.size).toEqual(
-              String("hello from PutObject".length),
-            );
+            expect(written?.size).toEqual(String("hello from PutObject".length));
             expect(written?.contentType).toEqual("application/octet-stream");
             expect(written?.metadata).toEqual({ source: "put-object" });
 
-            expect(yield* bucketRoles(buckets.put)).toEqual([
-              "roles/storage.objectUser",
-            ]);
+            expect(yield* bucketRoles(buckets.put)).toEqual(["roles/storage.objectUser"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
@@ -278,23 +242,14 @@ describe.skipIf(!dockerAvailable)(
             const seed = yield* objectOf(buckets.delete, SEED_KEY);
             expect(seed?.name).toEqual(SEED_KEY);
 
-            const out = yield* expectProbe<{ deleted: string }>(
-              baseUrl,
-              "deleteObject",
-            );
+            const out = yield* expectProbe<{ deleted: string }>(baseUrl, "deleteObject");
             expect(out.deleted).toEqual(SEED_KEY);
-            expect(yield* objectOf(buckets.delete, SEED_KEY)).toEqual(
-              undefined,
-            );
+            expect(yield* objectOf(buckets.delete, SEED_KEY)).toEqual(undefined);
 
             const missing = yield* callProbe(baseUrl, "deleteObjectMissing");
-            expect(missing.ok ? undefined : missing.error._tag).toEqual(
-              "NotFound",
-            );
+            expect(missing.ok ? undefined : missing.error._tag).toEqual("NotFound");
 
-            expect(yield* bucketRoles(buckets.delete)).toEqual([
-              "roles/storage.objectUser",
-            ]);
+            expect(yield* bucketRoles(buckets.delete)).toEqual(["roles/storage.objectUser"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
@@ -308,16 +263,9 @@ describe.skipIf(!dockerAvailable)(
         "mints a V4 URL that downloads without credentials; grants objectViewer on the bucket and tokenCreator on the host's own account",
         (_stack) =>
           Effect.gen(function* () {
-            const { url } = yield* expectProbe<{ url: string }>(
-              baseUrl,
-              "signGetObjectUrl",
-            );
-            expect(url).toContain(
-              `https://storage.googleapis.com/${buckets.sign}/seed/hello.txt?`,
-            );
-            expect(url).toContain(
-              `X-Goog-Credential=${encodeURIComponent(hostAccount)}`,
-            );
+            const { url } = yield* expectProbe<{ url: string }>(baseUrl, "signGetObjectUrl");
+            expect(url).toContain(`https://storage.googleapis.com/${buckets.sign}/seed/hello.txt?`);
+            expect(url).toContain(`X-Goog-Credential=${encodeURIComponent(hostAccount)}`);
 
             // No credentials: the signature alone authorizes the download.
             // The signer's bucket grant may still be propagating.
@@ -334,19 +282,14 @@ describe.skipIf(!dockerAvailable)(
             );
             expect(body).toEqual(SEED_TEXT);
 
-            expect(yield* bucketRoles(buckets.sign)).toEqual([
-              "roles/storage.objectViewer",
-            ]);
-            const accountPolicy =
-              yield* iam.getIamPolicyProjectsServiceAccounts({
-                resource: `projects/${project}/serviceAccounts/${hostAccount}`,
-              });
+            expect(yield* bucketRoles(buckets.sign)).toEqual(["roles/storage.objectViewer"]);
+            const accountPolicy = yield* iam.getIamPolicyProjectsServiceAccounts({
+              resource: `projects/${project}/serviceAccounts/${hostAccount}`,
+            });
             expect(
               (accountPolicy.bindings ?? [])
                 .filter((binding) =>
-                  (binding.members ?? []).includes(
-                    `serviceAccount:${hostAccount}`,
-                  ),
+                  (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
                 )
                 .map((binding) => binding.role),
             ).toEqual(["roles/iam.serviceAccountTokenCreator"]);

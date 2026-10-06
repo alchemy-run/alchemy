@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
-import type { Link } from "./Link.ts";
 import { API_URL, call } from "./client.ts";
+import type { Link } from "./Link.ts";
 import "./styles.css";
 
 /** Live click count, pushed by the link's Durable Object over a WebSocket. */
@@ -28,7 +28,9 @@ function LinkRow({ link }: { link: Link }) {
       >
         /{link.code}
       </a>
-      <p className="w-16 text-right font-mono text-2xl tabular-nums text-stone-100">{clicks ?? "–"}</p>
+      <p className="w-16 text-right font-mono text-2xl tabular-nums text-stone-100">
+        {clicks ?? "–"}
+      </p>
     </li>
   );
 }

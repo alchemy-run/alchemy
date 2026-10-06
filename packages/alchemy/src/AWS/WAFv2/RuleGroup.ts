@@ -6,11 +6,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fetchWafTags,
@@ -177,14 +173,8 @@ export const RuleGroupProvider = () =>
   Provider.effect(
     RuleGroup,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Partial<RuleGroupProps>,
-      ) {
-        return (
-          props.ruleGroupName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Partial<RuleGroupProps>) {
+        return props.ruleGroupName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const findRuleGroup = Effect.fn(function* (
@@ -198,9 +188,7 @@ export const RuleGroupProvider = () =>
             wafv2
               .getRuleGroup({ Name: name, Scope: scope, Id: cachedId })
               .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
               ),
           );
           if (byId?.RuleGroup) {
@@ -224,9 +212,7 @@ export const RuleGroupProvider = () =>
               wafv2
                 .getRuleGroup({ Name: name, Scope: scope, Id: summary.Id })
                 .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
                 ),
             );
           }
@@ -286,13 +272,7 @@ export const RuleGroupProvider = () =>
       });
 
       return {
-        stables: [
-          "ruleGroupName",
-          "ruleGroupId",
-          "ruleGroupArn",
-          "scope",
-          "capacity",
-        ],
+        stables: ["ruleGroupName", "ruleGroupId", "ruleGroupArn", "scope", "capacity"],
 
         list: () =>
           Effect.gen(function* () {
@@ -316,8 +296,7 @@ export const RuleGroupProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const scope = output?.scope ?? olds?.scope ?? defaultScope;
-          const name =
-            output?.ruleGroupName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.ruleGroupName ?? (yield* createName(id, olds ?? {}));
           const found = yield* findRuleGroup(scope, name, output?.ruleGroupId);
           if (!found?.RuleGroup) {
             return undefined;
@@ -332,8 +311,7 @@ export const RuleGroupProvider = () =>
           const name = output?.ruleGroupName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredVisibility =
-            news.visibilityConfig ?? defaultVisibilityConfig(name);
+          const desiredVisibility = news.visibilityConfig ?? defaultVisibilityConfig(name);
           // props survive engine serialization as plain JSON — restore
           // ByteMatchStatement SearchString blobs to Uint8Array
           const desiredRules = normalizeWafRules(news.rules);
@@ -358,9 +336,7 @@ export const RuleGroupProvider = () =>
                     Tags: createTagsList(desiredTags),
                   })
                   .pipe(
-                    Effect.catchTag("WAFDuplicateItemException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
                   ),
               ),
             );
@@ -391,9 +367,7 @@ export const RuleGroupProvider = () =>
             observedAspects.CustomResponseBodies = group.CustomResponseBodies;
             desiredAspects.CustomResponseBodies = news.customResponseBodies;
           }
-          if (
-            !deepEqual(observedAspects, desiredAspects, { stripNullish: true })
-          ) {
+          if (!deepEqual(observedAspects, desiredAspects, { stripNullish: true })) {
             yield* retryOptimisticLock(
               Effect.gen(function* () {
                 const fresh = yield* findRuleGroup(scope, name, group.Id);
@@ -459,12 +433,7 @@ export const RuleGroupProvider = () =>
                       Id: output.ruleGroupId,
                       LockToken: found.LockToken,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        "WAFNonexistentItemException",
-                        () => Effect.void,
-                      ),
-                    ),
+                    .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.void)),
                 );
               }),
             ),

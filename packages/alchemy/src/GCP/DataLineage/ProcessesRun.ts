@@ -60,9 +60,7 @@ export type ProcessesRunProps = {
    * Run state.
    * @default "STARTED"
    */
-  state?:
-    | datalineage.GoogleCloudDatacatalogLineageV1RunStateEnum
-    | (string & {});
+  state?: datalineage.GoogleCloudDatacatalogLineageV1RunStateEnum | (string & {});
   /**
    * Human-readable name shown in UIs. Max 200 characters.
    */
@@ -138,9 +136,7 @@ export type ProcessesRun = Resource<
  * @resource
  * @category DataLineage
  */
-export const ProcessesRun = Resource<ProcessesRun>(
-  "GCP.DataLineage.ProcessesRun",
-);
+export const ProcessesRun = Resource<ProcessesRun>("GCP.DataLineage.ProcessesRun");
 
 /** Alias matching the Data Lineage resource name. */
 export const Run = ProcessesRun;
@@ -152,8 +148,7 @@ export class ProcessesRunNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (process: string, runId: string) =>
-  `${process}/runs/${runId}`;
+const resourceName = (process: string, runId: string) => `${process}/runs/${runId}`;
 
 const nowIso = () => Effect.sync(() => new Date().toISOString());
 
@@ -192,10 +187,7 @@ export const ProcessesRunProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -212,35 +204,23 @@ export const ProcessesRunProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const process = processOf(
-        olds?.process ?? output?.process ?? "",
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const process = processOf(olds?.process ?? output?.process ?? "", env.project, location);
       const runId = yield* toPhysicalId(id, olds?.runId, output?.runId);
       const name = output?.name ?? resourceName(process, runId);
-      const existing =
-        (yield* getByName(name)) ?? (yield* findOwnedRun(id, process));
+      const existing = (yield* getByName(name)) ?? (yield* findOwnedRun(id, process));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.attributes))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.attributes)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const processes = yield* listOwnedProcesses(env.project, env.region);
-        const groups = yield* Effect.forEach(
-          processes,
-          (process) => listRuns(process.name ?? ""),
-          { concurrency: 4 },
-        );
+        const groups = yield* Effect.forEach(processes, (process) => listRuns(process.name ?? ""), {
+          concurrency: 4,
+        });
         return groups
           .flat()
           .filter((run) => hasAlchemyAttributeMap(run.attributes))
@@ -249,18 +229,14 @@ export const ProcessesRunProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const process = processOf(news.process, env.project, location);
       const runId = yield* toPhysicalId(id, news.runId, output?.runId);
       const name = output?.name ?? resourceName(process, runId);
       const ownership = yield* createOwnership(id);
       const attributes = desiredAttributes(news.attributes, ownership);
 
-      let current =
-        (yield* getByName(name)) ?? (yield* findOwnedRun(id, process));
+      let current = (yield* getByName(name)) ?? (yield* findOwnedRun(id, process));
 
       if (current === undefined) {
         const startTime = news.startTime ?? (yield* nowIso());
@@ -279,9 +255,7 @@ export const ProcessesRunProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               getByName(name).pipe(
-                Effect.flatMap((row) =>
-                  row ? Effect.succeed(row) : findOwnedRun(id, process),
-                ),
+                Effect.flatMap((row) => (row ? Effect.succeed(row) : findOwnedRun(id, process))),
               ),
             ),
           );
@@ -293,8 +267,7 @@ export const ProcessesRunProvider = () =>
       }
 
       const resolvedName = current.name ?? name;
-      const startTime =
-        news.startTime ?? current.startTime ?? (yield* nowIso());
+      const startTime = news.startTime ?? current.startTime ?? (yield* nowIso());
       const endTime = news.endTime ?? current.endTime;
       const state = news.state ?? current.state ?? "STARTED";
       const displayName = news.displayName ?? current.displayName;
@@ -304,13 +277,7 @@ export const ProcessesRunProvider = () =>
       const displayNameChanged = !sameText(current.displayName, displayName);
       const attributesChanged = !sameJson(current.attributes, attributes);
 
-      if (
-        startChanged ||
-        endChanged ||
-        stateChanged ||
-        displayNameChanged ||
-        attributesChanged
-      ) {
+      if (startChanged || endChanged || stateChanged || displayNameChanged || attributesChanged) {
         current = yield* datalineage.patchProjectsLocationsProcessesRuns({
           name: resolvedName,
           body: {

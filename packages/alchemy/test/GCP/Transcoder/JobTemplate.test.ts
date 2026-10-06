@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const location = "us-central1";
 
 const sdConfig: GCP.Transcoder.JobConfig = {
@@ -139,9 +136,7 @@ test.provider(
         pageSize: 1000,
       });
       expect(
-        (listed.jobTemplates ?? []).some(
-          (template) => template.name === created.name,
-        ),
+        (listed.jobTemplates ?? []).some((template) => template.name === created.name),
       ).toEqual(true);
 
       const updated = yield* stack.deploy(
@@ -186,11 +181,9 @@ test.provider(
       const oldGone = yield* waitUntilGone(updated.name);
       expect(oldGone).toEqual("gone");
 
-      const fetchedReplace = yield* transcoder.getProjectsLocationsJobTemplates(
-        {
-          name: replaced.name,
-        },
-      );
+      const fetchedReplace = yield* transcoder.getProjectsLocationsJobTemplates({
+        name: replaced.name,
+      });
       expect(fetchedReplace.name).toEqual(replaced.name);
       expect(fetchedReplace.config?.muxStreams?.[0]?.key).toEqual("sd");
 

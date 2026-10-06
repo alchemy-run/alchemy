@@ -6,6 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { isTransientGcpError } from "../Errors.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -31,7 +32,6 @@ import {
   updateMaskOf,
   type TaxonomyActivatedPolicyType,
 } from "./internal.ts";
-import { isTransientGcpError } from "../Errors.ts";
 
 export type { TaxonomyActivatedPolicyType };
 
@@ -176,25 +176,16 @@ const listTaxonomiesAt = (
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, listTaxonomiesAt).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasOwnershipMarker(item.description)),
-    ),
+    Effect.map((items) => items.filter((item) => hasOwnershipMarker(item.description))),
   );
 
-const observe = (
-  id: string,
-  name: string | undefined,
-  project: string,
-  location: string,
-) =>
+const observe = (id: string, name: string | undefined, project: string, location: string) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const existing = yield* getByName(name);
       if (existing !== undefined) return existing;
     }
-    const candidates = yield* listTaxonomiesAt(
-      locationParent(project, location),
-    );
+    const candidates = yield* listTaxonomiesAt(locationParent(project, location));
     return yield* findOwned(candidates, id, (item) => item.description);
   });
 
@@ -206,10 +197,7 @@ export const TaxonomyProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -219,16 +207,11 @@ export const TaxonomyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const existing = yield* observe(id, output?.name, env.project, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -240,18 +223,11 @@ export const TaxonomyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const activatedPolicyTypes = news.activatedPolicyTypes;
 
       let current = yield* observe(id, output?.name, env.project, location);
@@ -267,8 +243,7 @@ export const TaxonomyProvider = () =>
             },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current =
-          created ?? (yield* observe(id, undefined, env.project, location));
+        current = created ?? (yield* observe(id, undefined, env.project, location));
       }
 
       if (current === undefined) {
@@ -308,16 +283,13 @@ export const TaxonomyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       yield* ignoreGone(
-        datacatalog
-          .deleteProjectsLocationsTaxonomies({ name: output.name })
-          .pipe(
-            Effect.retry({
-              while: (error) =>
-                error._tag === "Conflict" || isTransientGcpError(error),
-              times: 8,
-              schedule: Schedule.exponential("500 millis"),
-            }),
-          ),
+        datacatalog.deleteProjectsLocationsTaxonomies({ name: output.name }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "Conflict" || isTransientGcpError(error),
+            times: 8,
+            schedule: Schedule.exponential("500 millis"),
+          }),
+        ),
       );
     }),
   });

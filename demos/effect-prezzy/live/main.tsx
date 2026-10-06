@@ -24,9 +24,11 @@ import { loadDeck, type LiveItem, type LiveStep } from "./deck.ts";
 type Deck = { items: LiveItem[]; steps: LiveStep[] };
 
 const componentFor = (item: LiveItem) =>
-  (item.item.kind === "intro" ? Intro : item.item.kind === "scene" ? Scene : Slide) as unknown as ComponentType<
-    Record<string, unknown>
-  >;
+  (item.item.kind === "intro"
+    ? Intro
+    : item.item.kind === "scene"
+      ? Scene
+      : Slide) as unknown as ComponentType<Record<string, unknown>>;
 
 const stepFromHash = () => Math.max(0, Number(location.hash.slice(1)) - 1 || 0);
 
@@ -40,7 +42,10 @@ function App() {
   /** Whether the current step should start playing once its player is ready. */
   const autoplay = useRef(false);
 
-  const reload = useCallback(() => loadDeck(new URLSearchParams(location.search).get("deck") ?? "loop").then(setDeck), []);
+  const reload = useCallback(
+    () => loadDeck(new URLSearchParams(location.search).get("deck") ?? "loop").then(setDeck),
+    [],
+  );
   useEffect(() => {
     reload();
     // intro.json or a scene.json was rebuilt: reload the data, keep the step.
@@ -168,7 +173,8 @@ function App() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (handleKey(event.key.length === 1 ? event.key.toLowerCase() : event.key)) event.preventDefault();
+      if (handleKey(event.key.length === 1 ? event.key.toLowerCase() : event.key))
+        event.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -80,22 +80,17 @@ export const makeWriteR2HttpClient = (
                       : contentLength != null
                         ? String(contentLength)
                         : undefined,
-                  cfR2StorageClass: (
-                    options as { storageClass?: string } | undefined
-                  )?.storageClass,
+                  cfR2StorageClass: (options as { storageClass?: string } | undefined)
+                    ?.storageClass,
                 }),
               ).pipe(
                 Effect.map(() =>
                   baseObject(key, meta ?? {}, {
                     size: contentLength,
                     customMetadata: (
-                      options as
-                        | { customMetadata?: Record<string, string> }
-                        | undefined
+                      options as { customMetadata?: Record<string, string> } | undefined
                     )?.customMetadata,
-                    storageClass: (
-                      options as { storageClass?: string } | undefined
-                    )?.storageClass,
+                    storageClass: (options as { storageClass?: string } | undefined)?.storageClass,
                     uploaded: new Date(),
                   }),
                 ),
@@ -137,16 +132,14 @@ export const makeWriteR2HttpClient = (
     createMultipartUpload: () =>
       Effect.die(
         new R2Error({
-          message:
-            "R2BucketBindingHttp does not support multipart uploads over the HTTP API.",
+          message: "R2BucketBindingHttp does not support multipart uploads over the HTTP API.",
           cause: new Error("unsupported"),
         }),
       ),
     resumeMultipartUpload: () =>
       Effect.die(
         new R2Error({
-          message:
-            "R2BucketBindingHttp does not support multipart uploads over the HTTP API.",
+          message: "R2BucketBindingHttp does not support multipart uploads over the HTTP API.",
           cause: new Error("unsupported"),
         }),
       ),

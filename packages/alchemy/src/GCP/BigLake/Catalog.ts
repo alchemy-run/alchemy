@@ -138,16 +138,10 @@ const getPolicy = (name: string) =>
           "options.requestedPolicyVersion": 3,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "BigLakeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "BigLakeResourceNotFound"], () => Effect.succeed(undefined)),
         );
 
-const toCatalogId = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const toCatalogId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -196,9 +190,7 @@ const emptyAndDeleteDatabase = (name: string) =>
         ),
       { concurrency: 4 },
     );
-    yield* ignoreGone(
-      biglake.deleteProjectsLocationsCatalogsDatabases({ name }),
-    );
+    yield* ignoreGone(biglake.deleteProjectsLocationsCatalogsDatabases({ name }));
   });
 
 export const CatalogProvider = () =>
@@ -211,10 +203,7 @@ export const CatalogProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.catalogId ?? output?.catalogId,
         nextId: news.catalogId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -224,17 +213,9 @@ export const CatalogProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const catalogId = yield* toCatalogId(
-        id,
-        olds?.catalogId,
-        output?.catalogId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, catalogId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const catalogId = yield* toCatalogId(id, olds?.catalogId, output?.catalogId);
+      const name = output?.name ?? resourceName(env.project, location, catalogId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -249,9 +230,8 @@ export const CatalogProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const catalogs = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listCatalogs(locationParent(env.project, location)),
+        const catalogs = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listCatalogs(locationParent(env.project, location)),
         )).flat();
         const owned = yield* Effect.forEach(
           namedOf(catalogs),
@@ -269,18 +249,10 @@ export const CatalogProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const catalogId = yield* toCatalogId(
-        id,
-        news.catalogId,
-        output?.catalogId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const catalogId = yield* toCatalogId(id, news.catalogId, output?.catalogId);
       const parent = locationParent(env.project, location);
-      const name =
-        output?.name ?? resourceName(env.project, location, catalogId);
+      const name = output?.name ?? resourceName(env.project, location, catalogId);
       let current = yield* getByName(name);
 
       if (current === undefined) {
@@ -304,9 +276,7 @@ export const CatalogProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       yield* emptyCatalog(output.name);
-      yield* ignoreGone(
-        biglake.deleteProjectsLocationsCatalogs({ name: output.name }),
-      );
+      yield* ignoreGone(biglake.deleteProjectsLocationsCatalogs({ name: output.name }));
       yield* waitUntilGone(getByName(output.name));
     }),
   });

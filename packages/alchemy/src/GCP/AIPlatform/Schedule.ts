@@ -187,16 +187,11 @@ export type Schedule = Resource<
  */
 export const Schedule = Resource<Schedule>("GCP.AIPlatform.Schedule");
 
-export class ScheduleNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.ScheduleNotResolved",
-)<{
+export class ScheduleNotResolved extends Data.TaggedError("GCP.AIPlatform.ScheduleNotResolved")<{
   name: string;
 }> {}
 
-const toAttrs = (
-  schedule: aiplatform.GoogleCloudAiplatformV1Schedule,
-  project: string,
-) => {
+const toAttrs = (schedule: aiplatform.GoogleCloudAiplatformV1Schedule, project: string) => {
   const name = schedule.name ?? "";
   const parsed = parseOwnership(schedule.displayName);
   return {
@@ -229,16 +224,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsSchedules
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.schedules ?? [])),
-      Stream.filter((schedule) => hasOwnershipMarker(schedule.displayName)),
-      Stream.map((schedule) => toAttrs(schedule, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsSchedules.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.schedules ?? [])),
+    Stream.filter((schedule) => hasOwnershipMarker(schedule.displayName)),
+    Stream.map((schedule) => toAttrs(schedule, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const toPipelineRequest = (
   request: PipelineJobRequest | undefined,
@@ -265,9 +258,7 @@ const toPipelineRequest = (
 
 const toNotebookRequest = (
   request: NotebookExecutionJobRequest | undefined,
-):
-  | aiplatform.GoogleCloudAiplatformV1CreateNotebookExecutionJobRequest
-  | undefined => {
+): aiplatform.GoogleCloudAiplatformV1CreateNotebookExecutionJobRequest | undefined => {
   if (request === undefined) return undefined;
   return {
     parent: request.parent,
@@ -296,9 +287,7 @@ export const ScheduleProvider = () =>
       const existing = yield* getByName(output?.name ?? "");
       if (existing !== undefined) {
         const attrs = toAttrs(existing, env.project);
-        return (yield* ownedByAlchemy(id, existing.displayName))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
       }
       const location = olds?.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
@@ -310,16 +299,12 @@ export const ScheduleProvider = () =>
           Stream.flatMap((page) => Stream.fromIterable(page.schedules ?? [])),
           Stream.filter((schedule) => schedule.displayName === displayName),
           Stream.runHead,
-          Effect.map((option) =>
-            option._tag === "Some" ? option.value : undefined,
-          ),
+          Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
-      return (yield* ownedByAlchemy(id, found.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, found.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -338,13 +323,8 @@ export const ScheduleProvider = () =>
       const displayName = encodeOwnershipLine(ownership, news.displayName);
       const maxConcurrentRunCount = news.maxConcurrentRunCount ?? "1";
       const desiredPaused = news.paused === true;
-      const pipelineRequest = toPipelineRequest(
-        news.createPipelineJobRequest,
-        parent,
-      );
-      const notebookRequest = toNotebookRequest(
-        news.createNotebookExecutionJobRequest,
-      );
+      const pipelineRequest = toPipelineRequest(news.createPipelineJobRequest, parent);
+      const notebookRequest = toNotebookRequest(news.createNotebookExecutionJobRequest);
 
       let current = yield* getByName(output?.name ?? "");
       if (current === undefined) {
@@ -354,9 +334,7 @@ export const ScheduleProvider = () =>
             Stream.flatMap((page) => Stream.fromIterable(page.schedules ?? [])),
             Stream.filter((schedule) => schedule.displayName === displayName),
             Stream.runHead,
-            Effect.map((option) =>
-              option._tag === "Some" ? option.value : undefined,
-            ),
+            Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
       }
@@ -384,14 +362,10 @@ export const ScheduleProvider = () =>
           current = yield* aiplatform.listProjectsLocationsSchedules
             .pages({ parent, pageSize: 100 })
             .pipe(
-              Stream.flatMap((page) =>
-                Stream.fromIterable(page.schedules ?? []),
-              ),
+              Stream.flatMap((page) => Stream.fromIterable(page.schedules ?? [])),
               Stream.filter((schedule) => schedule.displayName === displayName),
               Stream.runHead,
-              Effect.map((option) =>
-                option._tag === "Some" ? option.value : undefined,
-              ),
+              Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
               Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             );
         }
@@ -406,17 +380,13 @@ export const ScheduleProvider = () =>
       const name = current.name ?? "";
       const cronChanged = (current.cron ?? "") !== news.cron;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const concurrentChanged =
-        (current.maxConcurrentRunCount ?? "") !== maxConcurrentRunCount;
+      const concurrentChanged = (current.maxConcurrentRunCount ?? "") !== maxConcurrentRunCount;
       const activeChanged =
-        (current.maxConcurrentActiveRunCount ?? "") !==
-        (news.maxConcurrentActiveRunCount ?? "");
-      const maxRunChanged =
-        (current.maxRunCount ?? "") !== (news.maxRunCount ?? "");
+        (current.maxConcurrentActiveRunCount ?? "") !== (news.maxConcurrentActiveRunCount ?? "");
+      const maxRunChanged = (current.maxRunCount ?? "") !== (news.maxRunCount ?? "");
       const startChanged = (current.startTime ?? "") !== (news.startTime ?? "");
       const endChanged = (current.endTime ?? "") !== (news.endTime ?? "");
-      const queueChanged =
-        (current.allowQueueing === true) !== (news.allowQueueing === true);
+      const queueChanged = (current.allowQueueing === true) !== (news.allowQueueing === true);
 
       if (
         cronChanged ||

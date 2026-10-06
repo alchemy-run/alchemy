@@ -38,13 +38,8 @@ export interface DescribeStream extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeStreamRequest,
-    ) => Effect.Effect<
-      Kinesis.DescribeStreamOutput,
-      Kinesis.DescribeStreamError
-    >
+    ) => Effect.Effect<Kinesis.DescribeStreamOutput, Kinesis.DescribeStreamError>
   >
 > {}
 
-export const DescribeStream = Binding.Service<DescribeStream>(
-  "AWS.Kinesis.DescribeStream",
-);
+export const DescribeStream = Binding.Service<DescribeStream>("AWS.Kinesis.DescribeStream");

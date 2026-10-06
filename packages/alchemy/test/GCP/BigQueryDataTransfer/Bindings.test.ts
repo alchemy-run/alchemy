@@ -1,22 +1,17 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as bqdt from "@distilled.cloud/gcp/bigquerydatatransfer_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import BigQueryDataTransferBindingsHost, {
-  Nightly,
-} from "./fixtures/bindings-host.ts";
+import BigQueryDataTransferBindingsHost, { Nightly } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "BigQueryDataTransferBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "BigQueryDataTransferBindings");
 
 let baseUrl: string;
 let configName: string;
@@ -31,9 +26,7 @@ const projectGrantsOf = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -43,12 +36,7 @@ const projectGrantsOf = (account: string) =>
 describe.skipIf(!dockerAvailable)(
   "BigQueryDataTransfer Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:bigquerydatatransfer",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:bigquerydatatransfer", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -79,11 +67,10 @@ describe.skipIf(!dockerAvailable)(
         "starts a run as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out =
-              yield* expectProbe<bqdt.StartManualTransferRunsResponse>(
-                baseUrl,
-                "startManualRuns",
-              );
+            const out = yield* expectProbe<bqdt.StartManualTransferRunsResponse>(
+              baseUrl,
+              "startManualRuns",
+            );
             expect(out.runs).toHaveLength(1);
             const runName = out.runs?.[0]?.name ?? "";
             expect(runName.startsWith(`${configName}/runs/`)).toEqual(true);

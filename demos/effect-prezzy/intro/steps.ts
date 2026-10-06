@@ -7,7 +7,20 @@
  * fail and their real errors are shown) or inline `code` for the imagined
  * language. Boards are drawn by `remotion/intro/boards.tsx`.
  */
-import type { ArchStep, BundlePanel, DashStep, Drill, LoopPart, MiniGraph, PhaseTimeline, PanelItem, PyramidStep, ReqItem, ReqPanel, Tone } from "../shared/intro.ts";
+import type {
+  ArchStep,
+  BundlePanel,
+  DashStep,
+  Drill,
+  LoopPart,
+  MiniGraph,
+  PhaseTimeline,
+  PanelItem,
+  PyramidStep,
+  ReqItem,
+  ReqPanel,
+  Tone,
+} from "../shared/intro.ts";
 import CLIENTS from "./bundle-clients.json" with { type: "json" };
 import { demo } from "./demo.ts";
 
@@ -19,7 +32,9 @@ export type Find = string | { text: string; nth?: number };
  * entirely, for building a file up one piece per step from the finished version.
  */
 /** `fold` collapses a region to one line, like an editor fold: `first line … last line`. */
-export type Source = { snippet: string; regions?: string[]; omit?: string[]; fold?: string[] } | { code: string };
+export type Source =
+  | { snippet: string; regions?: string[]; omit?: string[]; fold?: string[] }
+  | { code: string };
 
 export interface CodeSpec {
   kind: "code";
@@ -74,7 +89,10 @@ export interface CodeSpec {
    * A third file under this one, on the left, generated from it: an arrow labelled
    * `label` runs down from this file to it, and `links` run from it to `beside`.
    */
-  under?: Pick<CodeSpec, "file" | "src" | "lang" | "marks"> & { label: string; links?: { from: Find; to: Find; tone?: Tone }[] };
+  under?: Pick<CodeSpec, "file" | "src" | "lang" | "marks"> & {
+    label: string;
+    links?: { from: Find; to: Find; tone?: Tone }[];
+  };
   /** Arcs from text in the code to a node or an edge's label in `diagram`. */
   diagramLinks?: { from: Find; to: { node: string } | { edge: [string, string] }; tone?: Tone }[];
   /** A hand-written aside in the bottom-right corner. */
@@ -130,7 +148,11 @@ export interface TerminalSpec {
   lines: string;
   fresh?: number;
   /** A live deploy under the lines (see TerminalStep.progress); `done` is ANSI text. */
-  progress?: { rows: { name: string; type?: string; binding?: boolean; from: number; to: number }[]; done: string; at: number };
+  progress?: {
+    rows: { name: string; type?: string; binding?: boolean; from: number; to: number }[];
+    done: string;
+    at: number;
+  };
   frames?: number;
 }
 
@@ -170,7 +192,10 @@ export interface CommentSpec {
 }
 
 /** An application's layers as a pyramid (loop deck). */
-export type PyramidSpec = Omit<PyramidStep, "notes" | "frames"> & { notes?: string; frames?: number };
+export type PyramidSpec = Omit<PyramidStep, "notes" | "frames"> & {
+  notes?: string;
+  frames?: number;
+};
 
 /** Code with ⟨0⟩, ⟨1⟩… slots that roll to new values from step to step (loop deck). */
 export interface RollSpec {
@@ -200,14 +225,24 @@ export type ArchSpec = Omit<ArchStep, "notes" | "frames"> & { notes?: string; fr
 /** A mocked observability dashboard (loop deck). */
 export type DashSpec = Omit<DashStep, "notes" | "frames"> & { notes?: string; frames?: number };
 
-export type StepSpec = DashSpec | ArchSpec | RollSpec | CodeSpec | SlideSpec | BoardSpec | TerminalSpec | BrowserSpec | LoopSpec | CommentSpec | PyramidSpec;
+export type StepSpec =
+  | DashSpec
+  | ArchSpec
+  | RollSpec
+  | CodeSpec
+  | SlideSpec
+  | BoardSpec
+  | TerminalSpec
+  | BrowserSpec
+  | LoopSpec
+  | CommentSpec
+  | PyramidSpec;
 
 /** The compiler's message lines that name the missing requirement. */
 const requirementLines = (needle: string) => (lines: string[]) => {
   const at = lines.findIndex((line) => line.includes(needle));
   return at < 0 ? lines.slice(0, 2) : lines.slice(Math.max(1, at - 1), at + 1);
 };
-
 
 // ── Act 1 & 2: one program in an imaginary cloud language ────────────────
 // The code on the left grows one idea at a time; the drawing on the right
@@ -240,7 +275,10 @@ const INFERRED_NEEDS = COLORED_APP.replace(
   "  // needs: s3:GetObject | sqs:SendMessage\n  runtime function fetch(req) {",
 );
 /** Step one of the colors: only construction is marked. */
-const CONSTRUCT_ONLY = COLORED_APP.replace("  runtime function fetch(req) {", "  function fetch(req) {");
+const CONSTRUCT_ONLY = COLORED_APP.replace(
+  "  runtime function fetch(req) {",
+  "  function fetch(req) {",
+);
 /** The question: what would a bucket created inside the function even mean? */
 const SCRATCH = VERSIONED.replace(
   "  const file = bucket.get(req.key)",
@@ -251,7 +289,14 @@ const EARLY_READ = VERSIONED.replace(
   "const queue = Queue()\n",
   'const queue = Queue()\nconst hello = bucket.get("hello.txt")\n',
 );
-const SCRATCH_NODE = { id: "scratch", title: "Bucket?", color: "#ff7b72", x: 360, y: 610, ghost: true };
+const SCRATCH_NODE = {
+  id: "scratch",
+  title: "Bucket?",
+  color: "#ff7b72",
+  x: 360,
+  y: 610,
+  ghost: true,
+};
 const COLORED_BAD = COLORED_APP.replace(
   "    const file = bucket.get(req.key)",
   "    const scratch = Bucket()\n    const file = bucket.get(req.key)",
@@ -263,7 +308,12 @@ const COLORED_EARLY = COLORED_APP.replace(
   '  const queue = Queue()\n  bucket.get("hello.txt")\n',
 );
 
-const at = (node: { id: string; title: string; color: string }, x: number, y: number, notes?: string[]) => ({
+const at = (
+  node: { id: string; title: string; color: string },
+  x: number,
+  y: number,
+  notes?: string[],
+) => ({
   ...node,
   x,
   y,
@@ -281,7 +331,9 @@ const GET = { from: "api", to: "bucket", tone: "construct" as const, label: "s3:
 const SEND = { from: "api", to: "queue", tone: "construct" as const, label: "sqs:SendMessage" };
 const BINDINGS = [GET, SEND];
 const ENV = ["$BUCKET_NAME", "$QUEUE_URL"];
-const lang = (spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize"> & { group?: string }): CodeSpec => ({
+const lang = (
+  spec: Omit<CodeSpec, "kind" | "group" | "pseudo" | "fontSize"> & { group?: string },
+): CodeSpec => ({
   kind: "code",
   group: "lang",
   pseudo: true,
@@ -321,7 +373,10 @@ const program = (): StepSpec[] => [
   lang({
     title: "You'd declare a queue the same way",
     src: { code: BQ },
-    diagram: { nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)], edges: [] },
+    diagram: {
+      nodes: [at(C.bucket, 590, 100, ["versioning: on"]), at(C.queue, 590, 440)],
+      edges: [],
+    },
     notes: "A queue would be declared just like the bucket: one line, one real queue in the cloud.",
   }),
   lang({
@@ -362,7 +417,8 @@ const program = (): StepSpec[] => [
     title: "That connection would need permission to read the bucket",
     src: { code: GET_FN },
     diagram: { nodes: GRAPH(["versioning: on"]), edges: [GET] },
-    notes: "For the function to call bucket.get, it would need an IAM policy that allows s3:GetObject on this bucket.",
+    notes:
+      "For the function to call bucket.get, it would need an IAM policy that allows s3:GetObject on this bucket.",
   }),
   lang({
     title: "…and the bucket's name, passed in as an environment variable",
@@ -375,7 +431,8 @@ const program = (): StepSpec[] => [
     title: "Sending to the queue would connect them the same way",
     src: { code: VERSIONED },
     diagram: { nodes: GRAPH(["versioning: on"], ENV), edges: BINDINGS },
-    notes: "Same again for the queue: sqs:SendMessage, and the queue's URL in an environment variable.",
+    notes:
+      "Same again for the queue: sqs:SendMessage, and the queue's URL in an environment variable.",
   }),
   lang({
     title: "The language would work all of this out from code",
@@ -468,7 +525,8 @@ const program = (): StepSpec[] => [
       edges: BINDINGS,
       cards: [{ text: "✗ can't create a resource at runtime", tone: "bad" }],
     },
-    notes: "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
+    notes:
+      "The colors are boundaries the compiler enforces. The mistake from before, creating a bucket inside a request, is now a compile error instead of a question.",
   }),
   lang({
     title: "…and so is reading the bucket during construction",
@@ -547,13 +605,20 @@ const deleter = (type: string) => `function deleter(remove: (id: string) => ${ty
 const REQ_LABEL = "Req · what it needs";
 const BUCKET: ReqItem = { name: "R2.BucketProvider", note: "to create the bucket" };
 const READ: ReqItem = { name: "R2.ReadBucket", note: "to read it at runtime" };
-const WORKER_PROVIDER: ReqItem = { name: "Cloudflare.WorkerProvider", note: "to deploy the Worker" };
+const WORKER_PROVIDER: ReqItem = {
+  name: "Cloudflare.WorkerProvider",
+  note: "to deploy the Worker",
+};
 const QUEUE: ReqItem = { name: "Queues.QueueProvider", note: "to create the queue" };
 const WRITE_LOGS: ReqItem = { name: "R2.WriteBucket", note: "only in dev" };
 const WRITE: ReqItem = { name: "Queues.WriteQueue", note: "to send at runtime" };
 const met = (item: ReqItem, note: string): ReqItem => ({ ...item, state: "met", note });
 const WORKER: ReqItem = { name: "Cloudflare.Worker", note: "native bindings run inside a Worker" };
-const PHANTOM: ReqItem = { name: "RuntimeContext", state: "met", note: "RuntimeContext.phantom\nopted out, in plain sight" };
+const PHANTOM: ReqItem = {
+  name: "RuntimeContext",
+  state: "met",
+  note: "RuntimeContext.phantom\nopted out, in plain sight",
+};
 /** Everything the Worker version of the program needs, with the bindings provided. */
 const PROVIDED: ReqItem[] = [
   met(READ, "ReadBucketBinding\nadds a native R2 binding"),
@@ -606,7 +671,8 @@ const CROSS_CLOUD = (connected: boolean): MiniGraph => ({
 });
 
 /** The first line of the compiler's message that starts with `prefix`. */
-const firstLine = (prefix: string) => (lines: string[]) => lines.filter((line) => line.startsWith(prefix)).slice(0, 1);
+const firstLine = (prefix: string) => (lines: string[]) =>
+  lines.filter((line) => line.startsWith(prefix)).slice(0, 1);
 
 /** One version of the Api Worker, `snippets/api-*.ts`, with its Req beside it. */
 const api = (s: {
@@ -645,10 +711,10 @@ const api = (s: {
   req: s.bundle
     ? undefined
     : {
-    label: REQ_LABEL,
-    items: s.req,
-    parts: s.fetchReq ? [{ label: "fetch's Req", items: s.fetchReq }] : undefined,
-  },
+        label: REQ_LABEL,
+        items: s.req,
+        parts: s.fetchReq ? [{ label: "fetch's Req", items: s.fetchReq }] : undefined,
+      },
   notes: s.notes,
 });
 
@@ -732,7 +798,10 @@ const STORAGE_CLASS = `class StorageImpl {
     return this.db.get(key);
   }
 }`;
-const SERVICE_R2 = SERVICE.replace("Effect<File, NotFound>", "Effect<File, NotFound, R2.GetObject<Uploads>>");
+const SERVICE_R2 = SERVICE.replace(
+  "Effect<File, NotFound>",
+  "Effect<File, NotFound, R2.GetObject<Uploads>>",
+);
 const STORAGE_R2 = `const StorageR2 = Layer.effect(Storage, Effect.gen(function* () {
   const bucket = yield* R2.Bucket("Uploads");
   return { get: (key) => bucket.get(key) };
@@ -818,7 +887,15 @@ const CDK_LINKS: NonNullable<CodeSpec["links"]> = [
 ];
 
 // ── terminal output, in the CLI's own colors ─────────────────────────────
-const T = { ok: "\x1b[38;5;113m", soft: "\x1b[38;5;150m", accent: "\x1b[38;5;173m", grey: "\x1b[38;5;102m", dim: "\x1b[2m", bold: "\x1b[1m", reset: "\x1b[0m" };
+const T = {
+  ok: "\x1b[38;5;113m",
+  soft: "\x1b[38;5;150m",
+  accent: "\x1b[38;5;173m",
+  grey: "\x1b[38;5;102m",
+  dim: "\x1b[2m",
+  bold: "\x1b[1m",
+  reset: "\x1b[0m",
+};
 const RULE = `${T.grey}${T.dim}${"─".repeat(46)}${T.reset}`;
 const DEPLOY_PLAN = [
   `${T.dim}$${T.reset} alchemy deploy`,
@@ -983,7 +1060,10 @@ const EVERYTHING: BundlePanel = {
 
 /** The build-up to Effect: write what fetch needs into its type. */
 const TYPED = (type: string) =>
-  COLORED_APP.replace("  runtime function fetch(req) {", `  runtime function fetch(req): ${type} {`);
+  COLORED_APP.replace(
+    "  runtime function fetch(req) {",
+    `  runtime function fetch(req): ${type} {`,
+  );
 const typedFetch: StepSpec[] = [
   lang({
     title: "So write what it needs into its type",
@@ -1042,7 +1122,15 @@ const allSteps: StepSpec[] = [
     lang: "shellscript",
     file: "setup.sh",
     code: SCRIPT,
-    marks: [{ kind: "underline", find: "create-bucket", label: "the bucket already exists", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "create-bucket",
+        label: "the bucket already exists",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     diagram: { nodes: [at(C.bucket, 360, 150, ["versioning: on"])], edges: [] },
     notes: "Run it again and create-bucket fails, because the bucket already exists.",
   }),
@@ -1082,7 +1170,8 @@ const allSteps: StepSpec[] = [
       edges: [],
       labels: [{ text: "created", x: 470, y: 90, tone: "good" }],
     },
-    notes: "An engine compares the desired state with what actually exists. The bucket doesn't exist yet, so the engine creates it.",
+    notes:
+      "An engine compares the desired state with what actually exists. The bucket doesn't exist yet, so the engine creates it.",
   }),
   iac({
     title: "Change what it should be…",
@@ -1090,7 +1179,8 @@ const allSteps: StepSpec[] = [
     file: "template.yaml",
     code: CFN_2,
     diagram: { nodes: [at(C.bucket, 360, 150)], edges: [] },
-    notes: "Now we want versioning. We don't write a script to turn it on. We just change the description.",
+    notes:
+      "Now we want versioning. We don't write a script to turn it on. We just change the description.",
   }),
   iac({
     title: "…and the engine updates only what changed",
@@ -1125,8 +1215,20 @@ const allSteps: StepSpec[] = [
     title: "…but I never liked trying to program in YAML",
     src: { code: CFN },
     marks: [
-      { kind: "circle", find: "!If [IsProd, 1024, 256]", label: "an if statement, in YAML", side: "right", tone: "bad" },
-      { kind: "underline", find: '!Sub "${Uploads.Arn}/*"', label: "string templating for references", side: "right", tone: "bad" },
+      {
+        kind: "circle",
+        find: "!If [IsProd, 1024, 256]",
+        label: "an if statement, in YAML",
+        side: "right",
+        tone: "bad",
+      },
+      {
+        kind: "underline",
+        find: '!Sub "${Uploads.Arn}/*"',
+        label: "string templating for references",
+        side: "right",
+        tone: "bad",
+      },
     ],
     notes:
       "But I never liked it. I'm a coder. I don't want to write config files, and I really don't want to program in YAML: conditions, string substitution, intrinsic functions.",
@@ -1145,7 +1247,15 @@ const allSteps: StepSpec[] = [
     file: "infra/api.ts",
     title: "Finally, I could configure infrastructure with real code",
     src: { code: CDK },
-    marks: [{ kind: "underline", find: "uploads.grantReadWrite(fn);", label: "the whole IAM policy", side: "right", tone: "good" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "uploads.grantReadWrite(fn);",
+        label: "the whole IAM policy",
+        side: "right",
+        tone: "good",
+      },
+    ],
     notes:
       "Finally, real code: variables, functions, types, and abstractions like grantReadWrite that write the IAM policy for you.",
   },
@@ -1171,12 +1281,28 @@ const allSteps: StepSpec[] = [
     file: "infra/api.ts",
     title: "It's a template generator, not programmable infrastructure",
     src: { code: CDK },
-    marks: [{ kind: "underline", find: "class Api extends Construct", label: "runs once, at synth", side: "right", tone: "neutral" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "class Api extends Construct",
+        label: "runs once, at synth",
+        side: "right",
+        tone: "neutral",
+      },
+    ],
     beside: {
       file: "cdk synth → template.yaml",
       lang: "yaml",
       src: { code: CDK_SYNTH },
-      marks: [{ kind: "underline", find: "Resources:", label: "what's actually deployed", side: "right", tone: "construct" }],
+      marks: [
+        {
+          kind: "underline",
+          find: "Resources:",
+          label: "what's actually deployed",
+          side: "right",
+          tone: "construct",
+        },
+      ],
     },
     links: [
       { from: 'new s3.Bucket(this, "Uploads")', to: "Uploads1E2F3A4B:" },
@@ -1202,13 +1328,30 @@ const allSteps: StepSpec[] = [
     file: "infra/api.ts",
     title: "You have to write two programs",
     src: { code: CDK },
-    marks: [{ kind: "underline", find: "class Api extends Construct", label: "one for the infrastructure", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "class Api extends Construct",
+        label: "one for the infrastructure",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     beside: {
       file: "src/handler.ts",
       src: { code: HANDLER },
-      marks: [{ kind: "underline", find: "const s3 = new S3Client({});", label: "one for the runtime", side: "right", tone: "runtime" }],
+      marks: [
+        {
+          kind: "underline",
+          find: "const s3 = new S3Client({});",
+          label: "one for the runtime",
+          side: "right",
+          tone: "runtime",
+        },
+      ],
     },
-    notes: "You end up writing two programs: one for the infrastructure, and one for the code that runs on it.",
+    notes:
+      "You end up writing two programs: one for the infrastructure, and one for the code that runs on it.",
   },
   {
     kind: "code",
@@ -1231,7 +1374,9 @@ const allSteps: StepSpec[] = [
     beside: {
       file: "src/handler.ts",
       src: { code: HANDLER },
-      marks: [{ kind: "circle", find: "BUCKET_NAME", label: "undefined!", side: "right", tone: "bad" }],
+      marks: [
+        { kind: "circle", find: "BUCKET_NAME", label: "undefined!", side: "right", tone: "bad" },
+      ],
     },
     links: [
       { from: '"index.handler"', to: "export const handler" },
@@ -1268,7 +1413,15 @@ const allSteps: StepSpec[] = [
     title: "But its runtime code shipped with the whole CDK",
     src: { code: PUNCHCARD },
     tints: [{ from: "async (event", to: "}));", tone: "runtime" }],
-    marks: [{ kind: "circle", find: "SNS.Topic", label: "brings the CDK with it", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "SNS.Topic",
+        label: "brings the CDK with it",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     panel: {
       title: "What the Lambda bundle contains",
       items: [
@@ -1287,8 +1440,20 @@ const allSteps: StepSpec[] = [
     title: "And every dependency had to be declared up front",
     src: { code: PUNCHCARD },
     marks: [
-      { kind: "circle", find: "depends: topic", label: "declared up front…", side: "right", tone: "construct" },
-      { kind: "underline", find: "(event, topic)", label: "…then passed down to where it's used", side: "right", tone: "construct" },
+      {
+        kind: "circle",
+        find: "depends: topic",
+        label: "declared up front…",
+        side: "right",
+        tone: "construct",
+      },
+      {
+        kind: "underline",
+        find: "(event, topic)",
+        label: "…then passed down to where it's used",
+        side: "right",
+        tone: "construct",
+      },
     ],
     notes:
       "And every dependency had to be listed up front, in depends, and then prop-drilled into the handler as an argument. The code that uses the topic can't just reach for it.",
@@ -1300,8 +1465,20 @@ const allSteps: StepSpec[] = [
     title: "…and carried through every function on the way down",
     src: { code: PUNCHCARD },
     marks: [
-      { kind: "circle", find: "depends: topic", label: "declared up front…", side: "right", tone: "construct" },
-      { kind: "underline", find: "(event, topic)", label: "…then passed down to where it's used", side: "right", tone: "construct" },
+      {
+        kind: "circle",
+        find: "depends: topic",
+        label: "declared up front…",
+        side: "right",
+        tone: "construct",
+      },
+      {
+        kind: "underline",
+        find: "(event, topic)",
+        label: "…then passed down to where it's used",
+        side: "right",
+        tone: "construct",
+      },
     ],
     drill: {
       label: "in a real app",
@@ -1334,7 +1511,15 @@ const allSteps: StepSpec[] = [
     file: "functionless · app.ts",
     title: "It peeks inside to see which resources the function uses",
     src: { code: FUNCTIONLESS },
-    marks: [{ kind: "circle", find: "table.delete", label: "found by reading the body", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "table.delete",
+        label: "found by reading the body",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     panel: {
       title: "Inferred",
       items: [{ title: "IAM policy", mono: `Allow dynamodb:DeleteItem\non table Todos` }],
@@ -1348,7 +1533,15 @@ const allSteps: StepSpec[] = [
     file: "functionless · app.ts",
     title: "But it can't see inside a function that's passed in",
     src: { code: deleter("Promise<void>") },
-    marks: [{ kind: "circle", find: "remove(id)", label: "which function? could be anything", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "remove(id)",
+        label: "which function? could be anything",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     notes:
       "But peeking inside breaks down fast. Take a function that's passed in. Which function is remove? It depends on the caller, so reading this body tells you nothing.",
   },
@@ -1369,7 +1562,13 @@ const allSteps: StepSpec[] = [
     src: { code: deleter("Promise<void, DeleteItem>") },
     marks: [
       { kind: "circle", find: "DeleteItem", tone: "construct" },
-      { kind: "underline", find: "new Function", label: "so it needs DeleteItem too", side: "right", tone: "construct" },
+      {
+        kind: "underline",
+        find: "new Function",
+        label: "so it needs DeleteItem too",
+        side: "right",
+        tone: "construct",
+      },
     ],
     notes:
       "Now nobody has to read the body. A type checker never looks inside the functions you call; it reads their signatures. The Function calls remove, so it needs DeleteItem too, and that's the policy. Higher-order functions and classes just work.",
@@ -1403,7 +1602,8 @@ const allSteps: StepSpec[] = [
       { kind: "underline", find: "Err", label: "how it fails", side: "below", tone: "neutral" },
       { kind: "circle", find: "Req", label: "what it needs", side: "above", tone: "construct" },
     ],
-    notes: "That's Effect. Success, errors, and the requirements channel: the signature we were missing.",
+    notes:
+      "That's Effect. Success, errors, and the requirements channel: the signature we were missing.",
   },
 
   // Act 5: the same program, in Alchemy. The code grows one idea at a time;
@@ -1420,14 +1620,16 @@ const allSteps: StepSpec[] = [
     snippet: "api-01-effect.ts",
     tints: [{ from: "const api = Effect.gen", to: "return {", tone: "construct" }],
     req: [],
-    notes: "The outer Effect runs once, when the function is set up: that's the construction phase.",
+    notes:
+      "The outer Effect runs once, when the function is set up: that's the construction phase.",
   }),
   api({
     title: "…and fetch is the runtime phase",
     snippet: "api-01-effect.ts",
     tints: [{ from: "fetch: Effect.gen", to: "}),", tone: "runtime" }],
     req: [],
-    notes: "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
+    notes:
+      "And fetch runs for each request: the runtime phase. The same two phases as our imaginary language, written with plain TypeScript and Effect.",
   }),
   api({
     title: "Resources are declared in construction, with yield*",
@@ -1447,7 +1649,15 @@ const allSteps: StepSpec[] = [
   api({
     title: "The goal was least privilege, guaranteed by the type checker",
     code: INFERRED,
-    marks: [{ kind: "underline", find: 'bucket.get("hello.txt")', label: "grant this, and nothing more", side: "right", tone: "good" }],
+    marks: [
+      {
+        kind: "underline",
+        find: 'bucket.get("hello.txt")',
+        label: "grant this, and nothing more",
+        side: "right",
+        tone: "good",
+      },
+    ],
     req: [],
     fetchReq: [GET_OBJECT],
     notes:
@@ -1457,7 +1667,15 @@ const allSteps: StepSpec[] = [
     title: "Providing a layer for it grants exactly that permission",
     code: INFERRED_ON_FETCH,
     quiet: true,
-    marks: [{ kind: "underline", find: "Effect.provide(R2.ReadBucket(bucket))", label: "grants s3:GetObject", side: "right", tone: "good" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "Effect.provide(R2.ReadBucket(bucket))",
+        label: "grants s3:GetObject",
+        side: "right",
+        tone: "good",
+      },
+    ],
     req: [],
     fetchReq: [met(GET_OBJECT, "R2.ReadBucket(bucket)\ngrants s3:GetObject")],
     notes:
@@ -1476,9 +1694,19 @@ const allSteps: StepSpec[] = [
   api({
     title: "…it's in the wrong spot",
     code: INFERRED_ON_FETCH,
-    marks: [{ kind: "circle", find: "Effect.provide(R2.ReadBucket(bucket))", label: "on fetch, at runtime", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "Effect.provide(R2.ReadBucket(bucket))",
+        label: "on fetch, at runtime",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     req: [],
-    fetchReq: [{ ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" }],
+    fetchReq: [
+      { ...GET_OBJECT, state: "bad", note: "provided per request:\ntoo late to grant a policy" },
+    ],
     notes:
       "It's in the wrong spot. The requirement lands on fetch, so that's where its layer has to be provided. But fetch runs at runtime, on every request. The layer grants the policy, and by then the deploy is long over. This makes no sense.",
   }),
@@ -1492,7 +1720,15 @@ const allSteps: StepSpec[] = [
   api({
     title: "But construction only finds it by digging into fetch's type",
     code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
-    marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "infer R",
+        label: "type magic on what it returns",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     req: [GET_OBJECT_HOISTED],
     notes:
       "But the outer Effect doesn't need R2.GetObject. Only fetch does. The only way construction learns about it is type magic: dig into the return type of the Effect, find fetch, infer its requirements, and hoist them up. The requirement is discovered by analyzing the runtime function, not declared.",
@@ -1500,7 +1736,15 @@ const allSteps: StepSpec[] = [
   api({
     title: "This is starting to feel like peeking inside again…",
     code: `${INFERRED_HOISTED}\n\n${HOIST_TYPE}`,
-    marks: [{ kind: "circle", find: "infer R", label: "type magic on what it returns", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "infer R",
+        label: "type magic on what it returns",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     req: [GET_OBJECT_HOISTED],
     notes:
       "Hang on. Reaching into fetch to find out what it uses… that's Functionless all over again. Peeking inside, just with types instead of the compiler. Let's keep going anyway and see where it breaks.",
@@ -1515,7 +1759,9 @@ const allSteps: StepSpec[] = [
   api({
     title: "The types can't tell that logs.put only runs in dev",
     code: INFERRED_DEV_2,
-    marks: [{ kind: "underline", find: "if (logs)", label: "only in dev", side: "right", tone: "bad" }],
+    marks: [
+      { kind: "underline", find: "if (logs)", label: "only in dev", side: "right", tone: "bad" },
+    ],
     req: [GET_OBJECT_HOISTED, { ...PUT_LOGS, state: "bad", note: "required in every stage" }],
     notes:
       "But the if only runs in dev, and a type can't know that. fetch's type is the union of every path through it, so R2.PutObject for Logs is required everywhere, production included. Types see every possible path, never the one that actually runs.",
@@ -1525,7 +1771,11 @@ const allSteps: StepSpec[] = [
     code: INFERRED_DEV,
     req: [
       GET_OBJECT_HOISTED,
-      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+      {
+        name: "R2.PutObject<Logs>",
+        state: "bad",
+        note: "R2.WriteBucket(Logs)\nprovided in production too",
+      },
     ],
     notes:
       "So to compile, we provide R2.WriteBucket for Logs, in every stage. And the layers are what carry the policies, so every policy for every path gets granted, whether that path runs or not.",
@@ -1545,7 +1795,11 @@ const allSteps: StepSpec[] = [
     ],
     req: [
       GET_OBJECT_HOISTED,
-      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+      {
+        name: "R2.PutObject<Logs>",
+        state: "bad",
+        note: "R2.WriteBucket(Logs)\nprovided in production too",
+      },
     ],
     notes:
       "Even if production never takes that path. The dev-only write to Logs is still in the type, so the WriteBucket layer has to be provided everywhere, and production gets permission to write to a bucket only dev uses. The very goal of this design, least privilege, is broken by the type system itself.",
@@ -1553,10 +1807,22 @@ const allSteps: StepSpec[] = [
   api({
     title: "Worst of all, we've broken encapsulation",
     code: INFERRED_DEV,
-    marks: [{ kind: "underline", find: "fetch: Effect.gen(function* () {", label: "its type now says R2, and which buckets", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "fetch: Effect.gen(function* () {",
+        label: "its type now says R2, and which buckets",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     req: [
       GET_OBJECT_HOISTED,
-      { name: "R2.PutObject<Logs>", state: "bad", note: "R2.WriteBucket(Logs)\nprovided in production too" },
+      {
+        name: "R2.PutObject<Logs>",
+        state: "bad",
+        note: "R2.WriteBucket(Logs)\nprovided in production too",
+      },
     ],
     notes:
       "Step back and look at what happened. The infrastructure a function uses has become part of its type. fetch's type now says R2, and exactly which buckets. That's broken encapsulation, and it's the problem that finally killed this design.",
@@ -1576,7 +1842,15 @@ const allSteps: StepSpec[] = [
     file: "src/Storage.ts",
     title: "Its R2 implementation needs R2.GetObject<Uploads>",
     src: { code: `${SERVICE}\n\n${STORAGE_R2}` },
-    marks: [{ kind: "underline", find: "bucket.get(key)", label: "requires R2.GetObject<Uploads>", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "bucket.get(key)",
+        label: "requires R2.GetObject<Uploads>",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     notes:
       "Now implement it with R2. Because the requirement is inferred from usage, this get doesn't just return a file: its type also requires R2.GetObject for the Uploads bucket. And that doesn't match the interface, which requires nothing.",
   },
@@ -1586,7 +1860,15 @@ const allSteps: StepSpec[] = [
     file: "src/Storage.ts",
     title: "The only fix is to name R2, and the bucket, in the interface",
     src: { code: `${SERVICE_R2}\n\n${STORAGE_R2}` },
-    marks: [{ kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "R2.GetObject<Uploads>",
+        label: "the implementation, in the interface",
+        side: "below",
+        tone: "bad",
+      },
+    ],
     notes:
       "The only way to make it fit is to put the requirement in the interface. Now Storage says R2, and which bucket. The implementation has leaked into the interface.",
   },
@@ -1597,8 +1879,20 @@ const allSteps: StepSpec[] = [
     title: "Now there can never be a second implementation",
     src: { code: `${SERVICE_R2}\n\n${STORAGE_R2}\n\n${STORAGE_S3}` },
     marks: [
-      { kind: "circle", find: "R2.GetObject<Uploads>", label: "the implementation, in the interface", side: "below", tone: "bad" },
-      { kind: "underline", find: { text: "bucket.get(key)", nth: 2 }, label: "requires S3.GetObject<Files>: doesn't fit", side: "right", tone: "bad" },
+      {
+        kind: "circle",
+        find: "R2.GetObject<Uploads>",
+        label: "the implementation, in the interface",
+        side: "below",
+        tone: "bad",
+      },
+      {
+        kind: "underline",
+        find: { text: "bucket.get(key)", nth: 2 },
+        label: "requires S3.GetObject<Files>: doesn't fit",
+        side: "right",
+        tone: "bad",
+      },
     ],
     notes:
       "And that's the nail in the coffin. Try an S3 implementation: same code, but its get requires S3.GetObject, and the interface already promised R2. You can't swap implementations, which is the whole point of a service. Infrastructure requirements can't live in the runtime function's type.",
@@ -1609,7 +1903,15 @@ const allSteps: StepSpec[] = [
     file: "src/Storage.ts",
     title: "This is why a Layer yields its dependencies in the body…",
     src: { code: `${SERVICE}\n\n${STORAGE_LIVE}` },
-    marks: [{ kind: "underline", find: "const db = yield* Database;", label: "dependencies, yielded in the body", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "const db = yield* Database;",
+        label: "dependencies, yielded in the body",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     notes:
       "This is why Effect has a pattern for this. When you build a Layer, you don't reach for dependencies inside each method. You yield them once, in the body of the Effect.",
   },
@@ -1620,8 +1922,20 @@ const allSteps: StepSpec[] = [
     title: "…and returns methods that close over them",
     src: { code: `${SERVICE}\n\n${STORAGE_LIVE}` },
     marks: [
-      { kind: "underline", find: "const db = yield* Database;", label: "dependencies, yielded in the body", side: "right", tone: "construct" },
-      { kind: "underline", find: "get: (key) => db.get(key),", label: "methods that close over them", side: "right", tone: "runtime" },
+      {
+        kind: "underline",
+        find: "const db = yield* Database;",
+        label: "dependencies, yielded in the body",
+        side: "right",
+        tone: "construct",
+      },
+      {
+        kind: "underline",
+        find: "get: (key) => db.get(key),",
+        label: "methods that close over them",
+        side: "right",
+        tone: "runtime",
+      },
     ],
     notes:
       "And then it returns the implementation: methods that close over those dependencies. The interface stays clean, because the dependency lives in the constructor, not in the method's type.",
@@ -1645,8 +1959,20 @@ const allSteps: StepSpec[] = [
     title: "A cloud program is an effectful constructor too",
     snippet: "api-02-bucket.ts",
     marks: [
-      { kind: "underline", find: 'const bucket = yield* R2.Bucket("Uploads");', label: "yields its resources", side: "right", tone: "construct" },
-      { kind: "underline", find: "fetch: Effect.gen(function* () {", label: "returns what runs later", side: "right", tone: "runtime" },
+      {
+        kind: "underline",
+        find: 'const bucket = yield* R2.Bucket("Uploads");',
+        label: "yields its resources",
+        side: "right",
+        tone: "construct",
+      },
+      {
+        kind: "underline",
+        find: "fetch: Effect.gen(function* () {",
+        label: "returns what runs later",
+        side: "right",
+        tone: "runtime",
+      },
     ],
     req: [],
     notes:
@@ -1693,7 +2019,15 @@ const allSteps: StepSpec[] = [
     title: "Its first face runs at construction and wires up the binding",
     snippet: "api-06-provide.ts",
     tints: [{ from: "const api = Effect.gen", to: "const jobs", tone: "construct" }],
-    marks: [{ kind: "circle", find: "R2.ReadBucket(bucket)", label: "binding, policy, env vars", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "circle",
+        find: "R2.ReadBucket(bucket)",
+        label: "binding, policy, env vars",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     req: [
       met(READ, "ReadBucketBinding\nattaches the R2 binding"),
       met(WRITE, "WriteQueueBinding\nattaches the Queue binding"),
@@ -1706,7 +2040,15 @@ const allSteps: StepSpec[] = [
     title: "Its second face runs at runtime and implements the interface",
     snippet: "api-06-provide.ts",
     tints: [{ from: "fetch: Effect.gen", to: "}),", tone: "runtime" }],
-    marks: [{ kind: "underline", find: 'uploads.get("hello.txt")', label: "the layer's get", side: "right", tone: "runtime" }],
+    marks: [
+      {
+        kind: "underline",
+        find: 'uploads.get("hello.txt")',
+        label: "the layer's get",
+        side: "right",
+        tone: "runtime",
+      },
+    ],
     req: [
       met(READ, "ReadBucketBinding\nimplements get"),
       met(WRITE, "WriteQueueBinding\nimplements send"),
@@ -1728,9 +2070,17 @@ const allSteps: StepSpec[] = [
       "Remember the Logs bucket that only exists in dev? Now it's ordinary code: create it and bind it for writing only when dev is true. No new syntax, no analysis. The program uses R2.WriteBucket, so its layer, R2.WriteBucketBinding, goes in the array like any other.",
   }),
   api({
-    title: "And \"peeking inside\" is solved by just running the code",
+    title: 'And "peeking inside" is solved by just running the code',
     snippet: "api-06b-dev.ts",
-    marks: [{ kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "R2.WriteBucket(logs)",
+        label: "skipped in prod",
+        side: "right",
+        tone: "good",
+      },
+    ],
     req: [
       met(READ, "ReadBucketBinding"),
       met(WRITE, "WriteQueueBinding"),
@@ -1744,8 +2094,20 @@ const allSteps: StepSpec[] = [
     title: "The layer ships in the bundle, but least privilege holds",
     snippet: "api-06b-dev.ts",
     marks: [
-      { kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" },
-      { kind: "box", find: "R2.WriteBucketBinding,", label: "in the bundle, never granted", side: "right", tone: "good" },
+      {
+        kind: "underline",
+        find: "R2.WriteBucket(logs)",
+        label: "skipped in prod",
+        side: "right",
+        tone: "good",
+      },
+      {
+        kind: "box",
+        find: "R2.WriteBucketBinding,",
+        label: "in the bundle, never granted",
+        side: "right",
+        tone: "good",
+      },
     ],
     req: [
       met(READ, "ReadBucketBinding"),
@@ -1760,8 +2122,20 @@ const allSteps: StepSpec[] = [
     title: "The types no longer guarantee it, running the code does",
     snippet: "api-06b-dev.ts",
     marks: [
-      { kind: "underline", find: "R2.WriteBucket(logs)", label: "skipped in prod", side: "right", tone: "good" },
-      { kind: "box", find: "R2.WriteBucketBinding,", label: "in the bundle, never granted", side: "right", tone: "good" },
+      {
+        kind: "underline",
+        find: "R2.WriteBucket(logs)",
+        label: "skipped in prod",
+        side: "right",
+        tone: "good",
+      },
+      {
+        kind: "box",
+        find: "R2.WriteBucketBinding,",
+        label: "in the bundle, never granted",
+        side: "right",
+        tone: "good",
+      },
     ],
     req: [
       met(READ, "ReadBucketBinding"),
@@ -1791,8 +2165,20 @@ const allSteps: StepSpec[] = [
     title: "export default and import.meta.url say what to bundle",
     snippet: "api-07-worker.ts",
     marks: [
-      { kind: "underline", find: "export default", label: "the Worker's entrypoint", side: "right", tone: "construct" },
-      { kind: "circle", find: "import.meta.url", label: "this file", side: "right", tone: "construct" },
+      {
+        kind: "underline",
+        find: "export default",
+        label: "the Worker's entrypoint",
+        side: "right",
+        tone: "construct",
+      },
+      {
+        kind: "circle",
+        find: "import.meta.url",
+        label: "this file",
+        side: "right",
+        tone: "construct",
+      },
     ],
     req: PROVIDED,
     notes:
@@ -1851,7 +2237,8 @@ const allSteps: StepSpec[] = [
     snippet: "api-10-lambda.error.ts",
     error: { hide: true },
     req: [...PROVIDED.slice(0, 2), WORKER],
-    notes: "Which bindings are right also depends on where the program runs. The program itself doesn't care, so let's swap Cloudflare.Worker for AWS.Lambda.Function.",
+    notes:
+      "Which bindings are right also depends on where the program runs. The program itself doesn't care, so let's swap Cloudflare.Worker for AWS.Lambda.Function.",
   }),
   api({
     title: "On Lambda, our Cloudflare binding layers won't compile",
@@ -1921,7 +2308,15 @@ const allSteps: StepSpec[] = [
     group: "phase-callback",
     title: "Remember the phase rule from our imaginary language?",
     src: { code: COLORED_BAD },
-    marks: [{ kind: "strike", find: "Bucket()", label: "can't create a resource at runtime", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "strike",
+        find: "Bucket()",
+        label: "can't create a resource at runtime",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     notes:
       "Before we deploy, remember the rule from our imaginary language. Construction and runtime are different colors, and creating a bucket inside a request was a compile error.",
   }),
@@ -1930,14 +2325,30 @@ const allSteps: StepSpec[] = [
     title: "…and that construction can't call runtime code",
     src: { code: COLORED_EARLY },
     quiet: true,
-    marks: [{ kind: "strike", find: 'bucket.get("hello.txt")', label: "no request yet", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "strike",
+        find: 'bucket.get("hello.txt")',
+        label: "no request yet",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     notes:
       "And the other direction: reading the bucket during construction, when there's no request yet, was an error too.",
   }),
   api({
     title: "So let's make that mistake in Alchemy",
     snippet: "api-08-construct.error.ts",
-    marks: [{ kind: "underline", find: 'yield* uploads.get("hello.txt");', label: "at deploy time", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "underline",
+        find: 'yield* uploads.get("hello.txt");',
+        label: "at deploy time",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     error: { hide: true },
     req: [...PROVIDED, { name: "RuntimeContext", note: "only exists during a request" }],
     notes:
@@ -1947,7 +2358,10 @@ const allSteps: StepSpec[] = [
     title: "It won't compile, because a Worker can't provide RuntimeContext",
     snippet: "api-08-construct.error.ts",
     error: { pick: firstLine("Type 'RuntimeContext'") },
-    req: [...PROVIDED, { name: "RuntimeContext", state: "bad", note: "only exists during a request" }],
+    req: [
+      ...PROVIDED,
+      { name: "RuntimeContext", state: "bad", note: "only exists during a request" },
+    ],
     notes:
       "A Worker's constructor runs at deploy time and cold start, with no request, so it can't provide RuntimeContext. Reading the bucket there is a type error, just like in our imaginary language.",
   }),
@@ -1969,7 +2383,15 @@ const allSteps: StepSpec[] = [
   api({
     title: "Declaring a resource just yields a plain piece of data",
     snippet: "api-07-worker.ts",
-    marks: [{ kind: "circle", find: 'R2.Bucket("Uploads")', label: "a type, a name, and props", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "circle",
+        find: 'R2.Bucket("Uploads")',
+        label: "a type, a name, and props",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     req: PROVIDED,
     notes:
       "A resource in Alchemy is just data: its type, its name, and its props. Yielding it doesn't call any cloud API.",
@@ -1978,8 +2400,20 @@ const allSteps: StepSpec[] = [
     title: "…that asks for a provider to create it",
     snippet: "api-07-worker.ts",
     marks: [
-      { kind: "underline", find: 'R2.Bucket("Uploads")', label: "needs R2.BucketProvider", side: "right", tone: "construct" },
-      { kind: "underline", find: 'Queues.Queue("Jobs")', label: "needs Queues.QueueProvider", side: "right", tone: "construct" },
+      {
+        kind: "underline",
+        find: 'R2.Bucket("Uploads")',
+        label: "needs R2.BucketProvider",
+        side: "right",
+        tone: "construct",
+      },
+      {
+        kind: "underline",
+        find: 'Queues.Queue("Jobs")',
+        label: "needs Queues.QueueProvider",
+        side: "right",
+        tone: "construct",
+      },
     ],
     req: [BUCKET, ...PROVIDED.slice(0, 1), QUEUE, ...PROVIDED.slice(1)],
     notes:
@@ -2026,12 +2460,21 @@ const allSteps: StepSpec[] = [
   stack({
     title: "We give the Stack the providers that create resources",
     code: STACK_2,
-    notes: "Next, the providers: the code that actually creates, updates and deletes resources. Cloudflare.providers() is every Cloudflare provider there is.",
+    notes:
+      "Next, the providers: the code that actually creates, updates and deletes resources. Cloudflare.providers() is every Cloudflare provider there is.",
   }),
   stack({
     title: "All of them, because this code isn't bundled or used at runtime",
     code: STACK_2,
-    marks: [{ kind: "box", find: "providers: Cloudflare.providers(),", label: "all of them", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "box",
+        find: "providers: Cloudflare.providers(),",
+        label: "all of them",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     notes:
       "Unlike the bindings, we don't have to be precise here. This code is never bundled into the Worker and never runs at runtime. It only runs on your machine, or in CI, during deploy, so none of it needs to be tree-shaken.",
   }),
@@ -2044,7 +2487,8 @@ const allSteps: StepSpec[] = [
   stack({
     title: "Then you give it an Effect that yields the resources you want",
     code: STACK_4,
-    notes: "Finally, the program itself: an Effect that yields the resources you want. Here, that's our Worker.",
+    notes:
+      "Finally, the program itself: an Effect that yields the resources you want. Here, that's our Worker.",
   }),
   {
     kind: "code",
@@ -2052,7 +2496,8 @@ const allSteps: StepSpec[] = [
     file: "alchemy.run.ts",
     title: "…and returns what we want to know, like its URL",
     src: { snippet: "stack.ts", regions: ["show"] },
-    notes: "And it returns the outputs we care about, like the Worker's URL, printed after every deploy.",
+    notes:
+      "And it returns the outputs we care about, like the Worker's URL, printed after every deploy.",
   },
   {
     kind: "code",
@@ -2060,7 +2505,15 @@ const allSteps: StepSpec[] = [
     file: "alchemy.run.ts",
     title: "Yielding Api brings its provider requirements with it",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "underline", find: "yield* Api", label: "needs these", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "yield* Api",
+        label: "needs these",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     req: { label: REQ_LABEL, items: [BUCKET, WORKER_PROVIDER, QUEUE] },
     notes:
       "Yielding Api brings its requirements along: a provider for every kind of resource it declared. R2.BucketProvider for the bucket, Queues.QueueProvider for the queue, and Cloudflare.WorkerProvider for the Worker itself. They bubble up to the Stack.",
@@ -2071,7 +2524,15 @@ const allSteps: StepSpec[] = [
     file: "alchemy.run.ts",
     title: "…and Cloudflare.providers() satisfies all of them",
     src: { snippet: "stack.ts", regions: ["show"] },
-    marks: [{ kind: "box", find: "providers: Cloudflare.providers(),", label: "all three", side: "right", tone: "good" }],
+    marks: [
+      {
+        kind: "box",
+        find: "providers: Cloudflare.providers(),",
+        label: "all three",
+        side: "right",
+        tone: "good",
+      },
+    ],
     req: { label: REQ_LABEL, items: [met(BUCKET, ""), met(WORKER_PROVIDER, ""), met(QUEUE, "")] },
     notes:
       "And the providers we gave the Stack satisfy them. That's why it can be every Cloudflare provider: this code runs during deploy, and none of it ships in the Worker.",
@@ -2096,7 +2557,6 @@ const allSteps: StepSpec[] = [
       "And it's checked. Swap Cloudflare.providers() for Layer.empty and the Stack no longer compiles: the Worker still needs its providers, and nothing is providing them.",
   },
 
-
   {
     kind: "code",
     group: "deploy",
@@ -2104,7 +2564,16 @@ const allSteps: StepSpec[] = [
     lang: "ansi",
     title: "alchemy deploy runs the Stack and shows you a plan",
     src: { code: DEPLOY_PLAN },
-    marks: [{ kind: "box", find: "+ Api (Cloudflare.Worker)", to: "  + Jobs", label: "the bindings, too", side: "right", tone: "construct" }],
+    marks: [
+      {
+        kind: "box",
+        find: "+ Api (Cloudflare.Worker)",
+        to: "  + Jobs",
+        label: "the bindings, too",
+        side: "right",
+        tone: "construct",
+      },
+    ],
     notes:
       "Now deploy. alchemy deploy runs the Stack's construction phase on your machine. That run discovers every resource and binding, and diffs them against the state into a plan: three resources to create, and the Worker's two bindings.",
   },
@@ -2133,7 +2602,12 @@ const pick = (title: string, as?: string, patch?: Partial<CodeSpec>): StepSpec =
   return { ...found, ...(as ? { title: as } : {}), ...(patch ?? {}) } as StepSpec;
 };
 
-const LIVE = { file: "src/Api.ts", snippet: "ApiLive.ts", group: "demo-live", regions: ["top", "rooms", "fetchTop", "live", "click", "fetchEnd"] };
+const LIVE = {
+  file: "src/Api.ts",
+  snippet: "ApiLive.ts",
+  group: "demo-live",
+  regions: ["top", "rooms", "fetchTop", "live", "click", "fetchEnd"],
+};
 const ROOM = { file: "src/LinkRoom.ts", snippet: "LinkRoom.ts", group: "demo-room" };
 
 /** A code step from the Shorty app in `snippets/shorty/`. */
@@ -2185,7 +2659,8 @@ const liveClicks: StepSpec[] = [
     title: "Each click bumps the count and saves it",
     regions: ["body"],
     omit: ["push", "socket"],
-    notes: "record adds one and saves it. Storage and compute live together, so there's no round trip to a database.",
+    notes:
+      "record adds one and saves it. Storage and compute live together, so there's no round trip to a database.",
   }),
   shorty({
     ...ROOM,
@@ -2205,22 +2680,26 @@ const liveClicks: StepSpec[] = [
     ...LIVE,
     title: "The Worker asks for the rooms, like any other binding",
     omit: ["live", "click"],
-    notes: "In the Worker, yield LinkRoom. Same shape as every binding so far: declared in construction, used at runtime.",
+    notes:
+      "In the Worker, yield LinkRoom. Same shape as every binding so far: declared in construction, used at runtime.",
   }),
   shorty({
     ...LIVE,
     title: "A click records itself in the link's room…",
     omit: ["live"],
-    notes: "When someone follows a short link, look it up, record the click in that link's room, and redirect.",
+    notes:
+      "When someone follows a short link, look it up, record the click in that link's room, and redirect.",
   }),
   shorty({
     ...LIVE,
     title: "…and /live hands the socket to the room",
-    notes: "And GET /:code/live hands the WebSocket straight to the room. That's the whole backend.",
+    notes:
+      "And GET /:code/live hands the WebSocket straight to the room. That's the whole backend.",
   }),
   shorty({
     title: "The dashboard just opens a socket",
-    notes: "On the website, each row opens a socket to its link's room and renders whatever arrives.",
+    notes:
+      "On the website, each row opens a socket to its link's room and renders whatever arrives.",
     file: "web/src/useClicks.ts",
     snippet: "useClicks.ts",
     group: "demo-hook",
@@ -2230,7 +2709,8 @@ const liveClicks: StepSpec[] = [
     title: "Click a link, and every dashboard updates",
     url: "http://localhost:5173",
     image: "04-durable-objects-browser-1.png",
-    notes: "Click the link from your phone and the count ticks up here, instantly. No polling, no pub/sub service to set up.",
+    notes:
+      "Click the link from your phone and the count ticks up here, instantly. No polling, no pub/sub service to set up.",
   },
 ];
 
@@ -2238,20 +2718,32 @@ export const steps: StepSpec[] = [
   pick("A programming language for the cloud"),
 
   // 1. The problem, fast
-  pick("Infrastructure as code declares what should be, not what is", "Infrastructure as code: declare what the cloud should be"),
+  pick(
+    "Infrastructure as code declares what should be, not what is",
+    "Infrastructure as code: declare what the cloud should be",
+  ),
   pick("An engine compares it to the cloud, and creates what's missing"),
   pick("Then the AWS CDK came out", "The CDK made it real code"),
-  pick("It also bothered me that the runtime code lived elsewhere", "But the code that runs is a second program"),
+  pick(
+    "It also bothered me that the runtime code lived elsewhere",
+    "But the code that runs is a second program",
+  ),
   pick("Rename one side, and nothing tells you the other broke"),
 
   // 2. The idea: a language for the cloud
-  pick("I wanted one language where a variable could be a cloud resource", "Imagine a language where a variable is a cloud resource"),
+  pick(
+    "I wanted one language where a variable could be a cloud resource",
+    "Imagine a language where a variable is a cloud resource",
+  ),
   pick("You'd declare a queue the same way"),
   pick("Functions would be resources too"),
   pick("When the function reads the bucket, they'd become connected"),
   pick("That connection would need permission to read the bucket"),
   pick("Sending to the queue would connect them the same way"),
-  pick("The language would work all of this out from code", "Least-privilege IAM, inferred from the code"),
+  pick(
+    "The language would work all of this out from code",
+    "Least-privilege IAM, inferred from the code",
+  ),
   pick("But what if the function created a bucket?"),
   pick("Uh-oh. Resources need to be known ahead of time"),
   pick("…and code outside the function has no request to serve"),
@@ -2278,24 +2770,48 @@ export const steps: StepSpec[] = [
   api({
     title: "But permissions are granted at deploy, and deploy runs construction",
     code: INFERRED,
-    marks: [{ kind: "underline", find: "fetch: Effect.gen(function* () {", label: "runs per request, too late to grant anything", side: "right", tone: "bad" }],
+    marks: [
+      {
+        kind: "underline",
+        find: "fetch: Effect.gen(function* () {",
+        label: "runs per request, too late to grant anything",
+        side: "right",
+        tone: "bad",
+      },
+    ],
     req: [],
     fetchReq: [{ name: "R2.GetObject<Uploads>", state: "bad", note: "to read the bucket" }],
     notes:
       "But whatever grants s3:GetObject has to run when the Worker is deployed, and that's construction. fetch only runs once requests arrive, long after the deploy.",
   }),
-  pick("A binding is just another dependency to yield", "So declare it in construction, and get back a client"),
+  pick(
+    "A binding is just another dependency to yield",
+    "So declare it in construction, and get back a client",
+  ),
   pick("A queue works the same way"),
   pick("Then we hand it a Layer for each binding it needs"),
   pick("Each one is a binding layer, and it has two faces"),
   pick("Its first face runs at construction and wires up the binding"),
   pick("Its second face runs at runtime and implements the interface"),
   pick("Conditional infrastructure is just an if statement"),
-  pick("And \"peeking inside\" is solved by just running the code", "Running the code decides what's granted"),
-  pick("Now let's actually deploy it, starting with a Worker", "Wrap it in a Worker, and it deploys", { group: "api-host" }),
-  pick("On Lambda, our Cloudflare binding layers won't compile", "Point it at Lambda, and the types catch the wrong bindings", { group: "api-host" }),
+  pick(
+    'And "peeking inside" is solved by just running the code',
+    "Running the code decides what's granted",
+  ),
+  pick(
+    "Now let's actually deploy it, starting with a Worker",
+    "Wrap it in a Worker, and it deploys",
+    { group: "api-host" },
+  ),
+  pick(
+    "On Lambda, our Cloudflare binding layers won't compile",
+    "Point it at Lambda, and the types catch the wrong bindings",
+    { group: "api-host" },
+  ),
   pick("Swap the native bindings for HTTP, and it runs anywhere", undefined, { group: "api-host" }),
-  pick("Now AWS can call Cloudflare, with only the access it needs", undefined, { group: "api-host" }),
+  pick("Now AWS can call Cloudflare, with only the access it needs", undefined, {
+    group: "api-host",
+  }),
   pick("This is where Stacks come in", "A Stack deploys it"),
   pick("Yielding Api brings its provider requirements with it"),
   pick("…and Cloudflare.providers() satisfies all of them"),

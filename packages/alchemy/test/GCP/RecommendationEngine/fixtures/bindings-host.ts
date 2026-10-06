@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 export const TITLE = "Cotton tee";
@@ -18,8 +18,7 @@ export default class RecommendationEngineBindingsHost extends GCP.Function<Recom
   "RecommendationEngineBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const getCatalogItem =
-      yield* GCP.RecommendationEngine.GetCatalogItem(Shirt);
+    const getCatalogItem = yield* GCP.RecommendationEngine.GetCatalogItem(Shirt);
 
     return {
       fetch: serveProbes({

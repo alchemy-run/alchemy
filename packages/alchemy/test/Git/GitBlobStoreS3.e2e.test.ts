@@ -1,3 +1,15 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 /**
  * Bytes on S3, compute on Cloudflare: the Worker and the Repo DO reach the
  * bucket through the S3 bindings with an identity Alchemy minted. A push
@@ -8,28 +20,13 @@ import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare";
 import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
-import * as ChildProcess from "effect/process/ChildProcess";
 import { makeS3TestStack, TEST_SECRET } from "./fixtures/s3-stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeS3TestStack("GitBlobStoreS3Stack");
 
@@ -139,9 +136,7 @@ test(
        git push -q ${remote} main`,
     );
     // Compact now; the pack is written to the store.
-    yield* admin.repos
-      .compact({ params: { owner, repo: name } })
-      .pipe(edgeRetry);
+    yield* admin.repos.compact({ params: { owner, repo: name } }).pipe(edgeRetry);
     const repo = yield* admin.repos.get({ params: { owner, repo: name } }).pipe(
       edgeRetry,
       Effect.repeat({

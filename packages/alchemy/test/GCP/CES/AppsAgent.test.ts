@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ces from "@distilled.cloud/gcp/ces_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   ces.getProjectsLocationsAppsAgents({ name }).pipe(
@@ -100,9 +97,7 @@ test.provider(
 
       expect(updated.agent.name).toEqual(created.agent.name);
       expect(updated.agent.description).toEqual("greets and routes");
-      expect(updated.agent.instruction).toEqual(
-        "Greet the user and offer help.",
-      );
+      expect(updated.agent.instruction).toEqual("Greet the user and offer help.");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.agent.name);

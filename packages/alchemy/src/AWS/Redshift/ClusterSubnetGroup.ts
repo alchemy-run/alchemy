@@ -11,12 +11,7 @@ import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  applyRedshiftTagDelta,
-  redshiftArn,
-  sameStringSet,
-  toTagRecord,
-} from "./internal.ts";
+import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
 
 export interface ClusterSubnetGroupProps {
   /**
@@ -104,9 +99,7 @@ export interface ClusterSubnetGroup extends Resource<
  *
  * @resource
  */
-export const ClusterSubnetGroup = Resource<ClusterSubnetGroup>(
-  "AWS.Redshift.ClusterSubnetGroup",
-);
+export const ClusterSubnetGroup = Resource<ClusterSubnetGroup>("AWS.Redshift.ClusterSubnetGroup");
 
 /**
  * Retry an effect while the subnet group is still held by a cluster that is
@@ -141,9 +134,7 @@ export const ClusterSubnetGroupProvider = () =>
         const response = yield* redshift
           .describeClusterSubnetGroups({ ClusterSubnetGroupName: name })
           .pipe(
-            Effect.catchTag("ClusterSubnetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.succeed(undefined)),
           );
         return response?.ClusterSubnetGroups?.[0];
       });
@@ -151,9 +142,7 @@ export const ClusterSubnetGroupProvider = () =>
       const toAttrs = Effect.fn(function* (group: redshift.ClusterSubnetGroup) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!group.ClusterSubnetGroupName) {
-          return yield* Effect.fail(
-            new Error("Cluster subnet group is missing its name"),
-          );
+          return yield* Effect.fail(new Error("Cluster subnet group is missing its name"));
         }
         return {
           clusterSubnetGroupName: group.ClusterSubnetGroupName,
@@ -178,27 +167,21 @@ export const ClusterSubnetGroupProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.clusterSubnetGroupName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.clusterSubnetGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* readGroup(name);
           if (!group?.ClusterSubnetGroupName) return undefined;
           const attrs = yield* toAttrs(group);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.clusterSubnetGroupName ?? (yield* toName(id, news));
+          const name = output?.clusterSubnetGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const description = news.description ?? "Managed by Alchemy";
@@ -219,12 +202,7 @@ export const ClusterSubnetGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ClusterSubnetGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ClusterSubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.ClusterSubnetGroupName) {
               return yield* Effect.fail(
@@ -250,9 +228,7 @@ export const ClusterSubnetGroupProvider = () =>
             observed = yield* readGroup(name);
             if (!observed?.ClusterSubnetGroupName) {
               return yield* Effect.fail(
-                new Error(
-                  `Cluster subnet group '${name}' not found after update`,
-                ),
+                new Error(`Cluster subnet group '${name}' not found after update`),
               );
             }
           }
@@ -261,10 +237,7 @@ export const ClusterSubnetGroupProvider = () =>
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "subnetgroup", name);
-          const { removed, upsert } = diffTags(
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          const { removed, upsert } = diffTags(toTagRecord(observed.Tags), desiredTags);
           yield* applyRedshiftTagDelta({ arn, upsert, removed });
 
           yield* session.note(arn);
@@ -281,9 +254,7 @@ export const ClusterSubnetGroupProvider = () =>
                 ClusterSubnetGroupName: output.clusterSubnetGroupName,
               })
               .pipe(
-                Effect.catchTag("ClusterSubnetGroupNotFoundFault", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.succeed(undefined)),
               ),
           );
         }),
@@ -300,9 +271,7 @@ export const ClusterSubnetGroupProvider = () =>
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((group) => toAttrs(group), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((group) => toAttrs(group), { concurrency: 4 })),
           ),
       };
     }),

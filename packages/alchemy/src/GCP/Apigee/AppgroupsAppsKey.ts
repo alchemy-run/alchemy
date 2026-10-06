@@ -141,9 +141,7 @@ export type AppgroupsAppsKey = Resource<
  * @resource
  * @category Apigee
  */
-export const AppgroupsAppsKey = Resource<AppgroupsAppsKey>(
-  "GCP.Apigee.AppgroupsAppsKey",
-);
+export const AppgroupsAppsKey = Resource<AppgroupsAppsKey>("GCP.Apigee.AppgroupsAppsKey");
 
 export class AppgroupsAppsKeyNotResolved extends Data.TaggedError(
   "GCP.Apigee.AppgroupsAppsKeyNotResolved",
@@ -154,18 +152,13 @@ export class AppgroupsAppsKeyNotResolved extends Data.TaggedError(
 const appGroupIdOf = (appGroup: string) =>
   appGroup.includes("/appgroups/") ? lastSegment(appGroup) : appGroup;
 
-const appNameOf = (app: string) =>
-  app.includes("/apps/") ? lastSegment(app) : app;
+const appNameOf = (app: string) => (app.includes("/apps/") ? lastSegment(app) : app);
 
 const appParentOf = (organization: string, appGroup: string, app: string) =>
   `${childName(orgNameOf(organization), "appgroups", appGroupIdOf(appGroup))}/apps/${appNameOf(app)}`;
 
-const resourceName = (
-  organization: string,
-  appGroup: string,
-  app: string,
-  consumerKey: string,
-) => `${appParentOf(organization, appGroup, app)}/keys/${consumerKey}`;
+const resourceName = (organization: string, appGroup: string, app: string, consumerKey: string) =>
+  `${appParentOf(organization, appGroup, app)}/keys/${consumerKey}`;
 
 const toKeyId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -210,11 +203,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroupsAppsKeys({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const listAppGroups = (organization: string) =>
   collectPages(
@@ -244,14 +233,7 @@ const listApps = (parent: string) =>
 
 export const AppgroupsAppsKeyProvider = () =>
   Provider.succeed(AppgroupsAppsKey, {
-    stables: [
-      "name",
-      "consumerKey",
-      "appGroup",
-      "app",
-      "organization",
-      "issuedAt",
-    ],
+    stables: ["name", "consumerKey", "appGroup", "app", "organization", "issuedAt"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -269,26 +251,17 @@ export const AppgroupsAppsKeyProvider = () =>
         news.consumerSecret !== undefined &&
         news.consumerSecret !== previousSecret;
       const groupChanged =
-        previousGroup !== undefined &&
-        appGroupIdOf(news.appGroup) !== appGroupIdOf(previousGroup);
+        previousGroup !== undefined && appGroupIdOf(news.appGroup) !== appGroupIdOf(previousGroup);
       const appChanged =
-        previousApp !== undefined &&
-        appNameOf(news.app) !== appNameOf(previousApp);
+        previousApp !== undefined && appNameOf(news.app) !== appNameOf(previousApp);
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
         orgIdOf(news.organization) !== orgIdOf(previousOrg);
-      if (
-        keyChanged ||
-        secretChanged ||
-        groupChanged ||
-        appChanged ||
-        orgChanged
-      ) {
+      if (keyChanged || secretChanged || groupChanged || appChanged || orgChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            keyChanged && !groupChanged && !appChanged && !orgChanged,
+          deleteFirst: keyChanged && !groupChanged && !appChanged && !orgChanged,
         };
       }
       return undefined;
@@ -296,26 +269,16 @@ export const AppgroupsAppsKeyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
       const appGroup = olds?.appGroup ?? output?.appGroup;
       const app = olds?.app ?? output?.app;
       if (appGroup === undefined || app === undefined) return undefined;
-      const consumerKey = yield* toKeyId(
-        id,
-        olds?.consumerKey,
-        output?.consumerKey,
-      );
-      const name =
-        output?.name ?? resourceName(organization, appGroup, app, consumerKey);
+      const consumerKey = yield* toKeyId(id, olds?.consumerKey, output?.consumerKey);
+      const name = output?.name ?? resourceName(organization, appGroup, app, consumerKey);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, appGroup, app);
-      return (yield* ownedBy(id, attributesToRecord(existing.attributes)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedBy(id, attributesToRecord(existing.attributes))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -339,16 +302,13 @@ export const AppgroupsAppsKeyProvider = () =>
                         name: `${parent}/apps/${appName}`,
                       })
                       .pipe(
-                        Effect.catchTag(
-                          ["NotFound", "ApigeeResourceNotFound"],
-                          () => Effect.succeed(app),
+                        Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+                          Effect.succeed(app),
                         ),
                       );
               for (const credential of fetched.credentials ?? []) {
                 const labels = attributesToRecord(credential.attributes);
-                if (
-                  !Object.keys(labels).some((key) => key.startsWith("alchemy-"))
-                ) {
+                if (!Object.keys(labels).some((key) => key.startsWith("alchemy-"))) {
                   continue;
                 }
                 rows.push(
@@ -361,12 +321,10 @@ export const AppgroupsAppsKeyProvider = () =>
                       attributes: credential.attributes,
                       issuedAt: credential.issuedAt,
                       expiresAt: credential.expiresAt,
-                      apiProducts: (credential.apiProducts ?? []).map(
-                        (product) => ({
-                          apiproduct: product.apiproduct,
-                          status: product.status,
-                        }),
-                      ),
+                      apiProducts: (credential.apiProducts ?? []).map((product) => ({
+                        apiproduct: product.apiproduct,
+                        status: product.status,
+                      })),
                     },
                     organization,
                     groupId,
@@ -385,15 +343,8 @@ export const AppgroupsAppsKeyProvider = () =>
       const organization = defaultOrgName(env.project, news.organization);
       const appGroup = appGroupIdOf(news.appGroup);
       const app = appNameOf(news.app);
-      const consumerKey = yield* toKeyId(
-        id,
-        news.consumerKey,
-        output?.consumerKey,
-      );
-      const consumerSecret = yield* toSecret(
-        id,
-        news.consumerSecret ?? output?.consumerSecret,
-      );
+      const consumerKey = yield* toKeyId(id, news.consumerKey, output?.consumerKey);
+      const consumerSecret = yield* toSecret(id, news.consumerSecret ?? output?.consumerSecret);
       const parent = appParentOf(organization, appGroup, app);
       const name = `${parent}/keys/${consumerKey}`;
       const ownership = yield* createOwnership(id);
@@ -430,25 +381,19 @@ export const AppgroupsAppsKeyProvider = () =>
       const statusChanged = (current.status ?? "") !== status;
       const attributesChanged = !sameRecord(observedAttributes, attributes);
 
-      if (
-        scopesChanged ||
-        productsChanged ||
-        statusChanged ||
-        attributesChanged
-      ) {
-        current =
-          yield* apigee.updateAppGroupAppKeyOrganizationsAppgroupsAppsKeys({
-            name,
-            body: {
-              action: statusChanged ? status : undefined,
-              apiProducts: news.apiProducts,
-              appGroupAppKey: {
-                consumerKey,
-                scopes: news.scopes,
-                attributes: recordToAttributes(attributes),
-              },
+      if (scopesChanged || productsChanged || statusChanged || attributesChanged) {
+        current = yield* apigee.updateAppGroupAppKeyOrganizationsAppgroupsAppsKeys({
+          name,
+          body: {
+            action: statusChanged ? status : undefined,
+            apiProducts: news.apiProducts,
+            appGroupAppKey: {
+              consumerKey,
+              scopes: news.scopes,
+              attributes: recordToAttributes(attributes),
             },
-          });
+          },
+        });
       }
 
       return toAttrs(current, organization, appGroup, app);
@@ -457,11 +402,6 @@ export const AppgroupsAppsKeyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsAppgroupsAppsKeys({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

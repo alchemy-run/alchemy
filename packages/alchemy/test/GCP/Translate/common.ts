@@ -1,6 +1,6 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import { MinimumLogLevel } from "effect/References";
 import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -9,9 +9,7 @@ export const logLevel = Effect.provideService(
 
 export const runLifecycle = !process.env.FAST;
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 
 export const location = "us-central1";
 

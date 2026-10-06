@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,10 +17,10 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_MACHINE_TYPE = "e2-micro";
-const DEFAULT_SOURCE_IMAGE =
-  "projects/debian-cloud/global/images/family/debian-12";
+const DEFAULT_SOURCE_IMAGE = "projects/debian-cloud/global/images/family/debian-12";
 const DEFAULT_DISK_SIZE_GB = "10";
 const DEFAULT_NETWORK = "global/networks/default";
 const MAX_NAME_LENGTH = 63;
@@ -222,9 +221,7 @@ export type InstanceTemplate = Resource<
  * @resource
  * @category Compute
  */
-export const InstanceTemplate = Resource<InstanceTemplate>(
-  "GCP.Compute.InstanceTemplate",
-);
+export const InstanceTemplate = Resource<InstanceTemplate>("GCP.Compute.InstanceTemplate");
 
 export class InstanceTemplateNotResolved extends Data.TaggedError(
   "GCP.Compute.InstanceTemplateNotResolved",
@@ -248,9 +245,7 @@ const DEFAULT_DISKS: InstanceTemplateDisk[] = [
   },
 ];
 
-const DEFAULT_NICS: InstanceTemplateNetworkInterface[] = [
-  { network: DEFAULT_NETWORK },
-];
+const DEFAULT_NICS: InstanceTemplateNetworkInterface[] = [{ network: DEFAULT_NETWORK }];
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -276,19 +271,13 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const sortedRecord = (
-  labels: Record<string, string> | undefined,
-): Record<string, string> =>
+const sortedRecord = (labels: Record<string, string> | undefined): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(labels ?? {}).sort(([left], [right]) =>
-      left.localeCompare(right),
-    ),
+    Object.entries(labels ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   );
 
 const resolvedDisks = (props: InstanceTemplateProps) =>
-  props.disks !== undefined && props.disks.length > 0
-    ? props.disks
-    : DEFAULT_DISKS;
+  props.disks !== undefined && props.disks.length > 0 ? props.disks : DEFAULT_DISKS;
 
 const resolvedNics = (props: InstanceTemplateProps) =>
   props.networkInterfaces !== undefined && props.networkInterfaces.length > 0
@@ -350,8 +339,7 @@ const initializeParamsOf = (
     diskType: disk.diskType,
     diskName: disk.diskName,
     labels: disk.labels,
-    diskSizeGb:
-      disk.diskSizeGb !== undefined ? String(disk.diskSizeGb) : undefined,
+    diskSizeGb: disk.diskSizeGb !== undefined ? String(disk.diskSizeGb) : undefined,
   };
 };
 
@@ -367,9 +355,7 @@ const toDisks = (disks: InstanceTemplateDisk[]): compute.AttachedDisk[] =>
     initializeParams: disk.source ? undefined : initializeParamsOf(disk),
   }));
 
-const toNics = (
-  nics: InstanceTemplateNetworkInterface[],
-): compute.NetworkInterface[] =>
+const toNics = (nics: InstanceTemplateNetworkInterface[]): compute.NetworkInterface[] =>
   nics.map((nic) => ({
     network: nic.network,
     subnetwork: nic.subnetwork,
@@ -386,8 +372,7 @@ const toProperties = (
   machineType: news.machineType ?? DEFAULT_MACHINE_TYPE,
   canIpForward: news.canIpForward,
   labels,
-  tags:
-    news.networkTags !== undefined ? { items: news.networkTags } : undefined,
+  tags: news.networkTags !== undefined ? { items: news.networkTags } : undefined,
   metadata:
     news.metadata !== undefined
       ? {
@@ -404,9 +389,7 @@ const toProperties = (
 });
 
 const bootSourceImage = (template: compute.InstanceTemplate) => {
-  const boot = (template.properties?.disks ?? []).find(
-    (disk) => disk.boot === true,
-  );
+  const boot = (template.properties?.disks ?? []).find((disk) => disk.boot === true);
   return boot?.initializeParams?.sourceImage;
 };
 
@@ -437,14 +420,11 @@ const waitUntilPresent = (project: string, templateName: string) =>
         : Effect.fail(new InstanceTemplateNotResolved({ templateName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InstanceTemplateNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InstanceTemplateNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("GCP.Compute.InstanceTemplateNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.InstanceTemplateNotResolved", () => Effect.succeed(undefined)),
   );
 
 const waitUntilGone = (project: string, templateName: string) =>
@@ -455,26 +435,16 @@ const waitUntilGone = (project: string, templateName: string) =>
         : Effect.fail(new InstanceTemplateStillExists({ templateName })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InstanceTemplateStillExists",
+      while: (error) => error._tag === "GCP.Compute.InstanceTemplateStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.InstanceTemplateStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.InstanceTemplateStillExists", () => Effect.void),
   );
 
 export const InstanceTemplateProvider = () =>
   Provider.succeed(InstanceTemplate, {
-    stables: [
-      "templateName",
-      "project",
-      "templateId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["templateName", "project", "templateId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -487,8 +457,7 @@ export const InstanceTemplateProvider = () =>
         news.templateName !== undefined &&
         previousName !== undefined &&
         news.templateName !== previousName;
-      const propsChanged =
-        olds !== undefined && fingerprint(news) !== fingerprint(olds);
+      const propsChanged = olds !== undefined && fingerprint(news) !== fingerprint(olds);
       const adoptedChanged =
         olds === undefined &&
         output !== undefined &&
@@ -504,26 +473,17 @@ export const InstanceTemplateProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          nextName === previousName,
+          previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateName = yield* toName(
-        id,
-        olds?.templateName,
-        output?.templateName,
-      );
+      const templateName = yield* toName(id, olds?.templateName, output?.templateName);
       const existing = yield* getByName(env.project, templateName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.properties?.labels),
-      ))
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.properties?.labels)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -547,11 +507,7 @@ export const InstanceTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateName = yield* toName(
-        id,
-        news.templateName,
-        output?.templateName,
-      );
+      const templateName = yield* toName(id, news.templateName, output?.templateName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

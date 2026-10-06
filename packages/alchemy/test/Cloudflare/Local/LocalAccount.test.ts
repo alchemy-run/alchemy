@@ -1,10 +1,10 @@
-import { ProfileStore, type ProviderConfig } from "@/Auth/Profile.ts";
-import { LOCAL_ACCOUNT_ID, localAccountId } from "@/Cloudflare/LocalAccount.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { ProfileStore, type ProviderConfig } from "@/Auth/Profile.ts";
+import { LOCAL_ACCOUNT_ID, localAccountId } from "@/Cloudflare/LocalAccount.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Layer.empty });
 const PROFILE_ACCOUNT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -60,9 +60,7 @@ test(
     expect(
       yield* localAccountId.pipe(
         Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({ CLOUDFLARE_ACCOUNT_ID: ENV_ACCOUNT }),
-          ),
+          ConfigProvider.layer(ConfigProvider.fromUnknown({ CLOUDFLARE_ACCOUNT_ID: ENV_ACCOUNT })),
         ),
       ),
     ).toBe(ENV_ACCOUNT);

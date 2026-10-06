@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -18,13 +18,7 @@ import {
 const { test } = Test.make({ providers: GCP.providers() });
 
 const fixtureDir = awsFixture("solidstart-app");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "vite.config.ts",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "vite.config.ts", "src", "public"];
 
 test.provider.skipIf(!dockerAvailable)(
   "SolidStart: deploy, GET page and API route, destroy, gone",
@@ -43,12 +37,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.SolidStart("Web", {
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "vite.config.ts",
-              ],
+              include: ["src/**", "public/**", "package.json", "vite.config.ts"],
             },
           });
           return { site };
@@ -64,14 +53,10 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "SolidStart /",
       });
-      yield* expectUrlContains(
-        `${url}/api/hello?echo=roundtrip`,
-        "SOLIDSTART_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "SolidStart /api/hello?echo=roundtrip",
-        },
-      );
+      yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "SOLIDSTART_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "SolidStart /api/hello?echo=roundtrip",
+      });
 
       yield* stack.destroy();
       yield* assertSiteGone(service);

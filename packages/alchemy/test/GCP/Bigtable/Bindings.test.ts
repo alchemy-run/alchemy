@@ -1,15 +1,11 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import BigtableBindingsHost, {
-  Db,
-  Nodes,
-  Rows,
-} from "./fixtures/bindings-host.ts";
+import BigtableBindingsHost, { Db, Nodes, Rows } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -23,9 +19,7 @@ let tableName: string;
 
 const hostRoles = (policy: bigtable.Policy) =>
   (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)
     .sort();
 
@@ -84,10 +78,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the instance as the host's service account, granted on the instance only",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<bigtable.Instance>(
-              baseUrl,
-              "getInstance",
-            );
+            const live = yield* expectProbe<bigtable.Instance>(baseUrl, "getInstance");
             const actual = yield* bigtable.getProjectsInstances({
               name: instanceName,
             });
@@ -108,10 +99,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the cluster as the host's service account, granted on the instance only",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<bigtable.Cluster>(
-              baseUrl,
-              "getCluster",
-            );
+            const live = yield* expectProbe<bigtable.Cluster>(baseUrl, "getCluster");
             expect(live.name).toEqual(clusterName);
             expect(live.serveNodes).toEqual(1);
             expect(live.defaultStorageType).toEqual("HDD");
@@ -129,10 +117,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "reads the table as the host's service account, granted on the table only",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<bigtable.Table>(
-              baseUrl,
-              "getTable",
-            );
+            const live = yield* expectProbe<bigtable.Table>(baseUrl, "getTable");
             expect(live.name).toEqual(tableName);
             expect(Object.keys(live.columnFamilies ?? {})).toEqual(["cf"]);
             yield* expectTableGrants;

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Application, ApplicationSnapshot } from "@/AWS/KinesisAnalyticsV2";
-import * as Test from "@/Test/Alchemy";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Application, ApplicationSnapshot } from "@/AWS/KinesisAnalyticsV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -57,9 +57,7 @@ describe.skipIf(gated)(
 
           expect(deployed.app.applicationStatus).toEqual("RUNNING");
           expect(deployed.snapshot.snapshotStatus).toEqual("READY");
-          expect(deployed.snapshot.applicationName).toEqual(
-            deployed.app.applicationName,
-          );
+          expect(deployed.snapshot.applicationName).toEqual(deployed.app.applicationName);
 
           // Out-of-band verification via distilled.
           const described = yield* analytics.describeApplicationSnapshot({
@@ -72,9 +70,7 @@ describe.skipIf(gated)(
 
           // The snapshot is deleted with the stack (before the application).
           const gone = yield* analytics
-            .describeApplication({
-              ApplicationName: deployed.app.applicationName,
-            })
+            .describeApplication({ ApplicationName: deployed.app.applicationName })
             .pipe(Effect.flip);
           expect(gone._tag).toEqual("ResourceNotFoundException");
         }),

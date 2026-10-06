@@ -1,9 +1,9 @@
 import * as AWS from "alchemy/AWS";
-import { Cluster } from "./Hosts.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Files, FilesS3 } from "./Files.ts";
+import { Cluster } from "./Hosts.ts";
 
 // #region show
 export default AWS.ECS.Service(
@@ -18,7 +18,8 @@ export default AWS.ECS.Service(
         const request = yield* HttpServerRequest;
         yield* files.upload(request.url, yield* request.text);
         return HttpServerResponse.empty({ status: 201 });
-      })/*hide*/.pipe(Effect.orDie)/*end*/,
+      }) /*hide*/
+        .pipe(Effect.orDie) /*end*/,
     };
   }).pipe(Effect.provide(FilesS3)),
 );

@@ -34,9 +34,7 @@ export interface FlagshipAuth {
  * The HTTP evaluate endpoint only supports a single `targetingKey` query
  * param, not the full flat evaluation context the Worker binding accepts.
  */
-const targetingKeyOf = (
-  context: EvaluationContext | undefined,
-): string | undefined => {
+const targetingKeyOf = (context: EvaluationContext | undefined): string | undefined => {
   const value = context?.["targetingKey"];
   return value === undefined ? undefined : String(value);
 };
@@ -112,8 +110,7 @@ export const makeHttpFlagshipClient = (
   const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
   const isString = (v: unknown): v is string => typeof v === "string";
   const isNumber = (v: unknown): v is number => typeof v === "number";
-  const isObjectLike = (v: unknown): boolean =>
-    v !== null && typeof v === "object";
+  const isObjectLike = (v: unknown): boolean => v !== null && typeof v === "object";
 
   return {
     // The raw runtime binding is a workerd object with no HTTP surface.
@@ -138,9 +135,7 @@ export const makeHttpFlagshipClient = (
     getObjectValue: (flagKey, defaultValue, context) =>
       evaluate(flagKey, context).pipe(
         Effect.map((r) =>
-          isObjectLike(r.value)
-            ? (r.value as typeof defaultValue)
-            : defaultValue,
+          isObjectLike(r.value) ? (r.value as typeof defaultValue) : defaultValue,
         ),
         Effect.catch(() => Effect.succeed(defaultValue)),
       ),

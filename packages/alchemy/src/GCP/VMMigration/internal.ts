@@ -17,15 +17,11 @@ export const GLOBAL_LOCATION = "global";
 export const MAX_NAME_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.VMMigration.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.VMMigration.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.VMMigration.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.VMMigration.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -48,16 +44,13 @@ export const rfc1035 = (name: string, fallback = "vm"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
 
-export const globalParent = (project: string) =>
-  `projects/${project}/locations/${GLOBAL_LOCATION}`;
+export const globalParent = (project: string) => `projects/${project}/locations/${GLOBAL_LOCATION}`;
 
 export const parentOfName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -83,26 +76,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -127,9 +110,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -152,13 +134,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -196,11 +175,9 @@ export const replaceOnIdentity = (input: {
  * Wait for a Migrate to Virtual Machines long-running operation. Sources, groups, and utilization reports settle in minutes; migrating-VM and image-import operations take longer.
  */
 export const waitForOperation = (operation: vm.Operation) =>
-  waitForGcpOperation(
-    operation,
-    (name) => vm.getProjectsLocationsOperations({ name }),
-    { budget: "20 minutes" },
-  );
+  waitForGcpOperation(operation, (name) => vm.getProjectsLocationsOperations({ name }), {
+    budget: "20 minutes",
+  });
 
 export const waitUntilExists = <A, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
@@ -253,8 +230,7 @@ export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => list(`projects/${project}/locations/${region}`),
     ),
   );
@@ -274,9 +250,7 @@ export const listSources = (project: string, region: string) =>
           pageSize: 1000,
         }),
         (page) => page.sources,
-      ).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([] as vm.Source[])),
-      ),
+      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as vm.Source[]))),
     ),
   );
 
@@ -288,20 +262,11 @@ export const forEachSource = <A, E, R>(
   Effect.gen(function* () {
     const sources = yield* listSources(project, region);
     const named = sources.filter((source) => (source.name ?? "").length > 0);
-    const groups = yield* Effect.forEach(
-      named,
-      (source) => list(source.name!),
-      { concurrency: 4 },
-    );
+    const groups = yield* Effect.forEach(named, (source) => list(source.name!), { concurrency: 4 });
     return groups.flat();
   });
 
-const markerOf = (
-  labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -309,10 +274,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -342,10 +304,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -373,14 +332,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -390,17 +345,8 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });

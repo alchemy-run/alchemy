@@ -13,9 +13,7 @@ export const LIST_LOCATIONS = ["global"] as const;
 export const MAX_ID_LENGTH = 63;
 export const MAX_ITEM_LENGTH = 100;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Speech.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Speech.ResourceNotResolved")<{
   name: string;
 }> {}
 
@@ -63,16 +61,10 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -90,10 +82,8 @@ export const resourceNameOf = (
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameNumber = (
-  left: number | undefined,
-  right: number | undefined,
-) => (left ?? 0) === (right ?? 0);
+export const sameNumber = (left: number | undefined, right: number | undefined) =>
+  (left ?? 0) === (right ?? 0);
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -116,11 +106,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -132,13 +120,9 @@ export const replaceOnIdentity = (input: {
   nextLocation?: string;
 }) => {
   const previousLocation =
-    input.previousLocation !== undefined
-      ? normalizeLocation(input.previousLocation)
-      : undefined;
+    input.previousLocation !== undefined ? normalizeLocation(input.previousLocation) : undefined;
   const nextLocation =
-    input.nextLocation !== undefined
-      ? normalizeLocation(input.nextLocation)
-      : undefined;
+    input.nextLocation !== undefined ? normalizeLocation(input.nextLocation) : undefined;
   const replace =
     (input.previousId !== undefined &&
       input.nextId !== undefined &&
@@ -196,13 +180,11 @@ export type Phrase = {
   boost?: number;
 };
 
-export const markerFromItems = (
-  items: readonly { value?: string }[] | null | undefined,
-) => (items ?? []).find((item) => isOwnershipMarker(item.value))?.value;
+export const markerFromItems = (items: readonly { value?: string }[] | null | undefined) =>
+  (items ?? []).find((item) => isOwnershipMarker(item.value))?.value;
 
-export const markerFromPhrases = (
-  phrases: readonly { value?: string }[] | null | undefined,
-) => (phrases ?? []).find((phrase) => isOwnershipMarker(phrase.value))?.value;
+export const markerFromPhrases = (phrases: readonly { value?: string }[] | null | undefined) =>
+  (phrases ?? []).find((phrase) => isOwnershipMarker(phrase.value))?.value;
 
 export const stripOwnershipItems = (
   items: readonly { value?: string }[] | null | undefined,
@@ -257,14 +239,10 @@ export const samePhrases = (
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.Speech.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.Speech.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -309,9 +287,7 @@ export const listCustomClassesAt = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.customClasses,
-      ).pipe(
-        Effect.catchTag("NotFound", () => emptyList<speech.CustomClass>()),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<speech.CustomClass>()));
 
 export const listPhraseSetsAt = (parent: string) =>
   parent.length === 0
@@ -329,11 +305,9 @@ const listLocationParents = (project: string) =>
 
 export const listProjectCustomClasses = (project: string) =>
   Effect.gen(function* () {
-    const groups = yield* Effect.forEach(
-      listLocationParents(project),
-      listCustomClassesAt,
-      { concurrency: 2 },
-    );
+    const groups = yield* Effect.forEach(listLocationParents(project), listCustomClassesAt, {
+      concurrency: 2,
+    });
     const seen = new Set<string>();
     const classes: speech.CustomClass[] = [];
     for (const customClass of groups.flat()) {
@@ -347,11 +321,9 @@ export const listProjectCustomClasses = (project: string) =>
 
 export const listProjectPhraseSets = (project: string) =>
   Effect.gen(function* () {
-    const groups = yield* Effect.forEach(
-      listLocationParents(project),
-      listPhraseSetsAt,
-      { concurrency: 2 },
-    );
+    const groups = yield* Effect.forEach(listLocationParents(project), listPhraseSetsAt, {
+      concurrency: 2,
+    });
     const seen = new Set<string>();
     const phraseSets: speech.PhraseSet[] = [];
     for (const phraseSet of groups.flat()) {
@@ -371,18 +343,14 @@ export const listProjectPhraseSets = (project: string) =>
 export const listOwnedCustomClasses = (project: string) =>
   listProjectCustomClasses(project).pipe(
     Effect.map((classes) =>
-      classes.filter((customClass) =>
-        hasOwnershipMarker(markerFromItems(customClass.items)),
-      ),
+      classes.filter((customClass) => hasOwnershipMarker(markerFromItems(customClass.items))),
     ),
   );
 
 export const listOwnedPhraseSets = (project: string) =>
   listProjectPhraseSets(project).pipe(
     Effect.map((phraseSets) =>
-      phraseSets.filter((phraseSet) =>
-        hasOwnershipMarker(markerFromPhrases(phraseSet.phrases)),
-      ),
+      phraseSets.filter((phraseSet) => hasOwnershipMarker(markerFromPhrases(phraseSet.phrases))),
     ),
   );
 

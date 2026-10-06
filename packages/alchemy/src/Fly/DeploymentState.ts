@@ -1,14 +1,8 @@
 import type { FlyMachineConfig } from "@distilled.cloud/fly-io/machines";
-import {
-  pinsFromConfig,
-  sameImageSet,
-  validObservedImageSet,
-} from "./DeploymentImages.ts";
+import { pinsFromConfig, sameImageSet, validObservedImageSet } from "./DeploymentImages.ts";
 import { alchemyMetadataKeys as keys } from "./Metadata.ts";
 
-type DeploymentState =
-  | { protocol: "legacy" | "1" | "2" }
-  | { protocol: "invalid"; reason: string };
+type DeploymentState = { protocol: "legacy" | "1" | "2" } | { protocol: "invalid"; reason: string };
 
 /** Observation and reconciliation must agree before treating a Machine as legacy. */
 export const classifyDeploymentState = (machine: {
@@ -52,9 +46,7 @@ export const classifyDeploymentState = (machine: {
 };
 
 /** Required recovery fields for a complete protocol-2 generation member. */
-const validProtocol2RecoveryMetadata = (machine: {
-  config?: FlyMachineConfig;
-}): boolean => {
+const validProtocol2RecoveryMetadata = (machine: { config?: FlyMachineConfig }): boolean => {
   if (!validObservedImageSet(machine)) return false;
   const recorded = machine.config?.metadata;
   const countText = recorded?.[keys.count] ?? "";
@@ -103,10 +95,7 @@ export const validProtocol2Generation = (
       metadata?.[keys.roles] !== first[keys.roles] ||
       replica === undefined ||
       indices.has(replica) ||
-      !sameImageSet(
-        pinsFromConfig(machine.config),
-        pinsFromConfig(group[0]?.config),
-      )
+      !sameImageSet(pinsFromConfig(machine.config), pinsFromConfig(group[0]?.config))
     )
       return false;
     indices.add(replica);

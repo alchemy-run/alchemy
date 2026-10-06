@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Output from "@/Output";
-import * as Effect from "effect/Effect";
 
 /**
  * A BigQuery table Feature Groups can register as their source: one row

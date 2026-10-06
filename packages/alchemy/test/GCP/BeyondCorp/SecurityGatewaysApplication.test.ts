@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -93,10 +93,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.endpointMatchers[0]?.hostname).toEqual("app.example.com");
       expect(created.displayName).toEqual("app a");
 
-      const fetched =
-        yield* beyondcorp.getProjectsLocationsSecurityGatewaysApplications({
-          name: created.name,
-        });
+      const fetched = yield* beyondcorp.getProjectsLocationsSecurityGatewaysApplications({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toContain("app a");
 
@@ -110,9 +109,7 @@ test.provider.skipIf(!runLifecycle)(
           return yield* GCP.BeyondCorp.SecurityGatewaysApplication("Web", {
             securityGateway: gateway.name,
             applicationId: created.applicationId,
-            endpointMatchers: [
-              { hostname: "app.example.com", ports: [80, 443] },
-            ],
+            endpointMatchers: [{ hostname: "app.example.com", ports: [80, 443] }],
             displayName: "app b",
           });
         }),
@@ -120,9 +117,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(updated.name).toEqual(created.name);
       expect(updated.displayName).toEqual("app b");
-      expect(updated.endpointMatchers[0]?.ports).toEqual(
-        expect.arrayContaining([80, 443]),
-      );
+      expect(updated.endpointMatchers[0]?.ports).toEqual(expect.arrayContaining([80, 443]));
 
       yield* stack.destroy();
 

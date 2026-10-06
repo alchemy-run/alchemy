@@ -1,21 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const parentOf = (project: string) =>
-  `projects/${project}/locations/us-central1`;
+const parentOf = (project: string) => `projects/${project}/locations/us-central1`;
 const missingDeploymentOf = (project: string) =>
   `${parentOf(project)}/deployments/alchemy-missing-deployment`;
 
@@ -97,12 +93,9 @@ test.provider.skipIf(!runLifecycle)(
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
-            return yield* GCP.WorkloadManager.DeploymentsActuation(
-              "Bootstrap",
-              {
-                deployment: missingDeployment,
-              },
-            );
+            return yield* GCP.WorkloadManager.DeploymentsActuation("Bootstrap", {
+              deployment: missingDeployment,
+            });
           }),
         ),
       );
@@ -116,9 +109,7 @@ test.provider.skipIf(!runLifecycle)(
   },
 );
 
-test.provider.skipIf(
-  !runLifecycle || !process.env.GCP_TEST_WORKLOADMANAGER_DEPLOYMENT,
-)(
+test.provider.skipIf(!runLifecycle || !process.env.GCP_TEST_WORKLOADMANAGER_DEPLOYMENT)(
   "create and delete an actuation under an entitled deployment",
   (stack) =>
     Effect.gen(function* () {
@@ -141,10 +132,9 @@ test.provider.skipIf(
       expect(created.deployment).toEqual(deploymentName);
       expect(created.project).toEqual(project);
 
-      const fetched =
-        yield* workloadmanager.getProjectsLocationsDeploymentsActuations({
-          name: created.name,
-        });
+      const fetched = yield* workloadmanager.getProjectsLocationsDeploymentsActuations({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();

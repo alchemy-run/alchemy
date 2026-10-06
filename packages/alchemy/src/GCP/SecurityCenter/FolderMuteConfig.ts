@@ -132,9 +132,7 @@ export type FolderMuteConfig = Resource<
  * @resource
  * @category SecurityCenter
  */
-export const FolderMuteConfig = Resource<FolderMuteConfig>(
-  "GCP.SecurityCenter.FolderMuteConfig",
-);
+export const FolderMuteConfig = Resource<FolderMuteConfig>("GCP.SecurityCenter.FolderMuteConfig");
 
 const resourceName = (folder: string, muteConfigId: string) =>
   `${folder}/muteConfigs/${muteConfigId}`;
@@ -173,22 +171,12 @@ const getByName = (name: string) =>
 
 export const FolderMuteConfigProvider = () =>
   Provider.succeed(FolderMuteConfig, {
-    stables: [
-      "name",
-      "muteConfigId",
-      "folder",
-      "folderId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "muteConfigId", "folder", "folderId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return (
-        replaceOn(
-          olds?.muteConfigId ?? output?.muteConfigId,
-          news.muteConfigId,
-        ) ??
+        replaceOn(olds?.muteConfigId ?? output?.muteConfigId, news.muteConfigId) ??
         replaceOn(
           olds?.folder ?? output?.folder,
           news.folder !== undefined ? folderParent(news.folder) : undefined,
@@ -199,22 +187,13 @@ export const FolderMuteConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const folder = yield* resolveFolder(
-        olds?.folder ?? output?.folder,
-        output?.folder,
-      );
-      const muteConfigId = yield* toPhysicalId(
-        id,
-        olds?.muteConfigId,
-        output?.muteConfigId,
-      );
+      const folder = yield* resolveFolder(olds?.folder ?? output?.folder, output?.folder);
+      const muteConfigId = yield* toPhysicalId(id, olds?.muteConfigId, output?.muteConfigId);
       const name = output?.name ?? resourceName(folder, muteConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, folder, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -222,28 +201,20 @@ export const FolderMuteConfigProvider = () =>
         const env = yield* GcpEnvironment.current;
         const folder = yield* tryResolveFolder();
         if (folder === undefined) return [];
-        return yield* scc.listFoldersMuteConfigs
-          .pages({ parent: folder, pageSize: 100 })
-          .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.muteConfigs ?? []),
-            ),
-            Stream.filter((config) => hasOwnershipMarker(config.description)),
-            Stream.map((config) => toAttrs(config, folder, env.project)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () => Effect.succeed([])),
-          );
+        return yield* scc.listFoldersMuteConfigs.pages({ parent: folder, pageSize: 100 }).pipe(
+          Stream.flatMap((page) => Stream.fromIterable(page.muteConfigs ?? [])),
+          Stream.filter((config) => hasOwnershipMarker(config.description)),
+          Stream.map((config) => toAttrs(config, folder, env.project)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("NotFound", () => Effect.succeed([])),
+        );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const folder = yield* resolveFolder(news.folder, output?.folder);
-      const muteConfigId = yield* toPhysicalId(
-        id,
-        news.muteConfigId,
-        output?.muteConfigId,
-      );
+      const muteConfigId = yield* toPhysicalId(id, news.muteConfigId, output?.muteConfigId);
       const name = resourceName(folder, muteConfigId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(ownership, news.description);

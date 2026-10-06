@@ -105,17 +105,10 @@ export class AuthorizedViewSetNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  authorizedViewSetId: string,
-) =>
+const resourceName = (project: string, location: string, authorizedViewSetId: string) =>
   `${locationParent(project, location)}/authorizedViewSets/${authorizedViewSetId}`;
 
-const toAttrs = (
-  set: cci.GoogleCloudContactcenterinsightsV1AuthorizedViewSet,
-  project: string,
-) => {
+const toAttrs = (set: cci.GoogleCloudContactcenterinsightsV1AuthorizedViewSet, project: string) => {
   const name = set.name ?? "";
   const parsed = parseOwnership(set.displayName);
   return {
@@ -137,28 +130,18 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  cci.listProjectsLocationsAuthorizedViewSets
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.authorizedViewSets ?? []),
-      ),
-      Stream.filter((set) => hasOwnershipMarker(set.displayName)),
-      Stream.map((set) => toAttrs(set, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  cci.listProjectsLocationsAuthorizedViewSets.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.authorizedViewSets ?? [])),
+    Stream.filter((set) => hasOwnershipMarker(set.displayName)),
+    Stream.map((set) => toAttrs(set, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const AuthorizedViewSetProvider = () =>
   Provider.succeed(AuthorizedViewSet, {
-    stables: [
-      "name",
-      "authorizedViewSetId",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "authorizedViewSetId", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -170,8 +153,7 @@ export const AuthorizedViewSetProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousId =
-        olds?.authorizedViewSetId ?? output?.authorizedViewSetId;
+      const previousId = olds?.authorizedViewSetId ?? output?.authorizedViewSetId;
       if (
         previousId !== undefined &&
         news.authorizedViewSetId !== undefined &&
@@ -189,34 +171,23 @@ export const AuthorizedViewSetProvider = () =>
         olds?.authorizedViewSetId,
         output?.authorizedViewSetId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, authorizedViewSetId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, authorizedViewSetId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = locationParent(env.project, location);
       const authorizedViewSetId = yield* toResourceId(
         id,

@@ -18,5 +18,6 @@ export const DatabaseLive = Layer.unwrap(
     const connection = yield* Cloudflare.Hyperdrive.Connect(pool);
     return Postgres.PostgresLayer({ url: connection.connectionString });
   }),
-)/*hide*/.pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding))/*end*/;
+) /*hide*/
+  .pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding)); /*end*/
 // #endregion show

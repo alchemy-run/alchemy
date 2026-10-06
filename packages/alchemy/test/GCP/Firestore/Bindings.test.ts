@@ -1,11 +1,11 @@
-import * as GCP from "@/GCP";
-import { decodeFields, encodeFields } from "@/GCP/Firestore/Values.ts";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { decodeFields, encodeFields } from "@/GCP/Firestore/Values.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import FirestoreBindingsHost, {
   DocsDatabase,
@@ -32,11 +32,7 @@ let databases: {
 };
 
 /** Write a document out of band, as the deployer. */
-const seed = (
-  database: string,
-  path: string,
-  fields: Record<string, unknown>,
-) =>
+const seed = (database: string, path: string, fields: Record<string, unknown>) =>
   firestore.patchProjectsDatabasesDocuments({
     name: `${database}/documents/${path}`,
     body: { fields: encodeFields(fields) },
@@ -44,12 +40,10 @@ const seed = (
 
 /** Read a document's fields out of band, `undefined` when it is missing. */
 const readOutOfBand = (database: string, path: string) =>
-  firestore
-    .getProjectsDatabasesDocuments({ name: `${database}/documents/${path}` })
-    .pipe(
-      Effect.map((document) => decodeFields(document.fields)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  firestore.getProjectsDatabasesDocuments({ name: `${database}/documents/${path}` }).pipe(
+    Effect.map((document) => decodeFields(document.fields)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Roles the host holds on the project under the IAM Condition naming only
@@ -65,9 +59,7 @@ const scopedRoles = (database: string) =>
     const hostBindings = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
     );
-    expect(
-      hostBindings.filter((binding) => binding.condition === undefined),
-    ).toEqual([]);
+    expect(hostBindings.filter((binding) => binding.condition === undefined)).toEqual([]);
     const condition = `resource.name == "${database}" || resource.name.startsWith("${database}/")`;
     return hostBindings
       .filter((binding) => binding.condition?.expression === condition)
@@ -78,12 +70,7 @@ const scopedRoles = (database: string) =>
 describe.skipIf(!dockerAvailable || !!process.env.FAST)(
   "Firestore Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:firestore",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:firestore", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -119,14 +106,9 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 600_000 });
 
-    const expectDocsGrants = Effect.suspend(() =>
-      scopedRoles(databases.docs),
-    ).pipe(
+    const expectDocsGrants = Effect.suspend(() => scopedRoles(databases.docs)).pipe(
       Effect.map((roles) =>
-        expect(roles).toEqual([
-          "roles/datastore.user",
-          "roles/datastore.viewer",
-        ]),
+        expect(roles).toEqual(["roles/datastore.user", "roles/datastore.viewer"]),
       ),
     );
 
@@ -135,10 +117,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         "writes a document as the host's service account, scoped to the database",
         (_stack) =>
           Effect.gen(function* () {
-            const doc = yield* expectProbe<firestore.Document>(
-              baseUrl,
-              "patchDocument",
-            );
+            const doc = yield* expectProbe<firestore.Document>(baseUrl, "patchDocument");
             expect(doc.name).toEqual(`${databases.docs}/documents/${PATCHED}`);
             expect(yield* readOutOfBand(databases.docs, PATCHED)).toEqual({
               name: "Alice",
@@ -158,10 +137,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
         (_stack) =>
           Effect.gen(function* () {
             yield* seed(databases.docs, SEEDED_GET, { name: "Seeded" });
-            const doc = yield* expectProbe<firestore.Document>(
-              baseUrl,
-              "getDocument",
-            );
+            const doc = yield* expectProbe<firestore.Document>(baseUrl, "getDocument");
             expect(doc.fields?.name?.stringValue).toEqual("Seeded");
             yield* expectDocsGrants;
           }),
@@ -179,9 +155,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
           Effect.gen(function* () {
             yield* seed(databases.docs, SEEDED_DELETE, { name: "Doomed" });
             yield* expectProbe(baseUrl, "deleteDocument");
-            expect(
-              yield* readOutOfBand(databases.docs, SEEDED_DELETE),
-            ).toBeUndefined();
+            expect(yield* readOutOfBand(databases.docs, SEEDED_DELETE)).toBeUndefined();
             yield* expectDocsGrants;
           }),
         {
@@ -206,9 +180,7 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               hasNextPage: true,
               big: [2],
             });
-            expect(yield* scopedRoles(databases.readOnly)).toEqual([
-              "roles/datastore.viewer",
-            ]);
+            expect(yield* scopedRoles(databases.readOnly)).toEqual(["roles/datastore.viewer"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:firestore", "live"],
@@ -229,18 +201,15 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               updated: { n: 1, "odd key": "x" },
               updateMissing: "NotFound",
             });
-            expect(
-              yield* readOutOfBand(databases.writeOnly, "things/created"),
-            ).toEqual({ n: 1, "odd key": "x" });
-            expect(
-              yield* readOutOfBand(databases.writeOnly, "things/set"),
-            ).toEqual({ team: "red" });
-            expect(
-              yield* readOutOfBand(databases.writeOnly, "things/gone"),
-            ).toBeUndefined();
-            expect(yield* scopedRoles(databases.writeOnly)).toEqual([
-              "roles/datastore.user",
-            ]);
+            expect(yield* readOutOfBand(databases.writeOnly, "things/created")).toEqual({
+              n: 1,
+              "odd key": "x",
+            });
+            expect(yield* readOutOfBand(databases.writeOnly, "things/set")).toEqual({
+              team: "red",
+            });
+            expect(yield* readOutOfBand(databases.writeOnly, "things/gone")).toBeUndefined();
+            expect(yield* scopedRoles(databases.writeOnly)).toEqual(["roles/datastore.user"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:firestore", "live"],
@@ -262,15 +231,12 @@ describe.skipIf(!dockerAvailable || !!process.env.FAST)(
               red: ["a"],
               afterDelete: true,
             });
-            expect(
-              yield* readOutOfBand(databases.readWrite, "scores/b"),
-            ).toEqual({ team: "blue", n: 3 });
-            expect(
-              yield* readOutOfBand(databases.readWrite, "scores/a"),
-            ).toBeUndefined();
-            expect(yield* scopedRoles(databases.readWrite)).toEqual([
-              "roles/datastore.user",
-            ]);
+            expect(yield* readOutOfBand(databases.readWrite, "scores/b")).toEqual({
+              team: "blue",
+              n: 3,
+            });
+            expect(yield* readOutOfBand(databases.readWrite, "scores/a")).toBeUndefined();
+            expect(yield* scopedRoles(databases.readWrite)).toEqual(["roles/datastore.user"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:firestore", "live"],

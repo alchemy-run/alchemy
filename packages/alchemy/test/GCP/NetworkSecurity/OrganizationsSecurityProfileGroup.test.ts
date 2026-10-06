@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getOrganizationsLocationsSecurityProfileGroups({ name }).pipe(
@@ -91,9 +88,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_NETWORKSECURITY)(
   },
 );
 
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECURITY,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECURITY)(
   "create, update, and delete an organization security profile group",
   (stack) =>
     Effect.gen(function* () {
@@ -101,68 +96,51 @@ test.provider.skipIf(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const profile =
-            yield* GCP.NetworkSecurity.OrganizationsSecurityProfile("Threats", {
-              type: "THREAT_PREVENTION",
-              threatPreventionProfile: {
-                severityOverrides: [
-                  { severity: "INFORMATIONAL", action: "ALERT" },
-                ],
-              },
-              labels: { env: "test" },
-            });
-          const group =
-            yield* GCP.NetworkSecurity.OrganizationsSecurityProfileGroup(
-              "Profiles",
-              {
-                threatPreventionProfile: profile.name.as<string>(),
-                description: "group a",
-                labels: { env: "test" },
-              },
-            );
+          const profile = yield* GCP.NetworkSecurity.OrganizationsSecurityProfile("Threats", {
+            type: "THREAT_PREVENTION",
+            threatPreventionProfile: {
+              severityOverrides: [{ severity: "INFORMATIONAL", action: "ALERT" }],
+            },
+            labels: { env: "test" },
+          });
+          const group = yield* GCP.NetworkSecurity.OrganizationsSecurityProfileGroup("Profiles", {
+            threatPreventionProfile: profile.name.as<string>(),
+            description: "group a",
+            labels: { env: "test" },
+          });
           return { profile, group };
         }),
       );
 
       expect(created.group.name).toContain("/securityProfileGroups/");
       expect(created.group.name).toContain("organizations/");
-      expect(created.group.threatPreventionProfile).toEqual(
-        created.profile.name,
-      );
+      expect(created.group.threatPreventionProfile).toEqual(created.profile.name);
       expect(created.group.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networksecurity.getOrganizationsLocationsSecurityProfileGroups({
-          name: created.group.name,
-        });
+      const fetched = yield* networksecurity.getOrganizationsLocationsSecurityProfileGroups({
+        name: created.group.name,
+      });
       expect(fetched.name).toEqual(created.group.name);
       expect(fetched.threatPreventionProfile).toEqual(created.profile.name);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const profile =
-            yield* GCP.NetworkSecurity.OrganizationsSecurityProfile("Threats", {
-              securityProfileId: created.profile.securityProfileId,
-              organization: created.profile.organization,
-              type: "THREAT_PREVENTION",
-              threatPreventionProfile: {
-                severityOverrides: [
-                  { severity: "INFORMATIONAL", action: "ALERT" },
-                ],
-              },
-              labels: { env: "prod" },
-            });
-          const group =
-            yield* GCP.NetworkSecurity.OrganizationsSecurityProfileGroup(
-              "Profiles",
-              {
-                securityProfileGroupId: created.group.securityProfileGroupId,
-                organization: created.group.organization,
-                threatPreventionProfile: profile.name.as<string>(),
-                description: "group b",
-                labels: { env: "prod", role: "ngfw" },
-              },
-            );
+          const profile = yield* GCP.NetworkSecurity.OrganizationsSecurityProfile("Threats", {
+            securityProfileId: created.profile.securityProfileId,
+            organization: created.profile.organization,
+            type: "THREAT_PREVENTION",
+            threatPreventionProfile: {
+              severityOverrides: [{ severity: "INFORMATIONAL", action: "ALERT" }],
+            },
+            labels: { env: "prod" },
+          });
+          const group = yield* GCP.NetworkSecurity.OrganizationsSecurityProfileGroup("Profiles", {
+            securityProfileGroupId: created.group.securityProfileGroupId,
+            organization: created.group.organization,
+            threatPreventionProfile: profile.name.as<string>(),
+            description: "group b",
+            labels: { env: "prod", role: "ngfw" },
+          });
           return { profile, group };
         }),
       );

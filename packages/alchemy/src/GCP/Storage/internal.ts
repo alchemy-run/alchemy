@@ -26,14 +26,9 @@ export const isUserManagedAclEntity = (entity: string | undefined) => {
   return value.startsWith("user-") && value.includes("@");
 };
 
-export const withTrailingSlash = (name: string) =>
-  name.endsWith("/") ? name : `${name}/`;
+export const withTrailingSlash = (name: string) => (name.endsWith("/") ? name : `${name}/`);
 
-export const toFolderName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+export const toFolderName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     const raw =
       name ??
@@ -57,9 +52,7 @@ export const listAlchemyBuckets = () =>
       })
       .pipe(
         Stream.filter((bucket) =>
-          Object.keys(bucket.labels ?? {}).some((key) =>
-            key.startsWith(ALCHEMY_LABEL_PREFIX),
-          ),
+          Object.keys(bucket.labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX)),
         ),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),

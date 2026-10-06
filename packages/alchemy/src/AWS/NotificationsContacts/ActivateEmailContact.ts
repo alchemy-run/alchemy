@@ -41,10 +41,7 @@ export interface ActivateEmailContact extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ActivateEmailContactRequest,
-    ) => Effect.Effect<
-      contacts.ActivateEmailContactResponse,
-      contacts.ActivateEmailContactError
-    >
+    ) => Effect.Effect<contacts.ActivateEmailContactResponse, contacts.ActivateEmailContactError>
   >
 > {}
 

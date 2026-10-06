@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_CONNECTION_PREFERENCE = "ACCEPT_AUTOMATIC";
 const MAX_NAME_LENGTH = 63;
@@ -181,9 +181,7 @@ export type ServiceAttachment = Resource<
     /** Connected consumer endpoints. */
     connectedEndpoints: ReadonlyArray<ServiceAttachmentConnectedEndpoint>;
     /** 128-bit PSC service-attachment id. */
-    pscServiceAttachmentId:
-      | { high: string | undefined; low: string | undefined }
-      | undefined;
+    pscServiceAttachmentId: { high: string | undefined; low: string | undefined } | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
     /** RFC3339 creation timestamp. */
@@ -248,9 +246,7 @@ export type ServiceAttachment = Resource<
  * @resource
  * @category Compute
  */
-export const ServiceAttachment = Resource<ServiceAttachment>(
-  "GCP.Compute.ServiceAttachment",
-);
+export const ServiceAttachment = Resource<ServiceAttachment>("GCP.Compute.ServiceAttachment");
 
 export class ServiceAttachmentNotResolved extends Data.TaggedError(
   "GCP.Compute.ServiceAttachmentNotResolved",
@@ -303,14 +299,10 @@ const acceptKey = (item: ServiceAttachmentConsumerAccept) =>
     connectionLimit: item.connectionLimit ?? 0,
   });
 
-const acceptListsKey = (
-  lists: ReadonlyArray<ServiceAttachmentConsumerAccept> | undefined,
-) => JSON.stringify([...(lists ?? [])].map(acceptKey).sort());
+const acceptListsKey = (lists: ReadonlyArray<ServiceAttachmentConsumerAccept> | undefined) =>
+  JSON.stringify([...(lists ?? [])].map(acceptKey).sort());
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const packed = Object.entries(labels)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)
@@ -350,16 +342,10 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `s${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-const toForwardingRuleUrl = (
-  project: string,
-  region: string,
-  value: string,
-) => {
+const toForwardingRuleUrl = (project: string, region: string, value: string) => {
   if (value.includes("/")) return value;
   return `projects/${project}/regions/${region}/forwardingRules/${value}`;
 };
@@ -414,36 +400,25 @@ const toAttrs = (
     propagatedConnectionLimit: attachment.propagatedConnectionLimit,
     natIpsPerEndpoint: attachment.natIpsPerEndpoint,
     domainNames: attachment.domainNames ?? [],
-    connectedEndpoints: (attachment.connectedEndpoints ?? []).map(
-      toConnectedEndpoint,
-    ),
+    connectedEndpoints: (attachment.connectedEndpoints ?? []).map(toConnectedEndpoint),
     pscServiceAttachmentId: attachment.pscServiceAttachmentId
       ? {
           high: attachment.pscServiceAttachmentId.high,
           low: attachment.pscServiceAttachmentId.low,
         }
       : undefined,
-    labels:
-      Object.keys(fromMetadata).length > 0 ? fromMetadata : fromDescription,
+    labels: Object.keys(fromMetadata).length > 0 ? fromMetadata : fromDescription,
     creationTimestamp: attachment.creationTimestamp,
     kind: attachment.kind,
   };
 };
 
-const getByName = (
-  project: string,
-  region: string,
-  serviceAttachment: string,
-) =>
+const getByName = (project: string, region: string, serviceAttachment: string) =>
   compute
     .getServiceAttachments({ project, region, serviceAttachment })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const requireAttachment = (
-  project: string,
-  region: string,
-  serviceAttachmentName: string,
-) =>
+const requireAttachment = (project: string, region: string, serviceAttachmentName: string) =>
   getByName(project, region, serviceAttachmentName).pipe(
     Effect.flatMap((attachment) =>
       attachment
@@ -462,11 +437,7 @@ const requireAttachment = (
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  serviceAttachmentName: string,
-) =>
+const waitUntilGone = (project: string, region: string, serviceAttachmentName: string) =>
   getByName(project, region, serviceAttachmentName).pipe(
     Effect.flatMap((attachment) =>
       attachment === undefined
@@ -490,10 +461,7 @@ const runOp = <E, R>(
   region: string,
   serviceAttachmentName: string,
   operation: Effect.Effect<compute.Operation, E, R>,
-) =>
-  operation.pipe(
-    Effect.flatMap((op) => waitRegionOperation(project, region, op)),
-  );
+) => operation.pipe(Effect.flatMap((op) => waitRegionOperation(project, region, op)));
 
 export const ServiceAttachmentProvider = () =>
   Provider.succeed(ServiceAttachment, {
@@ -509,32 +477,20 @@ export const ServiceAttachmentProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds.serviceAttachmentName ?? output?.serviceAttachmentName;
+      const previousName = olds.serviceAttachmentName ?? output?.serviceAttachmentName;
       const nextName = news.serviceAttachmentName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousRegion = normalizeRegion(
-        olds.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
-      const previousDomains = domainNamesKey(
-        olds.domainNames ?? output?.domainNames,
-      );
+      const previousDomains = domainNamesKey(olds.domainNames ?? output?.domainNames);
       const nextDomains = domainNamesKey(
         news.domainNames ?? olds.domainNames ?? output?.domainNames,
       );
-      const domainChanged =
-        news.domainNames !== undefined && previousDomains !== nextDomains;
+      const domainChanged = news.domainNames !== undefined && previousDomains !== nextDomains;
 
       if (nameChanged || regionChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -558,15 +514,8 @@ export const ServiceAttachmentProvider = () =>
         olds?.serviceAttachmentName,
         output?.serviceAttachmentName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        serviceAttachmentName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, serviceAttachmentName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const decoded = parseDescription(existing.description);
@@ -592,9 +541,7 @@ export const ServiceAttachmentProvider = () =>
               .filter(
                 (item) =>
                   hasOwnershipMarker(item.description) ||
-                  Object.keys(item.metadata ?? {}).some((key) =>
-                    key.startsWith("alchemy-"),
-                  ),
+                  Object.keys(item.metadata ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -613,28 +560,15 @@ export const ServiceAttachmentProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desiredDescription = encodeDescription(
-        news.description,
-        desiredLabels,
-      );
-      const targetService = toForwardingRuleUrl(
-        env.project,
-        region,
-        news.targetService,
-      );
+      const desiredDescription = encodeDescription(news.description, desiredLabels);
+      const targetService = toForwardingRuleUrl(env.project, region, news.targetService);
       const natSubnets = news.natSubnets.map((subnet) =>
         toSubnetworkUrl(env.project, region, subnet),
       );
-      const connectionPreference = connectionPreferenceOf(
-        news.connectionPreference,
-      );
+      const connectionPreference = connectionPreferenceOf(news.connectionPreference);
       const enableProxyProtocol = news.enableProxyProtocol === true;
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        serviceAttachmentName,
-      );
+      let current = yield* getByName(env.project, region, serviceAttachmentName);
 
       if (current === undefined) {
         const created = yield* compute
@@ -662,9 +596,7 @@ export const ServiceAttachmentProvider = () =>
               waitRegionOperation(env.project, region, operation, {
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }).pipe(
-                Effect.flatMap(() =>
-                  requireAttachment(env.project, region, serviceAttachmentName),
-                ),
+                Effect.flatMap(() => requireAttachment(env.project, region, serviceAttachmentName)),
               ),
             ),
             Effect.catchTag("Conflict", () =>
@@ -681,24 +613,17 @@ export const ServiceAttachmentProvider = () =>
         });
       }
 
-      const observedPreference = connectionPreferenceOf(
-        current.connectionPreference,
-      );
-      const observedTarget = resourceRefOf(
-        current.targetService ?? current.producerForwardingRule,
-      );
+      const observedPreference = connectionPreferenceOf(current.connectionPreference);
+      const observedTarget = resourceRefOf(current.targetService ?? current.producerForwardingRule);
       const observedNat = refsKey(current.natSubnets);
-      const observedAccept = acceptListsKey(
-        (current.consumerAcceptLists ?? []).map(toAccept),
-      );
+      const observedAccept = acceptListsKey((current.consumerAcceptLists ?? []).map(toAccept));
       const observedReject = refsKey(current.consumerRejectLists);
       const decoded = parseDescription(current.description);
       const observedMetadata = tagRecord(current.metadata);
       const labelsChanged =
         JSON.stringify(observedMetadata) !== JSON.stringify(desiredLabels) ||
         decoded.user !== (news.description ?? undefined) ||
-        JSON.stringify(userLabels(decoded.labels)) !==
-          JSON.stringify(userLabels(desiredLabels));
+        JSON.stringify(userLabels(decoded.labels)) !== JSON.stringify(userLabels(desiredLabels));
 
       const needsPatch =
         labelsChanged ||
@@ -711,18 +636,14 @@ export const ServiceAttachmentProvider = () =>
         (news.consumerRejectLists !== undefined &&
           observedReject !== refsKey(news.consumerRejectLists)) ||
         (news.reconcileConnections !== undefined &&
-          (current.reconcileConnections === true) !==
-            news.reconcileConnections) ||
+          (current.reconcileConnections === true) !== news.reconcileConnections) ||
         (news.propagatedConnectionLimit !== undefined &&
-          (current.propagatedConnectionLimit ?? 250) !==
-            news.propagatedConnectionLimit) ||
+          (current.propagatedConnectionLimit ?? 250) !== news.propagatedConnectionLimit) ||
         (news.natIpsPerEndpoint !== undefined &&
           (current.natIpsPerEndpoint ?? 1) !== news.natIpsPerEndpoint);
 
       if (needsPatch) {
-        const latest =
-          (yield* getByName(env.project, region, serviceAttachmentName)) ??
-          current;
+        const latest = (yield* getByName(env.project, region, serviceAttachmentName)) ?? current;
         yield* runOp(
           env.project,
           region,
@@ -739,17 +660,12 @@ export const ServiceAttachmentProvider = () =>
               natSubnets,
               connectionPreference,
               enableProxyProtocol,
-              consumerAcceptLists:
-                news.consumerAcceptLists ?? current.consumerAcceptLists,
-              consumerRejectLists:
-                news.consumerRejectLists ?? current.consumerRejectLists,
-              reconcileConnections:
-                news.reconcileConnections ?? current.reconcileConnections,
+              consumerAcceptLists: news.consumerAcceptLists ?? current.consumerAcceptLists,
+              consumerRejectLists: news.consumerRejectLists ?? current.consumerRejectLists,
+              reconcileConnections: news.reconcileConnections ?? current.reconcileConnections,
               propagatedConnectionLimit:
-                news.propagatedConnectionLimit ??
-                current.propagatedConnectionLimit,
-              natIpsPerEndpoint:
-                news.natIpsPerEndpoint ?? current.natIpsPerEndpoint,
+                news.propagatedConnectionLimit ?? current.propagatedConnectionLimit,
+              natIpsPerEndpoint: news.natIpsPerEndpoint ?? current.natIpsPerEndpoint,
               metadata: desiredLabels,
             },
           }),
@@ -760,9 +676,7 @@ export const ServiceAttachmentProvider = () =>
             schedule: Schedule.spaced("1 second"),
           }),
         );
-        current =
-          (yield* getByName(env.project, region, serviceAttachmentName)) ??
-          current;
+        current = (yield* getByName(env.project, region, serviceAttachmentName)) ?? current;
       }
 
       return toAttrs(current, env.project);

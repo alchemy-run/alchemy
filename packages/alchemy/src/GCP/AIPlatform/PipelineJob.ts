@@ -159,10 +159,7 @@ export class PipelineJobNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, id: string) =>
   `${locationParent(project, location)}/${COLLECTION}/${id}`;
 
-const toAttrs = (
-  job: aiplatform.GoogleCloudAiplatformV1PipelineJob,
-  project: string,
-) => {
+const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1PipelineJob, project: string) => {
   const name = job.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -193,9 +190,10 @@ const TERMINAL_STATES = new Set([
   "PIPELINE_STATE_CANCELLED",
 ]);
 
-class PipelineJobNotTerminal extends Data.TaggedError(
-  "GCP.AIPlatform.PipelineJobNotTerminal",
-)<{ name: string; state: string | undefined }> {}
+class PipelineJobNotTerminal extends Data.TaggedError("GCP.AIPlatform.PipelineJobNotTerminal")<{
+  name: string;
+  state: string | undefined;
+}> {}
 
 /**
  * A pending or running job cannot be deleted: cancel it and wait until it
@@ -205,27 +203,22 @@ const cancelUntilTerminal = (name: string) =>
   Effect.gen(function* () {
     const job = yield* getByName(name);
     if (job === undefined || TERMINAL_STATES.has(job.state ?? "")) return;
-    yield* aiplatform
-      .cancelProjectsLocationsPipelineJobs({ name, body: {} })
-      .pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        // The job can reach a terminal state between the read above and the
-        // cancel ("… is in state JOB_STATE_FAILED and cannot be canceled");
-        // the wait below re-reads the state and still fails if it is not
-        // terminal.
-        Effect.catchTag("BadRequest", () => Effect.void),
-      );
+    yield* aiplatform.cancelProjectsLocationsPipelineJobs({ name, body: {} }).pipe(
+      Effect.catchTag("NotFound", () => Effect.void),
+      // The job can reach a terminal state between the read above and the
+      // cancel ("… is in state JOB_STATE_FAILED and cannot be canceled");
+      // the wait below re-reads the state and still fails if it is not
+      // terminal.
+      Effect.catchTag("BadRequest", () => Effect.void),
+    );
     yield* getByName(name).pipe(
       Effect.flatMap((current) =>
         current === undefined || TERMINAL_STATES.has(current.state ?? "")
           ? Effect.void
-          : Effect.fail(
-              new PipelineJobNotTerminal({ name, state: current.state }),
-            ),
+          : Effect.fail(new PipelineJobNotTerminal({ name, state: current.state })),
       ),
       Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.AIPlatform.PipelineJobNotTerminal",
+        while: (error) => error._tag === "GCP.AIPlatform.PipelineJobNotTerminal",
         times: 36,
         schedule: Schedule.spaced("5 seconds"),
       }),
@@ -255,31 +248,21 @@ export const PipelineJobProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.pipelineJobId ?? output?.pipelineJobId;
       const nextId = news.pipelineJobId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const specChanged =
         olds !== undefined &&
         (!jsonEqual(news.pipelineSpec, olds.pipelineSpec) ||
           (news.templateUri ?? "") !== (olds.templateUri ?? ""));
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         specChanged;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -291,38 +274,29 @@ export const PipelineJobProvider = () =>
         output?.pipelineJobId,
         MAX_PIPELINE_JOB_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) =>
-            collectPages(
-              aiplatform.listProjectsLocationsPipelineJobs.pages({
-                parent: locationParent(env.project, location),
-                pageSize: 100,
-              }),
-            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
+        const pages = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          collectPages(
+            aiplatform.listProjectsLocationsPipelineJobs.pages({
+              parent: locationParent(env.project, location),
+              pageSize: 100,
+            }),
+          ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.pipelineJobs ?? [])
             .filter((job) =>
-              Object.keys(job.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(job.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map((job) => toAttrs(job, env.project)),
         );
@@ -336,10 +310,7 @@ export const PipelineJobProvider = () =>
         output?.pipelineJobId,
         MAX_PIPELINE_JOB_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, jobId);
       const desiredLabels = {
         ...toLabels(news.labels),

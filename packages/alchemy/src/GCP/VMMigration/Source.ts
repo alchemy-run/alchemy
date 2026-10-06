@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -208,9 +203,7 @@ const listOwned = (project: string, region: string) =>
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as vm.Source[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as vm.Source[])),
           ),
       ),
     );
@@ -266,26 +259,18 @@ export const SourceProvider = () =>
         vmware: olds?.vmware ?? output?.vmware,
       });
       const nextKind = kindOf(news) || previousKind;
-      const previousEncryption =
-        olds?.encryption?.kmsKey ?? output?.encryption?.kmsKey;
+      const previousEncryption = olds?.encryption?.kmsKey ?? output?.encryption?.kmsKey;
       const nextEncryption = news.encryption?.kmsKey ?? previousEncryption;
       const previousAwsRegion = olds?.aws?.awsRegion ?? output?.aws?.awsRegion;
       const nextAwsRegion = news.aws?.awsRegion ?? previousAwsRegion;
-      const previousAzureLocation =
-        olds?.azure?.azureLocation ?? output?.azure?.azureLocation;
-      const nextAzureLocation =
-        news.azure?.azureLocation ?? previousAzureLocation;
-      const previousSubscription =
-        olds?.azure?.subscriptionId ?? output?.azure?.subscriptionId;
-      const nextSubscription =
-        news.azure?.subscriptionId ?? previousSubscription;
+      const previousAzureLocation = olds?.azure?.azureLocation ?? output?.azure?.azureLocation;
+      const nextAzureLocation = news.azure?.azureLocation ?? previousAzureLocation;
+      const previousSubscription = olds?.azure?.subscriptionId ?? output?.azure?.subscriptionId;
+      const nextSubscription = news.azure?.subscriptionId ?? previousSubscription;
       return replaceOnIdentity({
         previousId: olds?.sourceId ?? output?.sourceId,
         nextId: news.sourceId ?? olds?.sourceId ?? output?.sourceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -301,24 +286,13 @@ export const SourceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sourceId = yield* toPhysicalId(
-        id,
-        olds?.sourceId,
-        output?.sourceId,
-        "source",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, sourceId);
+      const sourceId = yield* toPhysicalId(id, olds?.sourceId, output?.sourceId, "source");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, sourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -330,16 +304,8 @@ export const SourceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sourceId = yield* toPhysicalId(
-        id,
-        news.sourceId,
-        output?.sourceId,
-        "source",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const sourceId = yield* toPhysicalId(id, news.sourceId, output?.sourceId, "source");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, sourceId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -381,22 +347,18 @@ export const SourceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const awsChanged =
         news.aws !== undefined &&
-        (fingerprint(publicAws(current.aws)) !==
-          fingerprint(publicAws(news.aws)) ||
+        (fingerprint(publicAws(current.aws)) !== fingerprint(publicAws(news.aws)) ||
           news.aws.accessKeyCreds?.secretAccessKey !== undefined);
       const azureChanged =
         news.azure !== undefined &&
-        (fingerprint(publicAzure(current.azure)) !==
-          fingerprint(publicAzure(news.azure)) ||
+        (fingerprint(publicAzure(current.azure)) !== fingerprint(publicAzure(news.azure)) ||
           news.azure.clientSecretCreds?.clientSecret !== undefined);
       const vmwareChanged =
         news.vmware !== undefined &&
-        (fingerprint(publicVmware(current.vmware)) !==
-          fingerprint(publicVmware(news.vmware)) ||
+        (fingerprint(publicVmware(current.vmware)) !== fingerprint(publicVmware(news.vmware)) ||
           news.vmware.password !== undefined);
       const mask = fieldMask([
         labelsChanged && "labels",
@@ -420,26 +382,21 @@ export const SourceProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* vm
-        .deleteProjectsLocationsSources({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* vm.deleteProjectsLocationsSources({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

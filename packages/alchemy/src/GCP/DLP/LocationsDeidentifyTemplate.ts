@@ -115,8 +115,9 @@ export type LocationsDeidentifyTemplate = Resource<
  * @resource
  * @category DLP
  */
-export const LocationsDeidentifyTemplate =
-  Resource<LocationsDeidentifyTemplate>("GCP.DLP.LocationsDeidentifyTemplate");
+export const LocationsDeidentifyTemplate = Resource<LocationsDeidentifyTemplate>(
+  "GCP.DLP.LocationsDeidentifyTemplate",
+);
 
 export class LocationsDeidentifyTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDeidentifyTemplateNotResolved",
@@ -127,10 +128,7 @@ export class LocationsDeidentifyTemplateNotResolved extends Data.TaggedError(
 const resourceName = (project: string, location: string, templateId: string) =>
   `${locationParent(project, location)}/deidentifyTemplates/${templateId}`;
 
-const toAttrs = (
-  template: dlp.GooglePrivacyDlpV2DeidentifyTemplate,
-  project: string,
-) => {
+const toAttrs = (template: dlp.GooglePrivacyDlpV2DeidentifyTemplate, project: string) => {
   const name = template.name ?? "";
   const parsed = parseOwnership(template.description);
   return {
@@ -161,34 +159,24 @@ export const LocationsDeidentifyTemplateProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.templateId ?? output?.templateId;
       const idChanged =
-        previousId !== undefined &&
-        news.templateId !== undefined &&
-        news.templateId !== previousId;
+        previousId !== undefined && news.templateId !== undefined && news.templateId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
         news.location !== undefined &&
-        normalizeLocation(news.location) !==
-          normalizeLocation(previousLocation);
+        normalizeLocation(news.location) !== normalizeLocation(previousLocation);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateId = yield* toResourceId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toResourceId(id, olds?.templateId, output?.templateId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -212,14 +200,8 @@ export const LocationsDeidentifyTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
-      const templateId = yield* toResourceId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
+      const templateId = yield* toResourceId(id, news.templateId, output?.templateId);
       const name = resourceName(env.project, location, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -250,10 +232,7 @@ export const LocationsDeidentifyTemplateProvider = () =>
 
       const displayChanged = !sameText(current.displayName, news.displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const configChanged = !jsonEqual(
-        current.deidentifyConfig,
-        news.deidentifyConfig,
-      );
+      const configChanged = !jsonEqual(current.deidentifyConfig, news.deidentifyConfig);
 
       if (displayChanged || descriptionChanged || configChanged) {
         current = yield* dlp.patchProjectsLocationsDeidentifyTemplates({

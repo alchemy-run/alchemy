@@ -1,21 +1,16 @@
-import * as essentialcontacts from "@distilled.cloud/gcp/essentialcontacts_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as essentialcontacts from "@distilled.cloud/gcp/essentialcontacts_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export type NotificationCategory =
   essentialcontacts.GoogleCloudEssentialcontactsV1ContactNotificationCategorySubscriptionsItemEnum;
 
-export type DistilledContact =
-  essentialcontacts.GoogleCloudEssentialcontactsV1Contact;
+export type DistilledContact = essentialcontacts.GoogleCloudEssentialcontactsV1Contact;
 
 export const DEFAULT_LANGUAGE_TAG = "en-US";
 export const DEFAULT_CATEGORIES: NotificationCategory[] = ["ALL"];
@@ -24,9 +19,7 @@ export const UPDATE_MASK = "notificationCategorySubscriptions,languageTag";
 const OWNERSHIP_TOKEN = "alc";
 const MAX_LOCAL_PART = 64;
 
-export class FolderRequired extends Data.TaggedError(
-  "GCP.EssentialContacts.FolderRequired",
-)<{
+export class FolderRequired extends Data.TaggedError("GCP.EssentialContacts.FolderRequired")<{
   project: string;
 }> {}
 
@@ -55,24 +48,17 @@ export const projectParent = (project: string) =>
   project.startsWith("projects/") ? project : `projects/${project}`;
 
 export const folderParent = (folderId: string) =>
-  folderId.startsWith("folders/")
-    ? folderId
-    : `folders/${lastSegment(folderId)}`;
+  folderId.startsWith("folders/") ? folderId : `folders/${lastSegment(folderId)}`;
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const normalizeEmail = (email: string | undefined) =>
-  (email ?? "").trim().toLowerCase();
+export const normalizeEmail = (email: string | undefined) => (email ?? "").trim().toLowerCase();
 
-export const sortedCategories = (
-  values: readonly string[] | undefined,
-): NotificationCategory[] =>
+export const sortedCategories = (values: readonly string[] | undefined): NotificationCategory[] =>
   [...(values ?? [])]
     .map((value) => value as NotificationCategory)
     .slice()
@@ -81,9 +67,7 @@ export const sortedCategories = (
 export const sameCategories = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedCategories(left)) ===
-  JSON.stringify(sortedCategories(right));
+) => JSON.stringify(sortedCategories(left)) === JSON.stringify(sortedCategories(right));
 
 const markerOf = (stack: string, stage: string, id: string) =>
   `${OWNERSHIP_TOKEN}.${stack}.${stage}.${id}`;
@@ -93,10 +77,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (id.length >= stack.length && id.length >= stage.length) {
       id = id.slice(0, -1);
     } else if (stack.length >= stage.length) {
@@ -126,10 +107,7 @@ const stripOwnershipLocal = (local: string) => {
  * Essential Contacts have no labels or description, so Alchemy stamps
  * ownership into the email local-part as `+alc.{stack}.{stage}.{id}`.
  */
-export const encodeEmail = (
-  labels: Record<string, string>,
-  email: string,
-): string => {
+export const encodeEmail = (labels: Record<string, string>, email: string): string => {
   const { local, domain } = splitEmail(email);
   if (domain.length === 0) return email.trim();
   const base = stripOwnershipLocal(local);
@@ -153,8 +131,7 @@ export const parseEmail = (
   const tag = local.slice(index + token.length);
   const [stack, stage, ...idParts] = tag.split(".");
   const base = local.slice(0, index);
-  const restored =
-    domain.length > 0 ? `${base}@${domain}` : base.length > 0 ? base : email;
+  const restored = domain.length > 0 ? `${base}@${domain}` : base.length > 0 ? base : email;
   return {
     labels: {
       [alchemyLabelKeys.stack]: stack ?? "",
@@ -166,14 +143,10 @@ export const parseEmail = (
 };
 
 export const hasOwnershipMarker = (email: string | undefined) =>
-  Object.keys(parseEmail(email).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseEmail(email).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, email: string | undefined) =>
   Effect.gen(function* () {
@@ -183,28 +156,15 @@ export const ownedByAlchemy = (id: string, email: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
 export const ownershipLabels = (id: string) => createInternalLabels(id);
 
-export const toEmail = (
-  id: string,
-  requested: string | undefined,
-  existing: string | undefined,
-) =>
+export const toEmail = (id: string, requested: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (requested !== undefined && requested.length > 0) return requested;
     if (existing !== undefined && existing.length > 0) return existing;
@@ -253,9 +213,7 @@ export const toCoreAttrs = (
     project,
     email: parsed.email ?? contact.email ?? "",
     languageTag: contact.languageTag ?? DEFAULT_LANGUAGE_TAG,
-    notificationCategorySubscriptions: sortedCategories(
-      contact.notificationCategorySubscriptions,
-    ),
+    notificationCategorySubscriptions: sortedCategories(contact.notificationCategorySubscriptions),
     validationState: contact.validationState,
     validateTime: contact.validateTime,
   };
@@ -272,15 +230,11 @@ export const findOwnedContact = (
       const exact = contacts.find((contact) => contact.name === name);
       if (exact !== undefined) return exact;
     }
-    const desired = email
-      ? normalizeEmail(parseEmail(email).email ?? email)
-      : undefined;
+    const desired = email ? normalizeEmail(parseEmail(email).email ?? email) : undefined;
     let owned: DistilledContact | undefined;
     for (const contact of contacts) {
       if (!(yield* ownedByAlchemy(id, contact.email))) continue;
-      const observed = normalizeEmail(
-        parseEmail(contact.email).email ?? contact.email ?? "",
-      );
+      const observed = normalizeEmail(parseEmail(contact.email).email ?? contact.email ?? "");
       if (desired !== undefined) {
         if (observed === desired) return contact;
         continue;
@@ -303,16 +257,11 @@ export const collectPages = <A, Page, E, R>(
   );
 
 export const listContacts = <E extends { readonly _tag: string }, R>(
-  pages: Stream.Stream<
-    essentialcontacts.GoogleCloudEssentialcontactsV1ListContactsResponse,
-    E,
-    R
-  >,
+  pages: Stream.Stream<essentialcontacts.GoogleCloudEssentialcontactsV1ListContactsResponse, E, R>,
 ) =>
   collectPages(pages, (page) => page.contacts).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => emptyList<DistilledContact>(),
     ),
   );
@@ -346,10 +295,7 @@ export const tryResolveFolder = () =>
     return folderId !== undefined ? folderParent(folderId) : undefined;
   });
 
-export const resolveFolder = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveFolder = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) {
       return folderParent(explicit);
@@ -386,10 +332,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined && explicit.length > 0) {
       return organizationParent(explicit);
@@ -414,9 +357,5 @@ export const listOrganizationParents = () =>
 export const desiredLanguage = (value: string | undefined) =>
   value && value.length > 0 ? value : DEFAULT_LANGUAGE_TAG;
 
-export const desiredCategories = (
-  values: readonly NotificationCategory[] | undefined,
-) =>
-  values !== undefined && values.length > 0
-    ? sortedCategories(values)
-    : DEFAULT_CATEGORIES;
+export const desiredCategories = (values: readonly NotificationCategory[] | undefined) =>
+  values !== undefined && values.length > 0 ? sortedCategories(values) : DEFAULT_CATEGORIES;

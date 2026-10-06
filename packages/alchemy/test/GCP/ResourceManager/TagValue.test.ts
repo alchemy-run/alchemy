@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   crm.getTagValues({ name }).pipe(
@@ -26,8 +23,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const nextShortName = (name: string) =>
-  name.length < 256 ? `${name}x` : `${name.slice(0, 255)}x`;
+const nextShortName = (name: string) => (name.length < 256 ? `${name}x` : `${name.slice(0, 255)}x`);
 
 test.provider(
   "getTagValues on a missing value fails with TagValueNotFound",

@@ -1,15 +1,12 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  Credentials,
-  type Config as CredentialsConfig,
-} from "@distilled.cloud/gcp/Credentials";
+import { Credentials, type Config as CredentialsConfig } from "@distilled.cloud/gcp/Credentials";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/http/HttpClient";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
@@ -51,13 +48,9 @@ export const fromAuthProvider = () =>
       // layers never requires a configured profile. Only the lookup is
       // cached: distilled yields `Credentials` then the inner Effect on
       // every call so SA tokens can refresh from AuthProvider's cache.
-      const lookup = yield* resolveProviderConfig<
-        GcpAuthConfig,
-        GcpResolvedCredentials
-      >(GCP_AUTH_PROVIDER_NAME).pipe(
-        deferUntilFirstUse,
-        Effect.flatMap(Effect.cached),
-      );
+      const lookup = yield* resolveProviderConfig<GcpAuthConfig, GcpResolvedCredentials>(
+        GCP_AUTH_PROVIDER_NAME,
+      ).pipe(deferUntilFirstUse, Effect.flatMap(Effect.cached));
       return lookup.pipe(
         Effect.flatMap(({ profileName, resolve }) =>
           resolve.pipe(
@@ -94,9 +87,7 @@ export const fromChain = () =>
       const http = yield* HttpClient.HttpClient;
       const cached = yield* cacheCredentials(
         Effect.gen(function* () {
-          const envToken = yield* Config.option(
-            Config.String("GOOGLE_ACCESS_TOKEN"),
-          );
+          const envToken = yield* Config.option(Config.String("GOOGLE_ACCESS_TOKEN"));
           const envProject = yield* Config.option(
             Config.String("GOOGLE_PROJECT_ID").pipe(
               Config.orElse(() => Config.String("GOOGLE_CLOUD_PROJECT")),
@@ -112,9 +103,7 @@ export const fromChain = () =>
             };
           }
 
-          const keyFile = yield* Config.option(
-            Config.String("GOOGLE_APPLICATION_CREDENTIALS"),
-          );
+          const keyFile = yield* Config.option(Config.String("GOOGLE_APPLICATION_CREDENTIALS"));
           if (Option.isSome(keyFile)) {
             const raw = yield* fs.readFileString(keyFile.value).pipe(
               Effect.mapError(
@@ -143,10 +132,7 @@ export const fromChain = () =>
             return {
               config: {
                 accessToken: minted.accessToken,
-                project:
-                  Option.getOrUndefined(envProject) ??
-                  sa.project_id ??
-                  minted.project,
+                project: Option.getOrUndefined(envProject) ?? sa.project_id ?? minted.project,
               },
               expiresAt: minted.expirationMs,
             };
@@ -155,9 +141,7 @@ export const fromChain = () =>
           const token = yield* fetchMetadataToken(http);
           const project =
             Option.getOrUndefined(envProject) ??
-            (yield* fetchMetadataProject(http).pipe(
-              Effect.orElseSucceed(() => undefined),
-            ));
+            (yield* fetchMetadataProject(http).pipe(Effect.orElseSucceed(() => undefined)));
           return {
             config: { accessToken: token.accessToken, project },
             expiresAt: token.expiresAt,

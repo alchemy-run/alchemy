@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 export type NamedPort = {
   /** RFC1035 name for this port mapping (e.g. `"http"`). */
@@ -123,9 +119,7 @@ export type InstanceGroup = Resource<
  * @resource
  * @category Compute
  */
-export const InstanceGroup = Resource<InstanceGroup>(
-  "GCP.Compute.InstanceGroup",
-);
+export const InstanceGroup = Resource<InstanceGroup>("GCP.Compute.InstanceGroup");
 
 export class InstanceGroupNotResolved extends Data.TaggedError(
   "GCP.Compute.InstanceGroupNotResolved",
@@ -174,10 +168,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-) => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>) => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   const trimmed = user?.trim();
   return trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
@@ -209,9 +200,7 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const toNetworkUrl = (project: string, network: string | undefined) => {
   if (network === undefined || network.length === 0) return undefined;
@@ -220,9 +209,7 @@ const toNetworkUrl = (project: string, network: string | undefined) => {
 };
 
 const toInstanceUrl = (project: string, zone: string, instance: string) =>
-  instance.includes("/")
-    ? instance
-    : `projects/${project}/zones/${zone}/instances/${instance}`;
+  instance.includes("/") ? instance : `projects/${project}/zones/${zone}/instances/${instance}`;
 
 const canonPorts = (ports: readonly NamedPort[] | undefined): NamedPort[] =>
   [...(ports ?? [])]
@@ -234,9 +221,7 @@ const samePorts = (
   right: readonly NamedPort[] | undefined,
 ) => JSON.stringify(canonPorts(left)) === JSON.stringify(canonPorts(right));
 
-const fromApiPorts = (
-  ports: readonly compute.NamedPort[] | undefined,
-): NamedPort[] =>
+const fromApiPorts = (ports: readonly compute.NamedPort[] | undefined): NamedPort[] =>
   canonPorts(
     (ports ?? [])
       .filter(
@@ -291,9 +276,7 @@ const waitGone = (project: string, zone: string, instanceGroupName: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(
-            new InstanceGroupStillExists({ instanceGroupName, zone }),
-          ),
+        : Effect.fail(new InstanceGroupStillExists({ instanceGroupName, zone })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.InstanceGroupStillExists",
@@ -317,14 +300,7 @@ const runOp = <E, R>(
 
 export const InstanceGroupProvider = () =>
   Provider.succeed(InstanceGroup, {
-    stables: [
-      "instanceGroupName",
-      "zone",
-      "project",
-      "id",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["instanceGroupName", "zone", "project", "id", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -335,30 +311,20 @@ export const InstanceGroupProvider = () =>
       const previousNetwork = olds?.network ?? output?.network;
       const nextNetwork = news.network;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const zoneChanged =
-        previousZone !== undefined &&
-        lastSegment(previousZone) !== lastSegment(nextZone);
+        previousZone !== undefined && lastSegment(previousZone) !== lastSegment(nextZone);
       const networkChanged =
         nextNetwork !== undefined &&
         previousNetwork !== undefined &&
         lastSegment(previousNetwork) !== lastSegment(nextNetwork);
       const descriptionChanged =
-        olds !== undefined &&
-        (olds.description ?? "") !== (news.description ?? "");
-      if (
-        !nameChanged &&
-        !zoneChanged &&
-        !networkChanged &&
-        !descriptionChanged
-      ) {
+        olds !== undefined && (olds.description ?? "") !== (news.description ?? "");
+      if (!nameChanged && !zoneChanged && !networkChanged && !descriptionChanged) {
         return undefined;
       }
       const sameIdentity =
-        previousName === nextName &&
-        lastSegment(previousZone ?? "") === lastSegment(nextZone);
+        previousName === nextName && lastSegment(previousZone ?? "") === lastSegment(nextZone);
       return {
         action: "replace" as const,
         deleteFirst: sameIdentity,
@@ -439,20 +405,15 @@ export const InstanceGroupProvider = () =>
         current = yield* getByName(env.project, zone, instanceGroupName).pipe(
           Effect.flatMap((group) =>
             group === undefined
-              ? Effect.fail(
-                  new InstanceGroupNotResolved({ instanceGroupName, zone }),
-                )
+              ? Effect.fail(new InstanceGroupNotResolved({ instanceGroupName, zone }))
               : Effect.succeed(group),
           ),
           Effect.retry({
-            while: (error) =>
-              error._tag === "GCP.Compute.InstanceGroupNotResolved",
+            while: (error) => error._tag === "GCP.Compute.InstanceGroupNotResolved",
             times: 8,
             schedule: Schedule.exponential("250 millis"),
           }),
-          Effect.catchTag("GCP.Compute.InstanceGroupNotResolved", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("GCP.Compute.InstanceGroupNotResolved", () => Effect.succeed(undefined)),
         );
       }
 
@@ -483,27 +444,18 @@ export const InstanceGroupProvider = () =>
             schedule: Schedule.exponential("250 millis"),
           }),
         );
-        current =
-          (yield* getByName(env.project, zone, instanceGroupName)) ?? current;
+        current = (yield* getByName(env.project, zone, instanceGroupName)) ?? current;
       }
 
       if (news.instances !== undefined) {
-        const observed = yield* listMembers(
-          env.project,
-          zone,
-          instanceGroupName,
-        );
+        const observed = yield* listMembers(env.project, zone, instanceGroupName);
         const desired = news.instances.map((instance) =>
           toInstanceUrl(env.project, zone, instance),
         );
         const observedKeys = new Set(observed.map(lastSegment));
         const desiredKeys = new Set(desired.map(lastSegment));
-        const toAdd = desired.filter(
-          (instance) => !observedKeys.has(lastSegment(instance)),
-        );
-        const toRemove = observed.filter(
-          (instance) => !desiredKeys.has(lastSegment(instance)),
-        );
+        const toAdd = desired.filter((instance) => !observedKeys.has(lastSegment(instance)));
+        const toRemove = observed.filter((instance) => !desiredKeys.has(lastSegment(instance)));
         if (toAdd.length > 0) {
           yield* runOp(
             env.project,
@@ -532,8 +484,7 @@ export const InstanceGroupProvider = () =>
             }),
           );
         }
-        current =
-          (yield* getByName(env.project, zone, instanceGroupName)) ?? current;
+        current = (yield* getByName(env.project, zone, instanceGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);

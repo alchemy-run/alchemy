@@ -86,9 +86,7 @@ export type InappproductProps = {
   /**
    * Propagation latency tolerance for product updates.
    */
-  latencyTolerance?:
-    | androidpublisher.PatchInappproductsLatencyToleranceEnum
-    | (string & {});
+  latencyTolerance?: androidpublisher.PatchInappproductsLatencyToleranceEnum | (string & {});
 };
 
 export type Inappproduct = Resource<
@@ -166,9 +164,7 @@ export type Inappproduct = Resource<
  * @resource
  * @category AndroidPublisher
  */
-export const Inappproduct = Resource<Inappproduct>(
-  "GCP.AndroidPublisher.Inappproduct",
-);
+export const Inappproduct = Resource<Inappproduct>("GCP.AndroidPublisher.Inappproduct");
 
 export class InappproductNotResolved extends Data.TaggedError(
   "GCP.AndroidPublisher.InappproductNotResolved",
@@ -210,10 +206,8 @@ const desiredBody = (input: {
   subscriptionPeriod: input.news.subscriptionPeriod,
   trialPeriod: input.news.trialPeriod,
   gracePeriod: input.news.gracePeriod,
-  managedProductTaxesAndComplianceSettings:
-    input.news.managedProductTaxesAndComplianceSettings,
-  subscriptionTaxesAndComplianceSettings:
-    input.news.subscriptionTaxesAndComplianceSettings,
+  managedProductTaxesAndComplianceSettings: input.news.managedProductTaxesAndComplianceSettings,
+  subscriptionTaxesAndComplianceSettings: input.news.subscriptionTaxesAndComplianceSettings,
 });
 
 const needsSync = (
@@ -223,11 +217,9 @@ const needsSync = (
   !sameText(current.defaultLanguage, desired.defaultLanguage) ||
   !jsonEqual(current.listings, desired.listings) ||
   !jsonEqual(current.defaultPrice, desired.defaultPrice) ||
-  (desired.prices !== undefined &&
-    !jsonEqual(current.prices, desired.prices)) ||
+  (desired.prices !== undefined && !jsonEqual(current.prices, desired.prices)) ||
   (desired.status !== undefined && !sameText(current.status, desired.status)) ||
-  (desired.purchaseType !== undefined &&
-    !sameText(current.purchaseType, desired.purchaseType)) ||
+  (desired.purchaseType !== undefined && !sameText(current.purchaseType, desired.purchaseType)) ||
   !sameText(current.subscriptionPeriod, desired.subscriptionPeriod) ||
   !sameText(current.trialPeriod, desired.trialPeriod) ||
   !sameText(current.gracePeriod, desired.gracePeriod) ||
@@ -249,18 +241,11 @@ export const InappproductProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousPackage = olds?.packageName ?? output?.packageName;
-      if (
-        previousPackage !== undefined &&
-        news.packageName !== previousPackage
-      ) {
+      if (previousPackage !== undefined && news.packageName !== previousPackage) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousSku = olds?.sku ?? output?.sku;
-      if (
-        previousSku !== undefined &&
-        news.sku !== undefined &&
-        news.sku !== previousSku
-      ) {
+      if (previousSku !== undefined && news.sku !== undefined && news.sku !== previousSku) {
         return { action: "replace" as const, deleteFirst: true };
       }
       return undefined;
@@ -281,18 +266,13 @@ export const InappproductProvider = () =>
       const env = yield* GcpEnvironment.current;
       const packageName = news.packageName;
       const sku = yield* toSku(id, news.sku, output?.sku);
-      const defaultLanguage =
-        news.defaultLanguage ?? output?.defaultLanguage ?? DEFAULT_LANGUAGE;
+      const defaultLanguage = news.defaultLanguage ?? output?.defaultLanguage ?? DEFAULT_LANGUAGE;
       const title = yield* toDisplayName(
         id,
         news.listings?.[defaultLanguage]?.title,
         output?.listings?.[defaultLanguage]?.title,
       );
-      const listings = defaultInappListings(
-        news.listings,
-        title,
-        defaultLanguage,
-      );
+      const listings = defaultInappListings(news.listings, title, defaultLanguage);
       const autoConvertMissingPrices = news.autoConvertMissingPrices ?? true;
       const desired = desiredBody({
         packageName,
@@ -311,11 +291,7 @@ export const InappproductProvider = () =>
             autoConvertMissingPrices,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getInappproduct(packageName, sku),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getInappproduct(packageName, sku)));
         current = created ?? undefined;
       } else if (needsSync(current, desired)) {
         current = yield* androidpublisher.patchInappproducts({

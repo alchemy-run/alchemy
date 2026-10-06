@@ -2,11 +2,8 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { apply as applyPlan } from "../../Apply.ts";
 import * as Plan from "../../Plan.ts";
-import type {
-  ResourceSelection,
-  SelectionOutput,
-} from "../../ResourceSelection.ts";
 import type { PlannedAction, PlannedResource } from "../../Report.ts";
+import type { ResourceSelection, SelectionOutput } from "../../ResourceSelection.ts";
 import { applySession, Progress, withSpanEvents } from "../Progress.ts";
 import { open, type Session, type StackTarget } from "../Session.ts";
 
@@ -29,9 +26,7 @@ export interface FilteredPlanInput
   extends Omit<PlanInput, keyof ResourceSelection>, ResourceSelection {}
 
 /** Infer the deployed stack output from an `alchemy.run.ts` module type. */
-export type StackModuleOutput<Module> = Module extends {
-  readonly default: infer Definition;
-}
+export type StackModuleOutput<Module> = Module extends { readonly default: infer Definition }
   ? Definition extends Effect.Effect<any, any, any>
     ? Effect.Success<Definition> extends { readonly output: infer Output }
       ? Output
@@ -111,16 +106,13 @@ export function plan<Module = unknown>(
   input: FilteredPlanInput &
     ({ include: ReadonlyArray<string> } | { exclude: ReadonlyArray<string> }),
 ): PlanResult<undefined>;
-export function plan<Module = unknown>(
-  input: PlanInput,
-): PlanResult<StackModuleOutput<Module>>;
+export function plan<Module = unknown>(input: PlanInput): PlanResult<StackModuleOutput<Module>>;
 export function plan<Module = unknown>(
   input: FilteredPlanInput,
 ): PlanResult<StackModuleOutput<Module> | undefined>;
-export function plan<
-  Module = unknown,
-  Input extends FilteredPlanInput = PlanInput,
->(input: Input): PlanResult<SelectionOutput<StackModuleOutput<Module>, Input>>;
+export function plan<Module = unknown, Input extends FilteredPlanInput = PlanInput>(
+  input: Input,
+): PlanResult<SelectionOutput<StackModuleOutput<Module>, Input>>;
 export function plan<Module = unknown>(input: FilteredPlanInput) {
   return planStack<Module>(input);
 }
@@ -133,9 +125,7 @@ const planStack = <Module = unknown>(input: FilteredPlanInput) =>
       (input.include !== undefined || input.exclude !== undefined)
     ) {
       return yield* Effect.die(
-        new Plan.InvalidResourceSelection({
-          message: "Filtered destroy is not supported.",
-        }),
+        new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
       );
     }
     const report = withSpanEvents(yield* Progress);
@@ -145,9 +135,7 @@ const planStack = <Module = unknown>(input: FilteredPlanInput) =>
     // boundaries, the engine reports loading-state / computing-plan and the
     // per-node diff events. Re-providing the wrapped reporter is all the
     // route does — no translation layer.
-    const session = yield* open(input.target, input).pipe(
-      Effect.provideService(Progress, report),
-    );
+    const session = yield* open(input.target, input).pipe(Effect.provideService(Progress, report));
     const native = (yield* (
       input.operation === "destroy"
         ? Plan.destroy(session.stack)

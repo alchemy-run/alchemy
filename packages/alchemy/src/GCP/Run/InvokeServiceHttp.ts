@@ -1,11 +1,11 @@
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
-import * as Semaphore from "effect/Semaphore";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type { HttpMethod } from "effect/http/HttpMethod";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
 import {
@@ -35,9 +35,9 @@ const jwtExpiry = (token: string): number | undefined => {
   try {
     const payload = token.split(".")[1];
     if (payload === undefined) return undefined;
-    const json = JSON.parse(
-      atob(payload.replace(/-/g, "+").replace(/_/g, "/")),
-    ) as { exp?: unknown };
+    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      exp?: unknown;
+    };
     return typeof json.exp === "number" ? json.exp * 1000 : undefined;
   } catch {
     return undefined;
@@ -110,30 +110,24 @@ const makeIdTokenCache = (http: HttpClient.HttpClient) =>
  * @layer
  * @provides GCP.Run.InvokeService
  */
-export const InvokeServiceHttp: Layer.Layer<
-  InvokeService,
-  never,
-  HttpClient.HttpClient
-> = Layer.effect(
-  InvokeService,
-  Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
-    return Effect.fn(function* <T extends Service>(service: T) {
-      yield* bindGcpHost({
-        tag: "GCP.Run.InvokeService",
-        resource: service,
-        iam: [
-          grantFor(
-            { role: "roles/run.invoker", on: "run.service" },
-            service.name,
-          ),
-        ],
-      });
-      const uri = yield* service.uri;
-      const idToken = yield* makeIdTokenCache(http);
+export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.HttpClient> =
+  Layer.effect(
+    InvokeService,
+    Effect.gen(function* () {
+      const http = yield* HttpClient.HttpClient;
+      return Effect.fn(function* <T extends Service>(service: T) {
+        yield* bindGcpHost({
+          tag: "GCP.Run.InvokeService",
+          resource: service,
+          iam: [grantFor({ role: "roles/run.invoker", on: "run.service" }, service.name)],
+        });
+        const uri = yield* service.uri;
+        const idToken = yield* makeIdTokenCache(http);
 
-      const fetch = Effect.fn(`GCP.Run.InvokeService(${service.LogicalId})`)(
-        function* (path: string, init?: InvokeServiceRequestInit) {
+        const fetch = Effect.fn(`GCP.Run.InvokeService(${service.LogicalId})`)(function* (
+          path: string,
+          init?: InvokeServiceRequestInit,
+        ) {
           const base = yield* uri;
           if (base === undefined) {
             return yield* new InvokeServiceError({
@@ -150,16 +144,11 @@ export const InvokeServiceHttp: Layer.Layer<
             HttpClientRequest.bearerToken(token),
           );
           if (init?.body !== undefined) {
-            const contentType =
-              init.headers?.["content-type"] ?? init.headers?.["Content-Type"];
+            const contentType = init.headers?.["content-type"] ?? init.headers?.["Content-Type"];
             request =
               typeof init.body === "string"
                 ? HttpClientRequest.bodyText(request, init.body, contentType)
-                : HttpClientRequest.bodyUint8Array(
-                    request,
-                    init.body,
-                    contentType,
-                  );
+                : HttpClientRequest.bodyUint8Array(request, init.body, contentType);
           }
           const response = yield* http.execute(request).pipe(
             Effect.mapError(
@@ -192,9 +181,8 @@ export const InvokeServiceHttp: Layer.Layer<
                 }),
             }),
           } satisfies InvokeServiceResponse;
-        },
-      );
-      return { fetch };
-    });
-  }),
-);
+        });
+        return { fetch };
+      });
+    }),
+  );

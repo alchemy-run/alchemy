@@ -117,9 +117,7 @@ export type InspectTemplate = Resource<
  * @resource
  * @category DLP
  */
-export const InspectTemplate = Resource<InspectTemplate>(
-  "GCP.DLP.InspectTemplate",
-);
+export const InspectTemplate = Resource<InspectTemplate>("GCP.DLP.InspectTemplate");
 
 export class InspectTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.InspectTemplateNotResolved",
@@ -130,10 +128,7 @@ export class InspectTemplateNotResolved extends Data.TaggedError(
 const resourceName = (project: string, templateId: string) =>
   `projects/${project}/inspectTemplates/${templateId}`;
 
-const toAttrs = (
-  template: dlp.GooglePrivacyDlpV2InspectTemplate,
-  project: string,
-) => {
+const toAttrs = (template: dlp.GooglePrivacyDlpV2InspectTemplate, project: string) => {
   const name = template.name ?? "";
   const parsed = parseOwnership(template.description);
   return {
@@ -143,8 +138,7 @@ const toAttrs = (
     displayName: template.displayName,
     description: parsed.text,
     inspectConfig: template.inspectConfig,
-    allowLimitedAvailabilityInfoTypes:
-      template.allowLimitedAvailabilityInfoTypes === true,
+    allowLimitedAvailabilityInfoTypes: template.allowLimitedAvailabilityInfoTypes === true,
     createTime: template.createTime,
     updateTime: template.updateTime,
   };
@@ -165,26 +159,18 @@ export const InspectTemplateProvider = () =>
       if (!isResolved(news)) return undefined;
       const previous = olds?.templateId ?? output?.templateId;
       return replaceOnIdentity(
-        previous !== undefined &&
-          news.templateId !== undefined &&
-          news.templateId !== previous,
+        previous !== undefined && news.templateId !== undefined && news.templateId !== previous,
       );
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateId = yield* toResourceId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toResourceId(id, olds?.templateId, output?.templateId);
       const name = output?.name ?? resourceName(env.project, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -208,11 +194,7 @@ export const InspectTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateId = yield* toResourceId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toResourceId(id, news.templateId, output?.templateId);
       const name = resourceName(env.project, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -245,19 +227,10 @@ export const InspectTemplateProvider = () =>
 
       const displayChanged = !sameText(current.displayName, news.displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const configChanged = !jsonEqual(
-        current.inspectConfig,
-        news.inspectConfig,
-      );
-      const limitedChanged =
-        (current.allowLimitedAvailabilityInfoTypes === true) !== allowLimited;
+      const configChanged = !jsonEqual(current.inspectConfig, news.inspectConfig);
+      const limitedChanged = (current.allowLimitedAvailabilityInfoTypes === true) !== allowLimited;
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        configChanged ||
-        limitedChanged
-      ) {
+      if (displayChanged || descriptionChanged || configChanged || limitedChanged) {
         current = yield* dlp.patchProjectsInspectTemplates({
           name: current.name ?? name,
           body: {

@@ -38,9 +38,7 @@ export type EntryLinkReference = {
   /**
    * Reference type (`SOURCE` or `TARGET`). Immutable.
    */
-  type?:
-    | dataplex.GoogleCloudDataplexV1EntryLinkEntryReferenceTypeEnum
-    | (string & {});
+  type?: dataplex.GoogleCloudDataplexV1EntryLinkEntryReferenceTypeEnum | (string & {});
 };
 
 export type EntryGroupsEntryLinkProps = {
@@ -161,8 +159,7 @@ const resolveParent = (
   };
 };
 
-const resourceName = (parent: string, entryLinkId: string) =>
-  `${parent}/entryLinks/${entryLinkId}`;
+const resourceName = (parent: string, entryLinkId: string) => `${parent}/entryLinks/${entryLinkId}`;
 
 const linkTypeOf = (value: string | undefined) =>
   value && value.length > 0 ? value : RELATED_ENTRY_LINK_TYPE;
@@ -196,10 +193,7 @@ const refsKey = (refs: readonly EntryLinkReference[] | undefined) =>
       .sort((left, right) => left.name.localeCompare(right.name)),
   );
 
-const toAttrs = (
-  link: dataplex.GoogleCloudDataplexV1EntryLink,
-  project: string,
-) => {
+const toAttrs = (link: dataplex.GoogleCloudDataplexV1EntryLink, project: string) => {
   const name = link.name ?? "";
   const parsed = parseName(name, "entryLinks");
   const group = parseName(parsed.parent, "entryGroups");
@@ -257,21 +251,14 @@ export const EntryGroupsEntryLinkProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousType = linkTypeOf(
-        olds?.entryLinkType ?? output?.entryLinkType,
-      );
+      const previousType = linkTypeOf(olds?.entryLinkType ?? output?.entryLinkType);
       const nextType = linkTypeOf(news.entryLinkType ?? previousType);
-      const previousRefs = refsKey(
-        olds?.entryReferences ?? output?.entryReferences,
-      );
+      const previousRefs = refsKey(olds?.entryReferences ?? output?.entryReferences);
       const nextRefs = refsKey(news.entryReferences ?? olds?.entryReferences);
       return replaceOnIdentity({
         previousId: olds?.entryLinkId ?? output?.entryLinkId,
         nextId: news.entryLinkId ?? olds?.entryLinkId ?? output?.entryLinkId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -308,21 +295,14 @@ export const EntryGroupsEntryLinkProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* listAtLocation(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              dataplex.listProjectsLocationsEntryGroups.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.entryGroups,
-            ).pipe(
-              Effect.map((items) =>
-                items.filter((item) => hasAlchemyLabelMap(item.labels)),
-              ),
-            ),
+        const groups = yield* listAtLocation(env.project, env.region, (parent) =>
+          collectPages(
+            dataplex.listProjectsLocationsEntryGroups.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.entryGroups,
+          ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels)))),
         );
         const seen = new Set<string>();
         const found: ReturnType<typeof toAttrs>[] = [];
@@ -404,8 +384,7 @@ export const EntryGroupsEntryLinkProvider = () =>
       }
 
       const aspectsChanged =
-        news.aspects !== undefined &&
-        fingerprint(news.aspects) !== fingerprint(current.aspects);
+        news.aspects !== undefined && fingerprint(news.aspects) !== fingerprint(current.aspects);
 
       if (aspectsChanged) {
         current = yield* retryQuota(

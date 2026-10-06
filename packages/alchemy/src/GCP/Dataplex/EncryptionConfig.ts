@@ -105,18 +105,12 @@ export type EncryptionConfig = Resource<
  * @resource
  * @category Dataplex
  */
-export const EncryptionConfig = Resource<EncryptionConfig>(
-  "GCP.Dataplex.EncryptionConfig",
-);
+export const EncryptionConfig = Resource<EncryptionConfig>("GCP.Dataplex.EncryptionConfig");
 
 const orgParent = (organizationId: string, location: string) =>
   `organizations/${organizationId}/locations/${location}`;
 
-const resourceName = (
-  organizationId: string,
-  location: string,
-  encryptionConfigId: string,
-) =>
+const resourceName = (organizationId: string, location: string, encryptionConfigId: string) =>
   `${orgParent(organizationId, location)}/encryptionConfigs/${encryptionConfigId}`;
 
 const toId = (encryptionConfigId: string | undefined, existing?: string) =>
@@ -146,36 +140,25 @@ const toAttrs = (
 const getByName = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : retryQuota(
-        dataplex.getOrganizationsLocationsEncryptionConfigs({ name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    : retryQuota(dataplex.getOrganizationsLocationsEncryptionConfigs({ name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
 
 export const EncryptionConfigProvider = () =>
   Provider.succeed(EncryptionConfig, {
-    stables: [
-      "name",
-      "encryptionConfigId",
-      "organizationId",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "encryptionConfigId", "organizationId", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId:
-          olds?.encryptionConfigId ??
-          output?.encryptionConfigId ??
-          DEFAULT_ENCRYPTION_CONFIG_ID,
+          olds?.encryptionConfigId ?? output?.encryptionConfigId ?? DEFAULT_ENCRYPTION_CONFIG_ID,
         nextId: toId(
           news.encryptionConfigId,
           olds?.encryptionConfigId ?? output?.encryptionConfigId,
         ),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -187,19 +170,11 @@ export const EncryptionConfigProvider = () =>
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const encryptionConfigId = toId(
-        olds?.encryptionConfigId,
-        output?.encryptionConfigId,
-      );
+      const encryptionConfigId = toId(olds?.encryptionConfigId, output?.encryptionConfigId);
       const organizationId = olds?.organizationId ?? output?.organizationId;
       if (organizationId === undefined) return undefined;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(organizationId, location, encryptionConfigId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(organizationId, location, encryptionConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organizationId);
@@ -210,19 +185,9 @@ export const EncryptionConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const encryptionConfigId = toId(
-        news.encryptionConfigId,
-        output?.encryptionConfigId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        news.organizationId,
-        location,
-        encryptionConfigId,
-      );
+      const encryptionConfigId = toId(news.encryptionConfigId, output?.encryptionConfigId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(news.organizationId, location, encryptionConfigId);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -233,8 +198,7 @@ export const EncryptionConfigProvider = () =>
             encryptionConfigId,
             body: {
               key: news.key,
-              enableMetastoreEncryption:
-                news.enableMetastoreEncryption === true ? true : undefined,
+              enableMetastoreEncryption: news.enableMetastoreEncryption === true ? true : undefined,
             },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -250,32 +214,26 @@ export const EncryptionConfigProvider = () =>
 
       const keyChanged = (current.key ?? "") !== (news.key ?? "");
       const metastoreChanged =
-        (current.enableMetastoreEncryption === true) !==
-        (news.enableMetastoreEncryption === true);
+        (current.enableMetastoreEncryption === true) !== (news.enableMetastoreEncryption === true);
 
       if (keyChanged || metastoreChanged) {
-        const operation =
-          yield* dataplex.patchOrganizationsLocationsEncryptionConfigs({
+        const operation = yield* dataplex.patchOrganizationsLocationsEncryptionConfigs({
+          name: current.name ?? name,
+          updateMask: [
+            keyChanged ? "key" : undefined,
+            metastoreChanged ? "enableMetastoreEncryption" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: [
-              keyChanged ? "key" : undefined,
-              metastoreChanged ? "enableMetastoreEncryption" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name ?? name,
-              key: news.key,
-              enableMetastoreEncryption:
-                news.enableMetastoreEncryption === true,
-              etag: current.etag,
-            },
-          });
+            key: news.key,
+            enableMetastoreEncryption: news.enableMetastoreEncryption === true,
+            etag: current.etag,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, news.organizationId);

@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 
 export const MARKER_OBJECT = "marker.txt";
 
@@ -19,10 +19,7 @@ export default class MarkerJob extends GCP.Run.Job<MarkerJob>()(
     });
     const putObject = yield* GCP.Storage.PutObject(bucket);
     return {
-      run: putObject({ name: MARKER_OBJECT, body: "ran" }).pipe(
-        Effect.asVoid,
-        Effect.orDie,
-      ),
+      run: putObject({ name: MARKER_OBJECT, body: "ran" }).pipe(Effect.asVoid, Effect.orDie),
     };
   }).pipe(Effect.provide(GCP.Storage.PutObjectHttp)),
 ) {}

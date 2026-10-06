@@ -884,11 +884,20 @@ const PROVIDERS = [
     margin: 0 auto;
   }
   /* A very faint, static echo of the hero's ring geometry behind each
-     section, alternating sides. Masked so it takes the theme's text color. */
+     section, alternating sides. Masked so it takes the theme's text color.
+     Clipped horizontally only, so a pattern spills into the neighboring
+     sections instead of being cropped; without a per-section stacking
+     context it stays behind their content too. */
   .v2-section {
     position: relative;
+    overflow-x: clip;
+  }
+  /* One stacking context for all sections: patterns (z-index -1) paint above
+     the body background but below every section's content. Clipped so the
+     last section's pattern stops at the footer. */
+  :global(main) {
     isolation: isolate;
-    overflow: hidden;
+    overflow: clip;
   }
   .v2-section::before {
     content: "";

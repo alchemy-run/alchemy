@@ -9,9 +9,12 @@ export const DatabaseLive = Layer.unwrap(
   Effect.gen(function* () {
     const database = yield* Prisma.Postgres("Db", { project: "chat" });
     const db = yield* Prisma.Connection("Db", { database });
-    const pool = yield* Cloudflare.Hyperdrive.Connection("Pool", { origin: db.origin.as<Prisma.PostgresOrigin>() });
+    const pool = yield* Cloudflare.Hyperdrive.Connection("Pool", {
+      origin: db.origin.as<Prisma.PostgresOrigin>(),
+    });
     const connection = yield* Cloudflare.Hyperdrive.Connect(pool);
     return Postgres.PostgresLayer({ url: connection.connectionString });
   }),
-)/*hide*/.pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding))/*end*/;
+) /*hide*/
+  .pipe(Layer.provide(Cloudflare.Hyperdrive.ConnectBinding)); /*end*/
 // #endregion show

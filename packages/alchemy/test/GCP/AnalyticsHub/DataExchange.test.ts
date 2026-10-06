@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as analyticshub from "@distilled.cloud/gcp/analyticshub_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -12,9 +12,7 @@ const waitUntilGone = (name: string) =>
   analyticshub.getProjectsLocationsDataExchanges({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("InternalServerError", () =>
-      Effect.succeed("found" as const),
-    ),
+    Effect.catchTag("InternalServerError", () => Effect.succeed("found" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -97,10 +95,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.primaryContact).toEqual("catalog@example.com");
       expect(updated.documentation).toEqual("https://example.com/docs");
 
-      const fetchedUpdate =
-        yield* analyticshub.getProjectsLocationsDataExchanges({
-          name: created.name,
-        });
+      const fetchedUpdate = yield* analyticshub.getProjectsLocationsDataExchanges({
+        name: created.name,
+      });
       expect(fetchedUpdate.displayName).toEqual("Marketplace v2");
       expect(fetchedUpdate.description).toContain("updated catalogs");
       expect(fetchedUpdate.primaryContact).toEqual("catalog@example.com");

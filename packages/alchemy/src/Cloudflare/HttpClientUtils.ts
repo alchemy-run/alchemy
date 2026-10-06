@@ -1,12 +1,9 @@
-import {
-  Credentials,
-  fromApiToken,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { Credentials, fromApiToken } from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { HttpClient } from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
 /**
@@ -15,16 +12,12 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  */
 export const authorizeWith =
   (token: { value: Effect.Effect<Redacted.Redacted<string>> }) =>
-  <A, E>(
-    eff: Effect.Effect<A, E, Credentials | HttpClient>,
-  ): Effect.Effect<A, E, RuntimeContext> =>
+  <A, E>(eff: Effect.Effect<A, E, Credentials | HttpClient>): Effect.Effect<A, E, RuntimeContext> =>
     token.value.pipe(
       Effect.flatMap((value) =>
         eff.pipe(
           Effect.provide(
-            fromApiToken({ apiToken: Redacted.value(value) }).pipe(
-              Layer.provideMerge(FetchHttpClient.layer),
-            ),
+            fromApiToken({ apiToken: value }).pipe(Layer.provideMerge(FetchHttpClient.layer)),
           ),
         ),
       ),

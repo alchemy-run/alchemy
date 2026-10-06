@@ -14,7 +14,6 @@ export const ExecuteMutationHttp = Layer.effect(
   makeConnectorHttpBinding({
     tag: "GCP.FirebaseDataConnect.ExecuteMutation",
     iam: { role: "roles/firebasedataconnect.dataAdmin" },
-    operation:
-      firebasedataconnect.executeMutationProjectsLocationsServicesConnectors,
+    operation: firebasedataconnect.executeMutationProjectsLocationsServicesConnectors,
   }),
 );

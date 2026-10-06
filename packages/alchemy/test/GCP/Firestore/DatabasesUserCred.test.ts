@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 const enterpriseDatabaseId = "alchfsucreds2";
@@ -33,9 +30,7 @@ const waitUntilGone = (name: string) =>
 const waitUntilDatabase = (name: string, want: "ready" | "gone") =>
   firestore.getProjectsDatabases({ name }).pipe(
     Effect.map((database) =>
-      database.deleteTime !== undefined
-        ? ("gone" as const)
-        : ("ready" as const),
+      database.deleteTime !== undefined ? ("gone" as const) : ("ready" as const),
     ),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -45,22 +40,18 @@ const waitUntilDatabase = (name: string, want: "ready" | "gone") =>
     }),
   );
 
-const waitForDatabaseOperation = (
-  operation: firestore.GoogleLongrunningOperation,
-) =>
+const waitForDatabaseOperation = (operation: firestore.GoogleLongrunningOperation) =>
   Effect.gen(function* () {
     if (operation.done === true || operation.name === undefined) {
       return operation;
     }
-    return yield* firestore
-      .getProjectsDatabasesOperations({ name: operation.name })
-      .pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("4 seconds"),
-          until: (current) => current.done === true,
-          times: 10,
-        }),
-      );
+    return yield* firestore.getProjectsDatabasesOperations({ name: operation.name }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("4 seconds"),
+        until: (current) => current.done === true,
+        times: 10,
+      }),
+    );
   });
 
 const ensureEnterpriseDatabase = Effect.gen(function* () {
@@ -70,15 +61,10 @@ const ensureEnterpriseDatabase = Effect.gen(function* () {
       name: enterpriseDatabaseNameOf(project),
     })
     .pipe(
-      Effect.map((database) =>
-        database.deleteTime !== undefined ? undefined : database,
-      ),
+      Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
-  if (
-    existing !== undefined &&
-    (existing.databaseEdition ?? "").toUpperCase() === "ENTERPRISE"
-  ) {
+  if (existing !== undefined && (existing.databaseEdition ?? "").toUpperCase() === "ENTERPRISE") {
     return enterpriseDatabaseNameOf(project);
   }
   if (existing !== undefined) {

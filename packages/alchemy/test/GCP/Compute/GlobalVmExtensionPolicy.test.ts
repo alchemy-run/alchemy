@@ -1,33 +1,28 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (project: string, globalVmExtensionPolicy: string) =>
-  compute
-    .getGlobalVmExtensionPolicies({ project, globalVmExtensionPolicy })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  compute.getGlobalVmExtensionPolicies({ project, globalVmExtensionPolicy }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a global VM extension policy",

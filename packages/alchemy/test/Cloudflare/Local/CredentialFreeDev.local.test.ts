@@ -1,14 +1,14 @@
+import { expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { LOCAL_ACCOUNT_ID } from "@/Cloudflare/LocalAccount.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import * as HttpClient from "effect/http/HttpClient";
 
 const noCredentials = Layer.effect(
   ConfigProvider.ConfigProvider,
@@ -18,12 +18,9 @@ const noCredentials = Layer.effect(
       const key = path[0];
       if (path.length === 1 && typeof key === "string") {
         if (key.startsWith("CLOUDFLARE_")) return Effect.succeed(undefined);
-        if (key === "CI")
-          return Effect.succeed(ConfigProvider.makeValue("false"));
+        if (key === "CI") return Effect.succeed(ConfigProvider.makeValue("false"));
         if (key === "ALCHEMY_PROFILE")
-          return Effect.succeed(
-            ConfigProvider.makeValue("cloudflare-credential-free-test"),
-          );
+          return Effect.succeed(ConfigProvider.makeValue("cloudflare-credential-free-test"));
       }
       return base.load(path);
     });
@@ -56,14 +53,9 @@ test.provider(
             return Effect.fn(function* () {
               yield* namespace.put("seed", "credential-free");
               yield* objects.put("seed", "credential-free");
-              yield* database.exec(
-                "CREATE TABLE IF NOT EXISTS seed (value TEXT)",
-              );
+              yield* database.exec("CREATE TABLE IF NOT EXISTS seed (value TEXT)");
               yield* database.exec("DELETE FROM seed");
-              yield* database
-                .prepare("INSERT INTO seed VALUES (?)")
-                .bind("credential-free")
-                .run();
+              yield* database.prepare("INSERT INTO seed VALUES (?)").bind("credential-free").run();
               return { value: yield* namespace.get("seed") };
             });
           }).pipe(
@@ -122,9 +114,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const result = yield* Effect.result(
-        stack.deploy(
-          Cloudflare.KV.Namespace("RemoteNamespace").pipe(Alchemy.remote()),
-        ),
+        stack.deploy(Cloudflare.KV.Namespace("RemoteNamespace").pipe(Alchemy.remote())),
       );
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {

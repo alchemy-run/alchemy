@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -96,9 +91,7 @@ export type WeeklyWindow = {
   /**
    * Days of week. Empty means every day.
    */
-  daysOfWeek?: Array<
-    clouddeploy.WeeklyWindowDaysOfWeekItemEnum | (string & {})
-  >;
+  daysOfWeek?: Array<clouddeploy.WeeklyWindowDaysOfWeekItemEnum | (string & {})>;
   /** Inclusive start time. Must be set with `endTime`. */
   startTime?: TimeOfDay;
   /** Exclusive end time. Must be set with `startTime`. */
@@ -121,17 +114,13 @@ export type RolloutRestriction = {
    * Restricted invokers (`USER`, `DEPLOY_AUTOMATION`). Empty means all
    * invokers.
    */
-  invokers?: Array<
-    clouddeploy.RolloutRestrictionInvokersItemEnum | (string & {})
-  >;
+  invokers?: Array<clouddeploy.RolloutRestrictionInvokersItemEnum | (string & {})>;
   /**
    * Restricted rollout actions (`ADVANCE`, `APPROVE`, `CANCEL`,
    * `CREATE`, `IGNORE_JOB`, `RETRY_JOB`, `ROLLBACK`,
    * `TERMINATE_JOBRUN`). Empty means all actions.
    */
-  actions?: Array<
-    clouddeploy.RolloutRestrictionActionsItemEnum | (string & {})
-  >;
+  actions?: Array<clouddeploy.RolloutRestrictionActionsItemEnum | (string & {})>;
   /** Time windows during which actions are restricted. */
   timeWindows?: TimeWindows;
 };
@@ -292,15 +281,9 @@ export type DeployPolicy = Resource<
  * @resource
  * @category CloudDeploy
  */
-export const DeployPolicy = Resource<DeployPolicy>(
-  "GCP.CloudDeploy.DeployPolicy",
-);
+export const DeployPolicy = Resource<DeployPolicy>("GCP.CloudDeploy.DeployPolicy");
 
-const resourceName = (
-  project: string,
-  location: string,
-  deployPolicyId: string,
-) =>
+const resourceName = (project: string, location: string, deployPolicyId: string) =>
   `projects/${project}/locations/${location}/deployPolicies/${deployPolicyId}`;
 
 const toSelectors = (
@@ -376,25 +359,15 @@ const listOwned = (project: string, region: string) =>
 
 export const DeployPolicyProvider = () =>
   Provider.succeed(DeployPolicy, {
-    stables: [
-      "name",
-      "deployPolicyId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "deployPolicyId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.deployPolicyId ?? output?.deployPolicyId,
-        nextId:
-          news.deployPolicyId ?? olds?.deployPolicyId ?? output?.deployPolicyId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.deployPolicyId ?? olds?.deployPolicyId ?? output?.deployPolicyId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -409,17 +382,12 @@ export const DeployPolicyProvider = () =>
         output?.deployPolicyId,
         "deploypolicy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, deployPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, deployPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -437,9 +405,7 @@ export const DeployPolicyProvider = () =>
         output?.deployPolicyId,
         "deploypolicy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, deployPolicyId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -479,36 +445,30 @@ export const DeployPolicyProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.description, news.description) && "description",
         !sameBool(current.suspended, desiredSuspended) && "suspended",
-        fingerprint(toSelectors(current.selectors)) !==
-          fingerprint(news.selectors) && "selectors",
-        fingerprint(toRules(current.rules)) !== fingerprint(news.rules) &&
-          "rules",
+        fingerprint(toSelectors(current.selectors)) !== fingerprint(news.selectors) && "selectors",
+        fingerprint(toRules(current.rules)) !== fingerprint(news.rules) && "rules",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* clouddeploy.patchProjectsLocationsDeployPolicies({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              selectors: news.selectors,
-              rules: news.rules,
-              description: news.description,
-              suspended: desiredSuspended,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
-          });
+        const operation = yield* clouddeploy.patchProjectsLocationsDeployPolicies({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            selectors: news.selectors,
+            rules: news.rules,
+            description: news.description,
+            suspended: desiredSuspended,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

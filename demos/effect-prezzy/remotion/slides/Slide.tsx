@@ -8,10 +8,23 @@ import { brand } from "../theme.ts";
 export type SlideProps = Pick<SlideItem, "layout" | "props">;
 
 /** Fade + rise in, `delay` frames after the slide starts. */
-const Enter = ({ delay, children, style }: { delay: number; children: ReactNode; style?: CSSProperties }) => {
+const Enter = ({
+  delay,
+  children,
+  style,
+}: {
+  delay: number;
+  children: ReactNode;
+  style?: CSSProperties;
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const progress = spring({ frame: frame - delay, fps, config: { damping: 200 }, durationInFrames: 24 });
+  const progress = spring({
+    frame: frame - delay,
+    fps,
+    config: { damping: 200 },
+    durationInFrames: 24,
+  });
   return (
     <div
       style={{
@@ -92,14 +105,24 @@ const TitleLayout = ({ props }: SlideProps) => (
     </Enter>
     {props.subtitle ? (
       <Enter delay={14}>
-        <p style={{ margin: "36px 0 0", fontFamily: sans, fontSize: 40, color: brand.fgMuted, whiteSpace: "pre-line" }}>
+        <p
+          style={{
+            margin: "36px 0 0",
+            fontFamily: sans,
+            fontSize: 40,
+            color: brand.fgMuted,
+            whiteSpace: "pre-line",
+          }}
+        >
           {props.subtitle}
         </p>
       </Enter>
     ) : null}
     {props.footer ? (
       <Enter delay={20} style={{ position: "absolute", left: 180, bottom: 96 }}>
-        <div style={{ fontFamily: mono, fontSize: 34, letterSpacing: 1, color: brand.moss }}>{props.footer}</div>
+        <div style={{ fontFamily: mono, fontSize: 34, letterSpacing: 1, color: brand.moss }}>
+          {props.footer}
+        </div>
       </Enter>
     ) : null}
   </AbsoluteFill>
@@ -113,13 +136,25 @@ const SectionLayout = ({ props }: SlideProps) => (
       </Enter>
     ) : null}
     <Enter delay={5}>
-      <h1 style={{ margin: "28px 0 0", fontFamily: serif, fontWeight: 600, fontSize: 104, color: brand.fg, maxWidth: 1600, textWrap: "balance" }}>
+      <h1
+        style={{
+          margin: "28px 0 0",
+          fontFamily: serif,
+          fontWeight: 600,
+          fontSize: 104,
+          color: brand.fg,
+          maxWidth: 1600,
+          textWrap: "balance",
+        }}
+      >
         {props.heading}
       </h1>
     </Enter>
     {props.subtitle ? (
       <Enter delay={12}>
-        <p style={{ margin: "28px 0 0", fontFamily: sans, fontSize: 38, color: brand.fgMuted }}>{props.subtitle}</p>
+        <p style={{ margin: "28px 0 0", fontFamily: sans, fontSize: 38, color: brand.fgMuted }}>
+          {props.subtitle}
+        </p>
       </Enter>
     ) : null}
   </AbsoluteFill>

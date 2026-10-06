@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsInternalRanges({ name }).pipe(
@@ -40,14 +37,11 @@ test.provider(
       );
       expect(error._tag).toBe("NotFound");
 
-      const page =
-        yield* networkconnectivity.listProjectsLocationsInternalRanges({
-          parent: `projects/${project}/locations/global`,
-          pageSize: 100,
-        });
-      expect(
-        (page.internalRanges ?? []).map((range) => range.name),
-      ).not.toContain(
+      const page = yield* networkconnectivity.listProjectsLocationsInternalRanges({
+        parent: `projects/${project}/locations/global`,
+        pageSize: 100,
+      });
+      expect((page.internalRanges ?? []).map((range) => range.name)).not.toContain(
         `projects/${project}/locations/global/internalRanges/alchemy-ir-missing`,
       );
 
@@ -68,17 +62,14 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const range = yield* GCP.NetworkConnectivity.InternalRange(
-            "Reserved",
-            {
-              network: defaultNetworkSelfLink(project),
-              usage: "FOR_VPC",
-              peering: "FOR_SELF",
-              ipCidrRange: "172.20.10.0/24",
-              description: "range a",
-              labels: { env: "test" },
-            },
-          );
+          const range = yield* GCP.NetworkConnectivity.InternalRange("Reserved", {
+            network: defaultNetworkSelfLink(project),
+            usage: "FOR_VPC",
+            peering: "FOR_SELF",
+            ipCidrRange: "172.20.10.0/24",
+            description: "range a",
+            labels: { env: "test" },
+          });
           return { range };
         }),
       );
@@ -96,21 +87,18 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.range.labels).toMatchObject({ env: "test" });
       expect(created.range.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networkconnectivity.getProjectsLocationsInternalRanges({
-          name: created.range.name,
-        });
+      const fetched = yield* networkconnectivity.getProjectsLocationsInternalRanges({
+        name: created.range.name,
+      });
       expect(fetched.name).toEqual(created.range.name);
       expect(fetched.ipCidrRange).toEqual("172.20.10.0/24");
       expect(fetched.usage).toEqual("FOR_VPC");
       expect(fetched.peering).toEqual("FOR_SELF");
       expect(fetched.description).toEqual("range a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -132,10 +120,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(updated.labels).toMatchObject({ env: "prod", role: "ipam" });
       expect(updated.ipCidrRange).toEqual("172.20.10.0/24");
 
-      const refetched =
-        yield* networkconnectivity.getProjectsLocationsInternalRanges({
-          name: created.range.name,
-        });
+      const refetched = yield* networkconnectivity.getProjectsLocationsInternalRanges({
+        name: created.range.name,
+      });
       expect(refetched.description).toEqual("range b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("ipam");
