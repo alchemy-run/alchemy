@@ -8,6 +8,9 @@
     "directory": "examples/cloudflare-website-sveltekit"
   },
   "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
   "scripts": {
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",

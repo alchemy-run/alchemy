@@ -1,6 +1,7 @@
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { relativeWorkerMain } from "@/Cloudflare/Workers/Worker.ts";
 import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
@@ -481,6 +482,31 @@ describe(
 
       test("observes when prior state has crons (e.g. Effect-native cron())", () => {
         expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(true);
+      });
+    });
+
+    // The live drift-repair test in Worker.test.ts covers a moved checkout
+    // end to end; these pin the path edge cases it doesn't exercise.
+    describe("relativeWorkerMain", () => {
+      test("relativizes a file URL or absolute path inside cwd", () => {
+        expect(relativeWorkerMain("file:///repo/apps/api/src/index.ts", "/repo")).toEqual(
+          "apps/api/src/index.ts",
+        );
+        expect(relativeWorkerMain("/repo/src/worker.ts", "/repo")).toEqual("src/worker.ts");
+      });
+
+      test("keeps relative paths and paths outside cwd", () => {
+        expect(relativeWorkerMain("./src/worker.ts", "/repo")).toEqual("./src/worker.ts");
+        expect(relativeWorkerMain("/other/worker.ts", "/repo")).toEqual("/other/worker.ts");
+        expect(relativeWorkerMain("file:///other/worker.ts", "/repo")).toEqual(
+          "file:///other/worker.ts",
+        );
+      });
+
+      test("decodes escaped characters in file URLs", () => {
+        expect(relativeWorkerMain("file:///my%20repo/src/worker.ts", "/my repo")).toEqual(
+          "src/worker.ts",
+        );
       });
     });
   },
