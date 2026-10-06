@@ -1816,6 +1816,8 @@ describe("prop-flow convergence", { tags: ["unit", "local"] }, () => {
       Effect.gen(function* () {
         const program = Effect.gen(function* () {
           const A = yield* PhasedTarget("A", { desired: "a-value", replaceKey: "v1" });
+          // Only cycle members precreate; the self-binding puts A in one.
+          yield* A.bind("Self", { env: { SELF: A.stableId } });
           // B depends on A.stableId — a value already available from A's
           // precreate stub — yet must still be gated on A's reconcile.
           const B = yield* TestResource("B", { string: A.stableId });
@@ -1845,6 +1847,8 @@ describe("prop-flow convergence", { tags: ["unit", "local"] }, () => {
       Effect.gen(function* () {
         const program = Effect.gen(function* () {
           const A = yield* PhasedTarget("A", { desired: "a-value", replaceKey: "v1" });
+          // Only cycle members precreate; the self-binding puts A in one.
+          yield* A.bind("Self", { env: { SELF: A.stableId } });
           const B = yield* TestResource("B", { string: A.value });
           const C = yield* TestResource("C", { string: B.string });
           return { A, B, C };
@@ -5773,6 +5777,45 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
       yield* stack.destroy();
     });
   });
+
+  // A resource outside a dependency cycle is never precreated: like any
+  // other create with unresolved props, it gets the deferred ownership probe.
+  const acyclicStub = (enabled: boolean) =>
+    Effect.gen(function* () {
+      const parent = yield* Singleton("Parent", {});
+      return yield* Stub("Stub", { parent: parent.identity }).pipe(adopt(enabled));
+    });
+
+  test.provider(
+    "probes instead of precreating outside a cycle and refuses foreign state",
+    (stack) =>
+      Effect.gen(function* () {
+        const probe = yield* Probe;
+        yield* stack.destroy();
+        const refused = yield* stack.deploy(acyclicStub(false)).pipe(
+          Effect.as(false),
+          Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
+        );
+        expect(refused).toBe(true);
+        expect(probe.reads).toEqual(["Stub"]);
+        expect(probe.reconciles).toEqual([]);
+        expect((yield* getState("Stub")).attr).toBeUndefined();
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("adopts the probed resource outside a cycle when adoption is enabled", (stack) =>
+    Effect.gen(function* () {
+      const probe = yield* Probe;
+      yield* stack.destroy();
+      expect((yield* stack.deploy(acyclicStub(true))).identity).toBe("child-branch");
+      expect(probe.reads).toEqual(["Stub"]);
+      expect(probe.reconciles).toEqual([
+        { id: "Stub", olds: undefined, output: { identity: "stub", value: "stub" } },
+      ]);
+      yield* stack.destroy();
+    }),
+  );
 
   test.provider("resource adoption never authorizes a sibling", (stack) => {
     return Effect.gen(function* () {
