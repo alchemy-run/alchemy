@@ -634,7 +634,8 @@ export default defineConfig({
                   link: "/cloudflare/data/branch-from-shared-database",
                 },
                 { label: "Artifacts", link: "/cloudflare/data/artifacts" },
-                { label: "Basin (Pipelines & Iceberg)", link: "/cloudflare/data/basin" },
+                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
+                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
               ],
             },
             {
