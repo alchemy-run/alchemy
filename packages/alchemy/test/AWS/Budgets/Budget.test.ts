@@ -7,10 +7,13 @@ import * as AWS from "@/AWS";
 import { Budget, type BudgetCostTypes } from "@/AWS/Budgets/Budget.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { defaultStage } from "@/Test/Core";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const budgetName = "alchemy-test-budget-lifecycle";
+// Budget names are unique per account: scope to the test stage (`test_$USER`)
+// so concurrent runs by different developers don't share one budget.
+const budgetName = `alchemy-test-budget-lifecycle-${defaultStage()}`;
 
 const getBudget = (accountId: string) =>
   budgets.describeBudget({ AccountId: accountId, BudgetName: budgetName }).pipe(
