@@ -1066,3 +1066,33 @@ describe("KvNamespace binding persistence", () => {
     { timeout: 30_000 },
   );
 });
+
+it.effect(
+  "KV Instant accepts 300-byte keys and rejects oversized UTF-8 keys across operations",
+  () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "kv-instant-key-test",
+        compatibilityDate: "2026-03-10",
+        modules: [{ name: "main.js", type: "ESModule", content: TEST_SCRIPT }],
+        bindings: [KvNamespace.local({ binding: "NAMESPACE", id: "instant", mode: "instant" })],
+      });
+      const kv = new NamespacedKv(worker.baseUrl, "");
+      yield* Effect.promise(async () => {
+        for (const key of ["a".repeat(300), "é".repeat(150), "😀".repeat(75)]) {
+          await kv.put(key, "boundary");
+          expect(await kv.get(key)).toBe("boundary");
+          expect(await kv.get([key])).toEqual(new Map([[key, "boundary"]]));
+          await kv.delete(key);
+          expect(await kv.get(key)).toBeNull();
+        }
+        for (const key of ["a".repeat(301), "é".repeat(150) + "a", "😀".repeat(76)]) {
+          await expect(kv.put(key, "invalid")).rejects.toThrow("at most 300 bytes");
+          await expect(kv.get(key)).rejects.toThrow("at most 300 bytes");
+          await expect(kv.get([key])).rejects.toThrow("at most 300 bytes");
+          await expect(kv.delete(key)).rejects.toThrow("at most 300 bytes");
+        }
+      });
+    }).pipe(Effect.provide(localRuntimeLayer), Effect.scoped),
+  { timeout: 60_000 },
+);
