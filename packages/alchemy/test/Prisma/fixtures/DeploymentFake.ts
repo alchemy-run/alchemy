@@ -214,7 +214,7 @@ export const makeDeploymentCloud = (options: DeploymentCloudOptions = {}) => {
         }),
       });
 
-  const collect = (body: HttpBody.HttpBody) =>
+  const collect = (body: HttpBody.HttpBody): Effect.Effect<Uint8Array, unknown> =>
     body._tag === "Uint8Array"
       ? Effect.succeed(body.body)
       : body._tag === "Stream"
