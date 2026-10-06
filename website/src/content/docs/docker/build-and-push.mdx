@@ -90,8 +90,10 @@ arguments, target, platform, and build options contribute to the hash.
 
 For published builds, Alchemy checks the input-hash tag first. A hit returns the
 registry digest without invoking Docker. A miss builds and publishes. Layer-cache
-settings are separate: by default, published builds import the repository's
-`:buildcache` tag and export inline cache metadata.
+settings are separate: by default, each published image imports and exports
+inline cache metadata through its own `:buildcache-<hash>` tag, derived from the
+resource's identity, so images sharing a repository do not overwrite each
+other's layer cache.
 
 :::caution
 Pin base images and downloaded dependencies when reproducibility matters.

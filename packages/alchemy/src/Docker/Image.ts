@@ -4,6 +4,7 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { prepareImageBuild, type DockerBuildOptions } from "./ImageBuild.ts";
 import {
@@ -29,6 +30,14 @@ import {
 } from "./Registry.ts";
 
 export type { DockerBuildOptions } from "./ImageBuild.ts";
+
+/**
+ * Registry tag holding an image resource's inline layer cache. Derived from
+ * the resource FQN so it survives input changes and redeploys, but differs
+ * between images published to one repository.
+ */
+export const buildCacheTag = (fqn: string) =>
+  sha256Object({ fqn }).pipe(Effect.map((hash) => `buildcache-${hash.slice(0, 12)}`));
 export type { ImagePublish } from "./ImageRegistry.ts";
 
 export interface ImageProps {
@@ -244,7 +253,7 @@ const makeImageProvider = (localMode: boolean) =>
             if (!(yield* findImageManifest(output.ref, credentials))) return { action: "update" };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
+        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, session }) {
           const target = yield* location(id, news, instanceId);
           const build = yield* prepareImageBuild(news.build);
           const tag = build.hash;
@@ -274,7 +283,9 @@ const makeImageProvider = (localMode: boolean) =>
                   yield* session.note(`Reusing image ${cached.ref}`);
                   return cached;
                 }
-                const cacheRef = `${target.name}:buildcache`;
+                // One layer-cache tag per image resource: stable across its
+                // deploys, distinct from other images sharing the repository.
+                const cacheRef = `${target.name}:${yield* buildCacheTag(fqn)}`;
                 const tags: [string, ...string[]] = [
                   inputRef,
                   cacheRef,

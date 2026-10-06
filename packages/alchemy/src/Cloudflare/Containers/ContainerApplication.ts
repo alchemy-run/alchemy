@@ -203,8 +203,8 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * default `registryId`); fully qualified destinations are used as-is. When
    * omitted, images publish to a repository shared by the stack and stage.
    *
-   * Builds publish a content-hash tag plus an inline layer cache at
-   * `:buildcache` and deploy the immutable manifest digest. Matching build
+   * Builds publish a content-hash tag plus an inline layer cache at a
+   * per-image `:buildcache-<hash>` tag and deploy the immutable manifest digest. Matching build
    * inputs in the same repository reuse the published image without invoking
    * a builder, so applications and stages that share `repository` share
    * finished images and build layers. Pin base images and downloaded

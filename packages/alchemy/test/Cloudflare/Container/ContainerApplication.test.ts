@@ -735,6 +735,7 @@ describe.concurrent(
           );
           const firstHistory = yield* buildHistory;
           expect(firstHistory.filter((build) => build.status === "Completed")).toHaveLength(1);
+          const cacheTag = yield* DockerResources.buildCacheTag("SharedPublication/Image");
 
           const credentials = yield* Containers.createContainerRegistryCredentials({
             accountId: first.app.accountId,
@@ -748,7 +749,7 @@ describe.concurrent(
           const cacheDigest = Effect.gen(function* () {
             const response = yield* client.execute(
               HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${repositoryPath}/manifests/buildcache`,
+                `https://registry.cloudflare.com/v2/${repositoryPath}/manifests/${cacheTag}`,
               ).pipe(
                 HttpClientRequest.basicAuth(username, credentials.password),
                 HttpClientRequest.setHeader(
@@ -803,7 +804,7 @@ describe.concurrent(
             ]);
             const text = `${log.stdout}\n${log.stderr}`;
             expect(text).toContain(
-              `importing cache manifest from registry.cloudflare.com/${repositoryPath}:buildcache`,
+              `importing cache manifest from registry.cloudflare.com/${repositoryPath}:${cacheTag}`,
             );
             const changedLayers = yield* layersOf(changed.app.hash!.digest!);
             // Re-executing RUN would create a different UUID and therefore a different layer.
@@ -922,7 +923,7 @@ describe.concurrent(
           const cached = yield* http
             .execute(
               HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${first.app.accountId}/${imageName}/manifests/buildcache`,
+                `https://registry.cloudflare.com/v2/${first.app.accountId}/${imageName}/manifests/${yield* DockerResources.buildCacheTag("Image")}`,
               ).pipe(
                 HttpClientRequest.basicAuth(username, credentials.password),
                 HttpClientRequest.setHeader(
@@ -1091,6 +1092,7 @@ describe.concurrent(
         }),
         route: "/hello",
         response: "hello from external container",
+        imageFqn: "ExternalContainer/Image",
       },
       {
         name: "generated",
@@ -1101,6 +1103,7 @@ describe.concurrent(
         }).pipe(Effect.provide(MyContainerLive)),
         route: "/ping",
         response: "pong",
+        imageFqn: "EffectfulContainer/Image",
       },
     ]) {
       test.provider(
@@ -1172,7 +1175,7 @@ describe.concurrent(
             expect(manifest.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
             const cache = yield* client.execute(
               HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${repository}/manifests/buildcache`,
+                `https://registry.cloudflare.com/v2/${repository}/manifests/${yield* DockerResources.buildCacheTag(fixture.imageFqn)}`,
               ).pipe(
                 HttpClientRequest.basicAuth(username, credentials.password),
                 HttpClientRequest.setHeader(

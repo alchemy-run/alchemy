@@ -245,7 +245,7 @@ the configured account ID. With the default registry host, a build uses:
 
 ```text
 Published build: registry.cloudflare.com/<account-id>/web:<build-hash>
-Build cache:     registry.cloudflare.com/<account-id>/web:buildcache
+Build cache:     registry.cloudflare.com/<account-id>/web:buildcache-<image-id-hash>
 Deployed image:  registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
 ```
 
@@ -256,12 +256,12 @@ produce a new hash tag in that repository and can reuse its shared inline
 build-layer cache. Each stage still has its own Container application,
 runtime settings, and running instances; only images and build layers are shared.
 
-All builds targeting a repository import reusable layers from its
-`:buildcache` tag, even when their complete input hashes differ. That tag
-points to the latest exported inline cache, not an aggregate of every image
-ever published to the repository. A finished-image cache hit leaves the
-layer-cache tag unchanged. The Container deploys the immutable digest, not
-the mutable `buildcache` tag.
+Each image keeps its layer cache in its own `:buildcache-<hash>` tag, derived
+from the image resource's identity. Builds of the same Container in any stage
+import reusable layers from it, even when their complete input hashes differ,
+while other Containers sharing the repository keep separate cache tags. The tag
+points to the latest exported inline cache. A finished-image cache hit leaves it
+unchanged. The Container deploys the immutable digest, not the mutable cache tag.
 
 For an Effect-native Container, put `publish` in the props passed to
 `.make()`, alongside `main`. Omitting `publish` keeps the default stage

@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Docker from "@/Docker";
 import { findImageManifest, resolveImageManifest } from "@/Docker/ImageRegistry";
 import { inMemoryState } from "@/State";
@@ -55,7 +56,10 @@ describe(
           const first = yield* deploy("First");
           expect(first.ref).toMatch(/@sha256:/);
           expect(first.imageId).toBeUndefined();
-          expect((yield* resolveImageManifest(`${repository}:buildcache`)).ref).toBe(first.ref);
+          expect(
+            (yield* resolveImageManifest(`${repository}:${yield* Docker.buildCacheTag("First")}`))
+              .ref,
+          ).toBe(first.ref);
           const before = yield* Effect.sync(() => process.env.BUILDX_BUILDER);
           yield* Effect.acquireUseRelease(
             Effect.sync(() => {
@@ -100,6 +104,66 @@ describe(
           yield* stack.destroy();
         }),
       { exclusive: true, timeout: 120_000 },
+    );
+
+    test.provider(
+      "gives each image in a shared repository its own stable layer-cache tag",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const client = yield* HttpClient.HttpClient;
+          const port = yield* findAvailablePort();
+          const registry = Docker.Container("CacheRegistry", {
+            image: "registry:2",
+            start: true,
+            ports: [{ internal: 5000, external: port }],
+          });
+          yield* stack.deploy(registry);
+          yield* client
+            .get(`http://localhost:${port}/v2/`)
+            .pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 8 }));
+          const repository = `localhost:${port}/shared-cache`;
+          const program = (webVersion: string) =>
+            Effect.gen(function* () {
+              yield* registry;
+              const image = (id: string, label: string) =>
+                Docker.Image(id, {
+                  build: {
+                    dockerfile: { content: `FROM scratch\nLABEL image=${label}\n` },
+                    platform: "linux/amd64",
+                    options: ["--provenance=false"],
+                  },
+                  publish: { repository },
+                });
+              return { web: yield* image("Web", webVersion), api: yield* image("Api", "api") };
+            });
+          const cacheTags = client.get(`http://localhost:${port}/v2/shared-cache/tags/list`).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(Schema.Struct({ tags: Schema.Array(Schema.String) })),
+            ),
+            Effect.map(({ tags }) => tags.filter((tag) => tag.startsWith("buildcache")).sort()),
+          );
+          const webTag = yield* Docker.buildCacheTag("Web");
+          const apiTag = yield* Docker.buildCacheTag("Api");
+          expect(webTag).not.toBe(apiTag);
+
+          const first = yield* stack.deploy(program("first"));
+          expect(yield* cacheTags).toEqual([webTag, apiTag].sort());
+          expect((yield* resolveImageManifest(`${repository}:${webTag}`)).ref).toBe(first.web.ref);
+          expect((yield* resolveImageManifest(`${repository}:${apiTag}`)).ref).toBe(first.api.ref);
+
+          // A changed image moves only its own cache tag; the tag name is stable.
+          const changed = yield* stack.deploy(program("second"));
+          expect(changed.web.ref).not.toBe(first.web.ref);
+          expect(yield* cacheTags).toEqual([webTag, apiTag].sort());
+          expect((yield* resolveImageManifest(`${repository}:${webTag}`)).ref).toBe(
+            changed.web.ref,
+          );
+          expect((yield* resolveImageManifest(`${repository}:${apiTag}`)).ref).toBe(first.api.ref);
+          yield* stack.destroy();
+        }),
+      { timeout: 120_000 },
     );
 
     test.provider(
