@@ -17,6 +17,13 @@ import { expectGone } from "./Live.ts";
 export const artifactV1Path = `${import.meta.dirname}/deployment/v1.tar.gz`;
 export const artifactV2Path = `${import.meta.dirname}/deployment/v2.tar.gz`;
 
+/**
+ * A prebuilt artifact whose server answers `control`. `GET /hold?seconds=N`
+ * (capped at 300) delays its exit on the next SIGTERM by N seconds, so a stop
+ * keeps the deployment in `stopping` for that long.
+ */
+export const controlArtifactPath = `${import.meta.dirname}/deployment/control.tar.gz`;
+
 export const observeDeployment = (deploymentId: string) =>
   getDeployment({ deploymentId }).pipe(Effect.map((response) => response.data));
 
@@ -39,12 +46,12 @@ export const expectAppGone = (appId: string) =>
     ),
   );
 
-/** Poll a deployment until it reports `status` (bounded to ~50 s). */
-export const waitForStatus = (deploymentId: string, status: string) =>
+/** Poll a deployment until it reports `status` (bounded to `times` × 5 s). */
+export const waitForStatus = (deploymentId: string, status: string, times = 10) =>
   observeDeployment(deploymentId).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),
-      times: 10,
+      times,
       until: (deployment) => deployment.status === status,
     }),
   );
@@ -58,6 +65,23 @@ export const stateRow = (stack: Test.ScratchStack, fqn: string) =>
       return yield* Effect.die(new Error(`Expected a resource state row for '${fqn}'`));
     }
     return stored;
+  }).pipe(Effect.provide(stack.state));
+
+/** Overwrite fields of a resource's persisted props, e.g. to point it at another App. */
+export const patchStateProps = (
+  stack: Test.ScratchStack,
+  fqn: string,
+  patch: Record<string, unknown>,
+) =>
+  Effect.gen(function* () {
+    const stored = yield* stateRow(stack, fqn);
+    const state = yield* yield* State;
+    yield* state.set({
+      stack: stack.name,
+      stage: stack.stage,
+      fqn,
+      value: { ...stored, props: { ...(stored.props as object), ...patch } } as typeof stored,
+    });
   }).pipe(Effect.provide(stack.state));
 
 /**
