@@ -85,7 +85,7 @@ const base = Layer.mergeAll(
   ),
   Layer.succeed(
     Credentials,
-    Effect.succeed(apiTokenCredentials({ apiToken: "test-token" })),
+    Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
   ),
 );
 const noNetwork = Layer.succeed(
