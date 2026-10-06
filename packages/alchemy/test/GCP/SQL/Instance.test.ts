@@ -128,3 +128,111 @@ test.provider.skipIf(!runLifecycle)(
     retry: 0,
   },
 );
+
+test.provider.skipIf(!runLifecycle)(
+  "upgrades databaseVersion in place within the same engine",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.SQL.Instance("UpgradeDb", {
+            region: "us-central1",
+            databaseVersion: "POSTGRES_16",
+            tier: "db-f1-micro",
+            backupEnabled: false,
+            deletionProtectionEnabled: false,
+          });
+        }),
+      );
+      expect(created.databaseVersion).toEqual("POSTGRES_16");
+
+      const upgraded = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.SQL.Instance("UpgradeDb", {
+            region: "us-central1",
+            databaseVersion: "POSTGRES_17",
+            tier: "db-f1-micro",
+            backupEnabled: false,
+            deletionProtectionEnabled: false,
+          });
+        }),
+      );
+
+      // Same physical instance: upgraded, not replaced.
+      expect(upgraded.instanceName).toEqual(created.instanceName);
+      expect(upgraded.createTime).toEqual(created.createTime);
+      expect(upgraded.databaseVersion).toEqual("POSTGRES_17");
+
+      const fetched = yield* sqladmin.getInstances({
+        project: created.project,
+        instance: created.instanceName,
+      });
+      expect(fetched.databaseVersion).toEqual("POSTGRES_17");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.project, created.instanceName);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  // Create 5–15 minutes, major version upgrade 10–20 minutes, delete a few minutes.
+  {
+    tags: ["provider:gcp", "provider:gcp:sql", "live"],
+    timeout: 3_600_000,
+    retry: 0,
+  },
+);
+
+test.provider.skipIf(!runLifecycle)(
+  "destroy fails on a deletion-protected instance until protection is disabled",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.SQL.Instance("ProtectedDb", {
+            region: "us-central1",
+            databaseVersion: "MYSQL_8_0",
+            tier: "db-f1-micro",
+            backupEnabled: false,
+            deletionProtectionEnabled: true,
+          });
+        }),
+      );
+      expect(created.deletionProtectionEnabled).toEqual(true);
+
+      const error = yield* Effect.flip(stack.destroy());
+      expect(error).toBeInstanceOf(GCP.SQL.InstanceDeletionProtected);
+
+      const stillThere = yield* sqladmin.getInstances({
+        project: created.project,
+        instance: created.instanceName,
+      });
+      expect(stillThere.settings?.deletionProtectionEnabled).toEqual(true);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.SQL.Instance("ProtectedDb", {
+            region: "us-central1",
+            databaseVersion: "MYSQL_8_0",
+            tier: "db-f1-micro",
+            backupEnabled: false,
+            deletionProtectionEnabled: false,
+          });
+        }),
+      );
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.project, created.instanceName);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  // Create 5–15 minutes, protection patch, delete a few minutes.
+  {
+    tags: ["provider:gcp", "provider:gcp:sql", "live"],
+    timeout: 2_400_000,
+    retry: 0,
+  },
+);
