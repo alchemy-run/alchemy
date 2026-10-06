@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type KxEnvironmentStatus = finspace.EnvironmentStatus;
@@ -137,25 +132,17 @@ export interface KxEnvironment extends Resource<
  *
  * @resource
  */
-export const KxEnvironment = Resource<KxEnvironment>(
-  "AWS.FinSpace.KxEnvironment",
-);
+export const KxEnvironment = Resource<KxEnvironment>("AWS.FinSpace.KxEnvironment");
 
-const createKxEnvironmentName = (
-  id: string,
-  props: { name?: string | undefined },
-) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 255 });
+const createKxEnvironmentName = (id: string, props: { name?: string | undefined }) =>
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 255 });
 
 const fetchKxTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(
-        ["ResourceNotFoundException", "InvalidRequestException"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
+        Effect.succeed(undefined),
       ),
     );
   return Object.fromEntries(
@@ -166,9 +153,7 @@ const fetchKxTags = Effect.fn(function* (arn: string) {
 });
 
 const isGone = (status: KxEnvironmentStatus | undefined) =>
-  status === "DELETED" ||
-  status === "DELETING" ||
-  status === "DELETE_REQUESTED";
+  status === "DELETED" || status === "DELETING" || status === "DELETE_REQUESTED";
 
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -184,10 +169,7 @@ interface KxEnvironmentView {
   customDNSConfiguration?: CustomDNSServer[];
 }
 
-const toKxAttributes = Effect.fn(function* (
-  env: KxEnvironmentView,
-  fallbackId: string,
-) {
+const toKxAttributes = Effect.fn(function* (env: KxEnvironmentView, fallbackId: string) {
   const environmentArn = env.environmentArn ?? "";
   const attrs: KxEnvironment["Attributes"] = {
     environmentId: env.environmentId ?? fallbackId,
@@ -208,11 +190,7 @@ const toKxAttributes = Effect.fn(function* (
 const readKxEnvironmentById = Effect.fn(function* (environmentId: string) {
   const response = yield* finspace
     .getKxEnvironment({ environmentId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!response || isGone(response.status)) return undefined;
   return response;
 });
@@ -255,10 +233,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
   Effect.retry(self, {
     while: (e) => e._tag === "KxEnvironmentNotReady",
     // kdb environment provisioning is slow; poll every 20s up to ~40 min.
-    schedule: Schedule.max([
-      Schedule.spaced("20 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("20 seconds"), Schedule.recurs(120)]),
   });
 
 // Deleting an environment that is still creating/updating surfaces as a
@@ -272,35 +247,22 @@ const retryThroughConflict = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(8)]),
   });
 
-const waitForKxEnvironmentStatus = (
-  environmentId: string,
-  target: "CREATED" | "DELETED",
-) =>
+const waitForKxEnvironmentStatus = (environmentId: string, target: "CREATED" | "DELETED") =>
   retryWhileNotReady(
     Effect.gen(function* () {
       const response = yield* finspace
         .getKxEnvironment({ environmentId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       const status = response?.status;
       if (target === "DELETED") {
         if (response === undefined || isGone(status)) return;
-        return yield* Effect.fail(
-          new KxEnvironmentNotReady({ environmentId, status }),
-        );
+        return yield* Effect.fail(new KxEnvironmentNotReady({ environmentId, status }));
       }
       if (status === "CREATED") return;
       if (status === "FAILED_CREATION") {
-        return yield* Effect.fail(
-          new KxEnvironmentProvisioningFailed({ environmentId, status }),
-        );
+        return yield* Effect.fail(new KxEnvironmentProvisioningFailed({ environmentId, status }));
       }
-      return yield* Effect.fail(
-        new KxEnvironmentNotReady({ environmentId, status }),
-      );
+      return yield* Effect.fail(new KxEnvironmentNotReady({ environmentId, status }));
     }),
   );
 
@@ -312,12 +274,10 @@ export const KxEnvironmentProvider = () =>
         stables: ["environmentId", "environmentArn"],
         list: () =>
           Effect.gen(function* () {
-            const environments = yield* finspace.listKxEnvironments
-              .items({})
-              .pipe(
-                EffectStream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-              );
+            const environments = yield* finspace.listKxEnvironments.items({}).pipe(
+              EffectStream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
             return yield* Effect.forEach(
               environments.filter((env) => !isGone(env.status)),
               (env) => toKxAttributes(env, env.environmentId ?? ""),
@@ -327,14 +287,10 @@ export const KxEnvironmentProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const env = output?.environmentId
             ? yield* readKxEnvironmentById(output.environmentId)
-            : yield* findKxEnvironmentByName(
-                yield* createKxEnvironmentName(id, olds ?? {}),
-              );
+            : yield* findKxEnvironmentByName(yield* createKxEnvironmentName(id, olds ?? {}));
           if (!env) return undefined;
           const attrs = yield* toKxAttributes(env, output?.environmentId ?? "");
-          return (yield* hasAlchemyTags(id, attrs.tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
@@ -350,23 +306,15 @@ export const KxEnvironmentProvider = () =>
             olds.customDNSConfiguration !== undefined;
           if (
             hadNetwork &&
-            (!sameJson(
-              olds.transitGatewayConfiguration,
-              news.transitGatewayConfiguration,
-            ) ||
-              !sameJson(
-                olds.customDNSConfiguration,
-                news.customDNSConfiguration,
-              ))
+            (!sameJson(olds.transitGatewayConfiguration, news.transitGatewayConfiguration) ||
+              !sameJson(olds.customDNSConfiguration, news.customDNSConfiguration))
           ) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("FinSpace KxEnvironment requires props"),
-            );
+            return yield* Effect.fail(new Error("FinSpace KxEnvironment requires props"));
           }
           const name = yield* createKxEnvironmentName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -391,9 +339,7 @@ export const KxEnvironmentProvider = () =>
                 new Error(`CreateKxEnvironment for '${name}' returned no id`),
               );
             }
-            yield* session.note(
-              `Creating kdb environment ${name} (${created.environmentId})...`,
-            );
+            yield* session.note(`Creating kdb environment ${name} (${created.environmentId})...`);
             yield* waitForKxEnvironmentStatus(created.environmentId, "CREATED");
             env = yield* readKxEnvironmentById(created.environmentId);
             if (env === undefined) {
@@ -404,9 +350,7 @@ export const KxEnvironmentProvider = () =>
           }
           const environmentId = env.environmentId;
           if (environmentId === undefined) {
-            return yield* Effect.fail(
-              new Error(`kdb environment '${name}' has no environmentId`),
-            );
+            return yield* Effect.fail(new Error(`kdb environment '${name}' has no environmentId`));
           }
 
           // Sync network — UpdateKxEnvironmentNetwork is attach-once: apply
@@ -417,17 +361,14 @@ export const KxEnvironmentProvider = () =>
             news.customDNSConfiguration !== undefined;
           const hasNetwork =
             env.transitGatewayConfiguration !== undefined ||
-            (env.customDNSConfiguration !== undefined &&
-              env.customDNSConfiguration.length > 0);
+            (env.customDNSConfiguration !== undefined && env.customDNSConfiguration.length > 0);
           if (wantsNetwork && !hasNetwork) {
             yield* finspace.updateKxEnvironmentNetwork({
               environmentId,
               transitGatewayConfiguration: news.transitGatewayConfiguration,
               customDNSConfiguration: news.customDNSConfiguration,
             });
-            yield* session.note(
-              `Attaching network to kdb environment ${name}...`,
-            );
+            yield* session.note(`Attaching network to kdb environment ${name}...`);
             yield* waitForKxEnvironmentStatus(environmentId, "CREATED");
             env = (yield* readKxEnvironmentById(environmentId)) ?? env;
           }
@@ -435,8 +376,7 @@ export const KxEnvironmentProvider = () =>
           // Sync mutable settings — only call UpdateKxEnvironment on drift.
           const needsUpdate =
             name !== env.name ||
-            (news.description !== undefined &&
-              news.description !== env.description);
+            (news.description !== undefined && news.description !== env.description);
           if (needsUpdate) {
             yield* finspace.updateKxEnvironment({
               environmentId,
@@ -459,9 +399,7 @@ export const KxEnvironmentProvider = () =>
             if (upsert.length > 0) {
               yield* finspace.tagResource({
                 resourceArn: attrs.environmentArn,
-                tags: Object.fromEntries(
-                  upsert.map(({ Key, Value }) => [Key, Value]),
-                ),
+                tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
               });
             }
           }
@@ -480,9 +418,7 @@ export const KxEnvironmentProvider = () =>
           yield* retryThroughConflict(
             finspace
               .deleteKxEnvironment({ environmentId: output.environmentId })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           yield* waitForKxEnvironmentStatus(output.environmentId, "DELETED");
         }),

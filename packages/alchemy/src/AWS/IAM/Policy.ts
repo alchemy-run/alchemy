@@ -5,12 +5,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -225,11 +220,7 @@ export const PolicyProvider = () =>
       const readPolicy = Effect.fn(function* (policyArn: string) {
         const response = yield* iam
           .getPolicy({ PolicyArn: policyArn })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         return response?.Policy;
       });
 
@@ -248,11 +239,7 @@ export const PolicyProvider = () =>
             PolicyArn: policyArn,
             VersionId: versionId,
           })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         return parsePolicyDocument(response?.PolicyVersion?.Document);
       });
 
@@ -279,14 +266,10 @@ export const PolicyProvider = () =>
           Effect.gen(function* () {
             // IAM is global; enumerate only customer-managed ("Local")
             // policies, paginating exhaustively.
-            const policies = yield* iam.listPolicies
-              .pages({ Scope: "Local" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Policies ?? []),
-                ),
-              );
+            const policies = yield* iam.listPolicies.pages({ Scope: "Local" }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Policies ?? [])),
+            );
             const rows = yield* Effect.forEach(
               policies,
               (policy) =>
@@ -311,8 +294,7 @@ export const PolicyProvider = () =>
                     path: policy.Path,
                     defaultVersionId: policy.DefaultVersionId,
                     attachmentCount: policy.AttachmentCount,
-                    permissionsBoundaryUsageCount:
-                      policy.PermissionsBoundaryUsageCount,
+                    permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
                     isAttachable: policy.IsAttachable,
                     description: policy.Description,
                     policyDocument,
@@ -322,15 +304,11 @@ export const PolicyProvider = () =>
                   // A peer test may delete a policy between `listPolicies` and
                   // hydrating its tags/version — skip the vanished entry rather
                   // than failing the whole enumeration.
-                  Effect.catchTag("NoSuchEntityException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is NonNullable<typeof row> => row !== undefined,
-            );
+            return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
           }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
@@ -343,16 +321,13 @@ export const PolicyProvider = () =>
           if ((olds?.path ?? "/") !== (news.path ?? "/")) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.description ?? undefined) !== (news.description ?? undefined)
-          ) {
+          if ((olds?.description ?? undefined) !== (news.description ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const policyArn =
-            output?.policyArn ??
-            (yield* toPolicyArn(id, olds ?? ({} as PolicyProps)));
+            output?.policyArn ?? (yield* toPolicyArn(id, olds ?? ({} as PolicyProps)));
           const policy = yield* readPolicy(policyArn);
           if (!policy?.Arn || !policy.PolicyName) {
             return undefined;
@@ -385,8 +360,7 @@ export const PolicyProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const policyName =
-            output?.policyName ?? (yield* toPolicyName(id, news));
+          const policyName = output?.policyName ?? (yield* toPolicyName(id, news));
           const policyArn = output?.policyArn ?? (yield* toPolicyArn(id, news));
           const desiredTags = {
             ...(yield* createInternalTags(id)),
@@ -446,10 +420,7 @@ export const PolicyProvider = () =>
             policyArn,
             versionId: observed?.DefaultVersionId,
           });
-          if (
-            JSON.stringify(observedDocument ?? null) !==
-            JSON.stringify(news.policyDocument)
-          ) {
+          if (JSON.stringify(observedDocument ?? null) !== JSON.stringify(news.policyDocument)) {
             yield* prunePolicyVersions(policyArn);
             const createdVersion = yield* iam.createPolicyVersion({
               PolicyArn: policyArn,
@@ -498,16 +469,12 @@ export const PolicyProvider = () =>
             policyName,
             policyId: fresh?.PolicyId ?? observed?.PolicyId,
             path: fresh?.Path ?? observed?.Path ?? news.path ?? "/",
-            defaultVersionId:
-              fresh?.DefaultVersionId ?? observed?.DefaultVersionId,
-            attachmentCount:
-              fresh?.AttachmentCount ?? observed?.AttachmentCount,
+            defaultVersionId: fresh?.DefaultVersionId ?? observed?.DefaultVersionId,
+            attachmentCount: fresh?.AttachmentCount ?? observed?.AttachmentCount,
             permissionsBoundaryUsageCount:
-              fresh?.PermissionsBoundaryUsageCount ??
-              observed?.PermissionsBoundaryUsageCount,
+              fresh?.PermissionsBoundaryUsageCount ?? observed?.PermissionsBoundaryUsageCount,
             isAttachable: fresh?.IsAttachable ?? observed?.IsAttachable,
-            description:
-              fresh?.Description ?? observed?.Description ?? news.description,
+            description: fresh?.Description ?? observed?.Description ?? news.description,
             policyDocument: freshDocument,
             tags: desiredTags,
           };
@@ -517,11 +484,7 @@ export const PolicyProvider = () =>
             .listPolicyVersions({
               PolicyArn: output.policyArn,
             })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
           for (const version of versions?.Versions ?? []) {
             if (!version.IsDefaultVersion && version.VersionId) {
               yield* iam
@@ -529,9 +492,7 @@ export const PolicyProvider = () =>
                   PolicyArn: output.policyArn,
                   VersionId: version.VersionId,
                 })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                );
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
             }
           }
           yield* iam

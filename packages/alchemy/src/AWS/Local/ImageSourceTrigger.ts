@@ -53,9 +53,7 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
     return Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(
       Stream.tap((event) =>
         event._tag === "Error"
-          ? Effect.logWarning(
-              `[alchemy dev] ${id}: rebuild failed: ${event.error.message}`,
-            )
+          ? Effect.logWarning(`[alchemy dev] ${id}: rebuild failed: ${event.error.message}`)
           : Effect.void,
       ),
       Stream.filter((event) => event._tag === "Success"),
@@ -73,14 +71,9 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const context = path.resolve(source.context);
-    const streams: Stream.Stream<unknown, any>[] = [
-      fs.watch(context, { recursive: true }),
-    ];
+    const streams: Stream.Stream<unknown, any>[] = [fs.watch(context, { recursive: true })];
     // A path Dockerfile living OUTSIDE the context dir is watched too.
-    if (
-      source.dockerfile !== undefined &&
-      !isInlineDockerfile(source.dockerfile)
-    ) {
+    if (source.dockerfile !== undefined && !isInlineDockerfile(source.dockerfile)) {
       const dockerfile = path.resolve(source.dockerfile);
       if (!dockerfile.startsWith(`${context}/`)) {
         streams.push(fs.watch(path.dirname(dockerfile)));

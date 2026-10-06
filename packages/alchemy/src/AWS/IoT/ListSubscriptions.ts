@@ -2,8 +2,7 @@ import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListSubscriptionsRequest
-  extends iotdata.ListSubscriptionsRequest {}
+export interface ListSubscriptionsRequest extends iotdata.ListSubscriptionsRequest {}
 
 /**
  * Runtime binding for the IoT data-plane `ListSubscriptions` operation (IAM
@@ -34,13 +33,8 @@ export interface ListSubscriptions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListSubscriptionsRequest,
-    ) => Effect.Effect<
-      iotdata.ListSubscriptionsResponse,
-      iotdata.ListSubscriptionsError
-    >
+    ) => Effect.Effect<iotdata.ListSubscriptionsResponse, iotdata.ListSubscriptionsError>
   >
 > {}
 
-export const ListSubscriptions = Binding.Service<ListSubscriptions>(
-  "AWS.IoT.ListSubscriptions",
-);
+export const ListSubscriptions = Binding.Service<ListSubscriptions>("AWS.IoT.ListSubscriptions");

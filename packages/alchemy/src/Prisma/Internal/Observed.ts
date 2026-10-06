@@ -30,9 +30,7 @@ export interface ObservedDatabase {
   readonly name: string;
   readonly status: DatabaseStatus;
   readonly defaultConnectionId: string | null;
-  readonly connections: ReadonlyArray<
-    ObservedConnection & { readonly id: string }
-  >;
+  readonly connections: ReadonlyArray<ObservedConnection & { readonly id: string }>;
   readonly region?: { readonly id: string; readonly name: string } | null;
 }
 
@@ -80,6 +78,8 @@ export interface ObservedBucket {
   readonly name: string;
   readonly createdAt: string;
   readonly project: { readonly id: string };
+  readonly branchId?: string | null;
+  readonly logicalId?: string | null;
 }
 
 export interface ObservedApp {
@@ -91,6 +91,7 @@ export interface ObservedApp {
   readonly latestDeploymentId: string | null;
   readonly appEndpointDomain: string;
   readonly createdAt: string;
+  readonly logicalId?: string | null;
 }
 
 export interface ObservedDeployment {
@@ -129,6 +130,7 @@ export interface ObservedProjectDatabase extends ObservedDatabase {
   readonly createdAt: string;
   readonly source: ObservedSource | null;
   readonly project: { readonly id: string };
+  readonly logicalId?: string | null;
 }
 
 export interface ObservedProject {
@@ -140,9 +142,8 @@ export interface ObservedProject {
 }
 
 /** Read a required possibly-redacted secret as a plain string. */
-export const requiredSecretValue = (
-  value: string | Redacted.Redacted<string>,
-): string => (typeof value === "string" ? value : Redacted.value(value));
+export const requiredSecretValue = (value: string | Redacted.Redacted<string>): string =>
+  typeof value === "string" ? value : Redacted.value(value);
 
 /** Read a possibly-redacted secret as a plain string. */
 export const secretValue = (

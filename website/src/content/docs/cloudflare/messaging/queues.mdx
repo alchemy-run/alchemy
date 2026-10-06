@@ -221,6 +221,41 @@ if (request.url.startsWith("/queue/result/") && request.method === "GET") {
 }
 ```
 
+## Drain a Stream into the queue
+
+`Cloudflare.Queues.QueueSink(queue)` exposes the queue as an Effect
+[Sink](/infrastructure-as-effects/sinks). Run any `Stream` of message
+bodies into it; each stream chunk becomes one `sendBatch` call, split
+at Cloudflare's 100-message / 256 KB batch limits.
+
+```typescript
+const sink = yield* Cloudflare.Queues.QueueSink(Clicks);
+yield* Stream.fromIterable(events).pipe(Stream.run(sink));
+```
+
+Combined with `consumeQueueMessages`, a Worker can consume one queue,
+transform each batch, and drain it into another:
+
+```typescript
+Effect.gen(function* () {
+  const enriched = yield* Cloudflare.Queues.QueueSink(EnrichedClicks);
+
+  yield* Cloudflare.Queues.consumeQueueMessages<Click>(Clicks, (messages) =>
+    messages.pipe(
+      Stream.map((message) => message.body),
+      Stream.map((click) => ({ ...click, receivedAt: Date.now() })),
+      Stream.run(enriched),
+    ),
+  );
+}).pipe(
+  Effect.provide(Cloudflare.Queues.EventSourceLive),
+  Effect.provide(Cloudflare.Queues.QueueSinkBinding),
+);
+```
+
+`QueueSinkBinding` builds on the native `WriteQueueBinding`, so it is
+the only layer the sink needs. It also works under `alchemy dev`.
+
 ## What's the difference vs. a native `queue()` handler?
 
 Cloudflare's runtime delivers queue events to a `queue(batch, env)`

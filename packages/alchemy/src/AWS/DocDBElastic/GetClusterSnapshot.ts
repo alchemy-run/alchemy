@@ -28,10 +28,7 @@ export interface GetClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: docdbelastic.GetClusterSnapshotInput,
-    ) => Effect.Effect<
-      docdbelastic.GetClusterSnapshotOutput,
-      docdbelastic.GetClusterSnapshotError
-    >
+    ) => Effect.Effect<docdbelastic.GetClusterSnapshotOutput, docdbelastic.GetClusterSnapshotError>
   >
 > {}
 export const GetClusterSnapshot = Binding.Service<GetClusterSnapshot>(

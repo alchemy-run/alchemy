@@ -30,10 +30,7 @@ export interface ListRotationShifts extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.ListRotationShiftsRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.ListRotationShiftsResult,
-      ssm.ListRotationShiftsError
-    >
+    ) => Effect.Effect<ssm.ListRotationShiftsResult, ssm.ListRotationShiftsError>
   >
 > {}
 export const ListRotationShifts = Binding.Service<ListRotationShifts>(

@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -36,10 +33,7 @@ const expectGone = (accountId: string, policyId: string) =>
     Effect.catchTag("DevicePolicyNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ProfileNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -64,9 +58,7 @@ test.provider(
       expect(profile.policyId).toBeTruthy();
       expect(profile.accountId).toEqual(accountId);
       expect(profile.name).toEqual("alchemy-test-custom-profile");
-      expect(profile.match).toEqual(
-        'identity.email == "contractor@alchemy-test-2.us"',
-      );
+      expect(profile.match).toEqual('identity.email == "contractor@alchemy-test-2.us"');
       expect(profile.description).toEqual("Alchemy test profile");
       expect(profile.switchLocked).toEqual(true);
       expect(profile.default).toEqual(false);
@@ -91,16 +83,11 @@ test.provider(
       expect(updated.policyId).toEqual(profile.policyId);
       expect(updated.description).toEqual("Alchemy test profile v2");
       expect(updated.switchLocked).toEqual(false);
-      expect(updated.exclude.some((e) => e.address === "10.99.0.0/16")).toEqual(
-        true,
-      );
+      expect(updated.exclude.some((e) => e.address === "10.99.0.0/16")).toEqual(true);
 
       // Out-of-band verify the exclude list endpoint.
       const excludes = yield* zeroTrust
-        .getDevicePolicyCustomExclude({
-          accountId,
-          policyId: profile.policyId,
-        })
+        .getDevicePolicyCustomExclude({ accountId, policyId: profile.policyId })
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
@@ -109,9 +96,7 @@ test.provider(
           }),
         );
       expect(
-        (excludes.result ?? []).some(
-          (e) => "address" in e && e.address === "10.99.0.0/16",
-        ),
+        (excludes.result ?? []).some((e) => "address" in e && e.address === "10.99.0.0/16"),
       ).toEqual(true);
 
       yield* stack.destroy();
@@ -135,9 +120,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Devices.DeviceCustomProfile,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Devices.DeviceCustomProfile);
       const all = yield* provider.list();
 
       // Exhaustively paginated account collection must contain the profile we
@@ -145,9 +128,7 @@ test.provider(
       const found = all.find((p) => p.policyId === deployed.policyId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual("alchemy-test-custom-profile-list");
-      expect(found?.match).toEqual(
-        'identity.email == "list@alchemy-test-2.us"',
-      );
+      expect(found?.match).toEqual('identity.email == "list@alchemy-test-2.us"');
       expect(found?.accountId).toEqual(deployed.accountId);
       expect(found?.default).toEqual(false);
 

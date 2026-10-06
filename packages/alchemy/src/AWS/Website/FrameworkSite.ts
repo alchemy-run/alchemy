@@ -5,13 +5,9 @@ import type { MemoOptions } from "../../Command/Memo.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
-import {
-  Function as LambdaFunction,
-  type FunctionProps,
-} from "../Lambda/Function.ts";
-import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import { Server, type ServerDevProps } from "../../Website/Server.ts";
-import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
+import { Function as LambdaFunction, type FunctionProps } from "../Lambda/Function.ts";
+import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
 import {
   normalizeWebsiteDomain,
   type WebsiteAssetsConfig,
@@ -19,6 +15,7 @@ import {
   type WebsiteEdgeProps,
   type WebsiteInvalidationProps,
 } from "./shared.ts";
+import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 
 /**
  * Props shared by every framework website composite (SvelteKit, Nuxt,
@@ -147,129 +144,125 @@ export interface FrameworkSiteConfig {
  * resource FQNs are identical to the previous per-framework
  * implementations.
  */
-export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(
-  function* (
-    id: string,
-    propsIn: InputProps<FrameworkSiteProps>,
-    config: FrameworkSiteConfig,
-  ) {
-    // Props accept `Input<T>` throughout (matching the Cloudflare
-    // composites); values flow into the resources below, which resolve
-    // them at reconcile time. The plan-time reads in this function
-    // (domain-shape branching, dev wiring, the build's rootDir/memo)
-    // need concrete values — passing an `Output` for those specific
-    // fields is unsupported, same as on the Cloudflare side.
-    const props = propsIn as FrameworkSiteProps;
-    const ctx = yield* AlchemyContext;
-    const remoted = yield* ProviderModePolicy;
-    const isLocal = ctx.dev && remoted !== true;
+export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function* (
+  id: string,
+  propsIn: InputProps<FrameworkSiteProps>,
+  config: FrameworkSiteConfig,
+) {
+  // Props accept `Input<T>` throughout (matching the Cloudflare
+  // composites); values flow into the resources below, which resolve
+  // them at reconcile time. The plan-time reads in this function
+  // (domain-shape branching, dev wiring, the build's rootDir/memo)
+  // need concrete values — passing an `Output` for those specific
+  // fields is unsupported, same as on the Cloudflare side.
+  const props = propsIn as FrameworkSiteProps;
+  const ctx = yield* AlchemyContext;
+  const remoted = yield* ProviderModePolicy;
+  const isLocal = ctx.dev && remoted !== true;
 
-    const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
+  const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
 
-    // A Router-attached dev server is an ORIGIN for the emulated CloudFront
-    // edge, which runs in a container and reaches the host through its
-    // gateway address — it cannot open a connection to the host's loopback.
-    // Frameworks bind loopback by default (Vite picks `[::1]`), so the edge
-    // would get a refused connection and answer 502. Bind all interfaces
-    // unless the caller asked for a specific host. Standalone dev sites, and
-    // `mode: "external"` (we start nothing), keep the framework's default.
-    const dev: ServerDevProps | undefined =
-      isLocal && routerDomain && props.dev?.mode !== "external"
-        ? { ...props.dev, host: props.dev?.host ?? "0.0.0.0" }
-        : props.dev;
+  // A Router-attached dev server is an ORIGIN for the emulated CloudFront
+  // edge, which runs in a container and reaches the host through its
+  // gateway address — it cannot open a connection to the host's loopback.
+  // Frameworks bind loopback by default (Vite picks `[::1]`), so the edge
+  // would get a refused connection and answer 502. Bind all interfaces
+  // unless the caller asked for a specific host. Standalone dev sites, and
+  // `mode: "external"` (we start nothing), keep the framework's default.
+  const dev: ServerDevProps | undefined =
+    isLocal && routerDomain && props.dev?.mode !== "external"
+      ? { ...props.dev, host: props.dev?.host ?? "0.0.0.0" }
+      : props.dev;
 
-    const build = yield* Server("Build", {
-      framework: config.framework,
-      target: config.target,
-      root: props.rootDir,
-      env: props.env,
-      options: config.options,
-      memo: props.memo,
-      dev,
-    });
+  const build = yield* Server("Build", {
+    framework: config.framework,
+    target: config.target,
+    root: props.rootDir,
+    env: props.env,
+    options: config.options,
+    memo: props.memo,
+    dev,
+  });
 
-    if (isLocal) {
-      // Router-attached sites register with the Router in dev exactly as they
-      // do live — same resource types and ids — with the framework's dev
-      // server standing in for the S3 + Lambda origins.
-      const kvNamespace = routerDomain
-        ? yield* registerDevRouterRoute(routerDomain, build.url)
-        : undefined;
-      return {
-        bucket: undefined,
-        build,
-        files: undefined,
-        distribution: undefined,
-        invalidation: undefined,
-        kvNamespace,
-        server: undefined,
-        serverUrl: undefined,
-        url: build.url,
-        urls: [build.url],
-      };
-    }
-
-    const siteProps: StaticSiteProps = {
-      path: build.clientDir as unknown as string,
-      assets: props.assets,
-      domain: props.domain,
-      cloudfrontUrl: props.cloudfrontUrl,
-      edge: props.edge,
-      bucketName: props.bucketName,
-      forceDestroy: props.forceDestroy,
-      invalidation: props.invalidation,
-      tags: props.tags,
+  if (isLocal) {
+    // Router-attached sites register with the Router in dev exactly as they
+    // do live — same resource types and ids — with the framework's dev
+    // server standing in for the S3 + Lambda origins.
+    const kvNamespace = routerDomain
+      ? yield* registerDevRouterRoute(routerDomain, build.url)
+      : undefined;
+    return {
+      bucket: undefined,
+      build,
+      files: undefined,
+      distribution: undefined,
+      invalidation: undefined,
+      kvNamespace,
+      server: undefined,
+      serverUrl: undefined,
+      url: build.url,
+      urls: [build.url],
     };
+  }
 
-    if (config.static) {
-      const site = yield* makeKvSite(id, {
-        ...siteProps,
-        errorPage: config.static.errorPage,
-        spa: config.static.spa,
-      });
-      return {
-        ...site,
-        build,
-        server: undefined,
-        serverUrl: undefined,
-      };
-    }
+  const siteProps: StaticSiteProps = {
+    path: build.clientDir as unknown as string,
+    assets: props.assets,
+    domain: props.domain,
+    cloudfrontUrl: props.cloudfrontUrl,
+    edge: props.edge,
+    bucketName: props.bucketName,
+    forceDestroy: props.forceDestroy,
+    invalidation: props.invalidation,
+    tags: props.tags,
+  };
 
-    const server = yield* LambdaFunction("Server", {
-      main: build.serverEntry as unknown as string,
-      handler: "handler",
-      isExternal: true,
-      // The AWS deploy target's finishing pass writes the server directory
-      // as a complete Node deployment unit (entry + chunks) — ship it
-      // as-is.
-      bundle: false,
-      runtime: props.runtime ?? "nodejs24.x",
-      architecture: props.architecture,
-      memorySize: props.memorySize ?? 1024,
-      timeout: props.timeout ?? Duration.seconds(30),
-      env: props.env,
-      functionUrl: {
-        authType: "NONE",
-        invokeMode: "RESPONSE_STREAM",
-      },
+  if (config.static) {
+    const site = yield* makeKvSite(id, {
+      ...siteProps,
+      errorPage: config.static.errorPage,
+      spa: config.static.spa,
     });
-
-    const serverHost = Output.map((url: string | undefined) => {
-      if (!url) {
-        throw new Error(
-          `The ${config.name} server function did not produce a Function URL.`,
-        );
-      }
-      return new URL(url).hostname;
-    })(server.functionUrl as any) as Input<string>;
-
-    const site = yield* makeKvSite(id, siteProps, { serverHost });
-
     return {
       ...site,
       build,
-      server,
-      serverUrl: server.functionUrl,
+      server: undefined,
+      serverUrl: undefined,
     };
-  },
-);
+  }
+
+  const server = yield* LambdaFunction("Server", {
+    main: build.serverEntry as unknown as string,
+    handler: "handler",
+    isExternal: true,
+    // The AWS deploy target's finishing pass writes the server directory
+    // as a complete Node deployment unit (entry + chunks) — ship it
+    // as-is.
+    bundle: false,
+    runtime: props.runtime ?? "nodejs24.x",
+    architecture: props.architecture,
+    memorySize: props.memorySize ?? 1024,
+    timeout: props.timeout ?? Duration.seconds(30),
+    env: props.env,
+    functionUrl: {
+      authType: "NONE",
+      invokeMode: "RESPONSE_STREAM",
+    },
+  });
+
+  const serverHost = Output.map((url: string | undefined) => {
+    if (!url) {
+      throw new Error(`The ${config.name} server function did not produce a Function URL.`);
+    }
+    return new URL(url).hostname;
+  })(server.functionUrl as any) as Input<string>;
+
+  const site = yield* makeKvSite(id, siteProps, { serverHost });
+
+  return {
+    ...site,
+    build,
+    server,
+    serverUrl: server.functionUrl,
+  };
+});

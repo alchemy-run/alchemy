@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -14,11 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // as the AWS.CloudFront and AWS.Website.Vite suites).
 const runLive = !process.env.FAST;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "foldkit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "foldkit-app");
 
 // Clone under the alchemy package so `vite`, `foldkit`, and
 // `@foldkit/vite-plugin` resolve from the workspace's hoisted node_modules
@@ -86,18 +82,12 @@ describe.skipIf(!runLive || runEmulated)(
             label: "index",
           });
           // publicDir passthrough landed in the bucket.
-          yield* expectUrlContains(`${url}/robots.txt`, "User-agent", {
-            label: "public asset",
-          });
+          yield* expectUrlContains(`${url}/robots.txt`, "User-agent", { label: "public asset" });
           // SPA fallback (the composite's default): a deep link boots the app
           // instead of 404ing, and the Foldkit router resolves the route.
-          yield* expectUrlContains(
-            `${url}/counter/42`,
-            "FOLDKIT_AWS_PAGE_MARKER",
-            {
-              label: "spa fallback",
-            },
-          );
+          yield* expectUrlContains(`${url}/counter/42`, "FOLDKIT_AWS_PAGE_MARKER", {
+            label: "spa fallback",
+          });
 
           yield* stack.destroy();
         }),

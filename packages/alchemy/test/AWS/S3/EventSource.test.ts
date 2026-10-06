@@ -1,16 +1,16 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import BucketEventSourceFunctionLive, {
   BucketEventSourceFunction,
 } from "./fixtures/event-source-handler.ts";
@@ -35,9 +35,7 @@ describe(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "S3 EventSource test: destroying previous resources",
-        );
+        yield* Effect.logInfo("S3 EventSource test: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("S3 EventSource test: deploying fixture");
@@ -61,29 +59,19 @@ describe(
               ? response.json
               : response.text.pipe(
                   Effect.flatMap((body) =>
-                    Effect.fail(
-                      new FunctionNotReady({ status: response.status, body }),
-                    ),
+                    Effect.fail(new FunctionNotReady({ status: response.status, body })),
                   ),
                 ),
           ),
-          Effect.flatMap(
-            Schema.decodeUnknownEffect(
-              Schema.Struct({ bucketName: Schema.String }),
-            ),
-          ),
+          Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ bucketName: Schema.String }))),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `S3 EventSource test: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`S3 EventSource test: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy, times: 9 }),
         );
         fixtureBucketName = named.bucketName;
         expect(fixtureBucketName).toBeTruthy();
-        yield* Effect.logInfo(
-          "S3 EventSource test: fixture responded successfully",
-        );
+        yield* Effect.logInfo("S3 EventSource test: fixture responded successfully");
       }),
       { timeout: 120_000 },
     );
@@ -113,10 +101,10 @@ describe(
 
           const content = "hello from s3 event source";
           const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/put`),
-              { key, value: content },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/put`), {
+              key,
+              value: content,
+            }),
           );
           expect(response.status).toBe(200);
           const putResponse = yield* response.json.pipe(
@@ -148,18 +136,9 @@ describe(
           const Bucket = fixtureBucketName!;
           const key = "incoming/versions/a b+%?#/雪.txt";
           const oldContent = "historical notification content";
-          const currentContent =
-            "current notification content has different bytes";
-          const oldVersion = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: oldContent,
-          });
-          const currentVersion = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: currentContent,
-          });
+          const currentContent = "current notification content has different bytes";
+          const oldVersion = yield* S3.putObject({ Bucket, Key: key, Body: oldContent });
+          const currentVersion = yield* S3.putObject({ Bucket, Key: key, Body: currentContent });
           expect(oldVersion.VersionId).toBeTruthy();
           expect(currentVersion.VersionId).toBeTruthy();
           expect(currentVersion.VersionId).not.toBe(oldVersion.VersionId);
@@ -230,11 +209,7 @@ describe(
           const Bucket = fixtureBucketName!;
           const key = "incoming/replay/a b+%?#/雪.txt";
           const content = "recorded before permanent version deletion";
-          const created = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: content,
-          });
+          const created = yield* S3.putObject({ Bucket, Key: key, Body: content });
           expect(created.VersionId).toBeTruthy();
           const identity = {
             key,
@@ -251,11 +226,7 @@ describe(
           const before = yield* S3.headObject({ Bucket, Key: evidenceKey });
           expect(before.VersionId).toBeTruthy();
 
-          yield* S3.deleteObject({
-            Bucket,
-            Key: key,
-            VersionId: identity.versionId,
-          });
+          yield* S3.deleteObject({ Bucket, Key: key, VersionId: identity.versionId });
           const sourceExists = yield* S3.headObject({
             Bucket,
             Key: key,
@@ -313,11 +284,7 @@ describe(
           const sourceKey = "sources/copy.txt";
           const key = "incoming/copied/a b+%.txt";
           const content = "historical copy source content";
-          const source = yield* S3.putObject({
-            Bucket,
-            Key: sourceKey,
-            Body: content,
-          });
+          const source = yield* S3.putObject({ Bucket, Key: sourceKey, Body: content });
           expect(source.VersionId).toBeTruthy();
           yield* S3.putObject({
             Bucket,
@@ -325,22 +292,13 @@ describe(
             Body: "new source content must not be copied",
           });
           const CopySource = yield* Effect.sync(
-            () =>
-              `${Bucket}/${sourceKey}?versionId=${encodeURIComponent(source.VersionId!)}`,
+            () => `${Bucket}/${sourceKey}?versionId=${encodeURIComponent(source.VersionId!)}`,
           );
-          const copied = yield* S3.copyObject({
-            Bucket,
-            Key: key,
-            CopySource,
-          });
+          const copied = yield* S3.copyObject({ Bucket, Key: key, CopySource });
           expect(copied.VersionId).toBeTruthy();
           expect(copied.CopySourceVersionId).toBe(source.VersionId);
           const latestContent = "later destination content";
-          const latest = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: latestContent,
-          });
+          const latest = yield* S3.putObject({ Bucket, Key: key, Body: latestContent });
           expect(latest.VersionId).toBeTruthy();
           expect(latest.VersionId).not.toBe(copied.VersionId);
           const [copyEvent, putEvent] = yield* Effect.all(
@@ -393,11 +351,7 @@ describe(
           });
           expect(completed.VersionId).toBeTruthy();
           const latestContent = "later multipart destination content";
-          const latest = yield* S3.putObject({
-            Bucket,
-            Key: key,
-            Body: latestContent,
-          });
+          const latest = yield* S3.putObject({ Bucket, Key: key, Body: latestContent });
           expect(latest.VersionId).toBeTruthy();
           expect(latest.VersionId).not.toBe(completed.VersionId);
           const [completedEvent, putEvent] = yield* Effect.all(
@@ -446,9 +400,7 @@ const processedRecord = Schema.Struct({
 });
 
 const readProcessed = Effect.fn(function* (identity: NotificationIdentity) {
-  const path = yield* Effect.sync(
-    () => `/processed?${new URLSearchParams({ ...identity })}`,
-  );
+  const path = yield* Effect.sync(() => `/processed?${new URLSearchParams({ ...identity })}`);
   const response = yield* HttpClient.get(`${baseUrl}${path}`);
   if (response.status === 404) {
     yield* response.text;
@@ -456,16 +408,11 @@ const readProcessed = Effect.fn(function* (identity: NotificationIdentity) {
   }
   if (response.status !== 200) {
     return yield* Effect.fail(
-      new FunctionNotReady({
-        status: response.status,
-        body: yield* response.text,
-      }),
+      new FunctionNotReady({ status: response.status, body: yield* response.text }),
     );
   }
   const { processed } = yield* response.json.pipe(
-    Effect.flatMap(
-      Schema.decodeUnknownEffect(Schema.Struct({ processed: processedRecord })),
-    ),
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ processed: processedRecord }))),
   );
   expect(processed.bucket).toBe(fixtureBucketName);
   expect(processed.key).toBe(identity.key);
@@ -484,9 +431,7 @@ const waitForProcessed = (identity: NotificationIdentity) =>
     }),
   );
 
-class ProcessedNotReady extends Data.TaggedError(
-  "ProcessedNotReady",
-)<NotificationIdentity> {}
+class ProcessedNotReady extends Data.TaggedError("ProcessedNotReady")<NotificationIdentity> {}
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 

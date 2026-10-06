@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Workflow } from "./Workflow.ts";
 
-export interface StartRunRequest extends Omit<
-  omics.StartRunRequest,
-  "workflowId"
-> {}
+export interface StartRunRequest extends Omit<omics.StartRunRequest, "workflowId"> {}
 
 /**
  * Runtime binding for `omics:StartRun`.
@@ -32,9 +29,7 @@ export interface StartRun extends Binding.Service<
   (
     workflow: Workflow,
   ) => Effect.Effect<
-    (
-      request?: StartRunRequest,
-    ) => Effect.Effect<omics.StartRunResponse, omics.StartRunError>
+    (request?: StartRunRequest) => Effect.Effect<omics.StartRunResponse, omics.StartRunError>
   >
 > {}
 

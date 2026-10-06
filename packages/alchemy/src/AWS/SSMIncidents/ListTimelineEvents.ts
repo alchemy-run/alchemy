@@ -32,10 +32,7 @@ export interface ListTimelineEvents extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.ListTimelineEventsInput,
-    ) => Effect.Effect<
-      incidents.ListTimelineEventsOutput,
-      incidents.ListTimelineEventsError
-    >
+    ) => Effect.Effect<incidents.ListTimelineEventsOutput, incidents.ListTimelineEventsError>
   >
 > {}
 export const ListTimelineEvents = Binding.Service<ListTimelineEvents>(

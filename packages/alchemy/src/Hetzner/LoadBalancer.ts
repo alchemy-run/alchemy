@@ -458,9 +458,7 @@ type CloudLoadBalancer =
   | GetLoadBalancerResponseLoadBalancer
   | ListLoadBalancersResponseLoadBalancersItem;
 
-export class LoadBalancerNotCreated extends Data.TaggedError(
-  "Hetzner.LoadBalancerNotCreated",
-)<{
+export class LoadBalancerNotCreated extends Data.TaggedError("Hetzner.LoadBalancerNotCreated")<{
   name: string;
 }> {}
 
@@ -505,9 +503,7 @@ const certificateIdOf = (value: unknown): number | undefined => {
 };
 
 const recordOf = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
+  value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === "number" ? value : undefined;
@@ -580,8 +576,7 @@ const defaultHealthCheck = (
   destinationPort: number,
   override?: LoadBalancerHealthCheck,
 ): NormalizedHealthCheck => {
-  const hcProtocol =
-    override?.protocol ?? (protocol === "tcp" ? "tcp" : "http");
+  const hcProtocol = override?.protocol ?? (protocol === "tcp" ? "tcp" : "http");
   const httpSource = override?.http;
   return {
     protocol: hcProtocol,
@@ -595,9 +590,7 @@ const defaultHealthCheck = (
             domain: httpSource?.domain ?? null,
             path: httpSource?.path ?? "/",
             response: httpSource?.response ?? "",
-            statusCodes: [
-              ...(httpSource?.statusCodes ?? ["2??", "3??"]),
-            ].sort(),
+            statusCodes: [...(httpSource?.statusCodes ?? ["2??", "3??"])].sort(),
             tls: httpSource?.tls ?? false,
           }
         : undefined,
@@ -647,15 +640,12 @@ const desiredServices = (
     }))
     .sort((a, b) => a.listenPort - b.listenPort);
 
-const observedHealthHttp = (
-  value: unknown,
-): NormalizedHealthHttp | undefined => {
+const observedHealthHttp = (value: unknown): NormalizedHealthHttp | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = recordOf(value);
   const statusCodes = asStringArray(rec.status_codes) ?? [];
   return {
-    domain:
-      rec.domain === undefined ? null : ((rec.domain as string | null) ?? null),
+    domain: rec.domain === undefined ? null : ((rec.domain as string | null) ?? null),
     path: asString(rec.path) ?? "/",
     response: asString(rec.response) ?? "",
     statusCodes: [...statusCodes].sort(),
@@ -689,9 +679,7 @@ const observedServiceHttp = (
   if (protocol === "tcp") return undefined;
   const rec = recordOf(value);
   const certificates = Array.isArray(rec.certificates)
-    ? rec.certificates
-        .filter((id): id is number => typeof id === "number")
-        .sort((a, b) => a - b)
+    ? rec.certificates.filter((id): id is number => typeof id === "number").sort((a, b) => a - b)
     : [];
   return {
     cookieName: asString(rec.cookie_name) ?? DEFAULT_COOKIE_NAME,
@@ -719,23 +707,16 @@ const observedServices = (value: unknown): NormalizedService[] => {
         listenPort: asNumber(rec.listen_port) ?? 0,
         destinationPort,
         proxyprotocol: asBoolean(rec.proxyprotocol) ?? false,
-        healthCheck: observedHealthCheck(
-          rec.health_check,
-          destinationPort,
-          protocol,
-        ),
+        healthCheck: observedHealthCheck(rec.health_check, destinationPort, protocol),
         http: observedServiceHttp(protocol, rec.http),
       };
     })
     .sort((a, b) => a.listenPort - b.listenPort);
 };
 
-const serviceFingerprint = (service: NormalizedService): string =>
-  JSON.stringify(service);
+const serviceFingerprint = (service: NormalizedService): string => JSON.stringify(service);
 
-const toServiceAttr = (
-  service: NormalizedService,
-): LoadBalancerServiceAttr => ({
+const toServiceAttr = (service: NormalizedService): LoadBalancerServiceAttr => ({
   protocol: service.protocol,
   listenPort: service.listenPort,
   destinationPort: service.destinationPort,
@@ -789,13 +770,9 @@ const toHealthCheckRequest = (healthCheck: NormalizedHealthCheck) => ({
   ...(healthCheck.http
     ? {
         http: {
-          ...(healthCheck.http.domain !== null
-            ? { domain: healthCheck.http.domain }
-            : {}),
+          ...(healthCheck.http.domain !== null ? { domain: healthCheck.http.domain } : {}),
           path: healthCheck.http.path,
-          ...(healthCheck.http.response
-            ? { response: healthCheck.http.response }
-            : {}),
+          ...(healthCheck.http.response ? { response: healthCheck.http.response } : {}),
           status_codes: healthCheck.http.statusCodes,
           tls: healthCheck.http.tls,
         },
@@ -809,18 +786,12 @@ const toHttpRequest = (http: NormalizedServiceHttp | undefined) => {
     cookie_name: http.cookieName,
     cookie_lifetime: http.cookieLifetime,
     sticky_sessions: http.stickySessions,
-    ...(http.redirectHttp !== undefined
-      ? { redirect_http: http.redirectHttp }
-      : {}),
-    ...(http.certificates !== undefined
-      ? { certificates: http.certificates }
-      : {}),
+    ...(http.redirectHttp !== undefined ? { redirect_http: http.redirectHttp } : {}),
+    ...(http.certificates !== undefined ? { certificates: http.certificates } : {}),
   };
 };
 
-const toCreateService = (
-  service: NormalizedService,
-): CreateLoadBalancerRequestServicesItem =>
+const toCreateService = (service: NormalizedService): CreateLoadBalancerRequestServicesItem =>
   ({
     protocol: service.protocol,
     listen_port: service.listenPort,
@@ -830,9 +801,7 @@ const toCreateService = (
     ...(service.http ? { http: toHttpRequest(service.http) } : {}),
   }) as CreateLoadBalancerRequestServicesItem;
 
-const desiredTargets = (
-  targets: readonly LoadBalancerTarget[] | undefined,
-): NormalizedTarget[] => {
+const desiredTargets = (targets: readonly LoadBalancerTarget[] | undefined): NormalizedTarget[] => {
   const next: NormalizedTarget[] = [];
   for (const target of targets ?? []) {
     if (target.type === "server") {
@@ -918,10 +887,7 @@ const observedTargets = (value: unknown): NormalizedTarget[] => {
   return next.sort((a, b) => targetKey(a).localeCompare(targetKey(b)));
 };
 
-const toTargetAttr = (
-  target: NormalizedTarget,
-  raw: unknown,
-): LoadBalancerTargetAttr => {
+const toTargetAttr = (target: NormalizedTarget, raw: unknown): LoadBalancerTargetAttr => {
   const rec = recordOf(raw);
   if (target.type === "server") {
     return {
@@ -946,9 +912,7 @@ const toTargetAttr = (
   };
 };
 
-const desiredNetworkIds = (
-  networks: LoadBalancerProps["networks"] | undefined,
-): number[] => {
+const desiredNetworkIds = (networks: LoadBalancerProps["networks"] | undefined): number[] => {
   const ids = new Set<number>();
   for (const item of networks ?? []) {
     const id = networkIdOf(item);
@@ -957,9 +921,7 @@ const desiredNetworkIds = (
   return [...ids].sort((a, b) => a - b);
 };
 
-const observedPrivateNetworks = (
-  value: unknown,
-): { networkId: number; ip: string }[] => {
+const observedPrivateNetworks = (value: unknown): { networkId: number; ip: string }[] => {
   if (!Array.isArray(value)) return [];
   return value
     .flatMap((item) => {
@@ -976,9 +938,7 @@ const toAttrs = (lb: CloudLoadBalancer): LoadBalancer["Attributes"] => {
   const services = observedServices(lb.services);
   const rawTargets = Array.isArray(lb.targets) ? lb.targets : [];
   const targets = observedTargets(lb.targets);
-  const targetAttrs = targets.map((target, index) =>
-    toTargetAttr(target, rawTargets[index]),
-  );
+  const targetAttrs = targets.map((target, index) => toTargetAttr(target, rawTargets[index]));
   return {
     id: lb.id,
     name: lb.name,
@@ -1026,11 +986,7 @@ const alreadyThere = (e: { readonly _tag: string }): boolean =>
 const alreadyGone = (e: { readonly _tag: string }): boolean =>
   e._tag === "NotFound" || e._tag === "UnprocessableEntity";
 
-const createLoadBalancerName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createLoadBalancerName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       name ??
@@ -1052,11 +1008,7 @@ const getById = (id: number) =>
 const getByName = (name: string) =>
   Hetzner.loadBalancers
     .listLoadBalancers({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ load_balancers }) =>
-        load_balancers.find((item) => item.name === name),
-      ),
-    );
+    .pipe(Effect.map(({ load_balancers }) => load_balancers.find((item) => item.name === name)));
 
 const getByLabels = (labels: Record<string, string>) =>
   Hetzner.loadBalancers
@@ -1113,10 +1065,7 @@ const matchesPlacement = (
   if (location !== undefined && current.location.name !== location) {
     return false;
   }
-  if (
-    networkZone !== undefined &&
-    current.location.network_zone !== networkZone
-  ) {
+  if (networkZone !== undefined && current.location.network_zone !== networkZone) {
     return false;
   }
   return true;
@@ -1143,10 +1092,7 @@ const syncMetadata = (args: {
     return updated.load_balancer;
   });
 
-const syncAlgorithm = (
-  current: CloudLoadBalancer,
-  desired: LoadBalancerAlgorithm,
-) =>
+const syncAlgorithm = (current: CloudLoadBalancer, desired: LoadBalancerAlgorithm) =>
   Effect.gen(function* () {
     if (asAlgorithm(current.algorithm.type) === desired) return;
     yield* runAction(
@@ -1203,12 +1149,8 @@ const syncServices = (
   desired: readonly NormalizedService[],
 ) =>
   Effect.gen(function* () {
-    const observedByPort = new Map(
-      observed.map((service) => [service.listenPort, service]),
-    );
-    const desiredByPort = new Map(
-      desired.map((service) => [service.listenPort, service]),
-    );
+    const observedByPort = new Map(observed.map((service) => [service.listenPort, service]));
+    const desiredByPort = new Map(desired.map((service) => [service.listenPort, service]));
 
     for (const service of observed) {
       if (desiredByPort.has(service.listenPort)) continue;
@@ -1285,10 +1227,7 @@ const addTargetRequest = (loadBalancerId: number, target: NormalizedTarget) => {
   });
 };
 
-const removeTargetRequest = (
-  loadBalancerId: number,
-  target: NormalizedTarget,
-) => {
+const removeTargetRequest = (loadBalancerId: number, target: NormalizedTarget) => {
   if (target.type === "server") {
     return Hetzner.loadBalancerActions.removeLoadBalancerTarget({
       id: loadBalancerId,
@@ -1393,10 +1332,7 @@ export const LoadBalancerProvider = () =>
         if (news.location !== undefined && news.location !== output.location) {
           return { action: "replace" } as const;
         }
-        if (
-          news.networkZone !== undefined &&
-          news.networkZone !== output.networkZone
-        ) {
+        if (news.networkZone !== undefined && news.networkZone !== output.networkZone) {
           return { action: "replace" } as const;
         }
       }
@@ -1425,10 +1361,8 @@ export const LoadBalancerProvider = () =>
       const loadBalancerType = news.loadBalancerType ?? DEFAULT_TYPE;
       const algorithm = news.algorithm ?? DEFAULT_ALGORITHM;
       const location =
-        news.location ??
-        (news.networkZone === undefined ? DEFAULT_LOCATION : undefined);
-      const networkZone =
-        news.location === undefined ? news.networkZone : undefined;
+        news.location ?? (news.networkZone === undefined ? DEFAULT_LOCATION : undefined);
+      const networkZone = news.location === undefined ? news.networkZone : undefined;
       const publicInterface = news.publicInterface ?? true;
       const deleteProtection = news.deleteProtection ?? false;
       const services = desiredServices(news.services);
@@ -1438,15 +1372,11 @@ export const LoadBalancerProvider = () =>
       // Observe by id then desired name only. Do not fall back to
       // ownership labels — a create-first replacement still has the old
       // generation live under the same logical id.
-      let current =
-        output?.id !== undefined ? yield* getById(output.id) : undefined;
+      let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {
         current = yield* getByName(name);
       }
-      if (
-        current !== undefined &&
-        !matchesPlacement(current, location, networkZone)
-      ) {
+      if (current !== undefined && !matchesPlacement(current, location, networkZone)) {
         current = undefined;
       }
 
@@ -1461,9 +1391,7 @@ export const LoadBalancerProvider = () =>
             ...(location !== undefined ? { location } : {}),
             ...(networkZone !== undefined ? { network_zone: networkZone } : {}),
             ...(networks[0] !== undefined ? { network: networks[0] } : {}),
-            ...(services.length > 0
-              ? { services: services.map(toCreateService) }
-              : {}),
+            ...(services.length > 0 ? { services: services.map(toCreateService) } : {}),
           })
           .pipe(
             Effect.retry(busyRetry),
@@ -1476,10 +1404,7 @@ export const LoadBalancerProvider = () =>
           current = created.load_balancer;
         } else {
           const hit = yield* getByName(name);
-          if (
-            hit !== undefined &&
-            matchesPlacement(hit, location, networkZone)
-          ) {
+          if (hit !== undefined && matchesPlacement(hit, location, networkZone)) {
             current = hit;
           }
         }
@@ -1497,23 +1422,11 @@ export const LoadBalancerProvider = () =>
       yield* syncAlgorithm(current, algorithm);
       yield* syncType(current, loadBalancerType);
       const afterType = (yield* getById(current.id)) ?? current;
-      yield* syncServices(
-        current.id,
-        observedServices(afterType.services),
-        services,
-      );
+      yield* syncServices(current.id, observedServices(afterType.services), services);
       const afterServices = (yield* getById(current.id)) ?? afterType;
-      yield* syncTargets(
-        current.id,
-        observedTargets(afterServices.targets),
-        targets,
-      );
+      yield* syncTargets(current.id, observedTargets(afterServices.targets), targets);
       const afterTargets = (yield* getById(current.id)) ?? afterServices;
-      yield* syncNetworks(
-        current.id,
-        observedPrivateNetworks(afterTargets.private_net),
-        networks,
-      );
+      yield* syncNetworks(current.id, observedPrivateNetworks(afterTargets.private_net), networks);
       const afterNetworks = (yield* getById(current.id)) ?? afterTargets;
       yield* syncPublicInterface(afterNetworks, publicInterface);
       const afterPublic = (yield* getById(current.id)) ?? afterNetworks;

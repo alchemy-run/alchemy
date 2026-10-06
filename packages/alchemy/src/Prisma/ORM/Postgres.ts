@@ -1,20 +1,14 @@
+import type { Contract } from "@prisma/orm-postgres/contract/types";
 // The Prisma runtime peers are loaded on first use. This module is not
 // re-exported from `alchemy/Prisma`; import `alchemy/Prisma/ORM/Postgres`.
 import type { SqlStorage } from "@prisma/orm-postgres/family-contract/types";
-import type { Contract } from "@prisma/orm-postgres/contract/types";
 import type {
   Runtime,
   RuntimeConnection,
   RuntimeTransaction,
 } from "@prisma/orm-postgres/family-runtime";
-import type {
-  SqlExecutionPlan,
-  SqlQueryPlan,
-} from "@prisma/orm-postgres/relational-core/plan";
-import type {
-  PostgresClient,
-  PostgresOptionsBase,
-} from "@prisma/orm-postgres/runtime";
+import type { SqlExecutionPlan, SqlQueryPlan } from "@prisma/orm-postgres/relational-core/plan";
+import type { PostgresClient, PostgresOptionsBase } from "@prisma/orm-postgres/runtime";
 import type { PostgresStaticContext } from "@prisma/orm-postgres/static";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -23,12 +17,7 @@ import { makeExecutionMemo } from "../../Runtime/ExecutionMemo.ts";
 import { type ClientError, RollbackError, wrapPrismaError } from "./Errors.ts";
 import { type EffectOrm, makeOrmProxy } from "./OrmClient.ts";
 import { type Prepare, makePrepare } from "./Prepared.ts";
-export type {
-  Prepare,
-  Prepared,
-  PreparedQuery,
-  PreparedMutation,
-} from "./Prepared.ts";
+export type { Prepare, Prepared, PreparedQuery, PreparedMutation } from "./Prepared.ts";
 
 export * from "./Errors.ts";
 export type { EffectCollection, EffectOrm, WhereFilter } from "./OrmClient.ts";
@@ -39,20 +28,19 @@ export type AnyPostgresContract = Contract<SqlStorage>;
 /** A plan produced by the `sql` builder lane (`db.sql...build()`) or `raw`. */
 export type Plan<Row> = SqlQueryPlan<Row> | SqlExecutionPlan<Row>;
 
-export type PostgresConfig<C extends AnyPostgresContract> =
-  PostgresOptionsBase &
-    (
-      | {
-          /** The TypeScript contract returned by Prisma's `defineContract`. */
-          readonly contract: C;
-          readonly contractJson?: never;
-        }
-      | {
-          /** Canonical JSON paired with Prisma's emitted Contract declaration. */
-          readonly contractJson: unknown;
-          readonly contract?: never;
-        }
-    );
+export type PostgresConfig<C extends AnyPostgresContract> = PostgresOptionsBase &
+  (
+    | {
+        /** The TypeScript contract returned by Prisma's `defineContract`. */
+        readonly contract: C;
+        readonly contractJson?: never;
+      }
+    | {
+        /** Canonical JSON paired with Prisma's emitted Contract declaration. */
+        readonly contractJson: unknown;
+        readonly contract?: never;
+      }
+  );
 
 /**
  * The transaction scope handed to {@link PostgresDatabase.transaction}'s
@@ -73,11 +61,7 @@ export interface PostgresTransaction<C extends AnyPostgresContract> {
   rollback(): Effect.Effect<never, RollbackError>;
 }
 
-export interface PostgresDatabase<
-  C extends AnyPostgresContract,
-  E = never,
-  R = never,
-> {
+export interface PostgresDatabase<C extends AnyPostgresContract, E = never, R = never> {
   /**
    * The native Prisma client for the current execution. Prefer the Effect
    * methods for typed failures and repeatable execution.
@@ -229,22 +213,20 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
 ): Effect.Effect<PostgresDatabase<C, E, R>> =>
   Effect.gen(function* () {
     const { contract, contractJson, ...options } = config;
-    const [{ default: postgres }, { default: postgresStatic }, { orm }] =
-      yield* Effect.promise(() =>
+    const [{ default: postgres }, { default: postgresStatic }, { orm }] = yield* Effect.promise(
+      () =>
         Promise.all([
           import("@prisma/orm-postgres/runtime"),
           import("@prisma/orm-postgres/static"),
           import("@prisma/orm-postgres/orm-client"),
         ]),
-      );
+    );
 
     // Pure static context: the typed sql/raw builders and the codec
     // machinery, with no driver and no connection behind them.
     const statics = postgresStatic<C>({
       contractJson: contract ?? contractJson,
-      ...(options.extensions === undefined
-        ? {}
-        : { extensions: options.extensions }),
+      ...(options.extensions === undefined ? {} : { extensions: options.extensions }),
     });
 
     const client = yield* makeExecutionMemo(
@@ -261,9 +243,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
       }),
     );
 
-    const execute = <Row>(
-      plan: Plan<Row>,
-    ): Effect.Effect<Row[], ClientError | E, R> =>
+    const execute = <Row>(plan: Plan<Row>): Effect.Effect<Row[], ClientError | E, R> =>
       Effect.flatMap(client, (c) =>
         Effect.tryPromise({
           try: (signal) => c.runtime().query(plan, { signal }).toArray(),
@@ -271,35 +251,23 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
         }),
       );
 
-    const stream = <Row>(
-      plan: Plan<Row>,
-    ): Stream.Stream<Row, ClientError | E, R> =>
+    const stream = <Row>(plan: Plan<Row>): Stream.Stream<Row, ClientError | E, R> =>
       // unwrap re-evaluates per run, so each run gets a fresh
       // AsyncIterableResult (they are single-consumption).
       Stream.unwrap(
         Effect.map(client, (c) =>
-          Stream.fromAsyncIterable(
-            c.runtime().query(plan) as AsyncIterable<Row>,
-            wrapPrismaError,
-          ),
+          Stream.fromAsyncIterable(c.runtime().query(plan) as AsyncIterable<Row>, wrapPrismaError),
         ),
       );
 
-    const makeTransactionScope = (
-      txn: RuntimeTransaction,
-      runtime: Runtime,
-    ) => {
+    const makeTransactionScope = (txn: RuntimeTransaction, runtime: Runtime) => {
       const txOrm = orm<C>({
         runtime: txn,
         context: statics.context,
       });
       const tx: PostgresTransaction<C> = {
         orm: makeOrmProxy<C, never, never>(Effect.sync(() => txOrm)),
-        prepare: makePrepare(
-          Effect.succeed(runtime),
-          statics.sql,
-          Effect.succeed(txn),
-        ),
+        prepare: makePrepare(Effect.succeed(runtime), statics.sql, Effect.succeed(txn)),
         execute: <Row>(plan: Plan<Row>) =>
           Effect.tryPromise({
             try: (signal) => txn.query(plan, { signal }).toArray(),
@@ -317,9 +285,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
         Effect.acquireUseRelease(
           Effect.tryPromise({
             try: async () => {
-              const connection: RuntimeConnection = await c
-                .runtime()
-                .connection();
+              const connection: RuntimeConnection = await c.runtime().connection();
               try {
                 const txn = await connection.transaction();
                 return { connection, txn, committed: false };
@@ -367,9 +333,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
             catch: wrapPrismaError,
           }),
         ),
-      orm: makeOrmProxy<C, ClientError | E, R>(
-        Effect.map(client, (c) => c.orm),
-      ),
+      orm: makeOrmProxy<C, ClientError | E, R>(Effect.map(client, (c) => c.orm)),
       sql: statics.sql,
       raw: statics.raw,
       prepare: makePrepare(

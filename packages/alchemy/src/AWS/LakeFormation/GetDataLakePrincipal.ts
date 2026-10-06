@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetDataLakePrincipal}.
  */
-export interface GetDataLakePrincipalRequest
-  extends lf.GetDataLakePrincipalRequest {}
+export interface GetDataLakePrincipalRequest extends lf.GetDataLakePrincipalRequest {}
 
 /**
  * Runtime binding for `lakeformation:GetDataLakePrincipal`.
@@ -33,10 +32,7 @@ export interface GetDataLakePrincipal extends Binding.Service<
   () => Effect.Effect<
     (
       request?: GetDataLakePrincipalRequest,
-    ) => Effect.Effect<
-      lf.GetDataLakePrincipalResponse,
-      lf.GetDataLakePrincipalError
-    >
+    ) => Effect.Effect<lf.GetDataLakePrincipalResponse, lf.GetDataLakePrincipalError>
   >
 > {}
 

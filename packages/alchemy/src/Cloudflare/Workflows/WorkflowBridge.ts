@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64, Base64Url } from "effect/encoding";
 import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
@@ -42,19 +42,12 @@ export const makeWorkflowBridge =
     {
       entrypoint,
       stack,
-    }: {
-      entrypoint: Effect.Effect<Record<string, any>>;
-      stack: { name: string; stage: string };
-    },
+    }: { entrypoint: Effect.Effect<Record<string, any>>; stack: { name: string; stage: string } },
   ) =>
   (className: string) => {
     // One isolate-lifetime layer build shared by every instantiation of this
     // workflow class — `build` memoizes the built context.
-    const { build } = getWorkerExport<WorkflowExport>({
-      entrypoint,
-      stack,
-      exportName: className,
-    });
+    const { build } = getWorkerExport<WorkflowExport>({ entrypoint, stack, exportName: className });
 
     return class WorkflowBridge extends WorkflowEntrypoint {
       readonly build: Promise<{
@@ -66,17 +59,16 @@ export const makeWorkflowBridge =
       constructor(ctx: unknown, env: unknown) {
         super(ctx, env);
 
-        this.build = build(() => {}).then(
-          ({ context, export: wf, telemetry }) =>
-            wf.make(env).pipe(
-              Effect.provideContext(context),
-              Effect.map((fn) => ({
-                context,
-                fn: fn as WorkflowImpl<unknown, unknown, unknown>,
-                telemetry,
-              })),
-              Effect.runPromise,
-            ),
+        this.build = build(() => {}).then(({ context, export: wf, telemetry }) =>
+          wf.make(env).pipe(
+            Effect.provideContext(context),
+            Effect.map((fn) => ({
+              context,
+              fn: fn as WorkflowImpl<unknown, unknown, unknown>,
+              telemetry,
+            })),
+            Effect.runPromise,
+          ),
         );
       }
 
@@ -107,9 +99,7 @@ export const makeWorkflowBridge =
                 // scope by `buildEventTelemetry` so buffered telemetry
                 // flushes when the scope closes at the end of the
                 // run-invocation.
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
-                ),
+                Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
               ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
             ),
           ) as Effect.Effect<unknown, unknown>,
@@ -121,10 +111,7 @@ export const makeWorkflowBridge =
         // and ignored so it can't mask the run's outcome.
         if (!isScopeEjected(scope)) {
           await Scope.close(scope, exit).pipe(
-            Effect.ignoreCause({
-              log: "Warn",
-              message: "Workflow run scope close failed",
-            }),
+            Effect.ignoreCause({ log: "Warn", message: "Workflow run scope close failed" }),
             Effect.runPromise,
           );
         }
@@ -138,10 +125,7 @@ export const makeWorkflowBridge =
 
 const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
   payload: event.payload,
-  timestamp:
-    event.timestamp instanceof Date
-      ? event.timestamp
-      : new Date(event.timestamp),
+  timestamp: event.timestamp instanceof Date ? event.timestamp : new Date(event.timestamp),
   instanceId: event.instanceId ?? "",
   workflowName: event.workflowName ?? "",
   schedule: event.schedule ?? undefined,
@@ -156,16 +140,10 @@ export const wrapWorkflowStep = (
   step: any,
   identity?: WorkflowIdentity,
 ): WorkflowStep["Service"] => ({
-  do: <T, E>(
-    options: WorkflowTaskOptions<T, any, any, E>,
-  ): Effect.Effect<T, E> => {
+  do: <T, E>(options: WorkflowTaskOptions<T, any, any, E>): Effect.Effect<T, E> => {
     const { name } = options;
     // `task` provides application services; the bridge supplies attempt-local services.
-    const effect = options.effect as Effect.Effect<
-      T,
-      E,
-      WorkflowStepContext | Scope.Scope
-    >;
+    const effect = options.effect as Effect.Effect<T, E, WorkflowStepContext | Scope.Scope>;
     const config = definedStepConfig(options);
     const rollbackEffect = options.rollback;
     const rollback = rollbackEffect
@@ -174,14 +152,14 @@ export const wrapWorkflowStep = (
           rollback: async (context: any) => {
             const exit = await Effect.runPromiseExit(
               Effect.scoped(
-                rollbackEffect({
-                  error: context.error,
-                  output: context.output,
-                }) as Effect.Effect<void, unknown, Scope.Scope>,
+                rollbackEffect({ error: context.error, output: context.output }) as Effect.Effect<
+                  void,
+                  unknown,
+                  Scope.Scope
+                >,
               ),
             );
-            if (Exit.isFailure(exit))
-              throw await callbackFailure(exit.cause, name, identity);
+            if (Exit.isFailure(exit)) throw await callbackFailure(exit.cause, name, identity);
           },
           rollbackConfig: definedStepConfig(options.rollbackConfig),
         }
@@ -189,10 +167,7 @@ export const wrapWorkflowStep = (
     return Effect.scoped(
       Effect.gen(function* () {
         // Join active callbacks on interruption, without waiting through native retry delays.
-        const runPromise = yield* FiberSet.makeRuntimePromise<
-          never,
-          Exit.Exit<T, E>
-        >();
+        const runPromise = yield* FiberSet.makeRuntimePromise<never, Exit.Exit<T, E>>();
         let failure: { message: string; cause: Cause.Cause<E> } | undefined;
         const callback = async (context: any) => {
           const exit = await runPromise(
@@ -216,8 +191,7 @@ export const wrapWorkflowStep = (
         };
         return yield* Effect.tryPromise<T, unknown>({
           try: () => {
-            if (config && rollback)
-              return step.do(name, config, callback, rollback);
+            if (config && rollback) return step.do(name, config, callback, rollback);
             if (config) return step.do(name, config, callback);
             if (rollback) return step.do(name, callback, rollback);
             return step.do(name, callback);
@@ -230,12 +204,8 @@ export const wrapWorkflowStep = (
             error.name === "Error" &&
             error.message === failure.message
               ? Effect.failCause(failure.cause)
-              : Effect.promise(() =>
-                  decodeApplicationFailure<E>(error, name, identity),
-                ).pipe(
-                  Effect.flatMap((cause) =>
-                    cause ? Effect.failCause(cause) : Effect.die(error),
-                  ),
+              : Effect.promise(() => decodeApplicationFailure<E>(error, name, identity)).pipe(
+                  Effect.flatMap((cause) => (cause ? Effect.failCause(cause) : Effect.die(error))),
                 ),
           ),
         );
@@ -246,13 +216,8 @@ export const wrapWorkflowStep = (
     Effect.promise(() => step.sleep(name, duration)),
   sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
     Effect.promise(() => step.sleepUntil(name, timestamp)),
-  waitForEvent: <T>(
-    name: string,
-    options: any,
-  ): Effect.Effect<WorkflowStepEvent<T>> =>
-    Effect.promise(
-      () => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>,
-    ),
+  waitForEvent: <T>(name: string, options: any): Effect.Effect<WorkflowStepEvent<T>> =>
+    Effect.promise(() => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>),
 });
 
 const failurePrefix = "[alchemy-workflow-failure:v1]";
@@ -273,8 +238,7 @@ const callbackFailure = async <E>(
     try {
       const budget = { nodes: 0, seen: new Set<object>() };
       const errors = cause.reasons.map((reason) => {
-        if (reason._tag !== "Fail")
-          throw new TypeError("Expected an application failure");
+        if (reason._tag !== "Fail") throw new TypeError("Expected an application failure");
         return encodeFailureValue(reason.error, new Set<object>(), budget);
       });
       const error = Cause.squash(cause);
@@ -284,7 +248,7 @@ const callbackFailure = async <E>(
           : typeof error === "string"
             ? error
             : "Workflow application failure";
-      const body = `${Encoding.encodeBase64Url(
+      const body = `${Base64Url.encode(
         JSON.stringify({
           workflow: identity?.workflow ?? null,
           instanceId: identity?.instanceId ?? null,
@@ -313,10 +277,8 @@ const callbackFailure = async <E>(
 };
 
 const failureDigest = async (body: string): Promise<string> =>
-  Encoding.encodeBase64Url(
-    new Uint8Array(
-      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body)),
-    ),
+  Base64Url.encode(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))),
   );
 
 const decodeApplicationFailure = async <E>(
@@ -343,7 +305,7 @@ const decodeApplicationFailure = async <E>(
       throw new TypeError("invalid failure checksum");
     const end = body.indexOf("\n");
     if (end < 1) throw new TypeError("invalid failure framing");
-    const json = Encoding.decodeBase64UrlString(body.slice(0, end));
+    const json = Base64Url.decodeString(body.slice(0, end));
     if (Result.isFailure(json)) throw new TypeError("invalid failure encoding");
     const envelope: unknown = JSON.parse(json.success);
     if (
@@ -362,16 +324,10 @@ const decodeApplicationFailure = async <E>(
     )
       throw new TypeError("invalid failure envelope");
     // Only the validated private transport restores E's data; prototypes and identity are invocation-local.
-    const errors = envelope.errors.map((value) =>
-      decodeFailureValue(value),
-    ) as E[];
-    return Cause.fromReasons(
-      errors.map((value) => Cause.makeFailReason(value)),
-    );
+    const errors = envelope.errors.map((value) => decodeFailureValue(value)) as E[];
+    return Cause.fromReasons(errors.map((value) => Cause.makeFailReason(value)));
   } catch (cause) {
-    throw new TypeError("Invalid persisted Workflow application failure", {
-      cause,
-    });
+    throw new TypeError("Invalid persisted Workflow application failure", { cause });
   }
 };
 
@@ -387,32 +343,23 @@ const encodeFailureValue = (
     (typeof value === "string" && value.length > maxFailureLength)
   )
     throw new TypeError("encoded failure exceeds 16 KiB");
-  if (value === null || typeof value === "boolean" || typeof value === "string")
-    return value;
+  if (value === null || typeof value === "boolean" || typeof value === "string") return value;
   if (typeof value === "number")
     return Number.isFinite(value) && !Object.is(value, -0)
       ? value
       : ["number", Object.is(value, -0) ? "-0" : String(value)];
   if (value === undefined) return ["undefined"];
   if (typeof value === "bigint") return ["bigint", String(value)];
-  if (typeof value !== "object")
-    throw new TypeError(`unsupported ${typeof value}`);
+  if (typeof value !== "object") throw new TypeError(`unsupported ${typeof value}`);
   if (ancestors.has(value)) throw new TypeError("cyclic error data");
-  if (budget.seen.has(value))
-    throw new TypeError("shared references in error data");
+  if (budget.seen.has(value)) throw new TypeError("shared references in error data");
   budget.seen.add(value);
-  if (ancestors.size >= 64)
-    throw new TypeError("error data exceeds 64 nesting levels");
+  if (ancestors.size >= 64) throw new TypeError("error data exceeds 64 nesting levels");
   ancestors.add(value);
   try {
-    const encode = (item: unknown) =>
-      encodeFailureValue(item, ancestors, budget);
+    const encode = (item: unknown) => encodeFailureValue(item, ancestors, budget);
     const symbols = Object.getOwnPropertySymbols(value).filter(
-      (key) =>
-        !(
-          value instanceof Error &&
-          key === Symbol.for("effect/Data/Error/plainArgs")
-        ),
+      (key) => !(value instanceof Error && key === Symbol.for("effect/Data/Error/plainArgs")),
     );
     if (symbols.length) throw new TypeError("symbol-keyed error data");
     if (
@@ -423,25 +370,15 @@ const encodeFailureValue = (
       value instanceof Set
     ) {
       const own = Object.getOwnPropertyNames(value);
-      if (
-        own.some(
-          (key) => !(value instanceof Uint8Array && /^(0|[1-9]\d*)$/.test(key)),
-        )
-      )
+      if (own.some((key) => !(value instanceof Uint8Array && /^(0|[1-9]\d*)$/.test(key))))
         throw new TypeError("custom properties on serialized built-in values");
-      if (value instanceof Date)
-        return ["date", encode(Date.prototype.getTime.call(value))];
-      if (value instanceof Uint8Array)
-        return ["bytes", Encoding.encodeBase64(value)];
-      if (value instanceof ArrayBuffer)
-        return ["buffer", Encoding.encodeBase64(new Uint8Array(value))];
+      if (value instanceof Date) return ["date", encode(Date.prototype.getTime.call(value))];
+      if (value instanceof Uint8Array) return ["bytes", Base64.encode(value)];
+      if (value instanceof ArrayBuffer) return ["buffer", Base64.encode(new Uint8Array(value))];
       if (value instanceof Map)
         return [
           "map",
-          [...Map.prototype.entries.call(value)].map(([key, item]) => [
-            encode(key),
-            encode(item),
-          ]),
+          [...Map.prototype.entries.call(value)].map(([key, item]) => [encode(key), encode(item)]),
         ];
       return ["set", [...Set.prototype.values.call(value)].map(encode)];
     }
@@ -451,30 +388,21 @@ const encodeFailureValue = (
       if (
         keys.length !== value.length + 1 ||
         keys.some(
-          (key) =>
-            key !== "length" &&
-            (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length),
+          (key) => key !== "length" && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length),
         )
       )
         throw new TypeError("sparse arrays or custom array properties");
       for (const descriptor of Object.values(descriptors)) {
-        if (!("value" in descriptor))
-          throw new TypeError("accessor error data");
+        if (!("value" in descriptor)) throw new TypeError("accessor error data");
       }
       return [
         "array",
-        Array.from({ length: value.length }, (_, i) =>
-          encode(descriptors[i].value),
-        ),
+        Array.from({ length: value.length }, (_, i) => encode(descriptors[i].value)),
       ];
     }
     const descriptors = Object.getOwnPropertyDescriptors(value);
     let tag: string | undefined;
-    for (
-      let owner: object | null = value;
-      owner;
-      owner = Object.getPrototypeOf(owner)
-    ) {
+    for (let owner: object | null = value; owner; owner = Object.getPrototypeOf(owner)) {
       const descriptor = Object.getOwnPropertyDescriptor(owner, "_tag");
       if (!descriptor) continue;
       if (!("value" in descriptor)) throw new TypeError("accessor error data");
@@ -490,10 +418,7 @@ const encodeFailureValue = (
     )
       throw new TypeError("unsupported class instance");
     for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (
-        !("value" in descriptor) &&
-        !(value instanceof Error && key === "stack")
-      )
+      if (!("value" in descriptor) && !(value instanceof Error && key === "stack"))
         throw new TypeError("accessor error data");
     }
     const fields = new Map<string, unknown>();
@@ -504,27 +429,21 @@ const encodeFailureValue = (
         while (owner) {
           const descriptor = Object.getOwnPropertyDescriptor(owner, key);
           if (descriptor) {
-            if (
-              !("value" in descriptor) &&
-              !(owner === value && key === "stack")
-            )
+            if (!("value" in descriptor) && !(owner === value && key === "stack"))
               throw new TypeError("accessor error data");
             break;
           }
           owner = Object.getPrototypeOf(owner);
         }
       }
-      for (const [key, item] of Object.entries(
-        encodeRpcError(value) as Record<string, unknown>,
-      ))
+      for (const [key, item] of Object.entries(encodeRpcError(value) as Record<string, unknown>))
         fields.set(key, item);
       fields.set("name", value.name);
       fields.set("message", value.message);
     }
     for (const [key, descriptor] of Object.entries(descriptors)) {
       if (!("value" in descriptor)) {
-        if (value instanceof Error && key === "stack")
-          fields.set(key, value.stack);
+        if (value instanceof Error && key === "stack") fields.set(key, value.stack);
         else throw new TypeError("accessor error data");
       } else fields.set(key, descriptor.value);
     }
@@ -545,8 +464,7 @@ const decodeFailureValue = (value: unknown, depth = 0): unknown => {
     (typeof value === "number" && Number.isFinite(value))
   )
     return value;
-  if (!Array.isArray(value))
-    throw new TypeError("invalid serialized error value");
+  if (!Array.isArray(value)) throw new TypeError("invalid serialized error value");
   const decode = (item: unknown) => decodeFailureValue(item, depth + 1);
   const [tag, data] = value;
   if (tag === "undefined" && value.length === 1) return undefined;
@@ -557,11 +475,7 @@ const decodeFailureValue = (value: unknown, depth = 0): unknown => {
     ["NaN", "Infinity", "-Infinity", "-0"].includes(data)
   )
     return Number(data);
-  if (
-    tag === "bigint" &&
-    typeof data === "string" &&
-    /^-?(0|[1-9]\d*)$/.test(data)
-  )
+  if (tag === "bigint" && typeof data === "string" && /^-?(0|[1-9]\d*)$/.test(data))
     return BigInt(data);
   if (depth >= 64) throw new TypeError("invalid serialized error value");
   if (tag === "date") {
@@ -569,11 +483,8 @@ const decodeFailureValue = (value: unknown, depth = 0): unknown => {
     if (typeof timestamp === "number") return new Date(timestamp);
   }
   if ((tag === "bytes" || tag === "buffer") && typeof data === "string") {
-    const bytes = Encoding.decodeBase64(data);
-    if (
-      Result.isSuccess(bytes) &&
-      Encoding.encodeBase64(bytes.success) === data
-    )
+    const bytes = Base64.decode(data);
+    if (Result.isSuccess(bytes) && Base64.encode(bytes.success) === data)
       return tag === "bytes" ? bytes.success : bytes.success.buffer;
   }
   if (Array.isArray(data)) {

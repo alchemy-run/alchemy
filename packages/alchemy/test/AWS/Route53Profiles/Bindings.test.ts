@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import ProfilesTestFunctionLive, { ProfilesTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "Route53ProfilesBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,48 +34,30 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "Route53Profiles Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:route53profiles",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:route53profiles", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Route53Profiles bindings setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Route53Profiles bindings setup: destroying previous resources");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "Route53Profiles bindings setup: deploying fixture",
-        );
+        yield* Effect.logInfo("Route53Profiles bindings setup: deploying fixture");
         const attrs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* ProfilesTestFunction;
@@ -96,9 +75,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -126,21 +103,19 @@ describe.sequential(
     });
 
     describe("ListProfileAssociations", () => {
-      test.provider(
-        "lists the bound profile's VPC associations (injected profile id)",
-        (_stack) =>
-          Effect.gen(function* () {
-            // The fixture's profile is never associated with a VPC, so an
-            // empty list proves both the
-            // route53profiles:ListProfileAssociations grant and the ProfileId
-            // filter injection.
-            const response = (yield* getJson("/associations")) as {
-              count: number;
-              resourceIds: string[];
-            };
-            expect(response.count).toBe(0);
-            expect(response.resourceIds).toEqual([]);
-          }),
+      test.provider("lists the bound profile's VPC associations (injected profile id)", (_stack) =>
+        Effect.gen(function* () {
+          // The fixture's profile is never associated with a VPC, so an
+          // empty list proves both the
+          // route53profiles:ListProfileAssociations grant and the ProfileId
+          // filter injection.
+          const response = (yield* getJson("/associations")) as {
+            count: number;
+            resourceIds: string[];
+          };
+          expect(response.count).toBe(0);
+          expect(response.resourceIds).toEqual([]);
+        }),
       );
     });
 

@@ -3,29 +3,21 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Output from "../../Output.ts";
-import { canonicalCidr } from "../../Utils/ip-address.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { State, isActionState } from "../../State/State.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
-import {
-  getDefaultVpcDefaultSecurityGroupId,
-  getDefaultVpcScope,
-} from "./defaultVpcScope.ts";
-import type {
-  SecurityGroupId,
-  SecurityGroupRuleData,
-} from "./SecurityGroup.ts";
+import { canonicalCidr } from "../../Utils/ip-address.ts";
+import type { Providers } from "../Providers.ts";
+import { getDefaultVpcDefaultSecurityGroupId, getDefaultVpcScope } from "./defaultVpcScope.ts";
+import type { SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 
 export type SecurityGroupRuleId<ID extends string = string> = `sgr-${ID}`;
-export const SecurityGroupRuleId = <ID extends string>(
-  id: ID,
-): ID & SecurityGroupRuleId<ID> => `sgr-${id}` as ID & SecurityGroupRuleId<ID>;
+export const SecurityGroupRuleId = <ID extends string>(id: ID): ID & SecurityGroupRuleId<ID> =>
+  `sgr-${id}` as ID & SecurityGroupRuleId<ID>;
 
 export interface SecurityGroupRuleProps {
   /**
@@ -319,17 +311,13 @@ export interface SecurityGroupRule extends Resource<
  *
  * @resource
  */
-export const SecurityGroupRule = Resource<SecurityGroupRule>(
-  "AWS.EC2.SecurityGroupRule",
-);
+export const SecurityGroupRule = Resource<SecurityGroupRule>("AWS.EC2.SecurityGroupRule");
 
-class InvalidSecurityGroupRuleGroup extends Data.TaggedError(
-  "InvalidSecurityGroupRuleGroup",
-)<{ message: string }> {}
+class InvalidSecurityGroupRuleGroup extends Data.TaggedError("InvalidSecurityGroupRuleGroup")<{
+  message: string;
+}> {}
 
-const ruleGroupId = Effect.fn(function* (
-  props: Pick<SecurityGroupRuleProps, "group" | "groupId">,
-) {
+const ruleGroupId = Effect.fn(function* (props: Pick<SecurityGroupRuleProps, "group" | "groupId">) {
   if ((props.group === undefined) === (props.groupId === undefined)) {
     return yield* new InvalidSecurityGroupRuleGroup({
       message: "Specify exactly one of group or groupId.",
@@ -344,9 +332,7 @@ const ruleGroupId = Effect.fn(function* (
   return groupId;
 });
 
-class SecurityGroupRuleNotConverged extends Data.TaggedError(
-  "SecurityGroupRuleNotConverged",
-)<{
+class SecurityGroupRuleNotConverged extends Data.TaggedError("SecurityGroupRuleNotConverged")<{
   ruleId: string;
 }> {}
 
@@ -354,10 +340,7 @@ export const SecurityGroupRuleProvider = () =>
   Provider.effect(
     SecurityGroupRule,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -371,18 +354,14 @@ export const SecurityGroupRuleProvider = () =>
           Effect.flatMap((rule) =>
             rule
               ? Effect.succeed(rule)
-              : Effect.fail(
-                  new Error(`Security Group Rule ${ruleId} not found`),
-                ),
+              : Effect.fail(new Error(`Security Group Rule ${ruleId} not found`)),
           ),
         );
 
       const toAttrs = (
         rule: Awaited<
           ReturnType<
-            typeof describeRule extends (
-              ...args: any
-            ) => Effect.Effect<infer R, any, any>
+            typeof describeRule extends (...args: any) => Effect.Effect<infer R, any, any>
               ? () => Promise<R>
               : never
           >
@@ -402,14 +381,9 @@ export const SecurityGroupRuleProvider = () =>
         description: rule.Description,
       });
 
-      const tagsMatch = (
-        rule: ec2.SecurityGroupRule,
-        tags: Record<string, string>,
-      ) => {
+      const tagsMatch = (rule: ec2.SecurityGroupRule, tags: Record<string, string>) => {
         const { removed, upsert } = diffTags(
-          Object.fromEntries(
-            (rule.Tags ?? []).map((tag) => [tag.Key!, tag.Value!]),
-          ),
+          Object.fromEntries((rule.Tags ?? []).map((tag) => [tag.Key!, tag.Value!])),
           tags,
         );
         return removed.length === 0 && upsert.length === 0;
@@ -422,9 +396,7 @@ export const SecurityGroupRuleProvider = () =>
           if (!output) return undefined;
           return yield* describeRule(output.securityGroupRuleId).pipe(
             Effect.map(toAttrs),
-            Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.succeed(undefined)),
           );
         }),
 
@@ -437,9 +409,7 @@ export const SecurityGroupRuleProvider = () =>
             // census/nuke them. Rules on user-created groups inside the
             // default VPC are still listed.
             const defaultVpc = yield* getDefaultVpcScope;
-            const defaultSgId = yield* getDefaultVpcDefaultSecurityGroupId(
-              defaultVpc.vpcId,
-            );
+            const defaultSgId = yield* getDefaultVpcDefaultSecurityGroupId(defaultVpc.vpcId);
             return yield* ec2.describeSecurityGroupRules.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -452,11 +422,7 @@ export const SecurityGroupRuleProvider = () =>
                         SecurityGroupRuleId: string;
                       } => rule.SecurityGroupRuleId != null,
                     )
-                    .filter(
-                      (rule) =>
-                        defaultSgId === undefined ||
-                        rule.GroupId !== defaultSgId,
-                    )
+                    .filter((rule) => defaultSgId === undefined || rule.GroupId !== defaultSgId)
                     .map((rule) => toAttrs(rule)),
                 ),
               ),
@@ -476,8 +442,7 @@ export const SecurityGroupRuleProvider = () =>
           const target = group?.groupId ?? groupId;
           if (!isResolved(target)) return { action: "replace" };
           const desiredGroupId = yield* ruleGroupId({ groupId: target });
-          const oldGroupId =
-            olds.group?.groupId ?? olds.groupId ?? output?.groupId;
+          const oldGroupId = olds.group?.groupId ?? olds.groupId ?? output?.groupId;
           if (desiredGroupId !== oldGroupId) return { action: "replace" };
           for (const key of [
             "type",
@@ -493,16 +458,11 @@ export const SecurityGroupRuleProvider = () =>
               return { action: "replace" };
             }
           }
-          if (
-            !isResolved<Omit<SecurityGroupRuleProps, "group" | "groupId">>(rule)
-          )
-            return;
+          if (!isResolved<Omit<SecurityGroupRuleProps, "group" | "groupId">>(rule)) return;
           const desired = { ...rule, groupId: desiredGroupId };
           const { group: _group, groupId: _groupId, ...oldRule } = olds;
           if (output) {
-            const observed = yield* describeRule(
-              output.securityGroupRuleId,
-            ).pipe(
+            const observed = yield* describeRule(output.securityGroupRuleId).pipe(
               Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () =>
                 Effect.succeed(undefined),
               ),
@@ -517,8 +477,7 @@ export const SecurityGroupRuleProvider = () =>
               return { action: "replace" };
             }
             if (
-              observedSecurityGroupRuleKey(observed) !==
-                securityGroupRuleKey(rule) ||
+              observedSecurityGroupRuleKey(observed) !== securityGroupRuleKey(rule) ||
               !tagsMatch(observed, yield* createTags(id, rule.tags))
             ) {
               return { action: "update" };
@@ -602,8 +561,7 @@ export const SecurityGroupRuleProvider = () =>
                     TagSpecifications: tagSpec,
                     DryRun: false,
                   });
-            const newRuleId =
-              result.SecurityGroupRules?.[0]?.SecurityGroupRuleId!;
+            const newRuleId = result.SecurityGroupRules?.[0]?.SecurityGroupRuleId!;
             yield* session.note(`Security Group Rule created: ${newRuleId}`);
             observed = yield* describeRule(newRuleId);
           }
@@ -623,9 +581,7 @@ export const SecurityGroupRuleProvider = () =>
                     ToPort: news.toPort,
                     CidrIpv4: canonicalCidr(news.cidrIpv4),
                     CidrIpv6: canonicalCidr(news.cidrIpv6),
-                    ReferencedGroupId: news.referencedGroupId as
-                      | string
-                      | undefined,
+                    ReferencedGroupId: news.referencedGroupId as string | undefined,
                     PrefixListId: news.prefixListId as string | undefined,
                     Description: news.description ?? "",
                   },
@@ -655,8 +611,7 @@ export const SecurityGroupRuleProvider = () =>
           }
 
           const matches = (rule: ec2.SecurityGroupRule) =>
-            observedSecurityGroupRuleKey(rule) === desiredKey &&
-            tagsMatch(rule, desiredTags);
+            observedSecurityGroupRuleKey(rule) === desiredKey && tagsMatch(rule, desiredTags);
           const final = yield* describeRule(ruleId).pipe(
             Effect.repeat({
               until: matches,
@@ -665,18 +620,14 @@ export const SecurityGroupRuleProvider = () =>
             }),
           );
           if (!matches(final)) {
-            return yield* Effect.fail(
-              new SecurityGroupRuleNotConverged({ ruleId }),
-            );
+            return yield* Effect.fail(new SecurityGroupRuleNotConverged({ ruleId }));
           }
           return toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ olds, output, session }) {
           const ruleId = output.securityGroupRuleId;
-          const groupId = (output.groupId ??
-            olds?.group?.groupId ??
-            olds?.groupId) as string;
+          const groupId = (output.groupId ?? olds?.group?.groupId ?? olds?.groupId) as string;
           // Prefer the observed attribute (`isEgress`) — `olds` may be the
           // listed Attributes (e.g. during nuke) rather than the Props shape,
           // in which case `olds.type` is undefined.
@@ -695,10 +646,7 @@ export const SecurityGroupRuleProvider = () =>
               })
               .pipe(
                 Effect.catchTag(
-                  [
-                    "InvalidPermission.NotFound",
-                    "InvalidSecurityGroupRuleId.NotFound",
-                  ],
+                  ["InvalidPermission.NotFound", "InvalidSecurityGroupRuleId.NotFound"],
                   () => Effect.void,
                 ),
                 Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
@@ -712,10 +660,7 @@ export const SecurityGroupRuleProvider = () =>
               })
               .pipe(
                 Effect.catchTag(
-                  [
-                    "InvalidPermission.NotFound",
-                    "InvalidSecurityGroupRuleId.NotFound",
-                  ],
+                  ["InvalidPermission.NotFound", "InvalidSecurityGroupRuleId.NotFound"],
                   () => Effect.void,
                 ),
                 Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
@@ -729,9 +674,7 @@ export const SecurityGroupRuleProvider = () =>
   );
 
 // Only current declarations with persisted physical ownership are delegated.
-export const declaredSecurityGroupRuleIds = Effect.fn(function* (
-  groupId: string,
-) {
+export const declaredSecurityGroupRuleIds = Effect.fn(function* (groupId: string) {
   const stack = yield* Stack;
   const state = yield* yield* State;
   const ids = new Set<string>();
@@ -744,35 +687,20 @@ export const declaredSecurityGroupRuleIds = Effect.fn(function* (
       stage: stack.stage,
       fqn: source.FQN,
     });
-    if (
-      !sourceRow ||
-      isActionState(sourceRow) ||
-      sourceRow.resourceType !== source.Type
-    )
-      continue;
-    const sourceAttrs =
-      sourceRow.attr ?? ("old" in sourceRow ? sourceRow.old.attr : undefined);
+    if (!sourceRow || isActionState(sourceRow) || sourceRow.resourceType !== source.Type) continue;
+    const sourceAttrs = sourceRow.attr ?? ("old" in sourceRow ? sourceRow.old.attr : undefined);
     if (sourceAttrs) upstream[source.FQN] = sourceAttrs;
   }
   for (const resource of resources) {
-    if (resource.Type !== "AWS.EC2.SecurityGroupRule" || !resource.Props)
-      continue;
+    if (resource.Type !== "AWS.EC2.SecurityGroupRule" || !resource.Props) continue;
     const row = yield* state.get({
       stack: stack.name,
       stage: stack.stage,
       fqn: resource.FQN,
     });
-    if (
-      !row ||
-      isActionState(row) ||
-      row.resourceType !== "AWS.EC2.SecurityGroupRule"
-    )
-      continue;
+    if (!row || isActionState(row) || row.resourceType !== "AWS.EC2.SecurityGroupRule") continue;
     const attrs = row.attr ?? ("old" in row ? row.old.attr : undefined);
-    if (
-      attrs?.groupId === groupId &&
-      typeof attrs.securityGroupRuleId === "string"
-    ) {
+    if (attrs?.groupId === groupId && typeof attrs.securityGroupRuleId === "string") {
       const { group, groupId: declaredId } = resource.Props;
       if ((group === undefined) === (declaredId === undefined)) continue;
       const target = group ?? declaredId;
@@ -782,8 +710,7 @@ export const declaredSecurityGroupRuleIds = Effect.fn(function* (
           Effect.succeed(undefined),
         ),
       );
-      const declaredGroupId =
-        typeof declared === "string" ? declared : declared?.groupId;
+      const declaredGroupId = typeof declared === "string" ? declared : declared?.groupId;
       if (declaredGroupId === groupId) ids.add(attrs.securityGroupRuleId);
     }
   }
@@ -808,12 +735,8 @@ export const securityGroupRuleKey = (rule: SecurityGroupRuleData) => {
   const hasPorts = ["tcp", "udp", "icmp", "icmpv6"].includes(protocol);
   return JSON.stringify({
     protocol,
-    from: hasPorts
-      ? (rule.fromPort ?? (protocol === "icmpv6" ? -1 : undefined))
-      : undefined,
-    to: hasPorts
-      ? (rule.toPort ?? (protocol === "icmpv6" ? -1 : undefined))
-      : undefined,
+    from: hasPorts ? (rule.fromPort ?? (protocol === "icmpv6" ? -1 : undefined)) : undefined,
+    to: hasPorts ? (rule.toPort ?? (protocol === "icmpv6" ? -1 : undefined)) : undefined,
     ipv4: canonicalCidr(rule.cidrIpv4),
     ipv6: canonicalCidr(rule.cidrIpv6),
     group: rule.referencedGroupId,
@@ -829,22 +752,16 @@ export const observedSecurityGroupRuleKey = (rule: ec2.SecurityGroupRule) =>
     toPort: rule.ToPort,
     cidrIpv4: rule.CidrIpv4,
     cidrIpv6: rule.CidrIpv6,
-    referencedGroupId: rule.ReferencedGroupInfo?.GroupId as
-      | SecurityGroupId
-      | undefined,
+    referencedGroupId: rule.ReferencedGroupInfo?.GroupId as SecurityGroupId | undefined,
     prefixListId: rule.PrefixListId,
     description: rule.Description,
   });
 
 // EC2 creates one physical rule per source in an IpPermission.
 export const expandSecurityGroupRules = (rules: SecurityGroupRuleData[]) =>
-  rules.flatMap(
-    ({ cidrIpv4, cidrIpv6, referencedGroupId, prefixListId, ...rule }) => [
-      ...(cidrIpv4 === undefined ? [] : [{ ...rule, cidrIpv4 }]),
-      ...(cidrIpv6 === undefined ? [] : [{ ...rule, cidrIpv6 }]),
-      ...(referencedGroupId === undefined
-        ? []
-        : [{ ...rule, referencedGroupId }]),
-      ...(prefixListId === undefined ? [] : [{ ...rule, prefixListId }]),
-    ],
-  );
+  rules.flatMap(({ cidrIpv4, cidrIpv6, referencedGroupId, prefixListId, ...rule }) => [
+    ...(cidrIpv4 === undefined ? [] : [{ ...rule, cidrIpv4 }]),
+    ...(cidrIpv6 === undefined ? [] : [{ ...rule, cidrIpv6 }]),
+    ...(referencedGroupId === undefined ? [] : [{ ...rule, referencedGroupId }]),
+    ...(prefixListId === undefined ? [] : [{ ...rule, prefixListId }]),
+  ]);

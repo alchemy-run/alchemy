@@ -35,7 +35,6 @@ export interface UpdateCallAnalyticsCategory extends Binding.Service<
     >
   >
 > {}
-export const UpdateCallAnalyticsCategory =
-  Binding.Service<UpdateCallAnalyticsCategory>(
-    "AWS.Transcribe.UpdateCallAnalyticsCategory",
-  );
+export const UpdateCallAnalyticsCategory = Binding.Service<UpdateCallAnalyticsCategory>(
+  "AWS.Transcribe.UpdateCallAnalyticsCategory",
+);

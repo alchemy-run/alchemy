@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
 // On the standard testing account every MCN call fails with the typed
@@ -40,16 +37,11 @@ const getIntegration = (accountId: string, providerId: string) =>
 // for a missing integration with the typed `CloudIntegrationNotFound` (404).
 const expectGone = (accountId: string, providerId: string) =>
   getIntegration(accountId, providerId).pipe(
-    Effect.flatMap(() =>
-      Effect.fail({ _tag: "IntegrationNotDeleted" } as const),
-    ),
+    Effect.flatMap(() => Effect.fail({ _tag: "IntegrationNotDeleted" } as const)),
     Effect.catchTag("CloudIntegrationNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "IntegrationNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -72,29 +64,17 @@ test.provider(
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* mcn
-        .listCloudIntegrations({ accountId })
-        .pipe(Effect.flip);
+      const error = yield* mcn.listCloudIntegrations({ accountId }).pipe(Effect.flip);
       expect(error._tag).toEqual("FeatureNotEnabled");
 
       const createError = yield* mcn
-        .createCloudIntegration({
-          accountId,
-          cloudType: "AWS",
-          friendlyName: "alchemy-mcn-probe",
-        })
+        .createCloudIntegration({ accountId, cloudType: "AWS", friendlyName: "alchemy-mcn-probe" })
         .pipe(Effect.flip);
       expect(createError._tag).toEqual("FeatureNotEnabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"] },
 );
 
 test.provider(
@@ -119,13 +99,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"] },
 );
 
 test.provider.skipIf(!entitled)(
@@ -146,18 +120,12 @@ test.provider.skipIf(!entitled)(
       );
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.integrationId === deployed.integrationId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.integrationId === deployed.integrationId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
     timeout: 120_000,
   },
 );
@@ -203,24 +171,15 @@ test.provider.skipIf(!entitled)(
       expect(updated.friendlyName).toEqual("alchemy-mcn-cloud-integration-v2");
       expect(updated.description).toEqual("alchemy cloud integration test v2");
 
-      const liveUpdated = yield* getIntegration(
-        accountId,
-        integration.integrationId,
-      );
-      expect(liveUpdated.friendlyName).toEqual(
-        "alchemy-mcn-cloud-integration-v2",
-      );
+      const liveUpdated = yield* getIntegration(accountId, integration.integrationId);
+      expect(liveUpdated.friendlyName).toEqual("alchemy-mcn-cloud-integration-v2");
 
       yield* stack.destroy();
 
       yield* expectGone(accountId, integration.integrationId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
     timeout: 120_000,
   },
 );
@@ -259,11 +218,7 @@ test.provider.skipIf(!entitled)(
       yield* expectGone(accountId, replaced.integrationId);
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:magiccloudnetworking",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
     timeout: 120_000,
   },
 );

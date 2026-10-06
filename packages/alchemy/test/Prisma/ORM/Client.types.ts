@@ -113,26 +113,25 @@ export function clientTypes(db: PostgresDatabase<Contract>) {
         .where((fields, fns) => fns.eq(fields.email, params.email))
         .build(),
     );
-    const rows: Effect.Effect<
-      Array<{ id: number; email: string }>,
-      ClientError
-    > = query.query({ email: "alice@example.com" });
-    const stream: Stream.Stream<{ id: number; email: string }, ClientError> =
-      query.query({ email: "alice@example.com" }).stream;
+    const rows: Effect.Effect<Array<{ id: number; email: string }>, ClientError> = query.query({
+      email: "alice@example.com",
+    });
+    const stream: Stream.Stream<{ id: number; email: string }, ClientError> = query.query({
+      email: "alice@example.com",
+    }).stream;
     // @ts-expect-error prepared parameters preserve codec input types
     query.query({ email: 123 });
     // @ts-expect-error row-returning statements are queried, not executed for statistics
     query.execute({ email: "alice@example.com" });
-    const mutation = yield* db.prepare(
-      { name: "pg/text@1", id: "pg/int4@1" },
-      (_sql, params) =>
-        db.raw
-          .sql`UPDATE "user" SET name = ${params.name} WHERE id = ${params.id}`
-          .affectedCount()
-          .build(),
+    const mutation = yield* db.prepare({ name: "pg/text@1", id: "pg/int4@1" }, (_sql, params) =>
+      db.raw.sql`UPDATE "user" SET name = ${params.name} WHERE id = ${params.id}`
+        .affectedCount()
+        .build(),
     );
-    const stats: Effect.Effect<{ affectedRows: number }, ClientError> =
-      mutation.execute({ name: "Alice", id: 1 });
+    const stats: Effect.Effect<{ affectedRows: number }, ClientError> = mutation.execute({
+      name: "Alice",
+      id: 1,
+    });
     // @ts-expect-error mutations report statistics rather than rows
     mutation.query({ name: "Alice", id: 1 });
     // @ts-expect-error numeric codec parameters reject strings

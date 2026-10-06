@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Kafka from "@distilled.cloud/aws/kafka";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -41,9 +41,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const ClusterArn = yield* nonexistentClusterArn;
-      const error = yield* Effect.flip(
-        Kafka.getBootstrapBrokers({ ClusterArn }),
-      );
+      const error = yield* Effect.flip(Kafka.getBootstrapBrokers({ ClusterArn }));
       expect(error._tag).toBe("NotFoundException");
     }),
   { tags: ["provider:aws", "provider:aws:kafka", "live"] },
@@ -79,11 +77,7 @@ test.provider(
     Effect.gen(function* () {
       const ClusterArn = yield* nonexistentClusterArn;
       const error = yield* Effect.flip(
-        Kafka.createTopic({
-          ClusterArn,
-          TopicName: "alchemy-probe",
-          PartitionCount: 1,
-        }),
+        Kafka.createTopic({ ClusterArn, TopicName: "alchemy-probe", PartitionCount: 1 }),
       );
       // The topic control plane validates the request body before resolving
       // the cluster, so a nonexistent cluster surfaces the typed 400.
@@ -142,24 +136,17 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(cluster.bootstrapBrokerStringSaslIam).toContain(":9098");
 
       // Out-of-band verification via distilled.
-      const described = yield* Kafka.describeClusterV2({
-        ClusterArn: cluster.clusterArn,
-      });
+      const described = yield* Kafka.describeClusterV2({ ClusterArn: cluster.clusterArn });
       const info = described.ClusterInfo;
       expect(info?.State).toBe("ACTIVE");
       expect(info?.ClusterType).toBe("SERVERLESS");
-      expect(info?.Serverless?.ClientAuthentication?.Sasl?.Iam?.Enabled).toBe(
-        true,
-      );
+      expect(info?.Serverless?.ClientAuthentication?.Sasl?.Iam?.Enabled).toBe(true);
 
       yield* stack.destroy();
       yield* assertClusterDeleted(cluster.clusterArn);
     }),
   // create (~5-10 min) + destroy initiation, one test.
-  {
-    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:kafka", "live"],
-    timeout: 1_200_000,
-  },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:kafka", "live"], timeout: 1_200_000 },
 );
 
 // Deletion is verified as INITIATED (state DELETING, irreversible) or fully
@@ -168,20 +155,11 @@ const assertClusterDeleted = (arn: string) =>
   Effect.gen(function* () {
     const state = yield* Kafka.describeClusterV2({ ClusterArn: arn }).pipe(
       Effect.map((r) => r.ClusterInfo?.State ?? "gone"),
-      Effect.catchTag("NotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("NotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (state !== "gone" && state !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`MSK cluster '${arn}' still exists (state: ${state})`),
-      );
+      return yield* Effect.fail(new Error(`MSK cluster '${arn}' still exists (state: ${state})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
