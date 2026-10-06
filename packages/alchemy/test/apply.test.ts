@@ -5650,7 +5650,8 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
   interface Stub extends Resource<
     "Test.DeferredStub",
     Singleton["Props"],
-    Singleton["Attributes"]
+    Singleton["Attributes"],
+    { env?: Record<string, string> }
   > {}
   const Stub = Resource<Stub>("Test.DeferredStub");
   const stubProvider = Provider.succeed(Stub, {
@@ -5662,7 +5663,8 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const probe = yield* Probe;
       probe.reconciles.push({ id, olds, output });
-      expect(output).toEqual({ identity: "stub", value: "stub" });
+      // Cycle convergence re-reconciles against the first pass's output.
+      if (output?.value !== "ready") expect(output).toEqual({ identity: "stub", value: "stub" });
       if (probe.fail) return yield* new ResourceFailure();
       return { identity: news.parent!, value: "ready" };
     }),
@@ -5749,7 +5751,10 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
   test.provider("never probes a precreated stub, including interrupted reconciliation", (stack) => {
     const app = Effect.gen(function* () {
       const parent = yield* Singleton("Parent", {});
-      return yield* Stub("Stub", { parent: parent.identity }).pipe(adopt(false));
+      const stub = yield* Stub("Stub", { parent: parent.identity }).pipe(adopt(false));
+      // Only cycle members precreate; the self-binding puts Stub in one.
+      yield* stub.bind("Self", { env: { SELF: stub.identity } });
+      return stub;
     });
     return Effect.gen(function* () {
       const probe = yield* Probe;
@@ -5760,8 +5765,11 @@ describe("deferred adoption", { tags: ["unit", "local"] }, () => {
       probe.fail = false;
       expect((yield* stack.deploy(app)).identity).toBe("child-branch");
       expect(probe.reads).toEqual([]);
-      expect(probe.reconciles).toHaveLength(2);
-      expect(probe.reconciles.every(({ olds }) => olds === undefined)).toBe(true);
+      // Both create attempts start from the stub; the cycle's convergence
+      // pass then re-reconciles against the created output.
+      const creates = probe.reconciles.filter(({ olds }) => olds === undefined);
+      expect(creates).toHaveLength(2);
+      expect(creates.every(({ output }) => output?.value === "stub")).toBe(true);
       yield* stack.destroy();
     });
   });
@@ -5859,7 +5867,8 @@ describe("interrupted replacement destruction", { tags: ["unit", "local"] }, () 
   interface Generation extends Resource<
     "Test.DestructionGeneration",
     { revision: string; dependency?: string },
-    Attributes
+    Attributes,
+    { env?: Record<string, string> }
   > {}
   const Generation = Resource<Generation>("Test.DestructionGeneration");
   class Registry extends Context.Service<
@@ -6060,19 +6069,24 @@ describe("interrupted replacement destruction", { tags: ["unit", "local"] }, () 
       ),
     ),
   });
+  // Only cycle members precreate; the self-binding puts R in one.
+  const selfBound = (revision: string) =>
+    Effect.gen(function* () {
+      const r = yield* Generation("R", { revision });
+      yield* r.bind("Self", { env: { SELF: r.physicalId } });
+      return r;
+    });
   stubTest.provider(
     "unfinished precreate remains resumable after its deleting checkpoint fails",
     (stack) =>
       Effect.gen(function* () {
         const registry = yield* Registry;
         yield* stack.destroy();
-        const first = yield* stack.deploy(Generation("R", { revision: "one" }));
+        const first = yield* stack.deploy(selfBound("one"));
         const reached = yield* Deferred.make<void>();
         registry.reconcile = () =>
           Deferred.succeed(reached, undefined).pipe(Effect.andThen(Effect.never));
-        const fiber = yield* stack
-          .deploy(Generation("R", { revision: "two" }))
-          .pipe(Effect.forkChild);
+        const fiber = yield* stack.deploy(selfBound("two")).pipe(Effect.forkChild);
         yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
         yield* Fiber.interrupt(fiber);
         const pending = yield* getState("R");
@@ -6101,7 +6115,7 @@ describe("interrupted replacement destruction", { tags: ["unit", "local"] }, () 
           Effect.sync(() => {
             reconciles++;
           }).pipe(Effect.andThen(create));
-        const output = yield* stack.deploy(Generation("R", { revision: "two" }));
+        const output = yield* stack.deploy(selfBound("two"));
         expect(reconciles).toBe(1);
         expect(checkpoint.status).toBe("creating");
         expect(checkpoint.attr).toEqual(pending.attr);

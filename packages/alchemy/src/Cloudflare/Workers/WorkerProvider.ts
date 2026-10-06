@@ -2059,6 +2059,23 @@ export const LiveWorkerProvider = () =>
                 schedule: Schedule.spaced("2 seconds"),
                 times: 5,
               }),
+              // The `alchemy:dos:` tag alone is stale on a *former* host: after
+              // a `transferred_classes` migration Cloudflare rewrites the old
+              // host's local binding to a className-less reference to the moved
+              // namespace (left dangling once the new host is deleted), but the
+              // former host's tags are only rewritten on its next deploy. Such a
+              // script no longer hosts the class — it is not a transfer source.
+              Effect.catchTag("MissingDurableObjects", (error) =>
+                localBinding === undefined &&
+                settings.bindings?.some(
+                  (binding) =>
+                    binding.type === "durable_object_namespace" &&
+                    !binding.className &&
+                    (binding.scriptName == null || binding.scriptName === script),
+                )
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+              ),
             );
           }
           if (namespace?.script === script && namespace.class === params.className) {

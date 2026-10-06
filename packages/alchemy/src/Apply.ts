@@ -777,7 +777,12 @@ const executeNode = (
           yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
         }
 
-        if (node.provider.precreate && attr === undefined) {
+        // Only cycle peers rendezvous on a precreate stub (`waitForDeps`); every
+        // other consumer waits for the reconciled output. Outside a cycle the
+        // stub is pure cost, and a live one (e.g. a Worker placeholder whose
+        // Durable Object classes are empty) can serve traffic while the real
+        // version propagates.
+        if (inCycle && node.provider.precreate && attr === undefined) {
           // Some resources need a placeholder physical resource before their real
           // create can finish. Persist that stub so downstream evaluation can proceed.
           yield* report("pre-creating");
@@ -1156,7 +1161,7 @@ const executeNode = (
           yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
         }
 
-        if (node.provider.precreate && attr === undefined) {
+        if (inCycle && node.provider.precreate && attr === undefined) {
           yield* report("pre-creating");
           attr = yield* node.provider
             .precreate({

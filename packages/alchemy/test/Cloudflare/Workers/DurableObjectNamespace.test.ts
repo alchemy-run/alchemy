@@ -977,6 +977,75 @@ export default { async fetch() { return new Response("v4"); } };
       { timeout: 120_000 },
     );
 
+    // A former host keeps its `alchemy:dos:` tag until its next deploy, while
+    // Cloudflare rewrites its binding to a className-less reference to the
+    // moved namespace (dangling once the new host is deleted). Naming that
+    // former host again — e.g. a host history `[b, a]` after b is gone — must
+    // treat it as not hosting the class and create a fresh namespace, not fail
+    // trying to locate a namespace that no longer exists.
+    test.provider(
+      "a former host with a stale class tag is not a transfer source",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+
+          const hostA = Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: { Counter: Cloudflare.DurableObject("Counter") },
+          });
+
+          // v1 — worker-b takes worker-a's namespace; worker-a is untouched.
+          const v1 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              const a = yield* hostA;
+              const b = yield* Cloudflare.Worker("worker-b", {
+                script: hostWorkerScript,
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: a }) },
+              });
+              return { a, b };
+            }),
+          );
+          const movedNamespaceId = v1.b.durableObjectNamespaces.Counter;
+          expect(movedNamespaceId).toBe(v1.a.durableObjectNamespaces.Counter);
+
+          // v2 — worker-b (and with it the moved namespace) is deleted.
+          yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { a: yield* hostA };
+            }),
+          );
+
+          // v3 — worker-d names worker-a as its former host: worker-a no
+          // longer hosts Counter, so worker-d creates a fresh namespace.
+          const v3 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              const a = yield* hostA;
+              const d = yield* Cloudflare.Worker("worker-d", {
+                script: hostWorkerScript,
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: a }) },
+              });
+              return { a, d };
+            }),
+          );
+          const freshNamespaceId = v3.d.durableObjectNamespaces.Counter;
+          expect(freshNamespaceId).toBeDefined();
+          expect(freshNamespaceId).not.toBe(movedNamespaceId);
+
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespaces = yield* durableObjects.listNamespaces
+            .items({ accountId })
+            .pipe(Stream.runCollect);
+          expect(namespaces.find((ns) => ns.id === freshNamespaceId)).toMatchObject({
+            script: v3.d.workerName,
+            class: "Counter",
+          });
+          expect(namespaces.some((ns) => ns.id === movedNamespaceId)).toBe(false);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
     // #799: the documented *pure move* — the former host drops the DO entirely,
     // keeping no cross-script reference — done as two deploys. Phase 1 adds the
     // class to worker-a, declaring the former host by **Worker resource
