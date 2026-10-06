@@ -118,7 +118,7 @@ const launcherRuntime = (env: { npm_execpath: string; npm_config_user_agent: str
       env: {
         ...env,
         npm_execpath: env.npm_execpath.replace("<fake-bun>", fakeBun),
-        PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
+        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
       },
       extendEnv: true,
       stdin: "ignore",
