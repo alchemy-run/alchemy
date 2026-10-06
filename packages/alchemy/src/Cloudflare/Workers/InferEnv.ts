@@ -24,6 +24,7 @@ import type * as FlagshipNs from "../Flagship/index.ts";
 import type * as HyperdriveNs from "../Hyperdrive/index.ts";
 import type * as ImagesNs from "../Images/index.ts";
 import type * as KV from "../KV/index.ts";
+import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type * as PipelinesNs from "../Pipelines/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
@@ -144,6 +145,7 @@ export type GetBindingType<T> =
                                                               : T extends
                                                                     | VpcService
                                                                     | VpcServiceLookup
+                                                                    | MtlsCertificate
                                                                 ? Fetcher
                                                                 : T extends
                                                                       | PipelinesNs.Stream

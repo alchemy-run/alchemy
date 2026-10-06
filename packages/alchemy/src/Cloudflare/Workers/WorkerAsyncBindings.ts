@@ -26,6 +26,7 @@ import { getHyperdriveDevOriginForHost } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isMtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
@@ -433,7 +434,7 @@ const toValueBinding = (
  * Outputs also land here (lazily, nothing is resolved); the caller rejects
  * them before the returned Output is ever bound.
  */
-const toBinding = (
+export const toBinding = (
   bindingName: string,
   binding: WorkerBindingResource,
 ): BindingSpec | Output.Output<WorkerBinding, unknown> => {
@@ -523,6 +524,13 @@ const toBinding = (
       type: "vpc_service",
       name: bindingName,
       serviceId: binding.serviceId,
+    };
+  } else if (isMtlsCertificate(binding)) {
+    // `env.NAME` is a Fetcher whose subrequests present the certificate.
+    return {
+      type: "mtls_certificate",
+      name: bindingName,
+      certificateId: binding.mtlsCertificateId,
     };
   } else if (isDatabase(binding)) {
     return {

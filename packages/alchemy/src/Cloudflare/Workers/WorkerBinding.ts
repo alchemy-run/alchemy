@@ -18,6 +18,7 @@ import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import type { Stream as PipelinesStream } from "../Pipelines/Stream.ts";
 import type { Queue } from "../Queues/Queue.ts";
@@ -230,6 +231,8 @@ export type WorkerBindingResource =
   | WorkflowLike<any>
   | VpcService
   | VpcServiceLookup
+  // An account-level mTLS certificate becomes an `mtls_certificate` binding.
+  | MtlsCertificate
   // A Container bound directly in `env` declares a container-backed Durable
   // Object class (DO namespace binding + ContainerApplication in one).
   | Container.Decl.Any;
