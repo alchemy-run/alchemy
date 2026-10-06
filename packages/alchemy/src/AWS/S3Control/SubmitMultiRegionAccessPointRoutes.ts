@@ -37,10 +37,7 @@ export interface SubmitMultiRegionAccessPointRoutes extends Binding.Service<
     mrap: MultiRegionAccessPoint,
   ) => Effect.Effect<
     (
-      request: Omit<
-        s3control.SubmitMultiRegionAccessPointRoutesRequest,
-        "AccountId" | "Mrap"
-      >,
+      request: Omit<s3control.SubmitMultiRegionAccessPointRoutesRequest, "AccountId" | "Mrap">,
     ) => Effect.Effect<
       s3control.SubmitMultiRegionAccessPointRoutesResult,
       s3control.SubmitMultiRegionAccessPointRoutesError

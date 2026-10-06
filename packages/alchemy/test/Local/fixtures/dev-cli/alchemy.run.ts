@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 
 export default Alchemy.Stack(
   "DevCliKillFixture",

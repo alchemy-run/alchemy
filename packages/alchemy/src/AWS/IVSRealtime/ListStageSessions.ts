@@ -33,10 +33,7 @@ export interface ListStageSessions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListStageSessionsRequest,
-    ) => Effect.Effect<
-      ivsrealtime.ListStageSessionsResponse,
-      ivsrealtime.ListStageSessionsError
-    >
+    ) => Effect.Effect<ivsrealtime.ListStageSessionsResponse, ivsrealtime.ListStageSessionsError>
   >
 > {}
 export const ListStageSessions = Binding.Service<ListStageSessions>(

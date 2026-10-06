@@ -1,3 +1,12 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "@alchemy.run/vite-plugin-copy-editor";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -5,11 +14,10 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
+import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
+import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
@@ -25,6 +33,7 @@ function providersSidebarEntry() {
     collapsed: false,
     items: [
       { label: "AWS", link: "/aws" },
+      { label: "GCP", link: "/gcp" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
@@ -37,6 +46,7 @@ function providersSidebarEntry() {
       { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
+      { label: "Kubernetes", link: "/kubernetes" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -56,9 +66,7 @@ function providerResourcesEntry(...providers: string[]) {
   const entryItems = (provider: string) => {
     const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
-    return [
-      { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
-    ];
+    return [{ autogenerate: { directory: `providers/${provider}`, collapsed: true } }];
   };
   // A single provider's tree is inlined; a multi-namespace hub nests each
   // provider under its own subgroup so same-named resources (SQL.D1 vs
@@ -76,12 +84,8 @@ function providerResourcesEntry(...providers: string[]) {
 
 function sortFrontendItems(items: readonly { label: string; link: string }[]) {
   return items.toSorted((a, b) => {
-    const overviewOrder =
-      Number(b.label === "Overview") - Number(a.label === "Overview");
-    return (
-      overviewOrder ||
-      a.label.localeCompare(b.label, "en", { sensitivity: "base" })
-    );
+    const overviewOrder = Number(b.label === "Overview") - Number(a.label === "Overview");
+    return overviewOrder || a.label.localeCompare(b.label, "en", { sensitivity: "base" });
   });
 }
 
@@ -97,10 +101,7 @@ function providerApiReferenceEntry(...providers: string[]) {
     items.flatMap((item) => {
       if ("items" in item) {
         // Generated category and service groups can share a name.
-        return flatten(
-          item.items,
-          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
-        );
+        return flatten(item.items, prefix.at(-1) === item.label ? prefix : [...prefix, item.label]);
       }
       return [{ label: [...prefix, item.label].join("."), link: item.link }];
     });
@@ -122,6 +123,34 @@ function providerApiReferenceEntry(...providers: string[]) {
  * the directory layout but normalizing extensions to `.md`. This lets the worker
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
+/**
+ * Dev only: hand-written docs (`.md`/`.mdx`) are editable in the browser.
+ * Generated reference pages are edited through their JSDoc instead.
+ */
+const markdownCopy: MarkdownFilesOptions = {
+  root: fileURLToPath(new URL(".", import.meta.url)),
+  exclude: /\/src\/content\/docs\/providers\//,
+  style: JSDOC_COPY_STYLE,
+};
+
+function markdownCopyEditing(): AstroIntegration {
+  return {
+    name: "markdown-copy-editing",
+    hooks: {
+      "astro:config:setup": ({ command, config }) => {
+        if (command !== "dev") return;
+        const processor = config.markdown.processor as
+          | { name: string; options?: { mdastPlugins?: unknown[] } }
+          | undefined;
+        if (processor?.name !== "satteri" || !processor.options?.mdastPlugins) {
+          return;
+        }
+        processor.options.mdastPlugins.unshift(markdownBlocks(markdownCopy));
+      },
+    },
+  };
+}
+
 function copyMarkdownSources(): AstroIntegration {
   return {
     name: "copy-markdown-sources",
@@ -163,20 +192,16 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.writeFile(
-                target,
-                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
-              );
+              await fs.writeFile(target, rewriteReferenceLinks(await fs.readFile(full, "utf8")));
             }),
           );
         }
 
         // Docs (Starlight content collection) — preserves nested layout under
         // /content/docs/ → /<path>.md, lowercased to match Starlight's URLs.
-        await walk(
-          fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
-          { lowercase: true },
-        );
+        await walk(fileURLToPath(new URL("./src/content/docs/", import.meta.url)), {
+          lowercase: true,
+        });
         // Marketing pages (top-level Astro pages) — exposes /<page>.md so
         // agents can fetch raw MDX via the worker's content negotiation. Astro
         // page routing preserves case, so don't lowercase these.
@@ -198,8 +223,10 @@ export default defineConfig({
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
   },
   prefetch: true,
+  devToolbar: { enabled: false },
   trailingSlash: "ignore",
   integrations: [
+    markdownCopyEditing(),
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),
@@ -221,6 +248,7 @@ export default defineConfig({
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
+        ThemeSelect: "./src/components/starlight/ThemeSelect.astro",
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
@@ -789,9 +817,7 @@ export default defineConfig({
             },
             {
               label: "AI",
-              items: [
-                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
-              ],
+              items: [{ label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" }],
             },
             {
               label: "Messaging & events",
@@ -825,15 +851,11 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [
-                { label: "Secrets & env", link: "/aws/security/secrets-env" },
-              ],
+              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
             },
             {
               label: "Observability",
-              items: [
-                { label: "CloudWatch", link: "/aws/observability/cloudwatch" },
-              ],
+              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
             },
             {
               label: "Networking",
@@ -846,6 +868,35 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("AWS"),
+          ],
+        },
+        {
+          label: "GCP",
+          items: [
+            { label: "Overview", link: "/gcp" },
+            { label: "Setup", link: "/gcp/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Serve an API on Cloud Run",
+                  link: "/gcp/guides/cloud-run-api",
+                },
+                {
+                  label: "Ingest events into BigQuery",
+                  link: "/gcp/guides/event-pipeline",
+                },
+                {
+                  label: "Cache with Memorystore",
+                  link: "/gcp/guides/memorystore",
+                },
+                {
+                  label: "How bindings grant IAM",
+                  link: "/gcp/guides/bindings",
+                },
+              ],
+            },
+            providerResourcesEntry("GCP"),
           ],
         },
         {
@@ -975,6 +1026,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Connect Services",
+                  link: "/fly/compute/connecting-services",
+                },
                 {
                   label: "Blue/green deployments",
                   link: "/fly/compute/deployments",
@@ -1350,9 +1405,7 @@ export default defineConfig({
             { label: "Setup", link: "/axiom/setup" },
             {
               label: "Data",
-              items: [
-                { label: "Datasets & ingest", link: "/axiom/data/ingest" },
-              ],
+              items: [{ label: "Datasets & ingest", link: "/axiom/data/ingest" }],
             },
             {
               label: "Guides",
@@ -1467,6 +1520,72 @@ export default defineConfig({
           ],
         },
         {
+          label: "Kubernetes",
+          items: [
+            { label: "Overview", link: "/kubernetes" },
+            { label: "Setup", link: "/kubernetes/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "kubernetes/tutorial" } }],
+            },
+            {
+              label: "Clusters",
+              items: [
+                {
+                  label: "Connecting to clusters",
+                  link: "/kubernetes/clusters/connecting",
+                },
+                {
+                  label: "Container registries",
+                  link: "/kubernetes/clusters/registries",
+                },
+                { label: "Local clusters", link: "/kubernetes/clusters/local" },
+                { label: "Amazon EKS", link: "/kubernetes/clusters/eks" },
+                {
+                  label: "Cluster adapters",
+                  link: "/kubernetes/clusters/cluster-adapters",
+                },
+              ],
+            },
+            {
+              label: "Workloads",
+              items: [
+                {
+                  label: "Deployments",
+                  link: "/kubernetes/workloads/deployments",
+                },
+                {
+                  label: "Jobs & CronJobs",
+                  link: "/kubernetes/workloads/jobs",
+                },
+                {
+                  label: "Container images",
+                  link: "/kubernetes/workloads/images",
+                },
+                {
+                  label: "Configuration & bindings",
+                  link: "/kubernetes/workloads/bindings",
+                },
+                {
+                  label: "How objects are managed",
+                  link: "/kubernetes/workloads/object-lifecycle",
+                },
+              ],
+            },
+            {
+              label: "Objects",
+              items: [
+                { label: "Manifests", link: "/kubernetes/objects/manifests" },
+                {
+                  label: "Helm charts",
+                  link: "/kubernetes/objects/helm-charts",
+                },
+              ],
+            },
+            providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
@@ -1539,12 +1658,26 @@ export default defineConfig({
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
       // We want every post listed, so set it effectively unlimited.
       plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
-      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts"],
+      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts", "./src/favicon.ts"],
     }),
     mdx(),
   ],
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [
+      copyEditor({
+        handlers: {
+          jsdoc: jsdocCopyHandler(),
+          md: markdownFiles(markdownCopy),
+        },
+        markdownStyles: { [JSDOC_COPY_STYLE]: jsdocMarkdownStyle },
+      }),
+      tailwindcss(),
+    ],
+    server: {
+      // Dev-only: allow sharing the dev server through cloudflared quick
+      // tunnels (random *.trycloudflare.com hostnames).
+      allowedHosts: [".trycloudflare.com"],
+    },
     ssr: {
       // Sätteri (Astro 7's markdown processor) loads a platform-native
       // binding via CJS require. Bundling its JS loader into the prerender

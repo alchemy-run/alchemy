@@ -18,8 +18,7 @@ import * as Effect from "effect/Effect";
 // literal text "--no-input" is not mistaken for the flag.
 const hasNoInputFlag = (): boolean => {
   const separator = process.argv.indexOf("--");
-  const flagArgs =
-    separator === -1 ? process.argv : process.argv.slice(0, separator);
+  const flagArgs = separator === -1 ? process.argv : process.argv.slice(0, separator);
   return flagArgs.includes("--no-input");
 };
 
@@ -97,8 +96,9 @@ export interface InteractionCapabilities {
 }
 
 /** Process capabilities as an Effect so callers can replace them in tests. */
-export const processInteractionCapabilities: Effect.Effect<InteractionCapabilities> =
-  Effect.sync(() => ({ input: !isNonInteractive() }));
+export const processInteractionCapabilities: Effect.Effect<InteractionCapabilities> = Effect.sync(
+  () => ({ input: !isNonInteractive() }),
+);
 
 /** Select user-facing copy from an injected capability Effect. */
 export const messageForCapabilities = <E, R>(
@@ -106,14 +106,8 @@ export const messageForCapabilities = <E, R>(
   interactive: string,
   nonInteractive: string,
 ): Effect.Effect<string, E, R> =>
-  Effect.map(capabilities, ({ input }) =>
-    input ? interactive : nonInteractive,
-  );
+  Effect.map(capabilities, ({ input }) => (input ? interactive : nonInteractive));
 
 /** Prefer the profile dashboard when this process can own a TUI screen. */
 export const profileCommandHint = (nonInteractiveCommand: string) =>
-  messageForCapabilities(
-    processInteractionCapabilities,
-    "alchemy profile",
-    nonInteractiveCommand,
-  );
+  messageForCapabilities(processInteractionCapabilities, "alchemy profile", nonInteractiveCommand);

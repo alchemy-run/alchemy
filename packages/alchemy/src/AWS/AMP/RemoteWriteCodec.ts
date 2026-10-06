@@ -48,11 +48,7 @@ const pushVarint = (out: number[], value: number | bigint) => {
   out.push(Number(v));
 };
 
-const pushLengthDelimited = (
-  out: number[],
-  fieldNumber: number,
-  payload: ArrayLike<number>,
-) => {
+const pushLengthDelimited = (out: number[], fieldNumber: number, payload: ArrayLike<number>) => {
   out.push((fieldNumber << 3) | 2);
   pushVarint(out, payload.length);
   for (let i = 0; i < payload.length; i++) {
@@ -97,9 +93,7 @@ const encodeTimeSeries = (series: EncodableSeries): number[] => {
 };
 
 /** Encode a `prometheus.WriteRequest` protobuf message. */
-export const encodeWriteRequest = (
-  timeseries: readonly EncodableSeries[],
-): Uint8Array => {
+export const encodeWriteRequest = (timeseries: readonly EncodableSeries[]): Uint8Array => {
   const out: number[] = [];
   for (const series of timeseries) {
     pushLengthDelimited(out, 1, encodeTimeSeries(series));

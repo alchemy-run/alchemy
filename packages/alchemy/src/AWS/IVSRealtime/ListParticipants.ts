@@ -36,10 +36,7 @@ export interface ListParticipants extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListParticipantsRequest,
-    ) => Effect.Effect<
-      ivsrealtime.ListParticipantsResponse,
-      ivsrealtime.ListParticipantsError
-    >
+    ) => Effect.Effect<ivsrealtime.ListParticipantsResponse, ivsrealtime.ListParticipantsError>
   >
 > {}
 export const ListParticipants = Binding.Service<ListParticipants>(

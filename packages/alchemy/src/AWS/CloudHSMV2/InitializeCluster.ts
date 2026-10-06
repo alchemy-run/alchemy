@@ -32,10 +32,7 @@ export interface InitializeCluster extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.InitializeClusterRequest,
-    ) => Effect.Effect<
-      cloudhsm.InitializeClusterResponse,
-      cloudhsm.InitializeClusterError
-    >
+    ) => Effect.Effect<cloudhsm.InitializeClusterResponse, cloudhsm.InitializeClusterError>
   >
 > {}
 export const InitializeCluster = Binding.Service<InitializeCluster>(

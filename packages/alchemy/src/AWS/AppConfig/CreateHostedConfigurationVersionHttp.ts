@@ -15,10 +15,7 @@ export const CreateHostedConfigurationVersionHttp = makeAppConfigHttpBinding(
   CreateHostedConfigurationVersion,
   {
     operation: appconfig.createHostedConfigurationVersion,
-    spec: (
-      application: Application,
-      configurationProfile: ConfigurationProfile,
-    ) => ({
+    spec: (application: Application, configurationProfile: ConfigurationProfile) => ({
       identifiers: {
         ApplicationId: application.applicationId,
         ConfigurationProfileId: configurationProfile.configurationProfileId,

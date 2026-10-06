@@ -1,6 +1,6 @@
 import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { resources } from "../resources.ts";
 
 export class LayerApi extends Neon.Function<LayerApi>()("LayerApi") {}

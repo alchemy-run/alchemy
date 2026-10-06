@@ -5,12 +5,12 @@ import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as EffectHttp from "effect/http/HttpEffect";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { safeHttpEffect } from "../Http.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
@@ -20,7 +20,7 @@ import { FunctionEnvironment, FunctionRequest } from "./FunctionEnvironment.ts";
 import type { FunctionRuntimeContext } from "./FunctionRuntimeContext.ts";
 import { FunctionUpgradeSockets } from "./FunctionUpgrade.ts";
 
-const closeRequestScope = (scope: Scope.Scope) => {
+const closeRequestScope = (scope: Scope.Closeable) => {
   nativeWaitUntil(
     Effect.runPromise(
       Scope.close(scope, Exit.void).pipe(
@@ -34,10 +34,7 @@ const closeRequestScope = (scope: Scope.Scope) => {
 /** Build a Node-only Fetch bridge once per process, with a fresh scope for every request. */
 export const makeFunctionBridge = (entrypoint: unknown) => {
   const instanceScope = Scope.makeUnsafe();
-  const tag = Self as unknown as Context.Service<
-    never,
-    { RuntimeContext: FunctionRuntimeContext }
-  >;
+  const tag = Self as unknown as Context.Service<never, { RuntimeContext: FunctionRuntimeContext }>;
   const platform = Layer.mergeAll(
     NodeServices.layer,
     FetchHttpClient.layer,
@@ -99,14 +96,11 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
           built.context,
           Context.make(RuntimeContext, built.runtime),
           Context.make(FunctionRequest, request),
-          Context.make(
-            HttpServerRequest.HttpServerRequest,
-            HttpServerRequest.fromWeb(request),
-          ),
+          Context.make(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request)),
         );
-        const handler = safeHttpEffect(
-          built.dispatch(new URL(request.url).pathname),
-        ).pipe(Effect.interruptible);
+        const handler = safeHttpEffect(built.dispatch(new URL(request.url).pathname)).pipe(
+          Effect.interruptible,
+        );
         return yield* EffectHttp.toHandled(handler, (req, res) =>
           Effect.gen(function* () {
             const scope = yield* Effect.scope;
@@ -116,7 +110,7 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
               const socket = FunctionUpgradeSockets.get(res.body.body);
               if (socket && socket.readyState !== socket.CLOSED) {
                 EffectHttp.scopeDisableClose(scope);
-                const onClose = () => closeRequestScope(scope);
+                const onClose = () => closeRequestScope(scope as Scope.Closeable);
                 socket.addEventListener("close", onClose, { once: true });
                 request.signal.addEventListener("abort", onClose, {
                   once: true,
@@ -145,12 +139,9 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
               response,
               res.body._tag === "Stream" && web.body
                 ? new Response(
-                    web.body.pipeThrough(
-                      new TransformStream<Uint8Array, Uint8Array>(),
-                      {
-                        signal: request.signal,
-                      },
-                    ),
+                    web.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), {
+                      signal: request.signal,
+                    }),
                     {
                       status: web.status,
                       statusText: web.statusText,
@@ -160,12 +151,7 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
                 : web,
             );
           }),
-        ).pipe(
-          Effect.andThen(Deferred.await(response)),
-          Effect.provideContext(services),
-        );
-      }).pipe((effect) =>
-        Effect.runPromise(effect, { signal: request.signal }),
-      ),
+        ).pipe(Effect.andThen(Deferred.await(response)), Effect.provideContext(services));
+      }).pipe((effect) => Effect.runPromise(effect, { signal: request.signal })),
   };
 };

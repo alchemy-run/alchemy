@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface ListHealthEventsRequest extends Omit<
-  im.ListHealthEventsInput,
-  "MonitorName"
-> {}
+export interface ListHealthEventsRequest extends Omit<im.ListHealthEventsInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:ListHealthEvents` — list the health

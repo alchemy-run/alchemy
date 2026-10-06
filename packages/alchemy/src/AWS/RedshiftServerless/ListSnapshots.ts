@@ -26,12 +26,7 @@ export interface ListSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: serverless.ListSnapshotsRequest,
-    ) => Effect.Effect<
-      serverless.ListSnapshotsResponse,
-      serverless.ListSnapshotsError
-    >
+    ) => Effect.Effect<serverless.ListSnapshotsResponse, serverless.ListSnapshotsError>
   >
 > {}
-export const ListSnapshots = Binding.Service<ListSnapshots>(
-  "AWS.RedshiftServerless.ListSnapshots",
-);
+export const ListSnapshots = Binding.Service<ListSnapshots>("AWS.RedshiftServerless.ListSnapshots");

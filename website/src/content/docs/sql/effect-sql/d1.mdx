@@ -46,7 +46,7 @@ export const Database = Cloudflare.D1.Database("Database");
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/D1";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Database } from "./db.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -121,7 +121,7 @@ on the generic `SqlClient` tag and provide the database with
 `SQL.D1Layer`:
 
 ```typescript
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 const makeUsers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

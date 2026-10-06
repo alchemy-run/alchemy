@@ -27,11 +27,7 @@ export function handleWebSocket(
     socket.on("close", () => sockets.delete(socket));
   };
 
-  const onUpgrade = (
-    request: IncomingMessage,
-    socket: Duplex,
-    head: Buffer,
-  ) => {
+  const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
 
@@ -44,8 +40,7 @@ export function handleWebSocket(
     const base = /^https?:\/\//i.test(rawHost) ? rawHost : `http://${rawHost}`;
     const url = new URL(request.url ?? "/", base);
 
-    const isViteRequest =
-      request.headers["sec-websocket-protocol"]?.startsWith("vite") ?? false;
+    const isViteRequest = request.headers["sec-websocket-protocol"]?.startsWith("vite") ?? false;
     const isSandboxRequest = hasSandboxOrigin(url.origin);
 
     // Vite handles its own HMR upgrades; forward Sandbox preview URLs anyway.
@@ -73,11 +68,33 @@ export function handleWebSocket(
     socket.on("close", () => upstream.destroy());
 
     upstream.on("response", (response) => {
-      // Worker did not accept the upgrade.
-      if (!socket.destroyed) {
-        socket.destroy();
+      // The worker answered the handshake with an ordinary HTTP response
+      // (401, 403, 404, 500, ...) instead of upgrading. Relay it verbatim:
+      // destroying the socket here erases the worker's answer, so every
+      // refusal reaches the client as a bare connection reset, and a proxy in
+      // front of Vite reports it as a generic "Network connection lost" 502.
+      if (socket.destroyed) {
+        response.resume();
+        return;
       }
-      response.resume();
+
+      // The socket was hijacked out of the HTTP server, so it carries no
+      // framing of its own. `response` is already de-chunked by the client, so
+      // hop-by-hop headers must not be copied; the body is close-delimited
+      // instead.
+      const statusLine = `HTTP/1.1 ${response.statusCode ?? 502} ${
+        response.statusMessage ?? ""
+      }`.trimEnd();
+      const headerLines: Array<string> = [statusLine];
+      for (let i = 0; i < response.rawHeaders.length; i += 2) {
+        const name = response.rawHeaders[i]!;
+        if (HOP_BY_HOP_HEADERS.has(name.toLowerCase())) continue;
+        headerLines.push(`${name}: ${response.rawHeaders[i + 1]}`);
+      }
+      headerLines.push("connection: close");
+      socket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
+
+      response.pipe(socket);
     });
 
     upstream.on("upgrade", (upstreamRes, upstreamSocket, upstreamHead) => {
@@ -96,9 +113,7 @@ export function handleWebSocket(
       }`;
       const headerLines: Array<string> = [statusLine];
       for (let i = 0; i < upstreamRes.rawHeaders.length; i += 2) {
-        headerLines.push(
-          `${upstreamRes.rawHeaders[i]}: ${upstreamRes.rawHeaders[i + 1]}`,
-        );
+        headerLines.push(`${upstreamRes.rawHeaders[i]}: ${upstreamRes.rawHeaders[i + 1]}`);
       }
       socket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
 
@@ -131,6 +146,22 @@ export function handleWebSocket(
 }
 
 /**
+ * Headers that describe one hop's connection rather than the message. Copying
+ * `transfer-encoding: chunked` onto an already de-chunked body would corrupt
+ * the relayed response, so the whole hop-by-hop set is dropped.
+ */
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+/**
  * Matches the origin of a Sandbox SDK preview URL.
  * See: https://developers.cloudflare.com/sandbox/concepts/preview-urls/
  *
@@ -140,8 +171,7 @@ export function handleWebSocket(
  * [^.]+ groups separated by - cause quadratic backtracking on hyphen-heavy input. Tokens
  * are documented as letters/digits/underscores only.
  */
-const SANDBOX_ORIGIN_REGEXP =
-  /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
+const SANDBOX_ORIGIN_REGEXP = /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
 
 function hasSandboxOrigin(origin: string) {
   return SANDBOX_ORIGIN_REGEXP.test(origin);

@@ -95,38 +95,33 @@ export const makeHealthLakeStartJobHttpBinding = <
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* (
-      datastore: FHIRDatastore,
-      dataAccessRole: Role,
-    ) {
+    return Effect.fn(function* (datastore: FHIRDatastore, dataAccessRole: Role) {
       const DatastoreId = yield* datastore.datastoreId;
       const RoleArn = yield* dataAccessRole.roleArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}, ${dataAccessRole}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [Output.interpolate`${datastore.datastoreArn}`],
-                },
-                // CRITICAL: without iam:PassRole on the data-access role,
-                // Start*Job fails only at runtime with an AccessDenied.
-                {
-                  Effect: "Allow",
-                  Action: ["iam:PassRole"],
-                  Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
-                  Condition: {
-                    StringEquals: {
-                      "iam:PassedToService": "healthlake.amazonaws.com",
-                    },
+          yield* host.bind`Allow(${host}, ${options.tag}(${datastore}, ${dataAccessRole}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [Output.interpolate`${datastore.datastoreArn}`],
+              },
+              // CRITICAL: without iam:PassRole on the data-access role,
+              // Start*Job fails only at runtime with an AccessDenied.
+              {
+                Effect: "Allow",
+                Action: ["iam:PassRole"],
+                Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
+                Condition: {
+                  StringEquals: {
+                    "iam:PassedToService": "healthlake.amazonaws.com",
                   },
                 },
-              ],
-            },
-          );
+              },
+            ],
+          });
         }
       }
       return Effect.fn(`${options.tag}(${datastore.LogicalId})`)(function* (

@@ -1,4 +1,8 @@
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import {
+  Railway,
+  type SandboxCheckpoint as RailwaySandboxCheckpoint,
+} from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -10,14 +14,14 @@ import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import type { SandboxIdentity } from "./Sandbox.ts";
 
-const selection = {
-  id: true,
-  key: true,
-  environmentId: true,
-  createdAt: true,
-} as const satisfies railway.Selection<"SandboxCheckpoint">;
+const checkpointFields = <E>(checkpoint: Query<RailwaySandboxCheckpoint, E>) => ({
+  id: checkpoint.id,
+  key: checkpoint.key,
+  environmentId: checkpoint.environmentId,
+  createdAt: checkpoint.createdAt,
+});
 
-type CloudCheckpoint = railway.Result<"SandboxCheckpoint!", typeof selection>;
+type CloudCheckpoint = UnwrapPlan<ReturnType<typeof checkpointFields>>;
 
 export interface SandboxCheckpointProps {
   /**
@@ -103,14 +107,26 @@ export type SandboxCheckpoint = Resource<
  * @resource
  * @product Sandbox
  */
-export const SandboxCheckpoint = Resource<SandboxCheckpoint>(
-  "Railway.SandboxCheckpoint",
+export const SandboxCheckpoint = Resource<SandboxCheckpoint>("Railway.SandboxCheckpoint");
+
+const listCheckpoints = Query.fn((environmentId: string) =>
+  Railway.sandboxCheckpoints({ environmentId }).pipe(Query.map(checkpointFields)),
 );
 
-const listCheckpoints = (environmentId: string) =>
-  railway
-    .sandboxCheckpoints({ environmentId }, selection)
-    .pipe(railway.catchTags("RailwayNotFound", () => Effect.succeed([])));
+const sandboxCheckpointCreate = Query.fn(
+  (input: { environmentId: string; sandboxId: string; name: string }) =>
+    checkpointFields(Railway.sandboxCheckpointCreate(input)),
+);
+
+const sandboxCheckpointRename = Query.fn(
+  (input: { environmentId: string; id: string; name: string }) =>
+    checkpointFields(Railway.sandboxCheckpointRename(input)),
+);
+
+/** Railway answers a missing checkpoint with `false`, not an error. */
+const sandboxCheckpointDelete = Query.fn((input: { environmentId: string; id: string }) =>
+  Railway.sandboxCheckpointDelete(input),
+);
 
 const toAttrs = (
   checkpoint: CloudCheckpoint,
@@ -124,12 +140,8 @@ const toAttrs = (
   createdAt: checkpoint.createdAt,
 });
 
-const sameCapture = (
-  checkpoint: CloudCheckpoint,
-  output: SandboxCheckpoint["Attributes"],
-) =>
-  checkpoint.id === output.sandboxCheckpointId &&
-  checkpoint.createdAt === output.createdAt;
+const sameCapture = (checkpoint: CloudCheckpoint, output: SandboxCheckpoint["Attributes"]) =>
+  checkpoint.id === output.sandboxCheckpointId && checkpoint.createdAt === output.createdAt;
 
 const findRecordedCheckpoint = Effect.fn(function* (
   id: string,
@@ -172,15 +184,13 @@ export const SandboxCheckpointProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            news.sandbox.environmentId === output.environmentId &&
-            news.name === output.name,
+            news.sandbox.environmentId === output.environmentId && news.name === output.name,
         };
       }
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const environmentId =
-        output?.environmentId ?? olds?.sandbox?.environmentId;
+      const environmentId = output?.environmentId ?? olds?.sandbox?.environmentId;
       if (environmentId === undefined) return;
       const items = yield* listCheckpoints(environmentId);
       if (output !== undefined) {
@@ -246,16 +256,10 @@ export const SandboxCheckpointProvider = () =>
         }
       }
       if (current === undefined) {
-        current = yield* railway.createSandboxCheckpoint(
-          { environmentId, sandboxId, name },
-          selection,
-        );
+        current = yield* sandboxCheckpointCreate({ environmentId, sandboxId, name });
       }
       if (current.key !== name) {
-        current = yield* railway.renameSandboxCheckpoint(
-          { environmentId, id: current.id, name },
-          selection,
-        );
+        current = yield* sandboxCheckpointRename({ environmentId, id: current.id, name });
       }
       return toAttrs(current, sandboxId);
     }),
@@ -263,25 +267,15 @@ export const SandboxCheckpointProvider = () =>
     delete: Effect.fn(function* ({ id, olds, output }) {
       const items = yield* listCheckpoints(output.environmentId);
       const current = yield* findRecordedCheckpoint(id, olds, output, items);
-      if (current === undefined || current.createdAt !== output.createdAt)
-        return;
-      yield* railway
-        .deleteSandboxCheckpoint({
-          environmentId: output.environmentId,
-          id: current.id,
-        })
-        .pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
+      if (current === undefined || current.createdAt !== output.createdAt) return;
+      yield* sandboxCheckpointDelete({ environmentId: output.environmentId, id: current.id });
       yield* waitUntilDeleted(
         "SandboxCheckpoint",
         current.id,
         listCheckpoints(output.environmentId).pipe(
           Effect.map(
             (rows) =>
-              !rows.some(
-                (item) =>
-                  item.id === current.id &&
-                  item.createdAt === current.createdAt,
-              ),
+              !rows.some((item) => item.id === current.id && item.createdAt === current.createdAt),
           ),
         ),
         10,

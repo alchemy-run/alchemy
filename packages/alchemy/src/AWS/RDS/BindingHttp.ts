@@ -89,10 +89,7 @@ export const makeRdsClusterHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource: resources
-                  ? Output.map(cluster.dbClusterArn, (arn) => [
-                      arn,
-                      ...resources(arn),
-                    ])
+                  ? Output.map(cluster.dbClusterArn, (arn) => [arn, ...resources(arn)])
                   : [Output.interpolate`${cluster.dbClusterArn}`],
               },
             ],
@@ -147,10 +144,7 @@ export const makeRdsInstanceHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource: resources
-                  ? Output.map(instance.dbInstanceArn, (arn) => [
-                      arn,
-                      ...resources(arn),
-                    ])
+                  ? Output.map(instance.dbInstanceArn, (arn) => [arn, ...resources(arn)])
                   : [Output.interpolate`${instance.dbInstanceArn}`],
               },
             ],

@@ -1,7 +1,7 @@
 import * as guardduty from "@distilled.cloud/aws/guardduty";
 import * as Layer from "effect/Layer";
-import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 import { ArchiveFindings } from "./ArchiveFindings.ts";
+import { makeGuardDutyDetectorHttpBinding } from "./BindingHttp.ts";
 
 export const ArchiveFindingsHttp = Layer.effect(
   ArchiveFindings,

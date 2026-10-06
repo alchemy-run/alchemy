@@ -1,3 +1,6 @@
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 /**
  * The clone-bundle alarm job (DESIGN.md §12.2) — the v2 serving plane.
  *
@@ -22,18 +25,10 @@
  * index), so bundling a large repo never buffers the pack in memory.
  */
 import { BlobStoreError, type BlobStoreShape } from "../BlobStore.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import {
-  encodeTypeSize,
-  makeSha1,
-  type Oid,
-  type PackEntryType,
-} from "../Protocol/ObjectCodec.ts";
+import { encodeTypeSize, makeSha1, type Oid, type PackEntryType } from "../Protocol/ObjectCodec.ts";
+import { sidebandFramedLength, sidebandRechunk } from "../Protocol/Sideband.ts";
 import { StoreError, type ManifestEntry } from "../Protocol/Store.ts";
 import { bundleKey, bundleSidebandKey } from "../Store/Keys.ts";
-import { sidebandFramedLength, sidebandRechunk } from "../Protocol/Sideband.ts";
 
 /** A ref as it appears in a bundle's covered snapshot. */
 export interface BundleRef {
@@ -88,14 +83,10 @@ export const hashRefs = (refs: ReadonlyArray<BundleRef>): string => {
  * 20-byte trailer. Lets the bundle stream straight into R2 without
  * buffering.
  */
-export const packByteLength = (
-  entries: ReadonlyArray<ManifestEntry>,
-): number => {
+export const packByteLength = (entries: ReadonlyArray<ManifestEntry>): number => {
   let total = 12 + 20;
   for (const entry of entries) {
-    total +=
-      encodeTypeSize(entry.type as PackEntryType, entry.size).length +
-      entry.zsize;
+    total += encodeTypeSize(entry.type as PackEntryType, entry.size).length + entry.zsize;
   }
   return total;
 };
@@ -141,17 +132,12 @@ export const runBundleJob = (
         key,
         options
           .packStream(options.entries)
-          .pipe(
-            Stream.mapError(
-              (error) => new BlobStoreError({ reason: error.reason }),
-            ),
-          ),
+          .pipe(Stream.mapError((error) => new BlobStoreError({ reason: error.reason }))),
         { contentLength: size },
       )
       .pipe(
         Effect.mapError(
-          (error: BlobStoreError) =>
-            new StoreError({ reason: `blob put ${key}: ${error.reason}` }),
+          (error: BlobStoreError) => new StoreError({ reason: `blob put ${key}: ${error.reason}` }),
         ),
         Effect.provide(RuntimeContext.phantom),
       );
@@ -163,9 +149,7 @@ export const runBundleJob = (
       .put(
         sidebandKey,
         options.packStream(options.entries).pipe(
-          Stream.mapError(
-            (error) => new BlobStoreError({ reason: error.reason }),
-          ),
+          Stream.mapError((error) => new BlobStoreError({ reason: error.reason })),
           sidebandRechunk(1),
         ),
         { contentLength: sidebandFramedLength(size) },

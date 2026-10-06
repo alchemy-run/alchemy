@@ -13,9 +13,7 @@ import * as Schedule from "effect/Schedule";
  * `ResourceStillExists` — proving the trailing `stack.destroy()` actually
  * deleted everything (zero orphans).
  */
-export class ResourceStillExists extends Data.TaggedError(
-  "ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("ResourceStillExists")<{
   readonly resource: string;
 }> {}
 
@@ -26,9 +24,7 @@ const goneSchedule = Schedule.max([
   Schedule.exponential(500).pipe(
     Schedule.modifyDelay(({ duration }) =>
       Effect.succeed(
-        Duration.isGreaterThan(duration, Duration.seconds(5))
-          ? Duration.seconds(5)
-          : duration,
+        Duration.isGreaterThan(duration, Duration.seconds(5)) ? Duration.seconds(5) : duration,
       ),
     ),
   ),
@@ -40,14 +36,11 @@ const goneSchedule = Schedule.max([
 export const assertRestApiDeleted = Effect.fn(function* (restApiId: string) {
   yield* ag.getRestApi({ restApiId }).pipe(
     Effect.flatMap(() =>
-      Effect.fail(
-        new ResourceStillExists({ resource: `RestApi ${restApiId}` }),
-      ),
+      Effect.fail(new ResourceStillExists({ resource: `RestApi ${restApiId}` })),
     ),
     Effect.retry({
       while: (e): boolean =>
-        e._tag === "ResourceStillExists" ||
-        e._tag === "TooManyRequestsException",
+        e._tag === "ResourceStillExists" || e._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
@@ -56,51 +49,38 @@ export const assertRestApiDeleted = Effect.fn(function* (restApiId: string) {
 
 export const assertApiKeyDeleted = Effect.fn(function* (apiKeyId: string) {
   yield* ag.getApiKey({ apiKey: apiKeyId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ResourceStillExists({ resource: `ApiKey ${apiKeyId}` })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ResourceStillExists({ resource: `ApiKey ${apiKeyId}` }))),
     Effect.retry({
       while: (e): boolean =>
-        e._tag === "ResourceStillExists" ||
-        e._tag === "TooManyRequestsException",
+        e._tag === "ResourceStillExists" || e._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );
 });
 
-export const assertUsagePlanDeleted = Effect.fn(function* (
-  usagePlanId: string,
-) {
+export const assertUsagePlanDeleted = Effect.fn(function* (usagePlanId: string) {
   yield* ag.getUsagePlan({ usagePlanId }).pipe(
     Effect.flatMap(() =>
-      Effect.fail(
-        new ResourceStillExists({ resource: `UsagePlan ${usagePlanId}` }),
-      ),
+      Effect.fail(new ResourceStillExists({ resource: `UsagePlan ${usagePlanId}` })),
     ),
     Effect.retry({
       while: (e): boolean =>
-        e._tag === "ResourceStillExists" ||
-        e._tag === "TooManyRequestsException",
+        e._tag === "ResourceStillExists" || e._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
   );
 });
 
-export const assertDomainNameDeleted = Effect.fn(function* (
-  domainName: string,
-) {
+export const assertDomainNameDeleted = Effect.fn(function* (domainName: string) {
   yield* ag.getDomainName({ domainName }).pipe(
     Effect.flatMap(() =>
-      Effect.fail(
-        new ResourceStillExists({ resource: `DomainName ${domainName}` }),
-      ),
+      Effect.fail(new ResourceStillExists({ resource: `DomainName ${domainName}` })),
     ),
     Effect.retry({
       while: (e): boolean =>
-        e._tag === "ResourceStillExists" ||
-        e._tag === "TooManyRequestsException",
+        e._tag === "ResourceStillExists" || e._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),
@@ -114,14 +94,11 @@ export const assertVpcLinkDeleted = Effect.fn(function* (vpcLinkId: string) {
     Effect.flatMap((link) =>
       link.status === "DELETING"
         ? Effect.void
-        : Effect.fail(
-            new ResourceStillExists({ resource: `VpcLink ${vpcLinkId}` }),
-          ),
+        : Effect.fail(new ResourceStillExists({ resource: `VpcLink ${vpcLinkId}` })),
     ),
     Effect.retry({
       while: (e): boolean =>
-        e._tag === "ResourceStillExists" ||
-        e._tag === "TooManyRequestsException",
+        e._tag === "ResourceStillExists" || e._tag === "TooManyRequestsException",
       schedule: goneSchedule,
     }),
     Effect.catchTag("NotFoundException", () => Effect.void),

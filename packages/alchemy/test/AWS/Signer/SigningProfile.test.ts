@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { SigningProfile } from "@/AWS/Signer";
-import * as Test from "@/Test/Alchemy";
 import * as signer from "@distilled.cloud/aws/signer";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { SigningProfile } from "@/AWS/Signer";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -58,24 +58,17 @@ describe(
           expect(created.profileVersionArn).toContain(created.profileName);
 
           // Verify out-of-band via distilled
-          const observed = yield* signer.getSigningProfile({
-            profileName: created.profileName,
-          });
+          const observed = yield* signer.getSigningProfile({ profileName: created.profileName });
           expect(observed.arn).toEqual(created.arn);
           expect(observed.profileVersion).toEqual(created.profileVersion);
           expect(observed.status).toBe("Active");
           expect(observed.platformId).toBe("AWSLambda-SHA384-ECDSA");
-          expect(observed.signatureValidityPeriod).toEqual({
-            value: 12,
-            type: "MONTHS",
-          });
+          expect(observed.signatureValidityPeriod).toEqual({ value: 12, type: "MONTHS" });
           expect(observed.tags?.purpose).toBe("alchemy-test");
           // internal alchemy tags are branded on the profile
-          expect(
-            Object.keys(observed.tags ?? {}).some((k) =>
-              k.startsWith("alchemy::"),
-            ),
-          ).toBe(true);
+          expect(Object.keys(observed.tags ?? {}).some((k) => k.startsWith("alchemy::"))).toBe(
+            true,
+          );
 
           // UPDATE — tags are the only mutable aspect; the profile (name,
           // arn, version) must be untouched
@@ -98,9 +91,7 @@ describe(
           expect(updated.arn).toEqual(created.arn);
           expect(updated.profileVersion).toEqual(created.profileVersion);
 
-          const afterUpdate = yield* signer.getSigningProfile({
-            profileName: created.profileName,
-          });
+          const afterUpdate = yield* signer.getSigningProfile({ profileName: created.profileName });
           expect(afterUpdate.tags?.stage).toBe("two");
           expect(afterUpdate.tags?.purpose).toBe("alchemy-test");
 
@@ -113,11 +104,7 @@ describe(
                 signatureValidityPeriod: { value: 24, type: "MONTHS" },
                 tags: { purpose: "alchemy-test", stage: "two" },
               });
-              return {
-                profileName: profile.profileName,
-                arn: profile.arn,
-                status: profile.status,
-              };
+              return { profileName: profile.profileName, arn: profile.arn, status: profile.status };
             }),
           );
 
@@ -128,10 +115,7 @@ describe(
             profileName: replaced.profileName,
           });
           expect(afterReplace.status).toBe("Active");
-          expect(afterReplace.signatureValidityPeriod).toEqual({
-            value: 24,
-            type: "MONTHS",
-          });
+          expect(afterReplace.signatureValidityPeriod).toEqual({ value: 24, type: "MONTHS" });
           // the replaced (old) profile is canceled by the engine's delete
           yield* assertProfileCanceled(created.profileName);
 

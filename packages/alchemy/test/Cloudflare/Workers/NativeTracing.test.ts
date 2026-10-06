@@ -1,32 +1,27 @@
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { describe, expect, test as unit } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import {
   CloudflareTelemetryCompatibilityError,
   MIN_CLOUDFLARE_TRACING_DATE,
 } from "@/Cloudflare/Workers/Telemetry.ts";
-import { resolveObservability } from "@/Cloudflare/Workers/WorkerAsyncBindings.ts";
 import type { Worker } from "@/Cloudflare/Workers/Worker.ts";
+import { resolveObservability } from "@/Cloudflare/Workers/WorkerAsyncBindings.ts";
 import type { ResourceBinding } from "@/Resource.ts";
 import * as Test from "@/Test/Alchemy";
-import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect, test as unit } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import NativeTracingWorker, {
-  makeTracedWorker,
-} from "./fixtures/native-tracing/worker.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
+import NativeTracingWorker, { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * A span row Workers Observability ingested: Cloudflare's own
@@ -34,8 +29,7 @@ const logLevel = Effect.provideService(
  * can be checked directly) plus the `effect.exit` attribute the tracer
  * forwards on span end.
  */
-interface SpanRow
-  extends workers.ObservabilitySharedQueriesGetResponseEventsEventsItemMetadata {
+interface SpanRow extends workers.ObservabilitySharedQueriesGetResponseEventsEventsItemMetadata {
   exit: unknown;
 }
 
@@ -99,22 +93,13 @@ const traceOf = (spans: SpanRow[], root: string, id: string) => {
 
 type Bindings = ReadonlyArray<ResourceBinding<Worker["Binding"]>>;
 
-const tracesBind = (
-  traces: NonNullable<Worker["Binding"]["observability"]>["traces"],
-): Bindings =>
-  [
-    { sid: "Cloudflare.Telemetry", data: { observability: { traces } } },
-  ] as unknown as Bindings;
+const tracesBind = (traces: NonNullable<Worker["Binding"]["observability"]>["traces"]): Bindings =>
+  [{ sid: "Cloudflare.Telemetry", data: { observability: { traces } } }] as unknown as Bindings;
 
 describe(
   "resolveObservability",
   {
-    tags: [
-      "unit",
-      "provider:cloudflare",
-      "provider:cloudflare:worker",
-      "local",
-    ],
+    tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"],
   },
   () => {
     unit("omitted props + bound traces keep default logs", () => {
@@ -147,6 +132,23 @@ describe(
       expect(resolved.logs?.persist).toBe(true);
       expect(resolved.traces?.enabled).toBe(true);
       expect(resolved.traces?.headSamplingRate).toBe(1);
+    });
+
+    unit("Issues coexist with Telemetry traces and explicit logs", () => {
+      const resolved = resolveObservability(
+        {
+          observability: {
+            enabled: true,
+            logs: { enabled: true, invocationLogs: true },
+            issues: { enabled: true },
+          },
+        },
+        tracesBind({ enabled: true, headSamplingRate: 0.1 }),
+      );
+      expect(resolved.issues?.enabled).toBe(true);
+      expect(resolved.logs?.invocationLogs).toBe(true);
+      expect(resolved.traces?.enabled).toBe(true);
+      expect(resolved.traces?.headSamplingRate).toBe(0.1);
     });
 
     unit("no bind returns default logs", () => {
@@ -340,11 +342,9 @@ test.provider(
           return yield* NativeTracingWorker;
         }),
       );
-      yield* expectUrlContains(
-        `${worker.url}/fanout?id=warmup`,
-        "native-did-fanout",
-        { timeout: "180 seconds" },
-      );
+      yield* expectUrlContains(`${worker.url}/fanout?id=warmup`, "native-did-fanout", {
+        timeout: "180 seconds",
+      });
 
       // Several fan-out invocations in flight at once so fibers from
       // different requests interleave inside the isolate as well, plus one
@@ -369,11 +369,9 @@ test.provider(
           hit("/rpc", ids.rpc, "native-did-rpc:do-ok"),
           hit("/enqueue", ids.queue),
           // Head sampling 1: every Effect span is sampled.
-          expectUrlContains(
-            `${worker.url}/sampled`,
-            '"operation":true,"child":true',
-            { timeout: "120 seconds" },
-          ),
+          expectUrlContains(`${worker.url}/sampled`, '"operation":true,"child":true', {
+            timeout: "120 seconds",
+          }),
         ],
         { concurrency: "unbounded" },
       );
@@ -408,9 +406,7 @@ test.provider(
           const trace = traceOf(spans, e.root, e.id);
           return (
             trace !== undefined &&
-            e.names.every((name) =>
-              trace.spans.some((s) => s.spanName === name),
-            )
+            e.names.every((name) => trace.spans.some((s) => s.spanName === name))
           );
         });
       // Ingestion latency varies from seconds to several minutes.
@@ -440,8 +436,7 @@ test.provider(
         // `operation` hangs off Cloudflare's own request span.
         expect(
           trace.spans.some(
-            (s) =>
-              s.spanId === operation.parentSpanId && s.spanName !== "operation",
+            (s) => s.spanId === operation.parentSpanId && s.spanName !== "operation",
           ),
         ).toBe(true);
         for (const name of ["child.a", "child.b", "forked"]) {
@@ -449,9 +444,7 @@ test.provider(
           expect(branch.parentSpanId).toBe(operation.spanId);
           expect(trace.span(`${name}.inner`).parentSpanId).toBe(branch.spanId);
           const platform = trace.spans.filter(
-            (s) =>
-              s.parentSpanId === branch.spanId &&
-              !FANOUT_SPANS.includes(s.spanName ?? ""),
+            (s) => s.parentSpanId === branch.spanId && !FANOUT_SPANS.includes(s.spanName ?? ""),
           );
           expect(platform.length).toBeGreaterThanOrEqual(1);
         }
@@ -545,11 +538,9 @@ test.provider(
       // ingestion wait ends as soon as rows land instead of at its ceiling,
       // and the count can be bounded from below as well as above.
       const runId = yield* Effect.sync(() => globalThis.crypto.randomUUID());
-      yield* expectUrlContains(
-        `${worker.url}/sampled?id=warmup-${runId}`,
-        "native-did-sample",
-        { timeout: "180 seconds" },
-      );
+      yield* expectUrlContains(`${worker.url}/sampled?id=warmup-${runId}`, "native-did-sample", {
+        timeout: "180 seconds",
+      });
       const client = yield* HttpClient.HttpClient;
       const probe = client.get(`${worker.url}/sampled?id=${runId}`).pipe(
         Effect.flatMap((res) => res.json),
@@ -572,9 +563,7 @@ test.provider(
       const persistedCount = querySpans(accountId, worker.workerName).pipe(
         Effect.map(
           (spans) =>
-            spans.filter(
-              (s) => s.spanName === "operation" && s.requestId === runId,
-            ).length,
+            spans.filter((s) => s.spanName === "operation" && s.requestId === runId).length,
         ),
       );
       let previous = -1;
