@@ -1,4 +1,3 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
 /**
  * Node-side platform proxy: our reimplementation of wrangler's
  * `getPlatformProxy()` semantics on top of `cloudflare-runtime`.
@@ -45,25 +44,17 @@ import { loadInternalWorker } from "../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
+import { DEFAULT_COMPATIBILITY_DATE } from "../internal/constants.ts";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const ProxyWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/platform-proxy/PlatformProxy.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/platform-proxy/PlatformProxy.worker"),
 };
 import * as Text from "../bindings/Text.ts";
 import type { BindingHook } from "../PluginContext.ts";
 import * as Runtime from "../Runtime.ts";
-import {
-  ConfigError,
-  type RuntimeError,
-  SystemError,
-} from "../RuntimeError.shared.ts";
-import type {
-  BindingHooks,
-  DurableObjectNamespace,
-  Module,
-} from "../RuntimeWorker.ts";
+import { ConfigError, type RuntimeError, SystemError } from "../RuntimeError.shared.ts";
+import type { BindingHooks, DurableObjectNamespace, Module } from "../RuntimeWorker.ts";
 import type { ConnectedPlatformProxy, ConnectInfo } from "./connect.ts";
 import { connect } from "./connect.ts";
 import { BINDING_PLATFORM_PROXY_TOKEN } from "./PlatformProxyProtocol.shared.ts";
@@ -78,8 +69,6 @@ export type {
   PlatformProxyCacheStorage,
 } from "./connect.ts";
 
-const DEFAULT_COMPATIBILITY_DATE = "2026-03-10";
-
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -91,7 +80,7 @@ export interface PlatformProxyOptions<B extends BindingHooks = BindingHooks> {
    * @default "platform-proxy"
    */
   readonly name?: string;
-  /** @default "2026-03-10" */
+  /** @default "2026-08-31" */
   readonly compatibilityDate?: string;
   readonly compatibilityFlags?: Array<string>;
   /**
@@ -128,9 +117,7 @@ export interface PlatformProxyInstance<
 // Worker assembly
 // ---------------------------------------------------------------------------
 
-const makeModules = Effect.fnUntraced(function* (
-  options: PlatformProxyOptions,
-) {
+const makeModules = Effect.fnUntraced(function* (options: PlatformProxyOptions) {
   const proxyWorker = yield* Effect.promise(ProxyWorker.worker);
   const userModules = options.modules ?? [];
   const classNames = (options.durableObjectNamespaces ?? []).map(
@@ -169,18 +156,13 @@ const connectToInstance = <Env>(info: ConnectInfo) =>
     catch: (cause) =>
       new SystemError({
         subtag: "PlatformProxyEnvDescriptor",
-        message:
-          "Failed to read the environment descriptor from the platform-proxy worker.",
+        message: "Failed to read the environment descriptor from the platform-proxy worker.",
         cause,
       }),
   }).pipe(Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 10 }));
 
 type BindingRequirements<B extends BindingHooks> =
-  B extends Array<never>
-    ? never
-    : B extends ReadonlyArray<BindingHook<infer R>>
-      ? R
-      : never;
+  B extends Array<never> ? never : B extends ReadonlyArray<BindingHook<infer R>> ? R : never;
 
 /**
  * Start a workerd instance hosting `options.bindings` and return Node-side

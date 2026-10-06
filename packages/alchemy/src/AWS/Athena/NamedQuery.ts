@@ -101,9 +101,7 @@ export const NamedQueryProvider = () =>
     NamedQuery,
     Effect.gen(function* () {
       const toName = (id: string, props: NamedQueryProps) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 128 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
       // Deterministic per-instance idempotency token so a create that crashes
       // before state persists re-returns the SAME NamedQueryId on re-run
@@ -116,9 +114,7 @@ export const NamedQueryProvider = () =>
       const getOne = (namedQueryId: string) =>
         athena.getNamedQuery({ NamedQueryId: namedQueryId }).pipe(
           Effect.map((res) => res.NamedQuery),
-          Effect.catchTag("NamedQueryNotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NamedQueryNotFound", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -128,9 +124,7 @@ export const NamedQueryProvider = () =>
           if ((olds?.database ?? undefined) !== news.database) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.workGroup ?? "primary") !== (news.workGroup ?? "primary")
-          ) {
+          if ((olds?.workGroup ?? "primary") !== (news.workGroup ?? "primary")) {
             return { action: "replace" } as const;
           }
         }),
@@ -143,9 +137,7 @@ export const NamedQueryProvider = () =>
         }),
         list: () =>
           Effect.gen(function* () {
-            const wgPages = yield* athena.listWorkGroups
-              .pages({})
-              .pipe(Stream.runCollect);
+            const wgPages = yield* athena.listWorkGroups.pages({}).pipe(Stream.runCollect);
             const workGroups = Array.from(wgPages)
               .flatMap((page) => page.WorkGroups ?? [])
               .flatMap((wg) => (wg.Name ? [wg.Name] : []));
@@ -154,9 +146,7 @@ export const NamedQueryProvider = () =>
               const idPages = yield* athena.listNamedQueries
                 .pages({ WorkGroup: wg })
                 .pipe(Stream.runCollect);
-              const ids = Array.from(idPages).flatMap(
-                (page) => page.NamedQueryIds ?? [],
-              );
+              const ids = Array.from(idPages).flatMap((page) => page.NamedQueryIds ?? []);
               for (let i = 0; i < ids.length; i += 50) {
                 const res = yield* athena.batchGetNamedQuery({
                   NamedQueryIds: ids.slice(i, i + 50),
@@ -173,9 +163,7 @@ export const NamedQueryProvider = () =>
           const workGroup = news.workGroup ?? "primary";
 
           // Observe — cloud state (by cached id) is authoritative.
-          let nq = output?.namedQueryId
-            ? yield* getOne(output.namedQueryId)
-            : undefined;
+          let nq = output?.namedQueryId ? yield* getOne(output.namedQueryId) : undefined;
 
           if (nq) {
             // Sync — Name/Description/QueryString are updatable in place.
@@ -206,9 +194,7 @@ export const NamedQueryProvider = () =>
           }
 
           if (!nq?.NamedQueryId) {
-            return yield* Effect.die(
-              new Error(`NamedQuery ${name} did not materialize`),
-            );
+            return yield* Effect.die(new Error(`NamedQuery ${name} did not materialize`));
           }
 
           yield* session.note(nq.NamedQueryId);

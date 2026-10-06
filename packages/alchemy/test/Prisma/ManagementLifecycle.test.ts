@@ -1,30 +1,3 @@
-import { Unowned } from "@/AdoptPolicy";
-import { InstanceId } from "@/InstanceId";
-import * as Output from "@/Output";
-import { createPhysicalName } from "@/PhysicalName";
-import * as Provider from "@/Provider";
-import type { App } from "@/Prisma/App";
-import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
-import { PrismaApiError, PrismaClient } from "@/Prisma/Client";
-import {
-  CustomDomain as PrismaCustomDomain,
-  CustomDomainProvider,
-} from "@/Prisma/CustomDomain";
-import {
-  Database as PrismaDatabase,
-  DatabaseProvider,
-} from "@/Prisma/Database";
-import {
-  EnvironmentVariable as PrismaEnvironmentVariable,
-  EnvironmentVariableProvider,
-} from "@/Prisma/EnvironmentVariable";
-import { Project as PrismaProject, ProjectProvider } from "@/Prisma/Project";
-import { recoverDatabaseConnectionSecrets } from "@/Prisma/Internal/DatabaseSecrets";
-import {
-  SourceRepository as PrismaSourceRepository,
-  SourceRepositoryProvider,
-} from "@/Prisma/SourceRepository";
-import * as Test from "@/Test/Alchemy";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -32,7 +5,27 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
+import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext";
+import { InstanceId } from "@/InstanceId";
+import * as Output from "@/Output";
+import { createPhysicalName } from "@/PhysicalName";
+import type { App } from "@/Prisma/App";
+import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
+import { PrismaApiError, PrismaClient } from "@/Prisma/Client";
 import type { PrismaManagementClient } from "@/Prisma/Client";
+import { CustomDomain as PrismaCustomDomain, CustomDomainProvider } from "@/Prisma/CustomDomain";
+import { Database as PrismaDatabase, DatabaseProvider } from "@/Prisma/Database";
+import {
+  EnvironmentVariable as PrismaEnvironmentVariable,
+  EnvironmentVariableProvider,
+} from "@/Prisma/EnvironmentVariable";
+import { recoverDatabaseConnectionSecrets } from "@/Prisma/Internal/DatabaseSecrets";
+import { Project as PrismaProject, ProjectProvider } from "@/Prisma/Project";
+import {
+  SourceRepository as PrismaSourceRepository,
+  SourceRepositoryProvider,
+} from "@/Prisma/SourceRepository";
 import type {
   Branch as ApiBranch,
   CustomDomain as ApiCustomDomain,
@@ -41,7 +34,23 @@ import type {
   Project as ApiProject,
   SourceRepository as ApiSourceRepository,
 } from "@/Prisma/Types";
-import { AlchemyContext } from "@/AlchemyContext";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { PlatformServices } from "@/Util/PlatformServices";
+import {
+  conflict,
+  data,
+  dispatchTo,
+  failure,
+  type FakeManagementApi,
+  json,
+  makeFakeManagementApi,
+  noContent,
+  notFound,
+  page,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
+import { testStackContext } from "./fixtures/StackContext.ts";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 
@@ -51,59 +60,122 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
   adopt: false,
 });
 
-class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()(
-  "Prisma",
-) {}
+class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()("Prisma") {}
 
-const projectLayer = (client: PrismaManagementClient) =>
+const projectLayer = (fake: FakeManagementApi) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaProject])).pipe(
     Layer.provideMerge(ProjectProvider()),
-    Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(fake.layer),
   );
 
-const branchLayer = (client: PrismaManagementClient) =>
+/** Wire serializers for the in-memory cloud's Types.ts-shaped records. */
+const toWireProject = (project: ApiProject) => ({ ...project, logicalId: null });
+
+const toWireDatabase = (database: ApiDatabase) => database;
+
+const toWireCreatedDatabase = (database: ApiDatabase) => ({
+  ...database,
+  apiKeys: [],
+  connectionString: "postgres://direct",
+  directConnection: { host: "db.prisma.test", user: "prisma", pass: "secret" },
+});
+
+const branchLayer = (fake: FakeManagementApi) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaBranch])).pipe(
     Layer.provideMerge(BranchProvider()),
-    Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(fake.layer),
   );
 
-const databaseLayer = (client: PrismaManagementClient) =>
+const databaseLayer = (fake: FakeManagementApi) =>
   Layer.effect(TestPrismaProviders, Provider.collection([PrismaDatabase])).pipe(
     Layer.provideMerge(DatabaseProvider()),
-    Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(fake.layer),
   );
 
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers this
+ * suite declares, for the resources that now call distilled operations.
+ * `dispatchTo` maps each handler's result onto the wire (see the fixture).
+ */
+const clientBackedApi = (client: any) =>
+  makeFakeManagementApi((request) => {
+    // segments[0] is the "v1" prefix.
+    const [head, id, tail] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const body = request.bodyJson as any;
+    const query = Object.fromEntries(new URLSearchParams(request.search));
+    const { call, callVoid, list } = dispatchTo(request);
+
+    if (head === "projects") {
+      if (id === undefined && request.method === "GET") {
+        return call(client.listProjects, [], list);
+      }
+      if (tail === "branches" && request.method === "GET") {
+        return call(client.listBranches, [id, query], list);
+      }
+      if (tail === "databases" && request.method === "GET") {
+        return call(client.listProjectDatabases, [id, query], list);
+      }
+    }
+    if (head === "services" && id === undefined && request.method === "GET") {
+      return call(client.listApps, [query], list);
+    }
+    if (head === "environment-variables") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(client.listEnvironmentVariables, [query], list)
+          : call(client.createEnvironmentVariable, [body]);
+      }
+      if (request.method === "GET") {
+        return call(client.getEnvironmentVariable, [id]);
+      }
+      if (request.method === "PATCH") {
+        return call(client.updateEnvironmentVariable, [id, body]);
+      }
+      if (request.method === "DELETE") {
+        return callVoid(client.deleteEnvironmentVariable, [id]);
+      }
+    }
+    if (head === "source-repositories") {
+      if (id === undefined) {
+        return request.method === "GET"
+          ? call(client.listSourceRepositories, [query], list)
+          : call(client.createSourceRepository, [body]);
+      }
+      if (request.method === "GET") {
+        return call(client.getSourceRepository, [id]);
+      }
+      if (request.method === "DELETE") {
+        return callVoid(client.deleteSourceRepository, [id]);
+      }
+    }
+    return unhandled(request);
+  });
+
 const environmentVariableLayer = (client: PrismaManagementClient) =>
-  Layer.effect(
-    TestPrismaProviders,
-    Provider.collection([PrismaEnvironmentVariable]),
-  ).pipe(
+  Layer.effect(TestPrismaProviders, Provider.collection([PrismaEnvironmentVariable])).pipe(
     Layer.provideMerge(EnvironmentVariableProvider()),
-    Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(clientBackedApi(client).layer),
   );
 
 const customDomainLayer = (client: PrismaManagementClient) =>
-  Layer.effect(
-    TestPrismaProviders,
-    Provider.collection([PrismaCustomDomain]),
-  ).pipe(
+  Layer.effect(TestPrismaProviders, Provider.collection([PrismaCustomDomain])).pipe(
     Layer.provideMerge(CustomDomainProvider()),
     Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
   );
 
 const sourceRepositoryLayer = (client: PrismaManagementClient) =>
-  Layer.effect(
-    TestPrismaProviders,
-    Provider.collection([PrismaSourceRepository]),
-  ).pipe(
+  Layer.effect(TestPrismaProviders, Provider.collection([PrismaSourceRepository])).pipe(
     Layer.provideMerge(SourceRepositoryProvider()),
-    Layer.provideMerge(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
+    Layer.provideMerge(clientBackedApi(client).layer),
   );
 
 const apiProject = (
@@ -157,10 +229,7 @@ it.effect(
   "database credential recovery waits for a ready default connection",
   () => {
     const provisioning: ApiDatabase = {
-      ...apiDatabase("database-provisioning", {
-        projectId: "project-1",
-        name: "provisioning",
-      }),
+      ...apiDatabase("database-provisioning", { projectId: "project-1", name: "provisioning" }),
       status: "provisioning",
       defaultConnectionId: null,
       connections: [],
@@ -172,60 +241,57 @@ it.effect(
     };
     let reads = 0;
     let rotations = 0;
-    const client = {
-      getDatabase: () =>
-        Effect.sync(() => (reads++ === 0 ? provisioning : ready)),
-      rotateConnection: () =>
-        Effect.sync(() => {
-          rotations += 1;
-          return apiConnection(ready.id, ready.defaultConnectionId!);
-        }),
-    } as unknown as PrismaManagementClient;
+    const fake = makeFakeManagementApi((request) => {
+      if (request.pathname.startsWith("/v1/databases/")) {
+        return data(toWireDatabase(reads++ === 0 ? provisioning : ready));
+      }
+      if (request.pathname.endsWith("/rotate")) {
+        rotations += 1;
+        return data(apiConnection(ready.id, ready.defaultConnectionId!));
+      }
+      return unhandled(request);
+    });
 
     return Effect.gen(function* () {
-      const fiber = yield* recoverDatabaseConnectionSecrets(
-        client,
-        provisioning,
-        {},
-      ).pipe(Effect.forkChild({ startImmediately: true }));
+      const fiber = yield* recoverDatabaseConnectionSecrets(provisioning, {}).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
       yield* Effect.yieldNow;
       yield* TestClock.adjust("1 second");
       const recovered = yield* Fiber.join(fiber);
       expect(recovered.database.status).toBe("ready");
-      expect(recovered.database.defaultConnectionId).toBe(
-        "connection-provisioning",
-      );
-      expect(
-        Redacted.value(recovered.secrets.directConnectionString!),
-      ).toContain(ready.id);
+      expect(recovered.database.defaultConnectionId).toBe("connection-provisioning");
+      expect(Redacted.value(recovered.secrets.directConnectionString!)).toContain(ready.id);
       expect(rotations).toBe(1);
-    }).pipe(Effect.provide(TestClock.layer()));
+    }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
   },
+  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
 );
 
 it.effect(
   "database credential recovery has a bounded status-rich timeout",
   () => {
     const provisioning: ApiDatabase = {
-      ...apiDatabase("database-stuck", {
-        projectId: "project-1",
-        name: "stuck",
-      }),
+      ...apiDatabase("database-stuck", { projectId: "project-1", name: "stuck" }),
       status: "provisioning",
       defaultConnectionId: null,
       connections: [],
     };
-    const client = {
-      getDatabase: () => Effect.succeed(provisioning),
-      rotateConnection: () => Effect.die("must not rotate while provisioning"),
-    } as unknown as PrismaManagementClient;
+    const fake = makeFakeManagementApi((request) => {
+      if (request.pathname.startsWith("/v1/databases/")) {
+        return data(toWireDatabase(provisioning));
+      }
+      if (request.pathname.endsWith("/rotate")) {
+        throw new Error("must not rotate while provisioning");
+      }
+      return unhandled(request);
+    });
 
     return Effect.gen(function* () {
-      const fiber = yield* recoverDatabaseConnectionSecrets(
-        client,
-        provisioning,
-        {},
-      ).pipe(Effect.result, Effect.forkChild({ startImmediately: true }));
+      const fiber = yield* recoverDatabaseConnectionSecrets(provisioning, {}).pipe(
+        Effect.result,
+        Effect.forkChild({ startImmediately: true }),
+      );
       yield* Effect.yieldNow;
       yield* TestClock.adjust("1 minute");
       const result = yield* Fiber.join(fiber);
@@ -235,8 +301,9 @@ it.effect(
         expect(String(result.failure)).toContain("provisioning");
         expect(String(result.failure)).toContain("defaultConnectionId 'null'");
       }
-    }).pipe(Effect.provide(TestClock.layer()));
+    }).pipe(Effect.provide(fake.layer), Effect.provide(TestClock.layer()));
   },
+  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
 );
 
 const makeProjectCloud = (initial: ApiProject[] = []) => {
@@ -256,10 +323,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
     const database = Array.from(databases.values()).find(
       (database) => database.project.id === project.id && database.isDefault,
     );
-    return {
-      ...project,
-      defaultRegion: database?.region?.id ?? null,
-    };
+    return { ...project, defaultRegion: database?.region?.id ?? null };
   };
 
   const makeDatabase = (
@@ -284,15 +348,8 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
       isDefault: input.isDefault ?? false,
       defaultConnectionId: `connection-${id}`,
       connections: [apiConnection(id)],
-      project: {
-        id: project.id,
-        url: project.url,
-        name: project.name,
-      },
-      region: {
-        id: input.region ?? "us-east-1",
-        name: input.region ?? "us-east-1",
-      },
+      project: { id: project.id, url: project.url, name: project.name },
+      region: { id: input.region ?? "us-east-1", name: input.region ?? "us-east-1" },
       source: { type: "empty" },
       branchId: null,
     };
@@ -300,93 +357,95 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
     return database;
   };
 
-  const client = {
-    listProjects: () =>
-      Effect.sync(() => {
-        calls.push(["listProjects"]);
-        return Array.from(projects.values()).map(currentProject);
-      }),
-    getProject: (id: string) =>
-      Effect.suspend(() => {
+  // The same in-memory cloud, served over the wire for the resources that
+  // call distilled operations instead of the client above.
+  const fake = makeFakeManagementApi((request) => {
+    const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+    if (request.pathname === "/v1/services" && request.method === "GET") {
+      calls.push(["listApps", Object.fromEntries(new URLSearchParams(request.search))]);
+      return page([]);
+    }
+
+    if (request.pathname === "/v1/projects" && request.method === "GET") {
+      calls.push(["listProjects"]);
+      return page(Array.from(projects.values()).map(currentProject).map(toWireProject));
+    }
+
+    if (request.pathname === "/v1/projects" && request.method === "POST") {
+      const input = request.bodyJson as {
+        name?: string;
+        region?: string;
+        createDatabase?: boolean;
+      };
+      calls.push(["createProject", input]);
+      const id = `project-${nextId++}`;
+      const project = apiProject(id, input.name ?? `project-${id}`, null);
+      projects.set(id, project);
+      const database =
+        input.createDatabase === false
+          ? null
+          : makeDatabase(project, { region: input.region, isDefault: true });
+      return data(
+        {
+          ...toWireProject(currentProject(project)),
+          database: database === null ? null : toWireCreatedDatabase(database),
+        },
+        { status: 201 },
+      );
+    }
+
+    if (segments.length === 3 && segments[1] === "projects") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
         calls.push(["getProject", id]);
         const stored = projects.get(id);
         const project = stored
           ? staleProjectReads > 0
-            ? {
-                ...currentProject(stored),
-                defaultRegion: staleProjectDefaultRegion,
-              }
+            ? { ...currentProject(stored), defaultRegion: staleProjectDefaultRegion }
             : currentProject(stored)
           : undefined;
         if (staleProjectReads > 0) staleProjectReads -= 1;
-        return project
-          ? Effect.succeed(project)
-          : Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/projects/${id}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-      }),
-    createProject: (input: {
-      name?: string;
-      region?: string;
-      createDatabase?: boolean;
-    }) =>
-      Effect.sync(() => {
-        calls.push(["createProject", input]);
-        const id = `project-${nextId++}`;
-        const project = apiProject(id, input.name ?? `project-${id}`, null);
-        projects.set(id, project);
-        const database =
-          input.createDatabase === false
-            ? null
-            : makeDatabase(project, {
-                region: input.region,
-                isDefault: true,
-              });
-        return { ...currentProject(project), database };
-      }),
-    updateProject: (
-      id: string,
-      input: { name?: string; settings?: Record<string, unknown> },
-    ) =>
-      Effect.sync(() => {
+        return project === undefined ? notFound("not found") : data(toWireProject(project));
+      }
+      if (request.method === "PATCH") {
+        const input = request.bodyJson as { name?: string; settings?: Record<string, unknown> };
         calls.push(["updateProject", { id, input }]);
         const project = projects.get(id)!;
         const updated = { ...project, name: input.name ?? project.name };
         projects.set(id, updated);
-        return currentProject(updated);
-      }),
-    listProjectDatabases: (projectId: string) =>
-      Effect.sync(() => {
+        return data(toWireProject(currentProject(updated)));
+      }
+      if (request.method === "DELETE") {
+        calls.push(["deleteProject", id]);
+        projects.delete(id);
+        for (const [databaseId, database] of databases) {
+          if (database.project.id === id) databases.delete(databaseId);
+        }
+        return json(null, { status: 204 });
+      }
+    }
+
+    if (segments.length === 4 && segments[1] === "projects" && segments[3] === "databases") {
+      const projectId = segments[2]!;
+      if (request.method === "GET") {
         calls.push(["listProjectDatabases", projectId]);
         if (staleDatabaseLists > 0) {
           staleDatabaseLists -= 1;
-          return staleDatabases;
+          return page(staleDatabases.map(toWireDatabase));
         }
-        return Array.from(databases.values()).filter(
-          (database) => database.project.id === projectId,
+        return page(
+          Array.from(databases.values())
+            .filter((database) => database.project.id === projectId)
+            .map(toWireDatabase),
         );
-      }),
-    createProjectDatabase: (
-      projectId: string,
-      input: { region?: string; isDefault?: boolean },
-    ) =>
-      Effect.suspend(() => {
+      }
+      if (request.method === "POST") {
+        const input = request.bodyJson as { region?: string; isDefault?: boolean };
         calls.push(["createProjectDatabase", { projectId, input }]);
         if (conflictNextProjectDatabaseCreate) {
           conflictNextProjectDatabaseCreate = false;
-          return Effect.fail(
-            new PrismaApiError({
-              method: "POST",
-              path: `/v1/projects/${projectId}/databases`,
-              status: 409,
-              message: "default database promotion in progress",
-            }),
-          );
+          return conflict("default database promotion in progress");
         }
         const previousDefault = Array.from(databases.values()).find(
           (database) => database.project.id === projectId && database.isDefault,
@@ -399,58 +458,45 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
           staleDatabaseLists = 1;
           staleDatabases = Array.from(databases.values())
             .filter((database) => database.project.id === projectId)
-            .map((database) => ({
-              ...database,
-              isDefault: database.id === previousDefault?.id,
-            }));
+            .map((database) => ({ ...database, isDefault: database.id === previousDefault?.id }));
         }
-        return Effect.succeed(created);
-      }),
-    getDatabase: (id: string) =>
-      Effect.suspend(() => {
+        return data(toWireCreatedDatabase(created), { status: 201 });
+      }
+    }
+
+    if (segments.length === 3 && segments[1] === "databases") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
         calls.push(["getDatabase", id]);
         const database = databases.get(id);
-        return database
-          ? Effect.succeed(database)
-          : Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/databases/${id}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-      }),
-    deleteDatabase: (id: string) =>
-      Effect.sync(() => {
+        return database === undefined ? notFound("not found") : data(toWireDatabase(database));
+      }
+      if (request.method === "DELETE") {
         calls.push(["deleteDatabase", id]);
         databases.delete(id);
-      }),
-    rotateConnection: (id: string) =>
-      Effect.sync(() => {
-        calls.push(["rotateConnection", id]);
-        const database = Array.from(databases.values()).find(
-          (database) => database.defaultConnectionId === id,
-        )!;
-        return apiConnection(database.id, id);
-      }),
-    listApps: (query: unknown) =>
-      Effect.sync(() => {
-        calls.push(["listApps", query]);
-        return [];
-      }),
-    deleteProject: (id: string) =>
-      Effect.sync(() => {
-        calls.push(["deleteProject", id]);
-        projects.delete(id);
-        for (const [databaseId, database] of databases) {
-          if (database.project.id === id) databases.delete(databaseId);
-        }
-      }),
-  } as unknown as PrismaManagementClient;
+        return json(null, { status: 204 });
+      }
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "connections" &&
+      segments[3] === "rotate" &&
+      request.method === "POST"
+    ) {
+      const id = segments[2]!;
+      calls.push(["rotateConnection", id]);
+      const database = Array.from(databases.values()).find(
+        (candidate) => candidate.defaultConnectionId === id,
+      )!;
+      return data(apiConnection(database.id, id));
+    }
+
+    return unhandled(request);
+  });
 
   return {
-    client,
+    fake,
     calls,
     databases,
     projects,
@@ -465,7 +511,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
 
 const foreignProject = apiProject("project-foreign", "app");
 const refusalCloud = makeProjectCloud([foreignProject]);
-const refusal = Test.make({ providers: projectLayer(refusalCloud.client) });
+const refusal = Test.make({ providers: projectLayer(refusalCloud.fake) });
 
 refusal.test.provider(
   "Plan refuses cold adoption of a foreign Prisma project",
@@ -477,12 +523,7 @@ refusal.test.provider(
       yield* stack.destroy();
 
       const result = yield* stack
-        .deploy(
-          PrismaProject("Project", {
-            name: "app",
-            createDatabase: false,
-          }),
-        )
+        .deploy(PrismaProject("Project", { name: "app", createDatabase: false }))
         .pipe(Effect.result);
 
       expect(Result.isFailure(result)).toBe(true);
@@ -490,17 +531,24 @@ refusal.test.provider(
         expect(String(result.failure)).toContain("Cannot adopt resource");
       }
       expect(refusalCloud.projects.get("project-foreign")?.name).toBe("app");
-      expect(refusalCloud.calls.map(([operation]) => operation)).not.toContain(
-        "updateProject",
-      );
+      expect(refusalCloud.calls.map(([operation]) => operation)).not.toContain("updateProject");
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const generatedProjectRecoveryCloud = makeProjectCloud();
 const generatedProjectRecovery = Test.make({
-  providers: projectLayer(generatedProjectRecoveryCloud.client),
+  providers: projectLayer(generatedProjectRecoveryCloud.fake),
 });
 
 generatedProjectRecovery.test.provider(
@@ -517,7 +565,7 @@ generatedProjectRecovery.test.provider(
         "project-generated",
         apiProject("project-generated", name, null),
       );
-      const provider = yield* PrismaProject.Provider;
+      const provider = yield* Provider.findProvider(PrismaProject);
       const observed = yield* provider.read!({
         id: "Project",
         instanceId,
@@ -550,15 +598,9 @@ generatedProjectRecovery.test.provider(
           password: Redacted.make("old-password"),
         },
       } as never).pipe(Effect.provideService(InstanceId, instanceId));
-      expect((switched as PrismaProject["Attributes"]).databaseId).toBe(
-        "database-new-default",
-      );
-      expect(
-        (switched as PrismaProject["Attributes"]).directConnectionString,
-      ).toBeUndefined();
-      expect(
-        (switched as PrismaProject["Attributes"]).password,
-      ).toBeUndefined();
+      expect((switched as PrismaProject["Attributes"]).databaseId).toBe("database-new-default");
+      expect((switched as PrismaProject["Attributes"]).directConnectionString).toBeUndefined();
+      expect((switched as PrismaProject["Attributes"]).password).toBeUndefined();
       const cannotDropAdoptedDefault = yield* provider
         .reconcile({
           id: "Project",
@@ -571,9 +613,7 @@ generatedProjectRecovery.test.provider(
         .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
       expect(Result.isFailure(cannotDropAdoptedDefault)).toBe(true);
       if (Result.isFailure(cannotDropAdoptedDefault)) {
-        expect(String(cannotDropAdoptedDefault.failure)).toContain(
-          "cannot be removed in place",
-        );
+        expect(String(cannotDropAdoptedDefault.failure)).toContain("cannot be removed in place");
       }
       generatedProjectRecoveryCloud.calls.length = 0;
       const recoveredSecrets = yield* provider
@@ -586,9 +626,9 @@ generatedProjectRecovery.test.provider(
           bindings: [],
         } as never)
         .pipe(Effect.provideService(InstanceId, instanceId));
-      expect(
-        Redacted.value(recoveredSecrets.directConnectionString!),
-      ).toContain("database-new-default");
+      expect(Redacted.value(recoveredSecrets.directConnectionString!)).toContain(
+        "database-new-default",
+      );
       expect(generatedProjectRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
         "connection-database-new-default",
@@ -597,13 +637,19 @@ generatedProjectRecovery.test.provider(
       generatedProjectRecoveryCloud.databases.clear();
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const adoptionCloud = makeProjectCloud([foreignProject]);
-const adoption = Test.make({
-  providers: projectLayer(adoptionCloud.client),
-  adopt: true,
-});
+const adoption = Test.make({ providers: projectLayer(adoptionCloud.fake), adopt: true });
 
 adoption.test.provider(
   "Plan adopts explicitly and applies write-only project settings",
@@ -631,12 +677,19 @@ adoption.test.provider(
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const replacementCloud = makeProjectCloud();
-const replacement = Test.make({
-  providers: projectLayer(replacementCloud.client),
-});
+const replacement = Test.make({ providers: projectLayer(replacementCloud.fake) });
 
 replacement.test.provider(
   "Apply refuses to replace a data-bearing default database for a region change",
@@ -647,11 +700,7 @@ replacement.test.provider(
       yield* stack.destroy();
 
       const first = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: true,
-          region: "us-east-1",
-        }),
+        PrismaProject("Project", { name: "app", createDatabase: true, region: "us-east-1" }),
       );
       replacementCloud.calls.length = 0;
 
@@ -676,17 +725,24 @@ replacement.test.provider(
       expect(operations).not.toContain("deleteDatabase");
       expect(operations).not.toContain("deleteProject");
       expect(Array.from(replacementCloud.databases.values())).toHaveLength(1);
-      expect(
-        Array.from(replacementCloud.databases.values())[0]?.region?.id,
-      ).toBe("us-east-1");
+      expect(Array.from(replacementCloud.databases.values())[0]?.region?.id).toBe("us-east-1");
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const eventuallyConsistentRegionCloud = makeProjectCloud();
 const eventuallyConsistentRegion = Test.make({
-  providers: projectLayer(eventuallyConsistentRegionCloud.client),
+  providers: projectLayer(eventuallyConsistentRegionCloud.fake),
 });
 
 eventuallyConsistentRegion.test.provider(
@@ -698,10 +754,7 @@ eventuallyConsistentRegion.test.provider(
       yield* stack.destroy();
 
       const first = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: false,
-        }),
+        PrismaProject("Project", { name: "app", createDatabase: false }),
       );
       eventuallyConsistentRegionCloud.calls.length = 0;
       eventuallyConsistentRegionCloud.staleNextProjectDatabaseObservation();
@@ -715,13 +768,10 @@ eventuallyConsistentRegion.test.provider(
 
       expect(second.projectId).toBe(first.projectId);
       expect(second.defaultRegion).toBe("us-west-1");
-      expect(Redacted.value(second.directConnectionString!)).toContain(
-        second.databaseId!,
-      );
+      expect(Redacted.value(second.directConnectionString!)).toContain(second.databaseId!);
       expect(
-        eventuallyConsistentRegionCloud.calls.filter(
-          ([operation]) => operation === "getProject",
-        ).length,
+        eventuallyConsistentRegionCloud.calls.filter(([operation]) => operation === "getProject")
+          .length,
       ).toBeGreaterThanOrEqual(3);
       expect(
         eventuallyConsistentRegionCloud.calls.filter(
@@ -731,12 +781,19 @@ eventuallyConsistentRegion.test.provider(
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const conflictingRegionCloud = makeProjectCloud();
-const conflictingRegion = Test.make({
-  providers: projectLayer(conflictingRegionCloud.client),
-});
+const conflictingRegion = Test.make({ providers: projectLayer(conflictingRegionCloud.fake) });
 
 conflictingRegion.test.provider(
   "Project default database creation rejects a conflict without an observed default",
@@ -747,10 +804,7 @@ conflictingRegion.test.provider(
       yield* stack.destroy();
 
       const first = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: false,
-        }),
+        PrismaProject("Project", { name: "app", createDatabase: false }),
       );
       conflictingRegionCloud.calls.length = 0;
       conflictingRegionCloud.conflictNextProjectDatabaseCreate();
@@ -767,25 +821,30 @@ conflictingRegion.test.provider(
 
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain(
-          "does not expose the requested default database",
-        );
+        expect(String(result.failure)).toContain("does not expose the requested default database");
       }
       expect(first.databaseId).toBeUndefined();
       expect(conflictingRegionCloud.databases.size).toBe(0);
-      expect(
-        conflictingRegionCloud.calls.map(([operation]) => operation),
-      ).not.toContain("deleteDatabase");
+      expect(conflictingRegionCloud.calls.map(([operation]) => operation)).not.toContain(
+        "deleteDatabase",
+      );
 
       conflictingRegionCloud.databases.clear();
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const addDefaultCloud = makeProjectCloud();
-const addDefault = Test.make({
-  providers: projectLayer(addDefaultCloud.client),
-});
+const addDefault = Test.make({ providers: projectLayer(addDefaultCloud.fake) });
 
 addDefault.test.provider(
   "Apply adds a missing Project default database without replacing the Project",
@@ -796,10 +855,7 @@ addDefault.test.provider(
       yield* stack.destroy();
 
       const first = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: false,
-        }),
+        PrismaProject("Project", { name: "app", createDatabase: false }),
       );
       addDefaultCloud.calls.length = 0;
       const second = yield* stack.deploy(
@@ -816,18 +872,23 @@ addDefault.test.provider(
       expect(addDefaultCloud.calls.map(([operation]) => operation)).toContain(
         "createProjectDatabase",
       );
-      expect(
-        addDefaultCloud.calls.map(([operation]) => operation),
-      ).not.toContain("deleteProject");
+      expect(addDefaultCloud.calls.map(([operation]) => operation)).not.toContain("deleteProject");
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const removeDefaultCloud = makeProjectCloud();
-const removeDefault = Test.make({
-  providers: projectLayer(removeDefaultCloud.client),
-});
+const removeDefault = Test.make({ providers: projectLayer(removeDefaultCloud.fake) });
 
 removeDefault.test.provider(
   "Apply replaces a Project when removing its last default database",
@@ -838,30 +899,29 @@ removeDefault.test.provider(
       yield* stack.destroy();
 
       const first = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: true,
-        }),
+        PrismaProject("Project", { name: "app", createDatabase: true }),
       );
       removeDefaultCloud.calls.length = 0;
       const second = yield* stack.deploy(
-        PrismaProject("Project", {
-          name: "app",
-          createDatabase: false,
-        }),
+        PrismaProject("Project", { name: "app", createDatabase: false }),
       );
 
       expect(second.projectId).not.toBe(first.projectId);
       expect(second.databaseId).toBeUndefined();
-      const operations = removeDefaultCloud.calls.map(
-        ([operation]) => operation,
-      );
-      expect(operations.indexOf("deleteProject")).toBeLessThan(
-        operations.indexOf("createProject"),
-      );
+      const operations = removeDefaultCloud.calls.map(([operation]) => operation);
+      expect(operations.indexOf("deleteProject")).toBeLessThan(operations.indexOf("createProject"));
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:database",
+      "provider:prisma:project",
+      "local",
+    ],
+  },
 );
 
 const apiDatabase = (
@@ -897,77 +957,103 @@ const makeDatabaseCloud = () => {
   const databases = new Map<string, ApiDatabase>();
   const calls: Array<[string, unknown?]> = [];
   let nextId = 1;
-  const client = {
-    listDatabases: () => Effect.succeed(Array.from(databases.values())),
-    listProjectDatabases: (projectId: string) =>
-      Effect.succeed(
-        Array.from(databases.values()).filter(
-          (database) => database.project.id === projectId,
-        ),
-      ),
-    getDatabase: (id: string) =>
-      Effect.suspend(() => {
-        calls.push(["getDatabase", id]);
-        const database = databases.get(id);
-        return database
-          ? Effect.succeed(database)
-          : Effect.fail(
-              new PrismaApiError({
-                method: "GET",
-                path: `/v1/databases/${id}`,
-                status: 404,
-                message: "not found",
-              }),
-            );
-      }),
-    createDatabase: (input: {
-      projectId: string;
-      name?: string;
-      region?: string;
-      isDefault?: boolean;
-      source?: ApiDatabase["source"];
-    }) =>
-      Effect.sync(() => {
-        calls.push(["createDatabase", input]);
-        if (input.isDefault) {
-          for (const [id, database] of databases) {
-            if (database.project.id === input.projectId && database.isDefault) {
-              databases.set(id, { ...database, isDefault: false });
-            }
+  // The same in-memory cloud, served over the wire for the Database resource.
+  const fake = makeFakeManagementApi((request) => {
+    const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+    if (request.pathname === "/v1/databases" && request.method === "GET") {
+      return page(Array.from(databases.values()).map(toWireDatabase));
+    }
+    if (request.pathname === "/v1/databases" && request.method === "POST") {
+      const input = request.bodyJson as {
+        projectId: string;
+        name?: string;
+        region?: string;
+        isDefault?: boolean;
+        source?: ApiDatabase["source"];
+      };
+      calls.push(["createDatabase", input]);
+      if (input.isDefault) {
+        for (const [id, database] of databases) {
+          if (database.project.id === input.projectId && database.isDefault) {
+            databases.set(id, { ...database, isDefault: false });
           }
         }
-        const id = `database-${nextId++}`;
-        const database = apiDatabase(id, input);
-        databases.set(id, database);
-        return database;
-      }),
-    updateDatabase: (id: string, input: { name?: string }) =>
-      Effect.sync(() => {
+      }
+      const id = `database-${nextId++}`;
+      const database = apiDatabase(id, input);
+      databases.set(id, database);
+      return data(toWireCreatedDatabase(database), { status: 201 });
+    }
+
+    // No branches: the logical-ID lookup resolves no branch and falls back to the name.
+    if (
+      segments.length === 4 &&
+      segments[1] === "projects" &&
+      segments[3] === "branches" &&
+      request.method === "GET"
+    ) {
+      return page([]);
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "projects" &&
+      segments[3] === "databases" &&
+      request.method === "GET"
+    ) {
+      const projectId = segments[2]!;
+      return page(
+        Array.from(databases.values())
+          .filter((database) => database.project.id === projectId)
+          .map(toWireDatabase),
+      );
+    }
+
+    if (segments.length === 3 && segments[1] === "databases") {
+      const id = segments[2]!;
+      if (request.method === "GET") {
+        calls.push(["getDatabase", id]);
+        const database = databases.get(id);
+        return database === undefined ? notFound("not found") : data(toWireDatabase(database));
+      }
+      if (request.method === "PATCH") {
+        const input = request.bodyJson as { name?: string };
         const database = databases.get(id)!;
         const updated = { ...database, name: input.name ?? database.name };
         databases.set(id, updated);
-        return updated;
-      }),
-    rotateConnection: (id: string) =>
-      Effect.sync(() => {
-        calls.push(["rotateConnection", id]);
-        const database = Array.from(databases.values()).find(
-          (database) => database.defaultConnectionId === id,
-        )!;
-        return apiConnection(database.id, id);
-      }),
-    deleteDatabase: (id: string) =>
-      Effect.sync(() => {
+        return data(toWireDatabase(updated));
+      }
+      if (request.method === "DELETE") {
         calls.push(["deleteDatabase", id]);
         databases.delete(id);
-      }),
-  } as unknown as PrismaManagementClient;
-  return { client, calls, databases };
+        return json(null, { status: 204 });
+      }
+    }
+
+    if (
+      segments.length === 4 &&
+      segments[1] === "connections" &&
+      segments[3] === "rotate" &&
+      request.method === "POST"
+    ) {
+      const id = segments[2]!;
+      calls.push(["rotateConnection", id]);
+      const database = Array.from(databases.values()).find(
+        (candidate) => candidate.defaultConnectionId === id,
+      )!;
+      return data(apiConnection(database.id, id));
+    }
+
+    return unhandled(request);
+  });
+
+  return { fake, calls, databases };
 };
 
 const generatedDatabaseRecoveryCloud = makeDatabaseCloud();
 const generatedDatabaseRecovery = Test.make({
-  providers: databaseLayer(generatedDatabaseRecoveryCloud.client),
+  providers: databaseLayer(generatedDatabaseRecoveryCloud.fake),
 });
 
 generatedDatabaseRecovery.test.provider(
@@ -981,14 +1067,10 @@ generatedDatabaseRecovery.test.provider(
         Effect.provideService(InstanceId, instanceId),
       );
       generatedDatabaseRecoveryCloud.databases.set("database-generated", {
-        ...apiDatabase("database-generated", {
-          projectId: "project-1",
-          name,
-          isDefault: false,
-        }),
+        ...apiDatabase("database-generated", { projectId: "project-1", name, isDefault: false }),
         connections: [],
       });
-      const provider = yield* PrismaDatabase.Provider;
+      const provider = yield* Provider.findProvider(PrismaDatabase);
       const observed = yield* provider.read!({
         id: "Database",
         instanceId,
@@ -998,9 +1080,7 @@ generatedDatabaseRecovery.test.provider(
 
       expect(observed).toBeDefined();
       expect(Unowned.is(observed!)).toBe(false);
-      expect((observed as PrismaDatabase["Attributes"]).databaseName).toBe(
-        name,
-      );
+      expect((observed as PrismaDatabase["Attributes"]).databaseName).toBe(name);
       const localSecret = Redacted.make("postgres://local-dev-secret");
       const fromDev = yield* provider.read!({
         id: "Database",
@@ -1024,15 +1104,9 @@ generatedDatabaseRecovery.test.provider(
           password: Redacted.make("local-password"),
         },
       } as never).pipe(Effect.provideService(InstanceId, instanceId));
-      expect((fromDev as PrismaDatabase["Attributes"]).databaseId).toBe(
-        "database-generated",
-      );
-      expect(
-        (fromDev as PrismaDatabase["Attributes"]).directConnectionString,
-      ).toBeUndefined();
-      expect(
-        (fromDev as PrismaDatabase["Attributes"]).password,
-      ).toBeUndefined();
+      expect((fromDev as PrismaDatabase["Attributes"]).databaseId).toBe("database-generated");
+      expect((fromDev as PrismaDatabase["Attributes"]).directConnectionString).toBeUndefined();
+      expect((fromDev as PrismaDatabase["Attributes"]).password).toBeUndefined();
 
       generatedDatabaseRecoveryCloud.calls.length = 0;
       const recovered = yield* provider
@@ -1045,9 +1119,7 @@ generatedDatabaseRecovery.test.provider(
           bindings: [],
         } as never)
         .pipe(Effect.provideService(InstanceId, instanceId));
-      expect(Redacted.value(recovered.directConnectionString!)).toContain(
-        "database-generated",
-      );
+      expect(Redacted.value(recovered.directConnectionString!)).toContain("database-generated");
       expect(generatedDatabaseRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
         "connection-database-generated",
@@ -1065,11 +1137,7 @@ generatedDatabaseRecovery.test.provider(
       const adoptionObserved = yield* provider.read!({
         id: "ExplicitDatabase",
         instanceId,
-        olds: {
-          project: "project-1",
-          name: "explicit",
-          isDefault: false,
-        },
+        olds: { project: "project-1", name: "explicit", isDefault: false },
         output: undefined,
       } as never).pipe(Effect.provideService(InstanceId, instanceId));
       expect(Unowned.is(adoptionObserved!)).toBe(true);
@@ -1077,12 +1145,7 @@ generatedDatabaseRecovery.test.provider(
         .reconcile({
           id: "ExplicitDatabase",
           instanceId,
-          news: {
-            project: "project-1",
-            name: "explicit",
-            region: "us-west-1",
-            isDefault: false,
-          },
+          news: { project: "project-1", name: "explicit", region: "us-west-1", isDefault: false },
           olds: undefined,
           output: adoptionObserved,
           bindings: [],
@@ -1096,11 +1159,7 @@ generatedDatabaseRecovery.test.provider(
         .reconcile({
           id: "ExplicitDatabase",
           instanceId,
-          news: {
-            project: "project-1",
-            name: "explicit",
-            isDefault: true,
-          },
+          news: { project: "project-1", name: "explicit", isDefault: true },
           olds: undefined,
           output: adoptionObserved,
           bindings: [],
@@ -1108,19 +1167,13 @@ generatedDatabaseRecovery.test.provider(
         .pipe(Effect.provideService(InstanceId, instanceId), Effect.result);
       expect(Result.isFailure(cannotPromoteAdopted)).toBe(true);
       if (Result.isFailure(cannotPromoteAdopted)) {
-        expect(String(cannotPromoteAdopted.failure)).toContain(
-          "cannot manage a default database",
-        );
+        expect(String(cannotPromoteAdopted.failure)).toContain("cannot manage a default database");
       }
       const adopted = yield* provider
         .reconcile({
           id: "ExplicitDatabase",
           instanceId,
-          news: {
-            project: "project-1",
-            name: "explicit",
-            isDefault: false,
-          },
+          news: { project: "project-1", name: "explicit", isDefault: false },
           olds: undefined,
           output: adoptionObserved,
           bindings: [],
@@ -1130,8 +1183,7 @@ generatedDatabaseRecovery.test.provider(
       expect(
         generatedDatabaseRecoveryCloud.calls.filter(
           ([operation, id]) =>
-            operation === "rotateConnection" &&
-            id === "connection-database-explicit",
+            operation === "rotateConnection" && id === "connection-database-explicit",
         ),
       ).toEqual([]);
 
@@ -1150,9 +1202,9 @@ generatedDatabaseRecovery.test.provider(
           bindings: [],
         } as never)
         .pipe(Effect.provideService(InstanceId, instanceId));
-      expect(
-        Redacted.value(adoptedWithRotation.directConnectionString!),
-      ).toContain("database-explicit");
+      expect(Redacted.value(adoptedWithRotation.directConnectionString!)).toContain(
+        "database-explicit",
+      );
       expect(generatedDatabaseRecoveryCloud.calls).toContainEqual([
         "rotateConnection",
         "connection-database-explicit",
@@ -1160,49 +1212,50 @@ generatedDatabaseRecovery.test.provider(
       generatedDatabaseRecoveryCloud.databases.clear();
       yield* stack.destroy();
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
 );
 
-it.effect("refuses an undeletable standalone default database", () => {
-  let created = false;
-  const client = {
-    createDatabase: () =>
-      Effect.sync(() => {
-        created = true;
-        throw new Error("must fail before create");
-      }),
-  } as unknown as PrismaManagementClient;
+it.effect(
+  "refuses an undeletable standalone default database",
+  () => {
+    let created = false;
+    const client = {
+      createDatabase: () =>
+        Effect.sync(() => {
+          created = true;
+          throw new Error("must fail before create");
+        }),
+    } as unknown as PrismaManagementClient;
 
-  return Effect.gen(function* () {
-    const provider = yield* PrismaDatabase.Provider;
-    const error = yield* provider
-      .reconcile({
-        id: "Database",
-        instanceId: "00000000000000000000000000000000",
-        news: {
-          project: "project-1",
-          name: "primary",
-          region: "us-east-1",
-          isDefault: true,
-        },
-        olds: undefined,
-        output: undefined,
-        bindings: [],
-      } as never)
-      .pipe(Effect.flip);
+    return Effect.gen(function* () {
+      const provider = yield* PrismaDatabase.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "Database",
+          instanceId: "00000000000000000000000000000000",
+          news: { project: "project-1", name: "primary", region: "us-east-1", isDefault: true },
+          olds: undefined,
+          output: undefined,
+          bindings: [],
+        } as never)
+        .pipe(Effect.flip);
 
-    expect(String(error)).toContain("could never be destroyed");
-    expect(created).toBe(false);
-  }).pipe(
-    Effect.provide(DatabaseProvider()),
-    Effect.provide(Layer.succeed(PrismaClient, client)),
-    Effect.provide(liveProviderContext),
-  );
-});
+      expect(String(error)).toContain("could never be destroyed");
+      expect(created).toBe(false);
+    }).pipe(
+      Effect.provide(DatabaseProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(liveProviderContext),
+      Effect.provide(testStackContext),
+      Effect.provide(makeFakeManagementApi(unhandled).layer),
+      Effect.provide(PlatformServices),
+    );
+  },
+  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
+);
 
 const inheritedRegionCloud = makeDatabaseCloud();
-const inheritedRegion = Test.make({
-  providers: databaseLayer(inheritedRegionCloud.client),
-});
+const inheritedRegion = Test.make({ providers: databaseLayer(inheritedRegionCloud.fake) });
 
 inheritedRegion.test.provider(
   "Database region inherit is stable and follows the project default region",
@@ -1221,26 +1274,18 @@ inheritedRegion.test.provider(
       );
 
       const first = yield* stack.deploy(
-        PrismaDatabase("Database", {
-          project: "project-1",
-          name: "inherited",
-          region: "inherit",
-        }),
+        PrismaDatabase("Database", { project: "project-1", name: "inherited", region: "inherit" }),
       );
       expect(first.region).toBe("us-east-1");
 
       inheritedRegionCloud.calls.length = 0;
       const second = yield* stack.deploy(
-        PrismaDatabase("Database", {
-          project: "project-1",
-          name: "inherited",
-          region: "inherit",
-        }),
+        PrismaDatabase("Database", { project: "project-1", name: "inherited", region: "inherit" }),
       );
       expect(second.databaseId).toBe(first.databaseId);
-      expect(
-        inheritedRegionCloud.calls.map(([operation]) => operation),
-      ).not.toContain("createDatabase");
+      expect(inheritedRegionCloud.calls.map(([operation]) => operation)).not.toContain(
+        "createDatabase",
+      );
 
       inheritedRegionCloud.databases.set("project-default", {
         ...inheritedRegionCloud.databases.get("project-default")!,
@@ -1248,21 +1293,18 @@ inheritedRegion.test.provider(
       });
       inheritedRegionCloud.calls.length = 0;
       const moved = yield* stack.deploy(
-        PrismaDatabase("Database", {
-          project: "project-1",
-          name: "inherited",
-          region: "inherit",
-        }),
+        PrismaDatabase("Database", { project: "project-1", name: "inherited", region: "inherit" }),
       );
       expect(moved.databaseId).not.toBe(first.databaseId);
       expect(moved.region).toBe("us-west-1");
-      expect(
-        inheritedRegionCloud.calls.map(([operation]) => operation),
-      ).toContain("createDatabase");
+      expect(inheritedRegionCloud.calls.map(([operation]) => operation)).toContain(
+        "createDatabase",
+      );
 
       yield* stack.destroy();
       inheritedRegionCloud.databases.clear();
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
 );
 
 const environmentVariable = {
@@ -1282,8 +1324,7 @@ const environmentSecrets = new Map([[environmentVariable.id, "foreign"]]);
 const environmentCalls: Array<[string, unknown?]> = [];
 const environmentClient = {
   listEnvironmentVariables: () => Effect.succeed([environmentVariable]),
-  getEnvironmentVariable: (id: string) =>
-    Effect.succeed({ ...environmentVariable, id }),
+  getEnvironmentVariable: (id: string) => Effect.succeed({ ...environmentVariable, id }),
   createEnvironmentVariable: () =>
     Effect.fail(
       new PrismaApiError({
@@ -1335,13 +1376,12 @@ environmentAdoption.test.provider(
       yield* deploy();
       expect(environmentSecrets.get("env-1")).toBe("desired");
       expect(
-        environmentCalls.filter(
-          ([operation]) => operation === "updateEnvironmentVariable",
-        ),
+        environmentCalls.filter(([operation]) => operation === "updateEnvironmentVariable"),
       ).toHaveLength(2);
 
       yield* stack.destroy();
     }),
+  { tags: ["unit", "provider:prisma", "provider:prisma:environmentvariable", "local"] },
 );
 
 const customDomainCalls: Array<[string, unknown?]> = [];
@@ -1351,9 +1391,7 @@ const customDomainClient = {
   listAppDomains: (appId: string) =>
     Effect.sync(() => {
       customDomainCalls.push(["listAppDomains", appId]);
-      return Array.from(customDomainCloud.values()).filter(
-        (domain) => domain.appId === appId,
-      );
+      return Array.from(customDomainCloud.values()).filter((domain) => domain.appId === appId);
     }),
   getCustomDomain: (id: string) =>
     Effect.suspend(() => {
@@ -1375,7 +1413,7 @@ const customDomainClient = {
       return {
         id: appId,
         type: "app" as const,
-        url: `https://api.prisma.test/v1/apps/${appId}`,
+        url: `https://api.prisma.test/v1/services/${appId}`,
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
@@ -1417,12 +1455,7 @@ const customDomainClient = {
         failureCategory: null,
         certExpiresAt: null,
         dnsRecords: [
-          {
-            type: "CNAME" as const,
-            name: input.hostname,
-            value: "api.prisma.build",
-            ttl: null,
-          },
+          { type: "CNAME" as const, name: input.hostname, value: "api.prisma.build", ttl: null },
         ],
         createdAt,
         updatedAt: createdAt,
@@ -1451,9 +1484,7 @@ const customDomainClient = {
       customDomainCloud.delete(id);
     }),
 } as unknown as PrismaManagementClient;
-const customDomains = Test.make({
-  providers: customDomainLayer(customDomainClient),
-});
+const customDomains = Test.make({ providers: customDomainLayer(customDomainClient) });
 
 customDomains.test.provider(
   "custom domains use the canonical App API and exact status fields",
@@ -1466,9 +1497,7 @@ customDomains.test.provider(
 
       const domain = yield* stack.deploy(
         PrismaCustomDomain("Domain", {
-          app: {
-            appId: Output.asOutput("app-1"),
-          } as unknown as App,
+          app: { appId: Output.asOutput("app-1") } as unknown as App,
           hostname: "NEW.EXAMPLE.COM.",
         }),
       );
@@ -1491,7 +1520,7 @@ customDomains.test.provider(
         failureReason: "DNS verification failed",
         failureCategory: "dns",
       });
-      const provider = yield* PrismaCustomDomain.Provider;
+      const provider = yield* Provider.findProvider(PrismaCustomDomain);
       const failed = yield* provider.read!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
@@ -1529,14 +1558,9 @@ customDomains.test.provider(
       } as never);
       expect(retried.customDomainId).toBe(replacement.customDomainId);
       expect(retried.status).toBe("verifying");
-      expect(customDomainCalls).toContainEqual([
-        "retryCustomDomain",
-        replacement.customDomainId,
-      ]);
+      expect(customDomainCalls).toContainEqual(["retryCustomDomain", replacement.customDomainId]);
       expect(
-        customDomainCalls.filter(
-          ([operation]) => operation === "retryCustomDomain",
-        ),
+        customDomainCalls.filter(([operation]) => operation === "retryCustomDomain"),
       ).toHaveLength(1);
       const moveDiff = yield* provider.diff!({
         id: "Domain",
@@ -1576,6 +1600,15 @@ customDomains.test.provider(
 
       yield* stack.destroy();
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:app",
+      "provider:prisma:customdomain",
+      "local",
+    ],
+  },
 );
 
 const sourceRepositoryCloud = new Map<string, ApiSourceRepository>();
@@ -1583,15 +1616,11 @@ const sourceRepositoryCalls: Array<[string, unknown?]> = [];
 let nextSourceRepositoryId = 1;
 const sourceRepositoryClient = {
   listProjects: () =>
-    Effect.succeed([
-      apiProject("project-1", "one", null),
-      apiProject("project-2", "two", null),
-    ]),
+    Effect.succeed([apiProject("project-1", "one", null), apiProject("project-2", "two", null)]),
   listSourceRepositories: ({ projectId }: { projectId: string }) =>
     Effect.succeed(
       Array.from(sourceRepositoryCloud.values()).filter(
-        (repository) =>
-          repository.projectId === projectId && repository.status === "active",
+        (repository) => repository.projectId === projectId && repository.status === "active",
       ),
     ),
   listApps: () => Effect.succeed([]),
@@ -1676,16 +1705,11 @@ const sourceRepositoryClient = {
       sourceRepositoryCalls.push(["deleteSourceRepository", id]);
       const repository = sourceRepositoryCloud.get(id);
       if (repository) {
-        sourceRepositoryCloud.set(id, {
-          ...repository,
-          status: "archived",
-        });
+        sourceRepositoryCloud.set(id, { ...repository, status: "archived" });
       }
     }),
 } as unknown as PrismaManagementClient;
-const sourceRepositories = Test.make({
-  providers: sourceRepositoryLayer(sourceRepositoryClient),
-});
+const sourceRepositories = Test.make({ providers: sourceRepositoryLayer(sourceRepositoryClient) });
 
 sourceRepositories.test.provider(
   "source repository links reject non-atomic relinks without mutating the live link",
@@ -1697,30 +1721,20 @@ sourceRepositories.test.provider(
       yield* stack.destroy();
 
       const first = yield* stack.deploy(
-        PrismaSourceRepository("Repository", {
-          project: "project-1",
-          providerRepositoryId: 123,
-        }),
+        PrismaSourceRepository("Repository", { project: "project-1", providerRepositoryId: 123 }),
       );
       sourceRepositoryCalls.length = 0;
       const relink = yield* stack
         .deploy(
-          PrismaSourceRepository("Repository", {
-            project: "project-2",
-            providerRepositoryId: 456,
-          }),
+          PrismaSourceRepository("Repository", { project: "project-2", providerRepositoryId: 456 }),
         )
         .pipe(Effect.result);
       expect(Result.isFailure(relink)).toBe(true);
       if (Result.isFailure(relink)) {
-        expect(String(relink.failure)).toContain(
-          "cannot be replaced atomically",
-        );
+        expect(String(relink.failure)).toContain("cannot be replaced atomically");
       }
       expect(sourceRepositoryCalls).toEqual([]);
-      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe(
-        "active",
-      );
+      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe("active");
 
       const provider = yield* PrismaSourceRepository.Provider;
       const archivedDiff = yield* provider.diff!({
@@ -1735,10 +1749,17 @@ sourceRepositories.test.provider(
       expect(Result.isFailure(archivedDiff)).toBe(true);
 
       yield* stack.destroy();
-      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe(
-        "archived",
-      );
+      expect(sourceRepositoryCloud.get(first.sourceRepositoryId)?.status).toBe("archived");
     }),
+  {
+    tags: [
+      "unit",
+      "provider:prisma",
+      "provider:prisma:project",
+      "provider:prisma:sourcerepository",
+      "local",
+    ],
+  },
 );
 
 const branchCloud = new Map<string, ApiBranch>();
@@ -1749,15 +1770,11 @@ const branchClient = {
   listBranches: (_projectId: string, query?: { gitName?: string }) =>
     Effect.succeed(
       Array.from(branchCloud.values()).filter(
-        (branch) =>
-          query?.gitName === undefined || branch.gitName === query.gitName,
+        (branch) => query?.gitName === undefined || branch.gitName === query.gitName,
       ),
     ),
   getBranch: (id: string) => Effect.succeed(branchCloud.get(id)!),
-  createBranch: (
-    projectId: string,
-    input: { gitName: string; isDefault?: boolean },
-  ) =>
+  createBranch: (projectId: string, input: { gitName: string; isDefault?: boolean }) =>
     Effect.sync(() => {
       branchCalls.push(["createBranch", { projectId, input }]);
       const first = branchCloud.size === 0;
@@ -1793,10 +1810,7 @@ const branchClient = {
         throw new Error("the Management API rejects default demotion");
       }
       for (const [branchId, branch] of branchCloud) {
-        branchCloud.set(branchId, {
-          ...branch,
-          isDefault: branchId === id,
-        });
+        branchCloud.set(branchId, { ...branch, isDefault: branchId === id });
       }
       return branchCloud.get(id)!;
     }),
@@ -1806,7 +1820,86 @@ const branchClient = {
       branchCloud.delete(id);
     }),
 } as unknown as PrismaManagementClient;
-const branches = Test.make({ providers: branchLayer(branchClient) });
+
+// The same in-memory branch cloud, served over the wire.
+const branchFake = makeFakeManagementApi((request) => {
+  const segments = request.pathname.split("/").filter((s) => s.length > 0);
+
+  if (request.pathname === "/v1/projects" && request.method === "GET") {
+    return page([toWireProject(apiProject("project-1", "app"))]);
+  }
+
+  if (segments.length === 4 && segments[1] === "projects" && segments[3] === "branches") {
+    const projectId = segments[2]!;
+    if (request.method === "GET") {
+      const gitName = request.search.includes("gitName=")
+        ? new URLSearchParams(request.search).get("gitName")
+        : null;
+      return page(
+        Array.from(branchCloud.values()).filter(
+          (branch) => gitName === null || branch.gitName === gitName,
+        ),
+      );
+    }
+    if (request.method === "POST") {
+      const input = request.bodyJson as { gitName: string; isDefault?: boolean };
+      branchCalls.push(["createBranch", { projectId, input }]);
+      const first = branchCloud.size === 0;
+      const makeDefault = first || input.isDefault === true;
+      if (makeDefault) {
+        for (const [id, branch] of branchCloud) {
+          branchCloud.set(id, { ...branch, isDefault: false });
+        }
+      }
+      const id = `branch-${nextBranchId++}`;
+      const branch = {
+        id,
+        type: "branch" as const,
+        url: `https://api.prisma.test/v1/branches/${id}`,
+        gitName: input.gitName,
+        isDefault: makeDefault,
+        role: first ? ("production" as const) : ("preview" as const),
+        createdAt,
+        updatedAt: createdAt,
+        project: {
+          id: projectId,
+          url: `https://api.prisma.test/v1/projects/${projectId}`,
+          name: "app",
+        },
+      };
+      branchCloud.set(id, branch);
+      return data(branch, { status: 201 });
+    }
+  }
+
+  if (segments.length === 3 && segments[1] === "branches") {
+    const id = segments[2]!;
+    if (request.method === "GET") {
+      const branch = branchCloud.get(id);
+      return branch === undefined ? notFound("not found") : data(branch);
+    }
+    if (request.method === "PATCH") {
+      const input = request.bodyJson as { isDefault?: boolean | null };
+      branchCalls.push(["updateBranch", { id, input }]);
+      if (input.isDefault !== true) {
+        throw new Error("the Management API rejects default demotion");
+      }
+      for (const [branchId, branch] of branchCloud) {
+        branchCloud.set(branchId, { ...branch, isDefault: branchId === id });
+      }
+      return data(branchCloud.get(id)!);
+    }
+    if (request.method === "DELETE") {
+      branchCalls.push(["deleteBranch", id]);
+      branchCloud.delete(id);
+      return json(null, { status: 204 });
+    }
+  }
+
+  return unhandled(request);
+});
+
+const branches = Test.make({ providers: branchLayer(branchFake) });
 
 branches.test.provider(
   "branch promotion persists and restores the displaced default on destroy",
@@ -1835,11 +1928,7 @@ branches.test.provider(
       branchCloud.set(main.id, main);
 
       const preview = yield* stack.deploy(
-        PrismaBranch("Preview", {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        }),
+        PrismaBranch("Preview", { project: "project-1", gitName: "preview", isDefault: true }),
       );
       expect(preview.isDefault).toBe(true);
       expect(preview.role).toBe("preview");
@@ -1847,20 +1936,12 @@ branches.test.provider(
       expect(branchCloud.get(main.id)?.isDefault).toBe(false);
       expect(branchCloud.get(main.id)?.role).toBe("production");
 
-      const provider = yield* PrismaBranch.Provider;
+      const provider = yield* Provider.findProvider(PrismaBranch);
       const alreadyDefaultDiff = yield* provider.diff!({
         id: "Preview",
         instanceId: "00000000000000000000000000000000",
-        olds: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
-        news: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
+        olds: { project: "project-1", gitName: "preview", isDefault: true },
+        news: { project: "project-1", gitName: "preview", isDefault: true },
         output: preview,
         oldBindings: [],
         newBindings: [],
@@ -1870,10 +1951,7 @@ branches.test.provider(
       // A different API client can promote another branch, atomically
       // demoting the desired default. The next deploy must observe and heal it
       // even though desired props did not change.
-      branchCloud.set(main.id, {
-        ...branchCloud.get(main.id)!,
-        isDefault: true,
-      });
+      branchCloud.set(main.id, { ...branchCloud.get(main.id)!, isDefault: true });
       branchCloud.set(preview.branchId, {
         ...branchCloud.get(preview.branchId)!,
         isDefault: false,
@@ -1882,26 +1960,14 @@ branches.test.provider(
       const observed = yield* provider.read!({
         id: "Preview",
         instanceId: "00000000000000000000000000000000",
-        olds: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
+        olds: { project: "project-1", gitName: "preview", isDefault: true },
         output: preview,
       } as never);
       const driftDiff = yield* provider.diff!({
         id: "Preview",
         instanceId: "00000000000000000000000000000000",
-        olds: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
-        news: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
+        olds: { project: "project-1", gitName: "preview", isDefault: true },
+        news: { project: "project-1", gitName: "preview", isDefault: true },
         output: observed,
         oldBindings: [],
         newBindings: [],
@@ -1910,16 +1976,8 @@ branches.test.provider(
       yield* provider.reconcile({
         id: "Preview",
         instanceId: "00000000000000000000000000000000",
-        news: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
-        olds: {
-          project: "project-1",
-          gitName: "preview",
-          isDefault: true,
-        },
+        news: { project: "project-1", gitName: "preview", isDefault: true },
+        olds: { project: "project-1", gitName: "preview", isDefault: true },
         output: observed,
         bindings: [],
       } as never);
@@ -1945,11 +2003,7 @@ branches.test.provider(
         .reconcile({
           id: "UnsafeFirst",
           instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            gitName: "main",
-            isDefault: false,
-          },
+          news: { project: "project-1", gitName: "main", isDefault: false },
           olds: undefined,
           output: undefined,
           bindings: [],
@@ -1957,12 +2011,11 @@ branches.test.provider(
         .pipe(Effect.result);
       expect(Result.isFailure(firstBranch)).toBe(true);
       if (Result.isFailure(firstBranch)) {
-        expect(String(firstBranch.failure)).toContain(
-          "undeletable production branch",
-        );
+        expect(String(firstBranch.failure)).toContain("undeletable production branch");
       }
-      expect(branchCalls.map(([operation]) => operation)).not.toContain(
-        "createBranch",
-      );
+      expect(branchCalls.map(([operation]) => operation)).not.toContain("createBranch");
     }),
+  {
+    tags: ["unit", "provider:prisma", "provider:prisma:branch", "provider:prisma:project", "local"],
+  },
 );

@@ -3,7 +3,11 @@ import * as Data from "effect/Data";
 /** No `REDIS_URL` in the Function/Service environment. */
 export class UrlMissing extends Data.TaggedError("Redis.UrlMissing")<{
   name: string;
-}> {}
+}> {
+  override get message() {
+    return `REDIS_URL missing for ${this.name}`;
+  }
+}
 
 /** A Redis command failed (RESP error, socket, or protocol). */
 export class CommandError extends Data.TaggedError("Redis.CommandError")<{

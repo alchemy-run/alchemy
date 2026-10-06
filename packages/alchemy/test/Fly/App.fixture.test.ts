@@ -1,38 +1,45 @@
-import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Alchemy from "@/index.ts";
+import { Stack as StackService } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
+import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/app/api.ts";
-import {
-  Marker,
-  PublicIp,
-  SECRET_NAME,
-  Site,
-  VOLUME_PATH,
-} from "./fixtures/app/shared.ts";
+import { Marker, PublicIp, SECRET_NAME, Site, VOLUME_PATH } from "./fixtures/app/shared.ts";
 import Worker from "./fixtures/app/worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Fly.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
+// Out-of-band verification resolves Fly credentials the same way the stack
+// does — through the Alchemy profile via `Fly.providers()` — not from
+// `FLY_API_TOKEN`, which a laptop running off a profile does not have.
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(CredentialsFromEnv),
-    Effect.provide(FetchHttpClient.layer),
+    Effect.provide(
+      Fly.providers().pipe(
+        Layer.provideMerge(
+          Layer.succeed(StackService, {
+            name: "FlyAppFixtureVerify",
+            stage: "test",
+            resources: {},
+            bindings: {},
+            actions: {},
+          }),
+        ),
+        Layer.provideMerge(Layer.succeed(Stage, "test")),
+      ),
+    ),
   );
 
 class ApiNotReady extends Data.TaggedError("ApiNotReady")<{
@@ -125,13 +132,9 @@ test(
     );
     expect(liveWorker.id).toEqual(out.workerMachineId);
     expect(liveWorker.state).toEqual("started");
-    expect(liveWorker.config?.metadata?.["alchemy.type"]).toEqual(
-      "Fly.Service",
-    );
+    expect(liveWorker.config?.metadata?.["alchemy.type"]).toEqual("Fly.Service");
     expect(liveWorker.config?.mounts?.[0]?.path).toEqual(VOLUME_PATH);
-    expect(liveWorker.config?.mounts?.[0]?.volume).toEqual(
-      out.workerMounts[0]?.volumeId,
-    );
+    expect(liveWorker.config?.mounts?.[0]?.volume).toEqual(out.workerMounts[0]?.volumeId);
 
     const liveVolume = yield* distilled(
       machines.getVolumeById({
@@ -162,9 +165,7 @@ test(
       }),
       Effect.flatMap((res) =>
         res.status === 200
-          ? res.json.pipe(
-              Effect.mapError(() => new ApiNotReady({ status: res.status })),
-            )
+          ? res.json.pipe(Effect.mapError(() => new ApiNotReady({ status: res.status })))
           : Effect.fail(new ApiNotReady({ status: res.status })),
       ),
       Effect.retry({
@@ -179,5 +180,17 @@ test(
     expect(body.ok).toEqual(true);
     expect(body.name).toEqual(SECRET_NAME);
   }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:ipassignment",
+      "provider:fly:machine",
+      "provider:fly:secret",
+      "provider:fly:service",
+      "provider:fly:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

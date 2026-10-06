@@ -1,21 +1,32 @@
-import { Unowned } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext.ts";
-import { Artifacts } from "@/Artifacts";
-import { isResolved } from "@/Diff.ts";
-import * as ProviderLayer from "@/Local/ProviderLayer.ts";
-import * as Provider from "@/Provider.ts";
-import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
-import { Resource, type ResourceBinding } from "@/Resource";
-import { Stack } from "@/Stack";
-import * as State from "@/State/index";
-import { isUnknown } from "@/Util/unknown";
 import { Data } from "effect";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext.ts";
+import { Artifacts } from "@/Artifacts";
+import * as Binding from "@/Binding.ts";
+import { isResolved } from "@/Diff.ts";
+import * as ProviderLayer from "@/Local/ProviderLayer.ts";
+import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
+import * as Provider from "@/Provider.ts";
+import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
+import { Resource, type ResourceBinding } from "@/Resource";
+import { unpackEnvValue } from "@/RuntimeContext.ts";
+import {
+  createHostRuntimeContext,
+  type HostRuntimeContext,
+  type ServerHost,
+} from "@/Server/Process.ts";
+import { Stack } from "@/Stack";
+import * as State from "@/State/index";
+import { isUnknown } from "@/Util/unknown";
 
 // Bucket
 export type BucketProps = {
@@ -146,9 +157,7 @@ export const bindingTargetProvider = () =>
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ id, news = {}, olds = {}, newBindings }) {
           if (!isResolved(news)) return undefined;
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (hooks?.diff && isResolved(newBindings)) {
             yield* hooks.diff(id, newBindings as ResourceBinding[]);
           }
@@ -181,9 +190,7 @@ export const bindingTargetProvider = () =>
           // exactly when the test wants `failOn("X", "create")` to fire.
           // `output === undefined` would miss replacements with `precreate`
           // because precreate populates `output` before reconcile runs.
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (olds === undefined) {
             if (hooks?.create) {
               yield* hooks.create(id, news as TestResourceProps);
@@ -198,17 +205,13 @@ export const bindingTargetProvider = () =>
             string: news.string ?? id,
             env: Object.assign(
               {},
-              ...bindings.map(
-                (binding: any) => binding.env ?? binding.data?.env ?? {},
-              ),
+              ...bindings.map((binding: any) => binding.env ?? binding.data?.env ?? {}),
             ),
             replaceString: news.replaceString,
           };
         }),
         delete: Effect.fn(function* ({ id }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (hooks?.delete) {
             yield* hooks.delete(id);
           }
@@ -234,10 +237,9 @@ export interface DeletedBindingRegressionTarget extends Resource<
   }
 > {}
 
-export const DeletedBindingRegressionTarget =
-  Resource<DeletedBindingRegressionTarget>(
-    "Test.DeletedBindingRegressionTarget",
-  );
+export const DeletedBindingRegressionTarget = Resource<DeletedBindingRegressionTarget>(
+  "Test.DeletedBindingRegressionTarget",
+);
 
 export const deletedBindingRegressionProvider = () =>
   Provider.succeed(DeletedBindingRegressionTarget, {
@@ -254,9 +256,7 @@ export const deletedBindingRegressionProvider = () =>
         name: news.name ?? id,
         env: Object.assign(
           {},
-          ...bindings.map(
-            (binding: any) => binding.env ?? binding.data?.env ?? {},
-          ),
+          ...bindings.map((binding: any) => binding.env ?? binding.data?.env ?? {}),
         ),
       };
     }),
@@ -286,17 +286,11 @@ export const artifactProbeProvider = () =>
       const prev = olds as ArtifactProbeProps | undefined;
       const artifacts = yield* Artifacts;
       const previous = yield* artifacts.get<string>("memo");
-      if (
-        previous !== undefined &&
-        previous !== next.value &&
-        previous !== prev?.value
-      ) {
+      if (previous !== undefined && previous !== next.value && previous !== prev?.value) {
         return { action: "replace" as const };
       }
       yield* artifacts.set("memo", next.value);
-      return next.value !== prev?.value
-        ? { action: "update" as const }
-        : undefined;
+      return next.value !== prev?.value ? { action: "update" as const } : undefined;
     }),
     reconcile: Effect.fn(function* ({ news }) {
       const props = news as ArtifactProbeProps;
@@ -347,10 +341,7 @@ export class TestResourceHooks extends Context.Service<
      * exact `newBindings` array the engine handed it. Lets a test assert what
      * the plan stage observes (e.g. that duplicates were collapsed by sid).
      */
-    diff?: (
-      id: string,
-      newBindings: ResourceBinding[],
-    ) => Effect.Effect<void, any>;
+    diff?: (id: string, newBindings: ResourceBinding[]) => Effect.Effect<void, any>;
     /**
      * If provided, the read hook is invoked for the resource's `read` lifecycle
      * operation. Return:
@@ -359,9 +350,7 @@ export class TestResourceHooks extends Context.Service<
      *   - `undefined` to simulate a resource that does not exist
      *   - fail with `OwnedBySomeoneElse` to reject adoption
      */
-    read?: (
-      id: string,
-    ) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
+    read?: (id: string) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
   }
 >()("TestResourceHooks") {}
 
@@ -374,9 +363,7 @@ export const testResourceProvider = () =>
       return {
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, output }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (hooks?.read) {
             return (yield* hooks.read(id)) as any;
           }
@@ -391,9 +378,7 @@ export const testResourceProvider = () =>
               action: "replace",
             };
           }
-          const redactedValue = (
-            r: Redacted.Redacted<string> | undefined,
-          ): string | undefined =>
+          const redactedValue = (r: Redacted.Redacted<string> | undefined): string | undefined =>
             r && Redacted.isRedacted(r) ? Redacted.value(r) : undefined;
           const redactedArrayValues = (
             arr: Redacted.Redacted<string>[] | undefined,
@@ -418,9 +403,7 @@ export const testResourceProvider = () =>
             : undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           // Branch on `olds` (engine's create-vs-update intent), not
           // `output` — replacements arrive with a precreate stub in
           // `output` but `olds === undefined`.
@@ -444,9 +427,7 @@ export const testResourceProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ id }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (hooks?.delete) {
             yield* hooks.delete(id);
           }
@@ -481,21 +462,13 @@ export interface StaticStablesResource extends Resource<
 export class StaticStablesResourceHooks extends Context.Service<
   StaticStablesResourceHooks,
   {
-    create?: (
-      id: string,
-      props: StaticStablesResourceProps,
-    ) => Effect.Effect<void, any>;
-    update?: (
-      id: string,
-      props: StaticStablesResourceProps,
-    ) => Effect.Effect<void, any>;
+    create?: (id: string, props: StaticStablesResourceProps) => Effect.Effect<void, any>;
+    update?: (id: string, props: StaticStablesResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
   }
 >()("StaticStablesResourceHooks") {}
 
-export const StaticStablesResource = Resource<StaticStablesResource>(
-  "Test.StaticStablesResource",
-);
+export const StaticStablesResource = Resource<StaticStablesResource>("Test.StaticStablesResource");
 
 export const staticStablesResourceProvider = () =>
   Provider.succeed(StaticStablesResource, {
@@ -521,9 +494,7 @@ export const staticStablesResourceProvider = () =>
       return undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
-      const hooks = Option.getOrUndefined(
-        yield* Effect.serviceOption(StaticStablesResourceHooks),
-      );
+      const hooks = Option.getOrUndefined(yield* Effect.serviceOption(StaticStablesResourceHooks));
       // Branch on `olds` (engine create vs update intent). Replacements
       // pass `output` from the previous generation if any, but engine
       // resets `olds` to `undefined` for the new instance.
@@ -535,9 +506,7 @@ export const staticStablesResourceProvider = () =>
           string: news.string ?? id,
           tags: news.tags ?? {},
           stableId: output?.stableId ?? `stable-${id}`,
-          stableArn:
-            output?.stableArn ??
-            (`arn:test:resource:us-east-1:123456789:${id}` as const),
+          stableArn: output?.stableArn ?? (`arn:test:resource:us-east-1:123456789:${id}` as const),
           replaceString: news.replaceString,
         };
       }
@@ -548,17 +517,13 @@ export const staticStablesResourceProvider = () =>
         string: news.string ?? id,
         tags: news.tags ?? {},
         stableId: output?.stableId ?? `stable-${id}`,
-        stableArn:
-          output?.stableArn ??
-          (`arn:test:resource:us-east-1:123456789:${id}` as const),
+        stableArn: output?.stableArn ?? (`arn:test:resource:us-east-1:123456789:${id}` as const),
         replaceString: news.replaceString,
       };
     }),
     delete: Effect.fn(function* ({ id, output }) {
       yield* Effect.logDebug(output.string);
-      const hooks = Option.getOrUndefined(
-        yield* Effect.serviceOption(StaticStablesResourceHooks),
-      );
+      const hooks = Option.getOrUndefined(yield* Effect.serviceOption(StaticStablesResourceHooks));
       if (hooks?.delete) {
         yield* hooks.delete(id);
       }
@@ -584,9 +549,7 @@ export interface KindStablesResource extends Resource<
   }
 > {}
 
-export const KindStablesResource = Resource<KindStablesResource>(
-  "Test.KindStablesResource",
-);
+export const KindStablesResource = Resource<KindStablesResource>("Test.KindStablesResource");
 
 export const kindStablesResourceProvider = () =>
   Provider.succeed(KindStablesResource, {
@@ -600,9 +563,7 @@ export const kindStablesResourceProvider = () =>
       return undefined;
     }),
     reconcile: Effect.fn(function* ({ news }) {
-      const upstream = news.upstream as
-        | KindStablesResource["Attributes"]
-        | undefined;
+      const upstream = news.upstream as KindStablesResource["Attributes"] | undefined;
       return {
         kind: "postgresql",
         value: news.value,
@@ -690,14 +651,10 @@ export interface PhasedTarget extends Resource<
 
 export const PhasedTarget = Resource<PhasedTarget>("Test.PhasedTarget");
 
-const phasedStableId = (replaceKey?: string) =>
-  `stable:${replaceKey ?? "default"}`;
+const phasedStableId = (replaceKey?: string) => `stable:${replaceKey ?? "default"}`;
 
 const mergeBindingEnv = (bindings: Array<any>) =>
-  Object.assign(
-    {},
-    ...bindings.map((binding) => binding.env ?? binding.data?.env ?? {}),
-  );
+  Object.assign({}, ...bindings.map((binding) => binding.env ?? binding.data?.env ?? {}));
 
 export const phasedTargetProvider = () =>
   Provider.effect(
@@ -725,9 +682,7 @@ export const phasedTargetProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, bindings }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           // Branch on `olds` not `output`: replacement-create has
           // precreate-populated `output` but engine-cleared `olds`.
           if (olds === undefined) {
@@ -753,9 +708,7 @@ export const phasedTargetProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ id }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (hooks?.delete) {
             yield* hooks.delete(id);
           }
@@ -796,9 +749,7 @@ export const noPrecreateBindingTargetProvider = () =>
         string: news.string ?? id,
         env: Object.assign(
           {},
-          ...bindings.map(
-            (binding: any) => binding.env ?? binding.data?.env ?? {},
-          ),
+          ...bindings.map((binding: any) => binding.env ?? binding.data?.env ?? {}),
         ),
       };
     }),
@@ -825,9 +776,7 @@ export interface DurationResource extends Resource<
   }
 > {}
 
-export const DurationResource = Resource<DurationResource>(
-  "Test.DurationResource",
-);
+export const DurationResource = Resource<DurationResource>("Test.DurationResource");
 
 export const durationResourceProvider = () =>
   Provider.succeed(DurationResource, {
@@ -890,9 +839,7 @@ export interface DeleteFirstResource extends Resource<
   }
 > {}
 
-export const DeleteFirstResource = Resource<DeleteFirstResource>(
-  "Test.DeleteFirstResource",
-);
+export const DeleteFirstResource = Resource<DeleteFirstResource>("Test.DeleteFirstResource");
 
 export const deleteFirstResourceProvider = () =>
   Provider.succeed(DeleteFirstResource, {
@@ -911,12 +858,8 @@ export const deleteFirstResourceProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, olds }) {
       const name = news.name ?? id;
-      const hooks = Option.getOrUndefined(
-        yield* Effect.serviceOption(TestResourceHooks),
-      );
-      const registry = Option.getOrUndefined(
-        yield* Effect.serviceOption(CollisionRegistry),
-      );
+      const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+      const registry = Option.getOrUndefined(yield* Effect.serviceOption(CollisionRegistry));
       // `olds === undefined` ⇒ create (greenfield OR replacement-create); the
       // engine clears `olds` when minting the new replacement generation.
       if (olds === undefined) {
@@ -943,12 +886,8 @@ export const deleteFirstResourceProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ id, output }) {
-      const hooks = Option.getOrUndefined(
-        yield* Effect.serviceOption(TestResourceHooks),
-      );
-      const registry = Option.getOrUndefined(
-        yield* Effect.serviceOption(CollisionRegistry),
-      );
+      const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+      const registry = Option.getOrUndefined(yield* Effect.serviceOption(CollisionRegistry));
       registry?.live.delete(output.name);
       if (hooks?.delete) {
         yield* hooks.delete(id);
@@ -956,7 +895,7 @@ export const deleteFirstResourceProvider = () =>
     }),
   });
 
-// ── DriftResource — exercises `alchemy sync` (read + reconcile drift repair).
+// ── DriftResource — exercises `alchemy drift --repair`.
 //
 // Models a cloud with an inspectable, mutable backing store (`TestCloud`):
 // `reconcile` upserts the resource into the cloud map, `read` observes it,
@@ -977,9 +916,7 @@ export interface TestCloudService {
   readonly calls: { op: "read" | "reconcile" | "delete"; id: string }[];
 }
 
-export class TestCloud extends Context.Service<TestCloud, TestCloudService>()(
-  "TestCloud",
-) {}
+export class TestCloud extends Context.Service<TestCloud, TestCloudService>()("TestCloud") {}
 
 export const makeTestCloud = (): TestCloudService => ({
   resources: new Map(),
@@ -1012,9 +949,7 @@ export const driftResourceProvider = () =>
   Provider.effect(
     DriftResource,
     Effect.gen(function* () {
-      const cloudOf = Effect.serviceOption(TestCloud).pipe(
-        Effect.map(Option.getOrUndefined),
-      );
+      const cloudOf = Effect.serviceOption(TestCloud).pipe(Effect.map(Option.getOrUndefined));
       const copy = (attrs: Record<string, any>) =>
         JSON.parse(JSON.stringify(attrs)) as DriftResource["Attributes"];
       return {
@@ -1033,9 +968,7 @@ export const driftResourceProvider = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings }) {
           const cloud = yield* cloudOf;
           cloud?.calls.push({ op: "reconcile", id });
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (olds === undefined) {
             if (hooks?.create) {
               yield* hooks.create(id, { string: news.value });
@@ -1049,9 +982,7 @@ export const driftResourceProvider = () =>
             tags: news.tags ?? {},
             env: Object.assign(
               {},
-              ...bindings.map(
-                (binding: any) => binding.env ?? binding.data?.env ?? {},
-              ),
+              ...bindings.map((binding: any) => binding.env ?? binding.data?.env ?? {}),
             ),
           };
           cloud?.resources.set(id, copy(attrs));
@@ -1136,9 +1067,7 @@ export const inDev = <A, E, R>(
   eff: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R | AlchemyContext> =>
   AlchemyContext.pipe(
-    Effect.flatMap((ctx) =>
-      eff.pipe(Effect.provideService(AlchemyContext, { ...ctx, dev: true })),
-    ),
+    Effect.flatMap((ctx) => eff.pipe(Effect.provideService(AlchemyContext, { ...ctx, dev: true }))),
   );
 
 // ModalResource — a resource registered via `ProviderLayer.dual` with
@@ -1238,9 +1167,7 @@ const modalVariant = (mode: ProviderMode) =>
           // Failure injection via the shared TestResourceHooks (same pattern
           // as bindingTargetProvider): `olds === undefined` is the engine's
           // create intent — greenfield or replacement-create.
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (olds === undefined) {
             if (hooks?.create) {
               yield* hooks.create(id, {
@@ -1266,9 +1193,7 @@ const modalVariant = (mode: ProviderMode) =>
           };
         }),
         delete: Effect.fn(function* ({ id }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
+          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
           if (hooks?.delete) {
             yield* hooks.delete(id);
           }
@@ -1287,6 +1212,97 @@ export const modalResourceProvider = () =>
   ProviderLayer.dual(ModalResource, {
     live: () => modalVariant("live"),
     local: () => modalVariant("local"),
+    dataPlane: () => modalLocalDataPlane,
+    liveDataPlane: () => modalLiveDataPlane,
+  });
+
+/**
+ * Which data-plane override a deploy-time binding client ran under.
+ * The local/live layers below stamp this; ambient (no wrap) is `"ambient"`.
+ */
+export class DataPlaneTag extends Context.Service<DataPlaneTag, "local" | "live">()(
+  "Test.DataPlaneTag",
+) {}
+
+export const modalLocalDataPlane = Layer.succeed(DataPlaneTag, "local");
+export const modalLiveDataPlane = Layer.succeed(DataPlaneTag, "live");
+
+/**
+ * Deploy-time binding used to pin Binding client routing: the returned
+ * client reads {@link DataPlaneTag}, which is only in context when the wrap
+ * provided the matching plane layer closest.
+ */
+export interface ProbeBinding extends Binding.Service<
+  ProbeBinding,
+  "Test.ProbeBinding",
+  (
+    resource: ModalResource | readonly ModalResource[],
+  ) => Effect.Effect<() => Effect.Effect<"local" | "live" | "ambient">>
+> {}
+export const ProbeBinding = Binding.Service<ProbeBinding>("Test.ProbeBinding");
+
+export const ProbeBindingLive = Layer.succeed(
+  ProbeBinding,
+  Effect.fn(function* (_resource: ModalResource | readonly ModalResource[]) {
+    return () =>
+      Effect.serviceOption(DataPlaneTag).pipe(
+        Effect.map((opt) => (Option.isSome(opt) ? opt.value : "ambient")),
+      );
+  }),
+);
+
+// CapturedConfigHost - a Platform whose Init reads `Config.String("CAPTURED_MODE")`.
+// Its provider's diff always returns `noop` without comparing `env`, so only
+// the engine's comparison of Init-captured values can plan an update (#1831).
+// `reconcile` echoes the delivered value as the `mode` attribute.
+export interface CapturedConfigHostProps extends PlatformProps {
+  main?: string;
+  env?: Record<string, unknown>;
+}
+
+export interface CapturedConfigHost extends Resource<
+  "Test.CapturedConfigHost",
+  CapturedConfigHostProps,
+  { mode: unknown }
+> {}
+
+export const CapturedConfigHost: Platform<
+  CapturedConfigHost,
+  ServerHost,
+  Main<ServerHost>,
+  HostRuntimeContext
+> = Platform("Test.CapturedConfigHost", {
+  createRuntimeContext: createHostRuntimeContext("Test.CapturedConfigHost"),
+});
+
+export const capturedConfigHostProvider = () =>
+  Provider.succeed(CapturedConfigHost, {
+    list: () => Effect.succeed([]),
+    diff: () => Effect.succeed({ action: "noop" as const }),
+    reconcile: Effect.fn(function* ({ news }) {
+      const mode = unpackEnvValue(news.env?.CAPTURED_MODE as string);
+      return { mode: Redacted.isRedacted(mode) ? Redacted.value(mode) : mode };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
+/** Declare the host with `mode` served to its Init's `Config` reads. */
+export const capturedConfigHost = (mode: string) =>
+  Effect.gen(function* () {
+    const ambient = yield* ConfigProvider.ConfigProvider;
+    return yield* CapturedConfigHost(
+      "Host",
+      { main: "index.ts" },
+      Effect.gen(function* () {
+        const value = yield* Config.String("CAPTURED_MODE");
+        return { fetch: Effect.succeed(HttpServerResponse.text(value)) };
+      }),
+    ).pipe(
+      Effect.provideService(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.orElse(ConfigProvider.fromUnknown({ CAPTURED_MODE: mode }), ambient),
+      ),
+    );
   });
 
 // Layers
@@ -1309,10 +1325,11 @@ export const TestLayers = () =>
     deleteFirstResourceProvider(),
     driftResourceProvider(),
     modalResourceProvider(),
+    capturedConfigHostProvider(),
+    ProbeBindingLive,
   );
 
-export const InMemoryTestLayers = () =>
-  Layer.mergeAll(TestLayers(), State.inMemoryState());
+export const InMemoryTestLayers = () => Layer.mergeAll(TestLayers(), State.inMemoryState());
 
 // ── Failure injection helpers ──────────────────────────────────────────────
 //
@@ -1337,37 +1354,25 @@ export type LifecycleHooks = {
   delete?: (id: string) => Effect.Effect<void, any>;
 };
 
-export const failOn = (
-  resourceId: string,
-  hook: LifecycleHook,
-): LifecycleHooks => ({
+export const failOn = (resourceId: string, hook: LifecycleHook): LifecycleHooks => ({
   [hook]: (id: string) =>
-    id === resourceId
-      ? Effect.fail(new ResourceFailure())
-      : Effect.succeed(undefined),
+    id === resourceId ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
 });
 
 export const failOnMultiple = (
   failures: Array<{ id: string; hook: LifecycleHook }>,
 ): LifecycleHooks => {
-  const idsFor = (hook: LifecycleHook) =>
-    failures.filter((f) => f.hook === hook).map((f) => f.id);
+  const idsFor = (hook: LifecycleHook) => failures.filter((f) => f.hook === hook).map((f) => f.id);
   const createFailures = idsFor("create");
   const updateFailures = idsFor("update");
   const deleteFailures = idsFor("delete");
   return {
     create: (id: string) =>
-      createFailures.includes(id)
-        ? Effect.fail(new ResourceFailure())
-        : Effect.succeed(undefined),
+      createFailures.includes(id) ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
     update: (id: string) =>
-      updateFailures.includes(id)
-        ? Effect.fail(new ResourceFailure())
-        : Effect.succeed(undefined),
+      updateFailures.includes(id) ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
     delete: (id: string) =>
-      deleteFailures.includes(id)
-        ? Effect.fail(new ResourceFailure())
-        : Effect.succeed(undefined),
+      deleteFailures.includes(id) ? Effect.fail(new ResourceFailure()) : Effect.succeed(undefined),
   };
 };
 
@@ -1377,9 +1382,7 @@ export const dieOn = (
   message = `dieOn:${resourceId}:${hook}`,
 ): LifecycleHooks => ({
   [hook]: (id: string) =>
-    id === resourceId
-      ? Effect.die(new Error(message))
-      : Effect.succeed(undefined),
+    id === resourceId ? Effect.die(new Error(message)) : Effect.succeed(undefined),
 });
 
 export const throwOn = (

@@ -48,7 +48,6 @@ export interface BatchCheckLayerAvailability extends Binding.Service<
   >
 > {}
 
-export const BatchCheckLayerAvailability =
-  Binding.Service<BatchCheckLayerAvailability>(
-    "AWS.ECRPublic.BatchCheckLayerAvailability",
-  );
+export const BatchCheckLayerAvailability = Binding.Service<BatchCheckLayerAvailability>(
+  "AWS.ECRPublic.BatchCheckLayerAvailability",
+);

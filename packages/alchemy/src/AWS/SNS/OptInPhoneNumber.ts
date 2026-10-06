@@ -29,6 +29,4 @@ export interface OptInPhoneNumber extends Binding.Service<
   >
 > {}
 
-export const OptInPhoneNumber = Binding.Service<OptInPhoneNumber>(
-  "AWS.SNS.OptInPhoneNumber",
-);
+export const OptInPhoneNumber = Binding.Service<OptInPhoneNumber>("AWS.SNS.OptInPhoneNumber");

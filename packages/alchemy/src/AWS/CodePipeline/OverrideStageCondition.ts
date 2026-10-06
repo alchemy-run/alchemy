@@ -35,10 +35,7 @@ export interface OverrideStageCondition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: OverrideStageConditionRequest,
-    ) => Effect.Effect<
-      SVC.OverrideStageConditionResponse,
-      SVC.OverrideStageConditionError
-    >
+    ) => Effect.Effect<SVC.OverrideStageConditionResponse, SVC.OverrideStageConditionError>
   >
 > {}
 export const OverrideStageCondition = Binding.Service<OverrideStageCondition>(

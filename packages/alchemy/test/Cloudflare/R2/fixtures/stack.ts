@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 import ReadBindingWorker from "./read-binding.ts";
 import ReadHttpWorker from "./read-http.ts";
 import ReadWriteBindingWorker from "./readwrite-binding.ts";
@@ -15,7 +15,7 @@ import WriteHttpWorker from "./write-http.ts";
  * it can be deployed by the test suite AND inspected directly, e.g.
  *
  * ```sh
- * alchemy tail --stage test ./test/Cloudflare/R2/fixtures/stack.ts
+ * alchemy logs --tail --stage test --config ./test/Cloudflare/R2/fixtures/stack.ts
  * ```
  */
 export default Alchemy.Stack(

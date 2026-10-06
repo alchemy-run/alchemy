@@ -46,7 +46,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
     const traces = yield* Traces;
     const t = traces.name;
     const isProd = stack.stage === "prod";
-
     const prodTracesName: Input<string> = isProd
       ? t
       : (yield* Axiom.Dataset.ref("Traces", { stage: "prod" })).name;
@@ -82,7 +81,8 @@ export const CliOverviewDashboard = Axiom.Dashboard(
       ? Output.interpolate`['${t}']`
       : "table(dataset_filter)";
     const versionFilterWhere = `\n              | where isempty(alchemy_version) or tostring(column_ifexists("service.version", "")) == alchemy_version`;
-    const charts: Input<Axiom.Chart>[] = [
+
+    const charts: Input<Axiom.DashboardProps["dashboard"]["charts"]> = [
       {
         id: "filter-bar",
         type: "SmartFilter",
@@ -99,13 +99,11 @@ export const CliOverviewDashboard = Axiom.Dashboard(
                   selectType: "list" as const,
                   options: [
                     {
-                      id: "stage",
                       key: `${stack.stage} (this stage)`,
                       value: t,
                       default: true,
                     },
                     {
-                      id: "prod",
                       key: "prod (production data)",
                       value: prodTracesName,
                     },
@@ -119,10 +117,10 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             active: true,
             selectType: "list",
             options: [
-              { id: "1h", key: "1 hour", value: "1h", default: true },
-              { id: "6h", key: "6 hours", value: "6h" },
-              { id: "1d", key: "1 day", value: "1d" },
-              { id: "7d", key: "7 days", value: "7d" },
+              { key: "1 hour", value: "1h", default: true },
+              { key: "6 hours", value: "6h" },
+              { key: "1 day", value: "1d" },
+              { key: "7 days", value: "7d" },
             ],
           },
           {
@@ -130,9 +128,9 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             type: "select",
             name: "alchemy version",
             active: true,
-            selectType: "apl",
+            selectType: "query",
             options: [],
-            apl: {
+            query: {
               apl: Output.interpolate`
                   ${declarations}
                   let opts = ${datasetExpr}
@@ -193,7 +191,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 2 — Q1 broken out per-project, plus solo-vs-team split.
       {
         id: "users-per-project",
@@ -240,7 +237,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 3 — Q4: state-store breakdown.
       {
         id: "state-store-projects-by-id",
@@ -277,7 +273,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 4 — adoption shape: project growth + CI-vs-local split.
       {
         id: "projects-over-time",
@@ -344,7 +339,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // Row 5 — keep the state-store deploy health signals for the
       // Cloudflare-hosted store (not just init, but actual deploys).
       {
@@ -381,7 +375,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // ─── Cloudflare State Store ────────────────────────────────
       //
       // Two span sources feed this section:
@@ -539,7 +532,6 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
         },
       },
-
       // ─── Resource usage & reliability ──────────────────────────
       //
       // Every provider lifecycle invocation is wrapped in a
@@ -611,7 +603,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
       },
     ];
 
-    const layout: Axiom.LayoutCell[] = [
+    const layout: Axiom.DashboardProps["dashboard"]["layout"] = [
       // Row 0 — filter bar (full width, narrow)
       { i: "filter-bar", x: 0, y: 0, w: 12, h: 2 },
       // Row 1
@@ -664,17 +656,18 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         // Empty owner = X-AXIOM-EVERYONE (org-shared). API tokens
         // can't create per-user "private" dashboards.
         owner: "",
-        description:
-          "Adoption telemetry: distinct projects, active users per project, " +
-          "CI vs local usage, and state-store backend breakdown. Plus " +
-          "Cloudflare State Store ops: distinct deployments, stack count, " +
-          "per-op latency / error rate. " +
-          "Resource usage: ranked list of resource types by lifecycle ops, " +
-          "with error rates broken down by resource type and by lifecycle method. " +
-          "Project identity = alchemy.git.origin_hash (stable across CI runs); " +
-          "user identity = alchemy.user.id (ephemeral in CI); " +
-          "Cloudflare deployment identity = alchemy.cloudflare.account_hash " +
+        description: [
+          "Adoption telemetry: distinct projects, active users per project, ",
+          "CI vs local usage, and state-store backend breakdown. Plus ",
+          "Cloudflare State Store ops: distinct deployments, stack count, ",
+          "per-op latency / error rate. ",
+          "Resource usage: ranked list of resource types by lifecycle ops, ",
+          "with error rates broken down by resource type and by lifecycle method. ",
+          "Project identity = alchemy.git.origin_hash (stable across CI runs); ",
+          "user identity = alchemy.user.id (ephemeral in CI); ",
+          "Cloudflare deployment identity = alchemy.cloudflare.account_hash ",
           "(SHA-256 of accountId, set on CLI state_store.* spans).",
+        ].join(""),
         refreshTime: 60 as const,
         schemaVersion: 2 as const,
         // Axiom requires the `qr-now-{duration}` form for relative times.

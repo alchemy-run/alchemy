@@ -7,10 +7,7 @@ import type { Volume } from "./Volume.ts";
  * `CreateSnapshot` request with `VolumeId` injected from the bound
  * {@link Volume}.
  */
-export interface CreateSnapshotRequest extends Omit<
-  ec2.CreateSnapshotRequest,
-  "VolumeId"
-> {}
+export interface CreateSnapshotRequest extends Omit<ec2.CreateSnapshotRequest, "VolumeId"> {}
 
 /**
  * Runtime binding for the `CreateSnapshot` operation scoped to the bound
@@ -43,12 +40,8 @@ export interface CreateSnapshot extends Binding.Service<
   (
     volume: Volume,
   ) => Effect.Effect<
-    (
-      request?: CreateSnapshotRequest,
-    ) => Effect.Effect<ec2.Snapshot, ec2.CreateSnapshotError>
+    (request?: CreateSnapshotRequest) => Effect.Effect<ec2.Snapshot, ec2.CreateSnapshotError>
   >
 > {}
 
-export const CreateSnapshot = Binding.Service<CreateSnapshot>(
-  "AWS.EC2.CreateSnapshot",
-);
+export const CreateSnapshot = Binding.Service<CreateSnapshot>("AWS.EC2.CreateSnapshot");

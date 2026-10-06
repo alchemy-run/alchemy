@@ -31,10 +31,7 @@ export interface UpdateConfiguration extends Binding.Service<
   () => Effect.Effect<
     (
       request?: inspector2.UpdateConfigurationRequest,
-    ) => Effect.Effect<
-      inspector2.UpdateConfigurationResponse,
-      inspector2.UpdateConfigurationError
-    >
+    ) => Effect.Effect<inspector2.UpdateConfigurationResponse, inspector2.UpdateConfigurationError>
   >
 > {}
 export const UpdateConfiguration = Binding.Service<UpdateConfiguration>(

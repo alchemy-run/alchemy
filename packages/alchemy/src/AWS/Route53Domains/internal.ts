@@ -10,9 +10,5 @@ import * as Effect from "effect/Effect";
 // crash. Wrap in Effect.succeed (same as Pricing / CloudFront KVS / ACM).
 export const ROUTE53_DOMAINS_REGION = "us-east-1" as const;
 
-export const withRoute53DomainsRegion = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
-  effect.pipe(
-    Effect.provideService(AwsRegion, Effect.succeed(ROUTE53_DOMAINS_REGION)),
-  );
+export const withRoute53DomainsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ROUTE53_DOMAINS_REGION)));

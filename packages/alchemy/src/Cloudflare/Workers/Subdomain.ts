@@ -1,7 +1,6 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -37,13 +36,7 @@ export type SubdomainAttributes = {
   initialSubdomain: string | undefined;
 };
 
-export type Subdomain = Resource<
-  TypeId,
-  SubdomainProps,
-  SubdomainAttributes,
-  never,
-  Providers
->;
+export type Subdomain = Resource<TypeId, SubdomainProps, SubdomainAttributes, never, Providers>;
 
 /**
  * The account-wide `workers.dev` subdomain singleton
@@ -114,8 +107,7 @@ export const SubdomainProvider = () =>
       return {
         accountId: acct,
         subdomain: observed,
-        initialSubdomain:
-          output !== undefined ? output.initialSubdomain : observed,
+        initialSubdomain: output !== undefined ? output.initialSubdomain : observed,
       };
     }),
 
@@ -147,8 +139,7 @@ export const SubdomainProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed name is
       //    the account's original (undefined = none existed).
-      const initialSubdomain =
-        output !== undefined ? output.initialSubdomain : observed;
+      const initialSubdomain = output !== undefined ? output.initialSubdomain : observed;
 
       // 3. Sync — claim/rename only when the observed name differs.
       if (observed === news.subdomain) {

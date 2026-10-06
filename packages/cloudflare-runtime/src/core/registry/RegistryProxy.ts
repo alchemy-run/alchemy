@@ -1,18 +1,16 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
+import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as NodeCrypto from "node:crypto";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const RegistryProxyWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/registry/RegistryProxy.worker",
-    ),
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/registry/RegistryProxy.worker"),
 };
 import {
   defaultDurableObjectUniqueKey,
+  DEFAULT_COMPATIBILITY_DATE,
   SERVICE_USER_WORKER,
 } from "../internal/constants.ts";
 import { formatInternalWorkerModules } from "../internal/internal-modules.ts";
@@ -87,15 +85,13 @@ export const RegistryProxyLive = Layer.effect(
             const service: WorkerdConfig.Service = {
               name: SERVICE_REGISTRY_PROXY,
               worker: {
-                compatibilityDate: "2025-01-01",
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 compatibilityFlags: ["service_binding_extra_handlers"],
                 modules: yield* registry
                   .read(subscribed)
                   .pipe(
                     Effect.flatMap((targets) =>
-                      Effect.promise(() =>
-                        buildWorkerModules(targets, durableObjects),
-                      ),
+                      Effect.promise(() => buildWorkerModules(targets, durableObjects)),
                     ),
                   ),
                 bindings: [
@@ -147,10 +143,7 @@ export const RegistryProxyLive = Layer.effect(
                       },
                       ...published.map((service) => ({
                         ...service,
-                        service:
-                          "service" in service
-                            ? service.service
-                            : SERVICE_USER_WORKER,
+                        service: "service" in service ? service.service : SERVICE_USER_WORKER,
                       })),
                     ],
                   });
@@ -167,17 +160,31 @@ export const RegistryProxyLive = Layer.effect(
                       detail: { proxyPort },
                     });
                   }
-                  yield* registry.subscribe(subscribed).pipe(
-                    Stream.runForEach((targets) =>
-                      http.post(`http://127.0.0.1:${proxyPort}/`, {
+                  // A replacement process starts with the original module
+                  // snapshot. Restore current targets before announcing it as
+                  // ready, then subscribe afresh for subsequent changes.
+                  const update = (targets: ResolvedTargetMap) =>
+                    HttpClient.filterStatusOk(http)
+                      .post(`http://127.0.0.1:${proxyPort}/`, {
                         body: HttpBody.jsonUnsafe(targets),
-                      }),
-                    ),
-                    Effect.forkScoped,
-                  );
+                      })
+                      .pipe(
+                        Effect.mapError(
+                          (cause) =>
+                            new SystemError({
+                              subtag: "RegistryProxyUpdate",
+                              message: "Failed to update the registry proxy targets.",
+                              cause,
+                            }),
+                        ),
+                      );
+                  yield* registry.read(subscribed).pipe(Effect.flatMap(update));
+                  yield* registry
+                    .subscribe(subscribed)
+                    .pipe(Stream.runForEach(update), Effect.forkScoped);
                 }),
               ],
-              { concurrency: "unbounded" },
+              { concurrency: "unbounded", discard: true },
             ),
           api: {
             publish: (entry) =>
@@ -230,10 +237,7 @@ export const RegistryProxyLive = Layer.effect(
 );
 
 /** Generates a stable, variable-safe class name for an external Durable Object. */
-const externalDurableObjectClassName = (
-  scriptName: string,
-  className: string,
-) =>
+const externalDurableObjectClassName = (scriptName: string, className: string) =>
   `ExternalDurableObject_${NodeCrypto.createHash("sha256").update(scriptName).update(className).digest("hex").slice(0, 16)}`;
 
 /** Builds the worker modules for the registry proxy, including a pre-populated registry and proxy classes for each external Durable Object. */

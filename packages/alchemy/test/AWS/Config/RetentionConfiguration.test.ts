@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { RetentionConfiguration } from "@/AWS/Config";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { RetentionConfiguration } from "@/AWS/Config";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,13 +20,12 @@ test.provider(
       );
       expect(error._tag).toBe("NoSuchRetentionConfigurationException");
     }),
+  { tags: ["provider:aws", "provider:aws:config", "live"] },
 );
 
 const observeRetention = config.describeRetentionConfigurations({}).pipe(
   Effect.map((r) => (r.RetentionConfigurations ?? []).at(0)),
-  Effect.catchTag("NoSuchRetentionConfigurationException", () =>
-    Effect.succeed(undefined),
-  ),
+  Effect.catchTag("NoSuchRetentionConfigurationException", () => Effect.succeed(undefined)),
 );
 
 // The retention configuration is an account-region singleton AWS always
@@ -86,5 +85,5 @@ test.provider(
         expect(afterDestroy).toBeUndefined();
       }).pipe(Effect.ensuring(restorePrior(prior)));
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:config", "live"], timeout: 120_000 },
 );

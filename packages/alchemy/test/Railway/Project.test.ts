@@ -1,27 +1,35 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwaySdk } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const readProject = Query.fn((id: string) => {
+  const project = RailwaySdk.project({ id });
+  return {
+    id: project.id,
+    name: project.name,
+    description: project.description,
+    workspaceId: project.workspaceId,
+  };
+});
+
+const readProjectDeletedAt = Query.fn((id: string) => ({
+  deletedAt: RailwaySdk.project({ id }).deletedAt,
+}));
 
 const waitUntilGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+  readProjectDeletedAt(projectId).pipe(
+    Effect.map((project) => (project.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -37,9 +45,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Railway.Project("Site", {
-            description: "v1",
-          });
+          return yield* Railway.Project("Site", { description: "v1" });
         }),
       );
 
@@ -53,11 +59,9 @@ test.provider(
       expect(created.workspaceId.length).toBeGreaterThan(0);
       expect(created.environmentId).toEqual(expect.any(String));
       expect(created.environmentId.length).toBeGreaterThan(0);
-      expect(created.url).toEqual(
-        `https://railway.com/project/${created.projectId}`,
-      );
+      expect(created.url).toEqual(`https://railway.com/project/${created.projectId}`);
 
-      const fetched = yield* railway.project({ id: created.projectId });
+      const fetched = yield* readProject(created.projectId);
       expect(fetched.id).toEqual(created.projectId);
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toEqual("v1");
@@ -65,23 +69,17 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Project);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (project) => project.projectId === created.projectId,
-      );
+      const found = listed.find((project) => project.projectId === created.projectId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.name);
       expect(found?.url).toEqual(created.url);
       expect(found?.environmentId).toEqual(created.environmentId);
 
-      const nextName =
-        created.name.slice(0, -1) + (created.name.endsWith("z") ? "y" : "z");
+      const nextName = created.name.slice(0, -1) + (created.name.endsWith("z") ? "y" : "z");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Railway.Project("Site", {
-            name: nextName,
-            description: "v2",
-          });
+          return yield* Railway.Project("Site", { name: nextName, description: "v2" });
         }),
       );
 
@@ -91,7 +89,7 @@ test.provider(
       expect(updated.environmentId).toEqual(created.environmentId);
       expect(updated.url).toEqual(created.url);
 
-      const fetchedUpdate = yield* railway.project({ id: updated.projectId });
+      const fetchedUpdate = yield* readProject(updated.projectId);
       expect(fetchedUpdate.id).toEqual(updated.projectId);
       expect(fetchedUpdate.name).toEqual(nextName);
       expect(fetchedUpdate.description).toEqual("v2");
@@ -101,5 +99,5 @@ test.provider(
       const gone = yield* waitUntilGone(created.projectId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { tags: ["provider:railway", "provider:railway:project", "live"], timeout: 120_000 },
 );

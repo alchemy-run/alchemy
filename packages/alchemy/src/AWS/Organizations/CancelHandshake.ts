@@ -27,10 +27,7 @@ export interface CancelHandshake extends Binding.Service<
   () => Effect.Effect<
     (
       request: organizations.CancelHandshakeRequest,
-    ) => Effect.Effect<
-      organizations.CancelHandshakeResponse,
-      organizations.CancelHandshakeError
-    >
+    ) => Effect.Effect<organizations.CancelHandshakeResponse, organizations.CancelHandshakeError>
   >
 > {}
 export const CancelHandshake = Binding.Service<CancelHandshake>(

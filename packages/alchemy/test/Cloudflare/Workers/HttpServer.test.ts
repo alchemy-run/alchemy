@@ -1,15 +1,12 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { expectUrlContains } from "../Utils/Http.ts";
-import HttpServerWorker, {
-  readyMarker,
-  sensitiveContext,
-} from "./fixtures/http-server-worker.ts";
+import HttpServerWorker, { readyMarker, sensitiveContext } from "./fixtures/http-server-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -45,9 +42,7 @@ const getEmptyResponse = (url: string, status: number) =>
       );
     }
     return response;
-  }).pipe(
-    Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 20 }),
-  );
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 20 }));
 
 test(
   "a Respondable defect keeps its intended response over the wire",
@@ -57,7 +52,10 @@ test(
 
     yield* getEmptyResponse(`${url}/missing`, 404);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -72,5 +70,8 @@ test(
       expect(wireResponse).not.toContain(sensitiveValue);
     }
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

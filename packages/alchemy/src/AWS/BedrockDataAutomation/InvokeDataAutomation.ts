@@ -50,10 +50,7 @@ export interface InvokeDataAutomation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: InvokeDataAutomationRequest,
-    ) => Effect.Effect<
-      bdar.InvokeDataAutomationResponse,
-      bdar.InvokeDataAutomationError
-    >
+    ) => Effect.Effect<bdar.InvokeDataAutomationResponse, bdar.InvokeDataAutomationError>
   >
 > {}
 export const InvokeDataAutomation = Binding.Service<InvokeDataAutomation>(

@@ -6,7 +6,8 @@ import * as Option from "effect/Option";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { withProfileOverride } from "../Auth/Resolve.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
@@ -44,8 +45,7 @@ export interface RpcServerEnvironment {
 /** Query parameter carrying the JSON {@link SessionEnvironment} on session websockets. */
 export const SESSION_ENV_PARAM = "alchemy-session-env";
 
-export const encodeSessionEnvironment = (env: SessionEnvironment): string =>
-  JSON.stringify(env);
+export const encodeSessionEnvironment = (env: SessionEnvironment): string => JSON.stringify(env);
 
 export const decodeSessionEnvironment = (raw: string): SessionEnvironment =>
   JSON.parse(raw) as SessionEnvironment;
@@ -53,11 +53,10 @@ export const decodeSessionEnvironment = (raw: string): SessionEnvironment =>
 export type RpcEnvironmentServices = Layer.Success<ReturnType<typeof layer>>;
 
 export const layer = (
-  environment: Pick<RpcServerEnvironment, "profile" | "envFile"> &
-    SessionEnvironment,
+  environment: Pick<RpcServerEnvironment, "profile" | "envFile"> & SessionEnvironment,
 ) =>
   Layer.mergeAll(
-    ProfileLive,
+    ProfileStoreLive,
     CredentialsStoreLive,
     Layer.succeed(AuthProviders, {}),
     ConfigProvider.layer(
@@ -76,14 +75,12 @@ export const layer = (
     Layer.succeed(Stage, environment.stack.stage),
   );
 
-export const RPC_SERVER_ENVIRONMENT_KEY =
-  "ALCHEMY_RPC_SERVER_ENVIRONMENT" as const;
+export const RPC_SERVER_ENVIRONMENT_KEY = "ALCHEMY_RPC_SERVER_ENVIRONMENT" as const;
 
 /** The spawn-time environment the parent baked into the child's process env. */
-export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> =
-  Config.string(RPC_SERVER_ENVIRONMENT_KEY).pipe(
-    Config.map((raw) => JSON.parse(raw) as RpcServerEnvironment),
-  );
+export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> = Config.String(
+  RPC_SERVER_ENVIRONMENT_KEY,
+).pipe(Config.map((raw) => JSON.parse(raw) as RpcServerEnvironment));
 
 /**
  * Legacy single-stack boot: the full environment (including the stack) baked
@@ -95,25 +92,21 @@ export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> =
 export const fromEnv = () =>
   Layer.unwrap(
     fromProcessEnv.pipe(
-      Effect.flatMap(
-        (
-          environment,
-        ): Effect.Effect<ReturnType<typeof layer>, unknown, never> =>
-          environment.stack === undefined ||
-          environment.alchemyContext === undefined
-            ? Effect.die(
-                new Error(
-                  `${RPC_SERVER_ENVIRONMENT_KEY} carries no stack/alchemyContext — this child requires the legacy single-stack environment`,
-                ),
-              )
-            : Effect.succeed(
-                layer({
-                  profile: environment.profile,
-                  envFile: environment.envFile,
-                  stack: environment.stack,
-                  alchemyContext: environment.alchemyContext,
-                }),
+      Effect.flatMap((environment): Effect.Effect<ReturnType<typeof layer>, unknown, never> =>
+        environment.stack === undefined || environment.alchemyContext === undefined
+          ? Effect.die(
+              new Error(
+                `${RPC_SERVER_ENVIRONMENT_KEY} carries no stack/alchemyContext — this child requires the legacy single-stack environment`,
               ),
+            )
+          : Effect.succeed(
+              layer({
+                profile: environment.profile,
+                envFile: environment.envFile,
+                stack: environment.stack,
+                alchemyContext: environment.alchemyContext,
+              }),
+            ),
       ),
     ),
   );

@@ -1,27 +1,28 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
-import type {
-  ProjectCreateResponse,
-  ProjectResponse,
-  ProjectUpdateResponse,
-  ProjectsResponseEdgesItemNode,
-} from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import { Railway, type Project as RailwayProject } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { RailwayEnvironment } from "./Environment.ts";
-import {
-  createRailwayName,
-  matchesAlchemyPhysicalName,
-  sanitizeRailwayName,
-} from "./Metadata.ts";
+import { waitUntilDeleted } from "./GraphQL.ts";
+import { createRailwayName, matchesAlchemyPhysicalName, sanitizeRailwayName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
+import { waitOutCreateRateLimit } from "./transient.ts";
+
+const projectFields = <E>(project: Query<RailwayProject, E>) => ({
+  id: project.id,
+  name: project.name,
+  description: project.description,
+  workspaceId: project.workspaceId,
+  primaryEnvironmentId: project.primaryEnvironmentId,
+  baseEnvironmentId: project.baseEnvironmentId,
+  deletedAt: project.deletedAt,
+});
+type CloudProject = UnwrapPlan<ReturnType<typeof projectFields>>;
 
 export interface ProjectProps {
   /**
@@ -147,40 +148,63 @@ export type Project = Resource<
  * ```
  *
  * @resource
+ * @product Project
  */
 export const Project = Resource<Project>("Railway.Project");
 
-export class ProjectNotCreated extends Data.TaggedError(
-  "Railway.ProjectNotCreated",
-)<{
+export class ProjectNotCreated extends Data.TaggedError("Railway.ProjectNotCreated")<{
   name: string;
 }> {}
 
-type CloudProject =
-  | ProjectResponse
-  | ProjectCreateResponse
-  | ProjectUpdateResponse
-  | ProjectsResponseEdgesItemNode;
+/** Workspace id from a get-by-id or list-node Project payload. */
+export const workspaceIdOf = (
+  project: {
+    readonly workspaceId?: string | null;
+    readonly workspace?: { readonly id?: string | null } | null;
+  },
+  fallback?: string,
+): string => project.workspaceId ?? project.workspace?.id ?? fallback ?? "";
+
+/** Primary environment id from a get-by-id or list-node Project payload. */
+export const environmentIdOf = (project: {
+  readonly primaryEnvironmentId?: string | null;
+  readonly baseEnvironmentId?: string | null;
+  readonly baseEnvironment?: { readonly id?: string | null } | null;
+}): string =>
+  project.primaryEnvironmentId ?? project.baseEnvironmentId ?? project.baseEnvironment?.id ?? "";
 
 const toAttrs = (
   project: CloudProject,
-  fallback?: { name?: string; workspaceId?: string },
+  fallback?: { name?: string; workspaceId?: string; environmentId?: string },
 ): Project["Attributes"] => {
   const name = project.name || fallback?.name || "";
-  const workspaceId =
-    project.workspaceId ?? project.workspace?.id ?? fallback?.workspaceId ?? "";
-  const environmentId =
-    project.primaryEnvironmentId ??
-    project.baseEnvironmentId ??
-    project.baseEnvironment?.id ??
-    "";
   return {
     projectId: project.id,
     name,
-    workspaceId,
-    environmentId,
+    workspaceId: workspaceIdOf(project, fallback?.workspaceId),
+    environmentId: environmentIdOf(project) || fallback?.environmentId || "",
     url: `https://railway.com/project/${project.id}`,
   };
+};
+
+const liveEnvironments = (projectId: string, first: number) =>
+  Query.items(
+    Railway.environments({ projectId, first }).pipe(
+      Query.map((env) => ({ id: env.id, deletedAt: env.deletedAt })),
+    ),
+  );
+
+const fillEnvironmentId = (attrs: Project["Attributes"]) => {
+  if (attrs.environmentId.length > 0) return Effect.succeed(attrs);
+  return liveEnvironments(attrs.projectId, 5).pipe(
+    Stream.filter((env) => env.deletedAt == null),
+    Stream.take(1),
+    Stream.runHead,
+    Effect.map((option) =>
+      option._tag === "Some" ? { ...attrs, environmentId: option.value.id } : attrs,
+    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(attrs)),
+  );
 };
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
@@ -193,12 +217,12 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 const isGone = (project: CloudProject | undefined) =>
   project === undefined || project.deletedAt != null;
 
+const readProject = Query.fn((id: string) => projectFields(Railway.project({ id })));
+
 const getById = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
+  readProject(projectId).pipe(
     Effect.map((project) => (isGone(project) ? undefined : project)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
   );
 
 const currentWorkspaceId = Effect.fn(function* () {
@@ -206,13 +230,14 @@ const currentWorkspaceId = Effect.fn(function* () {
   return env.workspaceId;
 });
 
-/**
- * Railway allows one project create per workspace every 30 seconds.
- * Concurrent stacks (the live suite) stampede that cap; hold a process
- * slot, retry the typed tag, and wait out the window after a success
- * so the next waiter does not 429.
- */
-const projectCreateSlot = Semaphore.makeUnsafe(1);
+const projectCreate = Query.fn(
+  (input: {
+    name: string;
+    workspaceId: string;
+    description?: string;
+    defaultEnvironmentName?: string;
+  }) => projectFields(Railway.projectCreate({ input })),
+);
 
 export const createProject = (input: {
   name: string;
@@ -220,62 +245,72 @@ export const createProject = (input: {
   description?: string;
   defaultEnvironmentName?: string;
 }) =>
-  Semaphore.withPermits(
-    projectCreateSlot,
-    1,
-  )(
-    railway
-      .projectCreate({
-        input: {
-          name: input.name,
-          workspaceId: input.workspaceId,
-          ...(input.description !== undefined
-            ? { description: input.description }
-            : {}),
-          ...(input.defaultEnvironmentName !== undefined
-            ? { defaultEnvironmentName: input.defaultEnvironmentName }
-            : {}),
-        },
-      })
-      .pipe(
-        RailwayRetry.none,
-        Effect.retry({
-          while: (e) => e._tag === "RailwayRateLimited",
-          schedule: Schedule.spaced("31 seconds"),
-          times: 8,
-        }),
-        Effect.tap(() => Effect.sleep("31 seconds")),
-      ),
+  waitOutCreateRateLimit(
+    projectCreate({
+      name: input.name,
+      workspaceId: input.workspaceId,
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.defaultEnvironmentName !== undefined
+        ? { defaultEnvironmentName: input.defaultEnvironmentName }
+        : {}),
+    }),
+  );
+
+const projectUpdate = Query.fn((id: string, input: { name?: string; description?: string }) =>
+  projectFields(Railway.projectUpdate({ id, input })),
+);
+
+const projectDelete = Query.fn((id: string) => Railway.projectDelete({ id }));
+
+const workspaceProjects = (workspaceId: string) =>
+  Query.items(
+    Railway.projects({ workspaceId, first: 50, includeDeleted: false }).pipe(
+      Query.map(projectFields),
+    ),
   );
 
 const findByName = (workspaceId: string, name: string) =>
-  railway.projects
-    .items({ workspaceId, first: 50, includeDeleted: false })
-    .pipe(
-      Stream.filter((project) => !isGone(project) && project.name === name),
-      Stream.take(1),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-    );
+  workspaceProjects(workspaceId).pipe(
+    Stream.filter((project) => !isGone(project) && project.name === name),
+    Stream.take(1),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+  );
 
 /**
- * Projects in the current token's workspace that Alchemy owns. Used by
- * {@link Project} `list()` and by child resources so nuke never enumerates
- * the whole workspace unfiltered.
+ * Workspace projects Alchemy owns. Distilled `projects.items` plus the
+ * physical-name filter — Railway has no tags. No lock, no retry override.
  */
-export const listOwnedProjects = Effect.fn(function* () {
+export const ownedProjects = Effect.fn(function* () {
   const workspaceId = yield* currentWorkspaceId();
-  const projects = yield* railway.projects
-    .items({ workspaceId, first: 50, includeDeleted: false })
-    .pipe(Stream.runCollect);
+  const projects = yield* workspaceProjects(workspaceId).pipe(Stream.runCollect);
   return Array.from(projects)
-    .filter(
-      (project) => !isGone(project) && matchesAlchemyPhysicalName(project.name),
-    )
+    .filter((project) => !isGone(project) && matchesAlchemyPhysicalName(project.name))
     .map((project) => toAttrs(project, { workspaceId }));
 });
+
+export const listOwnedProjects = ownedProjects;
+
+/**
+ * Live environment ids under a project, including the stamped primary.
+ * `list()` walks these so partition environments are not invisible.
+ */
+export const projectEnvironmentIds = (project: { projectId: string; environmentId: string }) =>
+  liveEnvironments(project.projectId, 50).pipe(
+    Stream.filter((env) => env.deletedAt == null),
+    Stream.map((env) => env.id),
+    Stream.runCollect,
+    Effect.map((ids) => {
+      const set = new Set(Array.from(ids));
+      if (project.environmentId.length > 0) {
+        set.add(project.environmentId);
+      }
+      return Array.from(set);
+    }),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed(project.environmentId.length > 0 ? [project.environmentId] : []),
+    ),
+  );
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
@@ -285,8 +320,7 @@ export const ProjectProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const workspaceChanged =
-        news.workspaceId !== undefined &&
-        news.workspaceId !== output.workspaceId;
+        news.workspaceId !== undefined && news.workspaceId !== output.workspaceId;
       if (workspaceChanged) {
         return { action: "replace" as const };
       }
@@ -295,16 +329,14 @@ export const ProjectProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const name = yield* resolveName(id, olds?.name, output?.name);
-      const workspaceId =
-        output?.workspaceId ??
-        olds?.workspaceId ??
-        (yield* currentWorkspaceId());
+      const workspaceId = output?.workspaceId ?? olds?.workspaceId ?? (yield* currentWorkspaceId());
       const found =
-        (output?.projectId !== undefined
-          ? yield* getById(output.projectId)
-          : undefined) ?? (yield* findByName(workspaceId, name));
+        (output?.projectId !== undefined ? yield* getById(output.projectId) : undefined) ??
+        (yield* findByName(workspaceId, name));
       if (found === undefined) return undefined;
-      const attrs = toAttrs(found, { name, workspaceId });
+      const attrs = yield* fillEnvironmentId(
+        toAttrs(found, { name, workspaceId, environmentId: output?.environmentId }),
+      );
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
     }),
@@ -314,15 +346,10 @@ export const ProjectProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? {};
       const name = yield* resolveName(id, props.name, output?.name);
-      const workspaceId =
-        props.workspaceId ??
-        output?.workspaceId ??
-        (yield* currentWorkspaceId());
+      const workspaceId = props.workspaceId ?? output?.workspaceId ?? (yield* currentWorkspaceId());
 
       let current: CloudProject | undefined =
-        output?.projectId !== undefined
-          ? yield* getById(output.projectId)
-          : undefined;
+        output?.projectId !== undefined ? yield* getById(output.projectId) : undefined;
       if (current === undefined) {
         current = yield* findByName(workspaceId, name);
       }
@@ -331,17 +358,11 @@ export const ProjectProvider = () =>
         const created = yield* createProject({
           name,
           workspaceId,
-          ...(props.description !== undefined
-            ? { description: props.description }
-            : {}),
+          ...(props.description !== undefined ? { description: props.description } : {}),
           ...(props.defaultEnvironmentName !== undefined
             ? { defaultEnvironmentName: props.defaultEnvironmentName }
             : {}),
-        }).pipe(
-          Effect.catchTag("RailwayValidationError", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
         current = created ?? (yield* findByName(workspaceId, name));
       }
 
@@ -352,36 +373,27 @@ export const ProjectProvider = () =>
       const nameChanged = current.name !== name;
       const observedDescription = current.description ?? undefined;
       const descriptionChanged =
-        props.description !== undefined &&
-        props.description !== observedDescription;
+        props.description !== undefined && props.description !== observedDescription;
       if (nameChanged || descriptionChanged) {
-        current = yield* railway.projectUpdate({
-          id: current.id,
-          input: {
-            ...(nameChanged ? { name } : {}),
-            ...(descriptionChanged ? { description: props.description } : {}),
-          },
+        current = yield* projectUpdate(current.id, {
+          ...(nameChanged ? { name } : {}),
+          ...(descriptionChanged ? { description: props.description } : {}),
         });
       }
 
-      return toAttrs(current, { name, workspaceId });
+      return yield* fillEnvironmentId(
+        toAttrs(current, { name, workspaceId, environmentId: output?.environmentId }),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const projectId = output.projectId;
       if (projectId.length === 0) return;
-      yield* railway
-        .projectDelete({ id: projectId })
-        .pipe(
-          Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-        );
-      yield* getById(projectId).pipe(
-        Effect.map((project) => project === undefined),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (gone) => gone,
-          times: 8,
-        }),
+      yield* projectDelete(projectId).pipe(Effect.catchTag("RailwayNotFound", () => Effect.void));
+      yield* waitUntilDeleted(
+        "Project",
+        projectId,
+        getById(projectId).pipe(Effect.map((project) => project === undefined)),
       );
     }),
   });

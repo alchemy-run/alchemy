@@ -39,7 +39,6 @@ export interface ListDeployActionExecutionTargets extends Binding.Service<
     >
   >
 > {}
-export const ListDeployActionExecutionTargets =
-  Binding.Service<ListDeployActionExecutionTargets>(
-    "AWS.CodePipeline.ListDeployActionExecutionTargets",
-  );
+export const ListDeployActionExecutionTargets = Binding.Service<ListDeployActionExecutionTargets>(
+  "AWS.CodePipeline.ListDeployActionExecutionTargets",
+);

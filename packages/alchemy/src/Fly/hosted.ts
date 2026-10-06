@@ -2,6 +2,8 @@ import type { FlyMachineService } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
@@ -12,33 +14,62 @@ import {
   resolvePackageInstallIdentity,
   type PackageInstall,
 } from "../Bundle/InstalledPackages.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../Bundle/TempRoot.ts";
 import type { Docker } from "../Docker/Docker.ts";
+import { safeHttpEffect } from "../Http.ts";
 import type { ResourceBinding } from "../Resource.ts";
+import { createContainerRuntimeContext, type HostRuntimeContext } from "../Server/Process.ts";
 import {
-  createContainerRuntimeContext,
-  type HostRuntimeContext,
-} from "../Server/Process.ts";
-import { sha256Object } from "../Util/sha256.ts";
-import type { DiskSpec, ServiceBinding } from "./MountVolume.ts";
+  copyExtraFiles,
+  contextRootOf,
+  extraFileDestination,
+  hashExtraFiles,
+  isContextRootDest,
+  posixRelUnder,
+  resolveExtraSource,
+  type ExtraFile,
+} from "../Util/extraFiles.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
+import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
+import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
 
 export type FlyHostRuntimeContext = HostRuntimeContext;
 
-export const createFlyHostRuntimeContext = createContainerRuntimeContext;
+/**
+ * Container runtime context for Fly hosts. It also serves the program's RPC
+ * methods to bound callers (see {@link serveFlyRpc}) and boots the HTTP
+ * server for a program that exposes methods but no `fetch`.
+ */
+export const createFlyHostRuntimeContext =
+  (type: string) =>
+  (id: string): HostRuntimeContext => {
+    const base = createContainerRuntimeContext(type)(id);
+    const serveBase = base.serve;
+    const serve: HostRuntimeContext["serve"] = (handler, options) => {
+      const shape = options?.shape;
+      const methods = rpcMethodsOf(shape);
+      // `safeHttpEffect` also resolves a `fetch` given as an Effect that
+      // builds the handler.
+      const wrapped = serveFlyRpc(methods, safeHttpEffect(handler));
+      const boots =
+        shape === undefined || shape.fetch !== undefined || Object.keys(methods).length > 0;
+      return serveBase(
+        wrapped,
+        boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,
+      ) as Effect.Effect<void, never, any>;
+    };
+    return Object.assign(base, { serve });
+  };
 
 export const FLY_REGISTRY = "registry.fly.io";
-export const DEFAULT_BASE_IMAGE = "oven/bun:1";
+export const DEFAULT_BASE_IMAGE = "node:26-slim";
 export const DEFAULT_PORT = 3000;
 export const MACHINE_PLATFORM = "linux/amd64";
 
 export interface FlyBuildOptions extends Bundle.BundleConfig {
   /**
    * Native or Node-only packages to install into the Machine image with
-   * `bun install` instead of bundling them. `pg` is CommonJS: Rolldown's
+   * `npm install` instead of bundling them. `pg` is CommonJS: Rolldown's
    * interop turns `Client` into a namespace (`The superclass is not a
    * constructor`). Same `build.install` shape as Lambda.
    *
@@ -50,6 +81,8 @@ export interface FlyBuildOptions extends Bundle.BundleConfig {
   readonly install?: PackageInstall;
 }
 
+export type { ExtraFile };
+
 export interface HostedProgramProps {
   main: string;
   handler?: string;
@@ -58,7 +91,15 @@ export interface HostedProgramProps {
   env?: Record<string, any>;
   isExternal?: boolean;
   build?: FlyBuildOptions;
+  /**
+   * Extra host directories baked into the image (framework client
+   * assets, Next.js `.next`, …). Hashed into `code.hash` so asset
+   * changes rebuild the image.
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
 }
+
+export { extraFileDestination };
 
 const matchesConfiguredExternal = (
   external: rolldown.InputOptions["external"],
@@ -76,9 +117,7 @@ const matchesConfiguredExternal = (
   );
 };
 
-export class DeployTokenMissing extends Data.TaggedError(
-  "Fly.DeployTokenMissing",
-)<{
+export class DeployTokenMissing extends Data.TaggedError("Fly.DeployTokenMissing")<{
   appName: string;
 }> {}
 
@@ -101,27 +140,11 @@ const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 await bootstrap(entrypoint);
 `;
 
-/** Flatten a binding/env leaf into a machine env string. Unwraps Redacted. */
+/** Unwrap env inputs while preserving serialized RuntimeContext markers. */
 export const plainEnvValue = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
   if (Redacted.isRedacted(value)) return plainEnvValue(Redacted.value(value));
   if (typeof value === "string") {
-    if (value.startsWith("{")) {
-      try {
-        const parsed: unknown = JSON.parse(value);
-        if (
-          typeof parsed === "object" &&
-          parsed !== null &&
-          (parsed as { _tag?: unknown })._tag === "Redacted" &&
-          typeof (parsed as { value?: unknown }).value === "string"
-        ) {
-          const inner = (parsed as { value: string }).value;
-          return inner.length > 0 ? inner : undefined;
-        }
-      } catch {
-        // plain string that happens to start with `{`
-      }
-    }
     return value.length > 0 ? value : undefined;
   }
   if (typeof value === "number" || typeof value === "boolean") {
@@ -130,9 +153,7 @@ export const plainEnvValue = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const toEnvRecord = (
-  env: Record<string, any> | undefined,
-): Record<string, string> =>
+export const toEnvRecord = (env: Record<string, any> | undefined): Record<string, string> =>
   Object.fromEntries(
     Object.entries(env ?? {}).flatMap(([key, value]) => {
       const raw = plainEnvValue(value);
@@ -154,12 +175,9 @@ const coerceBindingName = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const collectBindingState = (
-  bindings: readonly ResourceBinding<ServiceBinding>[],
-) => {
+export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBinding>[]) => {
   const active = bindings.filter(
-    (binding: ResourceBinding<ServiceBinding> & { action?: string }) =>
-      binding.action !== "delete",
+    (binding: ResourceBinding<ServiceBinding> & { action?: string }) => binding.action !== "delete",
   );
   const env = toEnvRecord(
     active
@@ -169,9 +187,12 @@ export const collectBindingState = (
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
   const redis: { name: string; id?: string }[] = [];
-  const buckets: { name: string; id?: string }[] = [];
+  const buckets: { name: string; id?: string; values?: Record<string, string> }[] = [];
   const postgres: { clusterId: string; variableName?: string }[] = [];
+  const targets: BoundTarget[] = [];
   for (const binding of active) {
+    const target = binding?.data?.target;
+    if (target !== undefined) targets.push(target);
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
       seen.add(mount.path);
@@ -181,44 +202,37 @@ export const collectBindingState = (
     const redisName = coerceBindingName(attached?.name);
     const redisId = coerceBindingName(attached?.id);
     if (redisName !== undefined || redisId !== undefined) {
-      redis.push({
-        name: redisName ?? "",
-        id: redisId,
-      });
+      redis.push({ name: redisName ?? "", id: redisId });
     }
     const bucket = binding?.data?.bucket as
       | {
           name?: unknown;
           id?: unknown;
           addOnId?: unknown;
+          bucketName?: unknown;
           accessKeyId?: unknown;
           secretAccessKey?: unknown;
           endpoint?: unknown;
           region?: unknown;
-          bucketName?: unknown;
         }
       | undefined;
     const bucketName = coerceBindingName(bucket?.name);
-    const bucketId =
-      coerceBindingName(bucket?.id) ?? coerceBindingName(bucket?.addOnId);
+    const bucketId = coerceBindingName(bucket?.id) ?? coerceBindingName(bucket?.addOnId);
     if (bucketName !== undefined || bucketId !== undefined) {
-      buckets.push({
-        name: bucketName ?? "",
-        id: bucketId,
-      });
-    }
-    if (bucket !== undefined) {
-      Object.assign(
-        env,
-        toEnvRecord({
-          AWS_ACCESS_KEY_ID: bucket.accessKeyId,
-          AWS_SECRET_ACCESS_KEY: bucket.secretAccessKey,
-          AWS_ENDPOINT_URL_S3: bucket.endpoint,
-          AWS_ENDPOINT_URL: bucket.endpoint,
-          AWS_REGION: bucket.region,
-          BUCKET_NAME: bucket.bucketName ?? bucket.name,
-        }),
-      );
+      // The bound Bucket's attributes carry the create-time Tigris
+      // credentials, which Fly's add-on lookup often returns empty.
+      const values: Record<string, string> = {};
+      for (const [key, value] of [
+        ["BUCKET_NAME", bucket?.bucketName],
+        ["AWS_ACCESS_KEY_ID", bucket?.accessKeyId],
+        ["AWS_SECRET_ACCESS_KEY", bucket?.secretAccessKey],
+        ["AWS_ENDPOINT_URL_S3", bucket?.endpoint],
+        ["AWS_REGION", bucket?.region],
+      ] as const) {
+        const plain = plainEnvValue(value);
+        if (plain !== undefined) values[key] = plain;
+      }
+      buckets.push({ name: bucketName ?? "", id: bucketId, values });
     }
     const pg = binding?.data?.postgres;
     const clusterId = coerceBindingName(pg?.clusterId);
@@ -232,12 +246,18 @@ export const collectBindingState = (
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres };
+  return { env, mounts, redis, buckets, postgres, targets };
 };
 
+/**
+ * HTTP 80 → HTTPS redirect plus HTTPS 443 for public Services. Private
+ * (Flycast-only) Services publish plain HTTP on 80: Fly issues no
+ * certificate for `.flycast`, so a redirect to HTTPS would break callers.
+ */
 export const defaultHttpServices = (
   port: number,
   count = 1,
+  isPublic = true,
 ): FlyMachineService[] => [
   {
     protocol: "tcp",
@@ -245,10 +265,15 @@ export const defaultHttpServices = (
     autostart: true,
     autostop: "off",
     min_machines_running: count,
-    ports: [
-      { port: 80, handlers: ["http"], force_https: true },
-      { port: 443, handlers: ["tls", "http"] },
-    ],
+    ports: isPublic
+      ? [
+          { port: 80, handlers: ["http"], force_https: true },
+          { port: 443, handlers: ["tls", "http"] },
+        ]
+      : [{ port: 80, handlers: ["http"] }],
+    // Wait until the process is listening before the proxy sends traffic.
+    // Without this, fly.dev hangs (status 0) while Node is still booting.
+    checks: [{ type: "tcp", port, interval: "10s", timeout: "2s", grace_period: "30s" }],
   },
 ];
 
@@ -264,33 +289,49 @@ const generateDockerfile = (
   props: HostedProgramProps,
   hasChunks: boolean,
   install?: Record<string, string>,
+  entryRel?: string,
 ) => {
   const port = props.port ?? DEFAULT_PORT;
   const lines = [`FROM ${props.image ?? DEFAULT_BASE_IMAGE}`, `WORKDIR /app`];
   if (install !== undefined && Object.keys(install).length > 0) {
     lines.push(
       `COPY package.json /app/package.json`,
-      `RUN bun install --production`,
+      `RUN npm install --omit=dev --no-fund --no-audit`,
     );
+  }
+  if (props.isExternal === true) {
+    lines.push(`COPY . /app`);
+    const entry = entryRel !== undefined && entryRel.length > 0 ? entryRel : "serve-node.mjs";
+    lines.push(
+      `ENV PORT=${String(port)}`,
+      `ENV HOST=0.0.0.0`,
+      `EXPOSE ${String(port)}`,
+      `ENTRYPOINT ["node", ${JSON.stringify(`/app/${entry}`)}]`,
+    );
+    return `${lines.join("\n")}\n`;
   }
   lines.push(`COPY index.mjs /app/index.mjs`);
   if (hasChunks) {
     lines.push(`COPY *.js /app/`);
   }
+  const seen = new Set<string>();
+  for (const extra of props.extraFiles ?? []) {
+    const dest = extraFileDestination(extra.dest);
+    if (isContextRootDest(dest) || seen.has(dest)) continue;
+    seen.add(dest);
+    lines.push(`COPY ${dest} /app/${dest}`);
+  }
   lines.push(
     `ENV PORT=${String(port)}`,
+    `ENV HOST=0.0.0.0`,
     `EXPOSE ${String(port)}`,
-    `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+    `ENTRYPOINT ["node", "/app/index.mjs"]`,
   );
   return `${lines.join("\n")}\n`;
 };
 
 const installManifest = (dependencies: Record<string, string>) =>
-  `${JSON.stringify(
-    { private: true, type: "module", dependencies },
-    null,
-    2,
-  )}\n`;
+  `${JSON.stringify({ private: true, type: "module", dependencies }, null, 2)}\n`;
 
 export const createFlyHostedSupport = ({
   stackName,
@@ -301,9 +342,7 @@ export const createFlyHostedSupport = ({
 }: {
   stackName: string;
   stage: string;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
   docker: Docker["Service"];
   dotAlchemy: string;
 }) => {
@@ -311,6 +350,7 @@ export const createFlyHostedSupport = ({
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = Effect.fn(function* (props: HostedProgramProps) {
@@ -337,15 +377,10 @@ export const createFlyHostedSupport = ({
             for (const root of installRoots) {
               if (matchesPackageRoot(moduleId, root)) return true;
             }
-            return matchesConfiguredExternal(
-              configuredExternal,
-              moduleId,
-              parentId,
-              isResolved,
-            );
+            return matchesConfiguredExternal(configuredExternal, moduleId, parentId, isResolved);
           },
           resolve: {
-            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+            conditionNames: [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -362,16 +397,20 @@ export const createFlyHostedSupport = ({
       );
     });
 
-    const bundleOutput = props.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
+    if (props.isExternal === true) {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const bytes = yield* fs.readFile(realMain);
+      const hash = yield* sha256(bytes);
+      return { files: [{ path: path.basename(realMain), content: bytes }], hash };
+    }
+
+    const bundleOutput = yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
 
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
       content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
+        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     }));
 
     return { files, hash: bundleOutput.hash };
@@ -381,6 +420,7 @@ export const createFlyHostedSupport = ({
     const bundled = yield* bundleProgram(props);
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
+    const path = yield* Path.Path;
     const requested = yield* normalizeInstallTargets(props.build?.install);
     const identity =
       Object.keys(requested).length > 0
@@ -390,27 +430,34 @@ export const createFlyHostedSupport = ({
       identity !== undefined && Object.keys(identity.resolved).length > 0
         ? identity.resolved
         : undefined;
-    const packageJson =
-      install === undefined ? undefined : installManifest(install);
-    const dockerfile = generateDockerfile(
-      props,
-      bundled.files.length > 1,
-      install,
+    const packageJson = install === undefined ? undefined : installManifest(install);
+    const extras = (props.extraFiles ?? []).map((file) => ({
+      source: file.source,
+      dest: file.dest,
+    }));
+    const root = contextRootOf(realMain, extras, path, (source) =>
+      resolveExtraSource(source, path),
     );
+    const entryRel =
+      props.isExternal === true
+        ? (posixRelUnder(root, realMain, path) ?? path.basename(realMain))
+        : undefined;
+    const dockerfile = generateDockerfile(props, bundled.files.length > 1, install, entryRel);
+    const extraFiles = yield* hashExtraFiles(props.extraFiles);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
       packageJson,
+      extraFiles,
+      extraFilesIncludesNodeModules: true,
     })).slice(0, 16);
-    return { bundled, dockerfile, codeHash, packageJson };
+    return { bundled, dockerfile, codeHash, packageJson, entryRel };
   });
 
   const imageExists = (imageRef: string) =>
     docker.image.inspect(imageRef).pipe(
       Effect.map(() => true),
-      Effect.catchReason("PlatformError", "NotFound", () =>
-        Effect.succeed(false),
-      ),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
     );
 
   const pushBackoff = Schedule.exponential("2 seconds");
@@ -432,8 +479,8 @@ export const createFlyHostedSupport = ({
   }) {
     const note = input.session?.note ?? ((_message: string) => Effect.void);
     yield* note(`Bundling ${input.id} program...`);
-    const { bundled, dockerfile, codeHash, packageJson } =
-      yield* computeCodeHash(input.props);
+    const { bundled, dockerfile, codeHash, packageJson } = yield* computeCodeHash(input.props);
+    yield* note(`Hashed ${input.id} (${codeHash})`);
     const repo = sanitizeImageRepo(input.id);
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${repo}-${codeHash}`;
 
@@ -443,38 +490,46 @@ export const createFlyHostedSupport = ({
 
     if (!(yield* imageExists(imageRef))) {
       const realMain = yield* resolveMainPath(input.props.main);
-      const contextDir = yield* getStableContextDir(
-        realMain,
-        dotAlchemy,
-        `${input.id}-image`,
-      );
-      const files = bundled.files.map((file, index) => ({
-        path: index === 0 ? "index.mjs" : file.path,
-        content: file.content,
-      }));
-      if (packageJson !== undefined) {
-        files.push({
-          path: "package.json",
-          content: new TextEncoder().encode(packageJson),
-        });
+      const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${input.id}-image`);
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const files =
+        input.props.isExternal === true
+          ? packageJson !== undefined
+            ? [{ path: "package.json", content: new TextEncoder().encode(packageJson) }]
+            : []
+          : [
+              ...bundled.files.map((file, index) => ({
+                path: index === 0 ? "index.mjs" : file.path,
+                content: file.content,
+              })),
+              ...(packageJson !== undefined
+                ? [{ path: "package.json", content: new TextEncoder().encode(packageJson) }]
+                : []),
+            ];
+      yield* docker.materialize({ context: contextDir, dockerfile, files });
+      yield* copyExtraFiles(contextDir, input.props.extraFiles);
+      if (input.props.isExternal === true) {
+        const extras = (input.props.extraFiles ?? []).map((file) => ({
+          source: file.source,
+          dest: file.dest,
+        }));
+        const root = contextRootOf(realMain, extras, path, (source) =>
+          resolveExtraSource(source, path),
+        );
+        const entryRel = posixRelUnder(root, realMain, path) ?? path.basename(realMain);
+        const dest = path.join(contextDir, entryRel);
+        if (!(yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false)))) {
+          yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+          yield* fs.copy(realMain, dest, { overwrite: true });
+        }
       }
-      yield* docker.materialize({
-        context: contextDir,
-        dockerfile,
-        files,
-      });
       yield* note(`Building container image ${imageRef}...`);
-      yield* docker.image.build({
-        context: contextDir,
-        tag: imageRef,
-        platform: MACHINE_PLATFORM,
-      });
+      yield* docker.image.build({ context: contextDir, tag: imageRef, platform: MACHINE_PLATFORM });
       yield* note(`Built ${imageRef}`);
     }
 
-    const minted = yield* machines.createAppDeployToken({
-      app_name: input.appName,
-    });
+    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
     const token = minted.token;
     if (token === undefined || token.length === 0) {
       return yield* new DeployTokenMissing({ appName: input.appName });
@@ -482,17 +537,8 @@ export const createFlyHostedSupport = ({
 
     yield* note(`Pushing ${imageRef}...`);
     yield* docker.image
-      .push(imageRef, {
-        server: FLY_REGISTRY,
-        username: "x",
-        password: Redacted.make(token),
-      })
-      .pipe(
-        Effect.retry({
-          times: 3,
-          schedule: pushBackoff,
-        }),
-      );
+      .push(imageRef, { server: FLY_REGISTRY, username: "x", password: Redacted.make(token) })
+      .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
     yield* note(`Pushed ${imageRef}`);
     return { imageRef, codeHash };
   });
@@ -502,18 +548,12 @@ export const createFlyHostedSupport = ({
     return codeHash;
   });
 
-  return {
-    alchemyEnv,
-    bundleProgram,
-    computeCodeHash,
-    resolveImage,
-    hash,
-  };
+  return { alchemyEnv, bundleProgram, computeCodeHash, resolveImage, hash };
 };
 
 /**
  * Bundle a Sprite program the same way {@link createFlyHostedSupport}
- * bundles a Service — rolldown + bun bootstrap — without building a
+ * bundles a Service — rolldown + Node bootstrap — without building a
  * Docker image. The provider writes the files onto the Sprite.
  */
 export const createSpriteHostedSupport = ({
@@ -523,14 +563,13 @@ export const createSpriteHostedSupport = ({
 }: {
   stackName: string;
   stage: string;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
 }) => {
   const alchemyEnv = {
     ALCHEMY_STACK_NAME: stackName,
     ALCHEMY_STAGE: stage,
     ALCHEMY_PHASE: "runtime",
+    HOST: "0.0.0.0",
   };
 
   const bundleProgram = Effect.fn(function* (props: HostedProgramProps) {
@@ -555,7 +594,7 @@ export const createSpriteHostedSupport = ({
             ...((props.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+            conditionNames: [...Bundle.NODE_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -578,9 +617,7 @@ export const createSpriteHostedSupport = ({
     const files = bundleOutput.files.map((file) => ({
       path: file.path,
       content:
-        typeof file.content === "string"
-          ? new TextEncoder().encode(file.content)
-          : file.content,
+        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
     }));
 
     return { files, hash: bundleOutput.hash };

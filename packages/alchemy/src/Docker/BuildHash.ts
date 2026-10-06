@@ -6,12 +6,12 @@
  * image packaging; NOT exported from the Docker barrel.
  */
 
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 
 export interface DockerBuildSource {
   context: string;
@@ -33,11 +33,9 @@ interface DockerIgnore {
   rules: ReadonlyArray<DockerIgnoreRule>;
 }
 
-const normalizeRelativePath = (value: string) =>
-  value.replaceAll("\\", "/").replace(/^\.\/+/, "");
+const normalizeRelativePath = (value: string) => value.replaceAll("\\", "/").replace(/^\.\/+/, "");
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+const escapeRegExp = (value: string) => value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 
 /**
  * Compile Docker's ordered ignore-pattern form into a path matcher.
@@ -45,6 +43,20 @@ const escapeRegExp = (value: string) =>
  * Matching is rooted at the context. Descendants of a matched directory are
  * handled by checking each path's parents in {@link isDockerIgnored}.
  */
+const cleanDockerIgnorePath = (value: string) => {
+  const parts: string[] = [];
+  for (const part of value.split("/")) {
+    if (part.length === 0 || part === ".") continue;
+    if (part === "..") {
+      if (parts.length > 0 && parts.at(-1) !== "..") parts.pop();
+      else parts.push(part);
+    } else {
+      parts.push(part);
+    }
+  }
+  return parts.join("/");
+};
+
 const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
   if (raw.startsWith("#")) {
     return undefined;
@@ -63,10 +75,12 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
     pattern = pattern.slice(1).trim();
   }
 
-  pattern = pattern
-    .replace(/^\.\/+/, "")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  pattern = cleanDockerIgnorePath(
+    pattern
+      .replace(/^\.\/+/, "")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, ""),
+  );
   if (pattern.length === 0 || pattern === ".") {
     return undefined;
   }
@@ -118,14 +132,9 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
   };
 };
 
-const isDockerIgnored = (
-  relativePath: string,
-  rules: ReadonlyArray<DockerIgnoreRule>,
-) => {
+const isDockerIgnored = (relativePath: string, rules: ReadonlyArray<DockerIgnoreRule>) => {
   const segments = normalizeRelativePath(relativePath).split("/");
-  const candidates = segments.map((_, index) =>
-    segments.slice(0, index + 1).join("/"),
-  );
+  const candidates = segments.map((_, index) => segments.slice(0, index + 1).join("/"));
   let ignored = false;
   for (const rule of rules) {
     if (candidates.some((candidate) => rule.expression.test(candidate))) {
@@ -151,14 +160,10 @@ export const resolveDockerBuildPaths = Effect.fn(function* (
     : path.resolve(context, source.dockerfile);
 
   if (!(yield* fs.exists(context))) {
-    return yield* Effect.fail(
-      new Error(`Docker build context does not exist: ${context}`),
-    );
+    return yield* Effect.fail(new Error(`Docker build context does not exist: ${context}`));
   }
   if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.fail(
-      new Error(`Dockerfile does not exist: ${dockerfile}`),
-    );
+    return yield* Effect.fail(new Error(`Dockerfile does not exist: ${dockerfile}`));
   }
 
   return { context, dockerfile };
@@ -186,22 +191,67 @@ const resolveDockerIgnore = Effect.fn(function* ({
   }
 
   const content = yield* fs.readFileString(ignoreFile);
-  const relativePath = normalizeRelativePath(
-    path.relative(context, ignoreFile),
-  );
+  const relativePath = normalizeRelativePath(path.relative(context, ignoreFile));
   return {
     content,
     path:
-      relativePath === ".." ||
-      relativePath.startsWith("../") ||
-      path.isAbsolute(relativePath)
+      relativePath === ".." || relativePath.startsWith("../") || path.isAbsolute(relativePath)
         ? undefined
         : relativePath,
-    rules: content.split(/\r?\n/).flatMap((line) => {
-      const rule = compileDockerIgnoreRule(line);
-      return rule === undefined ? [] : [rule];
-    }),
+    rules: content
+      .replace(/^\uFEFF/, "")
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        const rule = compileDockerIgnoreRule(line);
+        return rule === undefined ? [] : [rule];
+      }),
   } satisfies DockerIgnore;
+});
+
+interface DockerBuildContextSelection {
+  /** Absolute build-context directory. */
+  readonly context: string;
+  /** Absolute Dockerfile path. */
+  readonly dockerfile: string;
+  /** Dockerfile path relative to the context, if it is inside the context. */
+  readonly dockerfilePath: string | undefined;
+  /** Return whether an entry must be sent to the Docker builder. */
+  readonly includes: (relativePath: string) => boolean;
+}
+
+/**
+ * Select the effective files sent for a Docker build.
+ *
+ * Dockerfile-specific ignore files take precedence over `.dockerignore`.
+ * The Dockerfile and selected ignore file stay in the upload even when an
+ * ignore rule matches them, as Docker clients must send both to the builder.
+ */
+export const selectDockerBuildContext = Effect.fn(function* (
+  source: Pick<DockerBuildSource, "context" | "dockerfile">,
+) {
+  const path = yield* Path.Path;
+  const { context, dockerfile } = yield* resolveDockerBuildPaths(source);
+  const dockerignore = yield* resolveDockerIgnore({ context, dockerfile });
+  const relativeDockerfile = normalizeRelativePath(path.relative(context, dockerfile));
+  const dockerfilePath =
+    relativeDockerfile === ".." ||
+    relativeDockerfile.startsWith("../") ||
+    path.isAbsolute(relativeDockerfile)
+      ? undefined
+      : relativeDockerfile;
+
+  return {
+    context,
+    dockerfile,
+    dockerfilePath,
+    includes: (relativePath: string) => {
+      const normalized = normalizeRelativePath(relativePath);
+      if (normalized === dockerfilePath || normalized === dockerignore?.path) {
+        return true;
+      }
+      return !isDockerIgnored(normalized, dockerignore?.rules ?? []);
+    },
+  } satisfies DockerBuildContextSelection;
 });
 
 /**
@@ -218,9 +268,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
   const path = yield* Path.Path;
   const { context, dockerfile } = yield* resolveDockerBuildPaths(source);
   const dockerignore =
-    mode === "effective"
-      ? yield* resolveDockerIgnore({ context, dockerfile })
-      : undefined;
+    mode === "effective" ? yield* resolveDockerIgnore({ context, dockerfile }) : undefined;
   const hasher = yield* Effect.sync(() => crypto.createHash("sha256"));
 
   yield* Effect.sync(() =>

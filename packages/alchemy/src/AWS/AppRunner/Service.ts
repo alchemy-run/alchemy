@@ -14,11 +14,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -31,23 +27,14 @@ import {
   type ServerHost,
 } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "../../Tags.ts";
 import { toSeconds } from "../../Util/Duration.ts";
 import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readAppRunnerTags,
-  syncAppRunnerTags,
-  toWireTags,
-} from "./internal.ts";
+import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
 /**
  * Container image source for an App Runner service.
@@ -233,12 +220,10 @@ export interface ServiceProps extends PlatformProps {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for the Effect-native entrypoint: rolldown
-   * `input`/`output` overrides plus pure-annotation options (`pure`).
-   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
-   * `@distilled.cloud/*` are annotated as pure by default so unused code
-   * from those packages is tree-shaken; list additional packages via
-   * `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for the Effect-native entrypoint. Unused
+   * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
+   * marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
   /**
@@ -388,11 +373,7 @@ export interface Service extends Resource<
   Providers
 > {}
 
-export type ServiceServices =
-  | Credentials
-  | Region
-  | ServerHost
-  | AWSEnvironment;
+export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 export type ServiceShape = Main<ServiceServices>;
 
@@ -463,16 +444,13 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -482,18 +460,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -520,20 +487,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * @resource
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("AWS.AppRunner.Service", {
-  createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
-    id: string,
-  ) => ServiceRuntimeContext,
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("AWS.AppRunner.Service", {
+    createRuntimeContext: createHostRuntimeContext("AWS.AppRunner.Service") as (
+      id: string,
+    ) => ServiceRuntimeContext,
+  });
 
-class AppRunnerServiceNotSettled extends Data.TaggedError(
-  "AppRunnerServiceNotSettled",
-)<{
+class AppRunnerServiceNotSettled extends Data.TaggedError("AppRunnerServiceNotSettled")<{
   readonly serviceArn: string;
   readonly status: string;
 }> {}
@@ -570,17 +531,11 @@ const normalizeMemory = (memory: string): string =>
   })[memory] ?? memory;
 
 /** Unwrap distilled's sensitive-string decoding to a plain value. */
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined || typeof value === "string"
-    ? value
-    : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined || typeof value === "string" ? value : Redacted.value(value);
 
 const plainRecord = (
-  record:
-    | { [key: string]: string | Redacted.Redacted<string> | undefined }
-    | undefined,
+  record: { [key: string]: string | Redacted.Redacted<string> | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(record ?? {}).flatMap(([key, value]) => {
@@ -589,16 +544,10 @@ const plainRecord = (
     }),
   );
 
-const sameRecord = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
+const sameRecord = (a: Record<string, string>, b: Record<string, string>): boolean => {
   const aKeys = Object.keys(a).sort();
   const bKeys = Object.keys(b).sort();
-  return (
-    aKeys.length === bKeys.length &&
-    aKeys.every((k, i) => k === bKeys[i] && a[k] === b[k])
-  );
+  return aKeys.length === bKeys.length && aKeys.every((k, i) => k === bKeys[i] && a[k] === b[k]);
 };
 
 /** Props with the source resolved (either given or built from `main`). */
@@ -606,19 +555,15 @@ interface ResolvedServiceProps extends ServiceProps {
   imageRepository: ServiceImageRepository;
 }
 
-const toWireSource = (
-  props: ResolvedServiceProps,
-): apprunner.SourceConfiguration => ({
+const toWireSource = (props: ResolvedServiceProps): apprunner.SourceConfiguration => ({
   ImageRepository: {
     ImageIdentifier: props.imageRepository.imageIdentifier,
     ImageRepositoryType: props.imageRepository.imageRepositoryType,
     ImageConfiguration: {
       Port: props.imageRepository.port,
       StartCommand: props.imageRepository.startCommand,
-      RuntimeEnvironmentVariables:
-        props.imageRepository.runtimeEnvironmentVariables,
-      RuntimeEnvironmentSecrets:
-        props.imageRepository.runtimeEnvironmentSecrets,
+      RuntimeEnvironmentVariables: props.imageRepository.runtimeEnvironmentVariables,
+      RuntimeEnvironmentSecrets: props.imageRepository.runtimeEnvironmentSecrets,
     },
   },
   AutoDeploymentsEnabled: props.autoDeploymentsEnabled,
@@ -659,8 +604,7 @@ const toWireNetwork = (
     ? undefined
     : {
         EgressConfiguration:
-          network.egressType !== undefined ||
-          network.vpcConnectorArn !== undefined
+          network.egressType !== undefined || network.vpcConnectorArn !== undefined
             ? {
                 EgressType: network.egressType,
                 VpcConnectorArn: network.vpcConnectorArn,
@@ -680,8 +624,7 @@ const toWireObservability = (
     ? undefined
     : {
         ObservabilityEnabled: observability.observabilityEnabled,
-        ObservabilityConfigurationArn:
-          observability.observabilityConfigurationArn,
+        ObservabilityConfigurationArn: observability.observabilityConfigurationArn,
       };
 
 /**
@@ -701,8 +644,7 @@ const sourceDrifted = (
     image?.ImageIdentifier !== desired.imageIdentifier ||
     image?.ImageRepositoryType !== desired.imageRepositoryType ||
     (desired.port !== undefined && config?.Port !== desired.port) ||
-    (desired.startCommand !== undefined &&
-      plain(config?.StartCommand) !== desired.startCommand) ||
+    (desired.startCommand !== undefined && plain(config?.StartCommand) !== desired.startCommand) ||
     (desired.runtimeEnvironmentVariables !== undefined &&
       !sameRecord(
         plainRecord(config?.RuntimeEnvironmentVariables),
@@ -716,8 +658,7 @@ const sourceDrifted = (
     (news.autoDeploymentsEnabled !== undefined &&
       observed?.AutoDeploymentsEnabled !== news.autoDeploymentsEnabled) ||
     (news.accessRoleArn !== undefined &&
-      observed?.AuthenticationConfiguration?.AccessRoleArn !==
-        news.accessRoleArn)
+      observed?.AuthenticationConfiguration?.AccessRoleArn !== news.accessRoleArn)
   );
 };
 
@@ -726,11 +667,9 @@ const instanceDrifted = (
   observed: apprunner.InstanceConfiguration | undefined,
 ): boolean =>
   desired !== undefined &&
-  ((desired.cpu !== undefined &&
-    normalizeCpu(observed?.Cpu ?? "") !== normalizeCpu(desired.cpu)) ||
+  ((desired.cpu !== undefined && normalizeCpu(observed?.Cpu ?? "") !== normalizeCpu(desired.cpu)) ||
     (desired.memory !== undefined &&
-      normalizeMemory(observed?.Memory ?? "") !==
-        normalizeMemory(desired.memory)) ||
+      normalizeMemory(observed?.Memory ?? "") !== normalizeMemory(desired.memory)) ||
     (desired.instanceRoleArn !== undefined &&
       observed?.InstanceRoleArn !== desired.instanceRoleArn));
 
@@ -739,13 +678,10 @@ const healthCheckDrifted = (
   observed: apprunner.HealthCheckConfiguration | undefined,
 ): boolean =>
   desired !== undefined &&
-  ((desired.protocol !== undefined &&
-    observed?.Protocol !== desired.protocol) ||
+  ((desired.protocol !== undefined && observed?.Protocol !== desired.protocol) ||
     (desired.path !== undefined && observed?.Path !== desired.path) ||
-    (desired.interval !== undefined &&
-      observed?.Interval !== toSeconds(desired.interval)) ||
-    (desired.timeout !== undefined &&
-      observed?.Timeout !== toSeconds(desired.timeout)) ||
+    (desired.interval !== undefined && observed?.Interval !== toSeconds(desired.interval)) ||
+    (desired.timeout !== undefined && observed?.Timeout !== toSeconds(desired.timeout)) ||
     (desired.healthyThreshold !== undefined &&
       observed?.HealthyThreshold !== desired.healthyThreshold) ||
     (desired.unhealthyThreshold !== undefined &&
@@ -759,13 +695,10 @@ const networkDrifted = (
   ((desired.egressType !== undefined &&
     observed?.EgressConfiguration?.EgressType !== desired.egressType) ||
     (desired.vpcConnectorArn !== undefined &&
-      observed?.EgressConfiguration?.VpcConnectorArn !==
-        desired.vpcConnectorArn) ||
+      observed?.EgressConfiguration?.VpcConnectorArn !== desired.vpcConnectorArn) ||
     (desired.isPubliclyAccessible !== undefined &&
-      observed?.IngressConfiguration?.IsPubliclyAccessible !==
-        desired.isPubliclyAccessible) ||
-    (desired.ipAddressType !== undefined &&
-      observed?.IpAddressType !== desired.ipAddressType));
+      observed?.IngressConfiguration?.IsPubliclyAccessible !== desired.isPubliclyAccessible) ||
+    (desired.ipAddressType !== undefined && observed?.IpAddressType !== desired.ipAddressType));
 
 const observabilityDrifted = (
   desired: ServiceObservabilityProps | undefined,
@@ -835,41 +768,30 @@ const reapLogGroup = Effect.fn(function* (logGroupName: string) {
   const deleteGroup = logs.deleteLogGroup({ logGroupName }).pipe(
     Effect.retry({
       while: (error) =>
-        error._tag === "OperationAbortedException" ||
-        error._tag === "ServiceUnavailableException",
-      schedule: Schedule.max([
-        Schedule.exponential("250 millis"),
-        Schedule.recurs(6),
-      ]),
+        error._tag === "OperationAbortedException" || error._tag === "ServiceUnavailableException",
+      schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(6)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.timeoutOrElse({
       duration: "30 seconds",
-      orElse: () =>
-        Effect.logWarning(
-          `Timed out deleting App Runner log group ${logGroupName}`,
-        ),
+      orElse: () => Effect.logWarning(`Timed out deleting App Runner log group ${logGroupName}`),
     }),
   );
 
   // A describe that cannot complete in time is not deletion proof —
   // assume the group is still present and let the bounded loop converge.
-  const observeGroup = logs
-    .describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 })
-    .pipe(
-      Effect.map((response) =>
-        (response.logGroups ?? []).some(
-          (group) => group.logGroupName === logGroupName,
-        ),
-      ),
-      Effect.timeoutOrElse({
-        duration: "15 seconds",
-        orElse: () =>
-          Effect.logWarning(
-            `Timed out observing App Runner log group ${logGroupName} — assuming still present`,
-          ).pipe(Effect.as(true)),
-      }),
-    );
+  const observeGroup = logs.describeLogGroups({ logGroupNamePrefix: logGroupName, limit: 1 }).pipe(
+    Effect.map((response) =>
+      (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
+    ),
+    Effect.timeoutOrElse({
+      duration: "15 seconds",
+      orElse: () =>
+        Effect.logWarning(
+          `Timed out observing App Runner log group ${logGroupName} — assuming still present`,
+        ).pipe(Effect.as(true)),
+    }),
+  );
 
   yield* deleteGroup;
 
@@ -887,9 +809,7 @@ const reapLogGroup = Effect.fn(function* (logGroupName: string) {
   );
 
   if (stillPresent) {
-    yield* Effect.logWarning(
-      `App Runner log group ${logGroupName} kept reappearing after delete`,
-    );
+    yield* Effect.logWarning(`App Runner log group ${logGroupName} kept reappearing after delete`);
   }
 });
 
@@ -960,9 +880,7 @@ export const ServiceProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(
-                      `Role '${roleName}' already exists and is not managed by alchemy`,
-                    ),
+                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
                 ),
               ),
             ),
@@ -1023,9 +941,8 @@ export const ServiceProvider = () =>
         bindings: ResourceBinding<Service["Binding"]>[];
       }) {
         const activeBindings = bindings.filter(
-          (
-            binding: ResourceBinding<Service["Binding"]> & { action?: string },
-          ) => binding.action !== "delete",
+          (binding: ResourceBinding<Service["Binding"]> & { action?: string }) =>
+            binding.action !== "delete",
         );
 
         const env = activeBindings
@@ -1080,8 +997,7 @@ export const ServiceProvider = () =>
               external: [
                 "bun",
                 "bun:*",
-                ...((props.build?.input?.external as string[] | undefined) ??
-                  []),
+                ...((props.build?.input?.external as string[] | undefined) ?? []),
               ],
               resolve: {
                 conditionNames: [...Bundle.BUN_CONDITION_NAMES],
@@ -1145,16 +1061,11 @@ await bootstrap(entrypoint);
         port: number;
       }) {
         const realMain = yield* resolveMainPath(props.main!);
-        const contextDir = yield* getStableContextDir(
-          realMain,
-          dotAlchemy,
-          `${id}-image`,
-        );
+        const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
         const imageUri = `${repositoryUri}:${hash}`;
 
         const generatedDockerfile = (() => {
-          const base =
-            props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
+          const base = props.docker?.base ?? "public.ecr.aws/docker/library/bun:1";
           return [
             `FROM ${base}`,
             `WORKDIR /app`,
@@ -1194,15 +1105,9 @@ await bootstrap(entrypoint);
       const readService = Effect.fn(function* (arn: string) {
         const response = yield* apprunner
           .describeService({ ServiceArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const service = response?.Service;
-        return service === undefined || statusIs(service.Status, "DELETED")
-          ? undefined
-          : service;
+        return service === undefined || statusIs(service.Status, "DELETED") ? undefined : service;
       });
 
       /** Find a live service by name (list has no name filter). */
@@ -1229,8 +1134,7 @@ await bootstrap(entrypoint);
       const waitForSettled = Effect.fn(function* (arn: string) {
         return yield* readService(arn).pipe(
           Effect.flatMap((service) =>
-            service !== undefined &&
-            statusIs(service.Status, "OPERATION_IN_PROGRESS")
+            service !== undefined && statusIs(service.Status, "OPERATION_IN_PROGRESS")
               ? Effect.fail(
                   new AppRunnerServiceNotSettled({
                     serviceArn: arn,
@@ -1241,10 +1145,7 @@ await bootstrap(entrypoint);
           ),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -1258,9 +1159,7 @@ await bootstrap(entrypoint);
             if (service === undefined) return Effect.void;
             if (statusIs(service.Status, "DELETE_FAILED")) {
               return Effect.fail(
-                new Error(
-                  `App Runner service '${arn}' failed to delete (status: DELETE_FAILED)`,
-                ),
+                new Error(`App Runner service '${arn}' failed to delete (status: DELETE_FAILED)`),
               );
             }
             return Effect.fail(
@@ -1272,10 +1171,7 @@ await bootstrap(entrypoint);
           }),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -1323,15 +1219,11 @@ await bootstrap(entrypoint);
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // The encryption key is create-only.
-          if (
-            (news?.kmsKeyArn ?? undefined) !== (olds?.kmsKeyArn ?? undefined)
-          ) {
+          if ((news?.kmsKeyArn ?? undefined) !== (olds?.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -1346,13 +1238,7 @@ await bootstrap(entrypoint);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
           const name = output?.serviceName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -1371,17 +1257,14 @@ await bootstrap(entrypoint);
           let platformAttributes = emptyPlatformAttributes;
           if (news.main !== undefined) {
             const instanceRoleName =
-              output?.instanceRoleName ??
-              (yield* createRoleName(id, "instance-role"));
+              output?.instanceRoleName ?? (yield* createRoleName(id, "instance-role"));
             const accessRoleName =
-              output?.accessRoleName ??
-              (yield* createRoleName(id, "access-role"));
+              output?.accessRoleName ?? (yield* createRoleName(id, "access-role"));
             const policyName = yield* createPhysicalName({
               id: `${id}-policy`,
               maxLength: 128,
             });
-            const repositoryName =
-              output?.repositoryName ?? (yield* createRepositoryName(id));
+            const repositoryName = output?.repositoryName ?? (yield* createRepositoryName(id));
 
             // Ensure roles + repository. Each helper is idempotent (creates
             // on miss, adopts on race) so the same sequence runs on initial
@@ -1497,9 +1380,7 @@ await bootstrap(entrypoint);
 
           // 1. Observe — cloud state is authoritative; output is only an
           // identifier cache.
-          let observed = output?.serviceArn
-            ? yield* readService(output.serviceArn)
-            : undefined;
+          let observed = output?.serviceArn ? yield* readService(output.serviceArn) : undefined;
           if (observed === undefined) {
             observed = yield* findByName(name);
           }
@@ -1513,20 +1394,11 @@ await bootstrap(entrypoint);
               .createService({
                 ServiceName: name,
                 SourceConfiguration: toWireSource(desired),
-                InstanceConfiguration: toWireInstance(
-                  desired.instanceConfiguration,
-                ),
-                HealthCheckConfiguration: toWireHealthCheck(
-                  desired.healthCheckConfiguration,
-                ),
-                NetworkConfiguration: toWireNetwork(
-                  desired.networkConfiguration,
-                ),
-                AutoScalingConfigurationArn:
-                  desired.autoScalingConfigurationArn,
-                ObservabilityConfiguration: toWireObservability(
-                  desired.observabilityConfiguration,
-                ),
+                InstanceConfiguration: toWireInstance(desired.instanceConfiguration),
+                HealthCheckConfiguration: toWireHealthCheck(desired.healthCheckConfiguration),
+                NetworkConfiguration: toWireNetwork(desired.networkConfiguration),
+                AutoScalingConfigurationArn: desired.autoScalingConfigurationArn,
+                ObservabilityConfiguration: toWireObservability(desired.observabilityConfiguration),
                 EncryptionConfiguration: desired.kmsKeyArn
                   ? { KmsKey: desired.kmsKeyArn }
                   : undefined,
@@ -1535,10 +1407,7 @@ await bootstrap(entrypoint);
               .pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "InvalidRequestException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("5 seconds"),
-                    Schedule.recurs(12),
-                  ]),
+                  schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
                 }),
               );
             observed = created.Service;
@@ -1549,9 +1418,7 @@ await bootstrap(entrypoint);
           const settled = yield* waitForSettled(observed.ServiceArn);
           if (settled === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `App Runner service '${name}' disappeared while reconciling`,
-              ),
+              new Error(`App Runner service '${name}' disappeared while reconciling`),
             );
           }
           observed = settled;
@@ -1571,35 +1438,16 @@ await bootstrap(entrypoint);
           if (sourceDrifted(desired, observed.SourceConfiguration)) {
             update.SourceConfiguration = toWireSource(desired);
           }
-          if (
-            instanceDrifted(
-              desired.instanceConfiguration,
-              observed.InstanceConfiguration,
-            )
-          ) {
-            update.InstanceConfiguration = toWireInstance(
-              desired.instanceConfiguration,
-            );
+          if (instanceDrifted(desired.instanceConfiguration, observed.InstanceConfiguration)) {
+            update.InstanceConfiguration = toWireInstance(desired.instanceConfiguration);
           }
           if (
-            healthCheckDrifted(
-              desired.healthCheckConfiguration,
-              observed.HealthCheckConfiguration,
-            )
+            healthCheckDrifted(desired.healthCheckConfiguration, observed.HealthCheckConfiguration)
           ) {
-            update.HealthCheckConfiguration = toWireHealthCheck(
-              desired.healthCheckConfiguration,
-            );
+            update.HealthCheckConfiguration = toWireHealthCheck(desired.healthCheckConfiguration);
           }
-          if (
-            networkDrifted(
-              desired.networkConfiguration,
-              observed.NetworkConfiguration,
-            )
-          ) {
-            update.NetworkConfiguration = toWireNetwork(
-              desired.networkConfiguration,
-            );
+          if (networkDrifted(desired.networkConfiguration, observed.NetworkConfiguration)) {
+            update.NetworkConfiguration = toWireNetwork(desired.networkConfiguration);
           }
           if (
             observabilityDrifted(
@@ -1613,12 +1461,10 @@ await bootstrap(entrypoint);
           }
           if (
             desired.autoScalingConfigurationArn !== undefined &&
-            observed.AutoScalingConfigurationSummary
-              ?.AutoScalingConfigurationArn !==
+            observed.AutoScalingConfigurationSummary?.AutoScalingConfigurationArn !==
               desired.autoScalingConfigurationArn
           ) {
-            update.AutoScalingConfigurationArn =
-              desired.autoScalingConfigurationArn;
+            update.AutoScalingConfigurationArn = desired.autoScalingConfigurationArn;
           }
 
           if (Object.keys(update).length > 0) {
@@ -1629,9 +1475,7 @@ await bootstrap(entrypoint);
             const updated = yield* waitForSettled(observed.ServiceArn);
             if (updated === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `App Runner service '${name}' disappeared while updating`,
-                ),
+                new Error(`App Runner service '${name}' disappeared while updating`),
               );
             }
             observed = updated;
@@ -1650,13 +1494,11 @@ await bootstrap(entrypoint);
           // InvalidStateException — wait (bounded) for it to settle first.
           const observed = yield* waitForSettled(output.serviceArn);
           if (observed !== undefined) {
-            yield* apprunner
-              .deleteService({ ServiceArn: output.serviceArn })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                // Already deleting — deletion is in progress.
-                Effect.catchTag("InvalidStateException", () => Effect.void),
-              );
+            yield* apprunner.deleteService({ ServiceArn: output.serviceArn }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              // Already deleting — deletion is in progress.
+              Effect.catchTag("InvalidStateException", () => Effect.void),
+            );
             yield* waitUntilGone(output.serviceArn);
           }
 
@@ -1668,17 +1510,9 @@ await bootstrap(entrypoint);
                 repositoryName: output.repositoryName,
                 force: true,
               })
-              .pipe(
-                Effect.catchTag(
-                  "RepositoryNotFoundException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
           }
-          for (const roleName of [
-            output.instanceRoleName,
-            output.accessRoleName,
-          ]) {
+          for (const roleName of [output.instanceRoleName, output.accessRoleName]) {
             if (roleName === undefined) continue;
             yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
               Stream.mapEffect((policyName) =>
@@ -1687,9 +1521,7 @@ await bootstrap(entrypoint);
                     RoleName: roleName,
                     PolicyName: policyName,
                   })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
+                  .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
               ),
               Stream.runDrain,
               // The role may already be gone (delete re-run / race) —
@@ -1697,30 +1529,21 @@ await bootstrap(entrypoint);
               // idempotent.
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
-            yield* iam.listAttachedRolePolicies
-              .items({ RoleName: roleName })
-              .pipe(
-                Stream.mapEffect((policy) =>
-                  iam
-                    .detachRolePolicy({
-                      RoleName: roleName,
-                      PolicyArn: policy.PolicyArn!,
-                    })
-                    .pipe(
-                      Effect.catchTag(
-                        "NoSuchEntityException",
-                        () => Effect.void,
-                      ),
-                    ),
-                ),
-                Stream.runDrain,
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+            yield* iam.listAttachedRolePolicies.items({ RoleName: roleName }).pipe(
+              Stream.mapEffect((policy) =>
+                iam
+                  .detachRolePolicy({
+                    RoleName: roleName,
+                    PolicyArn: policy.PolicyArn!,
+                  })
+                  .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+              ),
+              Stream.runDrain,
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
             yield* iam
               .deleteRole({ RoleName: roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
 
           // Last, because the reap can sit through App Runner's final log
@@ -1733,10 +1556,7 @@ await bootstrap(entrypoint);
           // carries Attributes rather than Props there and the flag reads
           // as unset anyway.
           if (!olds.retainLogGroups || force) {
-            for (const logGroupName of logGroupNamesFor(
-              output.serviceName,
-              output.serviceId,
-            )) {
+            for (const logGroupName of logGroupNamesFor(output.serviceName, output.serviceId)) {
               yield* reapLogGroup(logGroupName);
             }
           }

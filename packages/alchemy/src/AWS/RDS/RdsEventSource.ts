@@ -117,9 +117,7 @@ export interface RdsEventSourceProps extends EventRouteProps {
  */
 export const consumeRdsEvents = <StreamReq = never, Req = never>(
   props: RdsEventSourceProps,
-  process: (
-    events: Stream.Stream<RdsEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<RdsEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "RdsEvents",
@@ -128,9 +126,7 @@ export const consumeRdsEvents = <StreamReq = never, Req = never>(
       ...(props.kinds !== undefined
         ? { "detail-type": props.kinds.map((kind) => DETAIL_TYPES[kind]) }
         : {}),
-      ...(props.resourceArns !== undefined
-        ? { resources: [...props.resourceArns] }
-        : {}),
+      ...(props.resourceArns !== undefined ? { resources: [...props.resourceArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

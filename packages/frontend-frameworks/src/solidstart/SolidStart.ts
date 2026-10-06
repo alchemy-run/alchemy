@@ -36,12 +36,8 @@ import {
  */
 export interface SolidStartViteModule {
   readonly version?: string;
-  readonly createBuilder: (
-    config: Record<string, unknown>,
-  ) => Promise<SolidStartViteBuilder>;
-  readonly createServer: (
-    config: Record<string, unknown>,
-  ) => Promise<SolidStartViteDevServer>;
+  readonly createBuilder: (config: Record<string, unknown>) => Promise<SolidStartViteBuilder>;
+  readonly createServer: (config: Record<string, unknown>) => Promise<SolidStartViteDevServer>;
 }
 
 /** The structural slice of a vite builder this package reads. */
@@ -53,10 +49,7 @@ export interface SolidStartViteBuilder {
 export interface SolidStartViteDevServer {
   readonly listen: () => Promise<unknown>;
   readonly close: () => Promise<void>;
-  readonly resolvedUrls?:
-    | { readonly local: ReadonlyArray<string> }
-    | null
-    | undefined;
+  readonly resolvedUrls?: { readonly local: ReadonlyArray<string> } | null | undefined;
 }
 
 /**
@@ -116,10 +109,7 @@ export interface SolidStartTarget extends DeployTarget<SolidStartTargetConfig> {
  * a factory `(config) => SolidStartTarget`, or a module specifier resolved
  * from the *project's* `node_modules`.
  */
-export type SolidStartTargetInput = DeployTargetInput<
-  SolidStartTarget,
-  SolidStartTargetConfig
->;
+export type SolidStartTargetInput = DeployTargetInput<SolidStartTarget, SolidStartTargetConfig>;
 
 /**
  * The default deploy target: this package's own AWS Lambda target module,
@@ -127,8 +117,7 @@ export type SolidStartTargetInput = DeployTargetInput<
  * through its native Vite integration — `Cloudflare.Website.Vite` — so no
  * Cloudflare target exists here.)
  */
-export const DEFAULT_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/solidstart/aws";
+export const DEFAULT_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/aws";
 
 /** The specifier the project's SolidStart nitro plugin is loaded from. */
 export const NITRO_PLUGIN_SPECIFIER = "@solidjs/vite-plugin-nitro-2";
@@ -207,8 +196,7 @@ const inProjectCwd = <A, E, R>(
                   process.chdir(root);
                   return previous;
                 },
-                catch: (error) =>
-                  fail(`Failed to enter the project directory ${root}`, error),
+                catch: (error) => fail(`Failed to enter the project directory ${root}`, error),
               }),
               () => effect,
               (previous) =>
@@ -248,60 +236,58 @@ const inProjectCwd = <A, E, R>(
  */
 export const make: (
   options?: SolidStartOptions,
-) => Effect.Effect<
-  Framework["Service"],
-  never,
-  FileSystem.FileSystem | Path.Path
-> = Effect.fnUntraced(function* (options?: SolidStartOptions) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const baseRoot = options?.root ?? (yield* Effect.sync(() => process.cwd()));
+) => Effect.Effect<Framework["Service"], never, FileSystem.FileSystem | Path.Path> =
+  Effect.fnUntraced(function* (options?: SolidStartOptions) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const baseRoot = options?.root ?? (yield* Effect.sync(() => process.cwd()));
 
-  const targetConfig: SolidStartTargetConfig = { nitro: options?.nitro };
+    const targetConfig: SolidStartTargetConfig = { nitro: options?.nitro };
 
-  const resolveTarget = (root: string) =>
-    FrameworkCore.resolveDeployTarget<SolidStartTarget, SolidStartTargetConfig>(
-      root,
-      options?.target ?? DEFAULT_TARGET_SPECIFIER,
-      targetConfig,
-    ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
+    const resolveTarget = (root: string) =>
+      FrameworkCore.resolveDeployTarget<SolidStartTarget, SolidStartTargetConfig>(
+        root,
+        options?.target ?? DEFAULT_TARGET_SPECIFIER,
+        targetConfig,
+      ).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
 
-  const requireNitroPreset = (target: SolidStartTarget) =>
-    typeof target.nitroPreset === "string" && target.nitroPreset.length > 0
-      ? Effect.succeed(target)
-      : Effect.fail(
+    const requireNitroPreset = (target: SolidStartTarget) =>
+      typeof target.nitroPreset === "string" && target.nitroPreset.length > 0
+        ? Effect.succeed(target)
+        : Effect.fail(
+            fail(
+              `The resolved "${target.platform}" deploy target does not declare the nitro ` +
+                "preset hook (`nitroPreset`) and has no wholesale `build`",
+            ),
+          );
+
+    const loadVite = (root: string) =>
+      FrameworkCore.loadProjectModule<SolidStartViteModule>(root, "vite").pipe(
+        Effect.mapError((error) => fail("Failed to load the project's Vite install", error.cause)),
+      );
+
+    const loadNitroPlugin = (root: string) =>
+      FrameworkCore.loadProjectModule<SolidStartNitroPluginModule>(
+        root,
+        NITRO_PLUGIN_SPECIFIER,
+      ).pipe(
+        Effect.mapError((error) =>
           fail(
-            `The resolved "${target.platform}" deploy target does not declare the nitro ` +
-              "preset hook (`nitroPreset`) and has no wholesale `build`",
+            `Failed to load the project's "${NITRO_PLUGIN_SPECIFIER}" — install it alongside ` +
+              "`@solidjs/start`; it is the server half of a SolidStart build",
+            error.cause,
           ),
-        );
-
-  const loadVite = (root: string) =>
-    FrameworkCore.loadProjectModule<SolidStartViteModule>(root, "vite").pipe(
-      Effect.mapError((error) =>
-        fail("Failed to load the project's Vite install", error.cause),
-      ),
-    );
-
-  const loadNitroPlugin = (root: string) =>
-    FrameworkCore.loadProjectModule<SolidStartNitroPluginModule>(
-      root,
-      NITRO_PLUGIN_SPECIFIER,
-    ).pipe(
-      Effect.mapError((error) =>
-        fail(
-          `Failed to load the project's "${NITRO_PLUGIN_SPECIFIER}" — install it alongside ` +
-            "`@solidjs/start`; it is the server half of a SolidStart build",
-          error.cause,
         ),
-      ),
-    );
+      );
 
-  const build: Framework["Service"]["build"] = Effect.fn(
-    function* (buildOptions) {
+    const build: Framework["Service"]["build"] = Effect.fn(function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
-      const targetContext = { root, framework: "solidstart" };
+      const targetContext = {
+        root,
+        framework: "solidstart",
+        env: buildOptions?.env,
+      };
 
       // Wholesale build takeover (the AWS target uses this seam to run the
       // build in a disposable child process — vite.config.* executes user
@@ -321,9 +307,7 @@ export const make: (
       // build for a different preset would never be deployed.
       const conflict = findPresetConflict(options?.nitro, target.nitroPreset);
       if (conflict !== undefined) {
-        return yield* Effect.fail(
-          fail(presetConflictMessage(conflict, target.nitroPreset)),
-        );
+        return yield* Effect.fail(fail(presetConflictMessage(conflict, target.nitroPreset)));
       }
 
       const vite = yield* loadVite(root);
@@ -361,6 +345,12 @@ export const make: (
           try: async () => {
             const builder = await vite.createBuilder({
               root,
+              // Fixture clones have no local node_modules, so Vite would
+              // otherwise share `packages/alchemy/node_modules/.vite` with
+              // every other website test. Vocs writes shiki there; the
+              // SolidStart nitro graph then emits 11MB of grammars and
+              // SSR GET `/` hangs. Pin the cache under this project.
+              cacheDir: path.join(root, "node_modules", ".vite"),
               // Warn-level: rolldown-vite's native progress reporter writes
               // straight to the fd, corrupting hosting-process reporters
               // that can only intercept JS-level writers.
@@ -394,77 +384,101 @@ export const make: (
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, path),
       );
-    },
-  );
+    });
 
-  const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
-    const root = devOptions?.root ?? baseRoot;
-    const vite = yield* loadVite(root);
-    // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-    // on older Vite — see `resolveViteDevPort`.
-    const port = yield* FrameworkCore.resolveViteDevPort(
-      vite.version,
-      devOptions?.port ?? options?.dev?.port,
-    );
-    const host = devOptions?.host;
+    const devInProcess: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+      const root = devOptions?.root ?? baseRoot;
+      const vite = yield* loadVite(root);
+      // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
+      // on older Vite — see `resolveViteDevPort`.
+      const port = yield* FrameworkCore.resolveViteDevPort(
+        vite.version,
+        devOptions?.port ?? options?.dev?.port,
+      );
+      const host = devOptions?.host;
 
-    const server = yield* Effect.acquireRelease(
-      inProjectCwd(
-        root,
-        Effect.tryPromise({
-          try: async () => {
-            const server = await vite.createServer({
-              root,
-              logLevel: "warn",
-              server: {
-                port,
-                ...(host !== undefined ? { host } : undefined),
-              },
-            });
-            await server.listen();
-            return server;
-          },
-          catch: (error) =>
-            fail("Failed to start the SolidStart dev server", error),
-        }),
-      ),
-      (server) =>
-        Effect.promise(async () => {
-          try {
-            await server.close();
-          } catch {
-            // teardown is best-effort
-          }
-        }),
-    );
+      const server = yield* Effect.acquireRelease(
+        inProjectCwd(
+          root,
+          Effect.tryPromise({
+            try: async () => {
+              const server = await vite.createServer({
+                root,
+                cacheDir: path.join(root, "node_modules", ".vite"),
+                logLevel: "warn",
+                server: {
+                  port,
+                  ...(host !== undefined ? { host } : undefined),
+                },
+              });
+              await server.listen();
+              return server;
+            },
+            catch: (error) => fail("Failed to start the SolidStart dev server", error),
+          }),
+        ),
+        (server) =>
+          Effect.promise(async () => {
+            try {
+              await server.close();
+            } catch {
+              // teardown is best-effort
+            }
+          }),
+      );
 
-    const resolved = server.resolvedUrls?.local[0];
-    if (resolved === undefined) {
-      return yield* Effect.fail(fail("Could not determine the dev server URL"));
-    }
-    // Vite reports its local URL with a trailing slash. SolidStart runs with
-    // `appType: "custom"`, so its router sees the raw pathname and a caller
-    // that appends a path (`${url}/about`) would request `//about` and get a
-    // 404. Hand back an origin that concatenates correctly.
-    const url = resolved.endsWith("/") ? resolved.slice(0, -1) : resolved;
+      const resolved = server.resolvedUrls?.local[0];
+      if (resolved === undefined) {
+        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+      }
+      // Vite reports its local URL with a trailing slash. SolidStart runs with
+      // `appType: "custom"`, so its router sees the raw pathname and a caller
+      // that appends a path (`${url}/about`) would request `//about` and get a
+      // 404. Hand back an origin that concatenates correctly.
+      const url = resolved.endsWith("/") ? resolved.slice(0, -1) : resolved;
 
-    // Bounded readiness probe: any HTTP response counts (vite serves
-    // lazily; we only need the listener to answer).
-    yield* Effect.tryPromise({
-      try: async () => {
-        const response = await fetch(url, { redirect: "manual" });
-        await response.arrayBuffer().catch(() => {});
-      },
-      catch: (error) => fail("The dev server did not become reachable", error),
-    }).pipe(
-      Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
-    );
+      // Bounded readiness probe: any HTTP response counts (vite serves
+      // lazily; we only need the listener to answer).
+      yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(url, { redirect: "manual" });
+          await response.arrayBuffer().catch(() => {});
+        },
+        catch: (error) => fail("The dev server did not become reachable", error),
+      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
 
-    return { url };
+      return { url };
+    });
+
+    // SolidStart's `solidStart()` plugin resolves the app from `process.cwd()`
+    // at config-load time, so its startup needs `cwd === root`. That must not
+    // happen in a process hosting other sites (the alchemy dev sidecar) — run
+    // the dev server in a dedicated child whose cwd IS the root instead (see
+    // core/DevChild.ts). Inside that child (or when the options cannot cross
+    // the process boundary, e.g. a deploy-target VALUE from the e2e harness)
+    // the in-process path runs directly.
+    const dev: Framework["Service"]["dev"] = (devOptions) => {
+      const root = devOptions?.root ?? baseRoot;
+      const port = devOptions?.port ?? options?.dev?.port;
+      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
+        return devInProcess(devOptions);
+      }
+      return FrameworkCore.runDevChild({
+        framework: "solidstart",
+        module: "@alchemy.run/frontend-frameworks/solidstart",
+        callerUrl: import.meta.url,
+        rootDir: root,
+        makeOptions: { ...options, root },
+        devOptions: {
+          root,
+          ...(port !== undefined ? { port } : {}),
+          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
+        },
+      });
+    };
+
+    return Framework.of({ build, dev });
   });
-
-  return Framework.of({ build, dev });
-});
 
 /** The nitro server entry's module name within the `BuildOutput` (POSIX). */
 export const SERVER_ENTRY_NAME = "server/index.mjs";
@@ -488,11 +502,7 @@ export interface NitroOutputDirs {
  */
 export const readNitroOutput = (
   dirs: NitroOutputDirs,
-): Effect.Effect<
-  FrameworkCore.BuildOutput,
-  FrameworkError,
-  FileSystem.FileSystem
-> =>
+): Effect.Effect<FrameworkCore.BuildOutput, FrameworkError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const modules = yield* FrameworkCore.readServerModulesFromDisk({
       directory: dirs.serverDir,
@@ -500,20 +510,13 @@ export const readNitroOutput = (
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
       return yield* Effect.fail(
-        fail(
-          `The SolidStart build produced no server modules in ${dirs.serverDir}`,
-        ),
+        fail(`The SolidStart build produced no server modules in ${dirs.serverDir}`),
       );
     }
-    const serverModules = FrameworkCore.sortServerModules(
-      modules,
-      SERVER_ENTRY_NAME,
-    );
+    const serverModules = FrameworkCore.sortServerModules(modules, SERVER_ENTRY_NAME);
     if (serverModules[0]?.name !== SERVER_ENTRY_NAME) {
       return yield* Effect.fail(
-        fail(
-          `The SolidStart build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`,
-        ),
+        fail(`The SolidStart build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`),
       );
     }
     return {

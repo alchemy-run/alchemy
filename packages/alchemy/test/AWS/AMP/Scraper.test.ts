@@ -1,10 +1,10 @@
+import * as amp from "@distilled.cloud/aws/amp";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Scraper, ScraperLoggingConfiguration, Workspace } from "@/AWS/AMP";
 import * as Logs from "@/AWS/Logs";
 import * as Test from "@/Test/Alchemy";
-import * as amp from "@distilled.cloud/aws/amp";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,7 +22,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 30_000 },
+  { tags: ["provider:aws", "provider:aws:amp", "live"], timeout: 30_000 },
 );
 
 test.provider(
@@ -30,12 +30,10 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const response = yield* amp.getDefaultScraperConfiguration({});
-      const yaml = yield* Effect.sync(() =>
-        new TextDecoder().decode(response.configuration),
-      );
+      const yaml = yield* Effect.sync(() => new TextDecoder().decode(response.configuration));
       expect(yaml).toContain("scrape_configs");
     }),
-  { timeout: 30_000 },
+  { tags: ["provider:aws", "provider:aws:amp", "live"], timeout: 30_000 },
 );
 
 // Full scraper lifecycle requires a live Amazon EKS cluster to scrape and
@@ -99,5 +97,8 @@ test.provider.skipIf(!process.env.AWS_TEST_AMP_SCRAPER)(
 
       yield* stack.destroy();
     }),
-  { timeout: 1_800_000 },
+  {
+    tags: ["provider:aws", "provider:aws:amp", "provider:aws:logs", "live"],
+    timeout: 1_800_000,
+  },
 );

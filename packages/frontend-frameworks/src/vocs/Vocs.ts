@@ -1,3 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import type * as vite from "vite";
 /**
  * `Framework` implementation driving Vocs on Cloudflare Workers.
  *
@@ -24,21 +29,13 @@
  */
 import * as FrameworkCore from "../core/index.ts";
 import { WAKU_SERVER_ENTRY_MODULE } from "../waku/Waku.ts";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as vite from "vite";
-import {
-  selectVocsTargetInput,
-  type VocsTarget,
-  type VocsTargetOption,
-} from "./Target.ts";
+import { selectVocsTargetInput, type VocsTarget, type VocsTargetOption } from "./Target.ts";
 
 type ReactPluginModule = typeof import("@vitejs/plugin-react");
 type VocsViteModule = typeof import("vocs/vite");
 
 interface VocsProjectModules {
+  readonly bundler: typeof vite;
   readonly react: ReactPluginModule;
   readonly vite: VocsViteModule;
 }
@@ -72,9 +69,7 @@ const PREVIEW_SERVER_GLOBAL = "__WAKU_START_PREVIEW_SERVER__";
 interface WakuPreviewServer {
   readonly baseUrl: string;
   readonly middlewares: {
-    readonly use: (
-      fn: (req: unknown, res: unknown, next: (err?: unknown) => void) => void,
-    ) => void;
+    readonly use: (fn: (req: unknown, res: unknown, next: (err?: unknown) => void) => void) => void;
   };
   readonly close: () => Promise<void>;
 }
@@ -150,11 +145,7 @@ const workerdConfigBridge = (configPath: string | undefined): vite.Plugin => {
       const isVocsInternal = (name: string) =>
         normalized.endsWith(`/vocs/dist/internal/${name}.js`) ||
         normalized.endsWith(`/vocs/src/internal/${name}.ts`);
-      const mustReplace = (
-        source: string,
-        pattern: RegExp,
-        replacement: string,
-      ): string => {
+      const mustReplace = (source: string, pattern: RegExp, replacement: string): string => {
         if (!pattern.test(source)) {
           throw new Error(
             `@alchemy.run/frontend-frameworks/vocs: ${normalized} no longer matches the workerd config bridge ` +
@@ -210,10 +201,11 @@ const setPreviewServerGlobal = (
   adapterPath: string,
   configPath: string | undefined,
   project: VocsProjectModules,
+  port: number,
 ): void => {
   (globalThis as Record<string, unknown>)[PREVIEW_SERVER_GLOBAL] =
     async (): Promise<WakuPreviewServer> => {
-      const server = await vite.preview({
+      const server = await project.bundler.preview({
         configFile: false,
         root,
         ...sharedViteConfig(),
@@ -222,12 +214,12 @@ const setPreviewServerGlobal = (
           workerdConfigBridge(configPath),
           project.vite.vocs({ unstable_adapter: adapterPath }),
         ],
+        // localhost can resolve to another build's listener on the other IP family.
+        preview: { host: "127.0.0.1", port },
       });
       const baseUrl = server.resolvedUrls?.local[0];
       if (!baseUrl) {
-        throw new Error(
-          "Could not determine the URL of the vocs SSG preview server",
-        );
+        throw new Error("Could not determine the URL of the vocs SSG preview server");
       }
       return {
         baseUrl,
@@ -256,11 +248,7 @@ const clearPreviewServerGlobal = (): void => {
  */
 export const make = (
   options: VocsFrameworkOptions = {},
-): Layer.Layer<
-  FrameworkCore.Framework,
-  never,
-  FileSystem.FileSystem | Path.Path
-> =>
+): Layer.Layer<FrameworkCore.Framework, never, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     FrameworkCore.Framework,
     Effect.gen(function* () {
@@ -275,11 +263,9 @@ export const make = (
 
       const resolveTarget = (root: string) => {
         const { input, config } = selectVocsTargetInput(options);
-        return FrameworkCore.resolveDeployTarget<VocsTarget, unknown>(
-          root,
-          input,
-          config,
-        ).pipe(Effect.mapError(fail("Failed to resolve the deploy target")));
+        return FrameworkCore.resolveDeployTarget<VocsTarget, unknown>(root, input, config).pipe(
+          Effect.mapError(fail("Failed to resolve the deploy target")),
+        );
       };
 
       const findConfig = (root: string) =>
@@ -299,21 +285,12 @@ export const make = (
       const loadProject = (root: string) =>
         Effect.all(
           {
-            react: FrameworkCore.loadProjectModule<ReactPluginModule>(
-              root,
-              "@vitejs/plugin-react",
-            ),
-            vite: FrameworkCore.loadProjectModule<VocsViteModule>(
-              root,
-              "vocs/vite",
-            ),
+            bundler: FrameworkCore.loadProjectModule<typeof vite>(root, "vite"),
+            react: FrameworkCore.loadProjectModule<ReactPluginModule>(root, "@vitejs/plugin-react"),
+            vite: FrameworkCore.loadProjectModule<VocsViteModule>(root, "vocs/vite"),
           },
           { concurrency: "unbounded" },
-        ).pipe(
-          Effect.mapError(
-            fail("Failed to load Vocs from the project dependencies"),
-          ),
-        );
+        ).pipe(Effect.mapError(fail("Failed to load Vocs from the project dependencies")));
 
       /** Resolve the target's adapter module + vite plugins for one pass. */
       const prepareTarget = Effect.fn(function* (
@@ -321,24 +298,15 @@ export const make = (
         root: string,
         phase: "build" | "dev",
       ) {
-        const wakuDirectory =
-          yield* FrameworkCore.resolveProjectPackageDirectory(
-            root,
-            "waku",
-          ).pipe(
-            Effect.mapError(
-              fail("Failed to resolve the project's waku package directory"),
-            ),
-          );
+        const wakuDirectory = yield* FrameworkCore.resolveProjectPackageDirectory(
+          root,
+          "waku",
+        ).pipe(Effect.mapError(fail("Failed to resolve the project's waku package directory")));
         const context = { root, wakuDirectory, phase } as const;
         const [adapterPath, plugins] = yield* Effect.all(
           [target.adapter(context), target.vitePlugins(context)],
           { concurrency: "unbounded" },
-        ).pipe(
-          Effect.mapError(
-            fail(`The cloudflare target failed preparing the vocs ${phase}`),
-          ),
-        );
+        ).pipe(Effect.mapError(fail(`The cloudflare target failed preparing the vocs ${phase}`)));
         return { adapterPath, plugins, wakuDirectory };
       });
 
@@ -346,11 +314,16 @@ export const make = (
         build: Effect.fn(function* (buildOptions) {
           const root = yield* resolveRoot(buildOptions?.root);
           const target = yield* resolveTarget(root);
-          const { adapterPath, plugins } = yield* prepareTarget(
-            target,
-            root,
-            "build",
-          );
+          if (target.build !== undefined) {
+            return yield* target
+              .build({ root, framework: "vocs", env: buildOptions?.env })
+              .pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.provideService(Path.Path, path),
+                Effect.mapError(fail("The deploy target's build failed")),
+              );
+          }
+          const { adapterPath, plugins } = yield* prepareTarget(target, root, "build");
           const project = yield* loadProject(root);
           const configPath = yield* findConfig(root);
           // vocs's CLI (like waku's) runs with NODE_ENV set before loading
@@ -362,9 +335,10 @@ export const make = (
             entryEnvironment: "rsc",
             selectEntry: (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
           }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+          const previewPort = yield* FrameworkCore.resolveViteDevPort(project.bundler.version);
           yield* Effect.tryPromise({
             try: async () => {
-              const builder = await vite.createBuilder(
+              const builder = await project.bundler.createBuilder(
                 {
                   configFile: false,
                   root,
@@ -379,7 +353,7 @@ export const make = (
                 },
                 null,
               );
-              setPreviewServerGlobal(root, adapterPath, configPath, project);
+              setPreviewServerGlobal(root, adapterPath, configPath, project, previewPort);
               try {
                 await builder.buildApp();
               } finally {
@@ -406,11 +380,7 @@ export const make = (
         dev: Effect.fn(function* (devOptions) {
           const root = yield* resolveRoot(devOptions?.root);
           const target = yield* resolveTarget(root);
-          const { adapterPath, plugins } = yield* prepareTarget(
-            target,
-            root,
-            "dev",
-          );
+          const { adapterPath, plugins } = yield* prepareTarget(target, root, "dev");
           const project = yield* loadProject(root);
           const configPath = yield* findConfig(root);
           yield* Effect.sync(() => {
@@ -420,7 +390,7 @@ export const make = (
           const server = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: async () => {
-                const server = await vite.createServer({
+                const server = await project.bundler.createServer({
                   configFile: false,
                   root,
                   ...sharedViteConfig(),
@@ -443,14 +413,25 @@ export const make = (
               },
               catch: fail("Failed to start the vocs dev server"),
             }),
-            (server) => Effect.promise(async () => await server.close()),
+            (server) =>
+              Effect.promise(async () => {
+                try {
+                  (
+                    server.httpServer as { closeAllConnections?: () => void } | null | undefined
+                  )?.closeAllConnections?.();
+                  await server.close();
+                } catch {
+                  // teardown is best-effort
+                }
+              }).pipe(
+                Effect.timeout("3 seconds"),
+                Effect.orElseSucceed(() => undefined),
+              ),
           );
           const url = server.resolvedUrls?.local[0];
           if (url === undefined) {
             return yield* Effect.fail(
-              fail("Could not determine the URL of the vocs dev server")(
-                undefined,
-              ),
+              fail("Could not determine the URL of the vocs dev server")(undefined),
             );
           }
           return { url };
