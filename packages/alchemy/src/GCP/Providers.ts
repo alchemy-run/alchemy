@@ -1055,10 +1055,6 @@ import {
 import { RunPipelineHttp } from "./DataPipelines/RunPipelineHttp.ts";
 import { StopPipelineHttp } from "./DataPipelines/StopPipelineHttp.ts";
 import { AspectType, AspectTypeProvider } from "./Dataplex/AspectType.ts";
-import {
-  DataAttributeBinding,
-  DataAttributeBindingProvider,
-} from "./Dataplex/DataAttributeBinding.ts";
 import { DataDomain, DataDomainProvider } from "./Dataplex/DataDomain.ts";
 import { DataDomainsBinding, DataDomainsBindingProvider } from "./Dataplex/DataDomainsBinding.ts";
 import { DataProduct, DataProductProvider } from "./Dataplex/DataProduct.ts";
@@ -1067,11 +1063,6 @@ import {
   DataProductsDataAssetProvider,
 } from "./Dataplex/DataProductsDataAsset.ts";
 import { DataScan, DataScanProvider } from "./Dataplex/DataScan.ts";
-import {
-  DataTaxonomiesAttribute,
-  DataTaxonomiesAttributeProvider,
-} from "./Dataplex/DataTaxonomiesAttribute.ts";
-import { DataTaxonomy, DataTaxonomyProvider } from "./Dataplex/DataTaxonomy.ts";
 import { EncryptionConfig, EncryptionConfigProvider } from "./Dataplex/EncryptionConfig.ts";
 import { EntryGroup, EntryGroupProvider } from "./Dataplex/EntryGroup.ts";
 import { EntryGroupsEntry, EntryGroupsEntryProvider } from "./Dataplex/EntryGroupsEntry.ts";
@@ -3066,15 +3057,12 @@ const makeProviders = () =>
           TcpRoute,
           TlsRoute,
           AspectType,
-          DataAttributeBinding,
           DataDomain,
           DataDomainsBinding,
           DataProduct,
           DataProductsDataAsset,
           DataScan,
           EncryptionConfig,
-          DataTaxonomy,
-          DataTaxonomiesAttribute,
           EntryGroup,
           EntryGroupsEntry,
           EntryGroupsEntryLink,
@@ -4054,7 +4042,6 @@ const makeProviders = () =>
           ),
           Layer.mergeAll(
             AspectTypeProvider(),
-            DataAttributeBindingProvider(),
             DataDomainProvider(),
             DataDomainsBindingProvider(),
             DataProductProvider(),
@@ -4063,8 +4050,6 @@ const makeProviders = () =>
             EncryptionConfigProvider(),
           ),
           Layer.mergeAll(
-            DataTaxonomyProvider(),
-            DataTaxonomiesAttributeProvider(),
             EntryGroupProvider(),
             EntryGroupsEntryProvider(),
             EntryGroupsEntryLinkProvider(),
