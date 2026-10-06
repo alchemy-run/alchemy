@@ -18,6 +18,7 @@
     "dev": "alchemy dev",
     "dev:start": "vite dev --host 0.0.0.0",
     "emit": "prisma contract emit",
+    "prepare": "prisma contract emit",
     "seed": "tsx scripts/seed.ts",
     "start": "node .output/server/index.mjs",
     "tail": "alchemy logs --tail",
