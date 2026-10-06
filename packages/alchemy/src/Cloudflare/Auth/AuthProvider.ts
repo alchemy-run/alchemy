@@ -73,7 +73,7 @@ const withOAuthCredentials = <A, E, R>(
     effect,
     Layer.mergeAll(
       CfCredentialsModule.fromOAuth({
-        load: Effect.succeed({ accessToken }),
+        load: Effect.succeed({ accessToken: Redacted.make(accessToken) }),
         refresh: () => Effect.die("refresh not expected during account selection"),
       }),
       FetchHttpClient.layer,
