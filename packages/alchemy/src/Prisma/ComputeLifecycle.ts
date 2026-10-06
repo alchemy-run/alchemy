@@ -202,7 +202,7 @@ export const waitForDeploymentStatus = Effect.fn(function* (
 });
 
 /**
- * Stops a running or provisioning deployment, then deletes it.
+ * Stops a running or provisioning deployment (or waits out a stop in progress), then deletes it.
  *
  * Uses the canonical deployment lifecycle routes. Errors include the observed
  * status and exact manual route for cleanup.
@@ -228,16 +228,23 @@ export const destroyDeployment = Effect.fn(function* (
   const previousStatus = deployment.status;
   let statusAtDelete = previousStatus;
   let stopped = false;
-  if (deployment.status === "running" || deployment.status === "provisioning") {
-    yield* stopDeploymentIdempotent(deploymentId).pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.mapError(ensureError),
-    );
+  if (
+    deployment.status === "running" ||
+    deployment.status === "provisioning" ||
+    deployment.status === "stopping"
+  ) {
+    if (deployment.status !== "stopping") {
+      yield* stopDeploymentIdempotent(deploymentId).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.mapError(ensureError),
+      );
+      stopped = true;
+    }
+    // Only a stopped deployment can be deleted.
     const stoppedVersion = yield* waitForDeploymentStatus(deploymentId, "stopped", options).pipe(
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
     statusAtDelete = stoppedVersion?.status ?? "stopped";
-    stopped = true;
   }
 
   yield* deleteDeployment({ deploymentId }).pipe(
