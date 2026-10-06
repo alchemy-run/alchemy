@@ -1,280 +1,50 @@
+import { getProjectBranches } from "@distilled.cloud/prisma/management";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as HttpBody from "effect/http/HttpBody";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { TestClock } from "effect/testing";
+import * as Prisma from "@/Prisma";
 import {
   extractConnectionSecrets,
-  PrismaApiDecodeError,
+  isConflict,
+  isNotFound,
   PrismaApiError,
   PrismaClient,
-  PrismaClientLive,
-  type PrismaManagementClient,
 } from "@/Prisma/Client";
-import { PrismaEnvironment } from "@/Prisma/PrismaEnvironment";
-import { productionManagementApiRoutes } from "./fixtures/ManagementApiContract.ts";
+import * as Test from "@/Test/Alchemy";
+import { expectGone, expectProjectGone } from "./fixtures/Live.ts";
 
-interface Captured {
-  url: string;
-  method: string;
-  pathname: string;
-  search: string;
-  authorization: string | undefined;
-  bodyJson: unknown;
-}
+const { test } = Test.make({ providers: Prisma.providers() });
 
-const page = <T>(data: T[], hasMore = false, nextCursor: string | null = null) =>
-  json({ data, pagination: { hasMore, nextCursor } });
+const tags = (...resources: string[]) => [
+  "provider:prisma",
+  "provider:prisma:project",
+  ...resources.map((resource) => `provider:prisma:${resource}`),
+  "live",
+];
 
-const data = <T>(value: T) => json({ data: value });
+const projectStack = Effect.gen(function* () {
+  const project = yield* Prisma.Project("Project", { createDatabase: false });
+  return { projectId: project.projectId };
+});
 
-const json = (value: unknown, init?: ResponseInit) =>
-  new Response(JSON.stringify(value), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
-
-const empty = () => new Response(null, { status: 204 });
-
-const expectedManagementApiRoutes = [...productionManagementApiRoutes].sort();
-
-const routeTemplateFor = (method: string, pathname: string): string => {
-  const concreteSegments = pathname.split("/");
-  const route = productionManagementApiRoutes.find((candidate) => {
-    const separator = candidate.indexOf(" ");
-    const candidateMethod = candidate.slice(0, separator);
-    const templatePath = candidate.slice(separator + 1);
-    const templateSegments = templatePath.split("/");
-    return (
-      candidateMethod === method &&
-      templateSegments.length === concreteSegments.length &&
-      templateSegments.every(
-        (segment, index) =>
-          (/^\{[^}]+\}$/.test(segment) && concreteSegments[index]?.length !== 0) ||
-          segment === concreteSegments[index],
-      )
-    );
-  });
-  if (!route) {
-    throw new Error(`Missing route inventory mapping for ${method} ${pathname}`);
-  }
-  return route;
-};
-const routeInventoryFrom = (captured: Captured[]) => {
-  const routes = new Set<string>();
-  for (const request of captured) {
-    routes.add(routeTemplateFor(request.method, request.pathname));
-  }
-  routes.add("GET /v1/deployments/{deploymentId}/logs");
-  routes.add("GET /v1/builds/{buildId}/logs");
-  return [...routes].sort();
-};
-
-const fixtureResponse = (request: Captured) => {
-  if (request.pathname === "/v1/projects" && request.method === "GET") {
-    return request.search.includes("cursor=cursor-2")
-      ? page([{ id: "project-2", type: "project", name: "Two" }])
-      : page([{ id: "project-1", type: "project", name: "One" }], true, "cursor-2");
-  }
-
-  if (request.pathname === "/v1/projects/project-1/databases" && request.method === "POST") {
-    return data({ id: "database-1", type: "database", name: "main" });
-  }
-
-  if (request.pathname === "/v1/databases/database-1/backups" && request.method === "GET") {
-    return json({
-      data: [
-        {
-          id: "backup-1",
-          type: "backup",
-          backupType: "full",
-          createdAt: "2026-01-01T00:00:00Z",
-          status: "completed",
-        },
-      ],
-      meta: {
-        backupRetentionDays: 7,
-      },
-      pagination: {
-        hasMore: false,
-        limit: 1,
-      },
-    });
-  }
-
-  if (request.pathname === "/v1/workspaces/workspace-1/integrations" && request.method === "GET") {
-    return page([{ id: "integration-1", url: "https://example.test" }]);
-  }
-
-  if (request.pathname === "/v1/domains/domain-1" && request.method === "GET") {
-    return data({
-      id: "domain-1",
-      type: "custom-domain",
-      url: "https://api.prisma.test/v1/domains/domain-1",
-      hostname: "api.example.com",
-      appId: "app-1",
-      status: "pending_dns",
-      foundryStatus: "pending",
-      failureReason: null,
-      failureCategory: null,
-      certExpiresAt: null,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-      dnsRecords: [],
-    });
-  }
-
-  if (request.pathname.startsWith("/v1/regions") && request.method === "GET") {
-    return json({
-      data: [
-        {
-          id: "us-east-1",
-          type: "region",
-          name: "US East",
-          product: "postgres",
-          status: "available",
-        },
-      ],
-    });
-  }
-
-  return json(
-    {
-      error: {
-        message: `Unhandled fixture request ${request.method} ${request.pathname}${request.search}`,
-      },
-    },
-    { status: 500 },
+/** Run an effect that must fail with a Prisma Management API error. */
+const apiError = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.flip,
+    Effect.tap((error) => Effect.sync(() => expect(error).toBeInstanceOf(PrismaApiError))),
+    Effect.map((error) => error as PrismaApiError),
   );
-};
 
-const layerForHttp = (client: HttpClient.HttpClient, baseUrl = "https://api.prisma.test") =>
-  PrismaClientLive.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Layer.succeed(HttpClient.HttpClient, client),
-        Layer.succeed(PrismaEnvironment, {
-          type: "serviceToken" as const,
-          serviceToken: Redacted.make("test-token"),
-          source: { type: "stored" as const },
-          baseUrl,
-        }),
-      ),
+/** Poll a read until the API reports 404 for it. */
+const expectNotFound = <A, E, R>(read: Effect.Effect<A, E, R>) =>
+  expectGone(
+    read.pipe(
+      Effect.as(false),
+      Effect.catchIf(isNotFound, () => Effect.succeed(true)),
     ),
   );
 
-const harness = (baseUrl = "https://api.prisma.test") => {
-  const captured: Captured[] = [];
-  const client = HttpClient.make((request) =>
-    Effect.sync(() => {
-      const url = new URL(request.url);
-      const body = request.body as HttpBody.HttpBody;
-      const bodyText = body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
-      const entry: Captured = {
-        url: request.url,
-        method: request.method,
-        pathname: url.pathname,
-        search: url.search,
-        authorization: request.headers.authorization,
-        bodyJson: bodyText ? JSON.parse(bodyText) : undefined,
-      };
-      captured.push(entry);
-      return HttpClientResponse.fromWeb(request, fixtureResponse(entry));
-    }),
-  );
-  const layer = layerForHttp(client, baseUrl);
-  return { layer, captured };
-};
-
-const withClient = <A>(f: (client: PrismaManagementClient) => Effect.Effect<A, any, any>) =>
-  Effect.gen(function* () {
-    const client = yield* PrismaClient;
-    return yield* f(client);
-  });
-
-const routeCoverageHarness = () => {
-  const captured: Captured[] = [];
-  const client = HttpClient.make((request) =>
-    Effect.sync(() => {
-      const url = new URL(request.url);
-      const body = request.body as HttpBody.HttpBody;
-      const bodyText = body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
-      const entry: Captured = {
-        url: request.url,
-        method: request.method,
-        pathname: url.pathname,
-        search: url.search,
-        authorization: request.headers.authorization,
-        bodyJson: bodyText ? JSON.parse(bodyText) : undefined,
-      };
-      captured.push(entry);
-
-      if (entry.pathname.endsWith("/usage")) {
-        return HttpClientResponse.fromWeb(
-          request,
-          json({
-            period: { start: "2026-01-01", end: "2026-01-02" },
-            metrics: {
-              operations: { used: 0, unit: "ops" },
-              storage: { used: 0, unit: "GiB" },
-            },
-            generatedAt: "2026-01-02T00:00:00Z",
-          }),
-        );
-      }
-
-      if (entry.pathname.startsWith("/v1/regions") && entry.method === "GET") {
-        return HttpClientResponse.fromWeb(request, json({ data: [] }));
-      }
-
-      if (entry.method === "GET") {
-        return HttpClientResponse.fromWeb(request, page([]));
-      }
-
-      if (
-        entry.method === "DELETE" ||
-        entry.pathname.endsWith("/stop") ||
-        entry.pathname.endsWith("/transfer")
-      ) {
-        return HttpClientResponse.fromWeb(request, empty());
-      }
-
-      return HttpClientResponse.fromWeb(
-        request,
-        data({
-          id: "resource-1",
-          type: "resource",
-          foundryVersionId: "foundry-1",
-          uploadUrl: "https://upload.example.test/artifact.tar.gz",
-          previewDomain: "version-1.example.test",
-          appEndpointDomain: "app-1.example.test",
-        }),
-      );
-    }),
-  );
-  const layer = PrismaClientLive.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Layer.succeed(HttpClient.HttpClient, client),
-        Layer.succeed(PrismaEnvironment, {
-          type: "serviceToken" as const,
-          serviceToken: Redacted.make("test-token"),
-          source: { type: "stored" as const },
-          baseUrl: "https://api.prisma.test",
-        }),
-      ),
-    ),
-  );
-  return { layer, captured };
-};
-
-describe("PrismaClient", { tags: ["unit", "provider:prisma", "local"] }, () => {
+describe("extractConnectionSecrets", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it("extracts canonical endpoint secrets and parses direct credentials", () => {
     const secrets = extractConnectionSecrets({
       id: "connection-1",
@@ -309,1189 +79,376 @@ describe("PrismaClient", { tags: ["unit", "provider:prisma", "local"] }, () => {
     expect(secrets.user).toBe("api");
     expect(Redacted.value(secrets.password!)).toBe("p@ss");
   });
-
-  it.effect("paginates list endpoints and sends bearer auth", () => {
-    const { layer, captured } = harness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const projects = yield* client.listProjects({ limit: 1 });
-
-        expect(projects.map((project: { id: string }) => project.id)).toEqual([
-          "project-1",
-          "project-2",
-        ]);
-        expect(captured.map((request) => request.pathname)).toEqual([
-          "/v1/projects",
-          "/v1/projects",
-        ]);
-        expect(captured[0]?.search).toBe("?limit=1");
-        expect(captured[1]?.search).toBe("?limit=1&cursor=cursor-2");
-        expect(captured.every((request) => request.authorization === "Bearer test-token")).toBe(
-          true,
-        );
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("starts pagination from an explicit cursor", () => {
-    const { layer, captured } = harness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const projects = yield* client.listProjects({
-          limit: 1,
-          cursor: "cursor-2",
-        });
-
-        expect(projects.map((project: { id: string }) => project.id)).toEqual(["project-2"]);
-        expect(captured.map((request) => request.pathname)).toEqual(["/v1/projects"]);
-        expect(captured[0]?.search).toBe("?limit=1&cursor=cursor-2");
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("rejects pagination that omits a required next cursor", () => {
-    const http = HttpClient.make((request) =>
-      Effect.succeed(HttpClientResponse.fromWeb(request, page([], true, null))),
-    );
-
-    return withClient((client) => client.listProjects()).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiDecodeError);
-        expect(error.message).toContain("hasMore was true without a non-empty nextCursor");
-      }),
-    );
-  });
-
-  it.effect("rejects pagination that repeats a cursor", () => {
-    let attempts = 0;
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        return HttpClientResponse.fromWeb(request, page([], true, "repeated-cursor"));
-      }),
-    );
-
-    return withClient((client) => client.listProjects()).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiDecodeError);
-        expect(error.message).toContain("nextCursor repeated");
-        expect(attempts).toBe(2);
-      }),
-    );
-  });
-
-  it.effect("bounds aggregate pagination response bytes", () => {
-    let attempts = 0;
-    const payload = "x".repeat(4 * 1024 * 1024 - 1_024);
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        return HttpClientResponse.fromWeb(
-          request,
-          page([{ id: `project-${attempts}`, payload }], true, `cursor-${attempts}`),
-        );
-      }),
-    );
-
-    return withClient((client) => client.listProjects()).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiDecodeError);
-        expect(error.message).toContain("67108864 aggregate response byte safety limit");
-        if (error instanceof PrismaApiDecodeError) {
-          expect(error.bodyLength).toBeGreaterThan(64 * 1024 * 1024);
-        }
-        expect(attempts).toBe(17);
-      }),
-    );
-  });
-
-  it.effect("uses the configured Prisma API base URL", () => {
-    const { layer, captured } = harness("https://control-plane.prisma.test");
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        yield* client.listProjects({ limit: 1 });
-
-        expect(captured[0]?.url).toBe("https://control-plane.prisma.test/v1/projects?limit=1");
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("preserves current custom-domain wire fields", () => {
-    const { layer } = harness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const domain = yield* client.getCustomDomain("domain-1");
-        expect(domain.appId).toBe("app-1");
-        expect(domain.foundryStatus).toBe("pending");
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("preserves 200 versus 201 custom-domain create outcomes", () => {
-    const statuses = [200, 201] as const;
-    let requestIndex = 0;
-    const domain = {
-      id: "domain-1",
-      type: "custom-domain" as const,
-      url: "https://api.prisma.test/v1/domains/domain-1",
-      hostname: "api.example.com",
-      appId: "app-1",
-      status: "pending_dns" as const,
-      foundryStatus: "pending",
-      failureReason: null,
-      failureCategory: null,
-      certExpiresAt: null,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-      dnsRecords: [],
-    };
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        const status = statuses[requestIndex++];
-        return HttpClientResponse.fromWeb(request, json({ data: domain }, { status }));
-      }),
-    );
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const existing = yield* client.createAppDomain("app-1", {
-          hostname: domain.hostname,
-        });
-        const created = yield* client.createAppDomain("app-1", {
-          hostname: domain.hostname,
-        });
-
-        expect(existing).toEqual({ status: 200, domain });
-        expect(created).toEqual({ status: 201, domain });
-      }),
-    ).pipe(Effect.provide(layerForHttp(http)));
-  });
-
-  it.effect("accepts the full flat database-create response contract", () => {
-    const database = {
-      id: "database-1",
-      type: "database" as const,
-      url: "https://api.prisma.test/v1/databases/database-1",
-      name: "main",
-      status: "failure" as const,
-      createdAt: "2026-01-01T00:00:00Z",
-      isDefault: false,
-      defaultConnectionId: null,
-      connections: [],
-      project: {
-        id: "project-1",
-        url: "https://api.prisma.test/v1/projects/project-1",
-        name: "app",
-      },
-      region: null,
-      source: null,
-      branchId: null,
-    };
-    const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(request, json({ data: database }, { status: 201 })),
-      ),
-    );
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const result = yield* client.createDatabase({
-          projectId: "project-1",
-        });
-        expect(result.status).toBe("failure");
-        expect(result.region).toBeNull();
-      }),
-    ).pipe(Effect.provide(layerForHttp(http)));
-  });
-
-  it.effect("does not retain secret-bearing malformed response bodies", () => {
-    const secret = "postgres://admin:super-secret@db.prisma.test/postgres";
-    const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response(`{"data":{"connectionString":"${secret}"}`, {
-            status: 201,
-            headers: { "content-type": "application/json" },
-          }),
-        ),
-      ),
-    );
-    const layer = PrismaClientLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.succeed(HttpClient.HttpClient, http),
-          Layer.succeed(PrismaEnvironment, {
-            type: "serviceToken" as const,
-            serviceToken: Redacted.make("test-token"),
-            source: { type: "stored" as const },
-            baseUrl: "https://api.prisma.test",
-          }),
-        ),
-      ),
-    );
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const error = yield* client
-          .createConnection({ databaseId: "database-1", name: "api" })
-          .pipe(Effect.flip);
-        expect(error).toBeInstanceOf(PrismaApiDecodeError);
-        expect(JSON.stringify(error)).not.toContain(secret);
-        if (error instanceof PrismaApiDecodeError) {
-          expect(error.bodyLength).toBeGreaterThan(0);
-          expect("body" in error).toBe(false);
-          expect("cause" in error).toBe(false);
-        }
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("rejects a missing data response envelope", () => {
-    const http = HttpClient.make((request) =>
-      Effect.succeed(HttpClientResponse.fromWeb(request, json({ project: {} }))),
-    );
-
-    return withClient((client) => client.getProject("project-1")).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiDecodeError);
-        expect(error.message).toContain("did not contain a data envelope");
-      }),
-    );
-  });
-
-  it.effect("rejects path-confusing resource IDs before sending auth", () => {
-    const { layer, captured } = harness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const traversal = yield* client.getProject("../workspaces").pipe(Effect.flip);
-        const embeddedRoute = yield* client.getProject("project-1/databases").pipe(Effect.flip);
-        const deploymentLog = yield* client
-          .getDeploymentLogsRequest("deployment-1/../../projects")
-          .pipe(Effect.flip);
-        const buildLog = yield* client.getBuildLogsRequest("build-1?token=leak").pipe(Effect.flip);
-
-        for (const error of [traversal, embeddedRoute, deploymentLog, buildLog]) {
-          expect(error).toBeInstanceOf(PrismaApiError);
-          expect(error.message).toContain("invalid Prisma Management API");
-        }
-        expect(captured).toEqual([]);
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("times out an unresponsive management API request", () => {
-    const http = HttpClient.make(() => Effect.never);
-    const layer = layerForHttp(http);
-
-    return Effect.gen(function* () {
-      const fiber = yield* withClient((client) => client.getProject("project-1")).pipe(
-        Effect.provide(layer),
-        Effect.flip,
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* TestClock.adjust("11 seconds");
-      const error = yield* Fiber.join(fiber);
-
-      expect(error).toBeInstanceOf(PrismaApiError);
-      if (error instanceof PrismaApiError) {
-        expect(error.status).toBe(0);
-        expect(error.message).toContain("timed out after 10 seconds");
-      }
-    }).pipe(Effect.provide(TestClock.layer()));
-  });
-
-  it.effect("times out while reading a streaming response body", () => {
-    const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                controller.enqueue(new TextEncoder().encode('{"data":'));
-              },
-            }),
-            {
-              status: 201,
-              headers: { "content-type": "application/json" },
-            },
-          ),
-        ),
-      ),
-    );
-    const layer = layerForHttp(http);
-
-    return Effect.gen(function* () {
-      const fiber = yield* withClient((client) => client.getProject("project-1")).pipe(
-        Effect.provide(layer),
-        Effect.flip,
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* TestClock.adjust("11 seconds");
-      const error = yield* Fiber.join(fiber);
-
-      expect(error).toBeInstanceOf(PrismaApiError);
-      if (error instanceof PrismaApiError) {
-        expect(error.status).toBe(0);
-        expect(error.message).toContain("timed out after 10 seconds");
-      }
-    }).pipe(Effect.provide(TestClock.layer()));
-  });
-
-  it.effect("rejects oversized successful response bodies", () => {
-    const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response("x".repeat(4 * 1024 * 1024 + 1), {
-            status: 201,
-            headers: { "content-type": "application/json" },
-          }),
-        ),
-      ),
-    );
-
-    return withClient((client) => client.createProject({ name: "api" })).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiDecodeError);
-        expect(error.message).toContain("4194304 byte safety limit");
-      }),
-    );
-  });
-
-  it.effect("bounds and redacts oversized API error bodies", () => {
-    const secret = "do-not-retain-this-error-body";
-    const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response(secret.repeat(3_000), {
-            status: 400,
-            headers: { "content-type": "text/plain" },
-          }),
-        ),
-      ),
-    );
-
-    return withClient((client) => client.createProject({ name: "api" })).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiError);
-        expect(error.message).toContain("65536 byte safety limit");
-        expect(JSON.stringify(error)).not.toContain(secret);
-        if (error instanceof PrismaApiError) {
-          expect(error.status).toBe(400);
-          expect(error.body).toBeUndefined();
-        }
-      }),
-    );
-  });
-
-  it.effect("does not expose plain-text API error bodies in messages", () => {
-    const secret = "postgres://admin:plain-text-secret@db.example.test/main";
-    const http = HttpClient.make((request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          request,
-          new Response(secret, {
-            status: 400,
-            headers: { "content-type": "text/plain" },
-          }),
-        ),
-      ),
-    );
-
-    return withClient((client) => client.createProject({ name: "api" })).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiError);
-        expect(error.message).toBe("HTTP 400");
-        expect(String(error)).not.toContain(secret);
-        expect(JSON.stringify(error)).not.toContain(secret);
-        if (error instanceof PrismaApiError) {
-          expect(Redacted.value(error.body!)).toBe(secret);
-        }
-      }),
-    );
-  });
-
-  it.effect("exposes only safe codes from structured API errors", () => {
-    const secret = "postgres://admin:structured-secret@db.example.test/main";
-    const responseBody = {
-      error: {
-        code: "state:not_found",
-        message: secret,
-        hint: secret,
-      },
-    };
-    const http = HttpClient.make((request) =>
-      Effect.succeed(HttpClientResponse.fromWeb(request, json(responseBody, { status: 404 }))),
-    );
-
-    return withClient((client) => client.createProject({ name: "api" })).pipe(
-      Effect.provide(layerForHttp(http)),
-      Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(PrismaApiError);
-        expect(error.message).toBe("Prisma Management API request failed (state:not_found)");
-        expect(String(error)).not.toContain(secret);
-        expect(JSON.stringify(error)).not.toContain(secret);
-      }),
-    );
-  });
-
-  it.effect("uses canonical app and deployment management routes", () => {
-    const { layer, captured } = routeCoverageHarness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        yield* client.createProjectDatabase("project-1", {
-          name: "main",
-          region: "us-east-1",
-        });
-        yield* client.createApp({
-          projectId: "project-1",
-          displayName: "api",
-          regionId: "us-east-1",
-        });
-        yield* client.createAppDeployment("app-1", {
-          portMapping: { http: 3000 },
-        });
-        yield* client.getDeployment("deployment-1");
-        yield* client.startDeployment("deployment-1");
-        yield* client.stopDeployment("deployment-1");
-        yield* client.deleteDeployment("deployment-1");
-        yield* client.listWorkspaceIntegrations("workspace-1", { limit: 10 });
-
-        expect(
-          captured.map((request) => [request.method, `${request.pathname}${request.search}`]),
-        ).toEqual([
-          ["POST", "/v1/projects/project-1/databases"],
-          ["POST", "/v1/apps"],
-          ["POST", "/v1/apps/app-1/deployments"],
-          ["GET", "/v1/deployments/deployment-1"],
-          ["POST", "/v1/deployments/deployment-1/start"],
-          ["POST", "/v1/deployments/deployment-1/stop"],
-          ["DELETE", "/v1/deployments/deployment-1"],
-          ["GET", "/v1/workspaces/workspace-1/integrations?limit=10"],
-        ]);
-        expect(captured[0]?.bodyJson).toEqual({
-          name: "main",
-          region: "us-east-1",
-        });
-        expect(captured[2]?.bodyJson).toEqual({
-          portMapping: { http: 3000 },
-        });
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("retries transient API failures for destructive requests", () => {
-    const captured: Captured[] = [];
-    let attempts = 0;
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        const url = new URL(request.url);
-        captured.push({
-          url: request.url,
-          method: request.method,
-          pathname: url.pathname,
-          search: url.search,
-          authorization: request.headers.authorization,
-          bodyJson: undefined,
-        });
-        return HttpClientResponse.fromWeb(
-          request,
-          attempts < 3
-            ? json(
-                {
-                  error: {
-                    message: "transient platform failure",
-                  },
-                },
-                { status: 500 },
-              )
-            : empty(),
-        );
-      }),
-    );
-    const layer = PrismaClientLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.succeed(HttpClient.HttpClient, http),
-          Layer.succeed(PrismaEnvironment, {
-            type: "serviceToken" as const,
-            serviceToken: Redacted.make("test-token"),
-            source: { type: "stored" as const },
-            baseUrl: "https://api.prisma.test",
-          }),
-        ),
-      ),
-    );
-
-    return Effect.gen(function* () {
-      const fiber = yield* withClient((client) => client.deleteDeployment("deployment-1")).pipe(
-        Effect.provide(layer),
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* TestClock.adjust("1 second");
-      yield* Fiber.join(fiber);
-
-      expect(attempts).toBe(3);
-      expect(captured.map((request) => request.method)).toEqual(["DELETE", "DELETE", "DELETE"]);
-      expect(captured.map((request) => request.pathname)).toEqual([
-        "/v1/deployments/deployment-1",
-        "/v1/deployments/deployment-1",
-        "/v1/deployments/deployment-1",
-      ]);
-    }).pipe(Effect.provide(TestClock.layer()));
-  });
-
-  it.effect("retries transient API failures for safe lifecycle posts", () => {
-    const captured: Captured[] = [];
-    let attempts = 0;
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        const url = new URL(request.url);
-        captured.push({
-          url: request.url,
-          method: request.method,
-          pathname: url.pathname,
-          search: url.search,
-          authorization: request.headers.authorization,
-          bodyJson: undefined,
-        });
-        return HttpClientResponse.fromWeb(
-          request,
-          attempts < 3
-            ? json(
-                {
-                  error: {
-                    message: "transient platform failure",
-                  },
-                },
-                { status: 500 },
-              )
-            : data({
-                id: "deployment-1",
-                type: "deployment",
-                url: "https://api.prisma.test/v1/deployments/deployment-1",
-                foundryVersionId: "foundry-1",
-                status: "running",
-                previewDomain: "version-1.prisma.test",
-              }),
-        );
-      }),
-    );
-    const layer = PrismaClientLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.succeed(HttpClient.HttpClient, http),
-          Layer.succeed(PrismaEnvironment, {
-            type: "serviceToken" as const,
-            serviceToken: Redacted.make("test-token"),
-            source: { type: "stored" as const },
-            baseUrl: "https://api.prisma.test",
-          }),
-        ),
-      ),
-    );
-
-    return Effect.gen(function* () {
-      const fiber = yield* withClient((client) => client.startDeployment("deployment-1")).pipe(
-        Effect.provide(layer),
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* TestClock.adjust("1 second");
-      const version = yield* Fiber.join(fiber);
-
-      expect(attempts).toBe(3);
-      expect(version.previewDomain).toBe("version-1.prisma.test");
-      expect(captured.map((request) => request.method)).toEqual(["POST", "POST", "POST"]);
-      expect(captured.map((request) => request.pathname)).toEqual([
-        "/v1/deployments/deployment-1/start",
-        "/v1/deployments/deployment-1/start",
-        "/v1/deployments/deployment-1/start",
-      ]);
-    }).pipe(Effect.provide(TestClock.layer()));
-  });
-
-  it.effect("does not retry transient API failures for create requests", () => {
-    const captured: Captured[] = [];
-    let attempts = 0;
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        const url = new URL(request.url);
-        captured.push({
-          url: request.url,
-          method: request.method,
-          pathname: url.pathname,
-          search: url.search,
-          authorization: request.headers.authorization,
-          bodyJson: undefined,
-        });
-        return HttpClientResponse.fromWeb(
-          request,
-          json(
-            {
-              error: {
-                message: "transient platform failure",
-              },
-            },
-            { status: 500 },
-          ),
-        );
-      }),
-    );
-    const layer = PrismaClientLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.succeed(HttpClient.HttpClient, http),
-          Layer.succeed(PrismaEnvironment, {
-            type: "serviceToken" as const,
-            serviceToken: Redacted.make("test-token"),
-            source: { type: "stored" as const },
-            baseUrl: "https://api.prisma.test",
-          }),
-        ),
-      ),
-    );
-
-    return Effect.gen(function* () {
-      const error = yield* withClient((client) =>
-        client.createAppDeployment("app-1", {
-          portMapping: { http: 3000 },
-        }),
-      ).pipe(Effect.provide(layer), Effect.flip);
-
-      expect(error).toBeInstanceOf(PrismaApiError);
-      expect(attempts).toBe(1);
-      expect(captured.map((request) => request.method)).toEqual(["POST"]);
-      expect(captured.map((request) => request.pathname)).toEqual(["/v1/apps/app-1/deployments"]);
-    });
-  });
-
-  it.effect("does not retry transient API failures for transfer requests", () => {
-    const captured: Captured[] = [];
-    let attempts = 0;
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        const url = new URL(request.url);
-        captured.push({
-          url: request.url,
-          method: request.method,
-          pathname: url.pathname,
-          search: url.search,
-          authorization: request.headers.authorization,
-          bodyJson: undefined,
-        });
-        return HttpClientResponse.fromWeb(
-          request,
-          json(
-            {
-              error: {
-                message: "transient platform failure",
-              },
-            },
-            { status: 500 },
-          ),
-        );
-      }),
-    );
-    const layer = PrismaClientLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.succeed(HttpClient.HttpClient, http),
-          Layer.succeed(PrismaEnvironment, {
-            type: "serviceToken" as const,
-            serviceToken: Redacted.make("test-token"),
-            source: { type: "stored" as const },
-            baseUrl: "https://api.prisma.test",
-          }),
-        ),
-      ),
-    );
-
-    return Effect.gen(function* () {
-      const error = yield* withClient((client) =>
-        client.transferProject("project-1", {
-          recipientAccessToken: "recipient-token",
-        }),
-      ).pipe(Effect.provide(layer), Effect.flip);
-
-      expect(error).toBeInstanceOf(PrismaApiError);
-      expect(attempts).toBe(1);
-      expect(captured.map((request) => request.method)).toEqual(["POST"]);
-      expect(captured.map((request) => request.pathname)).toEqual([
-        "/v1/projects/project-1/transfer",
-      ]);
-    });
-  });
-
-  it.effect("retries transient transport failures", () => {
-    let attempts = 0;
-    const http = HttpClient.make((request) =>
-      Effect.sync(() => {
-        attempts += 1;
-        return attempts < 3
-          ? new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({
-                request,
-                cause: new Error("connection reset"),
-                description: "test transport failure",
-              }),
-            })
-          : undefined;
-      }).pipe(
-        Effect.flatMap((error) =>
-          error
-            ? Effect.fail(error)
-            : Effect.succeed(HttpClientResponse.fromWeb(request, page([{ id: "project-1" }]))),
-        ),
-      ),
-    );
-    const layer = PrismaClientLive.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.succeed(HttpClient.HttpClient, http),
-          Layer.succeed(PrismaEnvironment, {
-            type: "serviceToken" as const,
-            serviceToken: Redacted.make("test-token"),
-            source: { type: "stored" as const },
-            baseUrl: "https://api.prisma.test",
-          }),
-        ),
-      ),
-    );
-
-    return Effect.gen(function* () {
-      const fiber = yield* withClient((client) => client.listProjects()).pipe(
-        Effect.provide(layer),
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* TestClock.adjust("1 second");
-      const projects = yield* Fiber.join(fiber);
-
-      expect(attempts).toBe(3);
-      expect(projects.map((project) => project.id)).toEqual(["project-1"]);
-    }).pipe(Effect.provide(TestClock.layer()));
-  });
-
-  it.effect("preserves backup list metadata", () => {
-    const { layer, captured } = harness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const backups = yield* client.listBackups("database-1", { limit: 1 });
-
-        expect(backups).toEqual({
-          data: [
-            {
-              id: "backup-1",
-              type: "backup",
-              backupType: "full",
-              createdAt: "2026-01-01T00:00:00Z",
-              status: "completed",
-            },
-          ],
-          meta: {
-            backupRetentionDays: 7,
-          },
-          pagination: {
-            hasMore: false,
-            limit: 1,
-          },
-        });
-        expect(captured.map((request) => request.pathname)).toEqual([
-          "/v1/databases/database-1/backups",
-        ]);
-        expect(captured[0]?.search).toBe("?limit=1");
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("reads non-paginated region endpoints", () => {
-    const { layer } = harness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const regions = yield* client.listRegions({ product: "postgres" });
-        const postgresRegions = yield* client.listPostgresRegions();
-        const accelerateRegions = yield* client.listAccelerateRegions();
-
-        expect(regions.map((region) => region.id)).toEqual(["us-east-1"]);
-        expect(postgresRegions.map((region) => region.id)).toEqual(["us-east-1"]);
-        expect(accelerateRegions.map((region) => region.id)).toEqual(["us-east-1"]);
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("builds authenticated deployment log stream requests", () => {
-    const { layer, captured } = harness("https://api.prisma.test");
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        const request = yield* client.getDeploymentLogsRequest("deployment-1", {
-          tail: 100,
-          fromStart: true,
-          cursor: "byte-42",
-        });
-        expect(request.url).toBe(
-          "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=100&cursor=byte-42&from_start=true",
-        );
-        expect(Redacted.value(request.headers.Authorization)).toBe("Bearer test-token");
-        expect(captured).toEqual([]);
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it.effect("maps every supported Management API operation to its route", () => {
-    const { layer, captured } = routeCoverageHarness();
-
-    return withClient((client) =>
-      Effect.gen(function* () {
-        yield* client.listWorkspaces({ limit: 1 });
-        yield* client.getWorkspace("workspace-1");
-        yield* client.getCurrentPrincipal();
-        yield* client.listRegions({ product: "postgres" });
-        yield* client.listPostgresRegions();
-        yield* client.listAccelerateRegions();
-
-        yield* client.listProjects({ limit: 1 });
-        yield* client.getProject("project-1");
-        yield* client.createProject({ name: "app", region: "us-east-1" });
-        yield* client.updateProject("project-1", { name: "renamed" });
-        yield* client.deleteProject("project-1");
-        yield* client.transferProject("project-1", {
-          recipientAccessToken: "recipient-token",
-        });
-
-        yield* client.listDatabases({
-          projectId: "project-1",
-          branchGitName: "main",
-        });
-        yield* client.listProjectDatabases("project-1", { limit: 1 });
-        yield* client.getDatabase("database-1");
-        yield* client.createDatabase({
-          projectId: "project-1",
-          name: "main",
-        });
-        yield* client.createProjectDatabase("project-1", {
-          name: "main",
-          source: {
-            type: "backup",
-            databaseId: "database-source",
-            backupId: "backup-1",
-          },
-        });
-        yield* client.updateDatabase("database-1", { name: "main-2" });
-        yield* client.deleteDatabase("database-1");
-        yield* client.listBackups("database-1", { limit: 1 });
-        yield* client.restoreDatabase("database-1", {
-          source: {
-            type: "backup",
-            databaseId: "database-source",
-            backupId: "backup-1",
-          },
-        });
-        yield* client.getDatabaseUsage("database-1", {
-          startDate: "2026-01-01",
-        });
-
-        yield* client.listConnections({ databaseId: "database-1" });
-        yield* client.listDatabaseConnections("database-1", { limit: 1 });
-        yield* client.getConnection("connection-1");
-        yield* client.createConnection({
-          databaseId: "database-1",
-          name: "direct",
-        });
-        yield* client.createDatabaseConnection("database-1", {
-          name: "direct",
-        });
-        yield* client.deleteConnection("connection-1");
-        yield* client.rotateConnection("connection-1");
-
-        yield* client.listBranches("project-1", { gitName: "main" });
-        yield* client.getBranch("branch-1");
-        yield* client.createBranch("project-1", { gitName: "main" });
-        yield* client.updateBranch("branch-1", { isDefault: true });
-        yield* client.deleteBranch("branch-1");
-
-        yield* client.listBuckets({ projectId: "project-1" });
-        yield* client.getBucket("bucket-1");
-        yield* client.createBucket({
-          projectId: "project-1",
-          name: "uploads",
-        });
-        yield* client.deleteBucket("bucket-1");
-        yield* client.listBucketKeys("bucket-1", { limit: 1 });
-        yield* client.createBucketKey("bucket-1", { role: "read_write" });
-        yield* client.deleteBucketKey("bucket-1", "key-1");
-
-        yield* client.getCustomDomain("domain-1");
-        yield* client.deleteCustomDomain("domain-1");
-        yield* client.retryCustomDomain("domain-1");
-
-        yield* client.listEnvironmentVariables({
-          projectId: "project-1",
-          class: "production",
-          key: "TOKEN",
-        });
-        yield* client.getEnvironmentVariable("env-1");
-        yield* client.createEnvironmentVariable({
-          projectId: "project-1",
-          class: "production",
-          key: "TOKEN",
-          value: "secret",
-        });
-        yield* client.updateEnvironmentVariable("env-1", {
-          value: "secret-2",
-        });
-        yield* client.deleteEnvironmentVariable("env-1");
-
-        yield* client.listIntegrations({ workspaceId: "workspace-1" });
-        yield* client.listWorkspaceIntegrations("workspace-1", { limit: 1 });
-        yield* client.getIntegration("integration-1");
-        yield* client.deleteIntegration("integration-1");
-        yield* client.revokeWorkspaceIntegration("workspace-1", "client-1");
-
-        yield* client.listScmInstallations({ workspaceId: "workspace-1" });
-        yield* client.createScmInstallIntent({
-          provider: "github",
-          workspaceId: "workspace-1",
-        });
-        yield* client.listScmInstallationRepositories("scminstall-1", {
-          limit: 10,
-        });
-
-        yield* client.listSourceRepositories({ projectId: "project-1" });
-        yield* client.getSourceRepository("repo-1");
-        yield* client.createSourceRepository({
-          projectId: "project-1",
-          provider: "github",
-          providerRepositoryId: 123,
-          installationId: "scminstall-1",
-        });
-        yield* client.deleteSourceRepository("repo-1");
-
-        yield* client.listApps({
-          projectId: "project-1",
-          branchGitName: "main",
-        });
-        yield* client.getApp("app-1");
-        yield* client.createApp({
-          projectId: "project-1",
-          displayName: "web",
-        });
-        yield* client.updateApp("app-1", { displayName: "web-2" });
-        yield* client.deleteApp("app-1");
-        yield* client.promoteApp("app-1", { deploymentId: "deployment-1" });
-        yield* client.rollbackApp("app-1", { deploymentId: "deployment-1" });
-        yield* client.listAppDomains("app-1");
-        yield* client.createAppDomain("app-1", {
-          hostname: "web.example.com",
-        });
-        yield* client.listAppDeployments("app-1", { limit: 1 });
-        yield* client.createAppDeployment("app-1", {
-          skipCodeUpload: true,
-        });
-        yield* client.getDeployment("deployment-1");
-        yield* client.deleteDeployment("deployment-1");
-        yield* client.startDeployment("deployment-1");
-        yield* client.stopDeployment("deployment-1");
-        const deploymentLogsRequest = yield* client.getDeploymentLogsRequest("deployment-1", {
-          tail: 10,
-        });
-        expect(deploymentLogsRequest.url).toBe(
-          "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=10",
-        );
-        expect(Redacted.value(deploymentLogsRequest.headers.Authorization)).toBe(
-          "Bearer test-token",
-        );
-        const buildLogsRequest = yield* client.getBuildLogsRequest("build-1", {
-          follow: true,
-          cursor: "cursor-1",
-        });
-        expect(buildLogsRequest.url).toBe(
-          "https://api.prisma.test/v1/builds/build-1/logs?follow=true&cursor=cursor-1",
-        );
-        expect(Redacted.value(buildLogsRequest.headers.Authorization)).toBe("Bearer test-token");
-        expect(buildLogsRequest.headers.Accept).toBe("application/x-ndjson");
-
-        expect(
-          captured.map((request) => [request.method, `${request.pathname}${request.search}`]),
-        ).toEqual([
-          ["GET", "/v1/workspaces?limit=1"],
-          ["GET", "/v1/workspaces/workspace-1"],
-          ["GET", "/v1/me"],
-          ["GET", "/v1/regions?product=postgres"],
-          ["GET", "/v1/regions/postgres"],
-          ["GET", "/v1/regions/accelerate"],
-          ["GET", "/v1/projects?limit=1"],
-          ["GET", "/v1/projects/project-1"],
-          ["POST", "/v1/projects"],
-          ["PATCH", "/v1/projects/project-1"],
-          ["DELETE", "/v1/projects/project-1"],
-          ["POST", "/v1/projects/project-1/transfer"],
-          ["GET", "/v1/databases?projectId=project-1&branchGitName=main"],
-          ["GET", "/v1/projects/project-1/databases?limit=1"],
-          ["GET", "/v1/databases/database-1"],
-          ["POST", "/v1/databases"],
-          ["POST", "/v1/projects/project-1/databases"],
-          ["PATCH", "/v1/databases/database-1"],
-          ["DELETE", "/v1/databases/database-1"],
-          ["GET", "/v1/databases/database-1/backups?limit=1"],
-          ["POST", "/v1/databases/database-1/restore"],
-          ["GET", "/v1/databases/database-1/usage?startDate=2026-01-01"],
-          ["GET", "/v1/connections?databaseId=database-1"],
-          ["GET", "/v1/databases/database-1/connections?limit=1"],
-          ["GET", "/v1/connections/connection-1"],
-          ["POST", "/v1/connections"],
-          ["POST", "/v1/databases/database-1/connections"],
-          ["DELETE", "/v1/connections/connection-1"],
-          ["POST", "/v1/connections/connection-1/rotate"],
-          ["GET", "/v1/projects/project-1/branches?gitName=main"],
-          ["GET", "/v1/branches/branch-1"],
-          ["POST", "/v1/projects/project-1/branches"],
-          ["PATCH", "/v1/branches/branch-1"],
-          ["DELETE", "/v1/branches/branch-1"],
-          ["GET", "/v1/buckets?projectId=project-1"],
-          ["GET", "/v1/buckets/bucket-1"],
-          ["POST", "/v1/buckets"],
-          ["DELETE", "/v1/buckets/bucket-1"],
-          ["GET", "/v1/buckets/bucket-1/keys?limit=1"],
-          ["POST", "/v1/buckets/bucket-1/keys"],
-          ["DELETE", "/v1/buckets/bucket-1/keys/key-1"],
-          ["GET", "/v1/domains/domain-1"],
-          ["DELETE", "/v1/domains/domain-1"],
-          ["POST", "/v1/domains/domain-1/retry"],
-          ["GET", "/v1/environment-variables?projectId=project-1&class=production&key=TOKEN"],
-          ["GET", "/v1/environment-variables/env-1"],
-          ["POST", "/v1/environment-variables"],
-          ["PATCH", "/v1/environment-variables/env-1"],
-          ["DELETE", "/v1/environment-variables/env-1"],
-          ["GET", "/v1/integrations?workspaceId=workspace-1"],
-          ["GET", "/v1/workspaces/workspace-1/integrations?limit=1"],
-          ["GET", "/v1/integrations/integration-1"],
-          ["DELETE", "/v1/integrations/integration-1"],
-          ["DELETE", "/v1/workspaces/workspace-1/integrations/client-1"],
-          ["GET", "/v1/scm-installations?workspaceId=workspace-1"],
-          ["POST", "/v1/scm-installations/install-intents"],
-          ["GET", "/v1/scm-installations/scminstall-1/repositories?limit=10"],
-          ["GET", "/v1/source-repositories?projectId=project-1"],
-          ["GET", "/v1/source-repositories/repo-1"],
-          ["POST", "/v1/source-repositories"],
-          ["DELETE", "/v1/source-repositories/repo-1"],
-          ["GET", "/v1/apps?projectId=project-1&branchGitName=main"],
-          ["GET", "/v1/apps/app-1"],
-          ["POST", "/v1/apps"],
-          ["PATCH", "/v1/apps/app-1"],
-          ["DELETE", "/v1/apps/app-1"],
-          ["POST", "/v1/apps/app-1/promote"],
-          ["POST", "/v1/apps/app-1/rollback"],
-          ["GET", "/v1/apps/app-1/domains"],
-          ["POST", "/v1/apps/app-1/domains"],
-          ["GET", "/v1/apps/app-1/deployments?limit=1"],
-          ["POST", "/v1/apps/app-1/deployments"],
-          ["GET", "/v1/deployments/deployment-1"],
-          ["DELETE", "/v1/deployments/deployment-1"],
-          ["POST", "/v1/deployments/deployment-1/start"],
-          ["POST", "/v1/deployments/deployment-1/stop"],
-        ]);
-        expect(routeInventoryFrom(captured)).toEqual(expectedManagementApiRoutes);
-        expect(expectedManagementApiRoutes).toHaveLength(78);
-        expect(captured[11]?.bodyJson).toEqual({
-          recipientAccessToken: "recipient-token",
-        });
-        const restoreRequest = captured.find(
-          (request) =>
-            request.method === "POST" && request.pathname === "/v1/databases/database-1/restore",
-        );
-        expect(restoreRequest?.bodyJson).toEqual({
-          source: {
-            type: "backup",
-            databaseId: "database-source",
-            backupId: "backup-1",
-          },
-        });
-        const projectDatabaseRequest = captured.find(
-          (request) =>
-            request.method === "POST" && request.pathname === "/v1/projects/project-1/databases",
-        );
-        expect(projectDatabaseRequest?.bodyJson).toEqual({
-          name: "main",
-          source: {
-            type: "backup",
-            databaseId: "database-source",
-            backupId: "backup-1",
-          },
-        });
-
-        const createEnvRequest = captured.find(
-          (request) =>
-            request.method === "POST" && request.pathname === "/v1/environment-variables",
-        );
-        expect(createEnvRequest?.bodyJson).toEqual({
-          projectId: "project-1",
-          class: "production",
-          key: "TOKEN",
-          value: "secret",
-        });
-
-        const updateEnvRequest = captured.find(
-          (request) =>
-            request.method === "PATCH" && request.pathname === "/v1/environment-variables/env-1",
-        );
-        expect(updateEnvRequest?.bodyJson).toEqual({
-          value: "secret-2",
-        });
-
-        const sourceRepositoryRequest = captured.find(
-          (request) => request.method === "POST" && request.pathname === "/v1/source-repositories",
-        );
-        expect(sourceRepositoryRequest?.bodyJson).toEqual({
-          projectId: "project-1",
-          provider: "github",
-          providerRepositoryId: 123,
-          installationId: "scminstall-1",
-        });
-
-        const installIntentRequest = captured.find(
-          (request) =>
-            request.method === "POST" &&
-            request.pathname === "/v1/scm-installations/install-intents",
-        );
-        expect(installIntentRequest?.bodyJson).toEqual({
-          provider: "github",
-          workspaceId: "workspace-1",
-        });
-      }),
-    ).pipe(Effect.provide(layer));
-  });
-
-  it("matches the pinned Management API route contract", () => {
-    expect(expectedManagementApiRoutes).toEqual([...productionManagementApiRoutes].sort());
-  });
 });
+
+test.provider(
+  "reads the workspace, principal, regions, and integrations",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+
+    const me = yield* client.getCurrentPrincipal();
+    expect(me.workspace).not.toBeNull();
+    const workspaceId = me.workspace!.id;
+
+    const workspace = yield* client.getWorkspace(workspaceId);
+    expect(workspace.id).toBe(workspaceId);
+    const workspaces = yield* client.listWorkspaces({ limit: 1 });
+    expect(workspaces.map((candidate) => candidate.id)).toContain(workspaceId);
+
+    const regions = yield* client.listRegions({ product: "postgres" });
+    expect(regions.length).toBeGreaterThan(0);
+    expect(regions.every((region) => region.product === "postgres")).toBe(true);
+    const postgresRegions = yield* client.listPostgresRegions();
+    expect(postgresRegions.map((region) => region.id)).toContain("us-east-1");
+    const accelerateRegions = yield* client.listAccelerateRegions();
+    expect(accelerateRegions.map((region) => region.id)).toContain("us-east-1");
+
+    expect(Array.isArray(yield* client.listIntegrations({ workspaceId }))).toBe(true);
+    expect(Array.isArray(yield* client.listWorkspaceIntegrations(workspaceId, { limit: 1 }))).toBe(
+      true,
+    );
+    expect(Array.isArray(yield* client.listScmInstallations({ workspaceId }))).toBe(true);
+    expect(isNotFound(yield* apiError(client.getIntegration("itgr_alchemymissing00000000")))).toBe(
+      true,
+    );
+    if (me.credential.type === "service_token") {
+      // Service tokens cannot start a GitHub App install.
+      const refused = yield* apiError(
+        client.createScmInstallIntent({ provider: "github", workspaceId }),
+      );
+      expect(refused.status).toBe(403);
+    }
+
+    yield* stack.destroy();
+  }),
+  { tags: tags(), timeout: 120_000 },
+);
+
+test.provider(
+  "maps missing resources to 404s with redacted structured error bodies",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+
+    const missing = [
+      client.getProject("proj_alchemymissing00000000"),
+      client.getBranch("br_alchemymissing0000000000"),
+      client.getBucket("bkt_alchemymissing000000000"),
+      client.getEnvironmentVariable("envvar_alchemymissing000000"),
+      client.getCustomDomain("dom_alchemymissing000000000"),
+      client.deleteCustomDomain("dom_alchemymissing000000000"),
+      client.retryCustomDomain("dom_alchemymissing000000000"),
+      client.getSourceRepository("srcrepo_alchemymissing00000"),
+      client.deleteSourceRepository("srcrepo_alchemymissing00000"),
+    ];
+    for (const request of missing) {
+      const error = yield* apiError(request);
+      expect(error.status).toBe(404);
+      expect(isNotFound(error)).toBe(true);
+      // Only the safe error code reaches the message; the body stays redacted.
+      expect(error.message).toBe("Prisma Management API request failed (resource-not-found)");
+      expect(Redacted.value(error.body!)).toContain("resource-not-found");
+      expect(JSON.stringify(error)).not.toContain("Resource Not Found");
+    }
+
+    // Path-confusing IDs are refused locally (status 0) before any request.
+    for (const request of [
+      client.getProject("../workspaces"),
+      client.getProject("project-1/databases"),
+      client.getDeploymentLogsRequest("deployment-1/../../projects"),
+      client.getBuildLogsRequest("build-1?token=leak"),
+    ]) {
+      const error = yield* apiError(request);
+      expect(error.status).toBe(0);
+      expect(error.message).toContain("invalid Prisma Management API");
+    }
+
+    yield* stack.destroy();
+  }),
+  { tags: tags(), timeout: 120_000 },
+);
+
+test.provider(
+  "paginates branches across cursors and reports branch conflicts and deletes",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+    const { projectId } = yield* stack.deploy(projectStack);
+
+    const first = yield* client.createBranch(projectId, { gitName: "client/first" });
+    const second = yield* client.createBranch(projectId, { gitName: "client/second" });
+    expect(first.project.id).toBe(projectId);
+    expect(first.isDefault).toBe(false);
+
+    // The API pages one branch at a time; the client follows every cursor.
+    const firstPage = yield* getProjectBranches({ projectId, limit: 1 });
+    expect(firstPage.data).toHaveLength(1);
+    expect(firstPage.pagination.hasMore).toBe(true);
+    const cursor = firstPage.pagination.nextCursor!;
+    const all = yield* client.listBranches(projectId, { limit: 1 });
+    expect(all.map((branch) => branch.gitName).sort()).toEqual(
+      ["client/first", "client/second", firstPage.data[0]!.gitName].sort(),
+    );
+    // Starting from an explicit cursor skips the first page.
+    const rest = yield* client.listBranches(projectId, { limit: 1, cursor });
+    expect(rest.map((branch) => branch.id)).toEqual(
+      all.filter((branch) => branch.id !== firstPage.data[0]!.id).map((branch) => branch.id),
+    );
+    const filtered = yield* client.listBranches(projectId, { gitName: "client/second" });
+    expect(filtered.map((branch) => branch.id)).toEqual([second.id]);
+
+    const duplicate = yield* apiError(client.createBranch(projectId, { gitName: "client/first" }));
+    expect(duplicate.status).toBe(409);
+    expect(isConflict(duplicate)).toBe(true);
+
+    const updated = yield* client.updateBranch(first.id, { isDefault: false });
+    expect(updated.id).toBe(first.id);
+    expect((yield* client.getBranch(second.id)).gitName).toBe("client/second");
+
+    yield* client.deleteBranch(first.id);
+    yield* client.deleteBranch(second.id);
+    yield* expectNotFound(client.getBranch(first.id));
+    yield* expectNotFound(client.getBranch(second.id));
+
+    yield* stack.destroy();
+    yield* expectProjectGone(projectId);
+  }),
+  { tags: tags("branch"), timeout: 180_000 },
+);
+
+test.provider(
+  "creates, reads, renames, and deletes databases and their connections",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+    const { projectId } = yield* stack.deploy(projectStack);
+
+    const nested = yield* client.createProjectDatabase(projectId, {
+      name: "client-nested",
+      region: "us-east-1",
+    });
+    expect(nested.name).toBe("client-nested");
+    expect(nested.region?.id).toBe("us-east-1");
+    expect(nested.project.id).toBe(projectId);
+
+    const flat = yield* client.createDatabase({ projectId, name: "client-flat" });
+    expect(flat.project.id).toBe(projectId);
+    expect(flat.isDefault).toBe(false);
+    expect(["provisioning", "ready"]).toContain(flat.status);
+
+    const renamed = yield* client.updateDatabase(flat.id, { name: "client-flat-renamed" });
+    expect(renamed.name).toBe("client-flat-renamed");
+    expect((yield* client.getDatabase(flat.id)).name).toBe("client-flat-renamed");
+    expect(
+      (yield* client.listProjectDatabases(projectId, { limit: 1 })).map((db) => db.id).sort(),
+    ).toEqual([nested.id, flat.id].sort());
+    expect((yield* client.listDatabases({ projectId })).map((db) => db.id).sort()).toEqual(
+      [nested.id, flat.id].sort(),
+    );
+
+    const backups = yield* client.listBackups(nested.id, { limit: 1 });
+    expect(Array.isArray(backups.data)).toBe(true);
+    expect(backups.meta.backupRetentionDays).toBeGreaterThan(0);
+    expect(backups.pagination.hasMore).toBe(false);
+    const usage = yield* client.getDatabaseUsage(nested.id, {});
+    expect(usage.metrics.operations.unit).toBe("ops");
+    expect(usage.metrics.storage.unit).toBe("GiB");
+    const restore = yield* apiError(
+      client.restoreDatabase(flat.id, {
+        source: { type: "backup", databaseId: nested.id, backupId: "bkp_alchemymissing" },
+      }),
+    );
+    expect(isNotFound(restore)).toBe(true);
+
+    const connection = yield* client.createConnection({ databaseId: nested.id, name: "client" });
+    expect(connection.database.id).toBe(nested.id);
+    const secrets = extractConnectionSecrets(connection);
+    expect(secrets.host).toBe(connection.endpoints.direct!.host);
+    expect(secrets.user).toBeTruthy();
+    expect(secrets.password).toBeDefined();
+    const nestedConnection = yield* client.createDatabaseConnection(nested.id, {
+      name: "client-nested",
+    });
+    expect(nestedConnection.name).toBe("client-nested");
+
+    const listed = (yield* client.listDatabaseConnections(nested.id, { limit: 1 })).map(
+      (c) => c.id,
+    );
+    expect(listed).toEqual(expect.arrayContaining([connection.id, nestedConnection.id]));
+    expect((yield* client.listConnections({ databaseId: nested.id })).map((c) => c.id)).toEqual(
+      expect.arrayContaining([connection.id, nestedConnection.id]),
+    );
+    expect((yield* client.getConnection(connection.id)).name).toBe("client");
+
+    const rotated = yield* client.rotateConnection(connection.id);
+    expect(rotated.id).toBe(connection.id);
+    expect(Redacted.value(extractConnectionSecrets(rotated).password!)).not.toBe(
+      Redacted.value(secrets.password!),
+    );
+
+    yield* client.deleteConnection(connection.id);
+    yield* client.deleteConnection(nestedConnection.id);
+    yield* expectNotFound(client.getConnection(connection.id));
+    yield* expectNotFound(client.getConnection(nestedConnection.id));
+
+    yield* client.deleteDatabase(flat.id);
+    yield* client.deleteDatabase(nested.id);
+    yield* expectNotFound(client.getDatabase(flat.id));
+    expect(isNotFound(yield* apiError(client.deleteDatabase(flat.id)))).toBe(true);
+
+    yield* stack.destroy();
+    yield* expectProjectGone(projectId);
+  }),
+  { tags: tags("database", "connection"), timeout: 240_000 },
+);
+
+test.provider(
+  "manages buckets, bucket keys, and environment variables",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+    const { projectId } = yield* stack.deploy(projectStack);
+
+    const bucket = yield* client.createBucket({ projectId, name: "client" });
+    expect(bucket.project.id).toBe(projectId);
+    expect((yield* client.getBucket(bucket.id)).name).toBe("client");
+    expect((yield* client.listBuckets({ projectId })).map((b) => b.id)).toContain(bucket.id);
+
+    const key = yield* client.createBucketKey(bucket.id, { name: "client", role: "read" });
+    expect(key.role).toBe("read");
+    expect(key.secretAccessKey.length).toBeGreaterThan(0);
+    expect(key.bucketName).toBe(bucket.providerName);
+    const keys = yield* client.listBucketKeys(bucket.id, { limit: 1 });
+    expect(keys.map((k) => k.id)).toEqual([key.id]);
+    // The secret is returned once, on create.
+    expect("secretAccessKey" in keys[0]!).toBe(false);
+    yield* client.deleteBucketKey(bucket.id, key.id);
+    expect(yield* client.listBucketKeys(bucket.id)).toEqual([]);
+    yield* client.deleteBucket(bucket.id);
+    yield* expectNotFound(client.getBucket(bucket.id));
+
+    const variable = yield* client.createEnvironmentVariable({
+      projectId,
+      class: "preview",
+      key: "CLIENT_TEST",
+      value: "first",
+    });
+    expect(variable.projectId).toBe(projectId);
+    expect(variable.isManagedBySystem).toBe(false);
+    const duplicate = yield* apiError(
+      client.createEnvironmentVariable({
+        projectId,
+        class: "preview",
+        key: "CLIENT_TEST",
+        value: "second",
+      }),
+    );
+    expect(isConflict(duplicate)).toBe(true);
+    const updated = yield* client.updateEnvironmentVariable(variable.id, { value: "second" });
+    expect(updated.id).toBe(variable.id);
+    expect((yield* client.getEnvironmentVariable(variable.id)).key).toBe("CLIENT_TEST");
+    expect(
+      (yield* client.listEnvironmentVariables({
+        projectId,
+        class: "preview",
+        key: "CLIENT_TEST",
+      })).map((v) => v.id),
+    ).toEqual([variable.id]);
+    yield* client.deleteEnvironmentVariable(variable.id);
+    yield* expectNotFound(client.getEnvironmentVariable(variable.id));
+
+    expect(yield* client.listSourceRepositories({ projectId })).toEqual([]);
+
+    yield* stack.destroy();
+    yield* expectProjectGone(projectId);
+  }),
+  {
+    tags: tags("bucket", "bucketaccesskey", "environmentvariable", "sourcerepository"),
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "creates apps and deployments through the canonical routes",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+    const { projectId } = yield* stack.deploy(projectStack);
+
+    const app = yield* client.createApp({ projectId, displayName: "client" });
+    expect(app.projectId).toBe(projectId);
+    expect(app.latestDeploymentId).toBeNull();
+    expect(app.appEndpointDomain).toBeTruthy();
+    expect((yield* client.getApp(app.id)).name).toBe("client");
+    expect((yield* client.updateApp(app.id, { displayName: "client-renamed" })).name).toBe(
+      "client-renamed",
+    );
+    expect((yield* client.listApps({ projectId })).map((a) => a.id)).toEqual([app.id]);
+    expect(yield* client.listAppDomains(app.id)).toEqual([]);
+    expect(yield* client.listAppDeployments(app.id)).toEqual([]);
+
+    // Prisma refuses a domain until the App has a promoted deployment.
+    const domain = yield* apiError(
+      client.createAppDomain(app.id, { hostname: "alchemy-prisma-client.example.com" }),
+    );
+    expect(domain.status).toBe(422);
+
+    const deployment = yield* client.createAppDeployment(app.id, { portMapping: { http: 3000 } });
+    expect(deployment.uploadUrl).toMatch(/^https:\/\//);
+    const observed = yield* client.getDeployment(deployment.id);
+    expect(observed.id).toBe(deployment.id);
+    expect(observed.status).toBe("new");
+    expect(observed.portMapping).toEqual({ http: 3000 });
+    expect((yield* client.listAppDeployments(app.id, { limit: 1 })).map((d) => d.id)).toEqual([
+      deployment.id,
+    ]);
+
+    const logs = yield* client.getDeploymentLogsRequest(deployment.id, {
+      tail: 100,
+      fromStart: true,
+      cursor: "byte-42",
+    });
+    expect(logs.url).toBe(
+      `wss://api.prisma.io/v1/deployments/${deployment.id}/logs?tail=100&cursor=byte-42&from_start=true`,
+    );
+    expect(Redacted.value(logs.headers.Authorization)).toMatch(/^Bearer \S+$/);
+    const build = yield* client.getBuildLogsRequest("bld_1", { follow: true, cursor: "c-1" });
+    expect(build.url).toBe("https://api.prisma.io/v1/builds/bld_1/logs?follow=true&cursor=c-1");
+    expect(build.headers.Accept).toBe("application/x-ndjson");
+
+    yield* client.deleteDeployment(deployment.id);
+    yield* expectNotFound(client.getDeployment(deployment.id));
+    yield* client.deleteApp(app.id);
+    yield* expectNotFound(client.getApp(app.id));
+
+    yield* stack.destroy();
+    yield* expectProjectGone(projectId);
+  }),
+  { tags: tags("app", "deployment", "customdomain"), timeout: 180_000 },
+);
+
+test.provider(
+  "renames a project and refuses a transfer with an invalid recipient token",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const client = yield* PrismaClient;
+    const { projectId } = yield* stack.deploy(projectStack);
+
+    const renamed = yield* client.updateProject(projectId, { name: "alchemy-client-renamed" });
+    expect(renamed.name).toBe("alchemy-client-renamed");
+    expect((yield* client.getProject(projectId)).name).toBe("alchemy-client-renamed");
+    expect((yield* client.listProjects({ limit: 10 })).map((p) => p.id)).toContain(projectId);
+
+    const transfer = yield* apiError(
+      client.transferProject(projectId, { recipientAccessToken: "not-a-real-token" }),
+    );
+    expect(transfer.status).toBe(400);
+    expect(JSON.stringify(transfer)).not.toContain("not-a-real-token");
+    expect((yield* client.getProject(projectId)).id).toBe(projectId);
+
+    yield* stack.destroy();
+    yield* expectProjectGone(projectId);
+  }),
+  { tags: tags(), timeout: 120_000 },
+);
