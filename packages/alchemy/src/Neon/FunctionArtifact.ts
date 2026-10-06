@@ -159,9 +159,6 @@ export const buildFunctionArtifact = Effect.fn(function* (props: FunctionProps) 
     const bridge = yield* Effect.sync(() =>
       import.meta.resolve(`./FunctionBridge${moduleExtension(import.meta.url)}`),
     );
-    const nativeBridge = yield* Effect.sync(() =>
-      import.meta.resolve(`./FunctionNativeBridge${moduleExtension(import.meta.url)}`),
-    );
     const output = yield* Bundle.build(
       {
         ...props.bundle?.input,
@@ -174,12 +171,12 @@ export const buildFunctionArtifact = Effect.fn(function* (props: FunctionProps) 
         },
         plugins: [
           props.bundle?.input?.plugins,
-          virtual((entry) =>
-            props.isExternal
-              ? // Plain handlers keep their named exports (e.g. `upgrade`).
-                `import { makeNativeFunctionBridge } from ${JSON.stringify(nativeBridge)};\nimport entrypoint from ${JSON.stringify(entry)};\nexport * from ${JSON.stringify(entry)};\nexport default makeNativeFunctionBridge(entrypoint);`
-              : `import { makeFunctionBridge } from ${JSON.stringify(bridge)};\nimport entrypoint from ${JSON.stringify(entry)};\nexport default makeFunctionBridge(entrypoint);`,
-          ),
+          props.isExternal
+            ? undefined
+            : virtual(
+                (entry) =>
+                  `import { makeFunctionBridge } from ${JSON.stringify(bridge)};\nimport entrypoint from ${JSON.stringify(entry)};\nexport default makeFunctionBridge(entrypoint);`,
+              ),
         ],
       },
       {
@@ -189,18 +186,7 @@ export const buildFunctionArtifact = Effect.fn(function* (props: FunctionProps) 
         codeSplitting: false,
         banner: `import { createRequire as __alchemyCreateRequire } from "node:module";\nconst require = __alchemyCreateRequire(import.meta.url);`,
       },
-      {
-        ...props.bundle,
-        // The generated entry imports `main`; keep its top-level side effects
-        // (e.g. Hono route registration) as if it were the entry itself.
-        pure:
-          props.bundle?.pure === false
-            ? false
-            : {
-                ...props.bundle?.pure,
-                entries: [...(props.bundle?.pure?.entries ?? []), realMain],
-              },
-      },
+      props.bundle,
     );
     files = output.files.map(({ path, content }) => ({ path, content }));
   }

@@ -16,11 +16,6 @@ import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
 import { StackContext } from "../StackContext.ts";
-import {
-  abortableResponse,
-  disconnectSignal,
-  installDisconnectTracking,
-} from "./FunctionDisconnect.ts";
 import { FunctionEnvironment, FunctionRequest } from "./FunctionEnvironment.ts";
 import type { FunctionRuntimeContext } from "./FunctionRuntimeContext.ts";
 import { FunctionUpgradeSockets } from "./FunctionUpgrade.ts";
@@ -38,7 +33,6 @@ const closeRequestScope = (scope: Scope.Closeable) => {
 
 /** Build a Node-only Fetch bridge once per process, with a fresh scope for every request. */
 export const makeFunctionBridge = (entrypoint: unknown) => {
-  installDisconnectTracking();
   const instanceScope = Scope.makeUnsafe();
   const tag = Self as unknown as Context.Service<never, { RuntimeContext: FunctionRuntimeContext }>;
   const platform = Layer.mergeAll(
@@ -93,9 +87,8 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
   });
 
   return {
-    fetch: (request: Request) => {
-      const signal = disconnectSignal(request);
-      return Effect.gen(function* () {
+    fetch: (request: Request) =>
+      Effect.gen(function* () {
         const built = yield* build;
         const response = yield* Deferred.make<Response>();
         const services = Context.mergeAll(
@@ -119,14 +112,16 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
                 EffectHttp.scopeDisableClose(scope);
                 const onClose = () => closeRequestScope(scope as Scope.Closeable);
                 socket.addEventListener("close", onClose, { once: true });
-                signal.addEventListener("abort", onClose, { once: true });
+                request.signal.addEventListener("abort", onClose, {
+                  once: true,
+                });
                 yield* Effect.addFinalizer(() =>
                   Effect.sync(() => {
                     socket.removeEventListener("close", onClose);
-                    signal.removeEventListener("abort", onClose);
+                    request.signal.removeEventListener("abort", onClose);
                   }),
                 );
-                if (signal.aborted) onClose();
+                if (request.signal.aborted) onClose();
               }
               yield* Deferred.succeed(response, res.body.body);
               return;
@@ -142,11 +137,21 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
             // The body outlives fetch; propagate actual request aborts to its producer.
             yield* Deferred.succeed(
               response,
-              res.body._tag === "Stream" ? abortableResponse(web, signal) : web,
+              res.body._tag === "Stream" && web.body
+                ? new Response(
+                    web.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>(), {
+                      signal: request.signal,
+                    }),
+                    {
+                      status: web.status,
+                      statusText: web.statusText,
+                      headers: web.headers,
+                    },
+                  )
+                : web,
             );
           }),
         ).pipe(Effect.andThen(Deferred.await(response)), Effect.provideContext(services));
-      }).pipe((effect) => Effect.runPromise(effect, { signal }));
-    },
+      }).pipe((effect) => Effect.runPromise(effect, { signal: request.signal })),
   };
 };
