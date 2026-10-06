@@ -172,41 +172,6 @@ The producer code stays the same on every host. Only the layer changes:
 The HTTP and local layers need the stream's HTTP input turned on
 (`http: true`).
 
-## Use K2 from an async Worker
-
-Put the stream in a Worker's `env` and Alchemy adds the `k2` binding:
-
-```typescript
-// alchemy.run.ts
-export const Ingest = Cloudflare.Worker("Ingest", {
-  main: "./src/ingest.ts",
-  env: { ORDERS: Orders },
-});
-
-export type IngestEnv = Cloudflare.InferEnv<typeof Ingest>;
-```
-
-`env.ORDERS.send` returns a result object instead of throwing on an append
-failure:
-
-```typescript
-// src/ingest.ts
-import type { IngestEnv } from "../alchemy.run.ts";
-
-export default {
-  async fetch(request: Request, env: IngestEnv) {
-    const result = await env.ORDERS.send([
-      { content: new TextEncoder().encode(await request.text()) },
-    ]);
-    if (!result.success) {
-      const status = result.error.retryable ? 503 : 500;
-      return new Response(result.error.message, { status });
-    }
-    return new Response(null, { status: 202 });
-  },
-};
-```
-
 ## Consume from a long-running host
 
 `Cloudflare.K2.consumeStreamRecords(stream, handler)` subscribes a host to a
