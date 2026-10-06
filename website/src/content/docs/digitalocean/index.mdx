@@ -100,6 +100,16 @@ replaces the resource while a rename updates in place. Pass
 `key.fingerprint` to the droplet's `sshKeys` to embed the key in the
 root account.
 
+`publicKey` takes an `authorized_keys` line or a PEM public key, so a
+`KeyPair` generated in the Stack registers directly:
+
+```ts
+const pair = yield* Alchemy.KeyPair("deploy-key-pair");
+const key = yield* DigitalOcean.SshKey("deploy-key", {
+  publicKey: pair.publicKey,
+});
+```
+
 ## Firewalls
 
 A `Firewall` updates entirely in place — the API accepts the full

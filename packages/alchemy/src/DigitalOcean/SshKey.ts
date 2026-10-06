@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey } from "node:crypto";
 import * as DO from "@distilled.cloud/digitalocean";
 import type { SshKeys as ApiSshKey } from "@distilled.cloud/digitalocean";
 import * as Data from "effect/Data";
@@ -24,9 +24,9 @@ export type SshKeyProps = {
   name?: string;
 
   /**
-   * The public key in `authorized_keys` format (`ssh-ed25519 AAAA… note`).
-   * A change to the key material replaces the resource. A change to the
-   * trailing comment does not.
+   * The public key, either an `authorized_keys` line (`ssh-ed25519 AAAA… note`)
+   * or a PEM public key such as `KeyPair` produces. A change to the key
+   * material replaces the resource. A change to the trailing comment does not.
    */
   publicKey: string;
 };
@@ -75,6 +75,14 @@ export type SshKeyAttributes = SshKey["Attributes"];
  * });
  * ```
  *
+ * **Example:** Generate the Key Pair in the Stack
+ * ```typescript
+ * const pair = yield* Alchemy.KeyPair("deploy-key-pair");
+ * const key = yield* DigitalOcean.SshKey("deploy-key", {
+ *   publicKey: pair.publicKey,
+ * });
+ * ```
+ *
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/SSH-Keys
  *
  * @resource
@@ -87,7 +95,7 @@ export class SshKeyUnparseable extends Data.TaggedError("DigitalOcean.SshKeyUnpa
   readonly publicKey: string;
 }> {
   override get message() {
-    return "The public key is not in authorized_keys format (`<type> <base64 material> [comment]`).";
+    return "The public key is neither an authorized_keys line (`<type> <base64 material> [comment]`) nor a PEM public key.";
   }
 }
 
@@ -107,24 +115,84 @@ const PAGE_SIZE = 200;
 // GET can lag a change by a few seconds.
 const SSH_KEY_POLL: PollBudget = { every: "1 second", times: 10 };
 
-/** The base64 field of an `authorized_keys` line, without type and comment. */
-const keyMaterial = (publicKey: string) => publicKey.trim().split(/\s+/)[1];
+type AuthorizedKey = {
+  /** The `authorized_keys` line DigitalOcean registers. */
+  readonly line: string;
+  /** The base64 field of the line, without type and comment. */
+  readonly material: string;
+};
 
-/** DigitalOcean's fingerprint: the MD5 of the key material in colon-separated hex. */
-const fingerprintOf = (publicKey: string) =>
-  Effect.sync(() => {
-    const material = keyMaterial(publicKey);
-    if (material === undefined) return Option.none<string>();
-    const digest = createHash("md5").update(Buffer.from(material, "base64")).digest();
-    return Option.some(Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(":"));
-  }).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.fail(new SshKeyUnparseable({ publicKey })),
-        onSome: Effect.succeed,
-      }),
-    ),
+const parseAuthorizedKey = (line: string): AuthorizedKey | undefined => {
+  const material = line.split(/\s+/)[1];
+  return material === undefined ? undefined : { line, material };
+};
+
+const sshString = (bytes: Buffer) => {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(bytes.length);
+  return Buffer.concat([length, bytes]);
+};
+
+// A leading zero keeps a high first bit from reading as negative.
+const sshMpint = (bytes: Buffer) =>
+  sshString(
+    bytes[0] !== undefined && bytes[0] & 0x80 ? Buffer.concat([Buffer.of(0), bytes]) : bytes,
   );
+
+const fromBase64Url = (value: string) => Buffer.from(value, "base64url");
+
+const openSshLine = (type: string, ...fields: Buffer[]) =>
+  `${type} ${Buffer.concat([sshString(Buffer.from(type)), ...fields]).toString("base64")}`;
+
+// Wire formats from RFC 8709 (ed25519), RFC 4253 (rsa) and RFC 5656 (ecdsa).
+const openSshFromJwk = (jwk: JsonWebKey): string | undefined => {
+  if (jwk.kty === "OKP" && jwk.crv === "Ed25519" && jwk.x !== undefined) {
+    return openSshLine("ssh-ed25519", sshString(fromBase64Url(jwk.x)));
+  }
+  if (jwk.kty === "RSA" && jwk.n !== undefined && jwk.e !== undefined) {
+    return openSshLine("ssh-rsa", sshMpint(fromBase64Url(jwk.e)), sshMpint(fromBase64Url(jwk.n)));
+  }
+  const nist = jwk.kty === "EC" ? jwk.crv?.match(/^P-(256|384|521)$/) : null;
+  if (nist && jwk.x !== undefined && jwk.y !== undefined) {
+    const curve = `nistp${nist[1]}`;
+    const point = Buffer.concat([Buffer.of(4), fromBase64Url(jwk.x), fromBase64Url(jwk.y)]);
+    return openSshLine(`ecdsa-sha2-${curve}`, sshString(Buffer.from(curve)), sshString(point));
+  }
+  return undefined;
+};
+
+const isPem = (publicKey: string) => publicKey.startsWith("-----BEGIN");
+
+/**
+ * The key as DigitalOcean registers it. A PEM public key, as `KeyPair`
+ * produces, is converted to its `authorized_keys` line.
+ *
+ * @internal exported for unit testing
+ */
+export const authorizedKey = Effect.fn(function* (publicKey: string) {
+  const line = yield* Effect.try({
+    try: () => {
+      const trimmed = publicKey.trim();
+      if (!isPem(trimmed)) return trimmed;
+      return openSshFromJwk(createPublicKey(trimmed).export({ format: "jwk" }));
+    },
+    catch: () => new SshKeyUnparseable({ publicKey }),
+  });
+  const parsed = line === undefined ? undefined : parseAuthorizedKey(line);
+  if (parsed === undefined) return yield* new SshKeyUnparseable({ publicKey });
+  return parsed;
+});
+
+/**
+ * DigitalOcean's fingerprint: the MD5 of the key material in colon-separated hex.
+ *
+ * @internal exported for unit testing
+ */
+export const fingerprintOf = (key: AuthorizedKey) =>
+  Effect.sync(() => {
+    const digest = createHash("md5").update(Buffer.from(key.material, "base64")).digest();
+    return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(":");
+  });
 
 const hasName = (name: string) => (key: ApiSshKey) => key.name === name;
 
@@ -136,11 +204,18 @@ const hasFingerprint = (fingerprint: string) => (key: ApiSshKey) => key.fingerpr
  *
  * @internal exported for unit testing
  */
-export const diffSshKey = (news: Input<SshKeyProps>, olds: SshKeyProps) => {
+export const diffSshKey = Effect.fn(function* ({
+  olds,
+  news,
+}: {
+  readonly olds: SshKeyProps;
+  readonly news: Input<SshKeyProps>;
+}) {
   if (!isResolved(news)) return undefined;
-  const needsReplacement = keyMaterial(news.publicKey) !== keyMaterial(olds.publicKey);
-  return needsReplacement ? ({ action: "replace" } as const) : undefined;
-};
+  const next = yield* authorizedKey(news.publicKey);
+  const previous = yield* authorizedKey(olds.publicKey);
+  return next.material !== previous.material ? ({ action: "replace" } as const) : undefined;
+});
 
 const toAttrs = (key: ApiSshKey): SshKeyAttributes => ({
   sshKeyId: key.id,
@@ -263,7 +338,9 @@ export const SshKeyProvider = () =>
         const byId = yield* observeById(output.sshKeyId);
         if (Option.isSome(byId)) return toAttrs(byId.value);
       }
-      const registeredKey = yield* observe(yield* fingerprintOf(olds.publicKey));
+      const registeredKey = yield* observe(
+        yield* fingerprintOf(yield* authorizedKey(olds.publicKey)),
+      );
       if (Option.isNone(registeredKey)) return undefined;
       // A generated name proves ownership. A chosen name proves nothing,
       // so the key belongs to someone else until `--adopt` says otherwise.
@@ -273,15 +350,15 @@ export const SshKeyProvider = () =>
         ? attrs
         : Unowned(attrs);
     }),
-    diff: ({ olds, news }) => Effect.succeed(diffSshKey(news, olds)),
+    diff: diffSshKey,
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = news.name ?? (yield* physicalName(id));
-      const publicKey = news.publicKey.trim();
-      const fingerprint = yield* fingerprintOf(publicKey);
+      const desired = yield* authorizedKey(news.publicKey);
+      const fingerprint = yield* fingerprintOf(desired);
 
       const observed = yield* observeByIdOrFingerprint(output?.sshKeyId, fingerprint);
       const key = yield* Option.match(observed, {
-        onNone: () => register(id, publicKey, fingerprint, name),
+        onNone: () => register(id, desired.line, fingerprint, name),
         onSome: Effect.succeed,
       });
       return toAttrs(yield* syncName(key, name));
