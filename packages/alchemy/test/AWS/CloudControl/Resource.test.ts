@@ -26,9 +26,9 @@ const readValue = (
   return (JSON.parse(raw) as { Value?: string }).Value;
 };
 
-const assertDeleted = Effect.fn(function* (name: string) {
+const assertDeleted = Effect.fn(function* (name: string, typeName = "AWS::SSM::Parameter") {
   yield* CloudControl.getResource({
-    TypeName: "AWS::SSM::Parameter",
+    TypeName: typeName,
     Identifier: name,
   }).pipe(
     Effect.flatMap(() => Effect.fail(new ResourceStillExists())),
@@ -85,6 +85,73 @@ test.provider(
       // Delete + wait gone.
       yield* stack.destroy();
       yield* assertDeleted(paramName);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:aws", "provider:aws:cloudcontrol", "live"],
+    timeout: 240_000,
+  },
+);
+
+// A deterministic SSM Command document unique to this test. SSM echoes JSON
+// `Content` back as a formatted string and never returns the write-only
+// `UpdateMethod`, so an unchanged redeploy must not compute a patch.
+const documentName = "alchemy-test-cloudcontrol-document";
+
+const documentContent = (message: string) => ({
+  schemaVersion: "2.2",
+  description: "Alchemy Cloud Control document test",
+  mainSteps: [
+    {
+      action: "aws:runShellScript",
+      name: "echo",
+      inputs: { runCommand: [`echo ${message}`] },
+    },
+  ],
+});
+
+const documentDef = (message: string, owner = "alchemy") =>
+  Effect.gen(function* () {
+    const document = yield* CloudControlResource("CcDocument", {
+      typeName: "AWS::SSM::Document",
+      desiredState: {
+        Name: documentName,
+        DocumentType: "Command",
+        DocumentFormat: "JSON",
+        UpdateMethod: "NewVersion",
+        Content: documentContent(message),
+        Tags: [{ Key: "owner", Value: owner }],
+      },
+    });
+    return { document };
+  });
+
+const readContent = (content: unknown) =>
+  typeof content === "string" ? JSON.parse(content) : content;
+
+test.provider(
+  "updating a JSON SSM document without changing its content",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { document: created } = yield* stack.deploy(documentDef("hello"));
+      expect(created.identifier).toBe(documentName);
+      expect(readContent(created.properties.Content)).toEqual(documentContent("hello"));
+
+      // Tags-only change: reconcile runs with unchanged content. A perpetual
+      // `Content`/`UpdateMethod` patch would send an UpdateDocument with
+      // identical content, which SSM rejects.
+      const { document: unchanged } = yield* stack.deploy(documentDef("hello", "platform"));
+      expect(unchanged.identifier).toBe(documentName);
+      expect(readContent(unchanged.properties.Content)).toEqual(documentContent("hello"));
+
+      // A real content change still patches, as a new document version.
+      const { document: updated } = yield* stack.deploy(documentDef("world", "platform"));
+      expect(updated.identifier).toBe(documentName);
+      expect(readContent(updated.properties.Content)).toEqual(documentContent("world"));
+
+      yield* stack.destroy();
+      yield* assertDeleted(documentName, "AWS::SSM::Document");
     }).pipe(logLevel),
   {
     tags: ["provider:aws", "provider:aws:cloudcontrol", "live"],
