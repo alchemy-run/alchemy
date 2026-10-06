@@ -121,10 +121,7 @@ export const InstanceRegistrationProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds.serviceId !== news.serviceId ||
-            olds.instanceId !== news.instanceId
-          ) {
+          if (olds.serviceId !== news.serviceId || olds.instanceId !== news.instanceId) {
             return { action: "replace" } as const;
           }
           // attributes fall through to the default update path (upsert)
@@ -150,9 +147,7 @@ export const InstanceRegistrationProvider = () =>
           const matches =
             observedAttributes !== undefined &&
             desiredEntries.length === Object.keys(observedAttributes).length &&
-            desiredEntries.every(
-              ([key, value]) => observedAttributes[key] === value,
-            );
+            desiredEntries.every(([key, value]) => observedAttributes[key] === value);
 
           // ENSURE/SYNC — registerInstance is a create-or-update upsert
           if (!matches) {

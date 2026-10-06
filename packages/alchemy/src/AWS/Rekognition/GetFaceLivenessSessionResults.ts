@@ -38,7 +38,6 @@ export interface GetFaceLivenessSessionResults extends Binding.Service<
     >
   >
 > {}
-export const GetFaceLivenessSessionResults =
-  Binding.Service<GetFaceLivenessSessionResults>(
-    "AWS.Rekognition.GetFaceLivenessSessionResults",
-  );
+export const GetFaceLivenessSessionResults = Binding.Service<GetFaceLivenessSessionResults>(
+  "AWS.Rekognition.GetFaceLivenessSessionResults",
+);

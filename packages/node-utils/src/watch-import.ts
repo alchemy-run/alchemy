@@ -5,11 +5,7 @@ import {
   type DependencyChangeListener,
   type DependencyWatcherOptions,
 } from "./dependency-watcher.ts";
-import {
-  createImportLoader,
-  type ImportLoader,
-  type ImportLoaderOptions,
-} from "./import-loader.ts";
+import type { OxcLoader, OxcLoaderOptions } from "./register-oxc.ts";
 
 export interface ImportGeneration<T> {
   readonly value: T;
@@ -17,8 +13,7 @@ export interface ImportGeneration<T> {
   readonly dependencies: ReadonlySet<string>;
 }
 
-export interface ImportWatcherOptions
-  extends ImportLoaderOptions, DependencyWatcherOptions {
+export interface ImportWatcherOptions extends OxcLoaderOptions, DependencyWatcherOptions {
   readonly parentURL: string;
 }
 
@@ -32,7 +27,7 @@ export class ImportWatcher<T = unknown> {
   readonly #specifier: string;
   readonly #options: ImportWatcherOptions;
   readonly #watcher: DependencyWatcher;
-  #registration: ImportLoader | undefined;
+  #registration: OxcLoader | undefined;
   #dependencies = new Set<string>();
   #closed = false;
 
@@ -54,13 +49,11 @@ export class ImportWatcher<T = unknown> {
     if (this.#closed) throw new Error("ImportWatcher is closed");
     const namespace = randomUUID();
     const dependencies = new Set<string>();
-    const {
-      debounceMs: _,
-      parentURL,
-      watch: _watch,
-      ...registerOptions
-    } = this.#options;
-    const registration = await createImportLoader({
+    const { debounceMs: _, parentURL, watch: _watch, ...registerOptions } = this.#options;
+    // Loaded here, not at module scope: the exec child imports this file on
+    // both runtimes, and the loader's Node hooks do not exist under Bun.
+    const { registerOxc } = await import("./register-oxc.ts");
+    const registration = registerOxc({
       ...registerOptions,
       namespace,
       onImport: (url) => {
@@ -68,8 +61,7 @@ export class ImportWatcher<T = unknown> {
         dependencies.add(fileURLToPath(url));
         // A lazy import evaluated after this generation became current
         // extends the watched set immediately.
-        if (this.#dependencies === dependencies)
-          this.#watcher.set(dependencies);
+        if (this.#dependencies === dependencies) this.#watcher.set(dependencies);
       },
     });
     try {
@@ -101,7 +93,5 @@ export class ImportWatcher<T = unknown> {
   }
 }
 
-export const watchImport = <T = unknown>(
-  specifier: string,
-  options: ImportWatcherOptions,
-) => new ImportWatcher<T>(specifier, options);
+export const watchImport = <T = unknown>(specifier: string, options: ImportWatcherOptions) =>
+  new ImportWatcher<T>(specifier, options);

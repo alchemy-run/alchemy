@@ -94,10 +94,7 @@ class SnapshotPending extends Data.TaggedError("SnapshotPending")<{
 
 class SnapshotStillExists extends Data.TaggedError("SnapshotStillExists") {}
 
-const createSnapshotName = (
-  id: string,
-  props: { snapshotName?: string | undefined },
-) =>
+const createSnapshotName = (id: string, props: { snapshotName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.snapshotName) {
       return props.snapshotName;
@@ -131,11 +128,7 @@ const describeSnapshot = Effect.fn(function* ({
       ApplicationName: applicationName,
       SnapshotName: snapshotName,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   return response?.SnapshotDetails;
 });
 
@@ -157,21 +150,14 @@ const waitForSnapshotReady = ({
     if (status === "CREATING") {
       return yield* Effect.fail(new SnapshotPending({ status }));
     }
-    return yield* Effect.fail(
-      new SnapshotFailed({ applicationName, snapshotName, status }),
-    );
+    return yield* Effect.fail(new SnapshotFailed({ applicationName, snapshotName, status }));
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "SnapshotPending",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(36),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
     }),
     Effect.catchTag("SnapshotPending", (e) =>
-      Effect.fail(
-        new SnapshotFailed({ applicationName, snapshotName, status: e.status }),
-      ),
+      Effect.fail(new SnapshotFailed({ applicationName, snapshotName, status: e.status })),
     ),
   );
 
@@ -190,10 +176,7 @@ const waitForSnapshotDeleted = ({
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "SnapshotStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -210,11 +193,9 @@ export const ApplicationSnapshotProvider = () =>
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const applicationName =
-            output?.applicationName ?? olds?.applicationName;
+          const applicationName = output?.applicationName ?? olds?.applicationName;
           if (!applicationName) return undefined;
-          const snapshotName =
-            output?.snapshotName ?? (yield* createSnapshotName(id, olds ?? {}));
+          const snapshotName = output?.snapshotName ?? (yield* createSnapshotName(id, olds ?? {}));
           const details = yield* describeSnapshot({
             applicationName,
             snapshotName,
@@ -233,10 +214,7 @@ export const ApplicationSnapshotProvider = () =>
           // Snapshots are immutable — any identity change replaces.
           const oldName = yield* createSnapshotName(id, olds ?? {});
           const newName = yield* createSnapshotName(id, news ?? {});
-          if (
-            olds?.applicationName !== news?.applicationName ||
-            oldName !== newName
-          ) {
+          if (olds?.applicationName !== news?.applicationName || oldName !== newName) {
             return { action: "replace" } as const;
           }
         }),
@@ -245,8 +223,7 @@ export const ApplicationSnapshotProvider = () =>
         // READY. Nothing about a snapshot is mutable.
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const applicationName = news.applicationName;
-          const snapshotName =
-            output?.snapshotName ?? (yield* createSnapshotName(id, news));
+          const snapshotName = output?.snapshotName ?? (yield* createSnapshotName(id, news));
 
           const observed = yield* describeSnapshot({
             applicationName,
@@ -293,9 +270,7 @@ export const ApplicationSnapshotProvider = () =>
                 SnapshotName: output.snapshotName,
                 SnapshotCreationTimestamp: details.SnapshotCreationTimestamp,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           yield* waitForSnapshotDeleted({
             applicationName: output.applicationName,

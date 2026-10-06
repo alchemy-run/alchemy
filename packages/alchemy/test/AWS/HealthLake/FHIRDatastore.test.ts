@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { FHIRDatastore } from "@/AWS/HealthLake";
-import * as Test from "@/Test/Alchemy";
 import * as healthlake from "@distilled.cloud/aws/healthlake";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { FHIRDatastore } from "@/AWS/HealthLake";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,33 +22,25 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:healthlake", "live"] },
 );
 
 // The provider's delete already waits until the data store is gone; this
 // out-of-band check confirms it (gone, or terminal DELETED status).
 const assertDatastoreGone = (datastoreId: string) =>
   Effect.gen(function* () {
-    const status = yield* healthlake
-      .describeFHIRDatastore({ DatastoreId: datastoreId })
-      .pipe(
-        Effect.map((r) => r.DatastoreProperties.DatastoreStatus),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed("gone" as const),
-        ),
-      );
+    const status = yield* healthlake.describeFHIRDatastore({ DatastoreId: datastoreId }).pipe(
+      Effect.map((r) => r.DatastoreProperties.DatastoreStatus),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
+    );
     if (status !== "gone" && status !== "DELETED") {
       return yield* Effect.fail(
-        new Error(
-          `datastore '${datastoreId}' still exists (status: ${status})`,
-        ),
+        new Error(`datastore '${datastoreId}' still exists (status: ${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(8)]),
     }),
   );
 
@@ -83,9 +75,7 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
       });
       expect(described.DatastoreProperties.DatastoreStatus).toBe("ACTIVE");
       expect(described.DatastoreProperties.DatastoreTypeVersion).toBe("R4");
-      expect(described.DatastoreProperties.DatastoreName).toBe(
-        datastore.datastoreName,
-      );
+      expect(described.DatastoreProperties.DatastoreName).toBe(datastore.datastoreName);
 
       // Idempotent re-deploy with a tag change syncs in place (no replace,
       // no second 15-30min provisioning wait — the datastore is ACTIVE).
@@ -106,5 +96,8 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
       yield* assertDatastoreGone(datastore.datastoreId);
     }),
   // create (~15-30 min) + tag sync + delete wait-until-gone, one test.
-  { timeout: 5_400_000 },
+  {
+    tags: ["provider:aws", "provider:aws:healthlake", "live"],
+    timeout: 5_400_000,
+  },
 );

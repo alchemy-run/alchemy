@@ -1,16 +1,16 @@
+import { createHash } from "node:crypto";
 import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import { createHash } from "node:crypto";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { initialCwd } from "../../Util/Node.ts";
@@ -76,9 +76,7 @@ export interface AssetDeployment extends Resource<
  *
  * @resource
  */
-export const AssetDeployment = Resource<AssetDeployment>(
-  "Fly.Website.AssetDeployment",
-);
+export const AssetDeployment = Resource<AssetDeployment>("Fly.Website.AssetDeployment");
 
 const normalizePrefix = (prefix: string | undefined) =>
   prefix ? prefix.replace(/^\/+|\/+$/g, "") : "";
@@ -117,8 +115,8 @@ const withTigris = <A, E>(
       Layer.mergeAll(
         fromCredentials(
           {
-            accessKeyId: scope.accessKeyId,
-            secretAccessKey: scope.secretAccessKey,
+            accessKeyId: Redacted.make(scope.accessKeyId),
+            secretAccessKey: Redacted.make(scope.secretAccessKey),
           },
           scope.region,
         ),
@@ -219,8 +217,7 @@ export const AssetDeploymentProvider = () =>
           files.map((relative) =>
             Effect.gen(function* () {
               const body = yield* fs.readFile(path.join(root, relative));
-              const key =
-                prefix.length > 0 ? `${prefix}/${relative}` : relative;
+              const key = prefix.length > 0 ? `${prefix}/${relative}` : relative;
               const contentType = contentTypeOf(relative);
               const cacheControl = cacheControlOf(relative);
               return { relative, key, body, contentType, cacheControl };
@@ -281,14 +278,17 @@ export const AssetDeploymentProvider = () =>
         );
         return output;
       }),
-      delete: Effect.fn(function* ({ olds, output }) {
-        if (!(olds.purge ?? true)) return;
-        const scope = yield* scopeOf(olds.bucket);
-        const observed = yield* listObserved(scope, output.prefix);
-        yield* Effect.all(
-          [...observed.keys()].map((key) => deleteObject(scope, key)),
-          { concurrency: s3Concurrency },
-        );
-      }),
+      delete: Effect.fn(
+        function* ({ olds, output }) {
+          if (!(olds.purge ?? true)) return;
+          const scope = yield* scopeOf(olds.bucket);
+          const observed = yield* listObserved(scope, output.prefix);
+          yield* Effect.all(
+            [...observed.keys()].map((key) => deleteObject(scope, key)),
+            { concurrency: s3Concurrency },
+          );
+        },
+        Effect.catchTag("NoSuchBucket", () => Effect.void),
+      ),
     }),
   );

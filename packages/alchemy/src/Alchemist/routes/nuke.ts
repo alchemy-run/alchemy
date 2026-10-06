@@ -7,12 +7,9 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Nuke from "../../Nuke.ts";
 import type { ProviderMode } from "../../ProviderMode.ts";
+import type { ApplyStatus } from "../../Report.ts";
 import { Progress, withSpanEvents } from "../Progress.ts";
-import {
-  buildStackProviders,
-  DEFAULT_ENTRYPOINT,
-  type Target,
-} from "../Session.ts";
+import { buildStackProviders, DEFAULT_ENTRYPOINT, type Target } from "../Session.ts";
 
 export interface ScanInput extends Target {
   readonly mode: ProviderMode;
@@ -47,11 +44,9 @@ export interface ExecuteInput {
 export type NukeResult = Nuke.Result;
 
 /** Enumerate everything the stack's registered providers can see. */
-export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
-  input: ScanInput,
-) {
+export const scan = Effect.fn("Alchemist.nuke.scan")(function* (input: ScanInput) {
   const report = withSpanEvents(yield* Progress);
-  const debug = yield* Config.string("DEBUG").pipe(
+  const debug = yield* Config.String("DEBUG").pipe(
     Config.withDefault(""),
     Effect.map((value) => value.length > 0),
   );
@@ -72,11 +67,14 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
     exclude: input.exclude,
     concurrency: input.concurrency,
     timeoutSeconds: input.providerTimeoutSeconds,
-    onProvider: (provider, count) =>
+    onScan: (total) => report({ _tag: "nuke.scan.started", total }),
+    onProviderStarted: (provider) => report({ _tag: "nuke.scan.provider.started", provider }),
+    onProvider: (provider, count, error) =>
       report({
         _tag: "nuke.scan.provider.completed",
         provider,
         resources: count,
+        error,
       }),
   });
   return { mode: input.mode, resources, failures, context } satisfies NukeScan;
@@ -86,23 +84,48 @@ export const scan = Effect.fn("Alchemist.nuke.scan")(function* (
  * Permanently delete the selected resources. Each confirmed deletion is
  * reported through {@link Progress} as `NukeResourceDeleted`.
  */
-export const execute = Effect.fn("Alchemist.nuke.execute")(function* (
-  input: ExecuteInput,
-) {
+export const execute = Effect.fn("Alchemist.nuke.execute")(function* (input: ExecuteInput) {
   const report = withSpanEvents(yield* Progress);
+  const keys = new Map(input.resources.map((resource, index) => [resource, `nuke/${index}`]));
+  const status = (resource: Nuke.Target, status: ApplyStatus, message?: string) =>
+    report({
+      _tag: "apply.resource.status",
+      fqn: keys.get(resource)!,
+      id: resource.providerId,
+      type: resource.providerId,
+      status,
+      message,
+    });
   return yield* Nuke.destroy({
     targets: input.resources,
     context: input.scan.context,
     strategy: input.strategy,
     concurrency: input.concurrency,
     timeoutSeconds: input.providerTimeoutSeconds,
+    onPass: (pass) => report({ _tag: "nuke.pass.started", pass }),
+    onDeleting: (resource) => status(resource, "deleting"),
+    onHeld: (resource, blockedBy) =>
+      status(resource, "skipped", `Held back by ${blockedBy.join(", ")}`),
     onDeleted: (resource) =>
-      report({ _tag: "nuke.resource.deleted", resource: resource.displayName }),
+      status(resource, "deleted").pipe(
+        Effect.andThen(
+          report({
+            _tag: "nuke.resource.deleted",
+            provider: resource.providerId,
+            resource: resource.displayName,
+          }),
+        ),
+      ),
     onFailed: (resource, message) =>
-      report({
-        _tag: "nuke.resource.failed",
-        resource: resource.displayName,
-        message,
-      }),
+      status(resource, "fail", message).pipe(
+        Effect.andThen(
+          report({
+            _tag: "nuke.resource.failed",
+            provider: resource.providerId,
+            resource: resource.displayName,
+            message,
+          }),
+        ),
+      ),
   });
 });

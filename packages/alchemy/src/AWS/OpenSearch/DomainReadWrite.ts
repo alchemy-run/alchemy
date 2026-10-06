@@ -1,4 +1,5 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
+import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { OpenSearchApiError } from "./DataPlaneTypes.ts";
@@ -11,8 +12,7 @@ import type { WriteDomainClient } from "./DomainWrite.ts";
  * on {@link ReadDomainClient} and {@link WriteDomainClient} plus a raw
  * any-method escape hatch.
  */
-export interface ReadWriteDomainClient
-  extends ReadDomainClient, WriteDomainClient {
+export interface ReadWriteDomainClient extends ReadDomainClient, WriteDomainClient {
   /**
    * Raw escape hatch — a SigV4-signed request with any method against any
    * data-plane path (e.g. `PUT /my-index` to create an index with explicit
@@ -27,7 +27,7 @@ export interface ReadWriteDomainClient
       /** JSON body (sent as `application/json`). */
       body?: unknown;
     },
-  ): Effect.Effect<unknown, OpenSearchApiError | Credentials.CredentialsError>;
+  ): Effect.Effect<unknown, OpenSearchApiError | Credentials.CredentialsError | SigV4.SigningError>;
 }
 
 /**
@@ -73,6 +73,4 @@ export interface DomainReadWrite extends Binding.Service<
   "AWS.OpenSearch.DomainReadWrite",
   (domain: Domain) => Effect.Effect<ReadWriteDomainClient>
 > {}
-export const DomainReadWrite = Binding.Service<DomainReadWrite>(
-  "AWS.OpenSearch.DomainReadWrite",
-);
+export const DomainReadWrite = Binding.Service<DomainReadWrite>("AWS.OpenSearch.DomainReadWrite");

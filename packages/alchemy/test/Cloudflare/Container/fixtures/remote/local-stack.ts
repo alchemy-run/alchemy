@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 import LocalRemoteContainerWorker from "./local-worker.ts";
 
 /**
@@ -11,9 +11,11 @@ import LocalRemoteContainerWorker from "./local-worker.ts";
  * application, or a workers.dev worker with the live `Container.test.ts`
  * deployment when the two files run concurrently.
  */
+export const state = Alchemy.inMemoryState();
+
 export default Alchemy.Stack(
   "LocalRemoteContainerStack",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  { providers: Cloudflare.providers(), state },
   Effect.gen(function* () {
     const worker = yield* LocalRemoteContainerWorker;
     return { url: worker.url.as<string>() };

@@ -1,10 +1,6 @@
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../../../Plan.ts";
-import type {
-  ApplyEvent,
-  ApplyStatus,
-  ResourceStatusChanged,
-} from "../../../Report.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
+import type { ApplyEvent, ApplyStatus, ResourceStatusChanged } from "../../../Report.ts";
 import {
   buildNamespaceTree,
   buildPlanSummary,
@@ -29,6 +25,8 @@ export type PlanRow =
       type: "resource";
       id: string;
       resourceType: string;
+      /** Secondary identity for inventories without logical resource names. */
+      detail?: string;
       depth: number;
       action: CRUD["action"];
       persistedApplyStatus?: "created" | "updated";
@@ -64,12 +62,9 @@ export type ResourceRow = Extract<PlanRow, { type: "resource" }>;
  * grouping only, and bindings are reconciled by their host resource, so
  * counting them would leave the progress total unreachable.
  */
-const isProgressRow = (row: PlanRow) =>
-  row.type === "resource" || row.type === "task";
+const isProgressRow = (row: PlanRow) => row.type === "resource" || row.type === "task";
 
-export interface RowState extends Required<
-  Pick<ResourceStatusChanged, "id" | "status">
-> {
+export interface RowState extends Required<Pick<ResourceStatusChanged, "id" | "status">> {
   key: string;
   message?: string;
   startedAt?: number;
@@ -112,6 +107,13 @@ export interface PlanTreeOptions {
   readonly expanded?: boolean;
 }
 
+/** Display-only plans, such as cloud inventories, need no engine state or providers. */
+export interface PlanTreeData {
+  readonly rows: readonly PlanRow[];
+  readonly summary: PlanSummaryCounts;
+  readonly defaultMode?: ProviderMode;
+}
+
 const getRowKey = (item: FlattenedItem) => item.path.join("/");
 
 const findCrudByLogicalId = (plan: Plan, id: string): CRUD | undefined =>
@@ -123,8 +125,7 @@ const buildRows = (plan: Plan, detailed: boolean): PlanRow[] => {
   const resources = [
     ...Object.values(plan.resources),
     ...Object.values(plan.deletions).filter(
-      (item): item is NonNullable<Plan["deletions"][string]> =>
-        item !== undefined,
+      (item): item is NonNullable<Plan["deletions"][string]> => item !== undefined,
     ),
   ] as CRUD[];
   const actions = [
@@ -187,15 +188,13 @@ const buildRows = (plan: Plan, detailed: boolean): PlanRow[] => {
 export const initialResourceState = (row: ResourceRow): RowState => ({
   key: row.key,
   id: row.id,
-  status:
-    row.action === "noop" ? (row.persistedApplyStatus ?? "created") : "pending",
+  status: row.action === "noop" ? (row.persistedApplyStatus ?? "created") : "pending",
 });
 
 const buildInitialTasks = (rows: readonly PlanRow[]) =>
   new Map(
     rows.flatMap((row): Array<[string, RowState]> => {
-      if (row.type === "resource")
-        return [[row.key, initialResourceState(row)]];
+      if (row.type === "resource") return [[row.key, initialResourceState(row)]];
       if (row.type === "task") {
         return [
           [
@@ -219,19 +218,18 @@ export class PlanTree {
   readonly mode: "review" | "apply";
   readonly detailed: boolean;
   readonly titleDetail?: string;
+  readonly defaultMode?: ProviderMode;
   private state: PlanTreeState;
   private readonly listeners = new Set<() => void>();
 
-  constructor(
-    readonly plan: Plan,
-    options: PlanTreeOptions = {},
-  ) {
+  constructor(plan: Plan | PlanTreeData, options: PlanTreeOptions = {}) {
     this.detailed = options.detailed ?? false;
     this.mode = options.mode ?? "review";
     this.titleDetail = options.titleDetail;
-    this.rows = buildRows(plan, this.detailed);
+    this.defaultMode = plan.defaultMode;
+    this.rows = "rows" in plan ? plan.rows : buildRows(plan, this.detailed);
     this.progressRows = this.rows.filter(isProgressRow);
-    this.summary = buildPlanSummary(plan);
+    this.summary = "rows" in plan ? plan.summary : buildPlanSummary(plan);
     this.state = {
       tasks: buildInitialTasks(this.rows),
       label: options.label ?? "Plan",
@@ -272,6 +270,10 @@ export class PlanTree {
     this.update({ expanded });
   }
 
+  setLabel(label: string) {
+    this.update({ label });
+  }
+
   setViewport(viewport: PlanViewport) {
     this.update({ viewport });
   }
@@ -284,11 +286,7 @@ export class PlanTree {
     });
   }
 
-  finish(
-    outcome: PlanOutcome,
-    label: string,
-    view: PlanView = this.state.view,
-  ) {
+  finish(outcome: PlanOutcome, label: string, view: PlanView = this.state.view) {
     this.update({ busy: false, outcome, label, view });
   }
 
@@ -305,8 +303,7 @@ export class PlanTree {
     const key = event.fqn;
     const now = Date.now();
     const timing = (current: RowState | undefined, status: ApplyStatus) => {
-      const startedAt =
-        current?.startedAt ?? (isInProgress(status) ? now : undefined);
+      const startedAt = current?.startedAt ?? (isInProgress(status) ? now : undefined);
       return {
         startedAt,
         elapsedMs:

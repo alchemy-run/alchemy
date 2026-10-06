@@ -22,9 +22,7 @@ export const fnv1a64 = (value: string) => {
 export const physicalInstanceName = (name: string, instanceId: string) => {
   const instanceToken = instanceId.replaceAll(/[^a-zA-Z0-9]/g, "");
   const effectiveSuffix =
-    instanceToken.length >= 12
-      ? instanceToken.slice(0, 12)
-      : fnv1a64(instanceId).slice(0, 12);
+    instanceToken.length >= 12 ? instanceToken.slice(0, 12) : fnv1a64(instanceId).slice(0, 12);
   const maxPrefixLength = 65 - effectiveSuffix.length - 1;
   return `${name.trim().slice(0, maxPrefixLength)}-${effectiveSuffix}`;
 };
@@ -34,8 +32,6 @@ export const envName = (value: string) => {
   // Preserve the established keys for conventional PascalCase FQNs while
   // disambiguating arbitrary logical IDs whose lossy normalization can
   // collide (`db-a`, `db_a`, and `db.a`, for example).
-  const canonical = value
-    .split("/")
-    .every((segment) => /^[A-Z][a-z0-9]*$/.test(segment));
+  const canonical = value.split("/").every((segment) => /^[A-Z][a-z0-9]*$/.test(segment));
   return canonical ? normalized : `${normalized}_${fnv1a64(value)}`;
 };

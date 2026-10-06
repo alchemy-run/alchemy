@@ -30,10 +30,7 @@ export interface ListPermissionSets extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<ssoAdmin.ListPermissionSetsRequest, "InstanceArn">,
-    ) => Effect.Effect<
-      ssoAdmin.ListPermissionSetsResponse,
-      ssoAdmin.ListPermissionSetsError
-    >
+    ) => Effect.Effect<ssoAdmin.ListPermissionSetsResponse, ssoAdmin.ListPermissionSetsError>
   >
 > {}
 export const ListPermissionSets = Binding.Service<ListPermissionSets>(

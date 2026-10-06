@@ -30,10 +30,7 @@ export interface ResetLandingZone extends Binding.Service<
   (
     landingZone: LandingZone,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      controltower.ResetLandingZoneOutput,
-      controltower.ResetLandingZoneError
-    >
+    () => Effect.Effect<controltower.ResetLandingZoneOutput, controltower.ResetLandingZoneError>
   >
 > {}
 

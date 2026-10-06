@@ -26,11 +26,14 @@ export const Site = Railway.Project("Site");
 +export const Data = Railway.Volume("Data", {
 +  project: Site,
 +  mountPath: "/data",
++  region: "us-west2",
 +});
 ```
 
 The volume is disconnected until a Service mounts it. `mountPath` is
-the path in the container.
+the path in the container. `region` must match the Service from
+Part 2 — a Volume cannot move, and attaching across regions fails
+the deploy.
 
 ## Mount a disk into the Service
 
@@ -42,8 +45,8 @@ runtime:
 // src/api.ts
 import * as Railway from "alchemy/Railway";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 -import { Site } from "./project.ts";
 +import { Data, Site } from "./project.ts";
 
@@ -141,7 +144,7 @@ if (request.method === "PUT") {
 
 +if (request.method === "GET") {
 +  const text = yield* fs.readFileString(file).pipe(
-+    Effect.catchAll(() => Effect.succeed(undefined)),
++    Effect.catch(() => Effect.succeed(undefined)),
 +  );
 +  if (text === undefined) {
 +    return HttpServerResponse.text("Not found", { status: 404 });

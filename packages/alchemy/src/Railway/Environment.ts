@@ -1,15 +1,13 @@
+import { Query } from "@distilled.cloud/core/query";
 import type { Config } from "@distilled.cloud/railway";
-import { Credentials } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
+import { Credentials, GraphQLLive, Railway } from "@distilled.cloud/railway";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 
-export class RailwayWorkspaceNotFound extends Data.TaggedError(
-  "Railway.WorkspaceNotFound",
-)<{
+export class RailwayWorkspaceNotFound extends Data.TaggedError("Railway.WorkspaceNotFound")<{
   message: string;
 }> {}
 
@@ -18,10 +16,7 @@ export class RailwayWorkspaceNotFound extends Data.TaggedError(
  * (`me.workspace ?? me.workspaces[0]`). Not a resource — the Environment
  * *resource* is a project-scoped deploy environment.
  */
-export type RailwayWorkspace = {
-  readonly id: string;
-  readonly name: string;
-};
+export type RailwayWorkspace = { readonly id: string; readonly name: string };
 
 /**
  * Fully-resolved Railway environment for a stack.
@@ -31,9 +26,7 @@ export type RailwayWorkspace = {
  * (`me.workspace ?? me.workspaces[0]`), cached for the process. Resolve
  * it inside lifecycle operations with `RailwayEnvironment.current`.
  */
-export type RailwayEnvironmentShape = Config & {
-  readonly workspaceId: string;
-};
+export type RailwayEnvironmentShape = Config & { readonly workspaceId: string };
 
 export class RailwayEnvironment extends Context.Service<
   RailwayEnvironment,
@@ -50,32 +43,41 @@ export class RailwayEnvironment extends Context.Service<
  * Workspace/team tokens reject `me` with {@link RailwayForbidden}
  * (`Not Authorized`); fall back to `apiToken.workspaces[0]`.
  */
+const meWorkspaces = Query.fn(() => {
+  const me = Railway.me();
+  return {
+    workspace: { id: me.workspace.id, name: me.workspace.name },
+    workspaces: me.workspaces.pipe(
+      Query.map((workspace) => ({ id: workspace.id, name: workspace.name })),
+    ),
+  };
+});
+
+const tokenWorkspaces = Query.fn(() =>
+  Railway.apiToken().workspaces.pipe(
+    Query.map((workspace) => ({ id: workspace.id, name: workspace.name })),
+  ),
+);
+
 export const resolveWorkspace = Effect.fn(function* () {
-  const fromMe = yield* railway.me({}).pipe(
-    Effect.map((me) => me.workspace ?? me.workspaces[0]),
+  const fromMe = yield* meWorkspaces().pipe(
+    Effect.map((me) => (me.workspace.id !== null ? me.workspace : me.workspaces[0])),
     Effect.catchTag(["RailwayForbidden", "RailwayUnauthenticated"], () =>
       Effect.succeed(undefined),
     ),
   );
-  if (fromMe !== undefined && fromMe.id.length > 0) {
-    return {
-      id: fromMe.id,
-      name: fromMe.name,
-    } satisfies RailwayWorkspace;
+  if (fromMe?.id != null && fromMe.id.length > 0) {
+    return { id: fromMe.id, name: fromMe.name ?? "" } satisfies RailwayWorkspace;
   }
 
-  const token = yield* railway.apiToken({});
-  const workspace = token.workspaces[0];
+  const workspace = (yield* tokenWorkspaces())[0];
   if (workspace === undefined || workspace.id.length === 0) {
     return yield* new RailwayWorkspaceNotFound({
       message:
         "Railway current token did not include a workspace. Check RAILWAY_API_TOKEN is an account or workspace token.",
     });
   }
-  return {
-    id: workspace.id,
-    name: workspace.name,
-  } satisfies RailwayWorkspace;
+  return { id: workspace.id, name: workspace.name } satisfies RailwayWorkspace;
 });
 
 /**
@@ -104,14 +106,12 @@ export const fromCredentials = () =>
           resolveWorkspaceId().pipe(
             Effect.provide(
               Layer.mergeAll(
+                GraphQLLive,
                 Layer.succeed(Credentials, creds),
                 Layer.succeed(HttpClient.HttpClient, http),
               ),
             ),
-            Effect.map((workspaceId) => ({
-              ...resolved,
-              workspaceId,
-            })),
+            Effect.map((workspaceId) => ({ ...resolved, workspaceId })),
           ),
         ),
         Effect.orDie,

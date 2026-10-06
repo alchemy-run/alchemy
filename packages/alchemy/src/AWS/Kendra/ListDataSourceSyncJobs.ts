@@ -39,10 +39,7 @@ export interface ListDataSourceSyncJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListDataSourceSyncJobsRequest,
-    ) => Effect.Effect<
-      kendra.ListDataSourceSyncJobsResponse,
-      kendra.ListDataSourceSyncJobsError
-    >
+    ) => Effect.Effect<kendra.ListDataSourceSyncJobsResponse, kendra.ListDataSourceSyncJobsError>
   >
 > {}
 export const ListDataSourceSyncJobs = Binding.Service<ListDataSourceSyncJobs>(

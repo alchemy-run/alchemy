@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetCostComparisonDrivers}.
  */
-export interface GetCostComparisonDriversRequest
-  extends ce.GetCostComparisonDriversRequest {}
+export interface GetCostComparisonDriversRequest extends ce.GetCostComparisonDriversRequest {}
 
 /**
  * Runtime binding for `ce:GetCostComparisonDrivers`.
@@ -37,14 +36,10 @@ export interface GetCostComparisonDrivers extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetCostComparisonDriversRequest,
-    ) => Effect.Effect<
-      ce.GetCostComparisonDriversResponse,
-      ce.GetCostComparisonDriversError
-    >
+    ) => Effect.Effect<ce.GetCostComparisonDriversResponse, ce.GetCostComparisonDriversError>
   >
 > {}
 
-export const GetCostComparisonDrivers =
-  Binding.Service<GetCostComparisonDrivers>(
-    "AWS.CostExplorer.GetCostComparisonDrivers",
-  );
+export const GetCostComparisonDrivers = Binding.Service<GetCostComparisonDrivers>(
+  "AWS.CostExplorer.GetCostComparisonDrivers",
+);

@@ -25,15 +25,9 @@ export interface TableEventSource extends Binding.Service<
   "AWS.DynamoDB.TableEventSource",
   TableEventSourceService
 > {}
-export const TableEventSource = Binding.Service<TableEventSource>(
-  "AWS.DynamoDB.TableEventSource",
-);
+export const TableEventSource = Binding.Service<TableEventSource>("AWS.DynamoDB.TableEventSource");
 
-export type TableEventSourceService = <
-  Data = unknown,
-  StreamReq = never,
-  Req = never,
->(
+export type TableEventSourceService = <Data = unknown, StreamReq = never, Req = never>(
   table: Table,
   props: StreamsProps,
   process: (
@@ -144,11 +138,7 @@ export interface StreamsProps extends TableEventSourceProps {
  * );
  * ```
  */
-export const consumeTableChanges = <
-  Data = unknown,
-  Req = never,
-  StreamReq = never,
->(
+export const consumeTableChanges = <Data = unknown, Req = never, StreamReq = never>(
   table: Table,
   props: StreamsProps = {},
   handler: (

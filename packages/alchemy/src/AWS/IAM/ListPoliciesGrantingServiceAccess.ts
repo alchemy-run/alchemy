@@ -42,7 +42,6 @@ export interface ListPoliciesGrantingServiceAccess extends Binding.Service<
     >
   >
 > {}
-export const ListPoliciesGrantingServiceAccess =
-  Binding.Service<ListPoliciesGrantingServiceAccess>(
-    "AWS.IAM.ListPoliciesGrantingServiceAccess",
-  );
+export const ListPoliciesGrantingServiceAccess = Binding.Service<ListPoliciesGrantingServiceAccess>(
+  "AWS.IAM.ListPoliciesGrantingServiceAccess",
+);

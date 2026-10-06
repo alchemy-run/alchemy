@@ -1,34 +1,32 @@
+import { GraphQLLive } from "@distilled.cloud/railway";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import { RailwayAuth } from "./AuthProvider.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { CloudAgent, CloudAgentProvider } from "./CloudAgent.ts";
-import * as Credentials from "./Credentials.ts";
-import { DeleteObjectHttp } from "./DeleteObjectHttp.ts";
-import { GetObjectHttp } from "./GetObjectHttp.ts";
-import { HeadObjectHttp } from "./HeadObjectHttp.ts";
-import { ListObjectsV2Http } from "./ListObjectsV2Http.ts";
-import { PutObjectHttp } from "./PutObjectHttp.ts";
-import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
-import { fromCredentials } from "./Environment.ts";
-import { Function, FunctionProvider } from "./Function.ts";
-import { Group, GroupProvider } from "./Group.ts";
-import { Project, ProjectProvider } from "./Project.ts";
-import { Environment, EnvironmentProvider } from "./ProjectEnvironment.ts";
-import { TcpProxy, TcpProxyProvider } from "./TcpProxy.ts";
-import { Template, TemplateProvider } from "./Template.ts";
-import { UsageLimit, UsageLimitProvider } from "./Usage.ts";
-import { Variable, VariableProvider } from "./Variable.ts";
-import { MountVolumeLive } from "./MountVolume.ts";
 import { ConnectMongoHttp } from "./ConnectMongoHttp.ts";
 import { ConnectMySQLHttp } from "./ConnectMySQLHttp.ts";
 import { ConnectPostgresHttp } from "./ConnectPostgresHttp.ts";
+import * as Credentials from "./Credentials.ts";
+import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
+import { DeleteObjectHttp } from "./DeleteObjectHttp.ts";
+import { fromCredentials } from "./Environment.ts";
+import { Function, FunctionProvider } from "./Function.ts";
+import { GetObjectHttp } from "./GetObjectHttp.ts";
+import { Group, GroupProvider } from "./Group.ts";
+import { HeadObjectHttp } from "./HeadObjectHttp.ts";
+import { ListObjectsV2Http } from "./ListObjectsV2Http.ts";
 import { Mongo, MongoProvider } from "./Mongo.ts";
+import { MountVolumeLive } from "./MountVolume.ts";
 import { MySQL, MySQLProvider } from "./MySQL.ts";
 import { Postgres, PostgresProvider } from "./Postgres.ts";
 import {
@@ -37,25 +35,26 @@ import {
   PrivateNetworkEndpointProvider,
   PrivateNetworkProvider,
 } from "./PrivateNetwork.ts";
+import { Project, ProjectProvider } from "./Project.ts";
+import { Environment, EnvironmentProvider } from "./ProjectEnvironment.ts";
+import { PutObjectHttp } from "./PutObjectHttp.ts";
 import { ReadRedisHttp } from "./ReadRedisHttp.ts";
 import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
-import { RailwayRetryPolicy } from "./RetryPolicy.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
+import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
+import { SandboxCheckpoint, SandboxCheckpointProvider } from "./SandboxCheckpoint.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
-import { Cdn, CdnProvider } from "./Website/Cdn.ts";
-import {
-  Server as WebsiteServer,
-  ServerProvider as WebsiteServerProvider,
-} from "../Website/Server.ts";
-import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
+import { TcpProxy, TcpProxyProvider } from "./TcpProxy.ts";
+import { Template, TemplateProvider } from "./Template.ts";
+import { UsageLimit, UsageLimitProvider } from "./Usage.ts";
+import { Variable, VariableProvider } from "./Variable.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
+import { Cdn, CdnProvider } from "./Website/Cdn.ts";
 import { WriteRedisHttp } from "./WriteRedisHttp.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Railway",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Railway") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -112,6 +111,7 @@ export const providers = () =>
       Bucket,
       CloudAgent,
       Sandbox,
+      SandboxCheckpoint,
       Random,
       WebsiteServer,
     ]),
@@ -140,6 +140,7 @@ export const providers = () =>
         BucketProvider(),
         CloudAgentProvider(),
         SandboxProvider(),
+        SandboxCheckpointProvider(),
         RandomProvider(),
         WebsiteServerProvider(),
       ),
@@ -161,8 +162,8 @@ export const providers = () =>
         ExecHttp,
       ),
     ),
-    Layer.provide(RailwayRetryPolicy),
     Layer.provideMerge(fromCredentials()),
+    Layer.provideMerge(GraphQLLive),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),
     Layer.provideMerge(ProfileStoreLive),

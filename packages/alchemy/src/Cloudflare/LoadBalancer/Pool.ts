@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -137,11 +136,7 @@ export interface PoolProps {
    * @default { policy: "random" }
    */
   originSteering?: {
-    policy?:
-      | "random"
-      | "hash"
-      | "least_outstanding_requests"
-      | "least_connections";
+    policy?: "random" | "hash" | "least_outstanding_requests" | "least_connections";
   };
   /**
    * Filter pool and origin health notifications by resource type or health
@@ -172,13 +167,7 @@ export interface PoolAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Pool = Resource<
-  TypeId,
-  PoolProps,
-  PoolAttributes,
-  never,
-  Providers
->;
+export type Pool = Resource<TypeId, PoolProps, PoolAttributes, never, Providers>;
 
 /**
  * A Cloudflare Load Balancing pool — an account-scoped group of origin
@@ -335,10 +324,7 @@ export const PoolProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "PoolInUse",
-            schedule: Schedule.max([
-              Schedule.exponential("1 second"),
-              Schedule.recurs(6),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
           }),
           Effect.catchTag("PoolNotFound", () => Effect.void),
         );
@@ -391,10 +377,7 @@ const buildBody = (news: PoolProps, name: string) => ({
       o.header === undefined
         ? undefined
         : {
-            host:
-              o.header.host === undefined
-                ? undefined
-                : Array.from(o.header.host),
+            host: o.header.host === undefined ? undefined : Array.from(o.header.host),
           },
     flattenCname: o.flattenCname,
     // Inputs are resolved to concrete strings by Plan.
@@ -417,10 +400,7 @@ const buildBody = (news: PoolProps, name: string) => ({
  * Compare desired (explicitly set) fields against observed cloud state.
  * Unset desired fields defer to whatever the cloud already has.
  */
-const poolDirty = (
-  observed: ObservedPool,
-  body: ReturnType<typeof buildBody>,
-): boolean => {
+const poolDirty = (observed: ObservedPool, body: ReturnType<typeof buildBody>): boolean => {
   const scalarDirty = (
     desired: string | number | boolean | undefined,
     actual: string | number | boolean | null | undefined,
@@ -455,14 +435,11 @@ const poolDirty = (
     scalarDirty(body.longitude, observed.longitude) ||
     scalarDirty(body.notificationEmail, observed.notificationEmail) ||
     (body.loadShedding !== undefined &&
-      JSON.stringify(body.loadShedding) !==
-        JSON.stringify(observed.loadShedding ?? {})) ||
+      JSON.stringify(body.loadShedding) !== JSON.stringify(observed.loadShedding ?? {})) ||
     (body.originSteering !== undefined &&
-      JSON.stringify(body.originSteering) !==
-        JSON.stringify(observed.originSteering ?? {})) ||
+      JSON.stringify(body.originSteering) !== JSON.stringify(observed.originSteering ?? {})) ||
     (body.notificationFilter !== undefined &&
-      JSON.stringify(body.notificationFilter) !==
-        JSON.stringify(observed.notificationFilter ?? {}))
+      JSON.stringify(body.notificationFilter) !== JSON.stringify(observed.notificationFilter ?? {}))
   );
 };
 
@@ -490,10 +467,7 @@ const normalizeOrigin = (o: {
   virtualNetworkId: o.virtualNetworkId ?? "",
 });
 
-const toAttributes = (
-  pool: ObservedPool,
-  accountId: string,
-): PoolAttributes => ({
+const toAttributes = (pool: ObservedPool, accountId: string): PoolAttributes => ({
   poolId: pool.id ?? "",
   accountId,
   name: pool.name ?? "",

@@ -1,7 +1,6 @@
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -111,13 +110,7 @@ export type LiveInputAttributes = {
   meta: Record<string, unknown>;
 };
 
-export type LiveInput = Resource<
-  TypeId,
-  LiveInputProps,
-  LiveInputAttributes,
-  never,
-  Providers
->;
+export type LiveInput = Resource<TypeId, LiveInputProps, LiveInputAttributes, never, Providers>;
 
 /**
  * A Cloudflare Stream live input — an ingest endpoint (RTMPS/SRT/WebRTC)
@@ -201,14 +194,9 @@ export const LiveInputProvider = () =>
       // Cloudflare returns this list either wrapped (`{ liveInputs: [...] }`)
       // or as a bare `result` array depending on the account — handle both.
       const response = yield* stream.listLiveInputs({ accountId });
-      const inputs = Array.isArray(response)
-        ? response
-        : (response.liveInputs ?? []);
+      const inputs = Array.isArray(response) ? response : (response.liveInputs ?? []);
       return inputs
-        .filter(
-          (li): li is typeof li & { uid: string } =>
-            li.uid !== null && li.uid !== undefined,
-        )
+        .filter((li): li is typeof li & { uid: string } => li.uid !== null && li.uid !== undefined)
         .map((li) => toAttributes(li, accountId));
     }),
 
@@ -288,9 +276,7 @@ export const LiveInputProvider = () =>
 const getLiveInput = (accountId: string, liveInputId: string) =>
   stream
     .getLiveInput({ accountId, liveInputIdentifier: liveInputId })
-    .pipe(
-      Effect.catchTag("LiveInputNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("LiveInputNotFound", () => Effect.succeed(undefined)));
 
 const toAttributes = (
   input:
@@ -327,10 +313,7 @@ const deepValueEquals = (a: unknown, b: unknown): boolean => {
     return (
       ka.length === kb.length &&
       ka.every((k) =>
-        deepValueEquals(
-          (a as Record<string, unknown>)[k],
-          (b as Record<string, unknown>)[k],
-        ),
+        deepValueEquals((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
       )
     );
   }

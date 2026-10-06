@@ -19,9 +19,7 @@ import * as Schedule from "effect/Schedule";
  * exhausted.
  */
 
-export class HttpAssertionFailed extends Data.TaggedError(
-  "HttpAssertionFailed",
-)<{
+export class HttpAssertionFailed extends Data.TaggedError("HttpAssertionFailed")<{
   url: string;
   marker: string;
   status: number;
@@ -40,6 +38,8 @@ export class HttpMarkerPresent extends Data.TaggedError("HttpMarkerPresent")<{
 }> {}
 
 export interface ExpectUrlContainsOptions {
+  /** Request headers, e.g. an explicit HTML Accept header for content negotiation. */
+  headers?: Record<string, string>;
   /** Maximum total time to retry before failing. Default 90s. */
   timeout?: Duration.Input;
   /** Initial backoff between attempts. Default 750ms. */
@@ -66,7 +66,7 @@ const looksLikeCloudflarePlaceholder = (body: string) =>
  */
 const ATTEMPT_SETTLEMENT_CAP_MS = 60_000;
 
-const fetchOnce = (url: string, marker: string) =>
+const fetchOnce = (url: string, marker: string, headers?: Record<string, string>) =>
   Effect.tryPromise({
     try: async (signal) => {
       // Cache-busting query string defeats both edge caches and any
@@ -84,6 +84,7 @@ const fetchOnce = (url: string, marker: string) =>
             // No keep-alive reuse: the wedge above starts with a reused
             // connection the server already closed.
             connection: "close",
+            ...headers,
           },
         });
         return { res, body: await res.text() };
@@ -93,9 +94,7 @@ const fetchOnce = (url: string, marker: string) =>
         capTimer = setTimeout(
           () =>
             reject(
-              new Error(
-                `attempt did not settle within ${ATTEMPT_SETTLEMENT_CAP_MS}ms — abandoned`,
-              ),
+              new Error(`attempt did not settle within ${ATTEMPT_SETTLEMENT_CAP_MS}ms — abandoned`),
             ),
           ATTEMPT_SETTLEMENT_CAP_MS,
         );
@@ -103,15 +102,10 @@ const fetchOnce = (url: string, marker: string) =>
       const { res, body } = await Promise.race([attempt(), cap]).finally(() =>
         clearTimeout(capTimer),
       );
-      if (
-        !res.ok ||
-        looksLikeCloudflarePlaceholder(body) ||
-        !body.includes(marker)
-      ) {
+      if (!res.ok || looksLikeCloudflarePlaceholder(body) || !body.includes(marker)) {
         if (process.env.DEBUG_HTTP_ASSERT) {
           const flat = body.replace(/\s+/g, " ");
-          const interesting =
-            flat.match(/(Error|Worker threw|exception)[^<]{0,140}/gi) ?? [];
+          const interesting = flat.match(/(Error|Worker threw|exception)[^<]{0,140}/gi) ?? [];
           console.error(
             `[http-assert] ${res.status} ${url} :: ${interesting.length ? interesting.slice(0, 3).join(" | ") : flat.slice(0, 160)}`,
           );
@@ -149,20 +143,15 @@ export const expectUrlContains = (
   marker: string,
   options: ExpectUrlContainsOptions = {},
 ) => {
-  const totalTimeout = Duration.fromInputUnsafe(
-    options.timeout ?? "90 seconds",
-  );
+  const totalTimeout = Duration.fromInputUnsafe(options.timeout ?? "90 seconds");
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
-  return fetchOnce(url, marker).pipe(
+  return fetchOnce(url, marker, options.headers).pipe(
     Effect.retry({
       // Cap individual sleeps at 8s so very long timeouts still
       // sample at a reasonable rate near the end of the budget.
-      schedule: Schedule.min([
-        Schedule.exponential(initial, 1.5),
-        Schedule.spaced("8 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
     }),
     // Bound the *total* retry budget. `Effect.retry` on its own would
     // back off forever; the timeout guarantees the test fails loudly
@@ -181,9 +170,7 @@ export const expectUrlContains = (
           }),
         ),
     }),
-    Effect.tapError((error) =>
-      Effect.logError(`expectUrlContains(${label}) failed`, error),
-    ),
+    Effect.tapError((error) => Effect.logError(`expectUrlContains(${label}) failed`, error)),
   );
 };
 
@@ -208,9 +195,7 @@ export const expectUrlOk = (url: string) =>
     Effect.timeout("60 seconds"),
   );
 
-export class HttpResponseMismatch extends Data.TaggedError(
-  "HttpResponseMismatch",
-)<{
+export class HttpResponseMismatch extends Data.TaggedError("HttpResponseMismatch")<{
   url: string;
   expected: string;
   actual: string;
@@ -260,17 +245,12 @@ const retryResponse = (
   effect: Effect.Effect<Response, HttpResponseMismatch | HttpFetchFailed>,
   options: ExpectUrlContainsOptions,
 ) => {
-  const totalTimeout = Duration.fromInputUnsafe(
-    options.timeout ?? "90 seconds",
-  );
+  const totalTimeout = Duration.fromInputUnsafe(options.timeout ?? "90 seconds");
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
   return effect.pipe(
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential(initial, 1.5),
-        Schedule.spaced("8 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
     }),
     Effect.timeoutOrElse({
       duration: totalTimeout,
@@ -283,9 +263,7 @@ const retryResponse = (
           }),
         ),
     }),
-    Effect.tapError((error) =>
-      Effect.logError(`expect response (${label}) failed`, error),
-    ),
+    Effect.tapError((error) => Effect.logError(`expect response (${label}) failed`, error)),
   );
 };
 
@@ -446,18 +424,13 @@ export const expectUrlAbsent = (
   marker: string,
   options: ExpectUrlContainsOptions = {},
 ) => {
-  const totalTimeout = Duration.fromInputUnsafe(
-    options.timeout ?? "90 seconds",
-  );
+  const totalTimeout = Duration.fromInputUnsafe(options.timeout ?? "90 seconds");
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
 
   return fetchOnceAbsent(url, marker).pipe(
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential(initial, 1.5),
-        Schedule.spaced("8 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential(initial, 1.5), Schedule.spaced("8 seconds")]),
     }),
     Effect.timeoutOrElse({
       duration: totalTimeout,
@@ -470,8 +443,6 @@ export const expectUrlAbsent = (
           }),
         ),
     }),
-    Effect.tapError((error) =>
-      Effect.logError(`expectUrlAbsent(${label}) failed`, error),
-    ),
+    Effect.tapError((error) => Effect.logError(`expectUrlAbsent(${label}) failed`, error)),
   );
 };
