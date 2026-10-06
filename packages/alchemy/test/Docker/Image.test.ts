@@ -121,5 +121,55 @@ describe(
         expect(second.imageRef).toBe(first.imageRef);
       }),
     );
+
+    // A build failing inside a `RUN` step must say why, not just its exit
+    // code: the step's own output has to reach the deploy error. BuildKit
+    // logs steps to stderr; the legacy builder (no Buildx plugin, or
+    // `DOCKER_BUILDKIT=0`) logs them to stdout and only the exit reason to
+    // stderr.
+    for (const [builder, buildkit] of [
+      ["BuildKit", undefined],
+      ["the legacy builder", "0"],
+    ] as const) {
+      test.provider(
+        `reports the failing RUN step's output when a build fails with ${builder}`,
+        (stack) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const root = yield* fs.makeTempDirectoryScoped({
+              prefix: "alchemy-docker-image-fail-",
+            });
+            yield* fs.writeFileString(
+              path.join(root, "Dockerfile"),
+              // Computed in the step so only the step's output, never the echoed
+              // command, contains the expected text.
+              'FROM alpine:3.19\nRUN echo "npm ERR! missing script: build-$((40 + 2))" && exit 3\n',
+            );
+            yield* Effect.acquireRelease(
+              Effect.sync(() => {
+                const previous = process.env.DOCKER_BUILDKIT;
+                if (buildkit === undefined) delete process.env.DOCKER_BUILDKIT;
+                else process.env.DOCKER_BUILDKIT = buildkit;
+                return previous;
+              }),
+              (previous) =>
+                Effect.sync(() => {
+                  if (previous === undefined) delete process.env.DOCKER_BUILDKIT;
+                  else process.env.DOCKER_BUILDKIT = previous;
+                }),
+            );
+
+            const error = yield* stack
+              .deploy(Docker.Image("failing-image", { tag: "latest", build: { context: root } }))
+              .pipe(Effect.flip);
+
+            const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
+            expect(report).toContain("npm ERR! missing script: build-42");
+          }),
+        // Mutates `process.env.DOCKER_BUILDKIT`.
+        { exclusive: true },
+      );
+    }
   },
 );
