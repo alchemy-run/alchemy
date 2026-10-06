@@ -17,7 +17,6 @@ import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
@@ -536,8 +535,8 @@ export const LiveContainerProvider = () =>
         props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
-        session?: Pick<ScopedPlanStatusSession, "note">,
-        { reuseRemotePublication = false }: { reuseRemotePublication?: boolean } = {},
+        session?: { note: (message: string) => Effect.Effect<void> },
+        reuseRemotePublication = false,
       ) {
         const platform = publicationPlatform;
 
@@ -671,8 +670,8 @@ export const LiveContainerProvider = () =>
         imageRef: string,
         imageHash: string,
         previousImageRef: string | undefined,
-        session?: Pick<ScopedPlanStatusSession, "note">,
-        { reuseRemotePublication = false }: { reuseRemotePublication?: boolean } = {},
+        session?: { note: (message: string) => Effect.Effect<void> },
+        reuseRemotePublication = false,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const key = JSON.stringify([
@@ -685,7 +684,7 @@ export const LiveContainerProvider = () =>
           imageHash,
         ]);
         const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
-          publishImage(id, props, build, imageRef, session, { reuseRemotePublication }).pipe(
+          publishImage(id, props, build, imageRef, session, reuseRemotePublication).pipe(
             Effect.onExit((exit) =>
               Exit.isFailure(exit)
                 ? Effect.sync(() => {
@@ -734,7 +733,7 @@ export const LiveContainerProvider = () =>
         build: ImageBuild;
         imageRef: string;
         imageHash: string;
-        session: Pick<ScopedPlanStatusSession, "note">;
+        session: { note: (message: string) => Effect.Effect<void> };
       }) {
         yield* validateContainerConfiguration(news, existing.schedulingPolicy);
         const existingImage = existing.configuration.image;
@@ -799,7 +798,7 @@ export const LiveContainerProvider = () =>
         image: string,
         name: string,
         timeout: DurableObjectContainerProps["imagePreparationTimeout"],
-        session: Pick<ScopedPlanStatusSession, "note">,
+        session: { note: (message: string) => Effect.Effect<void> },
       ) {
         if (preparedImages.has(image)) return;
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -822,7 +821,7 @@ export const LiveContainerProvider = () =>
         id: string,
         props: DurableObjectContainerProps,
         output: ContainerApplication["Attributes"] | undefined,
-        session: Pick<ScopedPlanStatusSession, "note">,
+        session: { note: (message: string) => Effect.Effect<void> },
       ) {
         const images: Record<string, string> = {};
         const devImages: Record<string, DevContainerImage> = {};
@@ -846,7 +845,7 @@ export const LiveContainerProvider = () =>
               session,
               // The registry tag keyed by image inputs is the durable publication checkpoint.
               // Reuse it after an interrupted preparation, including mirrored images.
-              { reuseRemotePublication: true },
+              true,
             );
             imageRef = published.imageRef;
           }
@@ -934,7 +933,7 @@ export const LiveContainerProvider = () =>
         name: string;
         durableObjects: { namespaceId: string } | undefined;
         output: ContainerApplication["Attributes"] | undefined;
-        session: Pick<ScopedPlanStatusSession, "note">;
+        session: { note: (message: string) => Effect.Effect<void> };
       }) {
         if (!durableObjects) {
           return yield* new ContainerConfigurationError({
@@ -1053,7 +1052,7 @@ export const LiveContainerProvider = () =>
               namespaceId: string;
             }
           | undefined;
-        session: Pick<ScopedPlanStatusSession, "note">;
+        session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -1186,7 +1185,7 @@ export const LiveContainerProvider = () =>
         // turns out to be gone. Threaded through so the update→create fallback
         // below preserves the binding.
         durableObjects: { namespaceId: string } | undefined;
-        session: Pick<ScopedPlanStatusSession, "note">;
+        session: { note: (message: string) => Effect.Effect<void> };
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 

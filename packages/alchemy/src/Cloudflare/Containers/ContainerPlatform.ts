@@ -1,4 +1,3 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
@@ -8,21 +7,16 @@ import { serveRpc } from "../../Rpc.ts";
 import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
 import type { Fetcher } from "../Fetcher.ts";
+import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
-import {
-  ContainerTypeId,
-  type Container,
-  type ContainerStartupOptions,
-  type ContainerError,
-} from "./Container.ts";
+import { ContainerTypeId, type Container, type ContainerStartupOptions } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
-import { fromContainer } from "./ContainerClient.ts";
 import { workerContainerBinding } from "./ContainerConfiguration.ts";
 
 const toHttpUrl = (url: string) =>
@@ -37,13 +31,21 @@ const toHttpUrl = (url: string) =>
  * `@cloudflare/containers` `containerFetch` does
  * (`request.url.replace("https:", "http:")`).
  */
-export const httpSchemePort = (port: cf.Fetcher): cf.Fetcher => ({
-  fetch: (input, init) =>
-    typeof input === "object" && "url" in input
-      ? port.fetch(toHttpUrl(input.url), input)
-      : port.fetch(toHttpUrl(String(input)), init),
-  connect: (address, options) => port.connect(address, options),
-});
+export const httpSchemePort = <
+  P extends {
+    fetch: (...args: any[]) => any;
+    connect: (...args: any[]) => any;
+  },
+>(
+  port: P,
+): P =>
+  ({
+    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+      input instanceof Request
+        ? port.fetch(toHttpUrl(input.url), input)
+        : port.fetch(toHttpUrl(String(input)), init),
+    connect: (address: any, options?: any) => port.connect(address, options),
+  }) as any as P;
 
 const bindContainer = Effect.fn(function* <Shape, Req = never>(
   containerEff:
@@ -70,26 +72,26 @@ const bindContainer = Effect.fn(function* <Shape, Req = never>(
   // const _httpEffect = yield* init;
   return Effect.gen(function* () {
     const state = yield* DurableObjectState;
-    const client = fromContainer(() => state.container);
-    // Legacy methods expose native failures as defects rather than typed errors.
-    const legacy = <A, R>(effect: Effect.Effect<A, ContainerError, R>) =>
-      Effect.catch(effect, (error) => Effect.die(error.cause));
     return {
       id: container.LogicalId,
-      running: legacy(client.running).pipe(Effect.map((running) => running ?? false)),
-      start: (options?: ContainerStartupOptions) => legacy(client.start(options)),
-      destroy: (error?: unknown) => legacy(client.destroy(error)),
-      signal: (signo: number) => legacy(client.signal(signo)),
-      getTcpPort: (port: number) => legacy(client.getTcpPort(port)),
+      running: Effect.sync(() => state.container!.running ?? false),
+      destroy: (error?: any) => Effect.promise(() => state.container!.destroy(error)),
+      signal: (signo: number) => Effect.sync(() => state.container!.signal(signo)),
+      getTcpPort: (port: number) =>
+        Effect.sync(() => fromCloudflareFetcher(httpSchemePort(state.container!.getTcpPort(port)))),
       setInactivityTimeout: (durationMs: number | bigint) =>
-        legacy(client.setInactivityTimeout(durationMs)),
+        Effect.promise(() => state.container!.setInactivityTimeout(durationMs)),
       interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-        legacy(client.interceptOutboundHttp(addr, binding)),
+        toCloudflareFetcher(binding).pipe(
+          Effect.map((binding) => state.container!.interceptOutboundHttp(addr, binding)),
+        ),
       interceptAllOutboundHttp: (binding: Fetcher) =>
-        legacy(client.interceptAllOutboundHttp(binding)),
-      // An unattached legacy client has nothing to monitor.
-      monitor: () =>
-        Effect.suspend(() => (state.container ? legacy(client.monitor()) : Effect.void)),
+        toCloudflareFetcher(binding).pipe(
+          Effect.map((binding) => state.container!.interceptAllOutboundHttp(binding)),
+        ),
+      monitor: () => Effect.promise(() => state.container?.monitor() ?? Promise.resolve()),
+      start: (options?: ContainerStartupOptions) =>
+        Effect.sync(() => state.container!.start(options)),
     };
   });
 });

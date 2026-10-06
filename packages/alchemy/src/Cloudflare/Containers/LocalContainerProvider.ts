@@ -197,14 +197,6 @@ export const LocalContainerProvider = () =>
         };
       });
 
-      /** Drop memoized image hashes so the next prepare re-reads the sources. */
-      const forgetPreparedImages = Effect.fn(function* (keys: string[]) {
-        const artifacts = yield* Artifacts.Artifacts;
-        for (const key of keys) {
-          yield* artifacts.delete(`container-image:${key}`);
-        }
-      });
-
       const placeholderConfiguration = (
         props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
@@ -299,8 +291,10 @@ export const LocalContainerProvider = () =>
           const imageInputs = resolvedImageInputs(news);
           if (imageInputs !== undefined) {
             if (isDurableObjectContainer(imageInputs)) {
-              const names = Object.keys(imageInputs.images ?? {});
-              yield* forgetPreparedImages(names.map((name) => `${id}-${name}`));
+              const artifacts = yield* Artifacts.Artifacts;
+              for (const name of Object.keys(imageInputs.images ?? {})) {
+                yield* artifacts.delete(`container-image:${id}-${name}`);
+              }
               const prepared = yield* prepareNamedImages(id, imageInputs);
               const changed =
                 output.devImages === undefined ||
@@ -312,7 +306,7 @@ export const LocalContainerProvider = () =>
             // this provider runs in the RPC sidecar, whose `ArtifactStore`
             // outlives every run, so without this eviction the FIRST run's
             // hash would be compared forever.
-            yield* forgetPreparedImages([id]);
+            yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
             const input = yield* prepareImage(id, imageInputs);
             if (input.hash !== output.hash?.image || !output.dev) {
               return { action: "update" };

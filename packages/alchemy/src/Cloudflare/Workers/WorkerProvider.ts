@@ -3583,6 +3583,16 @@ export const LiveWorkerProvider = () =>
           );
         }
 
+        // Collect container-backed classes so we can send container metadata.
+        // `name` and `images` are only set for Durable Object-managed applications.
+        const containerClasses = new Map(
+          bindings.flatMap((b) =>
+            (b.data.containers ?? []).map(
+              ({ className, name, images }) => [className, { className, name, images }] as const,
+            ),
+          ),
+        );
+
         // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
@@ -3693,22 +3703,7 @@ export const LiveWorkerProvider = () =>
           newSqliteClasses,
         };
 
-        // One entry per container-backed class. `name` and `images` are only
-        // set for Durable Object-managed applications.
-        const containersByClass = new Map<
-          string,
-          { className: string; name?: string; images?: Record<string, string> }
-        >();
-        for (const binding of bindings) {
-          for (const container of binding.data.containers ?? []) {
-            containersByClass.set(container.className, {
-              className: container.className,
-              name: container.name,
-              images: container.images,
-            });
-          }
-        }
-        const metadataContainers = [...containersByClass.values()];
+        const metadataContainers = [...containerClasses.values()];
 
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
@@ -4739,7 +4734,7 @@ export const LiveWorkerProvider = () =>
           ).filter((binding) => !binding.transferredFrom);
           const doClasses = durableObjects.map((binding) => binding.className);
           // Only attach container metadata for classes actually fronted by a
-          // Container binding (mirrors reconcile's `containersByClass`).
+          // Container binding (mirrors reconcile's `containerClasses`).
           // Mapping every DO class to a container would wrongly mark plain DOs
           // as container-backed in the placeholder.
           const containers = Array.from(
