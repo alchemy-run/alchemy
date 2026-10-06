@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -248,7 +249,10 @@ layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, SpawnerStub)))((
  * `spawned` array (returned alongside the layer) instead of resetting the
  * top-level one mid-test, which would race the fiber's own spawns.
  */
-const makeInspectStub = (inspectStdout: string) => {
+const makeInspectStub = (
+  inspectStdout: string,
+  inspectExitCode?: Effect.Effect<ChildProcessSpawner.ExitCode>,
+) => {
   const spawned: Array<ReadonlyArray<string>> = [];
   const layer = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -260,16 +264,18 @@ const makeInspectStub = (inspectStdout: string) => {
         command._tag === "StandardCommand" &&
         command.args[0] === "image" &&
         command.args[1] === "inspect";
+      const stdout = isInspect ? inspectStdout : "";
       return Effect.succeed(
         ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: Effect.succeed(
-            ChildProcessSpawner.ExitCode(isInspect && inspectStdout === "" ? 1 : 0),
-          ),
+          exitCode:
+            isInspect && inspectExitCode
+              ? inspectExitCode
+              : Effect.succeed(ChildProcessSpawner.ExitCode(isInspect && stdout === "" ? 1 : 0)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stdin: Sink.drain,
-          stdout: isInspect ? Stream.make(new TextEncoder().encode(inspectStdout)) : Stream.empty,
+          stdout: stdout ? Stream.make(new TextEncoder().encode(stdout)) : Stream.empty,
           stderr: Stream.empty,
           all: Stream.empty,
           getInputFd: () => Sink.drain,
@@ -281,6 +287,37 @@ const makeInspectStub = (inspectStdout: string) => {
   );
   return { layer, spawned };
 };
+
+it.effect("interrupts Docker initialization when its owning scope closes", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    let interrupted = false;
+    const initialization = makeInspectStub(
+      "sha256:deadbeef",
+      Deferred.succeed(started, undefined).pipe(
+        Effect.andThen(Deferred.await(release)),
+        Effect.as(ChildProcessSpawner.ExitCode(0)),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            interrupted = true;
+          }),
+        ),
+      ),
+    );
+    yield* Effect.gen(function* () {
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Layer.build(
+            Layer.provide(DockerLive, Layer.merge(NodeServices.layer, initialization.layer)),
+          );
+          yield* Deferred.await(started);
+        }),
+      );
+      expect(interrupted).toBe(true);
+    }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
+  }),
+);
 
 const present = makeInspectStub("sha256:deadbeef");
 layer(Layer.provide(DockerLive, Layer.merge(NodeServices.layer, present.layer)))((it) => {
