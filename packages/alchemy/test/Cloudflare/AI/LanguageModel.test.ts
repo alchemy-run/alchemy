@@ -41,6 +41,7 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = beforeAll(deploy(Stack));
+
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 type StreamPart = {
@@ -288,37 +289,54 @@ test(
   },
 );
 
-// `qwq-32b` streams its chain of thought inline as text, closed by
-// `</think>`; only the answer after it is compared.
-const normalize = (text: string) =>
-  text
-    .split("</think>")
-    .at(-1)!
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
+const normalize = (text: string) => text.toLowerCase().replace(/[^a-z]/g, "");
 
-// Workers AI models disagree on where a streamed text fragment lives: some
-// mirror it in both the native `response` field and
-// `choices[0].delta.content` of one chunk (llama, qwen3, mistral), some set
-// only the OpenAI delta (kimi, gpt-oss), and some set only `response` (qwq).
-// Each shape must yield every fragment exactly once (#1907).
-const TEXT_MODELS = [
+// Workers AI models disagree on where a streamed fragment lives. Text can be
+// mirrored in both the native `response` field and
+// `choices[0].delta.content` of one chunk (llama, qwen3, mistral), set only
+// in the OpenAI delta (kimi, gpt-oss), or set only in `response` (qwq,
+// deepseek-r1-distill). Reasoning arrives as `reasoning_content`,
+// `reasoning`, both mirrored, or inline in the text inside `<think>` tags.
+// Each shape must yield every fragment exactly once, in the right part.
+const NON_REASONING_MODELS = [
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "@cf/meta/llama-4-scout-17b-16e-instruct",
-  "@cf/qwen/qwen3-30b-a3b-fp8",
   "@cf/mistralai/mistral-small-3.1-24b-instruct",
-  "@cf/moonshotai/kimi-k2.6",
-  "@cf/openai/gpt-oss-120b",
-  "@cf/qwen/qwq-32b",
 ];
+
+const REASONING_MODELS = [
+  // inline `<think>…</think>` in the native `response` text
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+  // inline, but the chat template pre-opens `<think>`: only `</think>` streams
+  "@cf/qwen/qwq-32b",
+  // `reasoning` and `reasoning_content` mirrored
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+  "@cf/openai/gpt-oss-120b",
+  "@cf/openai/gpt-oss-20b",
+  "@cf/zai-org/glm-4.7-flash",
+  // `reasoning_content` only
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/moonshotai/kimi-k2.5",
+  "@cf/zai-org/glm-5.3",
+  "@cf/deepseek-ai/deepseek-v4-flash-0731",
+  // `reasoning` only
+  "@cf/google/gemma-4-26b-a4b-it",
+];
+
+const TEXT_MODELS = [...NON_REASONING_MODELS, ...REASONING_MODELS];
 
 // Models that reliably make a tool call under `tool_choice: "required"`.
 const TOOL_MODELS = [
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "@cf/meta/llama-4-scout-17b-16e-instruct",
-  "@cf/qwen/qwen3-30b-a3b-fp8",
   "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  "@cf/qwen/qwen3-30b-a3b-fp8",
   "@cf/openai/gpt-oss-120b",
+  "@cf/openai/gpt-oss-20b",
+  "@cf/zai-org/glm-4.7-flash",
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/deepseek-ai/deepseek-v4-flash-0731",
+  "@cf/google/gemma-4-26b-a4b-it",
 ];
 
 const PONG = "Say the word 'pong' and nothing else.";
@@ -348,6 +366,36 @@ const streamedText = (parts: ReadonlyArray<StreamPart>) =>
     .map((p) => p.delta ?? "")
     .join("");
 
+const textDeltas = (parts: ReadonlyArray<StreamPart>) =>
+  parts.filter((p) => p.type === "text-delta").map((p) => p.delta ?? "");
+
+/**
+ * Assert a streamed answer to {@link PONG} was emitted exactly once. Checks
+ * the two duplication signatures rather than the exact wording, so verbose
+ * models (deepseek-r1-distill) don't flake: a fragment mirrored in two fields
+ * shows up as each delta repeated back to back, and a buffered reply
+ * re-emitted on finalize shows up as the whole text repeated.
+ */
+const expectEmittedOnce = (parts: ReadonlyArray<StreamPart>) => {
+  const deltas = textDeltas(parts);
+  const text = normalize(deltas.join(""));
+  expect(text).toContain("pong");
+  const repeats = deltas.filter((d, i) => i > 0 && d === deltas[i - 1]).length;
+  expect(repeats * 2).toBeLessThan(deltas.length);
+  expect(
+    text.length % 2 === 0 && text.slice(0, text.length / 2) === text.slice(text.length / 2),
+  ).toBe(false);
+};
+
+/** Assert reasoning was split out of the answer, with no `<think>` tags left over. */
+const expectReasoningSeparated = (reasoning: string | undefined, text: string) => {
+  expect(reasoning?.trim().length).toBeGreaterThan(0);
+  expect(reasoning).not.toContain("think>");
+  expect(text).not.toContain("think>");
+  expect(text).not.toContain(reasoning!.trim().slice(0, 40));
+  expect(normalize(text)).toContain("pong");
+};
+
 for (const model of TEXT_MODELS) {
   test(
     `streamed text deltas are emitted exactly once (${model})`,
@@ -355,7 +403,7 @@ for (const model of TEXT_MODELS) {
       const parts = yield* fetchParts(
         `/stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
       );
-      expect(normalize(streamedText(parts))).toBe("pong");
+      expectEmittedOnce(parts);
     }).pipe(logLevel),
     {
       tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
@@ -375,7 +423,7 @@ for (const model of TEXT_MODELS) {
         )}`,
       );
       expect(parts.some((p) => p.type === "tool-call")).toBe(false);
-      expect(normalize(streamedText(parts))).toBe("pong");
+      expectEmittedOnce(parts);
       expect(parts.filter((p) => p.type === "text-start")).toHaveLength(1);
     }).pipe(logLevel),
     {
@@ -400,6 +448,58 @@ for (const model of TOOL_MODELS) {
       expect(call?.name).toBe("get_weather");
       expect(call?.params?.city?.toLowerCase()).toContain("paris");
       expect(parts.some((p) => p.type === "tool-result" && p.id === call?.id)).toBe(true);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}
+
+const reasoningOf = (parts: ReadonlyArray<StreamPart>) =>
+  parts
+    .filter((p) => p.type === "reasoning-delta")
+    .map((p) => p.delta ?? "")
+    .join("");
+
+for (const model of REASONING_MODELS) {
+  test(
+    `streams reasoning separately from text (${model})`,
+    Effect.gen(function* () {
+      const parts = yield* fetchParts(
+        `/stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
+      );
+      expectReasoningSeparated(reasoningOf(parts), streamedText(parts));
+      // One reasoning block, closed before the text block opens.
+      expect(parts.filter((p) => p.type === "reasoning-start")).toHaveLength(1);
+      expect(parts.filter((p) => p.type === "reasoning-end")).toHaveLength(1);
+      expect(parts.findIndex((p) => p.type === "reasoning-end")).toBeLessThan(
+        parts.findIndex((p) => p.type === "text-start"),
+      );
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+
+  test(
+    `generates reasoning separately from text (${model})`,
+    Effect.gen(function* () {
+      const out = yield* stack;
+      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+      const res = yield* client
+        .get(
+          `${out.url}/generate?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
+        )
+        .pipe(
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis"),
+            times: 10,
+          }),
+        );
+      const body = (yield* res.json) as { text: string; reasoningText: string | undefined };
+      expectReasoningSeparated(body.reasoningText, body.text);
     }).pipe(logLevel),
     {
       tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],

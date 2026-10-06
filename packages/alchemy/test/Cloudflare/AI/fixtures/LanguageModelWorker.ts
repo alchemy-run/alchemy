@@ -89,10 +89,22 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
         const prompt =
           url.searchParams.get("prompt") ?? "Say the single word 'pong' and nothing else.";
 
+        // `?model=` overrides the default model so tests can cover the
+        // different Workers AI response shapes.
+        const modelParam = url.searchParams.get("model");
+        const modelFor = (fallback: typeof languageModel, temperature: number) =>
+          modelParam
+            ? aiGateway.model({ model: modelParam, parameters: { temperature, maxTokens: 1024 } })
+            : fallback;
+
         if (url.pathname === "/generate") {
-          const response = yield* AiLanguageModel.generateText({ prompt }).pipe(Effect.orDie);
+          const response = yield* AiLanguageModel.generateText({ prompt }).pipe(
+            Effect.provide(modelFor(languageModel, 0.7)),
+            Effect.orDie,
+          );
           return yield* HttpServerResponse.json({
             text: response.text,
+            reasoningText: response.reasoningText,
             finishReason: response.finishReason,
             usage: {
               inputTokens: response.usage.inputTokens.total,
@@ -103,10 +115,6 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
               .map(Cloudflare.AI.finishNeurons)[0],
           });
         }
-
-        // `?model=` overrides the default model so streaming tests can cover
-        // the different Workers AI chunk shapes (#1907).
-        const modelParam = url.searchParams.get("model");
 
         if (url.pathname === "/raw-stream") {
           const model = modelParam ?? MODEL;
@@ -194,14 +202,7 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
           }).pipe(
             Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
             Stream.provide(WeatherToolkitLayer),
-            Stream.provide(
-              modelParam
-                ? aiGateway.model({
-                    model: modelParam,
-                    parameters: { temperature: 0.2, maxTokens: 1024 },
-                  })
-                : toolLanguageModel,
-            ),
+            Stream.provide(modelFor(toolLanguageModel, 0.2)),
             Stream.provideContext(ctx),
           );
           return HttpServerResponse.stream(body, {
@@ -213,14 +214,7 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
           const encoder = new TextEncoder();
           const body = AiLanguageModel.streamText({ prompt }).pipe(
             Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
-            Stream.provide(
-              modelParam
-                ? aiGateway.model({
-                    model: modelParam,
-                    parameters: { temperature: 0.7, maxTokens: 1024 },
-                  })
-                : languageModel,
-            ),
+            Stream.provide(modelFor(languageModel, 0.7)),
             Stream.provideContext(ctx),
           );
           return HttpServerResponse.stream(body, {
