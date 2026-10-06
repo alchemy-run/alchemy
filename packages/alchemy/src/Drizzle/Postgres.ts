@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { resolveConnectionOptions } from "../SQL/PostgresTls.ts";
+import { resolvePoolConfig } from "../SQL/PostgresTls.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
@@ -45,12 +45,29 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * that block: memo key and finalizer target are always the same scope
  * object, so they cannot disagree.
  *
+ * `@effect/sql-pg` client options are passed via `config.client`. Behind a
+ * transaction-mode pooler such as Hyperdrive, turn off named prepared
+ * statements, since a later query can reach a backend session that never
+ * prepared them:
+ *
+ * ```typescript
+ * const db = yield* Drizzle.Postgres(hd.connectionString, {
+ *   client: { prepare: false },
+ * });
+ * ```
+ *
  * @binding
  */
 
 export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
-  config?: EffectDrizzlePgConfig<TRelations>,
+  config?: EffectDrizzlePgConfig<TRelations> & {
+    /**
+     * Overrides for the underlying `@effect/sql-pg` client — `prepare`,
+     * `ssl`, pool limits, and friends. The URL comes from `connectionString`.
+     */
+    readonly client?: Omit<PgClient.PgPoolConfig, "url">;
+  },
 ) =>
   Effect.map(
     makeExecutionMemo(
@@ -59,8 +76,11 @@ export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = n
           Promise.all([import("@effect/sql-pg/PgClient"), import("drizzle-orm/effect-postgres")]),
         );
         const url = yield* connectionString;
-        const pgCtx = yield* Layer.build(PgClient.layer(resolveConnectionOptions(url)));
-        return yield* PgDrizzle.makeWithDefaults(config).pipe(Effect.provideContext(pgCtx));
+        const { client, ...drizzleConfig } = config ?? {};
+        const pgCtx = yield* Layer.build(PgClient.layer(resolvePoolConfig(url, client)));
+        return yield* PgDrizzle.makeWithDefaults(
+          drizzleConfig as EffectDrizzlePgConfig<TRelations>,
+        ).pipe(Effect.provideContext(pgCtx));
       }),
     ),
     (db) =>

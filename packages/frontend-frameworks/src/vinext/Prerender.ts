@@ -120,6 +120,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   )) as {
     runPrerender: (options: {
       root: string;
+      concurrency?: number;
       nextConfig: unknown;
       routeRootConfig: unknown;
     }) => Promise<{ routes?: readonly unknown[] } | null>;
@@ -129,6 +130,7 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
     Effect.promise(() =>
       runPrerender({
         root,
+        concurrency: config.prerenderConfig?.concurrency,
         nextConfig: config.nextConfig,
         routeRootConfig: config.routeRootConfig,
       }),

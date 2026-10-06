@@ -443,7 +443,7 @@ const apiRoutedHttp = (client: any) =>
         });
       }),
     ),
-    fromApiToken({ apiToken: "fake-service-token", apiBaseUrl: FAKE_API_BASE_URL }),
+    fromApiToken({ apiToken: Redacted.make("fake-service-token"), apiBaseUrl: FAKE_API_BASE_URL }),
   );
 
 describe(

@@ -393,7 +393,7 @@ const toSnapshot = (r: SettingsResponse): ZoneDnsSettingsSnapshot => ({
   multiProvider: r.multiProvider,
   nameservers: {
     type: r.nameservers.type,
-    nsSet: undef(r.nameservers.nsSet),
+    nsSet: "nsSet" in r.nameservers ? undef(r.nameservers.nsSet) : undefined,
   },
   nsTtl: r.nsTtl,
   secondaryOverrides: r.secondaryOverrides,

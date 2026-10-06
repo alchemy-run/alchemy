@@ -1,6 +1,7 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import type { AssetConfig } from "../../../shared/types.ts";
+import type { NormalizedAssetConfig } from "./types.ts";
 
 interface CompatibilityFlag {
   enable: `assets_${string}`;
@@ -41,7 +42,7 @@ export const resolveCompatibilityOptions = (configuration?: AssetConfig) => {
 };
 
 export const flagIsEnabled = (
-  configuration: Required<AssetConfig>,
+  configuration: NormalizedAssetConfig,
   compatibilityFlag: (typeof COMPATIBILITY_FLAGS)[number],
 ) => {
   return !!configuration.compatibility_flags.find((flag) => flag === compatibilityFlag.enable);

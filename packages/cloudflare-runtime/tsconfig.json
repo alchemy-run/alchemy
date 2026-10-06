@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.cloudflare.json",
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/internal/workers-shared/shared/testdata/*.json"],
   "exclude": [
     "src/core/test/**",
     "src/rolldown/test/**",

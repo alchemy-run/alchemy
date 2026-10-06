@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/frontend-frameworks",
-  "version": "2.0.0-beta.80",
+  "version": "2.0.0-beta.81",
   "description": "Framework build and development integrations for Alchemy.",
   "keywords": [
     "alchemy",
@@ -495,6 +495,7 @@
     "effect": "catalog:",
     "hono": "catalog:",
     "nuxt": "catalog:frontend-peer",
+    "vinext": "catalog:",
     "vite": "catalog:frontend-peer",
     "vocs": "catalog:",
     "waku": "catalog:"
@@ -525,6 +526,9 @@
       "optional": true
     },
     "nuxt": {
+      "optional": true
+    },
+    "vinext": {
       "optional": true
     },
     "vite": {

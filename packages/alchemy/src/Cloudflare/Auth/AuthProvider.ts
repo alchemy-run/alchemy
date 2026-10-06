@@ -44,6 +44,7 @@ import {
   customOAuthScopeDefaults,
   OAUTH_SCOPE_GROUPS,
   OAUTH_SCOPE_NAMES,
+  OFFLINE_ACCESS_SCOPE,
   partitionOAuthScopes,
 } from "./OAuthScopes.ts";
 
@@ -72,7 +73,7 @@ const withOAuthCredentials = <A, E, R>(
     effect,
     Layer.mergeAll(
       CfCredentialsModule.fromOAuth({
-        load: Effect.succeed({ accessToken }),
+        load: Effect.succeed({ accessToken: Redacted.make(accessToken) }),
         refresh: () => Effect.die("refresh not expected during account selection"),
       }),
       FetchHttpClient.layer,
@@ -244,7 +245,7 @@ export const CloudflareAuth = AuthProviderLayer<
 
     const oauthLogin = (_profileName: string, scopes: string[]) =>
       Effect.gen(function* () {
-        const authorization = yield* OAuthClient.authorize([...scopes, "offline_access"]);
+        const authorization = yield* OAuthClient.authorize([...scopes, OFFLINE_ACCESS_SCOPE]);
 
         const credentials = yield* browserOAuth({
           provider: "Cloudflare",
