@@ -1,10 +1,10 @@
+import * as HttpApi from "effect/http-api/HttpApi";
 /**
  * The engine's internal API: routes the engine calls on itself, never a
  * user. Register `Git.InternalApiLive` beside public routes, outside user middleware.
  */
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import { HASH_ROUTE } from "../Hasher/Protocol.ts";
 
 /**

@@ -27,12 +27,7 @@ export type { PushInput, PreparedPush, RefUpdate } from "./Push.ts";
 export * as Http from "./Http.ts";
 export * as Push from "./PushInput.ts";
 export * from "./Server.ts";
-export {
-  parseCommit,
-  parseTree,
-  ZERO_OID,
-  ObjectType,
-} from "./Protocol/ObjectCodec.ts";
+export { parseCommit, parseTree, ZERO_OID, ObjectType } from "./Protocol/ObjectCodec.ts";
 export { StoreError } from "./Protocol/Store.ts";
 export { WireProtocolError, PackIngestError } from "./RepoObject.ts";
 export {
@@ -67,9 +62,4 @@ export {
   RESERVED_OWNERS,
 } from "./RegistryObject.ts";
 
-export {
-  Hasher,
-  HasherInline,
-  HasherSelf,
-  HASHER_BINDING,
-} from "./Hasher/Hasher.ts";
+export { Hasher, HasherInline, HasherSelf, HASHER_BINDING } from "./Hasher/Hasher.ts";

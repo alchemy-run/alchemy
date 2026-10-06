@@ -1,13 +1,10 @@
-import { makeFunctionHttpHandler } from "@/AWS/Lambda/HttpServer";
-import type {
-  LambdaFunctionURLEvent,
-  LambdaFunctionURLResult,
-} from "aws-lambda";
-import * as Effect from "effect/Effect";
-import type { Scope } from "effect/Scope";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { describe, expect, it } from "alchemy-test";
+import type { LambdaFunctionURLEvent, LambdaFunctionURLResult } from "aws-lambda";
+import * as Effect from "effect/Effect";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import type { Scope } from "effect/Scope";
+import { makeFunctionHttpHandler } from "@/AWS/Lambda/HttpServer";
 import { TestHttpEffect } from "./HttpServer.fixture";
 
 describe(
@@ -20,17 +17,10 @@ describe(
           makeEvent({
             rawPath: "/inspect",
             rawQueryString: "jobId=job-123&trace=1",
-            headers: {
-              "x-forwarded-proto": "https",
-              "x-request-id": "req-123",
-            },
+            headers: { "x-forwarded-proto": "https", "x-request-id": "req-123" },
             cookies: ["session=abc", "theme=dark"],
             requestContext: {
-              http: {
-                method: "GET",
-                path: "/inspect",
-                sourceIp: "203.0.113.42",
-              },
+              http: { method: "GET", path: "/inspect", sourceIp: "203.0.113.42" },
             } as LambdaFunctionURLEvent["requestContext"],
           }),
         ),
@@ -41,20 +31,13 @@ describe(
       expect(JSON.parse(result.body ?? "")).toEqual({
         method: "GET",
         url: "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
-        originalUrl:
-          "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
+        originalUrl: "https://example.lambda-url.us-east-1.on.aws/inspect?jobId=job-123&trace=1",
         host: "example.lambda-url.us-east-1.on.aws",
         protocol: "https",
         requestId: "req-123",
         remoteAddress: "203.0.113.42",
-        query: {
-          jobId: "job-123",
-          trace: "1",
-        },
-        cookies: {
-          session: "abc",
-          theme: "dark",
-        },
+        query: { jobId: "job-123", trace: "1" },
+        cookies: { session: "abc", theme: "dark" },
       });
     });
 
@@ -63,17 +46,10 @@ describe(
         await invoke(
           makeEvent({
             rawPath: "/jobs",
-            headers: {
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              content: "ship it",
-            }),
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ content: "ship it" }),
             requestContext: {
-              http: {
-                method: "POST",
-                path: "/jobs",
-              },
+              http: { method: "POST", path: "/jobs" },
             } as LambdaFunctionURLEvent["requestContext"],
           }),
         ),
@@ -89,9 +65,7 @@ describe(
       expect(JSON.parse(result.body ?? "")).toEqual({
         method: "POST",
         url: "https://example.lambda-url.us-east-1.on.aws/jobs",
-        payload: {
-          content: "ship it",
-        },
+        payload: { content: "ship it" },
       });
       expect(result.body).not.toContain("HttpServerResponse");
     });
@@ -102,10 +76,7 @@ describe(
           makeEvent({
             rawPath: "/binary",
             requestContext: {
-              http: {
-                method: "GET",
-                path: "/binary",
-              },
+              http: { method: "GET", path: "/binary" },
             } as LambdaFunctionURLEvent["requestContext"],
           }),
         ),
@@ -114,9 +85,7 @@ describe(
       expect(result.statusCode).toBe(200);
       expect(result.headers?.["content-type"]).toBe("application/octet-stream");
       expect(result.isBase64Encoded).toBe(true);
-      expect(Buffer.from(result.body ?? "", "base64").toString("utf8")).toBe(
-        "alchemy",
-      );
+      expect(Buffer.from(result.body ?? "", "base64").toString("utf8")).toBe("alchemy");
     });
 
     it("detects an API Gateway v2 HTTP API (payload 2.0) event and maps it like a Function URL event", async () => {
@@ -141,11 +110,7 @@ describe(
               domainPrefix: "abc123",
               routeKey: "GET /inspect",
               stage: "$default",
-              http: {
-                method: "GET",
-                path: "/inspect",
-                sourceIp: "203.0.113.99",
-              },
+              http: { method: "GET", path: "/inspect", sourceIp: "203.0.113.99" },
             } as LambdaFunctionURLEvent["requestContext"],
           }),
         ),
@@ -161,13 +126,8 @@ describe(
         protocol: "https",
         requestId: "req-apigw-v2",
         remoteAddress: "203.0.113.99",
-        query: {
-          jobId: "job-123",
-          trace: "1",
-        },
-        cookies: {
-          session: "abc",
-        },
+        query: { jobId: "job-123", trace: "1" },
+        cookies: { session: "abc" },
       });
     });
 
@@ -182,16 +142,11 @@ describe(
             version: "2.0",
             routeKey: "GET /inspect",
             rawPath: "/prod/inspect",
-            headers: {
-              host: "abc123.execute-api.us-west-2.amazonaws.com",
-            },
+            headers: { host: "abc123.execute-api.us-west-2.amazonaws.com" },
             requestContext: {
               routeKey: "GET /inspect",
               stage: "prod",
-              http: {
-                method: "GET",
-                path: "/prod/inspect",
-              },
+              http: { method: "GET", path: "/prod/inspect" },
             } as LambdaFunctionURLEvent["requestContext"],
           }),
         ),
@@ -208,10 +163,7 @@ describe(
           makeEvent({
             rawPath: "/boom",
             requestContext: {
-              http: {
-                method: "GET",
-                path: "/boom",
-              },
+              http: { method: "GET", path: "/boom" },
             } as LambdaFunctionURLEvent["requestContext"],
           }),
           Effect.fail({ message: "Boom" } as any).pipe(Effect.orDie),
@@ -245,19 +197,14 @@ const invoke = async (
   return Effect.runPromise(out);
 };
 
-const makeEvent = (
-  overrides: Partial<LambdaFunctionURLEvent> = {},
-): LambdaFunctionURLEvent => {
+const makeEvent = (overrides: Partial<LambdaFunctionURLEvent> = {}): LambdaFunctionURLEvent => {
   const event: LambdaFunctionURLEvent = {
     version: "2.0",
     routeKey: "$default",
     rawPath: "/",
     rawQueryString: "",
     cookies: undefined,
-    headers: {
-      host: "example.lambda-url.us-east-1.on.aws",
-      "x-forwarded-proto": "https",
-    },
+    headers: { host: "example.lambda-url.us-east-1.on.aws", "x-forwarded-proto": "https" },
     queryStringParameters: undefined,
     requestContext: {
       accountId: "123456789012",
@@ -286,17 +233,11 @@ const makeEvent = (
   return {
     ...event,
     ...overrides,
-    headers: {
-      ...event.headers,
-      ...overrides.headers,
-    },
+    headers: { ...event.headers, ...overrides.headers },
     requestContext: {
       ...event.requestContext,
       ...overrides.requestContext,
-      http: {
-        ...event.requestContext.http,
-        ...overrides.requestContext?.http,
-      },
+      http: { ...event.requestContext.http, ...overrides.requestContext?.http },
     },
   };
 };

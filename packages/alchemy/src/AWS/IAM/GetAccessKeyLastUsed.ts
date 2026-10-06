@@ -33,10 +33,7 @@ export interface GetAccessKeyLastUsed extends Binding.Service<
   <K extends AccessKey>(
     accessKey: K,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      iam.GetAccessKeyLastUsedResponse,
-      iam.GetAccessKeyLastUsedError
-    >
+    () => Effect.Effect<iam.GetAccessKeyLastUsedResponse, iam.GetAccessKeyLastUsedError>
   >
 > {}
 export const GetAccessKeyLastUsed = Binding.Service<GetAccessKeyLastUsed>(

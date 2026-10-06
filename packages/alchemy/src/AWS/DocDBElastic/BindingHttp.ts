@@ -17,8 +17,7 @@ import type { Cluster } from "./Cluster.ts";
  * Elastic-cluster snapshot ARNs embed a server-generated UUID that is only
  * known at runtime, so snapshot-scoped grants use this wildcard.
  */
-export const SNAPSHOT_ARN_WILDCARD =
-  "arn:aws:docdb-elastic:*:*:cluster-snapshot/*";
+export const SNAPSHOT_ARN_WILDCARD = "arn:aws:docdb-elastic:*:*:cluster-snapshot/*";
 
 /**
  * Build the impl Effect for an account-level operation (snapshot management,

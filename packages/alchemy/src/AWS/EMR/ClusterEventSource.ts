@@ -121,12 +121,8 @@ export const consumeClusterEvents = <StreamReq = never, Req = never>(
     props.id ?? "EMRClusterEvents",
     {
       source: ["aws.emr"],
-      "detail-type": (props.kinds ?? (["cluster"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.clusterIds !== undefined
-        ? { detail: { clusterId: [...props.clusterIds] } }
-        : {}),
+      "detail-type": (props.kinds ?? (["cluster"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.clusterIds !== undefined ? { detail: { clusterId: [...props.clusterIds] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

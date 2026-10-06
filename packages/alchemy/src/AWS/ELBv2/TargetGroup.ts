@@ -4,13 +4,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import { toSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TargetGroupName = string;
@@ -154,9 +154,7 @@ export const TargetGroupProvider = () =>
         stables: ["targetGroupArn", "targetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (
@@ -190,11 +188,7 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               TargetGroupArns: [output.targetGroupArn],
             })
-            .pipe(
-              Effect.catchTag("TargetGroupNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
           const targetGroup = described?.TargetGroups?.[0];
           if (!targetGroup?.TargetGroupArn) {
             return undefined;
@@ -212,21 +206,17 @@ export const TargetGroupProvider = () =>
         // them) to produce the same shape `read` returns.
         list: () =>
           Effect.gen(function* () {
-            const targetGroups = yield* elbv2.describeTargetGroups
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.TargetGroups ?? []).filter(
-                      (
-                        tg,
-                      ): tg is elbv2.TargetGroup & { TargetGroupArn: string } =>
-                        tg.TargetGroupArn != null,
-                    ),
+            const targetGroups = yield* elbv2.describeTargetGroups.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.TargetGroups ?? []).filter(
+                    (tg): tg is elbv2.TargetGroup & { TargetGroupArn: string } =>
+                      tg.TargetGroupArn != null,
                   ),
                 ),
-              );
+              ),
+            );
             return yield* Effect.forEach(
               targetGroups,
               (tg) =>
@@ -242,8 +232,7 @@ export const TargetGroupProvider = () =>
                     (tagDescriptions?.TagDescriptions?.[0]?.Tags ?? [])
                       .filter(
                         (t): t is { Key: string; Value: string } =>
-                          typeof t.Key === "string" &&
-                          typeof t.Value === "string",
+                          typeof t.Key === "string" && typeof t.Value === "string",
                       )
                       .map((t) => [t.Key, t.Value]),
                   );
@@ -272,11 +261,7 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               Names: [name],
             })
-            .pipe(
-              Effect.catchTag("TargetGroupNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
           let targetGroup = described?.TargetGroups?.[0];
 
           // Ensure — create if missing. Stable axes (vpcId, port, protocol,
@@ -289,9 +274,7 @@ export const TargetGroupProvider = () =>
               Name: name,
               Port: isLambdaTarget ? undefined : news.port,
               Protocol: isLambdaTarget ? undefined : (news.protocol ?? "HTTP"),
-              ProtocolVersion: isLambdaTarget
-                ? undefined
-                : news.protocolVersion,
+              ProtocolVersion: isLambdaTarget ? undefined : news.protocolVersion,
               VpcId: isLambdaTarget ? undefined : news.vpcId,
               TargetType: news.targetType ?? "ip",
               IpAddressType: isLambdaTarget ? undefined : news.ipAddressType,
@@ -311,9 +294,7 @@ export const TargetGroupProvider = () =>
             });
             targetGroup = created.TargetGroups?.[0];
             if (!targetGroup?.TargetGroupArn) {
-              return yield* Effect.die(
-                new Error("createTargetGroup returned no target group"),
-              );
+              return yield* Effect.die(new Error("createTargetGroup returned no target group"));
             }
           }
 
@@ -335,21 +316,15 @@ export const TargetGroupProvider = () =>
           const desiredHc = {
             HealthCheckPath: news.healthCheckPath ?? observedHc.HealthCheckPath,
             HealthCheckPort: news.healthCheckPort ?? observedHc.HealthCheckPort,
-            HealthCheckProtocol:
-              news.healthCheckProtocol ?? observedHc.HealthCheckProtocol,
-            HealthCheckEnabled:
-              news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
+            HealthCheckProtocol: news.healthCheckProtocol ?? observedHc.HealthCheckProtocol,
+            HealthCheckEnabled: news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
             HealthCheckIntervalSeconds:
-              toSeconds(news.healthCheckInterval) ??
-              observedHc.HealthCheckIntervalSeconds,
+              toSeconds(news.healthCheckInterval) ?? observedHc.HealthCheckIntervalSeconds,
             HealthCheckTimeoutSeconds:
-              toSeconds(news.healthCheckTimeout) ??
-              observedHc.HealthCheckTimeoutSeconds,
-            HealthyThresholdCount:
-              news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,
+              toSeconds(news.healthCheckTimeout) ?? observedHc.HealthCheckTimeoutSeconds,
+            HealthyThresholdCount: news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,
             UnhealthyThresholdCount:
-              news.unhealthyThresholdCount ??
-              observedHc.UnhealthyThresholdCount,
+              news.unhealthyThresholdCount ?? observedHc.UnhealthyThresholdCount,
             Matcher: news.matcher ?? observedHc.Matcher,
           };
           if (!deepEqual(observedHc, desiredHc)) {
@@ -364,12 +339,10 @@ export const TargetGroupProvider = () =>
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyTargetGroupAttributes({
               TargetGroupArn: targetGroupArn,
-              Attributes: Object.entries(news.attributes).map(
-                ([Key, Value]) => ({
-                  Key,
-                  Value,
-                }),
-              ),
+              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             });
           }
 
@@ -422,10 +395,7 @@ export const TargetGroupProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
               }),
               Effect.catchTag("ResourceInUseException", () => Effect.void),
             );

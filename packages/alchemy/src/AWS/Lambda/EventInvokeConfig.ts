@@ -32,9 +32,7 @@ export interface EventInvokeConfig {
   destinationConfig?: Lambda.DestinationConfig;
 }
 
-const retryOnConflict = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryOnConflict = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "ResourceConflictException",
@@ -63,11 +61,7 @@ const observeConfig = (functionName: string, qualifier: string | undefined) =>
   Lambda.getFunctionEventInvokeConfig({
     FunctionName: functionName,
     Qualifier: qualifier,
-  }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 /**
  * Converge the async invocation config of a function or alias to the desired
@@ -99,11 +93,9 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
   }
 
   const desired = {
-    maximumRetryAttempts:
-      config.maximumRetryAttempts ?? DEFAULT_MAXIMUM_RETRY_ATTEMPTS,
+    maximumRetryAttempts: config.maximumRetryAttempts ?? DEFAULT_MAXIMUM_RETRY_ATTEMPTS,
     maximumEventAgeSeconds:
-      toWireSeconds(config.maximumEventAge) ??
-      DEFAULT_MAXIMUM_EVENT_AGE_SECONDS,
+      toWireSeconds(config.maximumEventAge) ?? DEFAULT_MAXIMUM_EVENT_AGE_SECONDS,
     destinationConfig: normalizeDestinationConfig(config.destinationConfig),
   };
 
@@ -113,10 +105,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
       desired.maximumRetryAttempts &&
     (observed.MaximumEventAgeInSeconds ?? DEFAULT_MAXIMUM_EVENT_AGE_SECONDS) ===
       desired.maximumEventAgeSeconds &&
-    deepEqual(
-      normalizeDestinationConfig(observed.DestinationConfig),
-      desired.destinationConfig,
-    )
+    deepEqual(normalizeDestinationConfig(observed.DestinationConfig), desired.destinationConfig)
   ) {
     return;
   }
@@ -129,19 +118,13 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
     DestinationConfig: desired.destinationConfig,
   }).pipe(
     Effect.retry({
-      while: (
-        e,
-      ): e is
-        | Lambda.ResourceConflictException
-        | Lambda.InvalidParameterValueException =>
+      while: (e): e is Lambda.ResourceConflictException | Lambda.InvalidParameterValueException =>
         e._tag === "ResourceConflictException" ||
         // Destination validation races IAM policy propagation on the
         // execution role — Lambda rejects the put until the role can reach
         // the destination.
         (e._tag === "InvalidParameterValueException" &&
-          (e.message?.includes(
-            "The function execution role does not have permissions to call",
-          ) ??
+          (e.message?.includes("The function execution role does not have permissions to call") ??
             false)),
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),

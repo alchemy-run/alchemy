@@ -43,9 +43,7 @@ const toWireZonalConfig = (
   props === undefined
     ? undefined
     : {
-        firstZoneMonitorDurationInSeconds: toWireSeconds(
-          props.firstZoneMonitorDuration,
-        ),
+        firstZoneMonitorDurationInSeconds: toWireSeconds(props.firstZoneMonitorDuration),
         monitorDurationInSeconds: toWireSeconds(props.monitorDuration),
         minimumHealthyHostsPerZone: props.minimumHealthyHostsPerZone,
       };
@@ -128,16 +126,11 @@ export interface DeploymentConfig extends Resource<
  *
  * @resource
  */
-export const DeploymentConfig = Resource<DeploymentConfig>(
-  "AWS.CodeDeploy.DeploymentConfig",
-);
+export const DeploymentConfig = Resource<DeploymentConfig>("AWS.CodeDeploy.DeploymentConfig");
 
 /** Build the ARN for a CodeDeploy deployment configuration. */
-const deploymentConfigArn = (
-  region: string,
-  account: string,
-  name: string,
-): string => `arn:aws:codedeploy:${region}:${account}:deploymentconfig:${name}`;
+const deploymentConfigArn = (region: string, account: string, name: string): string =>
+  `arn:aws:codedeploy:${region}:${account}:deploymentconfig:${name}`;
 
 export const DeploymentConfigProvider = () =>
   Provider.effect(
@@ -160,17 +153,11 @@ export const DeploymentConfigProvider = () =>
       });
 
       return {
-        stables: [
-          "deploymentConfigName",
-          "deploymentConfigId",
-          "computePlatform",
-        ],
+        stables: ["deploymentConfigName", "deploymentConfigId", "computePlatform"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Deployment configurations are immutable — any settings change
@@ -189,8 +176,7 @@ export const DeploymentConfigProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.deploymentConfigName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.deploymentConfigName ?? (yield* toName(id, olds ?? {}));
           const config = yield* getConfig(name);
           if (config?.deploymentConfigId === undefined) return undefined;
           // Deployment configurations cannot be tagged, so there is no
@@ -205,8 +191,7 @@ export const DeploymentConfigProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.deploymentConfigName ?? (yield* toName(id, news));
+          const name = output?.deploymentConfigName ?? (yield* toName(id, news));
           const computePlatform = news.computePlatform ?? "Server";
 
           // 1. Observe — cloud state is authoritative.
@@ -253,12 +238,8 @@ export const DeploymentConfigProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: (e): boolean =>
-                  e._tag === "DeploymentConfigInUseException",
-                schedule: Schedule.max([
-                  Schedule.fixed(3000),
-                  Schedule.recurs(10),
-                ]),
+                while: (e): boolean => e._tag === "DeploymentConfigInUseException",
+                schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(10)]),
               }),
             );
         }),
@@ -266,16 +247,12 @@ export const DeploymentConfigProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const names = yield* codedeploy.listDeploymentConfigs
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.deploymentConfigsList ?? [],
-                  ),
-                ),
-              );
+            const names = yield* codedeploy.listDeploymentConfigs.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.deploymentConfigsList ?? []),
+              ),
+            );
             return (
               names
                 // Predefined CodeDeployDefault.* configurations are
@@ -284,11 +261,7 @@ export const DeploymentConfigProvider = () =>
                 .map((name) => ({
                   deploymentConfigName: name,
                   deploymentConfigId: "",
-                  deploymentConfigArn: deploymentConfigArn(
-                    region,
-                    accountId,
-                    name,
-                  ),
+                  deploymentConfigArn: deploymentConfigArn(region, accountId, name),
                   computePlatform: "",
                 }))
             );

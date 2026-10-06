@@ -1,7 +1,6 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -68,13 +67,7 @@ export type IndexAttributes = {
   modifiedOn: string | undefined;
 };
 
-export type Index = Resource<
-  TypeId,
-  IndexProps,
-  IndexAttributes,
-  never,
-  Providers
->;
+export type Index = Resource<TypeId, IndexProps, IndexAttributes, never, Providers>;
 
 /**
  * A Cloudflare Vectorize index for storing and querying vector embeddings.
@@ -136,8 +129,7 @@ export const Index = Resource<Index>(TypeId);
 /**
  * Returns true if the given value is a Vectorize Index resource.
  */
-export const isIndex = (value: unknown): value is Index =>
-  isResourceOfType(value, TypeId);
+export const isIndex = (value: unknown): value is Index => isResourceOfType(value, TypeId);
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {
@@ -148,8 +140,7 @@ export const IndexProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.indexName ?? (yield* createIndexName(id, olds.name));
+      const oldName = output?.indexName ?? (yield* createIndexName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -168,23 +159,17 @@ export const IndexProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name =
-        output?.indexName ?? (yield* createIndexName(id, olds?.name));
-      return yield* vectorize
-        .getIndex({ accountId: acct, indexName: name })
-        .pipe(
-          Effect.map((index) => toAttributes(index, name, acct)),
-          Effect.catchTag(["NotFound", "Gone"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const name = output?.indexName ?? (yield* createIndexName(id, olds?.name));
+      return yield* vectorize.getIndex({ accountId: acct, indexName: name }).pipe(
+        Effect.map((index) => toAttributes(index, name, acct)),
+        Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)),
+      );
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Prefer the deployed name: regenerating would target a different
       // index if the generator's output for this id ever drifts.
-      const indexName =
-        output?.indexName ?? (yield* createIndexName(id, news.name));
+      const indexName = output?.indexName ?? (yield* createIndexName(id, news.name));
 
       // Observe — read the live index by name. The name is the stable
       // identifier; fall back through a NotFound to the create path so
@@ -194,11 +179,7 @@ export const IndexProvider = () =>
           accountId,
           indexName,
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "Gone"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)));
 
       // Ensure — create if missing. Cloudflare returns 409 Conflict when
       // an index with the same name already exists; tolerate the race by
@@ -269,9 +250,7 @@ const createIndexName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const buildConfig = (
-  news: IndexProps,
-): vectorize.CreateIndexRequest["config"] =>
+const buildConfig = (news: IndexProps): vectorize.CreateIndexRequest["config"] =>
   news.preset !== undefined
     ? // `Preset` is intentionally open (`| (string & {})`) so
       // new Cloudflare presets aren't blocked by stale types. The

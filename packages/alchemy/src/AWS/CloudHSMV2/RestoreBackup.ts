@@ -27,12 +27,7 @@ export interface RestoreBackup extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.RestoreBackupRequest,
-    ) => Effect.Effect<
-      cloudhsm.RestoreBackupResponse,
-      cloudhsm.RestoreBackupError
-    >
+    ) => Effect.Effect<cloudhsm.RestoreBackupResponse, cloudhsm.RestoreBackupError>
   >
 > {}
-export const RestoreBackup = Binding.Service<RestoreBackup>(
-  "AWS.CloudHSMV2.RestoreBackup",
-);
+export const RestoreBackup = Binding.Service<RestoreBackup>("AWS.CloudHSMV2.RestoreBackup");

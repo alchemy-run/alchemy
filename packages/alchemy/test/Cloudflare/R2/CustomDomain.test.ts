@@ -1,40 +1,27 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({
-  providers: Cloudflare.providers(),
-  state: Cloudflare.state(),
-});
+const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_R2_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_R2_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
 const suffix = process.env.PULL_REQUEST ?? process.env.USER;
 // A custom-domain hostname maps one-to-one to a bucket at the Cloudflare zone
 // level, so it is a *global* resource. These suites run concurrently
 // (`sequence.concurrent`), so every test must claim a hostname no other test
 // uses — otherwise the tests race to attach the same hostname to different
 // buckets and lose with `Conflict: Domain already in use`.
-const domain = zoneName
-  ? `alchemy-r2-test-single-${suffix}.${zoneName}`
-  : undefined;
-const domain2 = zoneName
-  ? `alchemy-r2-test-multi-a-${suffix}.${zoneName}`
-  : undefined;
-const domain3 = zoneName
-  ? `alchemy-r2-test-multi-b-${suffix}.${zoneName}`
-  : undefined;
+const domain = zoneName ? `alchemy-r2-test-single-${suffix}.${zoneName}` : undefined;
+const domain2 = zoneName ? `alchemy-r2-test-multi-a-${suffix}.${zoneName}` : undefined;
+const domain3 = zoneName ? `alchemy-r2-test-multi-b-${suffix}.${zoneName}` : undefined;
 
 test.provider(
   "creates, updates, and deletes a bucket custom domain",
@@ -138,9 +125,7 @@ test.provider(
         }),
       );
 
-      const updatedByName = Object.fromEntries(
-        updated.domains.map((d) => [d.domain, d]),
-      );
+      const updatedByName = Object.fromEntries(updated.domains.map((d) => [d.domain, d]));
       expect(updatedByName[domain3!]?.enabled).toEqual(false);
       expect(updatedByName[domain2!]?.enabled).toEqual(true);
 
@@ -192,23 +177,15 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
 );
 
-const waitForBucketToBeDeleted = Effect.fn(function* (
-  bucketName: string,
-  accountId: string,
-) {
-  yield* r2
-    .getBucket({
-      accountId,
-      bucketName,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new BucketStillExists())),
-      Effect.retry({
-        while: (e): e is BucketStillExists => e instanceof BucketStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NoSuchBucket", () => Effect.void),
-    );
+const waitForBucketToBeDeleted = Effect.fn(function* (bucketName: string, accountId: string) {
+  yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+    Effect.retry({
+      while: (e): e is BucketStillExists => e instanceof BucketStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+  );
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

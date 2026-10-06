@@ -4,11 +4,10 @@ import type { AuthError } from "../Auth/AuthProvider.ts";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 import { GitHubCredentials } from "./Credentials.ts";
 
-export const Octokit: Effect.Effect<_Octokit, never, GitHubCredentials> =
-  Effect.gen(function* () {
-    const creds = yield* yield* GitHubCredentials;
-    return creds.octokit();
-  });
+export const Octokit: Effect.Effect<_Octokit, never, GitHubCredentials> = Effect.gen(function* () {
+  const creds = yield* yield* GitHubCredentials;
+  return creds.octokit();
+});
 
 /**
  * An Octokit honoring a per-resource `baseUrl` prop. When `baseUrl` is set,

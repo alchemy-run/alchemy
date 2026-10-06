@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as macie2 from "@distilled.cloud/aws/macie2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import Macie2TestFunctionLive, { Macie2TestFunction } from "./handler";
 import { makeMacie2TestLease } from "./TestLease.ts";
 
@@ -24,10 +24,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 // The Macie session is an account/region singleton with no tags, so ownership
@@ -52,31 +49,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -92,21 +80,12 @@ const getSession = macie2.getMacieSession({}).pipe(
 
 const skipForeign = () =>
   foreignSession
-    ? Effect.logInfo(
-        "Macie is already enabled by someone else — skipping",
-      ).pipe(Effect.as(true))
+    ? Effect.logInfo("Macie is already enabled by someone else — skipping").pipe(Effect.as(true))
     : Effect.succeed(false);
 
 describe.sequential(
   "Macie2 Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:macie2",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:macie2", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
@@ -114,9 +93,7 @@ describe.sequential(
         // fixture's own session enabled, which must not be mistaken for a
         // foreign one. Destroying the scratch stack disables Macie only if the
         // session is tracked in our state.
-        yield* Effect.logInfo(
-          "Macie2 test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Macie2 test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         // Never take over a Macie session this fixture did not create — any
@@ -141,21 +118,15 @@ describe.sequential(
         baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Macie2 test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Macie2 test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Macie2 test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Macie2 test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -188,16 +159,12 @@ describe.sequential(
     });
 
     describe("TestCustomDataIdentifier", () => {
-      test.provider(
-        "a detection regex round-trips with match counts",
-        (_stack) =>
-          Effect.gen(function* () {
-            if (yield* skipForeign()) return;
-            const response = (yield* postJson("/test-identifier")) as {
-              matchCount: number;
-            };
-            expect(response.matchCount).toBe(2);
-          }),
+      test.provider("a detection regex round-trips with match counts", (_stack) =>
+        Effect.gen(function* () {
+          if (yield* skipForeign()) return;
+          const response = (yield* postJson("/test-identifier")) as { matchCount: number };
+          expect(response.matchCount).toBe(2);
+        }),
       );
     });
 
@@ -237,9 +204,7 @@ describe.sequential(
             }
 
             // Statistics grouped by severity answer either way.
-            const stats = (yield* getJson("/finding-stats")) as {
-              groups: number;
-            };
+            const stats = (yield* getJson("/finding-stats")) as { groups: number };
             expect(stats.groups).toBeGreaterThanOrEqual(0);
           }),
         { timeout: 150_000 },
@@ -250,9 +215,7 @@ describe.sequential(
       test.provider("reads Macie's S3 inventory", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const buckets = (yield* getJson("/buckets")) as {
-            bucketCount: number;
-          };
+          const buckets = (yield* getJson("/buckets")) as { bucketCount: number };
           expect(buckets.bucketCount).toBeGreaterThanOrEqual(0);
 
           const search = (yield* getJson("/search")) as { matches: number };
@@ -265,9 +228,7 @@ describe.sequential(
       test.provider("lists Macie's managed data identifiers", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const response = (yield* getJson("/managed-identifiers")) as {
-            count: number;
-          };
+          const response = (yield* getJson("/managed-identifiers")) as { count: number };
           expect(response.count).toBeGreaterThan(0);
         }),
       );
@@ -277,14 +238,10 @@ describe.sequential(
       test.provider("a fresh session has no user configuration", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const allowLists = (yield* getJson("/allow-lists")) as {
-            count: number;
-          };
+          const allowLists = (yield* getJson("/allow-lists")) as { count: number };
           expect(allowLists.count).toBe(0);
 
-          const filters = (yield* getJson("/findings-filters")) as {
-            count: number;
-          };
+          const filters = (yield* getJson("/findings-filters")) as { count: number };
           expect(filters.count).toBe(0);
 
           const jobs = (yield* getJson("/jobs")) as { count: number };
@@ -297,9 +254,7 @@ describe.sequential(
       test.provider("reads export configuration and usage totals", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const exportConfig = (yield* getJson("/export-config")) as {
-            configured: boolean;
-          };
+          const exportConfig = (yield* getJson("/export-config")) as { configured: boolean };
           expect(exportConfig.configured).toBe(false);
 
           const usage = (yield* getJson("/usage")) as { totals: number };
@@ -312,9 +267,7 @@ describe.sequential(
       test.provider("reads the discovery and reveal configuration", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const discovery = (yield* getJson("/auto-discovery")) as {
-            status: string | null;
-          };
+          const discovery = (yield* getJson("/auto-discovery")) as { status: string | null };
           expect(discovery.status).not.toBeUndefined();
 
           const scopes = (yield* getJson("/scopes")) as { count: number };
@@ -346,10 +299,9 @@ describe.sequential(
               errorTag?: string;
             };
             if (response.errorTag) {
-              expect([
-                "ResourceNotFoundException",
-                "AccessDeniedException",
-              ]).toContain(response.errorTag);
+              expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
+                response.errorTag,
+              );
             } else {
               expect(response.administrator ?? null).toBeNull();
             }
@@ -361,14 +313,10 @@ describe.sequential(
       test.provider("reads this account's membership state", (_stack) =>
         Effect.gen(function* () {
           if (yield* skipForeign()) return;
-          const count = (yield* getJson("/invitations-count")) as {
-            count: number;
-          };
+          const count = (yield* getJson("/invitations-count")) as { count: number };
           expect(count.count).toBeGreaterThanOrEqual(0);
 
-          const invitations = (yield* getJson("/invitations")) as {
-            count: number;
-          };
+          const invitations = (yield* getJson("/invitations")) as { count: number };
           expect(invitations.count).toBeGreaterThanOrEqual(0);
 
           const members = (yield* getJson("/members")) as { count: number };
@@ -388,10 +336,7 @@ describe.sequential(
               errorTag?: string;
             };
             if (admins.errorTag) {
-              expect([
-                "AccessDeniedException",
-                "ValidationException",
-              ]).toContain(admins.errorTag);
+              expect(["AccessDeniedException", "ValidationException"]).toContain(admins.errorTag);
             } else {
               expect(admins.admins).toBeGreaterThanOrEqual(0);
             }
@@ -401,10 +346,9 @@ describe.sequential(
               errorTag?: string;
             };
             if (orgConfig.errorTag) {
-              expect([
-                "AccessDeniedException",
-                "ValidationException",
-              ]).toContain(orgConfig.errorTag);
+              expect(["AccessDeniedException", "ValidationException"]).toContain(
+                orgConfig.errorTag,
+              );
             } else {
               expect(typeof orgConfig.autoEnable).toBe("boolean");
             }

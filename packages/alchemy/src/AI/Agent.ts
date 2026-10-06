@@ -5,9 +5,7 @@ import { effectClass } from "../Util/effect.ts";
 import type { ToolImpl } from "./Tool.ts";
 
 export type Services<Refs extends any[]> = Refs[number] extends infer A
-  ? A extends
-      | ToolImpl<infer _T, infer _Err, infer Req>
-      | Context.Service<infer Req, infer _Shape>
+  ? A extends ToolImpl<infer _T, infer _Err, infer Req> | Context.Service<infer Req, infer _Shape>
     ? Req
     : never
   : never;
@@ -18,9 +16,7 @@ export interface Agent<
   Service = AgentService,
   Req = never,
 > {
-  [Symbol.iterator](): Effect.EffectIterator<
-    Effect.Effect<Service, never, Req>
-  >;
+  [Symbol.iterator](): Effect.EffectIterator<Effect.Effect<Service, never, Req>>;
   "~alchemy/Kind": "Agent";
   name: Name;
   refs: Refs;
@@ -29,10 +25,7 @@ export interface Agent<
 }
 
 export interface AgentService {
-  send(request: {
-    input: any;
-    session?: string;
-  }): Effect.Effect<void, never, RuntimeContext>;
+  send(request: { input: any; session?: string }): Effect.Effect<void, never, RuntimeContext>;
 }
 
 export const Agent: {
@@ -56,8 +49,7 @@ export const Agent: {
   };
 } = ((name?: string) =>
   name
-    ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeAgent(name, template, refs)
+    ? (template: TemplateStringsArray, ...refs: any[]) => makeAgent(name, template, refs)
     : (name: string) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
           makeAgent(name, template, refs)) as any;

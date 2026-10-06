@@ -30,10 +30,7 @@ const storage: AsyncLocalStorage<FileContext> = ((globalThis as any)[key] ??=
  * Collect one file: run `f` (the file's dynamic import + microtask flush)
  * with a fresh root as the ambient collector, and return the root.
  */
-export const collect = async (
-  file: string,
-  f: () => Promise<void>,
-): Promise<FileSuite> => {
+export const collect = async (file: string, f: () => Promise<void>): Promise<FileSuite> => {
   const root = makeFileSuite(file);
   await storage.run({ current: root }, f);
   return root;
@@ -61,9 +58,7 @@ export const currentSuite = (): Suite => currentContext().current;
 export const currentFile = (): string | undefined => {
   let suite: Suite | undefined = storage.getStore()?.current;
   while (suite?.parent !== undefined) suite = suite.parent;
-  return suite !== undefined && "file" in suite
-    ? (suite as FileSuite).file
-    : undefined;
+  return suite !== undefined && "file" in suite ? (suite as FileSuite).file : undefined;
 };
 
 /** Run `f` with `suite` as the current registration target. */

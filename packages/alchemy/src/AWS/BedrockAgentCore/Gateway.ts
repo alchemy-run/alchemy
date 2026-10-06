@@ -155,35 +155,22 @@ export const GatewayProvider = () =>
   Provider.effect(
     Gateway,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<GatewayProps, "name">,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: Pick<GatewayProps, "name">) {
         return props.name ?? (yield* createGatewayName(id));
       });
 
-      const getGatewayOrUndefined = Effect.fn(function* (
-        gatewayIdentifier: string,
-      ) {
+      const getGatewayOrUndefined = Effect.fn(function* (gatewayIdentifier: string) {
         return yield* control
           .getGateway({ gatewayIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const findByName = Effect.fn(function* (name: string) {
-        const pages = yield* control.listGateways
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* control.listGateways.pages({}).pipe(Stream.runCollect);
         const summary = Array.from(pages)
           .flatMap((page) => page.items ?? [])
           .find((s) => s.name === name);
-        return summary === undefined
-          ? undefined
-          : yield* getGatewayOrUndefined(summary.gatewayId);
+        return summary === undefined ? undefined : yield* getGatewayOrUndefined(summary.gatewayId);
       });
 
       const waitForSettled = Effect.fn(function* (gatewayId: string) {
@@ -209,12 +196,8 @@ export const GatewayProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* control.listGateways
-              .pages({})
-              .pipe(Stream.runCollect);
-            const summaries = Array.from(pages).flatMap(
-              (page) => page.items ?? [],
-            );
+            const pages = yield* control.listGateways.pages({}).pipe(Stream.runCollect);
+            const summaries = Array.from(pages).flatMap((page) => page.items ?? []);
             const hydrated = yield* Effect.forEach(
               summaries,
               (s) => getGatewayOrUndefined(s.gatewayId),
@@ -226,9 +209,7 @@ export const GatewayProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const gateway = output?.gatewayId
             ? yield* getGatewayOrUndefined(output.gatewayId)
-            : yield* findByName(
-                yield* createName(id, olds ?? ({} as GatewayProps)),
-              );
+            : yield* findByName(yield* createName(id, olds ?? ({} as GatewayProps)));
           if (gateway === undefined || gateway.status === "DELETING") {
             return undefined;
           }
@@ -244,9 +225,7 @@ export const GatewayProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)
-          ) {
+          if ((olds?.kmsKeyArn ?? undefined) !== (news?.kmsKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
           // description, role, authorizer, protocol config, and tags converge
@@ -315,13 +294,10 @@ export const GatewayProvider = () =>
             gateway.roleArn !== props.roleArn ||
             gateway.authorizerType !== authorizerType ||
             (gateway.protocolType ?? "MCP") !== protocolType ||
-            (gateway.exceptionLevel ?? undefined) !==
-              (props.exceptionLevel ?? undefined) ||
+            (gateway.exceptionLevel ?? undefined) !== (props.exceptionLevel ?? undefined) ||
             JSON.stringify(gateway.authorizerConfiguration ?? null) !==
               JSON.stringify(
-                props.authorizerConfiguration ??
-                  gateway.authorizerConfiguration ??
-                  null,
+                props.authorizerConfiguration ?? gateway.authorizerConfiguration ?? null,
               ) ||
             (props.protocolConfiguration !== undefined &&
               JSON.stringify(gateway.protocolConfiguration ?? null) !==
@@ -356,27 +332,19 @@ export const GatewayProvider = () =>
         // ConflictException until they are gone — the engine deletes targets
         // first, but their teardown is eventually consistent.
         delete: Effect.fn(function* ({ output }) {
-          yield* control
-            .deleteGateway({ gatewayIdentifier: output.gatewayId })
-            .pipe(
-              retryWhileConflict,
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          yield* control
-            .getGateway({ gatewayIdentifier: output.gatewayId })
-            .pipe(
-              Effect.map((g) => g.status as string),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed("GONE" as string),
-              ),
-              Effect.repeat({
-                schedule: Schedule.fixed("5 seconds"),
-                until: (status) => status === "GONE",
-                times: 24,
-              }),
-            );
+          yield* control.deleteGateway({ gatewayIdentifier: output.gatewayId }).pipe(
+            retryWhileConflict,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          );
+          yield* control.getGateway({ gatewayIdentifier: output.gatewayId }).pipe(
+            Effect.map((g) => g.status as string),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as string)),
+            Effect.repeat({
+              schedule: Schedule.fixed("5 seconds"),
+              until: (status) => status === "GONE",
+              times: 24,
+            }),
+          );
         }),
       });
     }),

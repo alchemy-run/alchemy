@@ -46,6 +46,4 @@ export interface GetConsoleOutput extends Binding.Service<
   >
 > {}
 
-export const GetConsoleOutput = Binding.Service<GetConsoleOutput>(
-  "AWS.EC2.GetConsoleOutput",
-);
+export const GetConsoleOutput = Binding.Service<GetConsoleOutput>("AWS.EC2.GetConsoleOutput");

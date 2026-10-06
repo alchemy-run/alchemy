@@ -49,7 +49,7 @@ implementation second:
 ```typescript
 // src/Sandbox.runtime.ts
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Sandbox } from "./Sandbox.ts";
 
 export default Sandbox.make(
@@ -361,7 +361,7 @@ export const Connection = Effect.gen(function* () {
 import * as Prisma from "alchemy/Prisma";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Api } from "./Api.ts";
 import { Connection } from "./Db.ts";
 

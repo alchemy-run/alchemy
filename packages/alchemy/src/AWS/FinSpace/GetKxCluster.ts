@@ -28,6 +28,4 @@ export interface GetKxCluster extends Binding.Service<
     ) => Effect.Effect<SVC.GetKxClusterResponse, SVC.GetKxClusterError>
   >
 > {}
-export const GetKxCluster = Binding.Service<GetKxCluster>(
-  "AWS.FinSpace.GetKxCluster",
-);
+export const GetKxCluster = Binding.Service<GetKxCluster>("AWS.FinSpace.GetKxCluster");

@@ -30,12 +30,7 @@ export interface ListAccessEntries extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<eks.ListAccessEntriesRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.ListAccessEntriesResponse,
-      eks.ListAccessEntriesError
-    >
+    ) => Effect.Effect<eks.ListAccessEntriesResponse, eks.ListAccessEntriesError>
   >
 > {}
-export const ListAccessEntries = Binding.Service<ListAccessEntries>(
-  "AWS.EKS.ListAccessEntries",
-);
+export const ListAccessEntries = Binding.Service<ListAccessEntries>("AWS.EKS.ListAccessEntries");
