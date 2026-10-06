@@ -202,6 +202,7 @@ catalog:
   typescript-api: "npm:typescript@7.1.0-dev.20260905.1"
   unenv: "^2.0.0-rc.24"
   uuid: "^14.0.1"
+  vinext: "^1.0.1"
   vite: "^8.0.7"
   vite-plugin-solid: "^2.11.12"
   vite-plugin-vue-devtools: "^8.1.1"

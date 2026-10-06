@@ -53,7 +53,11 @@ export const runVinextBuild = (options: {
     });
     const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
     const { default: vinext } = yield* loadVinextModule<{
-      default(options?: { disableAppRouter?: boolean }): PluginOption;
+      default(options?: {
+        disableAppRouter?: boolean;
+        __skipBuildLifecycle?: boolean;
+        __pagesClientAssetsModule?: string | null;
+      }): PluginOption;
     }>(root, "index.js");
     const cache = yield* makeVinextCachePlugin(root, options.cache);
     const { loadDotenv } = yield* loadVinextModule<{
@@ -68,8 +72,8 @@ export const runVinextBuild = (options: {
     const { runWithPreviewBuildCredentials } = yield* loadVinextModule<{
       runWithPreviewBuildCredentials<T>(callback: () => T): T;
     }>(root, "build/preview-credentials.js");
-    const { clearPagesClientAssetsBuildMetadata } = yield* loadVinextModule<{
-      clearPagesClientAssetsBuildMetadata(session: string): void;
+    const { PAGES_CLIENT_ASSETS_MODULE } = yield* loadVinextModule<{
+      PAGES_CLIENT_ASSETS_MODULE: string;
     }>(root, "build/pages-client-assets-module.js");
     const hasDirectory = (name: string) =>
       Effect.gen(function* () {
@@ -93,20 +97,12 @@ export const runVinextBuild = (options: {
           __VINEXT_SHARED_RSC_BUILD_IDENTITY: randomBytes(16).toString("hex"),
           __VINEXT_SHARED_REVALIDATE_SECRET: randomBytes(32).toString("hex"),
           __VINEXT_SHARED_PRERENDER_SECRET: randomBytes(32).toString("hex"),
-          ...(hybrid
-            ? {
-                __VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION: randomBytes(16).toString("hex"),
-              }
-            : {}),
         };
         const previous = Object.fromEntries(
           Object.keys(shared).map((key) => [key, process.env[key]]),
         );
         Object.assign(process.env, shared);
-        return {
-          previous,
-          session: shared.__VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION,
-        };
+        return previous;
       }),
       () =>
         Effect.gen(function* () {
@@ -140,6 +136,16 @@ export const runVinextBuild = (options: {
                 root,
               );
               await flatten(pagesConfig?.config.plugins ?? []);
+              // The App Router build writes the Pages client-asset manifest next to its RSC entry.
+              const pagesClientAssetsPath = path.join(
+                root,
+                "dist/server",
+                PAGES_CLIENT_ASSETS_MODULE,
+              );
+              const pagesClientAssetsModule = await fs.readFileString(pagesClientAssetsPath).pipe(
+                Effect.orElseSucceed(() => null),
+                Effect.runPromise,
+              );
               const transforms = flattened.filter(
                 (plugin) =>
                   !plugin.name.startsWith("vinext:") &&
@@ -151,7 +157,15 @@ export const runVinextBuild = (options: {
               await vite.build({
                 root,
                 configFile: false,
-                plugins: [transforms, vinext({ disableAppRouter: true }), cache],
+                plugins: [
+                  transforms,
+                  vinext({
+                    disableAppRouter: true,
+                    __skipBuildLifecycle: true,
+                    __pagesClientAssetsModule: pagesClientAssetsModule,
+                  }),
+                  cache,
+                ],
                 resolve: {
                   dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
                 },
@@ -166,9 +180,8 @@ export const runVinextBuild = (options: {
           );
           yield* runVinextPrerenderIfConfigured(root, options.cache, config);
         }),
-      ({ previous, session }) =>
+      (previous) =>
         Effect.sync(() => {
-          if (session) clearPagesClientAssetsBuildMetadata(session);
           for (const [key, value] of Object.entries(previous)) {
             if (value === undefined) delete process.env[key];
             else process.env[key] = value;
@@ -260,9 +273,10 @@ export const spawnVinextDev = (options: {
           [
             options.cli,
             "dev",
-            "-p",
+            "--port",
             String(options.port),
-            ...(options.host !== undefined ? ["-H", options.host] : []),
+            "--strictPort",
+            ...(options.host !== undefined ? ["--host", options.host] : []),
           ],
           {
             cwd: options.root,
