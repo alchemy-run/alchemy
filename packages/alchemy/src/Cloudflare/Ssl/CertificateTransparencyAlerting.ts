@@ -1,7 +1,6 @@
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -9,10 +8,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TypeId = "Cloudflare.Ssl.CtAlerting" as const;
+const TypeId = "Cloudflare.Ssl.CertificateTransparencyAlerting" as const;
 type TypeId = typeof TypeId;
 
-export type CtAlertingProps = {
+export type CertificateTransparencyAlertingProps = {
   /**
    * Zone whose Certificate Transparency alerting is managed. Stable —
    * changing the zone triggers a replacement (the old zone's subscription
@@ -21,9 +20,10 @@ export type CtAlertingProps = {
   zoneId: string;
   /**
    * Whether Cloudflare emails an alert when a certificate is issued for
-   * one of the zone's hostnames.
+   * one of the zone's hostnames. Cloudflare leaves it off for a new zone.
+   * @default true
    */
-  enabled: boolean;
+  enabled?: boolean;
   /**
    * Addresses that receive the alerts (at most 100). When omitted, the
    * zone's stored recipients are left as they are.
@@ -31,7 +31,7 @@ export type CtAlertingProps = {
   emails?: string[];
 };
 
-export type CtAlertingAttributes = {
+export type CertificateTransparencyAlertingAttributes = {
   /** Zone the subscription belongs to. */
   zoneId: string;
   /** Whether CT alerting is enabled for the zone. */
@@ -44,19 +44,21 @@ export type CtAlertingAttributes = {
   initialEmails: string[];
 };
 
-export type CtAlerting = Resource<
+export type CertificateTransparencyAlerting = Resource<
   TypeId,
-  CtAlertingProps,
-  CtAlertingAttributes,
+  CertificateTransparencyAlertingProps,
+  CertificateTransparencyAlertingAttributes,
   never,
   Providers
 >;
 
 /**
- * Certificate Transparency alerting for a Cloudflare zone
- * (`/zones/{zone_id}/ct/alerting`): Cloudflare watches the public CT logs
+ * Certificate Transparency alerting for a Cloudflare zone ("Certificate
+ * Transparency Monitoring" in the dashboard, `/zones/{zone_id}/ct/alerting`
+ * in the API): Cloudflare watches the public Certificate Transparency logs
  * and emails the listed recipients when a certificate is issued for one of
- * the zone's hostnames.
+ * the zone's hostnames. Certificates Cloudflare issues itself are filtered
+ * out.
  *
  * The subscription is a zone singleton, so this resource never creates or
  * deletes anything physical. Reconcile patches it when the observed state
@@ -65,10 +67,17 @@ export type CtAlerting = Resource<
  * ### Monitoring certificate issuance
  * **Example:** Email the security team on every new certificate
  * ```typescript
- * yield* Cloudflare.Ssl.CtAlerting("CtAlerting", {
+ * yield* Cloudflare.Ssl.CertificateTransparencyAlerting("CtAlerting", {
  *   zoneId: zone.zoneId,
- *   enabled: true,
  *   emails: ["security@example.com"],
+ * });
+ * ```
+ *
+ * **Example:** Turn alerting off for a zone
+ * ```typescript
+ * yield* Cloudflare.Ssl.CertificateTransparencyAlerting("CtAlerting", {
+ *   zoneId: zone.zoneId,
+ *   enabled: false,
  * });
  * ```
  *
@@ -78,12 +87,14 @@ export type CtAlerting = Resource<
  * @product SSL/TLS
  * @category SSL/TLS & Certificates
  */
-export const CtAlerting = Resource<CtAlerting>(TypeId);
+export const CertificateTransparencyAlerting = Resource<CertificateTransparencyAlerting>(TypeId);
 
 /**
- * Returns true if the given value is a CtAlerting resource.
+ * Returns true if the given value is a CertificateTransparencyAlerting resource.
  */
-export const isCtAlerting = (value: unknown): value is CtAlerting =>
+export const isCertificateTransparencyAlerting = (
+  value: unknown,
+): value is CertificateTransparencyAlerting =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const observe = (zoneId: string) =>
@@ -97,14 +108,11 @@ const recipients = (
 
 const sameRecipients = (a: readonly string[], b: readonly string[]) => {
   const sortedB = [...b].sort();
-  return (
-    a.length === b.length &&
-    [...a].sort().every((email, i) => email === sortedB[i])
-  );
+  return a.length === b.length && [...a].sort().every((email, i) => email === sortedB[i]);
 };
 
-export const CtAlertingProvider = () =>
-  Provider.succeed(CtAlerting, {
+export const CertificateTransparencyAlertingProvider = () =>
+  Provider.succeed(CertificateTransparencyAlerting, {
     nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled", "initialEmails"],
 
@@ -130,20 +138,15 @@ export const CtAlertingProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is CtAlertingAttributes => row !== undefined,
+        (row): row is CertificateTransparencyAlertingAttributes => row !== undefined,
       );
     }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const oldZoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof news.zoneId === "string" &&
-        oldZoneId !== news.zoneId
-      ) {
+        output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof news.zoneId === "string" && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -166,13 +169,14 @@ export const CtAlertingProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const zoneId = news.zoneId as string;
+      const enabled = news.enabled ?? true;
       const observed = yield* zones.getCtAlerting({ zoneId });
       const emails = recipients(observed);
       const initialEnabled = output?.initialEnabled ?? observed.enabled;
       const initialEmails = output?.initialEmails ?? emails;
 
       if (
-        observed.enabled === news.enabled &&
+        observed.enabled === enabled &&
         (news.emails === undefined || sameRecipients(news.emails, emails))
       ) {
         return {
@@ -185,7 +189,7 @@ export const CtAlertingProvider = () =>
       }
       const patched = yield* zones.patchCtAlerting({
         zoneId,
-        enabled: news.enabled,
+        enabled,
         ...(news.emails === undefined ? {} : { emails: news.emails }),
       });
       return {
