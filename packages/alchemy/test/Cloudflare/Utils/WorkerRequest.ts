@@ -41,8 +41,11 @@ export const requestWorker = (
             ),
           ),
     ),
+    // `while` is annotated `boolean` on purpose: an inferred type predicate
+    // makes `Effect.retry` drop `WorkerNotPropagated` from the error type,
+    // but it still escapes once the retries run out.
     Effect.retry({
-      while: (error) => error._tag === "WorkerNotPropagated",
+      while: (error): boolean => error._tag === "WorkerNotPropagated",
       schedule: Schedule.spaced(options.retryDelay ?? "1 second"),
       times: 8,
     }),
