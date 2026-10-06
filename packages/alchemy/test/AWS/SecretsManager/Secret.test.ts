@@ -225,6 +225,74 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
 );
 
+// The recovery window is validated before any API call: DeleteSecret only
+// accepts a whole number of days from 7 to 30.
+test.provider(
+  "recovery window outside 7..30 fails before creating anything",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = `alchemy-test-bad-window-${stack.stage}`;
+      const failure = yield* stack
+        .deploy(
+          Secret("BadWindowSecret", {
+            name,
+            secretString: Redacted.make("value"),
+            recoveryWindowInDays: 3,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "SecretRecoveryWindowOutOfRange" });
+      const absent = yield* secretsmanager.describeSecret({ SecretId: name }).pipe(Effect.flip);
+      expect(absent._tag).toBe("ResourceNotFoundException");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// A pending secret this resource did not create (no ownership tags) is never
+// restored: the deploy fails with OwnedBySomeoneElse and the secret stays
+// scheduled for deletion.
+test.provider(
+  "recovery window never restores a foreign pending secret",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = `alchemy-test-foreign-pending-${stack.stage}`;
+      const foreign = yield* secretsmanager.createSecret({
+        Name: name,
+        SecretString: "foreign",
+      });
+      yield* secretsmanager.deleteSecret({ SecretId: foreign.ARN!, RecoveryWindowInDays: 7 });
+
+      const failure = yield* stack
+        .deploy(
+          Secret("ForeignNameSecret", {
+            name,
+            secretString: Redacted.make("mine"),
+            recoveryWindowInDays: 7,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      const still = yield* secretsmanager.describeSecret({ SecretId: foreign.ARN! });
+      expect(still.DeletedDate).toBeDefined();
+
+      yield* stack.destroy();
+      yield* secretsmanager
+        .deleteSecret({ SecretId: foreign.ARN!, ForceDeleteWithoutRecovery: true })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ResourceNotFoundException",
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+          }),
+        );
+      yield* assertSecretDeleted(foreign.ARN!);
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
 // Audit: `secretBinary` is declared as `Redacted.Redacted<Uint8Array>` — this
 // exercises the Redacted conversion end-to-end at deploy time: create with a
 // binary value, verify the exact bytes on the wire out-of-band via distilled,
