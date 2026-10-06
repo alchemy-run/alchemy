@@ -20,6 +20,7 @@ describe("makeNodeTarget", () => {
     { hybrid: false, inline: false },
     { hybrid: true, inline: false },
     { hybrid: false, inline: true },
+    { hybrid: true, inline: true },
   ])(
     "builds and serves without an Alchemy plugin (hybrid: $hybrid, inline config: $inline)",
     ({ hybrid, inline }) =>
@@ -36,21 +37,30 @@ describe("makeNodeTarget", () => {
             });
             yield* fs.symlink(path.join(example, "node_modules"), path.join(root, "node_modules"));
             yield* fs.writeFileString(path.join(root, "package.json"), '{"type":"module"}');
+            // Hybrid builds bundle Pages separately; it must still see the user's config.
+            const pageExtensions = inline && !hybrid ? ', pageExtensions: ["page.tsx"]' : "";
             if (inline) {
               yield* fs.writeFileString(
                 path.join(root, "vite.config.ts"),
                 `
                 import vinext from "vinext";
-                export default { plugins: [vinext({ prerender: true, nextConfig: {
-                  basePath: "/nested", pageExtensions: ["page.tsx"],
-                } })] };
+                export default {
+                  resolve: { alias: { "@legacy-text": new URL("./legacy-text.ts", import.meta.url).pathname } },
+                  plugins: [vinext({ prerender: true, nextConfig: { basePath: "/nested"${pageExtensions} } })],
+                };
               `,
+              );
+              yield* fs.writeFileString(
+                path.join(root, "legacy-text.ts"),
+                'export const text = "Legacy page";',
               );
             }
             yield* fs.makeDirectory(path.join(root, "pages"));
             yield* fs.writeFileString(
-              path.join(root, inline ? "pages/legacy.page.tsx" : "pages/legacy.tsx"),
-              "export default function Page() { return <h1>Legacy page</h1>; }",
+              path.join(root, pageExtensions ? "pages/legacy.page.tsx" : "pages/legacy.tsx"),
+              inline
+                ? 'import { text } from "@legacy-text";\nexport default function Page() { return <h1>{text}</h1>; }'
+                : "export default function Page() { return <h1>Legacy page</h1>; }",
             );
             if (hybrid) {
               yield* fs.makeDirectory(path.join(root, "app"));
@@ -110,12 +120,13 @@ describe("makeNodeTarget", () => {
         try {
           const base = "http://127.0.0.1:" + server.address().port;
           for (const [route, text] of ${JSON.stringify(
-            hybrid
+            (hybrid
               ? [
                   ["/legacy", "Legacy page"],
                   ["/", "App page"],
                 ]
-              : [[inline ? "/nested/legacy" : "/legacy", "Legacy page"]],
+              : [["/legacy", "Legacy page"]]
+            ).map(([route, text]) => [inline ? `/nested${route}` : route, text]),
           )}) {
             const response = await fetch(base + route);
             assert.equal(response.status, 200);

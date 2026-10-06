@@ -16,7 +16,7 @@ import { findEphemeralPort } from "../core/DevPort.ts";
 import * as FrameworkCore from "../core/index.ts";
 import { toOutputFile, type BuildOutput } from "../core/index.ts";
 import { loadProjectModule, resolveProjectPackageDirectory } from "../core/Loader.ts";
-import { loadVinextBuildConfig } from "./BuildConfig.ts";
+import { loadVinextBuildConfig, type VinextRouteRootConfig } from "./BuildConfig.ts";
 import { makeVinextCachePlugin, type VinextCacheKind } from "./cache/plugin.ts";
 import { loadVinextModule } from "./Modules.ts";
 import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
@@ -53,11 +53,16 @@ export const runVinextBuild = (options: {
     });
     const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
     const { default: vinext } = yield* loadVinextModule<{
-      default(options?: {
-        disableAppRouter?: boolean;
-        __skipBuildLifecycle?: boolean;
-        __pagesClientAssetsModule?: string | null;
-      }): PluginOption;
+      default(
+        options?: VinextRouteRootConfig & {
+          nextConfig?: unknown;
+          cache?: unknown;
+          disableAppRouter?: boolean;
+          precompress?: boolean;
+          __skipBuildLifecycle?: boolean;
+          __pagesClientAssetsModule?: string | null;
+        },
+      ): PluginOption;
     }>(root, "index.js");
     const cache = yield* makeVinextCachePlugin(root, options.cache);
     const { loadDotenv } = yield* loadVinextModule<{
@@ -146,34 +151,71 @@ export const runVinextBuild = (options: {
                 Effect.orElseSucceed(() => null),
                 Effect.runPromise,
               );
-              const transforms = flattened.filter(
-                (plugin) =>
-                  !plugin.name.startsWith("vinext:") &&
-                  !plugin.name.startsWith("vite:react") &&
-                  !plugin.name.startsWith("rsc:") &&
-                  plugin.name !== "vite-rsc-load-module-dev-proxy" &&
-                  !plugin.name.startsWith("vite-plugin-cloudflare"),
-              );
+              // Mirrors vinext's own hybrid Pages build (build/lifecycle.js): keep the
+              // user's config and transforms, drop App Router internals.
+              const transforms = flattened
+                .filter(
+                  (plugin) =>
+                    !plugin.name.startsWith("vinext:") &&
+                    !plugin.name.startsWith("vite:react") &&
+                    plugin.name !== "rsc" &&
+                    !plugin.name.startsWith("rsc:") &&
+                    plugin.name !== "vite-rsc-load-module-dev-proxy" &&
+                    !plugin.name.startsWith("vite-plugin-cloudflare"),
+                )
+                .map((plugin) => ({ ...plugin, buildApp: undefined }));
+              const {
+                plugins: _plugins,
+                environments,
+                build: userBuild,
+                resolve: userResolve,
+                ...userConfig
+              } = pagesConfig?.config ?? {};
+              const { build: ssrBuild, ...pagesEnvironment } = environments?.ssr ?? {};
+              const mergedBuild = vite.mergeConfig(userBuild ?? {}, ssrBuild ?? {});
+              const userOutput = mergedBuild.rolldownOptions?.output;
               await vite.build({
+                ...userConfig,
                 root,
+                mode: "production",
                 configFile: false,
                 plugins: [
                   transforms,
+                  // vinext() does not expose its options; its config plugin carries these.
                   vinext({
+                    ...config.routeRootConfig,
+                    nextConfig: config.nextConfigInput,
+                    cache: config.cacheConfig ?? undefined,
                     disableAppRouter: true,
+                    precompress: false,
                     __skipBuildLifecycle: true,
                     __pagesClientAssetsModule: pagesClientAssetsModule,
                   }),
                   cache,
                 ],
+                environments: { ssr: { ...pagesEnvironment, consumer: "server" } },
                 resolve: {
-                  dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+                  ...userResolve,
+                  dedupe: [
+                    ...(userResolve?.dedupe ?? []),
+                    "react",
+                    "react-dom",
+                    "react/jsx-runtime",
+                    "react/jsx-dev-runtime",
+                  ],
                 },
                 build: {
+                  ...mergedBuild,
                   outDir: "dist/server",
                   emptyOutDir: false,
+                  manifest: false,
                   ssr: "virtual:vinext-server-entry",
-                  rolldownOptions: { output: { entryFileNames: "entry.js" } },
+                  rolldownOptions: {
+                    ...mergedBuild.rolldownOptions,
+                    output: Array.isArray(userOutput)
+                      ? userOutput.map((output) => ({ ...output, entryFileNames: "entry.js" }))
+                      : { ...userOutput, entryFileNames: "entry.js" },
+                  },
                 },
               });
             }),
