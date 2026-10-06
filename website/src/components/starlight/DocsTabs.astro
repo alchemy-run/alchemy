@@ -196,6 +196,11 @@ const categories = [...new Set(more.map((tab) => tab.category))];
     top: 100%;
     inset-inline-start: 0;
     min-width: 280px;
+    /* The menu opens directly below the fixed header; cap it to the
+       remaining viewport and scroll so short windows don't clip items. */
+    max-height: calc(100dvh - var(--sl-nav-height) - 1rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     z-index: 30;
     background: var(--alc-bg);
     border: 1px solid var(--alc-hairline-2);
