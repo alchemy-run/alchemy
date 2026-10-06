@@ -7,12 +7,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { findClusterById, sameStringSet, toTagRecord } from "./internal.ts";
@@ -162,9 +157,7 @@ export const Cluster = Resource<Cluster>("AWS.CloudHSMV2.Cluster");
 
 /** Cluster states that mean "gone" for reconciliation purposes. */
 const isGone = (cluster: cloudhsm.Cluster | undefined) =>
-  cluster === undefined ||
-  cluster.State === "DELETED" ||
-  cluster.State === "DELETE_IN_PROGRESS";
+  cluster === undefined || cluster.State === "DELETED" || cluster.State === "DELETE_IN_PROGRESS";
 
 export const ClusterProvider = () =>
   Provider.effect(
@@ -185,9 +178,7 @@ export const ClusterProvider = () =>
       // mid-reconcile), recover ownership by scanning for the cluster
       // carrying our alchemy tags.
       const findClusterByAlchemyTags = Effect.fn(function* (id: string) {
-        const pages = yield* cloudhsm.describeClusters
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* cloudhsm.describeClusters.pages({}).pipe(Stream.runCollect);
         for (const page of pages) {
           for (const cluster of page.Clusters ?? []) {
             if (isGone(cluster)) continue;
@@ -203,16 +194,11 @@ export const ClusterProvider = () =>
       // *_IN_PROGRESS state; the cluster itself settles in a few minutes
       // (budget 10 min = 40 * 15s).
       const waitUntilSettled = Effect.fn(function* (clusterId: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(40),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]);
         return yield* findClusterById(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(
-                new Error(`CloudHSM cluster '${clusterId}' not found`),
-              );
+              return Effect.fail(new Error(`CloudHSM cluster '${clusterId}' not found`));
             }
             if (cluster.State?.endsWith("_IN_PROGRESS")) {
               return Effect.fail(
@@ -229,9 +215,7 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: cloudhsm.Cluster) {
         if (!cluster.ClusterId) {
-          return yield* Effect.fail(
-            new Error("CloudHSM cluster is missing its ClusterId"),
-          );
+          return yield* Effect.fail(new Error("CloudHSM cluster is missing its ClusterId"));
         }
         return {
           clusterId: cluster.ClusterId,
@@ -286,9 +270,7 @@ export const ClusterProvider = () =>
             return undefined;
           }
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -322,9 +304,7 @@ export const ClusterProvider = () =>
           }
           const clusterId = observed?.ClusterId;
           if (!clusterId) {
-            return yield* Effect.fail(
-              new Error("CreateCluster returned no ClusterId"),
-            );
+            return yield* Effect.fail(new Error("CreateCluster returned no ClusterId"));
           }
 
           // Creation/modification park the cluster in *_IN_PROGRESS; wait
@@ -334,8 +314,7 @@ export const ClusterProvider = () =>
           // 3. Sync backup retention — diff OBSERVED policy against desired.
           if (
             backupRetentionDays !== undefined &&
-            String(backupRetentionDays) !==
-              observed.BackupRetentionPolicy?.Value
+            String(backupRetentionDays) !== observed.BackupRetentionPolicy?.Value
           ) {
             yield* cloudhsm.modifyCluster({
               ClusterId: clusterId,
@@ -378,33 +357,19 @@ export const ClusterProvider = () =>
           yield* cloudhsm.deleteCluster({ ClusterId: clusterId }).pipe(
             Effect.retry({
               while: (e) => e._tag === "CloudHsmInvalidRequestException",
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
             }),
-            Effect.catchTag(
-              "CloudHsmResourceNotFoundException",
-              () => Effect.void,
-            ),
+            Effect.catchTag("CloudHsmResourceNotFoundException", () => Effect.void),
           );
         }),
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* cloudhsm.describeClusters
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* cloudhsm.describeClusters.pages({}).pipe(Stream.runCollect);
             const clusters = Array.from(pages)
               .flatMap((page) => page.Clusters ?? [])
-              .filter(
-                (cluster) =>
-                  cluster.ClusterId !== undefined &&
-                  cluster.State !== "DELETED",
-              );
-            return yield* Effect.forEach(clusters, (cluster) =>
-              toAttrs(cluster),
-            );
+              .filter((cluster) => cluster.ClusterId !== undefined && cluster.State !== "DELETED");
+            return yield* Effect.forEach(clusters, (cluster) => toAttrs(cluster));
           }),
       };
     }),

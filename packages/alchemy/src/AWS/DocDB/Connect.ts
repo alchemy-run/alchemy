@@ -150,11 +150,7 @@ export interface Connect extends Binding.Service<
     cluster: DBCluster,
     options?: ConnectOptions,
   ) => Effect.Effect<
-    Effect.Effect<
-      MongoConnectionInfo,
-      secretsmanager.GetSecretValueError,
-      RuntimeContext
-    >
+    Effect.Effect<MongoConnectionInfo, secretsmanager.GetSecretValueError, RuntimeContext>
   >
 > {}
 export const Connect = Binding.Service<Connect>("AWS.DocDB.Connect");
@@ -194,9 +190,7 @@ export const formatMongoConnectionUrl = (
       : "";
   const port = options.port !== undefined ? `:${options.port}` : "";
   const database =
-    options.database !== undefined
-      ? `/${encodeURIComponent(options.database)}`
-      : "/";
+    options.database !== undefined ? `/${encodeURIComponent(options.database)}` : "/";
   const query = new URLSearchParams({
     replicaSet: "rs0",
     readPreference: "secondaryPreferred",
@@ -212,7 +206,5 @@ export const formatMongoConnectionUrl = (
       query.set("tlsAllowInvalidCertificates", "true");
     }
   }
-  return Redacted.make(
-    `mongodb://${auth}${options.host}${port}${database}?${query.toString()}`,
-  );
+  return Redacted.make(`mongodb://${auth}${options.host}${port}${database}?${query.toString()}`);
 };

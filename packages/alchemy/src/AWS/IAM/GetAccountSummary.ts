@@ -32,12 +32,7 @@ export interface GetAccountSummary extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iam.GetAccountSummaryRequest,
-    ) => Effect.Effect<
-      iam.GetAccountSummaryResponse,
-      iam.GetAccountSummaryError
-    >
+    ) => Effect.Effect<iam.GetAccountSummaryResponse, iam.GetAccountSummaryError>
   >
 > {}
-export const GetAccountSummary = Binding.Service<GetAccountSummary>(
-  "AWS.IAM.GetAccountSummary",
-);
+export const GetAccountSummary = Binding.Service<GetAccountSummary>("AWS.IAM.GetAccountSummary");

@@ -31,10 +31,7 @@ export interface BatchGetQueryExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: athena.BatchGetQueryExecutionInput,
-    ) => Effect.Effect<
-      athena.BatchGetQueryExecutionOutput,
-      athena.BatchGetQueryExecutionError
-    >
+    ) => Effect.Effect<athena.BatchGetQueryExecutionOutput, athena.BatchGetQueryExecutionError>
   >
 > {}
 

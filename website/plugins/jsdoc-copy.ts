@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   applyRuns,
   CopyEditError,
@@ -7,10 +11,6 @@ import {
   type MarkdownOptions,
   type MarkdownStyle,
 } from "@alchemy.run/vite-plugin-copy-editor";
-import { spawn } from "node:child_process";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   docCommentLines,
   docTargets,
@@ -26,9 +26,7 @@ const generator = path.join(repoRoot, "scripts/generate-api-reference.ts");
 
 const markdown: MarkdownOptions = {
   linePrefix: JSDOC_LINE_PREFIX,
-  atomics: [
-    { pattern: /\{@link\s+([^}]+)\}/, text: (m) => linkTagText(m[1]!) },
-  ],
+  atomics: [{ pattern: /\{@link\s+([^}]+)\}/, text: (m) => linkTagText(m[1]!) }],
 };
 const dialect = markdownDialect(markdown);
 
@@ -89,10 +87,7 @@ const locate = async (id: string) => {
 };
 
 const gone = () =>
-  new CopyEditError(
-    "This part of the JSDoc no longer exists. Reload and try again.",
-    409,
-  );
+  new CopyEditError("This part of the JSDoc no longer exists. Reload and try again.", 409);
 
 /** A fingerprint of a comment's editable structure (ids depend on it). */
 const shape = (targets: ReturnType<typeof docTargets>) =>
@@ -124,9 +119,7 @@ export const jsdocCopyHandler = (): CopyEditHandler => {
       child.stderr.on("data", (chunk) => (stderr += chunk));
       child.on("error", reject);
       child.on("exit", (code) =>
-        code === 0
-          ? resolve()
-          : reject(new Error(`API reference generation failed:\n${stderr}`)),
+        code === 0 ? resolve() : reject(new Error(`API reference generation failed:\n${stderr}`)),
       );
     });
 
@@ -171,34 +164,24 @@ export const jsdocCopyHandler = (): CopyEditHandler => {
   return {
     async edit({ id, before, after }, context) {
       const { parsed, file, code, targets } = await locate(id);
-      const block =
-        "block" in parsed ? targets.inline[parsed.block!] : undefined;
+      const block = "block" in parsed ? targets.inline[parsed.block!] : undefined;
       if (!block) throw gone();
       const runs = markdownRuns(code, block.start, block.end, markdown);
       const next = applyRuns(code, runs, dialect, { before, after });
       if (next === code) return { file: parsed.file, changed: false };
-      return save(
-        file,
-        parsed.file,
-        targets,
-        next,
-        parsed.commentStart,
-        context,
-      );
+      return save(file, parsed.file, targets, next, parsed.commentStart, context);
     },
 
     async readSource(id) {
       const { parsed, lines, targets } = await locate(id);
-      const region =
-        "region" in parsed ? targets.regions[parsed.region!] : undefined;
+      const region = "region" in parsed ? targets.regions[parsed.region!] : undefined;
       if (!region?.editable) throw gone();
       return regionSource(lines, region);
     },
 
     async writeSource({ id, source, base }, context) {
       const { parsed, file, code, lines, targets } = await locate(id);
-      const region =
-        "region" in parsed ? targets.regions[parsed.region!] : undefined;
+      const region = "region" in parsed ? targets.regions[parsed.region!] : undefined;
       if (!region?.editable) throw gone();
       if (regionSource(lines, region) !== base) {
         throw new CopyEditError(
@@ -213,14 +196,7 @@ export const jsdocCopyHandler = (): CopyEditHandler => {
         throw new CopyEditError((error as Error).message);
       }
       if (next === code) return { file: parsed.file, changed: false };
-      return save(
-        file,
-        parsed.file,
-        targets,
-        next,
-        parsed.commentStart,
-        context,
-      );
+      return save(file, parsed.file, targets, next, parsed.commentStart, context);
     },
   };
 };

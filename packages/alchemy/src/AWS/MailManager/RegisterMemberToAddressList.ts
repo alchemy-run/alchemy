@@ -30,13 +30,9 @@ export interface RegisterMemberToAddressList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.RegisterMemberToAddressListRequest, "AddressListId">,
-    ) => Effect.Effect<
-      mm.RegisterMemberToAddressListResponse,
-      mm.RegisterMemberToAddressListError
-    >
+    ) => Effect.Effect<mm.RegisterMemberToAddressListResponse, mm.RegisterMemberToAddressListError>
   >
 > {}
-export const RegisterMemberToAddressList =
-  Binding.Service<RegisterMemberToAddressList>(
-    "AWS.MailManager.RegisterMemberToAddressList",
-  );
+export const RegisterMemberToAddressList = Binding.Service<RegisterMemberToAddressList>(
+  "AWS.MailManager.RegisterMemberToAddressList",
+);

@@ -9,11 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  cleanMap,
-  databaseArn,
-  retryWhileConcurrentModification,
-} from "./internal.ts";
+import { cleanMap, databaseArn, retryWhileConcurrentModification } from "./internal.ts";
 
 export interface DatabaseProps {
   /**
@@ -98,23 +94,15 @@ export const DatabaseProvider = () =>
         props: { databaseName?: string | undefined },
       ) {
         return (
-          props.databaseName ??
-          (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
+          props.databaseName ?? (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
         );
       });
 
-      const observe = Effect.fn(function* (
-        name: string,
-        catalogId: string | undefined,
-      ) {
-        return yield* glue
-          .getDatabase({ Name: name, CatalogId: catalogId })
-          .pipe(
-            Effect.map((r) => r.Database),
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const observe = Effect.fn(function* (name: string, catalogId: string | undefined) {
+        return yield* glue.getDatabase({ Name: name, CatalogId: catalogId }).pipe(
+          Effect.map((r) => r.Database),
+          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return Database.Provider.of({
@@ -123,18 +111,12 @@ export const DatabaseProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* glue.getDatabases
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* glue.getDatabases.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.DatabaseList ?? [])
               .map((db) => ({
                 databaseName: db.Name,
-                databaseArn: databaseArn(
-                  region,
-                  db.CatalogId ?? accountId,
-                  db.Name,
-                ),
+                databaseArn: databaseArn(region, db.CatalogId ?? accountId, db.Name),
                 catalogId: db.CatalogId ?? accountId,
               }));
           }),
@@ -142,24 +124,17 @@ export const DatabaseProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const catalogId = output?.catalogId ?? olds?.catalogId ?? accountId;
-          const name =
-            output?.databaseName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.databaseName ?? (yield* createName(id, olds ?? {}));
           const db = yield* observe(name, catalogId);
           if (db === undefined) return undefined;
           const attrs = {
             databaseName: db.Name,
-            databaseArn: databaseArn(
-              region,
-              db.CatalogId ?? catalogId,
-              db.Name,
-            ),
+            databaseArn: databaseArn(region, db.CatalogId ?? catalogId, db.Name),
             catalogId: db.CatalogId ?? catalogId,
           };
           // Glue databases are not ARN-taggable — ownership markers live in
           // the database Parameters map.
-          return (yield* hasAlchemyTags(id, cleanMap(db.Parameters)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, cleanMap(db.Parameters))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {

@@ -34,11 +34,7 @@ export interface RetrieveRadarValueList extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveRadarValueListRequest,
-    ) => Effect.Effect<
-      StripeRadarValueList,
-      GetRadarValueListError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeRadarValueList, GetRadarValueListError, RuntimeContext>
   >
 > {}
 

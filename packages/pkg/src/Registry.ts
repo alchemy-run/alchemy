@@ -20,14 +20,7 @@ import {
 } from "./Registry/Bindings.ts";
 import { handler } from "./Registry/Handler.ts";
 
-export {
-  Bucket,
-  Cache,
-  Database,
-  Policy,
-  RegistryConfig,
-  Settings,
-} from "./Registry/Bindings.ts";
+export { Bucket, Cache, Database, Policy, RegistryConfig, Settings } from "./Registry/Bindings.ts";
 
 export interface RegistryOptions {
   /**
@@ -99,9 +92,9 @@ const RegistryConfigFromEnv = Layer.effect(
   RegistryConfig,
   Effect.gen(function* () {
     const env = yield* Cloudflare.Workers.WorkerEnvironment;
-    const settings = yield* Schema.decodeUnknownEffect(Settings)(
-      env[SETTINGS_ENV],
-    ).pipe(Effect.orDie);
+    const settings = yield* Schema.decodeUnknownEffect(Settings)(env[SETTINGS_ENV]).pipe(
+      Effect.orDie,
+    );
     return {
       ...settings,
       worker: {},
@@ -165,10 +158,7 @@ export default RegistryLive.pipe(Layer.provide(RegistryConfigFromEnv));
  * @product Workers
  * @category Workers & Compute
  */
-export const PkgRegistry = <const Id extends string>(
-  id: Id,
-  options: RegistryOptions,
-) =>
+export const PkgRegistry = <const Id extends string>(id: Id, options: RegistryOptions) =>
   Registry.pipe(
     Effect.provide(
       RegistryLive.pipe(

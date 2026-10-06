@@ -28,10 +28,7 @@ export interface ListJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: mediaconvert.ListJobsRequest,
-    ) => Effect.Effect<
-      mediaconvert.ListJobsResponse,
-      mediaconvert.ListJobsError
-    >
+    ) => Effect.Effect<mediaconvert.ListJobsResponse, mediaconvert.ListJobsError>
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.MediaConvert.ListJobs");

@@ -39,13 +39,9 @@ export interface GetSubscriptionAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetSubscriptionAttributesRequest,
-    ) => Effect.Effect<
-      sns.GetSubscriptionAttributesResponse,
-      sns.GetSubscriptionAttributesError
-    >
+    ) => Effect.Effect<sns.GetSubscriptionAttributesResponse, sns.GetSubscriptionAttributesError>
   >
 > {}
-export const GetSubscriptionAttributes =
-  Binding.Service<GetSubscriptionAttributes>(
-    "AWS.SNS.GetSubscriptionAttributes",
-  );
+export const GetSubscriptionAttributes = Binding.Service<GetSubscriptionAttributes>(
+  "AWS.SNS.GetSubscriptionAttributes",
+);

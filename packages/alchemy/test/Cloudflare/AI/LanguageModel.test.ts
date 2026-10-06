@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Sse from "effect/encoding/Sse";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as Sse from "effect/unstable/encoding/Sse";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { Gateway } from "./fixtures/Gateway.ts";
 import LanguageModelTestWorker from "./fixtures/LanguageModelWorker.ts";
 
@@ -22,10 +22,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AiGatewayLanguageModelStack",
@@ -56,6 +53,7 @@ type StreamPart = {
     inputTokens?: { total?: number };
     outputTokens?: { total?: number };
   };
+  metadata?: { cloudflare?: { neurons?: number } | null };
 };
 
 const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
@@ -88,6 +86,7 @@ test(
         inputTokens: number | undefined;
         outputTokens: number | undefined;
       };
+      neurons: number | undefined;
     };
 
     expect(typeof body.text).toBe("string");
@@ -99,14 +98,10 @@ test(
     // Refactor invariant: a normal completion maps to `stop`, not `unknown` /
     // `other` / `error`.
     expect(body.finishReason).toBe("stop");
+    expect(body.neurons).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -127,8 +122,7 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.map(parseSse),
         Effect.flatMap((parts) =>
-          parts.some((p) => p.type === "text-delta") &&
-          parts.some((p) => p.type === "finish")
+          parts.some((p) => p.type === "text-delta") && parts.some((p) => p.type === "finish")
             ? Effect.succeed(parts)
             : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
         ),
@@ -147,14 +141,10 @@ test(
     expect(parts.length).toBeGreaterThan(0);
     expect(text.length).toBeGreaterThan(0);
     expect(finish).toBeDefined();
+    expect(finish?.metadata?.cloudflare?.neurons).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -173,8 +163,7 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.map(parseSse),
         Effect.flatMap((parts) =>
-          parts.some((p) => p.type === "text-delta") &&
-          parts.some((p) => p.type === "finish")
+          parts.some((p) => p.type === "text-delta") && parts.some((p) => p.type === "finish")
             ? Effect.succeed(parts)
             : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
         ),
@@ -184,8 +173,7 @@ test(
         }),
       );
 
-    const indexOfType = (type: string) =>
-      parts.findIndex((p) => p.type === type);
+    const indexOfType = (type: string) => parts.findIndex((p) => p.type === type);
     const lastIndexOfType = (type: string) => {
       for (let i = parts.length - 1; i >= 0; i--) {
         if (parts[i]!.type === type) return i;
@@ -212,12 +200,7 @@ test(
     expect(parts.filter((p) => p.type === "text-end")).toHaveLength(1);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -263,12 +246,7 @@ test.skipIf(!process.env.DEBUG_RAW_STREAM)(
     print("\n=== end tool stream ===\n");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -304,12 +282,7 @@ test(
     expect(["stop", "length"]).toContain(finish?.reason);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -344,12 +317,7 @@ test(
     expect(total).toBeGreaterThan(20);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -366,9 +334,7 @@ test.skip(
     const id = `test-${Date.now()}`;
 
     const r1 = yield* client
-      .get(
-        `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`,
-      )
+      .get(`${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -399,12 +365,7 @@ test.skip(
     expect(b2.turns).toBeGreaterThanOrEqual(4);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
   },
 );
@@ -416,11 +377,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/tool?prompt=${encodeURIComponent(
-          "What's the weather in San Francisco?",
-        )}`,
-      )
+      .get(`${out.url}/tool?prompt=${encodeURIComponent("What's the weather in San Francisco?")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -462,12 +419,7 @@ test(
     expect(result.result.condition).toBe("sunny");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -479,11 +431,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/tool-stream?prompt=${encodeURIComponent(
-          "What's the weather in Seattle?",
-        )}`,
-      )
+      .get(`${out.url}/tool-stream?prompt=${encodeURIComponent("What's the weather in Seattle?")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -494,9 +442,7 @@ test(
 
     const parts = parseSse(yield* res.text);
     const toolParamsStart = parts.filter((p) => p.type === "tool-params-start");
-    const toolParamsDeltas = parts.filter(
-      (p) => p.type === "tool-params-delta",
-    );
+    const toolParamsDeltas = parts.filter((p) => p.type === "tool-params-delta");
     const toolParamsEnd = parts.filter((p) => p.type === "tool-params-end");
 
     expect(toolParamsStart.length).toBeGreaterThan(0);
@@ -529,12 +475,7 @@ test(
     expect(parts[parts.length - 1]?.type).toBe("finish");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -546,11 +487,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/tool-stream?prompt=${encodeURIComponent(
-          "What's the weather in Portland?",
-        )}`,
-      )
+      .get(`${out.url}/tool-stream?prompt=${encodeURIComponent("What's the weather in Portland?")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -574,20 +511,13 @@ test(
     const args = yield* Effect.try({
       try: () => JSON.parse(joined) as { city?: string },
       catch: (cause) =>
-        new Error(
-          `Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`,
-        ),
+        new Error(`Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`),
     });
     expect(typeof args.city).toBe("string");
     expect(args.city!.toLowerCase()).toContain("portland");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -599,9 +529,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/stream?prompt=${encodeURIComponent("Write a short haiku about Effect TS.")}`,
-      )
+      .get(`${out.url}/stream?prompt=${encodeURIComponent("Write a short haiku about Effect TS.")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -656,12 +584,7 @@ test(
     expect(collected.length).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );

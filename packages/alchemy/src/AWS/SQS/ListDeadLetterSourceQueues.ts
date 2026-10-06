@@ -38,14 +38,10 @@ export interface ListDeadLetterSourceQueues extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListDeadLetterSourceQueuesRequest,
-    ) => Effect.Effect<
-      sqs.ListDeadLetterSourceQueuesResult,
-      sqs.ListDeadLetterSourceQueuesError
-    >
+    ) => Effect.Effect<sqs.ListDeadLetterSourceQueuesResult, sqs.ListDeadLetterSourceQueuesError>
   >
 > {}
 
-export const ListDeadLetterSourceQueues =
-  Binding.Service<ListDeadLetterSourceQueues>(
-    "AWS.SQS.ListDeadLetterSourceQueues",
-  );
+export const ListDeadLetterSourceQueues = Binding.Service<ListDeadLetterSourceQueues>(
+  "AWS.SQS.ListDeadLetterSourceQueues",
+);

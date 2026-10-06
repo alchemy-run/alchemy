@@ -102,6 +102,9 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Guides: l("map"),
   Resources: l("boxes"),
   Concepts: l("book-text"),
+  Clusters: l("network"),
+  Workloads: l("container"),
+  Objects: l("file-code"),
   // Reference tab: provider groups get their official brand marks.
   AWS: b("amazonwebservices"),
   Cloudflare: b("cloudflare"),

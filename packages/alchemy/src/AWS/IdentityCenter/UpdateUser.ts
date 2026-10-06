@@ -35,12 +35,7 @@ export interface UpdateUser extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<identitystore.UpdateUserRequest, "IdentityStoreId">,
-    ) => Effect.Effect<
-      identitystore.UpdateUserResponse,
-      identitystore.UpdateUserError
-    >
+    ) => Effect.Effect<identitystore.UpdateUserResponse, identitystore.UpdateUserError>
   >
 > {}
-export const UpdateUser = Binding.Service<UpdateUser>(
-  "AWS.IdentityCenter.UpdateUser",
-);
+export const UpdateUser = Binding.Service<UpdateUser>("AWS.IdentityCenter.UpdateUser");

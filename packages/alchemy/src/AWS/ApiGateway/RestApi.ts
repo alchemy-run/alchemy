@@ -7,15 +7,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
-import {
-  deleteRestApiAndWait,
-  restApiArn,
-  retryOnApiStatusUpdating,
-  syncTags,
-} from "./common.ts";
+import type { Providers } from "../Providers.ts";
+import { deleteRestApiAndWait, restApiArn, retryOnApiStatusUpdating, syncTags } from "./common.ts";
 
 export interface RestApiProps {
   /**
@@ -233,8 +227,7 @@ const patchReplace = (path: string, value: string): ag.PatchOperation => ({
   value,
 });
 
-const encodeJsonPointerSegment = (s: string) =>
-  s.replace(/~/g, "~0").replace(/\//g, "~1");
+const encodeJsonPointerSegment = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
 const binaryMediaTypePath = (mediaType: string) =>
   `/binaryMediaTypes/${encodeJsonPointerSegment(mediaType)}`;
@@ -277,18 +270,10 @@ const buildUpdatePatches = (
   if (news.version !== prev.version) {
     patches.push(patchReplace("/version", news.version ?? ""));
   }
-  patches.push(
-    ...buildBinaryMediaTypePatches(
-      prev.binaryMediaTypes,
-      news.binaryMediaTypes,
-    ),
-  );
+  patches.push(...buildBinaryMediaTypePatches(prev.binaryMediaTypes, news.binaryMediaTypes));
   if (news.minimumCompressionSize !== prev.minimumCompressionSize) {
     patches.push(
-      patchReplace(
-        "/minimumCompressionSize",
-        String(news.minimumCompressionSize ?? ""),
-      ),
+      patchReplace("/minimumCompressionSize", String(news.minimumCompressionSize ?? "")),
     );
   }
   if (news.apiKeySource !== prev.apiKeySource) {
@@ -299,21 +284,14 @@ const buildUpdatePatches = (
   }
   if (news.disableExecuteApiEndpoint !== prev.disableExecuteApiEndpoint) {
     patches.push(
-      patchReplace(
-        "/disableExecuteApiEndpoint",
-        String(!!news.disableExecuteApiEndpoint),
-      ),
+      patchReplace("/disableExecuteApiEndpoint", String(!!news.disableExecuteApiEndpoint)),
     );
   }
   if (news.securityPolicy !== prev.securityPolicy) {
-    patches.push(
-      patchReplace("/securityPolicy", news.securityPolicy ?? "TLS_1_0"),
-    );
+    patches.push(patchReplace("/securityPolicy", news.securityPolicy ?? "TLS_1_0"));
   }
   if (news.endpointAccessMode !== prev.endpointAccessMode) {
-    patches.push(
-      patchReplace("/endpointAccessMode", news.endpointAccessMode ?? ""),
-    );
+    patches.push(patchReplace("/endpointAccessMode", news.endpointAccessMode ?? ""));
   }
   return patches;
 };
@@ -322,6 +300,42 @@ export const RestApiProvider = () =>
   Provider.effect(
     RestApi,
     Effect.gen(function* () {
+      // Ensure — create the REST API in full and return its snapshot. Used by
+      // `precreate` (cycle members) and by `reconcile` when the API is
+      // missing (greenfield outside a cycle, or deleted out of band).
+      const createApi = Effect.fn(function* (
+        id: string,
+        news: RestApiProps,
+        session: { note: (message: string) => Effect.Effect<void> },
+      ) {
+        const name = yield* generatedName(id, news);
+        const internalTags = yield* createInternalTags(id);
+        const allTags = { ...news.tags, ...internalTags };
+        const created = yield* retryOnApiStatusUpdating(
+          ag.createRestApi({
+            name,
+            description: news.description,
+            version: news.version,
+            cloneFrom: news.cloneFrom,
+            binaryMediaTypes: news.binaryMediaTypes,
+            minimumCompressionSize: news.minimumCompressionSize,
+            apiKeySource: news.apiKeySource,
+            endpointConfiguration: news.endpointConfiguration,
+            policy: news.policy,
+            tags: allTags,
+            disableExecuteApiEndpoint: news.disableExecuteApiEndpoint,
+            securityPolicy: news.securityPolicy,
+            endpointAccessMode: news.endpointAccessMode,
+          }),
+        );
+        if (!created.id || !created.rootResourceId) {
+          return yield* Effect.die("createRestApi missing id or rootResourceId");
+        }
+        yield* session.note(`Created REST API ${created.id}`);
+        const full = yield* ag.getRestApi({ restApiId: created.id });
+        return snapshotFromApi(full);
+      });
+
       return {
         stables: ["restApiId", "rootResourceId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -331,10 +345,7 @@ export const RestApiProvider = () =>
             // Endpoint type, private endpoint IDs, and IP address type are part
             // of the REST API endpoint shape; replacing avoids partial endpoint
             // drift that API Gateway cannot consistently patch in place.
-            !deepEqual(
-              news.endpointConfiguration?.types,
-              olds.endpointConfiguration?.types,
-            ) ||
+            !deepEqual(news.endpointConfiguration?.types, olds.endpointConfiguration?.types) ||
             !deepEqual(
               news.endpointConfiguration?.vpcEndpointIds,
               olds.endpointConfiguration?.vpcEndpointIds,
@@ -357,9 +368,7 @@ export const RestApiProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.items ?? [])
-                  .filter(
-                    (api): api is ag.RestApi & { id: string } => api.id != null,
-                  )
+                  .filter((api): api is ag.RestApi & { id: string } => api.id != null)
                   .map((api) => snapshotFromApi(api)),
               ),
             ),
@@ -368,11 +377,7 @@ export const RestApiProvider = () =>
           if (!output?.restApiId) return undefined;
           const api = yield* ag
             .getRestApi({ restApiId: output.restApiId })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!api?.id) return undefined;
           return snapshotFromApi(api);
         }),
@@ -391,34 +396,7 @@ export const RestApiProvider = () =>
             return yield* Effect.die("RestApi props were not resolved");
           }
           const news = newsIn as RestApiProps;
-          const name = yield* generatedName(id, news);
-          const internalTags = yield* createInternalTags(id);
-          const allTags = { ...news.tags, ...internalTags };
-          const created = yield* retryOnApiStatusUpdating(
-            ag.createRestApi({
-              name,
-              description: news.description,
-              version: news.version,
-              cloneFrom: news.cloneFrom,
-              binaryMediaTypes: news.binaryMediaTypes,
-              minimumCompressionSize: news.minimumCompressionSize,
-              apiKeySource: news.apiKeySource,
-              endpointConfiguration: news.endpointConfiguration,
-              policy: news.policy,
-              tags: allTags,
-              disableExecuteApiEndpoint: news.disableExecuteApiEndpoint,
-              securityPolicy: news.securityPolicy,
-              endpointAccessMode: news.endpointAccessMode,
-            }),
-          );
-          if (!created.id || !created.rootResourceId) {
-            return yield* Effect.die(
-              "createRestApi missing id or rootResourceId",
-            );
-          }
-          yield* session.note(`Created REST API ${created.id}`);
-          const full = yield* ag.getRestApi({ restApiId: created.id });
-          return snapshotFromApi(full);
+          return yield* createApi(id, news, session);
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           const { region } = yield* AWSEnvironment.current;
@@ -427,34 +405,19 @@ export const RestApiProvider = () =>
           }
           const news = newsIn as RestApiProps;
 
-          // RestApi has a `precreate` that always runs before `reconcile`
-          // for greenfield deployments — it creates the REST API in full
-          // so that `restApi.restApiId` is resolvable and child resources
-          // (Method, Resource, Authorizer) can register themselves back on
-          // the API via `restApi.bind`. By the time `reconcile` runs the id
-          // is populated; we never expect `output === undefined` here, but
-          // we still handle it defensively.
-          if (!output?.restApiId) {
-            return yield* Effect.die(
-              "RestApi reconcile reached without a precreate output",
-            );
-          }
-
           // Observe — fetch live cloud state. `output` is treated as a
-          // cache for the stable id only.
-          const observed = yield* ag
-            .getRestApi({ restApiId: output.restApiId })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          if (!observed?.id) {
-            return yield* Effect.die(
-              `RestApi ${output.restApiId} disappeared between precreate and reconcile`,
-            );
-          }
-          const observedSnapshot = snapshotFromApi(observed);
+          // cache for the stable id only. Only cycle members are precreated,
+          // so a greenfield create outside a cycle arrives without one.
+          const observed = output?.restApiId
+            ? yield* ag
+                .getRestApi({ restApiId: output.restApiId })
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+            : undefined;
+          // Ensure — create the API when it is missing.
+          const observedSnapshot = observed?.id
+            ? snapshotFromApi(observed)
+            : yield* createApi(id, news, session);
+          const restApiId = observedSnapshot.restApiId;
 
           // Sync mutable scalar fields — diff observed cloud state against
           // desired and emit only the delta as PATCH operations.
@@ -462,7 +425,7 @@ export const RestApiProvider = () =>
           if (patches.length > 0) {
             yield* retryOnApiStatusUpdating(
               ag.updateRestApi({
-                restApiId: output.restApiId,
+                restApiId,
                 patchOperations: patches,
               }),
             );
@@ -473,7 +436,7 @@ export const RestApiProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           if (!deepEqual(observedSnapshot.tags, desiredTags)) {
-            const arn = restApiArn(region, output.restApiId);
+            const arn = restApiArn(region, restApiId);
             yield* syncTags({
               resourceArn: arn,
               oldTags: observedSnapshot.tags,
@@ -481,11 +444,11 @@ export const RestApiProvider = () =>
             });
           }
 
-          yield* session.note(`Reconciled REST API ${output.restApiId}`);
+          yield* session.note(`Reconciled REST API ${restApiId}`);
 
           // Re-read so the returned attributes reflect what's actually in
           // the cloud after all sync steps.
-          const final = yield* ag.getRestApi({ restApiId: output.restApiId });
+          const final = yield* ag.getRestApi({ restApiId });
           if (!final.id) {
             return yield* Effect.die("getRestApi missing id after reconcile");
           }

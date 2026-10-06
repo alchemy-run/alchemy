@@ -37,10 +37,7 @@ export interface UnlabelParameterVersion extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UnlabelParameterVersionRequest,
-    ) => Effect.Effect<
-      SSM.UnlabelParameterVersionResult,
-      SSM.UnlabelParameterVersionError
-    >
+    ) => Effect.Effect<SSM.UnlabelParameterVersionResult, SSM.UnlabelParameterVersionError>
   >
 > {}
 export const UnlabelParameterVersion = Binding.Service<UnlabelParameterVersion>(
