@@ -628,6 +628,12 @@ const closeToolCall = (state: StreamState, index: number, parts: StreamParts): S
   const tc = state.toolCalls.get(index);
   if (!tc) return state;
   parts.push({ type: "tool-params-end", id: tc.id });
+  parts.push({
+    type: "tool-call",
+    id: tc.id,
+    name: tc.name,
+    params: tryParseJsonArgs(tc.arguments),
+  });
   const closed = new Set(state.closedToolIndices);
   closed.add(index);
   return { ...state, closedToolIndices: closed };
@@ -760,6 +766,13 @@ const handleNativeText = (
   if (native == null || native === "") return Effect.succeed(state);
   const text = typeof native === "object" ? JSON.stringify(native) : String(native);
   if (text.length === 0) return Effect.succeed(state);
+  // Some models (e.g. `@cf/meta/llama-3.3-70b`) mirror every text fragment
+  // in both the native `response` field and the OpenAI-compatible delta of
+  // the same chunk. Prefer the latter so the text is neither emitted nor
+  // buffered twice.
+  const openAiContent = (chunk.choices as Array<{ delta?: { content?: unknown } }> | undefined)?.[0]
+    ?.delta?.content;
+  if (openAiContent === text) return Effect.succeed(state);
   // When tools were requested, the native `response` stream is the
   // tool-call JSON, not prose — buffer it and decide on finalize. We
   // pre-allocate the tool id here (we're in an Effect, finalize is sync).
@@ -913,6 +926,7 @@ const flushNativeToolBuffer = (state: StreamState, parts: StreamParts): StreamSt
       parts.push({ type: "tool-params-delta", id, delta: call.args });
     }
     parts.push({ type: "tool-params-end", id });
+    parts.push({ type: "tool-call", id, name: call.name, params: tryParseJsonArgs(call.args) });
   });
   return { ...state, nativeToolBuffer: "", nativeToolId: undefined };
 };

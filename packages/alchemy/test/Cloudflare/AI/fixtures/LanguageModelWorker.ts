@@ -182,10 +182,11 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
 
         if (url.pathname === "/tool-stream") {
           const encoder = new TextEncoder();
+          const toolChoice = url.searchParams.get("toolChoice") === "auto" ? "auto" : "required";
           const body = AiLanguageModel.streamText({
             prompt,
             toolkit: WeatherToolkit,
-            toolChoice: "required",
+            toolChoice,
           }).pipe(
             Stream.map((part) => encoder.encode(`data: ${JSON.stringify(part)}\n\n`)),
             Stream.provide(WeatherToolkitLayer),
