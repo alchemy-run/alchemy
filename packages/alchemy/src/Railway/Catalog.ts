@@ -12,22 +12,17 @@ const regionFields = <E>(region: Query<Region, E>) => ({
 type RegionsResultItem = UnwrapPlan<ReturnType<typeof regionFields>>;
 
 const readRegions = Query.fn((projectId?: string) =>
-  Railway.regions(projectId === undefined ? {} : { projectId }).pipe(
-    Query.map(regionFields),
-  ),
+  Railway.regions(projectId === undefined ? {} : { projectId }).pipe(Query.map(regionFields)),
 );
 
 export type CatalogKind = "region" | "workspace";
 
-export class CatalogNotFound extends Data.TaggedError(
-  "Railway.CatalogNotFound",
-)<{
+export class CatalogNotFound extends Data.TaggedError("Railway.CatalogNotFound")<{
   kind: CatalogKind;
   ref: string;
 }> {}
 
-const notFound = (kind: CatalogKind, ref: string) =>
-  new CatalogNotFound({ kind, ref });
+const notFound = (kind: CatalogKind, ref: string) => new CatalogNotFound({ kind, ref });
 
 /**
  * Current token workspace (`me.workspace ?? me.workspaces[0]`).

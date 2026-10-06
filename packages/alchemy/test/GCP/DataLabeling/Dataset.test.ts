@@ -1,15 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datalabeling from "@distilled.cloud/gcp/datalabeling_v1beta1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  logLevel,
-  probe,
-  currentProject,
-  runLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, probe, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -76,9 +70,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("updated sku images");
 
       yield* stack.destroy();
-      const gone = yield* waitUntilGone(
-        datalabeling.getProjectsDatasets({ name: updated.name }),
-      );
+      const gone = yield* waitUntilGone(datalabeling.getProjectsDatasets({ name: updated.name }));
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {

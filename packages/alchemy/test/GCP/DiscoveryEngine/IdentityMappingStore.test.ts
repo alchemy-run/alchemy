@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import { quotaTolerant } from "./parent.ts";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Identity mapping stores need a workforce identity provider configured for
 // the project (BadRequest "IdP must be configured before creating an Identity
@@ -101,10 +98,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.identityMappingStoreId.startsWith("alch")).toEqual(true);
       expect(created.location).toEqual("global");
 
-      const fetched =
-        yield* discoveryengine.getProjectsLocationsIdentityMappingStores({
-          name: created.name,
-        });
+      const fetched = yield* discoveryengine.getProjectsLocationsIdentityMappingStores({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
 
       yield* stack.destroy();

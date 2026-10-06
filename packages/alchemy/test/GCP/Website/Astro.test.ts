@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { dockerAvailable } from "../bindingHost.ts";
@@ -18,13 +18,7 @@ import {
 const { test } = Test.make({ providers: GCP.providers() });
 
 const fixtureDir = awsFixture("astro-app");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "astro.config.mjs",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "astro.config.mjs", "src", "public"];
 
 test.provider.skipIf(!dockerAvailable)(
   "Astro SSR: deploy, GET / and an API route, destroy, gone",
@@ -43,12 +37,7 @@ test.provider.skipIf(!dockerAvailable)(
           const site = yield* GCP.Website.Astro("Web", {
             rootDir,
             memo: {
-              include: [
-                "src/**",
-                "public/**",
-                "package.json",
-                "astro.config.mjs",
-              ],
+              include: ["src/**", "public/**", "package.json", "astro.config.mjs"],
             },
           });
           return { site };
@@ -64,14 +53,10 @@ test.provider.skipIf(!dockerAvailable)(
         timeout: "180 seconds",
         label: "Astro /",
       });
-      yield* expectUrlContains(
-        `${url}/api/hello?echo=roundtrip`,
-        "ASTRO_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "Astro /api/hello?echo=roundtrip",
-        },
-      );
+      yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "ASTRO_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "Astro /api/hello?echo=roundtrip",
+      });
 
       yield* stack.destroy();
       yield* assertSiteGone(service);

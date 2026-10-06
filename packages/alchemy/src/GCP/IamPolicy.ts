@@ -3,14 +3,13 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as bigqueryconnection from "@distilled.cloud/gcp/bigqueryconnection_v1";
 import * as bigtableadmin from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
-import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as ml from "@distilled.cloud/gcp/ml_v1";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
@@ -20,6 +19,7 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -54,10 +54,7 @@ export interface IamCondition {
 }
 
 /** Condition identity: two conditions are the same binding iff equal. */
-const sameCondition = (
-  left: IamCondition | undefined,
-  right: IamCondition | undefined,
-) =>
+const sameCondition = (left: IamCondition | undefined, right: IamCondition | undefined) =>
   (left === undefined && right === undefined) ||
   (left !== undefined &&
     right !== undefined &&
@@ -108,9 +105,7 @@ type IamPolicyError = { readonly _tag: string; readonly message?: string };
 
 interface IamPolicyTarget {
   get: Effect.Effect<IamPolicy, IamPolicyError, GcpOpContext>;
-  set: (
-    policy: IamPolicy,
-  ) => Effect.Effect<unknown, IamPolicyError, GcpOpContext>;
+  set: (policy: IamPolicy) => Effect.Effect<unknown, IamPolicyError, GcpOpContext>;
 }
 
 // The generated per-service `Policy` shapes are structurally identical to
@@ -150,9 +145,7 @@ const bucketName = (name: string) =>
   name.replace(/^projects\/_\/buckets\//, "").replace(/^buckets\//, "");
 
 const computeInstance = (name: string): IamPolicyTarget => {
-  const match = /projects\/([^/]+)\/zones\/([^/]+)\/instances\/([^/]+)/.exec(
-    name,
-  );
+  const match = /projects\/([^/]+)\/zones\/([^/]+)\/instances\/([^/]+)/.exec(name);
   const [, project = "", zone = "", resource = ""] = match ?? [];
   return {
     get: compute.getIamPolicyInstances({
@@ -215,9 +208,7 @@ const bigqueryDataset = (name: string): IamPolicyTarget => {
   const match = /projects\/([^/]+)\/datasets\/([^/]+)/.exec(name);
   const [, projectId = "", datasetId = ""] = match ?? [];
   const isPrincipal = (item: DatasetAccessItem) =>
-    item.condition === undefined &&
-    item.role !== undefined &&
-    principalOf(item) !== undefined;
+    item.condition === undefined && item.role !== undefined && principalOf(item) !== undefined;
   const read = bigquery.getDatasets({ projectId, datasetId });
   return {
     get: read.pipe(
@@ -247,9 +238,7 @@ const bigqueryDataset = (name: string): IamPolicyTarget => {
               access: [
                 ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
                 ...(policy.bindings ?? []).flatMap((binding) =>
-                  (binding.members ?? []).map((member) =>
-                    accessItemOf(binding.role ?? "", member),
-                  ),
+                  (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
                 ),
               ],
             },
@@ -271,21 +260,14 @@ const secret = (name: string): IamPolicyTarget =>
       )(name);
 
 const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
-  project: bodyStyle(
-    resourcemanager.getIamPolicyProjects,
-    resourcemanager.setIamPolicyProjects,
-  ),
+  project: bodyStyle(resourcemanager.getIamPolicyProjects, resourcemanager.setIamPolicyProjects),
   "artifactregistry.repository": queryStyle(
     artifactregistry.getIamPolicyProjectsLocationsRepositories,
     artifactregistry.setIamPolicyProjectsLocationsRepositories,
   ),
   "bigquery.dataset": bigqueryDataset,
   // BigQuery table policies reject requestedPolicyVersion 3.
-  "bigquery.table": bodyStyle(
-    bigquery.getIamPolicyTables,
-    bigquery.setIamPolicyTables,
-    1,
-  ),
+  "bigquery.table": bodyStyle(bigquery.getIamPolicyTables, bigquery.setIamPolicyTables, 1),
   "bigqueryconnection.connection": bodyStyle(
     bigqueryconnection.getIamPolicyProjectsLocationsConnections,
     bigqueryconnection.setIamPolicyProjectsLocationsConnections,
@@ -327,10 +309,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
     kms.getIamPolicyProjectsLocationsKeyRingsCryptoKeys,
     kms.setIamPolicyProjectsLocationsKeyRingsCryptoKeys,
   ),
-  "ml.model": queryStyle(
-    ml.getIamPolicyProjectsModels,
-    ml.setIamPolicyProjectsModels,
-  ),
+  "ml.model": queryStyle(ml.getIamPolicyProjectsModels, ml.setIamPolicyProjectsModels),
   "privateca.caPool": queryStyle(
     privateca.getIamPolicyProjectsLocationsCaPools,
     privateca.setIamPolicyProjectsLocationsCaPools,
@@ -343,10 +322,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
     pubsub.getIamPolicyProjectsSubscriptions,
     pubsub.setIamPolicyProjectsSubscriptions,
   ),
-  "pubsub.topic": queryStyle(
-    pubsub.getIamPolicyProjectsTopics,
-    pubsub.setIamPolicyProjectsTopics,
-  ),
+  "pubsub.topic": queryStyle(pubsub.getIamPolicyProjectsTopics, pubsub.setIamPolicyProjectsTopics),
   "run.job": queryStyle(
     run.getIamPolicyProjectsLocationsJobs,
     run.setIamPolicyProjectsLocationsJobs,
@@ -414,9 +390,7 @@ const principal = (member: string) =>
     : `serviceAccount:${member}`;
 
 const targetName = (kind: GcpIamResourceKind, name: string) =>
-  kind === "project" && !name.startsWith("projects/")
-    ? `projects/${name}`
-    : name;
+  kind === "project" && !name.startsWith("projects/") ? `projects/${name}` : name;
 
 /**
  * Rewrite `policy` so `member` holds exactly `add` roles out of `managed`
@@ -439,8 +413,7 @@ const rewrite = (
   let dirty = false;
   for (const role of add) {
     const existing = bindings.find(
-      (binding) =>
-        binding.role === role && sameCondition(binding.condition, condition),
+      (binding) => binding.role === role && sameCondition(binding.condition, condition),
     );
     if (existing === undefined) {
       bindings.push(
@@ -507,8 +480,7 @@ export const updateIamMembership = (options: {
         error._tag === "Conflict" ||
         // Cloud Storage reports a stale etag as 412, not 409.
         error._tag === "IamPolicyEtagMismatch" ||
-        (error._tag === "BadRequest" &&
-          /does not exist/i.test(error.message ?? "")),
+        (error._tag === "BadRequest" && /does not exist/i.test(error.message ?? "")),
       // ~60s total: long enough for a new service account to propagate.
       times: 6,
       schedule: Schedule.exponential("1 second"),
@@ -536,9 +508,9 @@ export const updateIamMembership = (options: {
 };
 
 /** A written IAM policy did not read back with the change applied. */
-export class IamPolicyNotConverged extends Data.TaggedError(
-  "GCP.IamPolicyNotConverged",
-)<{ name: string }> {}
+export class IamPolicyNotConverged extends Data.TaggedError("GCP.IamPolicyNotConverged")<{
+  name: string;
+}> {}
 
 /**
  * Remove `member` from every unconditional binding of `roles` on the
@@ -572,8 +544,7 @@ export const projectRolesOf = (project: string, member: string) =>
       return (policy.bindings ?? [])
         .filter(
           (binding) =>
-            binding.condition === undefined &&
-            (binding.members ?? []).includes(principalId),
+            binding.condition === undefined && (binding.members ?? []).includes(principalId),
         )
         .flatMap((binding) => (binding.role ? [binding.role] : []));
     }),

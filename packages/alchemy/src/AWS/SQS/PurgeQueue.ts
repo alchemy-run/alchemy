@@ -27,11 +27,7 @@ import type { Queue } from "./Queue.ts";
 export interface PurgeQueue extends Binding.Service<
   PurgeQueue,
   "AWS.SQS.PurgeQueue",
-  (
-    queue: Queue,
-  ) => Effect.Effect<
-    () => Effect.Effect<sqs.PurgeQueueResponse, sqs.PurgeQueueError>
-  >
+  (queue: Queue) => Effect.Effect<() => Effect.Effect<sqs.PurgeQueueResponse, sqs.PurgeQueueError>>
 > {}
 
 export const PurgeQueue = Binding.Service<PurgeQueue>("AWS.SQS.PurgeQueue");

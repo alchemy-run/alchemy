@@ -154,22 +154,14 @@ export type ContentPolicy = Resource<
  */
 export const ContentPolicy = Resource<ContentPolicy>("GCP.DLP.ContentPolicy");
 
-export class ContentPolicyNotResolved extends Data.TaggedError(
-  "GCP.DLP.ContentPolicyNotResolved",
-)<{
+export class ContentPolicyNotResolved extends Data.TaggedError("GCP.DLP.ContentPolicyNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  contentPolicyId: string,
-) => `${locationParent(project, location)}/contentPolicies/${contentPolicyId}`;
+const resourceName = (project: string, location: string, contentPolicyId: string) =>
+  `${locationParent(project, location)}/contentPolicies/${contentPolicyId}`;
 
-const toAttrs = (
-  policy: dlp.GooglePrivacyDlpV2ContentPolicy,
-  project: string,
-) => {
+const toAttrs = (policy: dlp.GooglePrivacyDlpV2ContentPolicy, project: string) => {
   const name = policy.name ?? "";
   const parsed = parseOwnership(policy.displayName);
   return {
@@ -228,14 +220,11 @@ export const ContentPolicyProvider = () =>
         olds?.location ?? output?.location,
         DEFAULT_REGIONAL_LOCATION,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, contentPolicyId);
+      const name = output?.name ?? resourceName(env.project, location, contentPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -306,31 +295,16 @@ export const ContentPolicyProvider = () =>
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const inspectChanged = !jsonEqual(
-        current.inspectConfig,
-        news.inspectConfig,
-      );
+      const inspectChanged = !jsonEqual(current.inspectConfig, news.inspectConfig);
       const rulesChanged = !jsonEqual(current.rules, news.rules);
-      const defaultChanged = !jsonEqual(
-        current.defaultAction,
-        news.defaultAction,
-      );
-      const unsupportedChanged = !jsonEqual(
-        current.unsupportedFileType,
-        news.unsupportedFileType,
-      );
-      const tooLargeChanged = !jsonEqual(
-        current.inputTooLarge,
-        news.inputTooLarge,
-      );
+      const defaultChanged = !jsonEqual(current.defaultAction, news.defaultAction);
+      const unsupportedChanged = !jsonEqual(current.unsupportedFileType, news.unsupportedFileType);
+      const tooLargeChanged = !jsonEqual(current.inputTooLarge, news.inputTooLarge);
       const failedChanged = !jsonEqual(
         current.failedToScanSupportedFileType,
         news.failedToScanSupportedFileType,
       );
-      const loggingChanged = !jsonEqual(
-        current.loggingConfigs,
-        news.loggingConfigs,
-      );
+      const loggingChanged = !jsonEqual(current.loggingConfigs, news.loggingConfigs);
 
       if (
         displayChanged ||

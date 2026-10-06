@@ -6,8 +6,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt";
 
 /** The AWS Lambda deploy target for the Nuxt build. */
-export const NUXT_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/nuxt/aws";
+export const NUXT_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/aws";
 
 export interface NuxtProps extends FrameworkSiteProps {
   /**

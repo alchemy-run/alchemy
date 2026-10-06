@@ -33,14 +33,8 @@ export interface StartInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StartInstanceRequest,
-    ) => Effect.Effect<
-      compute.Operation,
-      compute.StartInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<compute.Operation, compute.StartInstancesError, RuntimeContext>
   >
 > {}
 
-export const StartInstance = Binding.Service<StartInstance>(
-  "GCP.Compute.StartInstance",
-);
+export const StartInstance = Binding.Service<StartInstance>("GCP.Compute.StartInstance");

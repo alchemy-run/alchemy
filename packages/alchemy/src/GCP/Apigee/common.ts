@@ -2,11 +2,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -26,10 +22,7 @@ export const stripRevision = (name: string) => {
   return index >= 0 ? parts.slice(0, index).join("/") : name;
 };
 
-export const organizationIdOf = (
-  value: string | undefined,
-  project: string,
-) => {
+export const organizationIdOf = (value: string | undefined, project: string) => {
   if (value === undefined || value.length === 0) return project;
   return segmentAfter(value, "organizations") ?? lastSegment(value);
 };
@@ -37,13 +30,10 @@ export const organizationIdOf = (
 export const environmentIdOf = (value: string) =>
   segmentAfter(value, "environments") ?? lastSegment(value);
 
-export const organizationNameOf = (organizationId: string) =>
-  `organizations/${organizationId}`;
+export const organizationNameOf = (organizationId: string) => `organizations/${organizationId}`;
 
-export const environmentNameOf = (
-  organizationId: string,
-  environmentId: string,
-) => `organizations/${organizationId}/environments/${environmentId}`;
+export const environmentNameOf = (organizationId: string, environmentId: string) =>
+  `organizations/${organizationId}/environments/${environmentId}`;
 
 export const parseOrgEnv = (name: string) => ({
   organizationId: segmentAfter(name, "organizations") ?? "",
@@ -86,14 +76,10 @@ export const deployedConfig = (parent: string) =>
     }),
   );
 
-export const namesFromConfig = (
-  items: readonly { name?: string }[] | undefined,
-): string[] =>
+export const namesFromConfig = (items: readonly { name?: string }[] | undefined): string[] =>
   (items ?? [])
     .map((item) => item.name)
-    .filter(
-      (name): name is string => typeof name === "string" && name.length > 0,
-    )
+    .filter((name): name is string => typeof name === "string" && name.length > 0)
     .map((name) => lastSegment(stripRevision(name)));
 
 export const toResourceId = (
@@ -154,9 +140,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedById = (id: string, labels: Record<string, string>) =>
   hasAlchemyLabels(id, labels);
@@ -167,8 +151,7 @@ export const sameText = (left: string | undefined, right: string | undefined) =>
 export const sameList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  [...(left ?? [])].sort().join("\0") === [...(right ?? [])].sort().join("\0");
+) => [...(left ?? [])].sort().join("\0") === [...(right ?? [])].sort().join("\0");
 
 export type ProjectEnvironment = {
   organizationId: string;
@@ -178,22 +161,15 @@ export type ProjectEnvironment = {
 
 export const listProjectEnvironments = Effect.fn(function* () {
   const env = yield* GcpEnvironment.current;
-  const page = yield* emptyOnMissing(
-    apigee.listOrganizations({ parent: "organizations" }),
-    {
-      organizations:
-        [] as apigee.GoogleCloudApigeeV1OrganizationProjectMappingList,
-    },
-  );
+  const page = yield* emptyOnMissing(apigee.listOrganizations({ parent: "organizations" }), {
+    organizations: [] as apigee.GoogleCloudApigeeV1OrganizationProjectMappingList,
+  });
   const mappings = (page.organizations ?? []).filter(
     (mapping) =>
-      mapping.projectId === env.project ||
-      (mapping.projectIds ?? []).includes(env.project),
+      mapping.projectId === env.project || (mapping.projectIds ?? []).includes(env.project),
   );
   const orgs =
-    mappings.length > 0
-      ? mappings
-      : [{ organization: env.project, projectId: env.project }];
+    mappings.length > 0 ? mappings : [{ organization: env.project, projectId: env.project }];
   const found: ProjectEnvironment[] = [];
   for (const mapping of orgs) {
     const organizationId = mapping.organization ?? env.project;
@@ -215,12 +191,8 @@ export const listProjectEnvironments = Effect.fn(function* () {
   return found;
 });
 
-export const listNameArray = (
-  values: readonly string[] | undefined,
-): string[] =>
-  (values ?? []).filter(
-    (value) => typeof value === "string" && value.length > 0,
-  );
+export const listNameArray = (values: readonly string[] | undefined): string[] =>
+  (values ?? []).filter((value) => typeof value === "string" && value.length > 0);
 
 export const namesFromListPayload = (payload: unknown): string[] => {
   if (Array.isArray(payload)) {

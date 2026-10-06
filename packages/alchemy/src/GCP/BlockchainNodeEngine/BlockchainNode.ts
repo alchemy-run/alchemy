@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   COLLECTION,
@@ -66,9 +61,7 @@ export type GethDetails = {
    * Geth garbage collection mode (`FULL` or `ARCHIVE`). Immutable —
    * changing it replaces the node.
    */
-  garbageCollectionMode?:
-    | bne.GethDetailsGarbageCollectionModeEnum
-    | (string & {});
+  garbageCollectionMode?: bne.GethDetailsGarbageCollectionModeEnum | (string & {});
 };
 
 export type EthereumDetails = {
@@ -277,9 +270,7 @@ export type BlockchainNode = Resource<
  * @resource
  * @category BlockchainNodeEngine
  */
-export const BlockchainNode = Resource<BlockchainNode>(
-  "GCP.BlockchainNodeEngine.BlockchainNode",
-);
+export const BlockchainNode = Resource<BlockchainNode>("GCP.BlockchainNodeEngine.BlockchainNode");
 
 const toValidator = (
   config: bne.ValidatorConfig | ValidatorConfig | undefined,
@@ -299,9 +290,7 @@ const toValidator = (
   };
 };
 
-const toGeth = (
-  details: bne.GethDetails | GethDetails | undefined,
-): GethDetails | undefined => {
+const toGeth = (details: bne.GethDetails | GethDetails | undefined): GethDetails | undefined => {
   if (details?.garbageCollectionMode === undefined) return undefined;
   return { garbageCollectionMode: details.garbageCollectionMode };
 };
@@ -331,19 +320,15 @@ const mergeEthereum = (
   network: next?.network ?? previous?.network,
   validatorConfig: {
     beaconFeeRecipient:
-      next?.validatorConfig?.beaconFeeRecipient ??
-      previous?.validatorConfig?.beaconFeeRecipient,
-    mevRelayUrls:
-      next?.validatorConfig?.mevRelayUrls ??
-      previous?.validatorConfig?.mevRelayUrls,
+      next?.validatorConfig?.beaconFeeRecipient ?? previous?.validatorConfig?.beaconFeeRecipient,
+    mevRelayUrls: next?.validatorConfig?.mevRelayUrls ?? previous?.validatorConfig?.mevRelayUrls,
     managedValidatorClient:
       next?.validatorConfig?.managedValidatorClient ??
       previous?.validatorConfig?.managedValidatorClient,
   },
   gethDetails: {
     garbageCollectionMode:
-      next?.gethDetails?.garbageCollectionMode ??
-      previous?.gethDetails?.garbageCollectionMode,
+      next?.gethDetails?.garbageCollectionMode ?? previous?.gethDetails?.garbageCollectionMode,
   },
   executionClient: next?.executionClient ?? previous?.executionClient,
   consensusClient: next?.consensusClient ?? previous?.consensusClient,
@@ -370,14 +355,8 @@ const desiredEthereum = (news: BlockchainNodeProps): EthereumDetails => {
     network: normalizeEnum(details?.network, DEFAULT_NETWORK),
     validatorConfig: details?.validatorConfig,
     gethDetails: details?.gethDetails,
-    executionClient: normalizeEnum(
-      details?.executionClient,
-      DEFAULT_EXECUTION_CLIENT,
-    ),
-    consensusClient: normalizeEnum(
-      details?.consensusClient,
-      DEFAULT_CONSENSUS_CLIENT,
-    ),
+    executionClient: normalizeEnum(details?.executionClient, DEFAULT_EXECUTION_CLIENT),
+    consensusClient: normalizeEnum(details?.consensusClient, DEFAULT_CONSENSUS_CLIENT),
     apiEnableAdmin: details?.apiEnableAdmin === true,
   };
 };
@@ -410,16 +389,13 @@ const toEndpoints = (
   if (endpoints === undefined) return undefined;
   return {
     beaconApiEndpoint: endpoints.beaconApiEndpoint,
-    beaconPrometheusMetricsApiEndpoint:
-      endpoints.beaconPrometheusMetricsApiEndpoint,
+    beaconPrometheusMetricsApiEndpoint: endpoints.beaconPrometheusMetricsApiEndpoint,
     executionClientPrometheusMetricsApiEndpoint:
       endpoints.executionClientPrometheusMetricsApiEndpoint,
   };
 };
 
-const toConnection = (
-  info: bne.ConnectionInfo | undefined,
-): ConnectionInfo | undefined => {
+const toConnection = (info: bne.ConnectionInfo | undefined): ConnectionInfo | undefined => {
   if (info === undefined) return undefined;
   return {
     serviceAttachment: info.serviceAttachment,
@@ -454,11 +430,7 @@ const toAttrs = (node: bne.BlockchainNode, project: string, region: string) => {
 
 const isPlaceholder = (node: bne.BlockchainNode) => {
   const name = node.name ?? "";
-  return (
-    name.length === 0 ||
-    name.endsWith(`/${COLLECTION}/-`) ||
-    name.endsWith(`/${COLLECTION}/`)
-  );
+  return name.length === 0 || name.endsWith(`/${COLLECTION}/-`) || name.endsWith(`/${COLLECTION}/`);
 };
 
 const getByName = (name: string) =>
@@ -482,14 +454,7 @@ const listOwned = (project: string, region: string) =>
 
 export const BlockchainNodeProvider = () =>
   Provider.succeed(BlockchainNode, {
-    stables: [
-      "name",
-      "blockchainNodeId",
-      "project",
-      "location",
-      "blockchainType",
-      "createTime",
-    ],
+    stables: ["name", "blockchainNodeId", "project", "location", "blockchainType", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -497,26 +462,14 @@ export const BlockchainNodeProvider = () =>
       const previousType = olds?.blockchainType ?? output?.blockchainType;
       const nextType = news.blockchainType ?? previousType;
       const previousPsc =
-        olds?.privateServiceConnectEnabled ??
-        output?.privateServiceConnectEnabled;
+        olds?.privateServiceConnectEnabled ?? output?.privateServiceConnectEnabled;
       const nextPsc = news.privateServiceConnectEnabled ?? previousPsc ?? false;
-      const previousEthereum = toEthereum(
-        olds?.ethereumDetails ?? output?.ethereumDetails,
-      );
-      const nextEthereum = mergeEthereum(
-        previousEthereum,
-        news.ethereumDetails,
-      );
+      const previousEthereum = toEthereum(olds?.ethereumDetails ?? output?.ethereumDetails);
+      const nextEthereum = mergeEthereum(previousEthereum, news.ethereumDetails);
       return replaceOnIdentity({
         previousId: olds?.blockchainNodeId ?? output?.blockchainNodeId,
-        nextId:
-          news.blockchainNodeId ??
-          olds?.blockchainNodeId ??
-          output?.blockchainNodeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.blockchainNodeId ?? olds?.blockchainNodeId ?? output?.blockchainNodeId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -527,8 +480,7 @@ export const BlockchainNodeProvider = () =>
             !sameEnum(previousType, nextType)) ||
           (previousPsc === true) !== (nextPsc === true) ||
           (previousEthereum !== undefined &&
-            ethereumIdentityKey(previousEthereum) !==
-              ethereumIdentityKey(nextEthereum)),
+            ethereumIdentityKey(previousEthereum) !== ethereumIdentityKey(nextEthereum)),
       });
     }),
 
@@ -540,18 +492,12 @@ export const BlockchainNodeProvider = () =>
         output?.blockchainNodeId,
         "node",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, blockchainNodeId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, blockchainNodeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -571,10 +517,7 @@ export const BlockchainNodeProvider = () =>
         output?.blockchainNodeId,
         "node",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, blockchainNodeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -623,10 +566,7 @@ export const BlockchainNodeProvider = () =>
         );
       const relaysChanged =
         desiredValidator?.mevRelayUrls !== undefined &&
-        !sameStringList(
-          observedValidator?.mevRelayUrls,
-          desiredValidator.mevRelayUrls,
-        );
+        !sameStringList(observedValidator?.mevRelayUrls, desiredValidator.mevRelayUrls);
 
       const mask = fieldMask([
         labelsChanged && "labels",
@@ -649,18 +589,14 @@ export const BlockchainNodeProvider = () =>
                         desiredValidator?.beaconFeeRecipient ??
                         observedValidator?.beaconFeeRecipient,
                       mevRelayUrls:
-                        desiredValidator?.mevRelayUrls ??
-                        observedValidator?.mevRelayUrls,
+                        desiredValidator?.mevRelayUrls ?? observedValidator?.mevRelayUrls,
                     },
                   }
                 : undefined,
           },
         });
         yield* waitForOperation(operation);
-        latest = yield* waitUntilExists(
-          getByName(latest.name ?? name),
-          latest.name ?? name,
-        );
+        latest = yield* waitUntilExists(getByName(latest.name ?? name), latest.name ?? name);
       }
 
       return toAttrs(latest, env.project, env.region);

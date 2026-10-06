@@ -7,11 +7,7 @@ import Api from "./src/Api.ts";
 import { database } from "./src/database.ts";
 
 export const providers = () =>
-  Layer.mergeAll(
-    GCP.providers(),
-    Drizzle.providers(),
-    Alchemy.RandomProvider(),
-  );
+  Layer.mergeAll(GCP.providers(), Drizzle.providers(), Alchemy.RandomProvider());
 
 export default Alchemy.Stack(
   "GcpCloudSqlDrizzleExample",

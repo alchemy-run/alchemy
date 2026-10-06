@@ -31,9 +31,7 @@ export type HostServiceAccount = Resource<
   Providers
 >;
 
-export const HostServiceAccount = Resource<HostServiceAccount>(
-  "GCP.IAM.HostServiceAccount",
-);
+export const HostServiceAccount = Resource<HostServiceAccount>("GCP.IAM.HostServiceAccount");
 
 const toAttrs = (
   account: iam.ServiceAccount,
@@ -81,8 +79,7 @@ export const HostServiceAccountProvider = () =>
     // resource only exists so `nuke` can list and delete leaked ones.
     reconcile: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
-      const accountId =
-        output?.accountId ?? `alch-${id.toLowerCase()}`.slice(0, 30);
+      const accountId = output?.accountId ?? `alch-${id.toLowerCase()}`.slice(0, 30);
       const email = hostServiceAccountEmail(env.project, accountId);
       const name = `projects/${env.project}/serviceAccounts/${email}`;
       const existing = yield* iam

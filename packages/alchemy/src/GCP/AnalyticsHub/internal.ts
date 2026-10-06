@@ -6,12 +6,8 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_ID_LENGTH = 40;
 export const MAX_DISPLAY_NAME_LENGTH = 63;
@@ -32,18 +28,14 @@ export const lastSegment = (value: string) => {
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation);
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation);
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left === true) === (right === true);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left === true) === (right === true);
 
 const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -65,8 +57,7 @@ const canonical = (value: unknown): unknown => {
 };
 
 export const sameJson = (left: unknown, right: unknown) =>
-  JSON.stringify(canonical(left) ?? null) ===
-  JSON.stringify(canonical(right) ?? null);
+  JSON.stringify(canonical(left) ?? null) === JSON.stringify(canonical(right) ?? null);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -77,14 +68,9 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -133,9 +119,7 @@ export const encodeDescription = (
   description: string | undefined,
 ): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  return description && description.length > 0
-    ? `${marker}\n${description}`
-    : marker;
+  return description && description.length > 0 ? `${marker}\n${description}` : marker;
 };
 
 export const parseDescription = (
@@ -161,9 +145,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedById = (id: string, description: string | undefined) =>
   Effect.gen(function* () {
@@ -171,9 +153,8 @@ export const ownedById = (id: string, description: string | undefined) =>
     return yield* hasAlchemyLabels(id, labels);
   });
 
-export const sharingKind = (
-  config: analyticshub.SharingEnvironmentConfig | undefined,
-) => (config?.dcrExchangeConfig !== undefined ? "dcr" : "default");
+export const sharingKind = (config: analyticshub.SharingEnvironmentConfig | undefined) =>
+  config?.dcrExchangeConfig !== undefined ? "dcr" : "default";
 
 export const replaceOnIdentity = (input: {
   previousId?: string;
@@ -195,8 +176,7 @@ export const replaceOnIdentity = (input: {
   const locationChanged =
     (input.previousLocation ?? "") !== "" &&
     (input.nextLocation ?? "") !== "" &&
-    (input.previousLocation ?? "").toLowerCase() !==
-      (input.nextLocation ?? "").toLowerCase();
+    (input.previousLocation ?? "").toLowerCase() !== (input.nextLocation ?? "").toLowerCase();
   if (!idChanged && !parentChanged && !locationChanged && !input.extra) {
     return undefined;
   }
@@ -219,8 +199,7 @@ export const ignoreGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -245,8 +224,7 @@ export const deleteRetry = <A, E extends { readonly _tag: string }, R>(
       schedule: Schedule.spaced("3 seconds"),
     }),
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -285,9 +263,7 @@ export const listDataExchanges = (parent: string) =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () =>
-          emptyList<analyticshub.DataExchange>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<analyticshub.DataExchange>()),
       );
 
 export const listListings = (parent: string) =>
@@ -323,9 +299,7 @@ export const listQueryTemplates = (parent: string) =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () =>
-          emptyList<analyticshub.QueryTemplate>(),
-        ),
+        Effect.catchTag("NotFound", () => emptyList<analyticshub.QueryTemplate>()),
       );
 
 export const listExchangesInProject = (project: string, region: string) =>

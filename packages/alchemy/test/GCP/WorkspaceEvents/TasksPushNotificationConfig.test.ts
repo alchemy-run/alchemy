@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as we from "@distilled.cloud/gcp/workspaceevents_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Push configs attach to an existing Workspace Events task; set
 // GCP_TEST_WORKSPACE_EVENTS_TASK to run the lifecycle.
@@ -86,13 +83,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.WorkspaceEvents.TasksPushNotificationConfig(
-            "Updates",
-            {
-              task,
-              url: "https://example.com/workspace-events",
-            },
-          );
+          return yield* GCP.WorkspaceEvents.TasksPushNotificationConfig("Updates", {
+            task,
+            url: "https://example.com/workspace-events",
+          });
         }),
       );
 
@@ -108,14 +102,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.WorkspaceEvents.TasksPushNotificationConfig(
-            "Updates",
-            {
-              task,
-              configId: created.configId,
-              url: "https://example.com/workspace-events-v2",
-            },
-          );
+          return yield* GCP.WorkspaceEvents.TasksPushNotificationConfig("Updates", {
+            task,
+            configId: created.configId,
+            url: "https://example.com/workspace-events-v2",
+          });
         }),
       );
 

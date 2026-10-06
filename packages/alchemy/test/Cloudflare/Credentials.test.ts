@@ -1,4 +1,3 @@
-import { cacheUntilExpiry } from "@/Cloudflare/Credentials";
 import {
   apiTokenCredentials,
   oauthCredentials,
@@ -8,7 +7,9 @@ import { describe, expect, it } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
+import { cacheUntilExpiry } from "@/Cloudflare/Credentials";
 
 /**
  * Regression spec for "alchemy dev breaks once the Cloudflare OAuth access
@@ -31,7 +32,7 @@ const makeOAuthResolver = () => {
     resolutions++;
     const now = yield* Clock.currentTimeMillis;
     return oauthCredentials({
-      accessToken: `token-${resolutions}`,
+      accessToken: Redacted.make(`token-${resolutions}`),
       // each freshly resolved token is valid for 1 hour from "now"
       expiresAt: now + 60 * MINUTE_MS,
     }) as ResolvedCredentials;
@@ -57,45 +58,41 @@ describe(
       }),
     );
 
-    it.effect(
-      "re-resolves OAuth credentials once the refresh window is reached",
-      () =>
-        Effect.gen(function* () {
-          const resolver = makeOAuthResolver();
-          const credentials = yield* cacheUntilExpiry(resolver.resolve);
+    it.effect("re-resolves OAuth credentials once the refresh window is reached", () =>
+      Effect.gen(function* () {
+        const resolver = makeOAuthResolver();
+        const credentials = yield* cacheUntilExpiry(resolver.resolve);
 
-          const first = yield* credentials;
-          expect(first.type).toBe("oauth");
+        const first = yield* credentials;
+        expect(first.type).toBe("oauth");
 
-          // 56 minutes in: inside the 5-minute refresh window of the 1h token.
-          yield* TestClock.adjust(Duration.minutes(56));
-          const second = yield* credentials;
+        // 56 minutes in: inside the 5-minute refresh window of the 1h token.
+        yield* TestClock.adjust(Duration.minutes(56));
+        const second = yield* credentials;
 
-          expect(resolver.count()).toBe(2);
-          expect(second).not.toBe(first);
+        expect(resolver.count()).toBe(2);
+        expect(second).not.toBe(first);
 
-          // The re-resolved token is cached again in turn.
-          yield* TestClock.adjust(Duration.minutes(10));
-          const third = yield* credentials;
-          expect(resolver.count()).toBe(2);
-          expect(third).toBe(second);
-        }),
+        // The re-resolved token is cached again in turn.
+        yield* TestClock.adjust(Duration.minutes(10));
+        const third = yield* credentials;
+        expect(resolver.count()).toBe(2);
+        expect(third).toBe(second);
+      }),
     );
 
-    it.effect(
-      "re-resolves OAuth credentials that are already fully expired",
-      () =>
-        Effect.gen(function* () {
-          const resolver = makeOAuthResolver();
-          const credentials = yield* cacheUntilExpiry(resolver.resolve);
+    it.effect("re-resolves OAuth credentials that are already fully expired", () =>
+      Effect.gen(function* () {
+        const resolver = makeOAuthResolver();
+        const credentials = yield* cacheUntilExpiry(resolver.resolve);
 
-          yield* credentials;
-          // The machine slept through the token's entire lifetime.
-          yield* TestClock.adjust(Duration.hours(6));
-          yield* credentials;
+        yield* credentials;
+        // The machine slept through the token's entire lifetime.
+        yield* TestClock.adjust(Duration.hours(6));
+        yield* credentials;
 
-          expect(resolver.count()).toBe(2);
-        }),
+        expect(resolver.count()).toBe(2);
+      }),
     );
 
     it.effect("caches non-expiring credentials (api tokens) forever", () =>
@@ -103,9 +100,7 @@ describe(
         let resolutions = 0;
         const resolve = Effect.sync(() => {
           resolutions++;
-          return apiTokenCredentials({
-            apiToken: "static",
-          }) as ResolvedCredentials;
+          return apiTokenCredentials({ apiToken: Redacted.make("static") }) as ResolvedCredentials;
         });
         const credentials = yield* cacheUntilExpiry(resolve);
 
@@ -124,17 +119,16 @@ describe(
           Effect.map(() => {
             resolutions++;
             return oauthCredentials({
-              accessToken: `token-${resolutions}`,
+              accessToken: Redacted.make(`token-${resolutions}`),
               expiresAt: Date.now() + 60 * MINUTE_MS,
             }) as ResolvedCredentials;
           }),
         );
         const credentials = yield* cacheUntilExpiry(resolve);
 
-        const results = yield* Effect.all(
-          [credentials, credentials, credentials, credentials],
-          { concurrency: "unbounded" },
-        );
+        const results = yield* Effect.all([credentials, credentials, credentials, credentials], {
+          concurrency: "unbounded",
+        });
 
         expect(resolutions).toBe(1);
         for (const result of results) {

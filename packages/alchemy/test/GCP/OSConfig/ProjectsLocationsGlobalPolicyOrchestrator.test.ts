@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as osconfig from "@distilled.cloud/gcp/osconfig_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   osconfig.getProjectsLocationsGlobalPolicyOrchestrators({ name }).pipe(
@@ -60,46 +57,37 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.OSConfig.ProjectsLocationsGlobalPolicyOrchestrator(
-            "Debian",
-            {
-              description: "validation only",
-              labels: { env: "test" },
-              state: "STOPPED",
-            },
-          );
+          return yield* GCP.OSConfig.ProjectsLocationsGlobalPolicyOrchestrator("Debian", {
+            description: "validation only",
+            labels: { env: "test" },
+            state: "STOPPED",
+          });
         }),
       );
 
       expect(created.policyOrchestratorId).toEqual(expect.any(String));
       expect(created.parent).toEqual(parent);
-      expect(created.name).toEqual(
-        `${parent}/policyOrchestrators/${created.policyOrchestratorId}`,
-      );
+      expect(created.name).toEqual(`${parent}/policyOrchestrators/${created.policyOrchestratorId}`);
       expect(created.action).toEqual("UPSERT");
       expect(created.state).toEqual("STOPPED");
       expect(created.description).toEqual("validation only");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* osconfig.getProjectsLocationsGlobalPolicyOrchestrators({
-          name: created.name,
-        });
+      const fetched = yield* osconfig.getProjectsLocationsGlobalPolicyOrchestrators({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.state).toEqual("STOPPED");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.OSConfig.ProjectsLocationsGlobalPolicyOrchestrator(
-            "Debian",
-            {
-              policyOrchestratorId: created.policyOrchestratorId,
-              description: "updated",
-              labels: { env: "prod", role: "os" },
-              state: "STOPPED",
-            },
-          );
+          return yield* GCP.OSConfig.ProjectsLocationsGlobalPolicyOrchestrator("Debian", {
+            policyOrchestratorId: created.policyOrchestratorId,
+            description: "updated",
+            labels: { env: "prod", role: "os" },
+            state: "STOPPED",
+          });
         }),
       );
 
@@ -107,10 +95,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("updated");
       expect(updated.labels).toMatchObject({ env: "prod", role: "os" });
 
-      const refetched =
-        yield* osconfig.getProjectsLocationsGlobalPolicyOrchestrators({
-          name: created.name,
-        });
+      const refetched = yield* osconfig.getProjectsLocationsGlobalPolicyOrchestrators({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("updated");
       expect(refetched.labels?.env).toEqual("prod");
 

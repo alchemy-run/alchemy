@@ -38,16 +38,12 @@ export type AchievementConfigurationProps = {
    * Achievement type. Immutable after create.
    * @default "STANDARD"
    */
-  achievementType?:
-    | gamesConfiguration.AchievementConfigurationAchievementTypeEnum
-    | (string & {});
+  achievementType?: gamesConfiguration.AchievementConfigurationAchievementTypeEnum | (string & {});
   /**
    * Initial visibility of the achievement.
    * @default "REVEALED"
    */
-  initialState?:
-    | gamesConfiguration.AchievementConfigurationInitialStateEnum
-    | (string & {});
+  initialState?: gamesConfiguration.AchievementConfigurationInitialStateEnum | (string & {});
   /**
    * Steps required to unlock. Required for `INCREMENTAL` achievements.
    * @default 10
@@ -217,27 +213,19 @@ const desiredBody = (input: {
   current?: gamesConfiguration.AchievementConfiguration;
 }): gamesConfiguration.AchievementConfiguration => {
   const achievementType =
-    input.news.achievementType ??
-    input.current?.achievementType ??
-    DEFAULT_ACHIEVEMENT_TYPE;
+    input.news.achievementType ?? input.current?.achievementType ?? DEFAULT_ACHIEVEMENT_TYPE;
   const draft = input.news.draft ?? {};
   const name = withTranslation(draft.name, input.locale, input.name);
   const description =
     input.description !== undefined
       ? withTranslation(draft.description, input.locale, input.description)
-      : (draft.description ??
-        withTranslation(undefined, input.locale, input.name));
+      : (draft.description ?? withTranslation(undefined, input.locale, input.name));
   return {
     achievementType,
-    initialState:
-      input.news.initialState ??
-      input.current?.initialState ??
-      DEFAULT_INITIAL_STATE,
+    initialState: input.news.initialState ?? input.current?.initialState ?? DEFAULT_INITIAL_STATE,
     stepsToUnlock:
       achievementType === "INCREMENTAL"
-        ? (input.news.stepsToUnlock ??
-          input.current?.stepsToUnlock ??
-          DEFAULT_STEPS_TO_UNLOCK)
+        ? (input.news.stepsToUnlock ?? input.current?.stepsToUnlock ?? DEFAULT_STEPS_TO_UNLOCK)
         : undefined,
     token: input.current?.token,
     id: input.current?.id,
@@ -318,9 +306,7 @@ export const AchievementConfigurationProvider = () =>
         output?.name,
       );
 
-      let current = yield* getAchievement(
-        news.achievementId ?? output?.achievementId ?? "",
-      );
+      let current = yield* getAchievement(news.achievementId ?? output?.achievementId ?? "");
 
       const locale = localeOf(news, current);
       const desired = desiredBody({

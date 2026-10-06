@@ -26,10 +26,7 @@ export interface GetChannelSchedule extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.GetChannelScheduleRequest,
-    ) => Effect.Effect<
-      mediatailor.GetChannelScheduleResponse,
-      mediatailor.GetChannelScheduleError
-    >
+    ) => Effect.Effect<mediatailor.GetChannelScheduleResponse, mediatailor.GetChannelScheduleError>
   >
 > {}
 export const GetChannelSchedule = Binding.Service<GetChannelSchedule>(

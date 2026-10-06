@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as medicalimaging from "@distilled.cloud/aws/medical-imaging";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MedicalImagingTestFunctionLive, {
   IMPORT_PREFIX,
   MedicalImagingTestFunction,
@@ -37,9 +37,7 @@ const NONEXISTENT_JOB = "0123456789abcdef0123456789abcdef";
 // AWS answers image-set routes on a nonexistent datastore with either tag
 // depending on which backend handles the request; both are typed.
 const expectNotFoundOrDenied = (error: { _tag: string }) =>
-  expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(
-    error._tag,
-  );
+  expect(["ResourceNotFoundException", "AccessDeniedException"]).toContain(error._tag);
 
 describe(
   "MedicalImaging data-plane operations (typed-error probes)",
@@ -93,9 +91,7 @@ describe(
       () =>
         Effect.gen(function* () {
           const error = yield* Effect.flip(
-            medicalimaging.searchImageSets({
-              datastoreId: NONEXISTENT_DATASTORE,
-            }),
+            medicalimaging.searchImageSets({ datastoreId: NONEXISTENT_DATASTORE }),
           );
           expectNotFoundOrDenied(error);
         }),
@@ -139,9 +135,7 @@ describe(
             medicalimaging.copyImageSet({
               datastoreId: NONEXISTENT_DATASTORE,
               sourceImageSetId: NONEXISTENT_IMAGE_SET,
-              copyImageSetInformation: {
-                sourceImageSet: { latestVersionId: "1" },
-              },
+              copyImageSetInformation: { sourceImageSet: { latestVersionId: "1" } },
             }),
           );
           expectNotFoundOrDenied(error);
@@ -181,34 +175,30 @@ describe(
       () =>
         Effect.gen(function* () {
           const error = yield* Effect.flip(
-            medicalimaging.listDICOMImportJobs({
-              datastoreId: NONEXISTENT_DATASTORE,
-            }),
+            medicalimaging.listDICOMImportJobs({ datastoreId: NONEXISTENT_DATASTORE }),
           );
           expect(error._tag).toBe("ResourceNotFoundException");
         }),
     );
 
-    test.provider(
-      "startDICOMImportJob on a nonexistent datastore fails with a typed tag",
-      () =>
-        Effect.gen(function* () {
-          const { accountId } = yield* AWSEnvironment.current;
-          const error = yield* Effect.flip(
-            medicalimaging.startDICOMImportJob({
-              datastoreId: NONEXISTENT_DATASTORE,
-              clientToken: "alchemy-medicalimaging-probe",
-              dataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
-              inputS3Uri: "s3://alchemy-probe-nonexistent/in/",
-              outputS3Uri: "s3://alchemy-probe-nonexistent/out/",
-            }),
-          );
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-            "AccessDeniedException",
-          ]).toContain(error._tag);
-        }),
+    test.provider("startDICOMImportJob on a nonexistent datastore fails with a typed tag", () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* AWSEnvironment.current;
+        const error = yield* Effect.flip(
+          medicalimaging.startDICOMImportJob({
+            datastoreId: NONEXISTENT_DATASTORE,
+            clientToken: "alchemy-medicalimaging-probe",
+            dataAccessRoleArn: `arn:aws:iam::${accountId}:role/alchemy-probe-nonexistent`,
+            inputS3Uri: "s3://alchemy-probe-nonexistent/in/",
+            outputS3Uri: "s3://alchemy-probe-nonexistent/out/",
+          }),
+        );
+        expect([
+          "ResourceNotFoundException",
+          "ValidationException",
+          "AccessDeniedException",
+        ]).toContain(error._tag);
+      }),
     );
   },
 );
@@ -242,16 +232,11 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -283,9 +268,10 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
         expect(importJob.status).toBe("SUBMITTED");
 
         // GetDICOMImportJob — the job is observable immediately.
-        const described = (yield* getJson(
-          `/describe-import?jobId=${importJob.jobId}`,
-        )) as { status?: string; errorTag?: string };
+        const described = (yield* getJson(`/describe-import?jobId=${importJob.jobId}`)) as {
+          status?: string;
+          errorTag?: string;
+        };
         expect(described.errorTag).toBeUndefined();
         expect(described.status).toBeTruthy();
 
@@ -295,10 +281,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
 
         // SearchImageSets — the store has no image sets (the import input
         // is invalid), so an empty result proves the grant + wiring.
-        const search = (yield* getJson("/search")) as {
-          count?: number;
-          errorTag?: string;
-        };
+        const search = (yield* getJson("/search")) as { count?: number; errorTag?: string };
         expect(search.errorTag).toBeUndefined();
         expect(search.count).toBe(0);
 
@@ -324,8 +307,7 @@ test.provider.skipIf(!process.env.AWS_TEST_MEDICAL_IMAGING)(
           Effect.map((r) => (r as { status: string }).status),
           Effect.repeat({
             schedule: Schedule.spaced("10 seconds"),
-            until: (status): boolean =>
-              status !== "SUBMITTED" && status !== "IN_PROGRESS",
+            until: (status): boolean => status !== "SUBMITTED" && status !== "IN_PROGRESS",
             times: 30,
           }),
         );

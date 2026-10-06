@@ -36,6 +36,4 @@ export interface GenerateMapping extends Binding.Service<
     ) => Effect.Effect<b2bi.GenerateMappingResponse, b2bi.GenerateMappingError>
   >
 > {}
-export const GenerateMapping = Binding.Service<GenerateMapping>(
-  "AWS.B2BI.GenerateMapping",
-);
+export const GenerateMapping = Binding.Service<GenerateMapping>("AWS.B2BI.GenerateMapping");

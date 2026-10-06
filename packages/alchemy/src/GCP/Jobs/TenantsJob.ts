@@ -302,18 +302,13 @@ export type TenantsJob = Resource<
  */
 export const TenantsJob = Resource<TenantsJob>("GCP.Jobs.TenantsJob");
 
-export class TenantsJobNotResolved extends Data.TaggedError(
-  "GCP.Jobs.TenantsJobNotResolved",
-)<{
+export class TenantsJobNotResolved extends Data.TaggedError("GCP.Jobs.TenantsJobNotResolved")<{
   name: string;
 }> {}
 
-const toParent = (project: string, parent: string) =>
-  tenantNameOf(project, parent);
+const toParent = (project: string, parent: string) => tenantNameOf(project, parent);
 
-const applicationOf = (
-  info: jobs.ApplicationInfo | undefined,
-): ApplicationInfo | undefined => {
+const applicationOf = (info: jobs.ApplicationInfo | undefined): ApplicationInfo | undefined => {
   if (info === undefined) return undefined;
   return {
     emails: info.emails,
@@ -411,12 +406,8 @@ export const TenantsJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = toParent(
-        env.project,
-        olds?.parent ?? output?.parent ?? "",
-      );
-      const name =
-        output?.name ?? jobNameOf(parent, olds?.jobId ?? output?.jobId ?? "");
+      const parent = toParent(env.project, olds?.parent ?? output?.parent ?? "");
+      const name = output?.name ?? jobNameOf(parent, olds?.jobId ?? output?.jobId ?? "");
       let existing = yield* getJob(name);
       if (existing === undefined) {
         existing = yield* findOwnedJob(parent, id);
@@ -440,28 +431,14 @@ export const TenantsJobProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = toParent(env.project, news.parent);
       const ownership = yield* ownershipLabels(id);
-      const title = yield* toGeneratedName(
-        id,
-        news.title,
-        output?.title,
-        MAX_TITLE_LENGTH,
-      );
-      const requisition = yield* toGeneratedName(
-        id,
-        news.requisitionId,
-        output?.requisitionId,
-      );
-      const requisitionId = encodeOwnershipLine(
-        ownership,
-        requisition,
-        MAX_REQUISITION_ID_LENGTH,
-      );
+      const title = yield* toGeneratedName(id, news.title, output?.title, MAX_TITLE_LENGTH);
+      const requisition = yield* toGeneratedName(id, news.requisitionId, output?.requisitionId);
+      const requisitionId = encodeOwnershipLine(ownership, requisition, MAX_REQUISITION_ID_LENGTH);
       // Shown to job seekers, so no ownership marker (requisitionId has it).
-      const description = (
-        news.description ??
-        output?.description ??
-        title
-      ).slice(0, MAX_DESCRIPTION_LENGTH);
+      const description = (news.description ?? output?.description ?? title).slice(
+        0,
+        MAX_DESCRIPTION_LENGTH,
+      );
       const name = output?.name ?? jobNameOf(parent, news.jobId ?? "");
 
       let current = yield* getJob(name);
@@ -490,50 +467,26 @@ export const TenantsJobProvider = () =>
         currentValue: string | undefined,
         next: string | undefined,
         field: string,
-      ) =>
-        next === undefined || sameText(currentValue, next) ? undefined : field;
-      const optionalJson = (
-        currentValue: unknown,
-        next: unknown,
-        field: string,
-      ) =>
+      ) => (next === undefined || sameText(currentValue, next) ? undefined : field);
+      const optionalJson = (currentValue: unknown, next: unknown, field: string) =>
         next === undefined || jsonEqual(currentValue, next) ? undefined : field;
       const updateMask = updateMaskOf(
         sameText(current.title, title) ? undefined : "title",
         sameText(current.description, description) ? undefined : "description",
-        sameText(current.requisitionId, requisitionId)
-          ? undefined
-          : "requisitionId",
+        sameText(current.requisitionId, requisitionId) ? undefined : "requisitionId",
         sameText(current.company, news.company) ? undefined : "company",
         optionalJson(current.addresses, news.addresses, "addresses"),
         optionalText(current.languageCode, news.languageCode, "languageCode"),
         optionalText(current.department, news.department, "department"),
         optionalText(current.jobLevel, news.jobLevel, "jobLevel"),
-        optionalJson(
-          current.employmentTypes,
-          news.employmentTypes,
-          "employmentTypes",
-        ),
-        optionalText(
-          current.postingRegion,
-          news.postingRegion,
-          "postingRegion",
-        ),
-        optionalText(
-          current.qualifications,
-          news.qualifications,
-          "qualifications",
-        ),
-        optionalText(
-          current.responsibilities,
-          news.responsibilities,
-          "responsibilities",
-        ),
+        optionalJson(current.employmentTypes, news.employmentTypes, "employmentTypes"),
+        optionalText(current.postingRegion, news.postingRegion, "postingRegion"),
+        optionalText(current.qualifications, news.qualifications, "qualifications"),
+        optionalText(current.responsibilities, news.responsibilities, "responsibilities"),
         optionalText(current.incentives, news.incentives, "incentives"),
         optionalJson(current.jobBenefits, news.jobBenefits, "jobBenefits"),
         optionalJson(current.degreeTypes, news.degreeTypes, "degreeTypes"),
-        news.promotionValue !== undefined &&
-          (current.promotionValue ?? 0) !== news.promotionValue
+        news.promotionValue !== undefined && (current.promotionValue ?? 0) !== news.promotionValue
           ? "promotionValue"
           : undefined,
         optionalJson(
@@ -546,23 +499,11 @@ export const TenantsJobProvider = () =>
           news.compensationInfo?.entries,
           "compensationInfo",
         ),
-        optionalText(
-          current.postingExpireTime,
-          news.postingExpireTime,
-          "postingExpireTime",
-        ),
+        optionalText(current.postingExpireTime, news.postingExpireTime, "postingExpireTime"),
         optionalText(current.jobStartTime, news.jobStartTime, "jobStartTime"),
         optionalText(current.jobEndTime, news.jobEndTime, "jobEndTime"),
-        optionalJson(
-          current.customAttributes,
-          news.customAttributes,
-          "customAttributes",
-        ),
-        optionalJson(
-          current.processingOptions,
-          news.processingOptions,
-          "processingOptions",
-        ),
+        optionalJson(current.customAttributes, news.customAttributes, "customAttributes"),
+        optionalJson(current.processingOptions, news.processingOptions, "processingOptions"),
         optionalText(current.visibility, news.visibility, "visibility"),
       );
 

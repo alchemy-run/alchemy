@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,20 +18,17 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 const DEFAULT_TYPE = "DEDICATED";
 const DEFAULT_LINK_TYPE = "LINK_TYPE_ETHERNET_10G_LR";
 
-export type InterconnectType =
-  | compute.InterconnectInterconnectTypeEnum
-  | (string & {});
-export type InterconnectLinkType =
-  | compute.InterconnectLinkTypeEnum
-  | (string & {});
+export type InterconnectType = compute.InterconnectInterconnectTypeEnum | (string & {});
+export type InterconnectLinkType = compute.InterconnectLinkTypeEnum | (string & {});
 export type InterconnectMacsec = compute.InterconnectMacsec;
-export type InterconnectApplicationAware =
-  compute.InterconnectApplicationAwareInterconnect;
+export type InterconnectApplicationAware = compute.InterconnectApplicationAwareInterconnect;
 
 export type InterconnectProps = {
   /**
@@ -276,8 +271,7 @@ const locationUrl = (project: string, location: string) => {
   return `projects/${project}/global/interconnectLocations/${location}`;
 };
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const linkTypeOf = (value: string | undefined) => value ?? DEFAULT_LINK_TYPE;
 
@@ -399,31 +393,21 @@ export const InterconnectProvider = () =>
       const previousName = olds?.interconnectName ?? output?.interconnectName;
       const nextName = news.interconnectName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousLocation = lastSegment(olds?.location ?? output?.location);
       const nextLocation = lastSegment(news.location ?? previousLocation);
-      const previousType = typeOf(
-        olds?.interconnectType ?? output?.interconnectType,
-      );
+      const previousType = typeOf(olds?.interconnectType ?? output?.interconnectType);
       const nextType = typeOf(news.interconnectType ?? previousType);
       const previousLink = linkTypeOf(olds?.linkType ?? output?.linkType);
       const nextLink = linkTypeOf(news.linkType ?? previousLink);
       const previousCustomer = olds?.customerName ?? output?.customerName ?? "";
       const nextCustomer = news.customerName ?? previousCustomer;
-      const previousRemote = lastSegment(
-        olds?.remoteLocation ?? output?.remoteLocation,
-      );
+      const previousRemote = lastSegment(olds?.remoteLocation ?? output?.remoteLocation);
       const nextRemote = lastSegment(news.remoteLocation ?? previousRemote);
-      const previousFeatures = featuresKey(
-        olds?.requestedFeatures ?? output?.requestedFeatures,
-      );
+      const previousFeatures = featuresKey(olds?.requestedFeatures ?? output?.requestedFeatures);
       const nextFeatures = featuresKey(
-        news.requestedFeatures ??
-          olds?.requestedFeatures ??
-          output?.requestedFeatures,
+        news.requestedFeatures ?? olds?.requestedFeatures ?? output?.requestedFeatures,
       );
 
       const immutableChanged =
@@ -432,8 +416,7 @@ export const InterconnectProvider = () =>
         previousLink !== nextLink ||
         previousCustomer !== nextCustomer ||
         previousRemote !== nextRemote ||
-        (news.requestedFeatures !== undefined &&
-          previousFeatures !== nextFeatures);
+        (news.requestedFeatures !== undefined && previousFeatures !== nextFeatures);
 
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -446,17 +429,11 @@ export const InterconnectProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const interconnectName = yield* toName(
-        id,
-        olds?.interconnectName,
-        output?.interconnectName,
-      );
+      const interconnectName = yield* toName(id, olds?.interconnectName, output?.interconnectName);
       const existing = yield* getByName(env.project, interconnectName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -471,26 +448,18 @@ export const InterconnectProvider = () =>
           })
           .pipe(
             Stream.filter((item) =>
-              Object.keys(item.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as Interconnect["Attributes"][]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as Interconnect["Attributes"][])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const interconnectName = yield* toName(
-        id,
-        news.interconnectName,
-        output?.interconnectName,
-      );
+      const interconnectName = yield* toName(id, news.interconnectName, output?.interconnectName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -544,10 +513,8 @@ export const InterconnectProvider = () =>
           (current.requestedLinkCount ?? 1) !== requestedLinkCount) ||
         (current.macsecEnabled === true) !== (news.macsecEnabled === true) ||
         (news.macsec !== undefined &&
-          JSON.stringify(current.macsec ?? null) !==
-            JSON.stringify(news.macsec ?? null)) ||
-        (news.aaiEnabled !== undefined &&
-          (current.aaiEnabled === true) !== news.aaiEnabled);
+          JSON.stringify(current.macsec ?? null) !== JSON.stringify(news.macsec ?? null)) ||
+        (news.aaiEnabled !== undefined && (current.aaiEnabled === true) !== news.aaiEnabled);
 
       if (needsPatch) {
         yield* runOp(
@@ -575,8 +542,7 @@ export const InterconnectProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, interconnectName)) ?? current;
+          const latest = (yield* getByName(env.project, interconnectName)) ?? current;
           if (latest === undefined) {
             return yield* new InterconnectNotResolved({ interconnectName });
           }

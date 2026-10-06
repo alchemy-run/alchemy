@@ -126,9 +126,7 @@ export type DeidentifyTemplate = Resource<
  * @resource
  * @category DLP
  */
-export const DeidentifyTemplate = Resource<DeidentifyTemplate>(
-  "GCP.DLP.DeidentifyTemplate",
-);
+export const DeidentifyTemplate = Resource<DeidentifyTemplate>("GCP.DLP.DeidentifyTemplate");
 
 export class DeidentifyTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.DeidentifyTemplateNotResolved",
@@ -139,10 +137,7 @@ export class DeidentifyTemplateNotResolved extends Data.TaggedError(
 const resourceName = (project: string, templateId: string) =>
   `projects/${project}/deidentifyTemplates/${templateId}`;
 
-const toAttrs = (
-  template: dlp.GooglePrivacyDlpV2DeidentifyTemplate,
-  project: string,
-) => {
+const toAttrs = (template: dlp.GooglePrivacyDlpV2DeidentifyTemplate, project: string) => {
   const name = template.name ?? "";
   const parsed = parseOwnership(template.description);
   return {
@@ -172,26 +167,18 @@ export const DeidentifyTemplateProvider = () =>
       if (!isResolved(news)) return undefined;
       const previous = olds?.templateId ?? output?.templateId;
       return replaceOnIdentity(
-        previous !== undefined &&
-          news.templateId !== undefined &&
-          news.templateId !== previous,
+        previous !== undefined && news.templateId !== undefined && news.templateId !== previous,
       );
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateId = yield* toResourceId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toResourceId(id, olds?.templateId, output?.templateId);
       const name = output?.name ?? resourceName(env.project, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -215,11 +202,7 @@ export const DeidentifyTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateId = yield* toResourceId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
+      const templateId = yield* toResourceId(id, news.templateId, output?.templateId);
       const name = resourceName(env.project, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -250,10 +233,7 @@ export const DeidentifyTemplateProvider = () =>
 
       const displayChanged = !sameText(current.displayName, news.displayName);
       const descriptionChanged = (current.description ?? "") !== description;
-      const configChanged = !jsonEqual(
-        current.deidentifyConfig,
-        news.deidentifyConfig,
-      );
+      const configChanged = !jsonEqual(current.deidentifyConfig, news.deidentifyConfig);
 
       if (displayChanged || descriptionChanged || configChanged) {
         current = yield* dlp.patchProjectsDeidentifyTemplates({

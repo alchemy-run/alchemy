@@ -159,9 +159,7 @@ export type CustomersDevice = Resource<
  * @resource
  * @category SasPortal
  */
-export const CustomersDevice = Resource<CustomersDevice>(
-  "GCP.SasPortal.CustomersDevice",
-);
+export const CustomersDevice = Resource<CustomersDevice>("GCP.SasPortal.CustomersDevice");
 
 export class CustomersDeviceNotResolved extends Data.TaggedError(
   "GCP.SasPortal.CustomersDeviceNotResolved",
@@ -170,11 +168,7 @@ export class CustomersDeviceNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  device: sasportal.SasPortalDevice,
-  parent: string,
-  project: string,
-) => {
+const toAttrs = (device: sasportal.SasPortalDevice, parent: string, project: string) => {
   const name = device.name ?? "";
   return {
     name,
@@ -208,9 +202,7 @@ export const CustomersDeviceProvider = () =>
           (news.serialNumber !== undefined &&
             output?.serialNumber !== undefined &&
             news.serialNumber !== output.serialNumber) ||
-          (news.fccId !== undefined &&
-            output?.fccId !== undefined &&
-            news.fccId !== output.fccId),
+          (news.fccId !== undefined && output?.fccId !== undefined && news.fccId !== output.fccId),
       });
     }),
 
@@ -219,21 +211,16 @@ export const CustomersDeviceProvider = () =>
       const parent = expandCustomer(olds?.parent ?? output?.parent ?? "");
       const name = olds?.name ?? output?.name ?? "";
       let existing = yield* getCustomerDevice(name);
-      let locatedParent = existing
-        ? parentOf(existing.name ?? "") || parent
-        : parent;
+      let locatedParent = existing ? parentOf(existing.name ?? "") || parent : parent;
       if (existing === undefined) {
         const found =
-          (yield* findOwnedCustomerDevice(id, parent)) ??
-          (yield* scanOwnedCustomerDevice(id));
+          (yield* findOwnedCustomerDevice(id, parent)) ?? (yield* scanOwnedCustomerDevice(id));
         existing = found?.row;
         locatedParent = found?.parent ?? locatedParent;
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, locatedParent, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -248,9 +235,7 @@ export const CustomersDeviceProvider = () =>
                   Effect.map((rows) =>
                     rows
                       .filter((row) => hasOwnershipMarker(row.displayName))
-                      .map((row) =>
-                        toAttrs(row, customer.name ?? "", env.project),
-                      ),
+                      .map((row) => toAttrs(row, customer.name ?? "", env.project)),
                   ),
                 )
               : Effect.succeed([]),
@@ -268,11 +253,7 @@ export const CustomersDeviceProvider = () =>
         yield* toDisplayName(id, news.displayName, output?.displayName),
         MAX_DISPLAY_NAME_LENGTH,
       );
-      const serialNumber = yield* toSerialNumber(
-        id,
-        news.serialNumber,
-        output?.serialNumber,
-      );
+      const serialNumber = yield* toSerialNumber(id, news.serialNumber, output?.serialNumber);
       const desired = deviceBody({
         displayName,
         serialNumber,
@@ -285,8 +266,7 @@ export const CustomersDeviceProvider = () =>
       let current = yield* getCustomerDevice(news.name ?? output?.name ?? "");
       if (current === undefined) {
         const found =
-          (yield* findOwnedCustomerDevice(id, parent)) ??
-          (yield* scanOwnedCustomerDevice(id));
+          (yield* findOwnedCustomerDevice(id, parent)) ?? (yield* scanOwnedCustomerDevice(id));
         current = found?.row;
       }
 
@@ -298,9 +278,7 @@ export const CustomersDeviceProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              findOwnedCustomerDevice(id, parent).pipe(
-                Effect.map((found) => found?.row),
-              ),
+              findOwnedCustomerDevice(id, parent).pipe(Effect.map((found) => found?.row)),
             ),
           );
         current = created ?? undefined;
@@ -317,35 +295,19 @@ export const CustomersDeviceProvider = () =>
       const nameChanged = !sameText(current.displayName, displayName);
       const allowlistsChanged =
         news.grantRangeAllowlists !== undefined &&
-        !sameJson(
-          frequencyRangesOf(current.grantRangeAllowlists),
-          news.grantRangeAllowlists,
-        );
+        !sameJson(frequencyRangesOf(current.grantRangeAllowlists), news.grantRangeAllowlists);
       const configChanged =
         news.preloadedConfig !== undefined &&
-        !sameJson(
-          deviceConfigOf(current.preloadedConfig),
-          news.preloadedConfig,
-        );
+        !sameJson(deviceConfigOf(current.preloadedConfig), news.preloadedConfig);
       const metadataChanged =
         news.deviceMetadata !== undefined &&
-        !sameJson(
-          deviceMetadataOf(current.deviceMetadata),
-          news.deviceMetadata,
-        );
-      if (
-        nameChanged ||
-        allowlistsChanged ||
-        configChanged ||
-        metadataChanged
-      ) {
+        !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
+      if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchCustomersDevices({
           name,
           updateMask: updateMaskOf(
             "displayName",
-            news.grantRangeAllowlists !== undefined
-              ? "grantRangeAllowlists"
-              : undefined,
+            news.grantRangeAllowlists !== undefined ? "grantRangeAllowlists" : undefined,
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
@@ -358,9 +320,9 @@ export const CustomersDeviceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryDelete(
-        sasportal.deleteCustomersDevices({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryDelete(sasportal.deleteCustomersDevices({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getCustomerDevice(output.name));
     }),
   });

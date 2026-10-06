@@ -1,9 +1,9 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import type { TransferJob } from "./TransferJob.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import type { TransferJob } from "./TransferJob.ts";
 
 /**
  * Shared HTTP scaffolding for Storage Transfer job bindings.
@@ -13,11 +13,7 @@ import { type BindingIam, grantFor } from "../HttpBinding.ts";
  * (after providing Credentials + HttpClient) so the inner runtime Effect is
  * `Effect<A, E>` and does not leak `GcpOpContext`.
  */
-export const makeTransferJobHttpBinding = <
-  I extends { jobName?: string },
-  A,
-  E,
->(options: {
+export const makeTransferJobHttpBinding = <I extends { jobName?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: Effect.Effect<

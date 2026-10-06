@@ -6,8 +6,8 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandDataStore,
@@ -128,8 +128,7 @@ export class DataStoresSessionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (dataStore: string, sessionId: string) =>
-  `${dataStore}/sessions/${sessionId}`;
+const resourceName = (dataStore: string, sessionId: string) => `${dataStore}/sessions/${sessionId}`;
 
 const ownershipLabels = (labels: Record<string, string>): string[] => [
   `${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]}`,
@@ -151,10 +150,7 @@ const alchemyLabelsOf = (labels: readonly string[] | undefined) =>
       }),
   );
 
-const toAttrs = (
-  session: discoveryengine.GoogleCloudDiscoveryengineV1Session,
-  project: string,
-) => {
+const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, project: string) => {
   const name = session.name ?? "";
   const parsed = parseResourceName(name, "sessions");
   return {
@@ -181,28 +177,19 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAtParent = (parent: string) =>
-  discoveryengine.listProjectsLocationsDataStoresSessions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
-      Stream.filter((session) =>
-        (session.labels ?? []).some((label) => label.startsWith("alchemy-")),
-      ),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  discoveryengine.listProjectsLocationsDataStoresSessions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
+    Stream.filter((session) =>
+      (session.labels ?? []).some((label) => label.startsWith("alchemy-")),
+    ),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 export const DataStoresSessionProvider = () =>
   Provider.succeed(DataStoresSession, {
-    stables: [
-      "name",
-      "sessionId",
-      "dataStore",
-      "project",
-      "location",
-      "startTime",
-    ],
+    stables: ["name", "sessionId", "dataStore", "project", "location", "startTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -223,21 +210,11 @@ export const DataStoresSessionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sessionId = yield* toPhysical(
-        id,
-        olds?.sessionId,
-        output?.sessionId,
-        sessionIdOf,
-      );
+      const sessionId = yield* toPhysical(id, olds?.sessionId, output?.sessionId, sessionIdOf);
       const parent = olds?.dataStore
-        ? expandDataStore(
-            olds.dataStore,
-            env.project,
-            output?.location ?? "global",
-          )
+        ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
         : undefined;
-      const name =
-        output?.name ?? (parent ? resourceName(parent, sessionId) : "");
+      const name = output?.name ?? (parent ? resourceName(parent, sessionId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -267,24 +244,12 @@ export const DataStoresSessionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
-      const sessionId = yield* toPhysical(
-        id,
-        news.sessionId,
-        output?.sessionId,
-        sessionIdOf,
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
+      const sessionId = yield* toPhysical(id, news.sessionId, output?.sessionId, sessionIdOf);
       const name = resourceName(parent, sessionId);
       const displayName = news.displayName;
       const labels = yield* internalLabels(id);
-      const desiredLabels = [
-        ...ownershipLabels(labels),
-        ...userStringLabels(news.labels),
-      ];
+      const desiredLabels = [...ownershipLabels(labels), ...userStringLabels(news.labels)];
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -309,44 +274,33 @@ export const DataStoresSessionProvider = () =>
         return yield* new DataStoresSessionNotResolved({ name });
       }
 
-      const displayChanged =
-        (current.displayName ?? "") !== (displayName ?? "");
-      const userChanged =
-        (current.userPseudoId ?? "") !== (news.userPseudoId ?? "");
-      const stateChanged =
-        news.state !== undefined && (current.state ?? "") !== news.state;
-      const pinChanged =
-        (current.isPinned === true) !== (news.isPinned === true);
+      const displayChanged = (current.displayName ?? "") !== (displayName ?? "");
+      const userChanged = (current.userPseudoId ?? "") !== (news.userPseudoId ?? "");
+      const stateChanged = news.state !== undefined && (current.state ?? "") !== news.state;
+      const pinChanged = (current.isPinned === true) !== (news.isPinned === true);
       const labelsChanged = !sameStringList(current.labels, desiredLabels);
 
-      if (
-        displayChanged ||
-        userChanged ||
-        stateChanged ||
-        pinChanged ||
-        labelsChanged
-      ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsDataStoresSessions({
+      if (displayChanged || userChanged || stateChanged || pinChanged || labelsChanged) {
+        current = yield* discoveryengine.patchProjectsLocationsDataStoresSessions({
+          name: current.name ?? name,
+          updateMask: [
+            displayChanged ? "display_name" : undefined,
+            userChanged ? "user_pseudo_id" : undefined,
+            stateChanged ? "state" : undefined,
+            pinChanged ? "is_pinned" : undefined,
+            labelsChanged ? "labels" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: [
-              displayChanged ? "display_name" : undefined,
-              userChanged ? "user_pseudo_id" : undefined,
-              stateChanged ? "state" : undefined,
-              pinChanged ? "is_pinned" : undefined,
-              labelsChanged ? "labels" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: current.name ?? name,
-              displayName,
-              userPseudoId: news.userPseudoId,
-              state: news.state,
-              isPinned: news.isPinned === true,
-              labels: desiredLabels,
-            },
-          });
+            displayName,
+            userPseudoId: news.userPseudoId,
+            state: news.state,
+            isPinned: news.isPinned === true,
+            labels: desiredLabels,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

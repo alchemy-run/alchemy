@@ -31,6 +31,4 @@ export interface UpdateTopic extends Binding.Service<
     ) => Effect.Effect<kafka.UpdateTopicResponse, kafka.UpdateTopicError>
   >
 > {}
-export const UpdateTopic = Binding.Service<UpdateTopic>(
-  "AWS.Kafka.UpdateTopic",
-);
+export const UpdateTopic = Binding.Service<UpdateTopic>("AWS.Kafka.UpdateTopic");

@@ -10,7 +10,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -18,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_NODE_COUNT = 1;
@@ -234,22 +234,16 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Memcache.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Memcache.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Memcache.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.Memcache.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.Memcache.InstanceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Memcache.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Memcache.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -259,10 +253,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -286,16 +278,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     instanceId:
-      instancesAt >= 0 && parts[instancesAt + 1]
-        ? parts[instancesAt + 1]!
-        : lastSegment(name),
+      instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : lastSegment(name),
   };
 };
 
@@ -327,19 +314,13 @@ const paramsOf = (
     ),
   );
 
-const paramsKey = (
-  params: Record<string, string | undefined> | null | undefined,
-) =>
+const paramsKey = (params: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
-    Object.fromEntries(
-      Object.entries(paramsOf(params)).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    Object.fromEntries(Object.entries(paramsOf(params)).sort(([a], [b]) => a.localeCompare(b))),
   );
 
 const listKey = (values: readonly string[] | undefined) =>
-  JSON.stringify(
-    [...(values ?? [])].map((value) => value.toLowerCase()).sort(),
-  );
+  JSON.stringify([...(values ?? [])].map((value) => value.toLowerCase()).sort());
 
 const nodeConfigOf = (config: NodeConfig | undefined): NodeConfig => ({
   cpuCount: config?.cpuCount ?? DEFAULT_CPU_COUNT,
@@ -365,10 +346,7 @@ const windowKey = (window: WeeklyMaintenanceWindow) =>
   });
 
 const maintenanceOf = (
-  policy:
-    | memcache.GoogleCloudMemcacheV1MaintenancePolicy
-    | MaintenancePolicy
-    | undefined,
+  policy: memcache.GoogleCloudMemcacheV1MaintenancePolicy | MaintenancePolicy | undefined,
 ): MaintenancePolicy | undefined => {
   if (policy === undefined) return undefined;
   return {
@@ -385,13 +363,9 @@ const maintenanceKey = (policy: MaintenancePolicy | undefined) =>
 
 const parseMemcacheVersion = (version: string | undefined) => {
   if (version === undefined) return undefined;
-  const match = version
-    .toUpperCase()
-    .match(/^MEMCACHE_(\d+)_(\d+)(?:_(\d+))?$/);
+  const match = version.toUpperCase().match(/^MEMCACHE_(\d+)_(\d+)(?:_(\d+))?$/);
   if (!match) return undefined;
-  return (
-    Number(match[1]) * 10_000 + Number(match[2]) * 100 + Number(match[3] ?? 0)
-  );
+  return Number(match[1]) * 10_000 + Number(match[2]) * 100 + Number(match[3] ?? 0);
 };
 
 const versionDecreasing = (previous: string | undefined, next: string) => {
@@ -401,11 +375,7 @@ const versionDecreasing = (previous: string | undefined, next: string) => {
   return newN < oldN;
 };
 
-const toAttrs = (
-  instance: memcache.Instance,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (instance: memcache.Instance, project: string, region: string) => {
   const name = instance.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -450,20 +420,15 @@ const getByName = (name: string) =>
  * (code 5) and an operation that is already gone count as success
  * (delete race).
  */
-const waitForOperation = (
-  operation: memcache.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  waitForGcpOperation(
-    operation,
-    (name) => memcache.getProjectsLocationsOperations({ name }),
-    { budget: "30 minutes", interval: "10 seconds" },
-  ).pipe(
+const waitForOperation = (operation: memcache.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => memcache.getProjectsLocationsOperations({ name }), {
+    budget: "30 minutes",
+    interval: "10 seconds",
+  }).pipe(
     Effect.catchIf(
       (error) =>
         options?.notFoundOk === true &&
-        (error._tag === "NotFound" ||
-          (error._tag === "GCP.OperationFailed" && error.code === 5)),
+        (error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5)),
       () => Effect.succeed(operation),
     ),
   );
@@ -471,9 +436,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Memcache.InstanceNotResolved",
@@ -508,9 +471,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Memcache.InstanceStillExists",
@@ -532,8 +493,7 @@ const toCreateBody = (
   nodeCount,
   nodeConfig,
   memcacheVersion: news.memcacheVersion,
-  parameters:
-    news.parameters === undefined ? undefined : { params: news.parameters },
+  parameters: news.parameters === undefined ? undefined : { params: news.parameters },
   maintenancePolicy: news.maintenancePolicy,
   reservedIpRangeId: news.reservedIpRangeId,
 });
@@ -548,33 +508,17 @@ export const InstanceProvider = () =>
 
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousNetwork =
-        olds?.authorizedNetwork ?? output?.authorizedNetwork ?? "";
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousNetwork = olds?.authorizedNetwork ?? output?.authorizedNetwork ?? "";
       const nextNetwork = news.authorizedNetwork ?? previousNetwork;
       const previousZones = listKey(olds?.zones ?? output?.zones);
-      const nextZones =
-        news.zones !== undefined ? listKey(news.zones) : previousZones;
-      const previousNodeConfig = nodeConfigKey(
-        olds?.nodeConfig ?? output?.nodeConfig,
-      );
-      const nextNodeConfig = nodeConfigKey(
-        news.nodeConfig ?? output?.nodeConfig,
-      );
-      const previousRanges = listKey(
-        olds?.reservedIpRangeId ?? output?.reservedIpRangeId,
-      );
+      const nextZones = news.zones !== undefined ? listKey(news.zones) : previousZones;
+      const previousNodeConfig = nodeConfigKey(olds?.nodeConfig ?? output?.nodeConfig);
+      const nextNodeConfig = nodeConfigKey(news.nodeConfig ?? output?.nodeConfig);
+      const previousRanges = listKey(olds?.reservedIpRangeId ?? output?.reservedIpRangeId);
       const nextRanges =
-        news.reservedIpRangeId !== undefined
-          ? listKey(news.reservedIpRangeId)
-          : previousRanges;
+        news.reservedIpRangeId !== undefined ? listKey(news.reservedIpRangeId) : previousRanges;
       const previousVersion = olds?.memcacheVersion ?? output?.memcacheVersion;
       const nextVersion = news.memcacheVersion;
       const downgrade =
@@ -583,9 +527,7 @@ export const InstanceProvider = () =>
         versionDecreasing(previousVersion, nextVersion);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousNetwork !== nextNetwork ||
         previousZones !== nextZones ||
@@ -597,27 +539,19 @@ export const InstanceProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, instanceId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -633,13 +567,9 @@ export const InstanceProvider = () =>
             Stream.filter(
               (instance) =>
                 !isPlaceholder(instance) &&
-                Object.keys(instance.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(instance.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
-            Stream.map((instance) =>
-              toAttrs(instance, env.project, env.region),
-            ),
+            Stream.map((instance) => toAttrs(instance, env.project, env.region)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -649,10 +579,7 @@ export const InstanceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, news.instanceId, output?.instanceId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, instanceId);
       const nodeCount = news.nodeCount ?? DEFAULT_NODE_COUNT;
       const nodeConfig = nodeConfigOf(news.nodeConfig);
@@ -704,11 +631,9 @@ export const InstanceProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const desiredNodeCount = news.nodeCount ?? current.nodeCount ?? nodeCount;
-      const nodeCountChanged =
-        (current.nodeCount ?? DEFAULT_NODE_COUNT) !== desiredNodeCount;
+      const nodeCountChanged = (current.nodeCount ?? DEFAULT_NODE_COUNT) !== desiredNodeCount;
       const maintenanceChanged =
         news.maintenancePolicy !== undefined &&
         maintenanceKey(maintenanceOf(current.maintenancePolicy)) !==
@@ -752,20 +677,18 @@ export const InstanceProvider = () =>
         news.parameters !== undefined &&
         paramsKey(current.parameters?.params) !== paramsKey(news.parameters);
       if (parametersChanged) {
-        const updated =
-          yield* memcache.updateParametersProjectsLocationsInstances({
-            name,
-            body: {
-              updateMask: "parameters",
-              parameters: { params: news.parameters },
-            },
-          });
+        const updated = yield* memcache.updateParametersProjectsLocationsInstances({
+          name,
+          body: {
+            updateMask: "parameters",
+            parameters: { params: news.parameters },
+          },
+        });
         yield* waitForOperation(updated);
-        const applied =
-          yield* memcache.applyParametersProjectsLocationsInstances({
-            name,
-            body: { applyAll: true },
-          });
+        const applied = yield* memcache.applyParametersProjectsLocationsInstances({
+          name,
+          body: { applyAll: true },
+        });
         yield* waitForOperation(applied);
         current = yield* waitUntilReady(name);
       }

@@ -24,15 +24,10 @@ export const writeSecretGrants: BindingIam[] = [
 
 // No predefined role covers access + version management short of
 // secretmanager.admin, so ReadWrite grants both narrow roles.
-export const readWriteSecretGrants: BindingIam[] = [
-  ...readSecretGrants,
-  ...writeSecretGrants,
-];
+export const readWriteSecretGrants: BindingIam[] = [...readSecretGrants, ...writeSecretGrants];
 
 const versionName = (secretName: string, version: string) =>
-  version.includes("/versions/")
-    ? version
-    : `${secretName}/versions/${version}`;
+  version.includes("/versions/") ? version : `${secretName}/versions/${version}`;
 
 export const makeSecretHelpers = Effect.gen(function* () {
   const access = yield* secretmanager.accessProjectsSecretsVersions;
@@ -47,14 +42,10 @@ export const makeSecretHelpers = Effect.gen(function* () {
           name: versionName(yield* secretName, version ?? "latest"),
         });
         const data = response.payload?.data ?? "";
-        return yield* Effect.sync(
-          () => new Uint8Array(Buffer.from(data, "base64")),
-        );
+        return yield* Effect.sync(() => new Uint8Array(Buffer.from(data, "base64")));
       }).pipe(
         // Missing, disabled, and destroyed versions have no readable payload.
-        Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () => Effect.succeed(undefined)),
       );
     return {
       accessBytes,

@@ -187,9 +187,7 @@ export type AgentsPlaybook = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsPlaybook = Resource<AgentsPlaybook>(
-  "GCP.Dialogflow.AgentsPlaybook",
-);
+export const AgentsPlaybook = Resource<AgentsPlaybook>("GCP.Dialogflow.AgentsPlaybook");
 
 export class AgentsPlaybookNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsPlaybookNotResolved",
@@ -200,8 +198,7 @@ export class AgentsPlaybookNotResolved extends Data.TaggedError(
 const DEFAULT_GOAL = "Handle the user request.";
 const DEFAULT_TYPE: PlaybookType = "TASK";
 
-const resourceName = (agent: string, playbookId: string) =>
-  `${agent}/playbooks/${playbookId}`;
+const resourceName = (agent: string, playbookId: string) => `${agent}/playbooks/${playbookId}`;
 
 const stepsOf = (
   steps: dialogflow.GoogleCloudDialogflowCxV3PlaybookStepList | undefined,
@@ -214,9 +211,7 @@ const stepsOf = (
 };
 
 const instructionOf = (
-  instruction:
-    | dialogflow.GoogleCloudDialogflowCxV3PlaybookInstruction
-    | undefined,
+  instruction: dialogflow.GoogleCloudDialogflowCxV3PlaybookInstruction | undefined,
 ): PlaybookInstruction | undefined => {
   if (instruction === undefined) return undefined;
   return {
@@ -266,40 +261,27 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooks
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
-      Stream.filter((playbook) => hasOwnershipMarker(playbook.displayName)),
-      Stream.map((playbook) => toAttrs(playbook, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooks.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
+    Stream.filter((playbook) => hasOwnershipMarker(playbook.displayName)),
+    Stream.map((playbook) => toAttrs(playbook, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooks
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
-      Stream.filter((playbook) => playbook.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooks.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
+    Stream.filter((playbook) => playbook.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AgentsPlaybookProvider = () =>
   Provider.succeed(AgentsPlaybook, {
-    stables: [
-      "name",
-      "playbookId",
-      "agent",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "playbookId", "agent", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -321,17 +303,9 @@ export const AgentsPlaybookProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
-      const playbookId = yield* toResourceId(
-        id,
-        olds?.playbookId,
-        output?.playbookId,
-      );
-      const name =
-        output?.name ??
-        (agent !== undefined ? resourceName(agent, playbookId) : "");
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
+      const playbookId = yield* toResourceId(id, olds?.playbookId, output?.playbookId);
+      const name = output?.name ?? (agent !== undefined ? resourceName(agent, playbookId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && agent !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -342,34 +316,24 @@ export const AgentsPlaybookProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, agent);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const agents = yield* namedAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) => listAt(agent.name, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(agents, (agent) => listAt(agent.name, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
-      const playbookId = yield* toResourceId(
-        id,
-        news.playbookId,
-        output?.playbookId,
-      );
+      const playbookId = yield* toResourceId(id, news.playbookId, output?.playbookId);
       const name = output?.name ?? resourceName(agent, playbookId);
       const ownership = yield* internalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
@@ -400,11 +364,7 @@ export const AgentsPlaybookProvider = () =>
             parent: agent,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
@@ -416,24 +376,18 @@ export const AgentsPlaybookProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const goalChanged = !sameText(current.goal, goal);
       const instructionChanged =
-        fingerprint(instructionOf(current.instruction)) !==
-        fingerprint(news.instruction);
-      const typeChanged =
-        (current.playbookType ?? DEFAULT_TYPE) !== playbookType;
+        fingerprint(instructionOf(current.instruction)) !== fingerprint(news.instruction);
+      const typeChanged = (current.playbookType ?? DEFAULT_TYPE) !== playbookType;
       const toolsChanged =
-        fingerprint([...(current.referencedTools ?? [])]) !==
-        fingerprint(news.referencedTools);
+        fingerprint([...(current.referencedTools ?? [])]) !== fingerprint(news.referencedTools);
       const playbooksChanged =
         fingerprint([...(current.referencedPlaybooks ?? [])]) !==
         fingerprint(news.referencedPlaybooks);
       const flowsChanged =
-        fingerprint([...(current.referencedFlows ?? [])]) !==
-        fingerprint(news.referencedFlows);
+        fingerprint([...(current.referencedFlows ?? [])]) !== fingerprint(news.referencedFlows);
       const llmChanged =
-        fingerprint(current.llmModelSettings) !==
-        fingerprint(news.llmModelSettings);
-      const codeChanged =
-        fingerprint(current.codeBlock) !== fingerprint(news.codeBlock);
+        fingerprint(current.llmModelSettings) !== fingerprint(news.llmModelSettings);
+      const codeChanged = fingerprint(current.codeBlock) !== fingerprint(news.codeBlock);
       const inputChanged =
         fingerprint(current.inputParameterDefinitions) !==
         fingerprint(news.inputParameterDefinitions);

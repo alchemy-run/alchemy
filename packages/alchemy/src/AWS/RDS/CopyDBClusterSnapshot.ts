@@ -29,10 +29,7 @@ export interface CopyDBClusterSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: rds.CopyDBClusterSnapshotMessage,
-    ) => Effect.Effect<
-      rds.CopyDBClusterSnapshotResult,
-      rds.CopyDBClusterSnapshotError
-    >
+    ) => Effect.Effect<rds.CopyDBClusterSnapshotResult, rds.CopyDBClusterSnapshotError>
   >
 > {}
 export const CopyDBClusterSnapshot = Binding.Service<CopyDBClusterSnapshot>(

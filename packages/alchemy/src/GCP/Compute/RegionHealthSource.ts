@@ -1,14 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  sameUrlList,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,12 +10,20 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  sameUrlList,
+  toPhysicalName,
+} from "./internal.ts";
 
 const DEFAULT_SOURCE_TYPE = "BACKEND_SERVICE";
 
-export type RegionHealthSourceType =
-  | compute.HealthSourceSourceTypeEnum
-  | (string & {});
+export type RegionHealthSourceType = compute.HealthSourceSourceTypeEnum | (string & {});
 
 export type RegionHealthSourceProps = {
   /**
@@ -136,9 +134,7 @@ export type RegionHealthSource = Resource<
  * @resource
  * @category Compute
  */
-export const RegionHealthSource = Resource<RegionHealthSource>(
-  "GCP.Compute.RegionHealthSource",
-);
+export const RegionHealthSource = Resource<RegionHealthSource>("GCP.Compute.RegionHealthSource");
 
 export class RegionHealthSourceNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionHealthSourceNotResolved",
@@ -147,14 +143,9 @@ export class RegionHealthSourceNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_SOURCE_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_SOURCE_TYPE).toUpperCase();
 
-const toBackendServiceUrl = (
-  project: string,
-  region: string,
-  value: string | undefined,
-) => {
+const toBackendServiceUrl = (project: string, region: string, value: string | undefined) => {
   if (value === undefined || value.length === 0) return undefined;
   if (value.includes("/backendServices/")) return value;
   return `projects/${project}/regions/${region}/backendServices/${lastSegment(value)}`;
@@ -202,13 +193,10 @@ const awaitResource = (project: string, region: string, sourceName: string) =>
     Effect.flatMap((source) =>
       source !== undefined
         ? Effect.succeed(source)
-        : Effect.fail(
-            new RegionHealthSourceNotResolved({ sourceName, region }),
-          ),
+        : Effect.fail(new RegionHealthSourceNotResolved({ sourceName, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionHealthSourceNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionHealthSourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -231,27 +219,17 @@ export const RegionHealthSourceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.sourceName ?? output?.sourceName;
       const nextName = news.sourceName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
       const previousType = typeOf(olds?.sourceType ?? output?.sourceType);
       const nextType = typeOf(news.sourceType ?? output?.sourceType);
       if (nameChanged || regionChanged || previousType !== nextType) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -259,16 +237,8 @@ export const RegionHealthSourceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sourceName = yield* toPhysicalName(
-        id,
-        olds?.sourceName,
-        output?.sourceName,
-        "source",
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const sourceName = yield* toPhysicalName(id, olds?.sourceName, output?.sourceName, "source");
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, sourceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -289,9 +259,7 @@ export const RegionHealthSourceProvider = () =>
             Stream.runCollect,
             Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
-        return Array.from(
-          pages as readonly compute.HealthSourceAggregatedList[],
-        ).flatMap((page) =>
+        return Array.from(pages as readonly compute.HealthSourceAggregatedList[]).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.healthSources ?? [])
               .filter((item) => hasOwnershipMarker(item.description))
@@ -302,12 +270,7 @@ export const RegionHealthSourceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sourceName = yield* toPhysicalName(
-        id,
-        news.sourceName,
-        output?.sourceName,
-        "source",
-      );
+      const sourceName = yield* toPhysicalName(id, news.sourceName, output?.sourceName, "source");
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -317,11 +280,8 @@ export const RegionHealthSourceProvider = () =>
         return url === undefined ? [] : [url];
       });
       const healthAggregationPolicy =
-        toHealthAggregationPolicyUrl(
-          env.project,
-          region,
-          news.healthAggregationPolicy,
-        ) ?? news.healthAggregationPolicy;
+        toHealthAggregationPolicyUrl(env.project, region, news.healthAggregationPolicy) ??
+        news.healthAggregationPolicy;
 
       let current = yield* getByName(env.project, region, sourceName);
 
@@ -364,10 +324,7 @@ export const RegionHealthSourceProvider = () =>
         patch.sources = sources;
         dirty = true;
       }
-      if (
-        lastSegment(current.healthAggregationPolicy) !==
-        lastSegment(healthAggregationPolicy)
-      ) {
+      if (lastSegment(current.healthAggregationPolicy) !== lastSegment(healthAggregationPolicy)) {
         patch.healthAggregationPolicy = healthAggregationPolicy;
         dirty = true;
       }
@@ -382,8 +339,7 @@ export const RegionHealthSourceProvider = () =>
             body: patch,
           }),
         );
-        current =
-          (yield* getByName(env.project, region, sourceName)) ?? current;
+        current = (yield* getByName(env.project, region, sourceName)) ?? current;
       }
 
       return toAttrs(current, env.project);

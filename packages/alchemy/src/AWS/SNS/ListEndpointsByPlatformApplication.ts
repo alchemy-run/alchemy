@@ -39,6 +39,4 @@ export interface ListEndpointsByPlatformApplication extends Binding.Service<
 > {}
 
 export const ListEndpointsByPlatformApplication =
-  Binding.Service<ListEndpointsByPlatformApplication>(
-    "AWS.SNS.ListEndpointsByPlatformApplication",
-  );
+  Binding.Service<ListEndpointsByPlatformApplication>("AWS.SNS.ListEndpointsByPlatformApplication");

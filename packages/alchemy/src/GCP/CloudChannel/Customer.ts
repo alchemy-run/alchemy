@@ -97,9 +97,7 @@ export type Customer = Resource<
     /** Organization postal address. */
     orgPostalAddress: cloudchannel.GoogleTypePostalAddress | undefined;
     /** Primary contact. */
-    primaryContactInfo:
-      | cloudchannel.GoogleCloudChannelV1ContactInfo
-      | undefined;
+    primaryContactInfo: cloudchannel.GoogleCloudChannelV1ContactInfo | undefined;
     /** Alternate email. */
     alternateEmail: string | undefined;
     /** BCP-47 language code. */
@@ -178,9 +176,7 @@ export type Customer = Resource<
  */
 export const Customer = Resource<Customer>("GCP.CloudChannel.Customer");
 
-export class CustomerNotResolved extends Data.TaggedError(
-  "GCP.CloudChannel.CustomerNotResolved",
-)<{
+export class CustomerNotResolved extends Data.TaggedError("GCP.CloudChannel.CustomerNotResolved")<{
   name: string;
 }> {}
 
@@ -195,22 +191,14 @@ export const CustomerProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.customerId ?? output?.customerId,
         nextId: news.customerId,
-        previousParent:
-          previousParent !== undefined
-            ? toAccountName(previousParent)
-            : undefined,
+        previousParent: previousParent !== undefined ? toAccountName(previousParent) : undefined,
         nextParent,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const parent = toAccountName(
-        olds?.parent ?? output?.parent ?? output?.account ?? "",
-      );
-      const name = toCustomerName(
-        parent,
-        olds?.customerId ?? output?.customerId ?? output?.name,
-      );
+      const parent = toAccountName(olds?.parent ?? output?.parent ?? output?.account ?? "");
+      const name = toCustomerName(parent, olds?.customerId ?? output?.customerId ?? output?.name);
       let existing = yield* getCustomer(output?.name ?? name);
       if (existing === undefined) {
         const domain = yield* toDomain(id, olds?.domain, output?.domain);
@@ -234,18 +222,14 @@ export const CustomerProvider = () =>
         orgDisplayName,
         domain,
         orgPostalAddress: news.orgPostalAddress ?? output?.orgPostalAddress,
-        primaryContactInfo:
-          news.primaryContactInfo ?? output?.primaryContactInfo,
+        primaryContactInfo: news.primaryContactInfo ?? output?.primaryContactInfo,
         alternateEmail: news.alternateEmail,
         languageCode: news.languageCode ?? output?.languageCode,
         correlationId: news.correlationId,
         customerAttestationState: news.customerAttestationState,
         channelPartnerId: news.channelPartnerId,
       });
-      const name = toCustomerName(
-        parent,
-        news.customerId ?? output?.customerId ?? output?.name,
-      );
+      const name = toCustomerName(parent, news.customerId ?? output?.customerId ?? output?.name);
 
       let current = yield* getCustomer(output?.name ?? name);
       if (current === undefined) {
@@ -258,11 +242,7 @@ export const CustomerProvider = () =>
             parent,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findCustomerByDomain(parent, domain),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findCustomerByDomain(parent, domain)));
         current = created ?? undefined;
       }
 
@@ -275,10 +255,7 @@ export const CustomerProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.orgDisplayName, orgDisplayName);
       const domainChanged = !sameText(current.domain, domain);
-      const addressChanged = !jsonEqual(
-        current.orgPostalAddress,
-        body.orgPostalAddress,
-      );
+      const addressChanged = !jsonEqual(current.orgPostalAddress, body.orgPostalAddress);
       const contactChanged = !jsonEqual(
         {
           firstName: current.primaryContactInfo?.firstName,
@@ -295,24 +272,12 @@ export const CustomerProvider = () =>
           title: body.primaryContactInfo?.title,
         },
       );
-      const alternateChanged = !sameText(
-        current.alternateEmail,
-        news.alternateEmail,
-      );
-      const languageChanged = !sameText(
-        current.languageCode,
-        body.languageCode,
-      );
-      const correlationChanged = !sameText(
-        current.correlationId,
-        news.correlationId,
-      );
+      const alternateChanged = !sameText(current.alternateEmail, news.alternateEmail);
+      const languageChanged = !sameText(current.languageCode, body.languageCode);
+      const correlationChanged = !sameText(current.correlationId, news.correlationId);
       const attestationChanged =
         news.customerAttestationState !== undefined &&
-        !sameText(
-          current.customerAttestationState,
-          news.customerAttestationState,
-        );
+        !sameText(current.customerAttestationState, news.customerAttestationState);
       const partnerChanged =
         news.channelPartnerId !== undefined &&
         !sameText(current.channelPartnerId, news.channelPartnerId);

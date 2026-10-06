@@ -23,21 +23,16 @@ export class UpgradeObject extends DurableObject<unknown> {
         ON alchemy_scheduled_events (run_at);
     `);
     ctx.blockConcurrencyWhile(async () => {
-      const constructors =
-        (await ctx.storage.get<string[]>("constructors")) ?? [];
+      const constructors = (await ctx.storage.get<string[]>("constructors")) ?? [];
       await ctx.storage.put("constructors", [...constructors, "v1"]);
     });
   }
 
   private reconcileAlarm() {
     const next = this.ctx.storage.sql
-      .exec<{ run_at: number | null }>(
-        "SELECT MIN(run_at) AS run_at FROM alchemy_scheduled_events",
-      )
+      .exec<{ run_at: number | null }>("SELECT MIN(run_at) AS run_at FROM alchemy_scheduled_events")
       .one().run_at;
-    return next === null
-      ? this.ctx.storage.deleteAlarm()
-      : this.ctx.storage.setAlarm(next);
+    return next === null ? this.ctx.storage.deleteAlarm() : this.ctx.storage.setAlarm(next);
   }
 
   async seed(proof = true) {
@@ -74,8 +69,7 @@ export class UpgradeObject extends DurableObject<unknown> {
         now,
       )
       .toArray();
-    const deliveries =
-      (await this.ctx.storage.get<Delivery[]>("deliveries")) ?? [];
+    const deliveries = (await this.ctx.storage.get<Delivery[]>("deliveries")) ?? [];
     for (const event of due) {
       if (event.repeat_ms !== null) {
         this.ctx.storage.sql.exec(
@@ -84,10 +78,7 @@ export class UpgradeObject extends DurableObject<unknown> {
           event.id,
         );
       } else {
-        this.ctx.storage.sql.exec(
-          "DELETE FROM alchemy_scheduled_events WHERE id = ?",
-          event.id,
-        );
+        this.ctx.storage.sql.exec("DELETE FROM alchemy_scheduled_events WHERE id = ?", event.id);
       }
       deliveries.push({
         version: "v1",
@@ -108,9 +99,7 @@ export class UpgradeObject extends DurableObject<unknown> {
       .toArray();
     const schemaRows = schema.some((row) => row.name === "alchemy_alarm_schema")
       ? this.ctx.storage.sql
-          .exec<SchemaVersion>(
-            "SELECT id, version FROM alchemy_alarm_schema ORDER BY id",
-          )
+          .exec<SchemaVersion>("SELECT id, version FROM alchemy_alarm_schema ORDER BY id")
           .toArray()
       : [];
     return {
@@ -120,8 +109,7 @@ export class UpgradeObject extends DurableObject<unknown> {
       version: "v1",
       id: this.ctx.id.toString(),
       marker: (await this.ctx.storage.get<string>("marker")) ?? null,
-      constructors:
-        (await this.ctx.storage.get<string[]>("constructors")) ?? [],
+      constructors: (await this.ctx.storage.get<string[]>("constructors")) ?? [],
       legacyRows: this.ctx.storage.sql
         .exec<LegacyRow>(
           "SELECT id, run_at, repeat_ms, payload FROM alchemy_scheduled_events ORDER BY id",
@@ -146,10 +134,7 @@ export class UpgradeObject extends DurableObject<unknown> {
 }
 
 export default {
-  async fetch(
-    request: Request,
-    env: { UpgradeObject: DurableObjectNamespace<UpgradeObject> },
-  ) {
+  async fetch(request: Request, env: { UpgradeObject: DurableObjectNamespace<UpgradeObject> }) {
     if (
       request.headers.get("x-alarm-worker-version") !== null &&
       request.headers.get("x-alarm-worker-version") !== "v1"

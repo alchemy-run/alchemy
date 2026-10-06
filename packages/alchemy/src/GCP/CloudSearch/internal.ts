@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const DATASOURCE_PREFIX = "datasources/";
@@ -31,9 +27,7 @@ const RESERVED_SHORT_NAMES = new Set([
   "teams",
 ]);
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.CloudSearch.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.CloudSearch.ResourceNotResolved")<{
   name: string;
 }> {}
 
@@ -46,10 +40,8 @@ export const lastSegment = (value: string) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBoolean = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? false) === (right ?? false);
+export const sameBoolean = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -57,12 +49,7 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -70,10 +57,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -94,10 +78,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -125,20 +106,14 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) => {
-  if (
-    Object.keys(parseOwnership(text).labels).some((key) =>
-      key.startsWith("alchemy-"),
-    )
-  ) {
+  if (Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"))) {
     return true;
   }
   return (text ?? "").toLowerCase().includes("alchemy-");
 };
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -148,18 +123,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -183,9 +149,7 @@ export const toGeneratedName = (
       maxLength,
       lowercase: true,
     });
-    const next = /^[a-z]/.test(generated)
-      ? generated
-      : `c${generated}`.slice(0, maxLength);
+    const next = /^[a-z]/.test(generated) ? generated : `c${generated}`.slice(0, maxLength);
     return next.length >= 4 ? next : `${next}xxxx`.slice(0, maxLength);
   });
 
@@ -229,8 +193,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -240,23 +203,18 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
 
 export const toDatasourceName = (value: string) => {
   if (value.length === 0) return value;
-  return value.startsWith(DATASOURCE_PREFIX)
-    ? value
-    : `${DATASOURCE_PREFIX}${value}`;
+  return value.startsWith(DATASOURCE_PREFIX) ? value : `${DATASOURCE_PREFIX}${value}`;
 };
 
 export const datasourceIdOf = (name: string) =>
-  name.startsWith(DATASOURCE_PREFIX)
-    ? name.slice(DATASOURCE_PREFIX.length)
-    : lastSegment(name);
+  name.startsWith(DATASOURCE_PREFIX) ? name.slice(DATASOURCE_PREFIX.length) : lastSegment(name);
 
 export const toSearchApplicationName = (value: string) => {
   if (value.length === 0) return value;
@@ -286,8 +244,7 @@ const stringField = (value: unknown, key: string): string | undefined => {
 };
 
 export const operationResourceName = (operation: cloudsearch.Operation) =>
-  stringField(operation.response, "name") ??
-  stringField(operation.metadata, "name");
+  stringField(operation.response, "name") ?? stringField(operation.metadata, "name");
 
 /** Wait for an operation through the shared GCP waiter. */
 export const waitForOperation = (
@@ -346,9 +303,7 @@ export const waitUntilExists = <A, E, R>(
 export const getDatasource = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : catchMissing(
-        cloudsearch.getSettingsDatasources({ name: toDatasourceName(name) }),
-      );
+    : catchMissing(cloudsearch.getSettingsDatasources({ name: toDatasourceName(name) }));
 
 export const listDatasources = () =>
   cloudsearch.listSettingsDatasources.pages({ pageSize: 1000 }).pipe(
@@ -360,9 +315,7 @@ export const listDatasources = () =>
 
 export const listOwnedDatasources = () =>
   listDatasources().pipe(
-    Effect.map((sources) =>
-      sources.filter((source) => hasOwnershipMarker(source.displayName)),
-    ),
+    Effect.map((sources) => sources.filter((source) => hasOwnershipMarker(source.displayName))),
   );
 
 export const findOwnedDatasource = (id: string) =>
@@ -387,21 +340,15 @@ export const getSearchApplication = (name: string) =>
 
 export const listSearchApplications = () =>
   cloudsearch.listSettingsSearchapplications.pages({ pageSize: 100 }).pipe(
-    Stream.flatMap((page) =>
-      Stream.fromIterable(page.searchApplications ?? []),
-    ),
+    Stream.flatMap((page) => Stream.fromIterable(page.searchApplications ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound", () =>
-      emptyList<cloudsearch.SearchApplication>(),
-    ),
+    Effect.catchTag("NotFound", () => emptyList<cloudsearch.SearchApplication>()),
   );
 
 export const listOwnedSearchApplications = () =>
   listSearchApplications().pipe(
-    Effect.map((apps) =>
-      apps.filter((app) => hasOwnershipMarker(app.displayName)),
-    ),
+    Effect.map((apps) => apps.filter((app) => hasOwnershipMarker(app.displayName))),
   );
 
 export const findOwnedSearchApplication = (id: string) =>
@@ -417,9 +364,7 @@ export const findOwnedSearchApplication = (id: string) =>
 
 export const findDatasourceByDisplayName = (displayName: string) =>
   listDatasources().pipe(
-    Effect.map((sources) =>
-      sources.find((source) => source.displayName === displayName),
-    ),
+    Effect.map((sources) => sources.find((source) => source.displayName === displayName)),
   );
 
 export const findSearchApplicationByDisplayName = (displayName: string) =>

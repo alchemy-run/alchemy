@@ -11,7 +11,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
   encodeOwnership,
   hasOwnershipMarker,
@@ -21,6 +20,7 @@ import {
   parseResourceName,
   rfc1035,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
 export type CachedContentPart = {
@@ -149,9 +149,7 @@ export type CachedContent = Resource<
  * @resource
  * @category AIPlatform
  */
-export const CachedContent = Resource<CachedContent>(
-  "GCP.AIPlatform.CachedContent",
-);
+export const CachedContent = Resource<CachedContent>("GCP.AIPlatform.CachedContent");
 
 export class CachedContentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.CachedContentNotResolved",
@@ -171,10 +169,7 @@ const toContents = (
   }));
 };
 
-const toAttrs = (
-  cache: aiplatform.GoogleCloudAiplatformV1CachedContent,
-  project: string,
-) => {
+const toAttrs = (cache: aiplatform.GoogleCloudAiplatformV1CachedContent, project: string) => {
   const name = cache.name ?? "";
   const parsed = parseResourceName(name, "cachedContents");
   const ownership = parseOwnership(cache.displayName);
@@ -200,15 +195,11 @@ const getByName = (name: string) =>
 
 const listCaches = (project: string, region: string) => {
   const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsCachedContents
-      .pages({ parent, pageSize: 100 })
-      .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.cachedContents ?? []),
-        ),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    aiplatform.listProjectsLocationsCachedContents.pages({ parent, pageSize: 100 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.cachedContents ?? [])),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
@@ -216,12 +207,7 @@ const listCaches = (project: string, region: string) => {
   return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
-const findOwned = (
-  id: string,
-  project: string,
-  region: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, region: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -232,9 +218,7 @@ const findOwned = (
       const { labels } = parseOwnership(cache.displayName);
       if (yield* hasAlchemyLabels(id, labels)) return cache;
     }
-    return undefined as
-      | aiplatform.GoogleCloudAiplatformV1CachedContent
-      | undefined;
+    return undefined as aiplatform.GoogleCloudAiplatformV1CachedContent | undefined;
   });
 
 const fallbackDisplayName = (id: string) =>
@@ -250,29 +234,18 @@ const fallbackDisplayName = (id: string) =>
 
 export const CachedContentProvider = () =>
   Provider.succeed(CachedContent, {
-    stables: [
-      "name",
-      "cachedContentId",
-      "project",
-      "location",
-      "model",
-      "createTime",
-    ],
+    stables: ["name", "cachedContentId", "project", "location", "model", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const previousModel = olds?.model ?? output?.model ?? "";
-      const previousKey =
-        olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
+      const previousKey = olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKey = news.encryptionSpec?.kmsKeyName ?? previousKey;
       const replace =
         previousLocation !== nextLocation ||
@@ -284,12 +257,7 @@ export const CachedContentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* findOwned(
-        id,
-        env.project,
-        env.region,
-        output?.name,
-      );
+      const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseOwnership(existing.displayName);
@@ -307,10 +275,7 @@ export const CachedContentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const internal = yield* createInternalLabels(id);
       const desiredDisplayName = encodeOwnership(
         internal,
@@ -343,9 +308,7 @@ export const CachedContentProvider = () =>
               times: 4,
               schedule: Schedule.spaced("3 seconds"),
             }),
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, env.region),
-            ),
+            Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)),
           );
         current = created ?? undefined;
       }
@@ -359,8 +322,7 @@ export const CachedContentProvider = () =>
       const name = current.name ?? "";
       const ttlChanged = news.ttl !== undefined && news.ttl.length > 0;
       const expireChanged =
-        news.expireTime !== undefined &&
-        news.expireTime !== (current.expireTime ?? "");
+        news.expireTime !== undefined && news.expireTime !== (current.expireTime ?? "");
 
       if (ttlChanged || expireChanged) {
         current = yield* aiplatform.patchProjectsLocationsCachedContents({

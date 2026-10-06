@@ -10,9 +10,7 @@ export interface GetParameterVersionRequest {
    * `BASIC` returns metadata only.
    * @default "FULL"
    */
-  view?:
-    | parametermanager.GetProjectsLocationsParametersVersionsViewEnum
-    | (string & {});
+  view?: parametermanager.GetProjectsLocationsParametersVersionsViewEnum | (string & {});
 }
 
 /**

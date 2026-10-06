@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gkeonprem from "@distilled.cloud/gcp/gkeonprem_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   missingMembership,
   currentProject,
@@ -17,10 +17,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   gkeonprem.getProjectsLocationsVmwareClusters({ name }).pipe(
@@ -94,8 +91,7 @@ test.provider.skipIf(!runVmwareLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.GKEOnPrem.VmwareCluster("Workload", {
-            adminClusterMembership:
-              vmwareAdminMembership ?? missingMembership(project),
+            adminClusterMembership: vmwareAdminMembership ?? missingMembership(project),
             onPremVersion: "1.28.0-gke.1",
             controlPlaneNode: vmwareControlPlane,
             networkConfig: vmwareNetwork,
@@ -124,9 +120,7 @@ test.provider.skipIf(!runVmwareLifecycle)(
             vmwareClusterId: created.vmwareClusterId,
             location: created.location,
             adminClusterMembership:
-              created.adminClusterMembership ??
-              vmwareAdminMembership ??
-              missingMembership(project),
+              created.adminClusterMembership ?? vmwareAdminMembership ?? missingMembership(project),
             onPremVersion: created.onPremVersion ?? "1.28.0-gke.1",
             controlPlaneNode: created.controlPlaneNode ?? vmwareControlPlane,
             networkConfig: created.networkConfig ?? vmwareNetwork,

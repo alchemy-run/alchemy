@@ -32,17 +32,13 @@ export interface DescribeStackResourceDrifts extends Binding.Service<
     stack: Stack,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        cloudformation.DescribeStackResourceDriftsInput,
-        "StackName"
-      >,
+      request?: Omit<cloudformation.DescribeStackResourceDriftsInput, "StackName">,
     ) => Effect.Effect<
       cloudformation.DescribeStackResourceDriftsOutput,
       cloudformation.DescribeStackResourceDriftsError
     >
   >
 > {}
-export const DescribeStackResourceDrifts =
-  Binding.Service<DescribeStackResourceDrifts>(
-    "AWS.CloudFormation.DescribeStackResourceDrifts",
-  );
+export const DescribeStackResourceDrifts = Binding.Service<DescribeStackResourceDrifts>(
+  "AWS.CloudFormation.DescribeStackResourceDrifts",
+);

@@ -192,14 +192,10 @@ const listConfigs = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.reportConfigs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.reportConfigs ?? [])),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.ReportConfig[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.ReportConfig[])),
           ),
       ),
     );
@@ -220,14 +216,7 @@ const listOwned = (project: string, region: string) =>
 
 export const ReportConfigsReportProvider = () =>
   Provider.succeed(ReportConfigsReport, {
-    stables: [
-      "name",
-      "reportId",
-      "reportConfig",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "reportId", "reportConfig", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -246,10 +235,7 @@ export const ReportConfigsReportProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.reportId ?? output?.reportId,
         nextId: news.reportId ?? olds?.reportId ?? output?.reportId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -262,30 +248,19 @@ export const ReportConfigsReportProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const reportConfig = configNameOf(
         olds?.reportConfig ?? output?.reportConfig ?? "",
         env.project,
         location,
       );
-      const reportId = yield* toPhysicalId(
-        id,
-        olds?.reportId,
-        output?.reportId,
-        "report",
-      );
+      const reportId = yield* toPhysicalId(id, olds?.reportId, output?.reportId, "report");
       const name =
-        output?.name ??
-        (reportConfig.length > 0 ? resourceName(reportConfig, reportId) : "");
+        output?.name ?? (reportConfig.length > 0 ? resourceName(reportConfig, reportId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -297,21 +272,9 @@ export const ReportConfigsReportProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const reportConfig = configNameOf(
-        news.reportConfig,
-        env.project,
-        location,
-      );
-      const reportId = yield* toPhysicalId(
-        id,
-        news.reportId,
-        output?.reportId,
-        "report",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const reportConfig = configNameOf(news.reportConfig, env.project, location);
+      const reportId = yield* toPhysicalId(id, news.reportId, output?.reportId, "report");
       const name = resourceName(reportConfig, reportId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

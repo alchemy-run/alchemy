@@ -201,11 +201,8 @@ export type Deployment = Resource<
  */
 export const Deployment = Resource<Deployment>("GCP.ApiHub.Deployment");
 
-const resourceName = (
-  project: string,
-  location: string,
-  deploymentId: string,
-) => `${locationParent(project, location)}/deployments/${deploymentId}`;
+const resourceName = (project: string, location: string, deploymentId: string) =>
+  `${locationParent(project, location)}/deployments/${deploymentId}`;
 
 const toAttrs = (
   deployment: apihub.GoogleCloudApihubV1Deployment,
@@ -248,16 +245,14 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  apihub.listProjectsLocationsDeployments
-    .pages({ parent, pageSize: 1000 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.deployments ?? [])),
-      Stream.filter((item) => hasOwnershipMarker(item.description)),
-      Stream.map((item) => toAttrs(item, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  apihub.listProjectsLocationsDeployments.pages({ parent, pageSize: 1000 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.deployments ?? [])),
+    Stream.filter((item) => hasOwnershipMarker(item.description)),
+    Stream.map((item) => toAttrs(item, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const toBody = (
   news: DeploymentProps,
@@ -289,10 +284,7 @@ export const DeploymentProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.deploymentId ?? output?.deploymentId,
         nextId: news.deploymentId ?? olds?.deploymentId ?? output?.deploymentId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -308,36 +300,23 @@ export const DeploymentProvider = () =>
         output?.deploymentId,
         MAX_LONG_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, deploymentId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, deploymentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-          env.region,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const deploymentId = yield* toPhysicalId(
         id,
         news.deploymentId,
@@ -371,37 +350,19 @@ export const DeploymentProvider = () =>
       const observed = parseOwnership(current.description).text;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(observed, news.description);
-      const documentationChanged = !sameJson(
-        current.documentation,
-        news.documentation,
-      );
+      const documentationChanged = !sameJson(current.documentation, news.documentation);
       const typeChanged = !sameJson(
         current.deploymentType,
         news.deploymentType ?? DEFAULT_DEPLOYMENT_TYPE,
       );
       const uriChanged = !sameText(current.resourceUri, news.resourceUri);
-      const endpointsChanged = !sameStringList(
-        current.endpoints,
-        news.endpoints,
-      );
+      const endpointsChanged = !sameStringList(current.endpoints, news.endpoints);
       const sloChanged = !sameJson(current.slo, news.slo);
-      const environmentChanged = !sameJson(
-        current.environment,
-        news.environment,
-      );
+      const environmentChanged = !sameJson(current.environment, news.environment);
       const attributesChanged = !sameJson(current.attributes, news.attributes);
-      const sourceProjectChanged = !sameText(
-        current.sourceProject,
-        news.sourceProject,
-      );
-      const sourceEnvironmentChanged = !sameText(
-        current.sourceEnvironment,
-        news.sourceEnvironment,
-      );
-      const managementUrlChanged = !sameJson(
-        current.managementUrl,
-        news.managementUrl,
-      );
+      const sourceProjectChanged = !sameText(current.sourceProject, news.sourceProject);
+      const sourceEnvironmentChanged = !sameText(current.sourceEnvironment, news.sourceEnvironment);
+      const managementUrlChanged = !sameJson(current.managementUrl, news.managementUrl);
       const sourceUriChanged = !sameJson(current.sourceUri, news.sourceUri);
 
       const updateMask = updateMaskOf(

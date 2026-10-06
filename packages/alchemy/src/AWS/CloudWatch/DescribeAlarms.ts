@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { AlarmResource } from "./binding-common.ts";
 
-export interface DescribeAlarmsRequest extends Omit<
-  cloudwatch.DescribeAlarmsInput,
-  "AlarmNames"
-> {}
+export interface DescribeAlarmsRequest extends Omit<cloudwatch.DescribeAlarmsInput, "AlarmNames"> {}
 
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
@@ -47,12 +44,8 @@ export interface DescribeAlarms extends Binding.Service<
   (
     ...alarms: AlarmResources
   ) => Effect.Effect<
-    (
-      request?: DescribeAlarmsRequest,
-    ) => Effect.Effect<cloudwatch.DescribeAlarmsOutput, any>
+    (request?: DescribeAlarmsRequest) => Effect.Effect<cloudwatch.DescribeAlarmsOutput, any>
   >
 > {}
 
-export const DescribeAlarms = Binding.Service<DescribeAlarms>(
-  "AWS.CloudWatch.DescribeAlarms",
-);
+export const DescribeAlarms = Binding.Service<DescribeAlarms>("AWS.CloudWatch.DescribeAlarms");

@@ -1,17 +1,13 @@
 import * as Effect from "effect/Effect";
-import type { Instance } from "./Instance.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Instance } from "./Instance.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud Spanner instance bindings.
  * NOT exported from index.ts.
  */
-export const makeSpannerInstanceHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeSpannerInstanceHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

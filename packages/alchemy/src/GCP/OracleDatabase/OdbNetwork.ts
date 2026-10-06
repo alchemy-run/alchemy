@@ -121,11 +121,8 @@ export type OdbNetwork = Resource<
  */
 export const OdbNetwork = Resource<OdbNetwork>("GCP.OracleDatabase.OdbNetwork");
 
-const resourceName = (
-  project: string,
-  location: string,
-  odbNetworkId: string,
-) => `projects/${project}/locations/${location}/odbNetworks/${odbNetworkId}`;
+const resourceName = (project: string, location: string, odbNetworkId: string) =>
+  `projects/${project}/locations/${location}/odbNetworks/${odbNetworkId}`;
 
 const toAttrs = (network: oracle.OdbNetwork, project: string) => {
   const name = network.name ?? "";
@@ -153,15 +150,13 @@ const getByName = (name: string) =>
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
-    oracle.listProjectsLocationsOdbNetworks
-      .pages({ parent, pageSize: 1000 })
-      .pipe(
-        Stream.flatMap((page) => Stream.fromIterable(page.odbNetworks ?? [])),
-        Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-      ),
+    oracle.listProjectsLocationsOdbNetworks.pages({ parent, pageSize: 1000 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.odbNetworks ?? [])),
+      Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
+    ),
   );
 
 export const OdbNetworkProvider = () =>
@@ -180,9 +175,7 @@ export const OdbNetworkProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousNetwork = lastSegment(
-        olds?.network ?? output?.network ?? DEFAULT_NETWORK,
-      );
+      const previousNetwork = lastSegment(olds?.network ?? output?.network ?? DEFAULT_NETWORK);
       const nextNetwork = lastSegment(
         news.network ?? olds?.network ?? output?.network ?? DEFAULT_NETWORK,
       );
@@ -191,9 +184,7 @@ export const OdbNetworkProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.odbNetworkId ?? output?.odbNetworkId,
         nextId: news.odbNetworkId ?? olds?.odbNetworkId ?? output?.odbNetworkId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -209,17 +200,12 @@ export const OdbNetworkProvider = () =>
         output?.odbNetworkId,
         "odbnetwork",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, odbNetworkId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, odbNetworkId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -237,9 +223,7 @@ export const OdbNetworkProvider = () =>
         output?.odbNetworkId,
         "odbnetwork",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, odbNetworkId);
       const network = networkName(env.project, news.network);
       const desiredLabels = {

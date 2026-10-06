@@ -8,11 +8,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 63;
@@ -161,9 +157,7 @@ export type Policy = Resource<
  */
 export const Policy = Resource<Policy>("GCP.DNS.Policy");
 
-export class PolicyNotResolved extends Data.TaggedError(
-  "GCP.DNS.PolicyNotResolved",
-)<{
+export class PolicyNotResolved extends Data.TaggedError("GCP.DNS.PolicyNotResolved")<{
   policyName: string;
 }> {}
 
@@ -187,11 +181,9 @@ const toNetworkUrl = (project: string, network: string) => {
 };
 
 const desiredNetworks = (project: string, networks: string[] | undefined) =>
-  [
-    ...new Set(
-      (networks ?? []).map((network) => toNetworkUrl(project, network)),
-    ),
-  ].sort((left, right) => lastSegment(left).localeCompare(lastSegment(right)));
+  [...new Set((networks ?? []).map((network) => toNetworkUrl(project, network)))].sort(
+    (left, right) => lastSegment(left).localeCompare(lastSegment(right)),
+  );
 
 const observedNetworks = (policy: dns.Policy) =>
   (policy.networks ?? [])
@@ -201,9 +193,7 @@ const observedNetworks = (policy: dns.Policy) =>
 
 const sameNetworks = (left: string[], right: string[]) =>
   left.length === right.length &&
-  left.every(
-    (url, index) => lastSegment(url) === lastSegment(right[index] ?? ""),
-  );
+  left.every((url, index) => lastSegment(url) === lastSegment(right[index] ?? ""));
 
 const desiredNameServers = (
   servers: PolicyAlternativeNameServer[] | undefined,
@@ -214,26 +204,19 @@ const desiredNameServers = (
     forwardingPath: server.forwardingPath,
   }));
 
-const observedNameServers = (
-  policy: dns.Policy,
-): PolicyAlternativeNameServer[] =>
-  (policy.alternativeNameServerConfig?.targetNameServers ?? []).map(
-    (server) => ({
-      ipv4Address: server.ipv4Address,
-      ipv6Address: server.ipv6Address,
-      forwardingPath: server.forwardingPath,
-    }),
-  );
+const observedNameServers = (policy: dns.Policy): PolicyAlternativeNameServer[] =>
+  (policy.alternativeNameServerConfig?.targetNameServers ?? []).map((server) => ({
+    ipv4Address: server.ipv4Address,
+    ipv6Address: server.ipv6Address,
+    forwardingPath: server.forwardingPath,
+  }));
 
 const sameNameServers = (
   left: PolicyAlternativeNameServer[],
   right: PolicyAlternativeNameServer[],
 ) => JSON.stringify(left) === JSON.stringify(right);
 
-const encodeDescription = (
-  internal: Record<string, string>,
-  user?: string,
-): string => {
+const encodeDescription = (internal: Record<string, string>, user?: string): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${internal[alchemyLabelKeys.stack] ?? ""} ${alchemyLabelKeys.stage}=${internal[alchemyLabelKeys.stage] ?? ""} ${alchemyLabelKeys.id}=${internal[alchemyLabelKeys.id] ?? ""}]`;
   return user && user.length > 0 ? `${marker}\n${user}` : marker;
 };
@@ -259,15 +242,9 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasAlchemyMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toPolicyName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const toPolicyName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
@@ -326,11 +303,7 @@ export const PolicyProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousName = olds?.policyName ?? output?.policyName;
       const nextName = news.policyName ?? previousName;
-      if (
-        previousName === undefined ||
-        nextName === undefined ||
-        nextName === previousName
-      ) {
+      if (previousName === undefined || nextName === undefined || nextName === previousName) {
         return undefined;
       }
       // A VPC may belong to only one server policy, so the old policy
@@ -341,18 +314,12 @@ export const PolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyName = yield* toPolicyName(
-        id,
-        olds?.policyName,
-        output?.policyName,
-      );
+      const policyName = yield* toPolicyName(id, olds?.policyName, output?.policyName);
       const existing = yield* getByName(env.project, policyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -379,11 +346,7 @@ export const PolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const policyName = yield* toPolicyName(
-        id,
-        news.policyName,
-        output?.policyName,
-      );
+      const policyName = yield* toPolicyName(id, news.policyName, output?.policyName);
       const enableInboundForwarding = news.enableInboundForwarding === true;
       const enableLogging = news.enableLogging === true;
       const enableDns64 = news.enableDns64 === true;
@@ -404,16 +367,11 @@ export const PolicyProvider = () =>
               enableInboundForwarding,
               enableLogging,
               networks: networks.map((networkUrl) => ({ networkUrl })),
-              alternativeNameServerConfig:
-                alternativeNameServerConfig(nameServers),
+              alternativeNameServerConfig: alternativeNameServerConfig(nameServers),
               dns64Config: dns64Config(enableDns64),
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, policyName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(env.project, policyName)));
         current = created ?? undefined;
       }
 
@@ -421,21 +379,12 @@ export const PolicyProvider = () =>
         return yield* new PolicyNotResolved({ policyName });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const inboundChanged =
-        (current.enableInboundForwarding === true) !== enableInboundForwarding;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const inboundChanged = (current.enableInboundForwarding === true) !== enableInboundForwarding;
       const loggingChanged = (current.enableLogging === true) !== enableLogging;
-      const dns64Changed =
-        (current.dns64Config?.scope?.allQueries === true) !== enableDns64;
-      const networksChanged = !sameNetworks(
-        observedNetworks(current),
-        networks,
-      );
-      const nameServersChanged = !sameNameServers(
-        observedNameServers(current),
-        nameServers,
-      );
+      const dns64Changed = (current.dns64Config?.scope?.allQueries === true) !== enableDns64;
+      const networksChanged = !sameNetworks(observedNetworks(current), networks);
+      const nameServersChanged = !sameNameServers(observedNameServers(current), nameServers);
 
       if (
         descriptionChanged ||
@@ -473,10 +422,7 @@ export const PolicyProvider = () =>
           policy: policyName,
           body,
         });
-        current =
-          patched.policy ??
-          (yield* getByName(env.project, policyName)) ??
-          current;
+        current = patched.policy ?? (yield* getByName(env.project, policyName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -504,8 +450,7 @@ export const PolicyProvider = () =>
           () => detach.pipe(Effect.andThen(attempt)),
         ),
         Effect.retry({
-          while: (error) =>
-            error._tag === "Conflict" || error._tag === "BadRequest",
+          while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),

@@ -120,9 +120,7 @@ export type Ruleset = Resource<
  */
 export const Ruleset = Resource<Ruleset>("GCP.FirebaseRules.Ruleset");
 
-export class RulesetNotResolved extends Data.TaggedError(
-  "GCP.FirebaseRules.RulesetNotResolved",
-)<{
+export class RulesetNotResolved extends Data.TaggedError("GCP.FirebaseRules.RulesetNotResolved")<{
   name: string;
 }> {}
 
@@ -147,8 +145,7 @@ export const RulesetProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const sourceChanged =
-        sourceFingerprint(news.source.files) !==
-        sourceFingerprint(output.source.files);
+        sourceFingerprint(news.source.files) !== sourceFingerprint(output.source.files);
       const attachmentChanged =
         news.attachmentPoint !== undefined &&
         (news.attachmentPoint ?? "") !== (output.attachmentPoint ?? "");
@@ -160,17 +157,11 @@ export const RulesetProvider = () =>
       const env = yield* GcpEnvironment.current;
       let existing = yield* getRuleset(output?.name ?? "");
       if (existing === undefined) {
-        existing = yield* findOwnedRuleset(
-          yield* listFullRulesets(env.project),
-          id,
-          output?.name,
-        );
+        existing = yield* findOwnedRuleset(yield* listFullRulesets(env.project), id, output?.name);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.source))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.source)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -199,8 +190,7 @@ export const RulesetProvider = () =>
         if (
           found !== undefined &&
           (output?.name === found.name ||
-            (sourceFingerprint(found.source?.files) ===
-              sourceFingerprint(news.source.files) &&
+            (sourceFingerprint(found.source?.files) === sourceFingerprint(news.source.files) &&
               sameText(found.attachmentPoint, news.attachmentPoint)))
         ) {
           current = found;
@@ -219,9 +209,7 @@ export const RulesetProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               listFullRulesets(env.project).pipe(
-                Effect.flatMap((rulesets) =>
-                  findOwnedRuleset(rulesets, id, undefined),
-                ),
+                Effect.flatMap((rulesets) => findOwnedRuleset(rulesets, id, undefined)),
               ),
             ),
           );

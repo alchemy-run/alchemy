@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import type {
-  SecurityGroupArn,
-  SecurityGroupId,
-  SecurityGroupRuleData,
-} from "./SecurityGroup.ts";
+import type { SecurityGroupArn, SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 import {
   declaredSecurityGroupRuleIds,
   expandSecurityGroupRules,
@@ -22,9 +18,9 @@ import {
 } from "./SecurityGroupRule.ts";
 import type { VpcId } from "./Vpc.ts";
 
-class DefaultSecurityGroupNotFound extends Data.TaggedError(
-  "DefaultSecurityGroupNotFound",
-)<{ vpcId: VpcId }> {}
+class DefaultSecurityGroupNotFound extends Data.TaggedError("DefaultSecurityGroupNotFound")<{
+  vpcId: VpcId;
+}> {}
 
 class InvalidDefaultSecurityGroupRules extends Data.TaggedError(
   "InvalidDefaultSecurityGroupRules",
@@ -242,9 +238,7 @@ export interface DefaultSecurityGroup extends Resource<
  *
  * @resource
  */
-export const DefaultSecurityGroup = Resource<DefaultSecurityGroup>(
-  "AWS.EC2.DefaultSecurityGroup",
-);
+export const DefaultSecurityGroup = Resource<DefaultSecurityGroup>("AWS.EC2.DefaultSecurityGroup");
 
 export const DefaultSecurityGroupProvider = () =>
   Provider.effect(
@@ -298,9 +292,7 @@ export const DefaultSecurityGroupProvider = () =>
           description: group.Description!,
           vpcId: group.VpcId as VpcId,
           ownerId: group.OwnerId!,
-          ingressRules: rules
-            .filter((rule) => !rule.IsEgress)
-            .map(toRule(false)),
+          ingressRules: rules.filter((rule) => !rule.IsEgress).map(toRule(false)),
           egressRules: rules.filter((rule) => rule.IsEgress).map(toRule(true)),
         } satisfies DefaultSecurityGroup["Attributes"];
       });
@@ -323,19 +315,14 @@ export const DefaultSecurityGroupProvider = () =>
           : undefined,
       });
 
-      const desiredRules = Effect.fn(function* (
-        rules: SecurityGroupRuleData[],
-      ) {
+      const desiredRules = Effect.fn(function* (rules: SecurityGroupRuleData[]) {
         if (
           rules.some(
             (rule) =>
               !rule.ipProtocol ||
-              ![
-                rule.cidrIpv4,
-                rule.cidrIpv6,
-                rule.referencedGroupId,
-                rule.prefixListId,
-              ].some(Boolean),
+              ![rule.cidrIpv4, rule.cidrIpv6, rule.referencedGroupId, rule.prefixListId].some(
+                Boolean,
+              ),
           )
         ) {
           return yield* new InvalidDefaultSecurityGroupRules({
@@ -346,10 +333,7 @@ export const DefaultSecurityGroupProvider = () =>
         for (const rule of expandSecurityGroupRules(rules)) {
           const key = securityGroupRuleKey({ ...rule, description: undefined });
           const previous = desired.get(key);
-          if (
-            previous &&
-            securityGroupRuleKey(previous) !== securityGroupRuleKey(rule)
-          ) {
+          if (previous && securityGroupRuleKey(previous) !== securityGroupRuleKey(rule)) {
             return yield* new InvalidDefaultSecurityGroupRules({
               message: "Duplicate rules must have the same description.",
             });
@@ -368,9 +352,8 @@ export const DefaultSecurityGroupProvider = () =>
           const observed = rules.filter((rule) => !!rule.IsEgress === isEgress);
           const desired = [...(isEgress ? egress : ingress).values()];
           return (
-            JSON.stringify(
-              observed.map(observedSecurityGroupRuleKey).sort(),
-            ) === JSON.stringify(desired.map(securityGroupRuleKey).sort())
+            JSON.stringify(observed.map(observedSecurityGroupRuleKey).sort()) ===
+            JSON.stringify(desired.map(securityGroupRuleKey).sort())
           );
         });
 
@@ -399,10 +382,7 @@ export const DefaultSecurityGroupProvider = () =>
               else yield* ec2.revokeSecurityGroupIngress(request);
             }).pipe(
               Effect.catchTag(
-                [
-                  "InvalidPermission.NotFound",
-                  "InvalidSecurityGroupRuleId.NotFound",
-                ],
+                ["InvalidPermission.NotFound", "InvalidSecurityGroupRuleId.NotFound"],
                 () => Effect.void,
               ),
             );
@@ -428,9 +408,7 @@ export const DefaultSecurityGroupProvider = () =>
               })
               .pipe(
                 Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () =>
-                  Effect.fail(
-                    new DefaultSecurityGroupRulesNotConverged({ groupId }),
-                  ),
+                  Effect.fail(new DefaultSecurityGroupRulesNotConverged({ groupId })),
                 ),
               );
           }
@@ -449,9 +427,7 @@ export const DefaultSecurityGroupProvider = () =>
           ).pipe(
             // Re-observe a racing authorization rather than assuming its description.
             Effect.catchTag("InvalidPermission.Duplicate", () =>
-              Effect.fail(
-                new DefaultSecurityGroupRulesNotConverged({ groupId }),
-              ),
+              Effect.fail(new DefaultSecurityGroupRulesNotConverged({ groupId })),
             ),
           );
         }
@@ -465,28 +441,17 @@ export const DefaultSecurityGroupProvider = () =>
           if (!vpcId) return undefined;
           const group = yield* describeGroup(vpcId);
           if (!group?.GroupId) return undefined;
-          return yield* toAttrs(
-            group,
-            yield* describeRules(group.GroupId as SecurityGroupId),
-          );
+          return yield* toAttrs(group, yield* describeRules(group.GroupId as SecurityGroupId));
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           // An unresolved VPC must not expose the previous group's stable identity.
-          if (
-            !("vpcId" in news) ||
-            !isResolved(news.vpcId) ||
-            news.vpcId !== olds.vpcId
-          ) {
+          if (!("vpcId" in news) || !isResolved(news.vpcId) || news.vpcId !== olds.vpcId) {
             return { action: "replace" };
           }
           if (!isResolved(news.ingress) || !isResolved(news.egress)) return;
-          const ingress = yield* desiredRules(
-            resolveSecurityGroupRules(news.ingress, false),
-          );
-          const egress = yield* desiredRules(
-            resolveSecurityGroupRules(news.egress, true),
-          );
+          const ingress = yield* desiredRules(resolveSecurityGroupRules(news.ingress, false));
+          const egress = yield* desiredRules(resolveSecurityGroupRules(news.egress, true));
           const group = yield* describeGroup(news.vpcId);
           if (!group?.GroupId) return { action: "update", stables: [] };
           const groupId = group.GroupId as SecurityGroupId;
@@ -494,25 +459,18 @@ export const DefaultSecurityGroupProvider = () =>
           const observed = (yield* describeRules(groupId)).filter(
             (rule) => !owned.has(rule.SecurityGroupRuleId!),
           );
-          if (!rulesMatch(observed, ingress, egress))
-            return { action: "update" };
+          if (!rulesMatch(observed, ingress, egress)) return { action: "update" };
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
           // Validate both directions before changing either one.
-          const ingress = yield* desiredRules(
-            resolveSecurityGroupRules(news.ingress, false),
-          );
-          const egress = yield* desiredRules(
-            resolveSecurityGroupRules(news.egress, true),
-          );
+          const ingress = yield* desiredRules(resolveSecurityGroupRules(news.ingress, false));
+          const egress = yield* desiredRules(resolveSecurityGroupRules(news.egress, true));
           const group = yield* describeGroup(news.vpcId).pipe(
             Effect.flatMap((group) =>
               group?.GroupId
                 ? Effect.succeed(group)
-                : Effect.fail(
-                    new DefaultSecurityGroupNotFound({ vpcId: news.vpcId }),
-                  ),
+                : Effect.fail(new DefaultSecurityGroupNotFound({ vpcId: news.vpcId })),
             ),
             // AWS may expose the VPC before its default group is visible.
             Effect.retry({
@@ -550,8 +508,7 @@ export const DefaultSecurityGroupProvider = () =>
             return final;
           }).pipe(
             Effect.retry({
-              while: (error) =>
-                error._tag === "DefaultSecurityGroupRulesNotConverged",
+              while: (error) => error._tag === "DefaultSecurityGroupRulesNotConverged",
               schedule: Schedule.spaced("1 second"),
               times: 8,
             }),

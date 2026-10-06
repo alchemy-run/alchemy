@@ -1,33 +1,24 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "tanstack-dev-bindings-fixture",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "tanstack-dev-bindings-fixture");
 
 // Vite project roots must stay reachable via a sane relative path from the
 // process cwd (see Vite.test.ts) — clone under the package's own `.tmp/`.
@@ -64,13 +55,7 @@ describe.concurrent(
           const rootDir = yield* cloneFixture(fixtureDir, {
             prefix: "alchemy-tanstack-live-",
             tempRoot,
-            entries: [
-              "alchemy.run.ts",
-              "package.json",
-              "tsconfig.json",
-              "vite.config.ts",
-              "src",
-            ],
+            entries: ["alchemy.run.ts", "package.json", "tsconfig.json", "vite.config.ts", "src"],
           });
           const memoInclude = [
             "src/**",
@@ -90,20 +75,14 @@ describe.concurrent(
               const site = yield* Cloudflare.Website.Vite("TanStackStartLive", {
                 rootDir,
                 workersDev: true,
-                compatibility: {
-                  date: "2024-09-23",
-                  flags: ["nodejs_compat"],
-                },
+                compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
                 // No `assets` config (mirroring the Vite resource's TanStack
                 // example): client assets serve asset-first from the asset
                 // layer, everything else (SSR routes, /api/*) falls through
                 // to the TanStack server handler. `runWorkerFirst: true`
                 // would route `/assets/*` into the worker, which 404s them.
                 memo: { include: memoInclude },
-                env: {
-                  BUCKET: bucket,
-                  DEV_MARKER: marker,
-                },
+                env: { BUCKET: bucket, DEV_MARKER: marker },
               });
               return { site, bucket };
             }),
@@ -132,10 +111,7 @@ describe.concurrent(
           // The env binding reached the server route.
           expect(put.marker).toBe(marker);
 
-          const get = yield* fetchJsonReady<{
-            marker: string;
-            value: string | null;
-          }>(r2Url);
+          const get = yield* fetchJsonReady<{ marker: string; value: string | null }>(r2Url);
           expect(get.value).toBe("tanstack-live-value");
           expect(get.marker).toBe(marker);
 
@@ -151,9 +127,7 @@ describe.concurrent(
   },
 );
 
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
-);
+const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
 
 const fetchJsonReady = <T>(url: string) =>
   Effect.gen(function* () {
@@ -171,10 +145,7 @@ const fetchJsonReady = <T>(url: string) =>
       ),
       Effect.retry({
         // Capped interval, ~90s total budget (workers.dev / DO propagation).
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
@@ -183,9 +154,7 @@ const fetchJsonReady = <T>(url: string) =>
 const putTextJsonReady = <T>(url: string, body: string) =>
   Effect.gen(function* () {
     return yield* HttpClient.execute(
-      HttpClientRequest.put(url).pipe(
-        HttpClientRequest.bodyText(body, "text/plain"),
-      ),
+      HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText(body, "text/plain")),
     ).pipe(
       Effect.flatMap((res) =>
         res.status === 200
@@ -199,10 +168,7 @@ const putTextJsonReady = <T>(url: string, body: string) =>
       ),
       Effect.retry({
         // Capped interval, ~90s total budget (workers.dev / DO propagation).
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 45,
       }),
     );
@@ -235,9 +201,7 @@ const expectClientScriptServes = (siteUrl: string) =>
       const body = yield* assetRes.text;
       if (!contentType.includes("javascript") || body.includes("<html")) {
         return yield* Effect.fail(
-          new Error(
-            `asset ${match[1]} did not serve as JS: ${contentType} ${body.slice(0, 120)}`,
-          ),
+          new Error(`asset ${match[1]} did not serve as JS: ${contentType} ${body.slice(0, 120)}`),
         );
       }
     }).pipe(
@@ -251,29 +215,18 @@ const expectClientScriptServes = (siteUrl: string) =>
     );
   });
 
-const waitForBucketToBeDeleted = Effect.fn(function* (
-  bucketName: string,
-  accountId: string,
-) {
-  yield* r2
-    .getBucket({
-      accountId,
-      bucketName,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new BucketStillExists())),
-      Effect.retry({
-        while: (e): e is BucketStillExists => e instanceof BucketStillExists,
-        schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("200 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
-          Schedule.recurs(20),
-        ]),
-      }),
-      Effect.catchTag("NoSuchBucket", () => Effect.void),
-    );
+const waitForBucketToBeDeleted = Effect.fn(function* (bucketName: string, accountId: string) {
+  yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+    Effect.retry({
+      while: (e): e is BucketStillExists => e instanceof BucketStillExists,
+      schedule: Schedule.max([
+        Schedule.min([Schedule.exponential("200 millis"), Schedule.spaced("2 seconds")]),
+        Schedule.recurs(20),
+      ]),
+    }),
+    Effect.catchTag("NoSuchBucket", () => Effect.void),
+  );
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

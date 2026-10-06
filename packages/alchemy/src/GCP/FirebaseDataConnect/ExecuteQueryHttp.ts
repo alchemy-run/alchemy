@@ -14,7 +14,6 @@ export const ExecuteQueryHttp = Layer.effect(
   makeConnectorHttpBinding({
     tag: "GCP.FirebaseDataConnect.ExecuteQuery",
     iam: { role: "roles/firebasedataconnect.dataViewer" },
-    operation:
-      firebasedataconnect.executeQueryProjectsLocationsServicesConnectors,
+    operation: firebasedataconnect.executeQueryProjectsLocationsServicesConnectors,
   }),
 );

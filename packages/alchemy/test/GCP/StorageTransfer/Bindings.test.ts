@@ -1,13 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import StorageTransferBindingsHost, {
   Copy,
@@ -38,9 +38,7 @@ const projectRoles = () =>
     .pipe(
       Effect.map((policy) =>
         (policy.bindings ?? [])
-          .filter((binding) =>
-            (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-          )
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,
@@ -82,12 +80,7 @@ const grantBucketRole = (bucket: string, member: string, role: string) =>
 describe.skipIf(!dockerAvailable)(
   "StorageTransfer Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:storagetransfer",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:storagetransfer", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -114,26 +107,10 @@ describe.skipIf(!dockerAvailable)(
               projectId: buckets.project,
             });
             const member = `serviceAccount:${account.accountEmail}`;
-            yield* grantBucketRole(
-              buckets.source,
-              member,
-              "roles/storage.objectViewer",
-            );
-            yield* grantBucketRole(
-              buckets.source,
-              member,
-              "roles/storage.legacyBucketReader",
-            );
-            yield* grantBucketRole(
-              buckets.sink,
-              member,
-              "roles/storage.legacyBucketWriter",
-            );
-            yield* grantBucketRole(
-              buckets.sink,
-              member,
-              "roles/storage.objectAdmin",
-            );
+            yield* grantBucketRole(buckets.source, member, "roles/storage.objectViewer");
+            yield* grantBucketRole(buckets.source, member, "roles/storage.legacyBucketReader");
+            yield* grantBucketRole(buckets.sink, member, "roles/storage.legacyBucketWriter");
+            yield* grantBucketRole(buckets.sink, member, "roles/storage.objectAdmin");
           }),
           testOptions,
           "StorageTransferBindings",
@@ -194,10 +171,7 @@ describe.skipIf(!dockerAvailable)(
         "runs the bound job as the host and the object lands in the sink",
         (_stack) =>
           Effect.gen(function* () {
-            const started = yield* expectProbe<{ name: string }>(
-              baseUrl,
-              "runTransferJob",
-            );
+            const started = yield* expectProbe<{ name: string }>(baseUrl, "runTransferJob");
             expect(started.name).toMatch(/^transferOperations\//);
 
             const operation = yield* storagetransfer

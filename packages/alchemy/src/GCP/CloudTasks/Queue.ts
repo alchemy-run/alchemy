@@ -169,9 +169,7 @@ export type Queue = Resource<
  */
 export const Queue = Resource<Queue>("GCP.CloudTasks.Queue");
 
-export class QueueNotResolved extends Data.TaggedError(
-  "GCP.CloudTasks.QueueNotResolved",
-)<{
+export class QueueNotResolved extends Data.TaggedError("GCP.CloudTasks.QueueNotResolved")<{
   name: string;
 }> {}
 
@@ -199,11 +197,7 @@ const resourceName = (project: string, location: string, queueId: string) =>
 const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-const toQueueId = (
-  id: string,
-  queueId: string | undefined,
-  existing?: string,
-) =>
+const toQueueId = (id: string, queueId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (queueId !== undefined) return queueId;
     if (existing !== undefined) return existing;
@@ -226,9 +220,7 @@ const sortHeaderOverrides = (
         value: item.header?.value,
       },
     }))
-    .sort((left, right) =>
-      (left.header?.key ?? "").localeCompare(right.header?.key ?? ""),
-    );
+    .sort((left, right) => (left.header?.key ?? "").localeCompare(right.header?.key ?? ""));
 
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, current) => {
@@ -294,10 +286,7 @@ const toUserRateLimits = (
   return Object.keys(next).length > 0 ? next : undefined;
 };
 
-const toAttrs = (
-  queue: cloudtasks.Queue,
-  project: string,
-): Queue["Attributes"] => {
+const toAttrs = (queue: cloudtasks.Queue, project: string): Queue["Attributes"] => {
   const name = queue.name ?? "";
   const parsed = parseName(name);
   return {
@@ -320,10 +309,7 @@ const getByName = (name: string) =>
     .getProjectsLocationsQueues({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const sameHttpTarget = (
-  left: cloudtasks.HttpTarget,
-  right: cloudtasks.HttpTarget | undefined,
-) => {
+const sameHttpTarget = (left: cloudtasks.HttpTarget, right: cloudtasks.HttpTarget | undefined) => {
   const normalize = (target: cloudtasks.HttpTarget | undefined) => {
     if (target === undefined) return undefined;
     return {
@@ -343,19 +329,10 @@ export const QueueProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.queueId ?? output?.queueId;
       const nextId = news.queueId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       if (idChanged || previousLocation !== nextLocation) {
         return { action: "replace" as const };
       }
@@ -365,10 +342,7 @@ export const QueueProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, olds?.queueId, output?.queueId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, queueId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -380,10 +354,7 @@ export const QueueProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const queueId = yield* toQueueId(id, news.queueId, output?.queueId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, queueId);
       const parent = locationParent(env.project, location);
       const desiredHttpTarget = news.httpTarget;
@@ -443,19 +414,11 @@ export const QueueProvider = () =>
         desiredRateLimits !== undefined &&
         overlayChanged(desiredRateLimits, toUserRateLimits(current.rateLimits))
       ) {
-        patchBody.rateLimits = toRateLimits(
-          desiredRateLimits,
-          current.rateLimits,
-        );
+        patchBody.rateLimits = toRateLimits(desiredRateLimits, current.rateLimits);
         mask.push("rateLimits");
       }
 
-      if (
-        overlayChanged(
-          news.stackdriverLoggingConfig,
-          current.stackdriverLoggingConfig,
-        )
-      ) {
+      if (overlayChanged(news.stackdriverLoggingConfig, current.stackdriverLoggingConfig)) {
         patchBody.stackdriverLoggingConfig = {
           ...current.stackdriverLoggingConfig,
           ...news.stackdriverLoggingConfig,
@@ -471,12 +434,7 @@ export const QueueProvider = () =>
         mask.push("httpTarget");
       }
 
-      if (
-        overlayChanged(
-          news.appEngineRoutingOverride,
-          current.appEngineRoutingOverride,
-        )
-      ) {
+      if (overlayChanged(news.appEngineRoutingOverride, current.appEngineRoutingOverride)) {
         patchBody.appEngineRoutingOverride = {
           ...current.appEngineRoutingOverride,
           ...news.appEngineRoutingOverride,

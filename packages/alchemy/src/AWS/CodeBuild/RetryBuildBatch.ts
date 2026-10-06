@@ -28,6 +28,4 @@ export interface RetryBuildBatch extends Binding.Service<
     ) => Effect.Effect<SVC.RetryBuildBatchOutput, SVC.RetryBuildBatchError>
   >
 > {}
-export const RetryBuildBatch = Binding.Service<RetryBuildBatch>(
-  "AWS.CodeBuild.RetryBuildBatch",
-);
+export const RetryBuildBatch = Binding.Service<RetryBuildBatch>("AWS.CodeBuild.RetryBuildBatch");

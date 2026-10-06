@@ -1,3 +1,7 @@
+import * as zaraz from "@distilled.cloud/cloudflare/zaraz";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
@@ -6,20 +10,12 @@ import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { stripNullFields, stripUndefinedFields } from "@/Util/data";
-import * as zaraz from "@distilled.cloud/cloudflare/zaraz";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneId = process.env.CLOUDFLARE_TEST_ZARAZ_ZONE_ID;
-const zoneName =
-  process.env.CLOUDFLARE_TEST_ZARAZ_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_ZARAZ_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Zaraz needs no entitlement (available on all plans), but its config is a
 // zone-wide singleton these tests mutate in place — they only run against a
@@ -72,11 +68,7 @@ describe.sequential(
             const liveRetained = yield* zaraz.getConfig({ zoneId: zoneId! });
             expect(liveRetained.dataLayer).toEqual(original.dataLayer);
           }).pipe(
-            Effect.ensuring(
-              zaraz
-                .putConfig(toPutConfig(zoneId!, original))
-                .pipe(Effect.ignore),
-            ),
+            Effect.ensuring(zaraz.putConfig(toPutConfig(zoneId!, original)).pipe(Effect.ignore)),
           );
         }).pipe(logLevel),
       { timeout: 120_000 },
@@ -91,9 +83,7 @@ describe.sequential(
           yield* stack.destroy();
 
           const original = yield* zaraz.getConfig({ zoneId: zoneId! });
-          const originalWorkflow = yield* zaraz.getWorkflow({
-            zoneId: zoneId!,
-          });
+          const originalWorkflow = yield* zaraz.getWorkflow({ zoneId: zoneId! });
           const defaults = yield* zaraz.getDefault({ zoneId: zoneId! });
 
           yield* Effect.gen(function* () {
@@ -115,16 +105,12 @@ describe.sequential(
 
             const liveDeleted = yield* zaraz.getConfig({ zoneId: zoneId! });
             expect(liveDeleted.dataLayer).toEqual(defaults.dataLayer);
-            const liveDeletedWorkflow = yield* zaraz.getWorkflow({
-              zoneId: zoneId!,
-            });
+            const liveDeletedWorkflow = yield* zaraz.getWorkflow({ zoneId: zoneId! });
             expect(liveDeletedWorkflow).toEqual("realtime");
           }).pipe(
             Effect.ensuring(
               Effect.gen(function* () {
-                yield* zaraz
-                  .putConfig(toPutConfig(zoneId!, original))
-                  .pipe(Effect.ignore);
+                yield* zaraz.putConfig(toPutConfig(zoneId!, original)).pipe(Effect.ignore);
                 yield* zaraz
                   .putZaraz({ zoneId: zoneId!, workflow: originalWorkflow })
                   .pipe(Effect.ignore);
@@ -167,9 +153,7 @@ describe.sequential(
             expect(liveRetained).toEqual(workflow);
           }).pipe(
             Effect.ensuring(
-              zaraz
-                .putZaraz({ zoneId: zoneId!, workflow: original })
-                .pipe(Effect.ignore),
+              zaraz.putZaraz({ zoneId: zoneId!, workflow: original }).pipe(Effect.ignore),
             ),
           );
         }).pipe(logLevel),
@@ -187,16 +171,12 @@ describe.sequential(
           const { accountId } = yield* yield* CloudflareEnvironment;
           const zone = yield* findZoneByName({ accountId, name: zoneName });
           if (!zone) {
-            return yield* Effect.die(
-              new Error(`zone "${zoneName}" not found in account`),
-            );
+            return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
           }
 
           yield* stack.destroy();
 
-          const provider = yield* Provider.findProvider(
-            Cloudflare.Zaraz.Config,
-          );
+          const provider = yield* Provider.findProvider(Cloudflare.Zaraz.Config);
           const all = yield* provider.list();
 
           expect(all.length).toBeGreaterThan(0);
@@ -226,9 +206,7 @@ describe.sequential(
           const { accountId } = yield* yield* CloudflareEnvironment;
           const zone = yield* findZoneByName({ accountId, name: zoneName });
           if (!zone) {
-            return yield* Effect.die(
-              new Error(`zone "${zoneName}" not found in account`),
-            );
+            return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
           }
 
           const original = yield* zaraz.getConfig({ zoneId: zone.id });
@@ -260,14 +238,11 @@ describe.sequential(
             );
             const wedged = rows.find(
               (r): r is { fqn: string; row: ResourceState } =>
-                isResourceState(r.row) &&
-                r.row.resourceType === "Cloudflare.Zaraz.Config",
+                isResourceState(r.row) && r.row.resourceType === "Cloudflare.Zaraz.Config",
             );
             if (!wedged) {
               return yield* Effect.die(
-                new Error(
-                  "no Cloudflare.Zaraz.Config state row found after deploy",
-                ),
+                new Error("no Cloudflare.Zaraz.Config state row found after deploy"),
               );
             }
             yield* state.set({
@@ -278,10 +253,7 @@ describe.sequential(
                 ...wedged.row,
                 status: "creating",
                 attr: undefined,
-                props: {
-                  ...wedged.row.props,
-                  zone: undefined,
-                },
+                props: { ...wedged.row.props, zone: undefined },
               },
             });
 
@@ -313,10 +285,7 @@ describe.sequential(
 
 type ConfigResponse = zaraz.GetConfigResponse | zaraz.PutConfigResponse;
 
-const toPutConfig = (
-  zoneId: string,
-  config: ConfigResponse,
-): zaraz.PutConfigRequest =>
+const toPutConfig = (zoneId: string, config: ConfigResponse): zaraz.PutConfigRequest =>
   stripUndefinedFields({
     zoneId,
     dataLayer: config.dataLayer,

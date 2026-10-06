@@ -15,48 +15,43 @@ export const RestoreTableFromBackupHttp = Layer.effect(
   Effect.gen(function* () {
     const restoreTableFromBackup = yield* DynamoDB.restoreTableFromBackup;
 
-    return Effect.fn(function* <From extends Table, To extends Table>(
-      from: From,
-      to: To,
-    ) {
+    return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const TargetTableName = yield* to.tableName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.RestoreTableFromBackup(${from}, ${to}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["dynamodb:RestoreTableFromBackup"],
-                  Resource: [Output.interpolate`${from.tableArn}/backup/*`],
-                },
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "dynamodb:PutItem",
-                    "dynamodb:UpdateItem",
-                    "dynamodb:DeleteItem",
-                    "dynamodb:GetItem",
-                    "dynamodb:Query",
-                    "dynamodb:Scan",
-                    "dynamodb:BatchWriteItem",
-                  ],
-                  Resource: [to.tableArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.DynamoDB.RestoreTableFromBackup(${from}, ${to}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["dynamodb:RestoreTableFromBackup"],
+                Resource: [Output.interpolate`${from.tableArn}/backup/*`],
+              },
+              {
+                Effect: "Allow",
+                Action: [
+                  "dynamodb:PutItem",
+                  "dynamodb:UpdateItem",
+                  "dynamodb:DeleteItem",
+                  "dynamodb:GetItem",
+                  "dynamodb:Query",
+                  "dynamodb:Scan",
+                  "dynamodb:BatchWriteItem",
+                ],
+                Resource: [to.tableArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.DynamoDB.RestoreTableFromBackup(${from.LogicalId}, ${to.LogicalId})`,
-      )(function* (request: RestoreTableFromBackupRequest) {
-        return yield* restoreTableFromBackup({
-          ...request,
-          TargetTableName: yield* TargetTableName,
-        });
-      });
+      return Effect.fn(`AWS.DynamoDB.RestoreTableFromBackup(${from.LogicalId}, ${to.LogicalId})`)(
+        function* (request: RestoreTableFromBackupRequest) {
+          return yield* restoreTableFromBackup({
+            ...request,
+            TargetTableName: yield* TargetTableName,
+          });
+        },
+      );
     });
   }),
 );

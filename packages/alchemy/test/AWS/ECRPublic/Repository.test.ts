@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { PublicRepository } from "@/AWS/ECRPublic";
-import * as Test from "@/Test/Alchemy";
 import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import { Region } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { PublicRepository } from "@/AWS/ECRPublic";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,13 +16,9 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(Region, Effect.succeed("us-east-1")));
 
 const findRepository = (repositoryName: string) =>
-  pin(
-    ecrpublic.describeRepositories({ repositoryNames: [repositoryName] }),
-  ).pipe(
+  pin(ecrpublic.describeRepositories({ repositoryNames: [repositoryName] })).pipe(
     Effect.map((r) => r.repositories?.[0]),
-    Effect.catchTag("RepositoryNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class RepositoryStillExists extends Data.TaggedError("RepositoryStillExists")<{
@@ -32,16 +28,11 @@ class RepositoryStillExists extends Data.TaggedError("RepositoryStillExists")<{
 const assertRepositoryDeleted = (repositoryName: string) =>
   findRepository(repositoryName).pipe(
     Effect.flatMap((repo) =>
-      repo === undefined
-        ? Effect.void
-        : Effect.fail(new RepositoryStillExists({ repositoryName })),
+      repo === undefined ? Effect.void : Effect.fail(new RepositoryStillExists({ repositoryName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "RepositoryStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -80,11 +71,7 @@ test.provider(
 
       const tags = yield* pin(
         ecrpublic.listTagsForResource({ resourceArn: repo.repositoryArn }),
-      ).pipe(
-        Effect.map((r) =>
-          Object.fromEntries((r.tags ?? []).map((t) => [t.Key, t.Value])),
-        ),
-      );
+      ).pipe(Effect.map((r) => Object.fromEntries((r.tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestPublicRepo");
 
@@ -112,11 +99,7 @@ test.provider(
 
       const tags2 = yield* pin(
         ecrpublic.listTagsForResource({ resourceArn: repo.repositoryArn }),
-      ).pipe(
-        Effect.map((r) =>
-          Object.fromEntries((r.tags ?? []).map((t) => [t.Key, t.Value])),
-        ),
-      );
+      ).pipe(Effect.map((r) => Object.fromEntries((r.tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags2.Extra).toBe("yes");
 
       yield* stack.destroy();

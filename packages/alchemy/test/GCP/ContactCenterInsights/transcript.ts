@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import * as Output from "@/Output";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 
 export const CHAT_TRANSCRIPT = JSON.stringify({
   entries: [
@@ -42,8 +42,7 @@ export const uploadChatTranscript = (bucketName: string) =>
             }),
           },
         ),
-      catch: (error) =>
-        new Error(`transcript bucket create failed: ${String(error)}`),
+      catch: (error) => new Error(`transcript bucket create failed: ${String(error)}`),
     });
     const response = yield* Effect.tryPromise({
       try: () =>
@@ -61,9 +60,7 @@ export const uploadChatTranscript = (bucketName: string) =>
       catch: (error) => new Error(`transcript upload failed: ${String(error)}`),
     });
     if (!response.ok) {
-      return yield* Effect.die(
-        new Error(`transcript upload failed with HTTP ${response.status}`),
-      );
+      return yield* Effect.die(new Error(`transcript upload failed with HTTP ${response.status}`));
     }
   });
 

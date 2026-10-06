@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,16 +8,12 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type TargetTcpProxyProxyHeader = compute.TargetTcpProxyProxyHeaderEnum;
-export type TargetTcpProxyLoadBalancingScheme =
-  compute.TargetTcpProxyLoadBalancingSchemeEnum;
+export type TargetTcpProxyLoadBalancingScheme = compute.TargetTcpProxyLoadBalancingSchemeEnum;
 
 const DEFAULT_PROXY_HEADER: TargetTcpProxyProxyHeader = "NONE";
 
@@ -143,9 +138,7 @@ export type TargetTcpProxy = Resource<
  * @resource
  * @category Compute
  */
-export const TargetTcpProxy = Resource<TargetTcpProxy>(
-  "GCP.Compute.TargetTcpProxy",
-);
+export const TargetTcpProxy = Resource<TargetTcpProxy>("GCP.Compute.TargetTcpProxy");
 
 export class TargetTcpProxyNotResolved extends Data.TaggedError(
   "GCP.Compute.TargetTcpProxyNotResolved",
@@ -230,13 +223,7 @@ const getByName = (project: string, targetTcpProxy: string) =>
 
 export const TargetTcpProxyProvider = () =>
   Provider.succeed(TargetTcpProxy, {
-    stables: [
-      "targetTcpProxyName",
-      "project",
-      "targetTcpProxyId",
-      "selfLink",
-      "creationTimestamp",
-    ],
+    stables: ["targetTcpProxyName", "project", "targetTcpProxyId", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -252,9 +239,7 @@ export const TargetTcpProxyProvider = () =>
         if ((olds.proxyBind ?? false) !== (news.proxyBind ?? false)) {
           return { action: "replace" as const, deleteFirst: true };
         }
-        if (
-          (olds.loadBalancingScheme ?? "") !== (news.loadBalancingScheme ?? "")
-        ) {
+        if ((olds.loadBalancingScheme ?? "") !== (news.loadBalancingScheme ?? "")) {
           return { action: "replace" as const, deleteFirst: true };
         }
       }
@@ -283,9 +268,7 @@ export const TargetTcpProxyProvider = () =>
           .pipe(
             Stream.filter((proxy) => {
               const { labels } = parseDescription(proxy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((proxy) => toAttrs(proxy, env.project)),
             Stream.runCollect,
@@ -328,9 +311,7 @@ export const TargetTcpProxyProvider = () =>
             body,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* getByName(env.project, targetTcpProxyName);
@@ -347,11 +328,7 @@ export const TargetTcpProxyProvider = () =>
             targetTcpProxy: targetTcpProxyName,
             body: { service: desiredService },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetTcpProxyName);
         if (current === undefined) {
           return yield* new TargetTcpProxyNotResolved({
@@ -360,20 +337,14 @@ export const TargetTcpProxyProvider = () =>
         }
       }
 
-      if (
-        (current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredProxyHeader
-      ) {
+      if ((current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredProxyHeader) {
         yield* compute
           .setProxyHeaderTargetTcpProxies({
             project: env.project,
             targetTcpProxy: targetTcpProxyName,
             body: { proxyHeader: desiredProxyHeader },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetTcpProxyName);
         if (current === undefined) {
           return yield* new TargetTcpProxyNotResolved({

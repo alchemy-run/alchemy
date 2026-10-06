@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   clusterName,
@@ -60,9 +55,7 @@ export type VolumeDataRestorePolicyBinding = {
   /** Policy applied to volumes in scope. */
   policy?: gkebackup.VolumeDataRestorePolicyBindingPolicyEnum | (string & {});
   /** Volume type this binding applies to. */
-  volumeType?:
-    | gkebackup.VolumeDataRestorePolicyBindingVolumeTypeEnum
-    | (string & {});
+  volumeType?: gkebackup.VolumeDataRestorePolicyBindingVolumeTypeEnum | (string & {});
 };
 
 export type TransformationRuleAction = {
@@ -139,9 +132,7 @@ export type RestoreConfig = {
    * How volume data is restored.
    * @default "NO_VOLUME_DATA_RESTORATION"
    */
-  volumeDataRestorePolicy?:
-    | gkebackup.RestoreConfigVolumeDataRestorePolicyEnum
-    | (string & {});
+  volumeDataRestorePolicy?: gkebackup.RestoreConfigVolumeDataRestorePolicyEnum | (string & {});
   /**
    * How to handle cluster-scoped resources that already exist.
    */
@@ -296,15 +287,10 @@ export type RestorePlan = Resource<
  */
 export const RestorePlan = Resource<RestorePlan>("GCP.GKEBackup.RestorePlan");
 
-const resourceName = (
-  project: string,
-  location: string,
-  restorePlanId: string,
-) => `projects/${project}/locations/${location}/restorePlans/${restorePlanId}`;
+const resourceName = (project: string, location: string, restorePlanId: string) =>
+  `projects/${project}/locations/${location}/restorePlans/${restorePlanId}`;
 
-const toRestoreConfig = (
-  config: gkebackup.RestoreConfig | undefined,
-): RestoreConfig | undefined =>
+const toRestoreConfig = (config: gkebackup.RestoreConfig | undefined): RestoreConfig | undefined =>
   config === undefined
     ? undefined
     : {
@@ -323,11 +309,7 @@ const toRestoreConfig = (
         noNamespaces: config.noNamespaces,
       };
 
-const toAttrs = (
-  item: gkebackup.RestorePlan,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkebackup.RestorePlan, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "restorePlans", region);
   return {
@@ -368,14 +350,7 @@ const listOwned = (project: string) =>
 
 export const RestorePlanProvider = () =>
   Provider.succeed(RestorePlan, {
-    stables: [
-      "name",
-      "restorePlanId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "restorePlanId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -384,12 +359,8 @@ export const RestorePlanProvider = () =>
       const previousPlan = olds?.backupPlan ?? output?.backupPlan;
       return replaceOnIdentity({
         previousId: olds?.restorePlanId ?? output?.restorePlanId,
-        nextId:
-          news.restorePlanId ?? olds?.restorePlanId ?? output?.restorePlanId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.restorePlanId ?? olds?.restorePlanId ?? output?.restorePlanId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -414,18 +385,12 @@ export const RestorePlanProvider = () =>
         output?.restorePlanId,
         "restoreplan",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, restorePlanId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, restorePlanId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -443,18 +408,10 @@ export const RestorePlanProvider = () =>
         output?.restorePlanId,
         "restoreplan",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, restorePlanId);
       const cluster = clusterName(news.cluster, env.project, location);
-      const backupPlan = expandParent(
-        news.backupPlan,
-        env.project,
-        location,
-        "backupPlans",
-      );
+      const backupPlan = expandParent(news.backupPlan, env.project, location, "backupPlans");
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -501,8 +458,8 @@ export const RestorePlanProvider = () =>
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.description, news.description) && "description",
-        fingerprint(toRestoreConfig(current.restoreConfig)) !==
-          fingerprint(news.restoreConfig) && "restoreConfig",
+        fingerprint(toRestoreConfig(current.restoreConfig)) !== fingerprint(news.restoreConfig) &&
+          "restoreConfig",
       ]);
 
       if (mask.length > 0) {

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -257,12 +252,9 @@ export const RealmProvider = () =>
         previousId: olds?.realmId ?? output?.realmId,
         nextId: news.realmId ?? olds?.realmId ?? output?.realmId,
         previousLocation: normalizeLocation(olds?.location ?? output?.location),
-        nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
-        ),
+        nextLocation: normalizeLocation(news.location ?? olds?.location ?? output?.location),
         extra:
-          (previousBook !== undefined &&
-            !sameRef(previousBook, news.registryBook)) ||
+          (previousBook !== undefined && !sameRef(previousBook, news.registryBook)) ||
           (previousTraffic !== undefined &&
             nextTraffic !== undefined &&
             previousTraffic !== nextTraffic) ||
@@ -277,22 +269,13 @@ export const RealmProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const realmId = yield* toPhysicalId(
-        id,
-        olds?.realmId,
-        output?.realmId,
-        "realm",
-      );
+      const realmId = yield* toPhysicalId(id, olds?.realmId, output?.realmId, "realm");
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, realmId);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, realmId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -304,24 +287,14 @@ export const RealmProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const realmId = yield* toPhysicalId(
-        id,
-        news.realmId,
-        output?.realmId,
-        "realm",
-      );
+      const realmId = yield* toPhysicalId(id, news.realmId, output?.realmId, "realm");
       const location = normalizeLocation(news.location ?? output?.location);
       const name = resourceName(env.project, location, COLLECTION, realmId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const registryBook = expandName(
-        news.registryBook,
-        env.project,
-        location,
-        "registryBooks",
-      );
+      const registryBook = expandName(news.registryBook, env.project, location, "registryBooks");
       const trafficType = news.trafficType ?? DEFAULT_TRAFFIC;
       const managementType = news.managementType ?? DEFAULT_MANAGEMENT;
       const ipVersion = news.ipVersion ?? DEFAULT_IP_VERSION;
@@ -354,9 +327,7 @@ export const RealmProvider = () =>
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const mask = fieldMask([
-        (upsert.length > 0 || removed.length > 0) && "labels",
-      ]);
+      const mask = fieldMask([(upsert.length > 0 || removed.length > 0) && "labels"]);
 
       if (mask.length > 0) {
         const operation = yield* cnr.patchProjectsLocationsRealms({
@@ -368,10 +339,7 @@ export const RealmProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

@@ -11,12 +11,7 @@ import { resolveConnectionOptions } from "../SQL/PostgresTls.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ReplacedResourceState } from "./ResourceState.ts";
-import {
-  State,
-  StateStoreError,
-  type PersistedState,
-  type StateService,
-} from "./State.ts";
+import { State, StateStoreError, type PersistedState, type StateService } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 // `@effect/sql-pg` is loaded lazily rather than imported statically (as
@@ -52,9 +47,7 @@ export interface PostgresStateOptions<E = never, R = never> {
    * be passed directly. The store creates its own `@effect/sql-pg` pool from
    * the URL and closes that pool when the state layer is released.
    */
-  url?:
-    | Redacted.Redacted<string>
-    | Effect.Effect<Redacted.Redacted<string>, E, R>;
+  url?: Redacted.Redacted<string> | Effect.Effect<Redacted.Redacted<string>, E, R>;
   /**
    * Prefix for the advisory-lock key. The full key for a stack/stage is
    * `{lockKeyPrefix}:{stack}/{stage}`.
@@ -167,9 +160,7 @@ interface Lease {
  * });
  * ```
  */
-export const postgresState = <E = never, R = never>(
-  options: PostgresStateOptions<E, R>,
-) =>
+export const postgresState = <E = never, R = never>(options: PostgresStateOptions<E, R>) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -220,8 +211,7 @@ export const makePostgresState = <E = never, R = never>(
 
     const stateError = <A, E2, R2>(
       effect: Effect.Effect<A, E2, R2>,
-    ): Effect.Effect<A, StateStoreError, R2> =>
-      Effect.mapError(effect, toError);
+    ): Effect.Effect<A, StateStoreError, R2> => Effect.mapError(effect, toError);
 
     /**
      * Idempotent schema migration. Concurrent `create table if not exists`
@@ -274,9 +264,10 @@ export const makePostgresState = <E = never, R = never>(
         const resolved = Effect.isEffect(url)
           ? yield* Effect.provideContext(url, context).pipe(stateError)
           : url;
-        const built = yield* Layer.build(
-          PgClient.layer(resolveConnectionOptions(resolved)),
-        ).pipe(Scope.provide(scope), stateError);
+        const built = yield* Layer.build(PgClient.layer(resolveConnectionOptions(resolved))).pipe(
+          Scope.provide(scope),
+          stateError,
+        );
         return Context.get(built, PgClient.PgClient);
       });
 
@@ -293,8 +284,7 @@ export const makePostgresState = <E = never, R = never>(
               ? yield* openPool(url)
               : yield* Effect.fail(
                   new StateStoreError({
-                    message:
-                      "postgresState requires exactly one of `client` or `url`",
+                    message: "postgresState requires exactly one of `client` or `url`",
                   }),
                 );
         // The store reads columns by the exact names written below, so a
@@ -307,11 +297,9 @@ export const makePostgresState = <E = never, R = never>(
 
     const run = <A>(
       f: (sql: SqlClient.SqlClient) => Effect.Effect<A, SqlError.SqlError>,
-    ): Effect.Effect<A, StateStoreError> =>
-      ready.pipe(Effect.flatMap((sql) => stateError(f(sql))));
+    ): Effect.Effect<A, StateStoreError> => ready.pipe(Effect.flatMap((sql) => stateError(f(sql))));
 
-    const lockKey = (stack: string, stage: string) =>
-      `${prefix}:${stack}/${stage}`;
+    const lockKey = (stack: string, stage: string) => `${prefix}:${stack}/${stage}`;
 
     /**
      * Acquires the session-scoped advisory lock for `key` on a connection
@@ -341,10 +329,7 @@ export const makePostgresState = <E = never, R = never>(
           const onReserved = <A>(
             effect: Effect.Effect<A, SqlError.SqlError>,
           ): Effect.Effect<A, SqlError.SqlError> =>
-            Effect.provideService(effect, sql.transactionService, [
-              reserved,
-              0,
-            ]);
+            Effect.provideService(effect, sql.transactionService, [reserved, 0]);
 
           const acquired = yield* onReserved(
             sql`select pg_try_advisory_lock(hashtextextended(${key}, 0)) as acquired, pg_backend_pid() as pid`,
@@ -365,9 +350,7 @@ export const makePostgresState = <E = never, R = never>(
 
           yield* Scope.addFinalizer(
             scope,
-            onReserved(
-              sql`select pg_advisory_unlock(hashtextextended(${key}, 0))`,
-            ).pipe(
+            onReserved(sql`select pg_advisory_unlock(hashtextextended(${key}, 0))`).pipe(
               // If the connection already dropped, Postgres auto-released
               // the session-scoped lock; there is nothing left to unlock.
               Effect.ignore,
@@ -434,10 +417,7 @@ export const makePostgresState = <E = never, R = never>(
     const leaseMutex = Semaphore.makeUnsafe(1);
     const leases = new Map<string, Effect.Effect<Lease, StateStoreError>>();
 
-    const leaseFor = (
-      stack: string,
-      stage: string,
-    ): Effect.Effect<Lease, StateStoreError> =>
+    const leaseFor = (stack: string, stage: string): Effect.Effect<Lease, StateStoreError> =>
       Semaphore.withPermits(
         leaseMutex,
         1,
@@ -470,14 +450,13 @@ export const makePostgresState = <E = never, R = never>(
 
     // Operations without a stage cannot name a single lease, so they
     // re-verify every lease this store currently holds instead.
-    const verifyHeldLeases: Effect.Effect<void, StateStoreError> =
-      Effect.suspend(() =>
-        Effect.forEach(
-          Array.from(leases.values()),
-          (lease) => lease.pipe(Effect.flatMap((held) => held.checkLive)),
-          { discard: true },
-        ),
-      );
+    const verifyHeldLeases: Effect.Effect<void, StateStoreError> = Effect.suspend(() =>
+      Effect.forEach(
+        Array.from(leases.values()),
+        (lease) => lease.pipe(Effect.flatMap((held) => held.checkLive)),
+        { discard: true },
+      ),
+    );
 
     const jsonParam = (value: unknown) => JSON.stringify(encodeState(value));
 
@@ -546,10 +525,7 @@ export const makePostgresState = <E = never, R = never>(
               sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and value ->> 'status' = 'replaced'`,
           ).pipe(
             Effect.map((rows) =>
-              rows.map(
-                (row) =>
-                  reviveStateRecursive(row.value) as ReplacedResourceState,
-              ),
+              rows.map((row) => reviveStateRecursive(row.value) as ReplacedResourceState),
             ),
           ),
         ),
@@ -584,22 +560,15 @@ export const makePostgresState = <E = never, R = never>(
               Effect.flatMap((stages) =>
                 Effect.forEach(
                   stages,
-                  (found) =>
-                    guarded({ stack, stage: found }, deleteStage(stack, found)),
+                  (found) => guarded({ stack, stage: found }, deleteStage(stack, found)),
                   { discard: true },
                 ),
               ),
               Effect.andThen(
-                run(
-                  (sql) =>
-                    sql`delete from alchemy_resource_state where stack = ${stack}`,
-                ),
+                run((sql) => sql`delete from alchemy_resource_state where stack = ${stack}`),
               ),
               Effect.andThen(
-                run(
-                  (sql) =>
-                    sql`delete from alchemy_stack_output where stack = ${stack}`,
-                ),
+                run((sql) => sql`delete from alchemy_stack_output where stack = ${stack}`),
               ),
               Effect.asVoid,
             )
@@ -621,9 +590,7 @@ export const makePostgresState = <E = never, R = never>(
           ).pipe(
             Effect.map((rows) => {
               const row = rows[0];
-              return row === undefined
-                ? undefined
-                : reviveStateRecursive(row.value);
+              return row === undefined ? undefined : reviveStateRecursive(row.value);
             }),
           ),
         ),

@@ -77,13 +77,9 @@ export type MonetizationSubscription = Resource<
     /** Base plans (output-only state omitted from equality). */
     basePlans: androidpublisher.BasePlan[] | undefined;
     /** Tax and compliance settings. */
-    taxAndComplianceSettings:
-      | androidpublisher.SubscriptionTaxAndComplianceSettings
-      | undefined;
+    taxAndComplianceSettings: androidpublisher.SubscriptionTaxAndComplianceSettings | undefined;
     /** Payment-country restrictions. */
-    restrictedPaymentCountries:
-      | androidpublisher.RestrictedPaymentCountries
-      | undefined;
+    restrictedPaymentCountries: androidpublisher.RestrictedPaymentCountries | undefined;
     /** Whether the subscription is archived. */
     archived: boolean | undefined;
   },
@@ -166,10 +162,7 @@ export class MonetizationSubscriptionNotResolved extends Data.TaggedError(
   productId: string;
 }> {}
 
-const toAttrs = (
-  subscription: androidpublisher.Subscription,
-  project: string,
-) => ({
+const toAttrs = (subscription: androidpublisher.Subscription, project: string) => ({
   packageName: subscription.packageName ?? "",
   productId: subscription.productId ?? "",
   project,
@@ -200,46 +193,25 @@ const needsSync = (
 ) =>
   !jsonEqual(current.listings, desired.listings) ||
   (desired.basePlans !== undefined &&
-    !jsonEqual(
-      publicBasePlans(current.basePlans),
-      publicBasePlans(desired.basePlans),
-    )) ||
+    !jsonEqual(publicBasePlans(current.basePlans), publicBasePlans(desired.basePlans))) ||
   (desired.taxAndComplianceSettings !== undefined &&
-    !jsonEqual(
-      current.taxAndComplianceSettings,
-      desired.taxAndComplianceSettings,
-    )) ||
+    !jsonEqual(current.taxAndComplianceSettings, desired.taxAndComplianceSettings)) ||
   (desired.restrictedPaymentCountries !== undefined &&
-    !jsonEqual(
-      current.restrictedPaymentCountries,
-      desired.restrictedPaymentCountries,
-    ));
+    !jsonEqual(current.restrictedPaymentCountries, desired.restrictedPaymentCountries));
 
-const syncMask = (
-  current: androidpublisher.Subscription,
-  desired: androidpublisher.Subscription,
-) =>
+const syncMask = (current: androidpublisher.Subscription, desired: androidpublisher.Subscription) =>
   updateMaskOf(
     !jsonEqual(current.listings, desired.listings) ? "listings" : undefined,
     desired.basePlans !== undefined &&
-      !jsonEqual(
-        publicBasePlans(current.basePlans),
-        publicBasePlans(desired.basePlans),
-      )
+      !jsonEqual(publicBasePlans(current.basePlans), publicBasePlans(desired.basePlans))
       ? "basePlans"
       : undefined,
     desired.taxAndComplianceSettings !== undefined &&
-      !jsonEqual(
-        current.taxAndComplianceSettings,
-        desired.taxAndComplianceSettings,
-      )
+      !jsonEqual(current.taxAndComplianceSettings, desired.taxAndComplianceSettings)
       ? "taxAndComplianceSettings"
       : undefined,
     desired.restrictedPaymentCountries !== undefined &&
-      !jsonEqual(
-        current.restrictedPaymentCountries,
-        desired.restrictedPaymentCountries,
-      )
+      !jsonEqual(current.restrictedPaymentCountries, desired.restrictedPaymentCountries)
       ? "restrictedPaymentCountries"
       : undefined,
   );
@@ -251,10 +223,7 @@ export const MonetizationSubscriptionProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousPackage = olds?.packageName ?? output?.packageName;
-      if (
-        previousPackage !== undefined &&
-        news.packageName !== previousPackage
-      ) {
+      if (previousPackage !== undefined && news.packageName !== previousPackage) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.productId ?? output?.productId;
@@ -271,11 +240,7 @@ export const MonetizationSubscriptionProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const packageName = olds?.packageName ?? output?.packageName ?? "";
-      const productId = yield* toProductId(
-        id,
-        olds?.productId,
-        output?.productId,
-      );
+      const productId = yield* toProductId(id, olds?.productId, output?.productId);
       const existing = yield* getSubscription(packageName, productId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -286,11 +251,7 @@ export const MonetizationSubscriptionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const packageName = news.packageName;
-      const productId = yield* toProductId(
-        id,
-        news.productId,
-        output?.productId,
-      );
+      const productId = yield* toProductId(id, news.productId, output?.productId);
       const title = yield* toDisplayName(
         id,
         news.listings?.[0]?.title,
@@ -315,11 +276,7 @@ export const MonetizationSubscriptionProvider = () =>
             "regionsVersion.version": regionsVersion,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getSubscription(packageName, productId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getSubscription(packageName, productId)));
         current = created ?? undefined;
       }
 

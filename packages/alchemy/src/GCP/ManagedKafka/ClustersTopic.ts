@@ -117,9 +117,7 @@ export type ClustersTopic = Resource<
  * @resource
  * @category ManagedKafka
  */
-export const ClustersTopic = Resource<ClustersTopic>(
-  "GCP.ManagedKafka.ClustersTopic",
-);
+export const ClustersTopic = Resource<ClustersTopic>("GCP.ManagedKafka.ClustersTopic");
 
 export class ClustersTopicNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ClustersTopicNotResolved",
@@ -130,8 +128,7 @@ export class ClustersTopicNotResolved extends Data.TaggedError(
 const clusterOf = (cluster: string, project: string, location: string) =>
   expandParent(cluster, project, location, "clusters");
 
-const resourceName = (cluster: string, topicId: string) =>
-  `${cluster}/topics/${topicId}`;
+const resourceName = (cluster: string, topicId: string) => `${cluster}/topics/${topicId}`;
 
 const toAttrs = (topic: kafka.Topic, project: string) => {
   const name = topic.name ?? "";
@@ -155,52 +152,32 @@ export const ClustersTopicProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousFactor =
-        olds?.replicationFactor ?? output?.replicationFactor;
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousFactor = olds?.replicationFactor ?? output?.replicationFactor;
       const nextFactor = news.replicationFactor ?? previousFactor;
       return replaceOnIdentity({
         previousId: olds?.topicId ?? output?.topicId,
-        nextId: news.topicId
-          ? rfc1035(news.topicId, "topic")
-          : (olds?.topicId ?? output?.topicId),
+        nextId: news.topicId ? rfc1035(news.topicId, "topic") : (olds?.topicId ?? output?.topicId),
         previousParent: olds?.cluster ?? output?.cluster,
         nextParent: clusterOf(news.cluster, env.project, location),
         extra:
-          previousFactor !== undefined &&
-          nextFactor !== undefined &&
-          previousFactor !== nextFactor,
+          previousFactor !== undefined && nextFactor !== undefined && previousFactor !== nextFactor,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const topicId = yield* toPhysicalId(
-        id,
-        olds?.topicId,
-        output?.topicId,
-        "topic",
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const topicId = yield* toPhysicalId(id, olds?.topicId, output?.topicId, "topic");
       const cluster =
         olds?.cluster !== undefined
           ? clusterOf(olds.cluster, env.project, location)
           : (output?.cluster ?? "");
-      const name =
-        output?.name ??
-        (cluster.length > 0 ? resourceName(cluster, topicId) : "");
+      const name = output?.name ?? (cluster.length > 0 ? resourceName(cluster, topicId) : "");
       const existing = yield* getTopic(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return output !== undefined || olds !== undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -216,11 +193,7 @@ export const ClustersTopicProvider = () =>
                 pageSize: 1000,
               }),
               (page) => page.topics,
-            ).pipe(
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([] as kafka.Topic[]),
-              ),
-            ),
+            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as kafka.Topic[]))),
           { concurrency: 4 },
         );
         return topics.flat().map((topic) => toAttrs(topic, env.project));
@@ -228,21 +201,12 @@ export const ClustersTopicProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const cluster = clusterOf(news.cluster, env.project, location);
-      const topicId = yield* toPhysicalId(
-        id,
-        news.topicId,
-        output?.topicId,
-        "topic",
-      );
+      const topicId = yield* toPhysicalId(id, news.topicId, output?.topicId, "topic");
       const name = output?.name ?? resourceName(cluster, topicId);
       const partitionCount = news.partitionCount ?? DEFAULT_PARTITION_COUNT;
-      const replicationFactor =
-        news.replicationFactor ?? DEFAULT_REPLICATION_FACTOR;
+      const replicationFactor = news.replicationFactor ?? DEFAULT_REPLICATION_FACTOR;
       const configs = news.configs;
 
       let current = yield* getTopic(name);
@@ -282,8 +246,7 @@ export const ClustersTopicProvider = () =>
       const partitionsChanged =
         (current.partitionCount ?? DEFAULT_PARTITION_COUNT) !== partitionCount;
       const configsChanged =
-        fingerprint(stringMapOf(current.configs)) !==
-        fingerprint(stringMapOf(configs));
+        fingerprint(stringMapOf(current.configs)) !== fingerprint(stringMapOf(configs));
 
       if (partitionsChanged || configsChanged) {
         current = yield* kafka.patchProjectsLocationsClustersTopics({

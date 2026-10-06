@@ -1,5 +1,4 @@
 import { hostname } from "node:os";
-import packageJson from "../../package.json" with { type: "json" };
 import {
   authOidc,
   authorizeCliAuth,
@@ -12,20 +11,11 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import {
-  AuthError,
-  AuthProviderLayer,
-  type ConfigureField,
-} from "../Auth/AuthProvider.ts";
+import packageJson from "../../package.json" with { type: "json" };
+import { AuthError, AuthProviderLayer, type ConfigureField } from "../Auth/AuthProvider.ts";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
-import {
-  detectOidcToken,
-  SUPPORTED_OIDC_PLATFORMS,
-} from "../Auth/OidcToken.ts";
-import {
-  storedValueText,
-  validateFieldValues,
-} from "../Auth/StoredAuthProvider.ts";
+import { detectOidcToken, SUPPORTED_OIDC_PLATFORMS } from "../Auth/OidcToken.ts";
+import { storedValueText, validateFieldValues } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
 
 export const DopplerAuthConfigSchema = Schema.Struct({
@@ -64,12 +54,7 @@ const client = {
   version: `v${packageJson.version.split("-")[0]}`,
   os: process.platform === "win32" ? "windows" : process.platform,
   // Doppler expects Go-style architecture names.
-  arch:
-    process.arch === "x64"
-      ? "amd64"
-      : process.arch === "ia32"
-        ? "386"
-        : process.arch,
+  arch: process.arch === "x64" ? "amd64" : process.arch === "ia32" ? "386" : process.arch,
 };
 
 /**
@@ -77,9 +62,7 @@ const client = {
  * Doppler answers `409 Conflict` while approval is still pending; any other
  * failure (rejected, expired) ends the flow.
  */
-const awaitApproval = (authorization: {
-  polling_code: string | Redacted.Redacted<string>;
-}) =>
+const awaitApproval = (authorization: { polling_code: string | Redacted.Redacted<string> }) =>
   authorizeCliAuth({ code: authorization.polling_code }).pipe(
     Retry.none,
     Effect.retry({
@@ -120,10 +103,9 @@ export const login = Effect.gen(function* () {
     })
     .pipe(mapPromptCancellation, Effect.andThen(Effect.never));
 
-  const credentials = yield* Effect.raceFirst(
-    awaitApproval(authorization),
-    waitingPrompt,
-  ).pipe(Effect.timeout(LOGIN_TIMEOUT));
+  const credentials = yield* Effect.raceFirst(awaitApproval(authorization), waitingPrompt).pipe(
+    Effect.timeout(LOGIN_TIMEOUT),
+  );
 
   const config: DopplerAuthConfig = {
     method: "login",
@@ -150,8 +132,7 @@ const tokenFields: ReadonlyArray<ConfigureField> = [
 const promptForToken = Interaction.accessors.prompt
   .password({
     message: "Doppler API token",
-    description:
-      "A service token or personal token. Stored in your Alchemy profile.",
+    description: "A service token or personal token. Stored in your Alchemy profile.",
     validate: (value) => (value.trim().length ? undefined : "Required"),
   })
   .pipe(
@@ -193,8 +174,7 @@ const revokeLoginToken = (config: DopplerAuthConfig) =>
         Effect.mapError(
           () =>
             new AuthError({
-              message:
-                "Could not revoke the Doppler login token. Try logging out again.",
+              message: "Could not revoke the Doppler login token. Try logging out again.",
             }),
         ),
       )
@@ -216,9 +196,7 @@ export const mintTokenFromOidc = (config: {
     Retry.none,
     Effect.timeout(API_TIMEOUT),
     Effect.map((response): DopplerResolvedCredentials => ({
-      token: Redacted.isRedacted(response.token)
-        ? response.token
-        : Redacted.make(response.token),
+      token: Redacted.isRedacted(response.token) ? response.token : Redacted.make(response.token),
     })),
     Effect.mapError(
       (cause) =>
@@ -257,53 +235,51 @@ const readEnvironment = Effect.gen(function* () {
 });
 
 /** Doppler profile authentication: explicit browser Login or a stored API token. */
-export const DopplerAuth = AuthProviderLayer<
-  DopplerAuthConfig,
-  DopplerResolvedCredentials
->()(PROVIDER_NAME, {
-  configSchema: DopplerAuthConfigSchema,
-  configure: () => chooseMethod,
-  configureMethods: [{ method: "api-token", fields: tokenFields }],
-  configureWith: (_, input) =>
-    input.method === "api-token"
-      ? validateFieldValues(PROVIDER_NAME, tokenFields, input.values).pipe(
-          Effect.map((values): DopplerAuthConfig => ({
-            method: "api-token",
-            token: storedValueText(values.token)!,
-          })),
-        )
-      : Effect.fail(
-          new AuthError({
-            message:
-              "Doppler: use method 'api-token' for flag-driven configuration. Login requires interactive profile setup.",
-          }),
-        ),
-  login: (_, config) => (config.method === "login" ? login : promptForToken),
-  logout: (_, config) => revokeLoginToken(config),
-  read: (_, config) => Effect.succeed({ token: Redacted.make(config.token) }),
-  details: (_, config) =>
-    Effect.succeed({ lines: [{ key: "method", value: config.method }] }),
-  readEnvironment,
-  environment: [
-    {
-      name: DOPPLER_TOKEN_ENV,
-      required: true,
-      secret: true,
-      alternatives: [DOPPLER_IDENTITY_ID_ENV],
-      description:
-        "A service token or personal token; or set DOPPLER_IDENTITY_ID instead to log in with the platform's OIDC token (Vercel, GitHub Actions, GitLab CI, GCP)",
-    },
-    {
-      name: DOPPLER_OIDC_TOKEN_ENV,
-      required: false,
-      secret: true,
-      description:
-        "Explicit OIDC token for platforms that are not auto-detected",
-    },
-    {
-      name: DOPPLER_OIDC_AUDIENCE_ENV,
-      required: false,
-      description: "Audience to request in the platform's OIDC token",
-    },
-  ],
-});
+export const DopplerAuth = AuthProviderLayer<DopplerAuthConfig, DopplerResolvedCredentials>()(
+  PROVIDER_NAME,
+  {
+    configSchema: DopplerAuthConfigSchema,
+    configure: () => chooseMethod,
+    configureMethods: [{ method: "api-token", fields: tokenFields }],
+    configureWith: (_, input) =>
+      input.method === "api-token"
+        ? validateFieldValues(PROVIDER_NAME, tokenFields, input.values).pipe(
+            Effect.map((values): DopplerAuthConfig => ({
+              method: "api-token",
+              token: storedValueText(values.token)!,
+            })),
+          )
+        : Effect.fail(
+            new AuthError({
+              message:
+                "Doppler: use method 'api-token' for flag-driven configuration. Login requires interactive profile setup.",
+            }),
+          ),
+    login: (_, config) => (config.method === "login" ? login : promptForToken),
+    logout: (_, config) => revokeLoginToken(config),
+    read: (_, config) => Effect.succeed({ token: Redacted.make(config.token) }),
+    details: (_, config) => Effect.succeed({ lines: [{ key: "method", value: config.method }] }),
+    readEnvironment,
+    environment: [
+      {
+        name: DOPPLER_TOKEN_ENV,
+        required: true,
+        secret: true,
+        alternatives: [DOPPLER_IDENTITY_ID_ENV],
+        description:
+          "A service token or personal token; or set DOPPLER_IDENTITY_ID instead to log in with the platform's OIDC token (Vercel, GitHub Actions, GitLab CI, GCP)",
+      },
+      {
+        name: DOPPLER_OIDC_TOKEN_ENV,
+        required: false,
+        secret: true,
+        description: "Explicit OIDC token for platforms that are not auto-detected",
+      },
+      {
+        name: DOPPLER_OIDC_AUDIENCE_ENV,
+        required: false,
+        description: "Audience to request in the platform's OIDC token",
+      },
+    ],
+  },
+);

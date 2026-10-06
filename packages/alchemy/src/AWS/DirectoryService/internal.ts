@@ -25,12 +25,10 @@ export const toTagRecord = (
  * the next pass.
  */
 export const readDirectoryTags = Effect.fn(function* (directoryId: string) {
-  const tags = yield* ds.listTagsForResource
-    .items({ ResourceId: directoryId })
-    .pipe(
-      Stream.runCollect,
-      Effect.catch(() => Effect.succeed([] as ds.Tag[])),
-    );
+  const tags = yield* ds.listTagsForResource.items({ ResourceId: directoryId }).pipe(
+    Stream.runCollect,
+    Effect.catch(() => Effect.succeed([] as ds.Tag[])),
+  );
   return toTagRecord(Array.from(tags));
 });
 

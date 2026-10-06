@@ -1,18 +1,14 @@
 import * as Effect from "effect/Effect";
-import type { Service } from "./Service.ts";
-import type { ServicesConnector } from "./ServicesConnector.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Service } from "./Service.ts";
+import type { ServicesConnector } from "./ServicesConnector.ts";
 
 /**
  * Shared HTTP scaffolding for Firebase Data Connect bindings.
  * NOT exported from index.ts.
  */
-export const makeServiceHttpBinding = <
-  I extends { name: string },
-  A,
-  E,
->(options: {
+export const makeServiceHttpBinding = <I extends { name: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -37,11 +33,7 @@ export const makeServiceHttpBinding = <
     });
   });
 
-export const makeConnectorHttpBinding = <
-  I extends { name: string },
-  A,
-  E,
->(options: {
+export const makeConnectorHttpBinding = <I extends { name: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

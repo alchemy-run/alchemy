@@ -1,31 +1,23 @@
-// Alchemy modifications are licensed under Apache-2.0.
-// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
+import type * as NodeHttp from "node:http";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import type * as NodeHttp from "node:http";
 import type { Sharp } from "sharp";
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const ImagesWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/images/Images.worker",
-    ),
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/bindings/images/Images.worker"),
 };
 const ImagesStoreWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/images/ImagesStore.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/images/ImagesStore.worker"),
 };
 import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
 import * as Storage from "../../globals/Storage.ts";
-import {
-  DEFAULT_COMPATIBILITY_DATE,
-  SOCKET_USER_ENTRY,
-} from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE, SOCKET_USER_ENTRY } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
@@ -76,13 +68,11 @@ export const ImagesLive = Layer.effect(
     const enableControlEndpoints = yield* Plugin.UnsafeEnableControlEndpoints;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
         return yield* new ConfigError({
           subtag: "Images",
-          message:
-            "Cannot configure Images persistence: the Storage service has no disk path.",
+          message: "Cannot configure Images persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
@@ -131,17 +121,11 @@ export const ImagesLive = Layer.effect(
             res
               .writeHead(200, { "content-type": "application/json" })
               .end(
-                JSON.stringify(
-                  publicPort === undefined
-                    ? null
-                    : `http://127.0.0.1:${publicPort}`,
-                ),
+                JSON.stringify(publicPort === undefined ? null : `http://127.0.0.1:${publicPort}`),
               );
             return;
           }
-          const response = await imagesLocalFetcher(
-            await readNodeRequest(req, url),
-          );
+          const response = await imagesLocalFetcher(await readNodeRequest(req, url));
           res.writeHead(response.status, Object.fromEntries(response.headers));
           res.end(Buffer.from(await response.arrayBuffer()));
         };
@@ -150,14 +134,11 @@ export const ImagesLive = Layer.effect(
           api: {
             register: () =>
               Plugin.use(Loopback.Loopback, (loopback) =>
-                Effect.map(
-                  loopback.api.route(`images:${worker.name}`, handler),
-                  (service) => {
-                    used = true;
-                    loopbackService = service;
-                    return { name: SERVICE_IMAGES };
-                  },
-                ),
+                Effect.map(loopback.api.route(`images:${worker.name}`, handler), (service) => {
+                  used = true;
+                  loopbackService = service;
+                  return { name: SERVICE_IMAGES };
+                }),
               ),
           },
           start: (ports) =>
@@ -207,9 +188,7 @@ export const ImagesLive = Layer.effect(
               name: SERVICE_IMAGES,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-                modules: formatInternalWorkerModules(
-                  yield* Effect.promise(ImagesWorker.worker),
-                ),
+                modules: formatInternalWorkerModules(yield* Effect.promise(ImagesWorker.worker)),
                 bindings: [
                   {
                     name: BINDING_IMAGES_STORE,
@@ -246,9 +225,7 @@ export const ImagesLive = Layer.effect(
                     `,
                   },
                 ],
-                bindings: [
-                  { name: "IMAGES", service: { name: SERVICE_IMAGES } },
-                ],
+                bindings: [{ name: "IMAGES", service: { name: SERVICE_IMAGES } }],
               },
               upstreamBindingName: "UPSTREAM",
               order: 1,
@@ -278,33 +255,10 @@ export const ImagesLive = Layer.effect(
  * GIF and RGB/RGBA outputs fail with a 415 error (code 9520), and SVG inputs
  * are not transformed.
  */
-export const local = (
-  props: ImagesProps,
-): BindingHook<Images | Loopback.Loopback> =>
+export const local = (props: ImagesProps): BindingHook<Images | Loopback.Loopback> =>
   Plugin.use(Images, (images) =>
-    Effect.map(
-      images.api.register(),
-      (service): WorkerdConfig.Worker_Binding => ({
-        name: props.binding,
-        wrapped: {
-          moduleName: "cloudflare-internal:images-api",
-          innerBindings: [
-            {
-              name: "fetcher",
-              service,
-            },
-          ],
-        },
-      }),
-    ),
-  );
-
-/** Bind to the deployed Images service via the remote bindings proxy. */
-export const remote = (binding: string) =>
-  makeRemoteBinding(
-    { name: binding, type: "images", raw: true },
-    (service) => ({
-      name: binding,
+    Effect.map(images.api.register(), (service): WorkerdConfig.Worker_Binding => ({
+      name: props.binding,
       wrapped: {
         moduleName: "cloudflare-internal:images-api",
         innerBindings: [
@@ -314,8 +268,23 @@ export const remote = (binding: string) =>
           },
         ],
       },
-    }),
+    })),
   );
+
+/** Bind to the deployed Images service via the remote bindings proxy. */
+export const remote = (binding: string) =>
+  makeRemoteBinding({ name: binding, type: "images", raw: true }, (service) => ({
+    name: binding,
+    wrapped: {
+      moduleName: "cloudflare-internal:images-api",
+      innerBindings: [
+        {
+          name: "fetcher",
+          service,
+        },
+      ],
+    },
+  }));
 
 // -----------------------------------------------------------------------------
 // Node-side Sharp fetcher, adapted from Miniflare's images plugin
@@ -330,10 +299,7 @@ export const remote = (binding: string) =>
 // -----------------------------------------------------------------------------
 
 /** Read a Node.js request into a fetch `Request` (bodies are buffered). */
-async function readNodeRequest(
-  req: NodeHttp.IncomingMessage,
-  url: URL,
-): Promise<Request> {
+async function readNodeRequest(req: NodeHttp.IncomingMessage, url: URL): Promise<Request> {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (value === undefined) continue;
@@ -535,11 +501,7 @@ async function runTransform(
       transformer.avif();
       break;
     case "image/gif":
-      return errorResponse(
-        415,
-        9520,
-        "ERROR: GIF output is not supported in local mode",
-      );
+      return errorResponse(415, 9520, "ERROR: GIF output is not supported in local mode");
     case "image/jpeg":
       transformer.jpeg();
       break;
@@ -551,11 +513,7 @@ async function runTransform(
       break;
     case "rgb":
     case "rgba":
-      return errorResponse(
-        415,
-        9520,
-        "ERROR: RGB/RGBA output is not supported in local mode",
-      );
+      return errorResponse(415, 9520, "ERROR: RGB/RGBA output is not supported in local mode");
     default:
       outputFormat = "image/jpeg";
       break;
@@ -569,11 +527,7 @@ async function runTransform(
   });
 }
 
-function errorResponse(
-  status: number,
-  code: number,
-  message: string,
-): Response {
+function errorResponse(status: number, code: number, message: string): Response {
   return new Response(`ERROR ${code}: ${message}`, {
     status,
     headers: {

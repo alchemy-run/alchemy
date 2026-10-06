@@ -9,11 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForDeleteOperation } from "./operations.ts";
 
@@ -176,15 +172,11 @@ export type LogBucket = Resource<
  */
 export const LogBucket = Resource<LogBucket>("GCP.Logging.LogBucket");
 
-export class LogBucketNotResolved extends Data.TaggedError(
-  "GCP.Logging.LogBucketNotResolved",
-)<{
+export class LogBucketNotResolved extends Data.TaggedError("GCP.Logging.LogBucketNotResolved")<{
   name: string;
 }> {}
 
-export class LogBucketFailed extends Data.TaggedError(
-  "GCP.Logging.LogBucketFailed",
-)<{
+export class LogBucketFailed extends Data.TaggedError("GCP.Logging.LogBucketFailed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -199,9 +191,7 @@ const resourceName = (project: string, location: string, bucketId: string) =>
   `projects/${project}/locations/${location}/buckets/${bucketId}`;
 
 const parseBucketName = (name: string) => {
-  const match = name.match(
-    /^projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/,
-  );
+  const match = name.match(/^projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/);
   if (!match) return undefined;
   return { project: match[1]!, location: match[2]!, bucketId: match[3]! };
 };
@@ -225,9 +215,7 @@ const toId = (id: string, bucketId: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z0-9]/.test(generated)
-      ? generated
-      : `b${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z0-9]/.test(generated) ? generated : `b${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const encodeDescription = (
@@ -261,17 +249,12 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const isDeleted = (
-  bucket: logging.LogBucket | undefined,
-): bucket is undefined =>
+const isDeleted = (bucket: logging.LogBucket | undefined): bucket is undefined =>
   bucket === undefined || bucket.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
 const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -280,10 +263,7 @@ const canonRestricted = (fields: readonly string[] | undefined) =>
   [...(fields ?? [])].slice().sort();
 
 const canonIndexConfigs = (
-  configs:
-    | readonly logging.IndexConfig[]
-    | readonly LogBucketIndexConfig[]
-    | undefined,
+  configs: readonly logging.IndexConfig[] | readonly LogBucketIndexConfig[] | undefined,
 ): LogBucketIndexConfig[] =>
   [...(configs ?? [])]
     .flatMap((config) =>
@@ -291,27 +271,20 @@ const canonIndexConfigs = (
         ? [
             {
               fieldPath: config.fieldPath,
-              type: (config.type ??
-                "INDEX_TYPE_STRING") as LogBucketIndexConfig["type"],
+              type: (config.type ?? "INDEX_TYPE_STRING") as LogBucketIndexConfig["type"],
             },
           ]
         : [],
     )
     .sort((left, right) => left.fieldPath.localeCompare(right.fieldPath));
 
-const toAttrs = (
-  bucket: logging.LogBucket,
-  project: string,
-  location: string,
-) => {
+const toAttrs = (bucket: logging.LogBucket, project: string, location: string) => {
   const bucketId = bucketIdOf(bucket);
   const resolvedLocation = locationOf(bucket, location);
   const parsed = parseDescription(bucket.description);
   const cmekKey = bucket.cmekSettings?.kmsKeyName;
   return {
-    name:
-      bucket.name ??
-      (bucketId ? resourceName(project, resolvedLocation, bucketId) : ""),
+    name: bucket.name ?? (bucketId ? resourceName(project, resolvedLocation, bucketId) : ""),
     bucketId,
     project,
     location: resolvedLocation,
@@ -365,9 +338,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket)
-        ? Effect.void
-        : Effect.fail(new LogBucketNotResolved({ name })),
+      isDeleted(bucket) ? Effect.void : Effect.fail(new LogBucketNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.LogBucketNotResolved",
@@ -376,10 +347,7 @@ const waitUntilDeleted = (name: string) =>
     }),
   );
 
-const toCreateBody = (
-  props: LogBucketProps,
-  description: string,
-): logging.LogBucket => ({
+const toCreateBody = (props: LogBucketProps, description: string): logging.LogBucket => ({
   description,
   retentionDays: props.retentionDays,
   locked: props.locked === true ? true : undefined,
@@ -395,9 +363,7 @@ const toCreateBody = (
           type: config.type,
         }))
       : undefined,
-  cmekSettings: props.cmekSettings
-    ? { kmsKeyName: props.cmekSettings.kmsKeyName }
-    : undefined,
+  cmekSettings: props.cmekSettings ? { kmsKeyName: props.cmekSettings.kmsKeyName } : undefined,
 });
 
 export const LogBucketProvider = () =>
@@ -408,9 +374,7 @@ export const LogBucketProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.bucketId ?? output?.bucketId;
       const idChanged =
-        previousId !== undefined &&
-        news.bucketId !== undefined &&
-        news.bucketId !== previousId;
+        previousId !== undefined && news.bucketId !== undefined && news.bucketId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -424,8 +388,7 @@ export const LogBucketProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
       const bucketId = yield* toId(id, olds?.bucketId, output?.bucketId);
-      const name =
-        output?.name ?? resourceName(env.project, location, bucketId);
+      const name = output?.name ?? resourceName(env.project, location, bucketId);
       const existing = yield* getByName(name);
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, env.project, location);
@@ -443,16 +406,9 @@ export const LogBucketProvider = () =>
           })
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
-            Stream.filter(
-              (bucket) =>
-                !isDeleted(bucket) && hasOwnershipMarker(bucket.description),
-            ),
+            Stream.filter((bucket) => !isDeleted(bucket) && hasOwnershipMarker(bucket.description)),
             Stream.map((bucket) =>
-              toAttrs(
-                bucket,
-                env.project,
-                locationOf(bucket, DEFAULT_LOCATION),
-              ),
+              toAttrs(bucket, env.project, locationOf(bucket, DEFAULT_LOCATION)),
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -469,10 +425,7 @@ export const LogBucketProvider = () =>
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         yield* undelete(current.name ?? name);
         current = yield* waitUntilActive(current.name ?? name);
       }
@@ -486,10 +439,7 @@ export const LogBucketProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
-        if (
-          current !== undefined &&
-          current.lifecycleState === "DELETE_REQUESTED"
-        ) {
+        if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
           yield* undelete(current.name ?? name);
           current = yield* waitUntilActive(current.name ?? name);
         } else if (current !== undefined && isPending(current.lifecycleState)) {
@@ -503,13 +453,11 @@ export const LogBucketProvider = () =>
 
       const desiredLocked = news.locked === true;
       const desiredAnalytics = news.analyticsEnabled === true;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const retentionChanged =
         news.retentionDays !== undefined &&
         current.locked !== true &&
-        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !==
-          news.retentionDays;
+        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !== news.retentionDays;
       const restrictedChanged =
         news.restrictedFields !== undefined &&
         !jsonEqual(
@@ -518,20 +466,15 @@ export const LogBucketProvider = () =>
         );
       const indexChanged =
         news.indexConfigs !== undefined &&
-        !jsonEqual(
-          canonIndexConfigs(current.indexConfigs),
-          canonIndexConfigs(news.indexConfigs),
-        );
+        !jsonEqual(canonIndexConfigs(current.indexConfigs), canonIndexConfigs(news.indexConfigs));
       const analyticsChanged =
         news.analyticsEnabled !== undefined &&
         desiredAnalytics &&
         current.analyticsEnabled !== true;
       const cmekChanged =
         news.cmekSettings !== undefined &&
-        (current.cmekSettings?.kmsKeyName ?? "") !==
-          news.cmekSettings.kmsKeyName;
-      const lockedChanged =
-        news.locked !== undefined && desiredLocked && current.locked !== true;
+        (current.cmekSettings?.kmsKeyName ?? "") !== news.cmekSettings.kmsKeyName;
+      const lockedChanged = news.locked !== undefined && desiredLocked && current.locked !== true;
 
       const syncMask = [
         descriptionChanged ? "description" : undefined,
@@ -607,17 +550,13 @@ export const LogBucketProvider = () =>
 
       const ignoreIfGone = (error: { readonly _tag: "BadRequest" }) =>
         getByName(name).pipe(
-          Effect.flatMap((bucket) =>
-            isDeleted(bucket) ? Effect.void : Effect.fail(error),
-          ),
+          Effect.flatMap((bucket) => (isDeleted(bucket) ? Effect.void : Effect.fail(error))),
         );
 
-      const deleteBucket = logging
-        .deleteProjectsLocationsBuckets({ name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchTag("BadRequest", ignoreIfGone),
-        );
+      const deleteBucket = logging.deleteProjectsLocationsBuckets({ name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.catchTag("BadRequest", ignoreIfGone),
+      );
 
       yield* deleteBucket.pipe(
         Effect.catchTag("BadRequest", () =>
@@ -631,9 +570,7 @@ export const LogBucketProvider = () =>
                 Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as logging.Link[]),
-                ),
+                Effect.catchTag("NotFound", () => Effect.succeed([] as logging.Link[])),
               );
             yield* Effect.forEach(
               links,
@@ -644,13 +581,8 @@ export const LogBucketProvider = () =>
                         name: link.name,
                       })
                       .pipe(
-                        Effect.flatMap((operation) =>
-                          waitForDeleteOperation(operation),
-                        ),
-                        Effect.catchTag(
-                          ["NotFound", "BadRequest"],
-                          () => Effect.void,
-                        ),
+                        Effect.flatMap((operation) => waitForDeleteOperation(operation)),
+                        Effect.catchTag(["NotFound", "BadRequest"], () => Effect.void),
                       )
                   : Effect.void,
               { concurrency: 4 },

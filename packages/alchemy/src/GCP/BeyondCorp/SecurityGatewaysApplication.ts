@@ -82,9 +82,7 @@ export type SecurityGatewaysApplicationProps = {
   /**
    * External application schema (`PROXY_GATEWAY`, `API_GATEWAY`).
    */
-  schema?:
-    | beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ApplicationSchemaEnum
-    | (string & {});
+  schema?: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ApplicationSchemaEnum | (string & {});
   /**
    * Upstream resources that receive matched traffic.
    */
@@ -166,16 +164,12 @@ export type SecurityGatewaysApplication = Resource<
  * @resource
  * @category BeyondCorp
  */
-export const SecurityGatewaysApplication =
-  Resource<SecurityGatewaysApplication>(
-    "GCP.BeyondCorp.SecurityGatewaysApplication",
-  );
+export const SecurityGatewaysApplication = Resource<SecurityGatewaysApplication>(
+  "GCP.BeyondCorp.SecurityGatewaysApplication",
+);
 
-const parentGatewayName = (
-  project: string,
-  location: string,
-  securityGateway: string,
-) => expandName(securityGateway, project, location, "securityGateways");
+const parentGatewayName = (project: string, location: string, securityGateway: string) =>
+  expandName(securityGateway, project, location, "securityGateways");
 
 const resourceNameOf = (parent: string, applicationId: string) =>
   `${parent}/applications/${applicationId}`;
@@ -191,9 +185,7 @@ const locationFromParent = (securityGateway: string, fallback: string) => {
 };
 
 const toMatchers = (
-  matchers:
-    | beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1EndpointMatcherList
-    | undefined,
+  matchers: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1EndpointMatcherList | undefined,
 ): SecurityGatewaysApplicationEndpointMatcher[] =>
   (matchers ?? []).map((matcher) => ({
     hostname: matcher.hostname,
@@ -201,9 +193,7 @@ const toMatchers = (
   }));
 
 const toUpstreams = (
-  upstreams:
-    | beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ApplicationUpstreamList
-    | undefined,
+  upstreams: beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1ApplicationUpstreamList | undefined,
 ): SecurityGatewaysApplicationUpstream[] =>
   (upstreams ?? []).map((upstream) => ({
     network: upstream.network ? { name: upstream.network.name } : undefined,
@@ -218,9 +208,7 @@ const toUpstreams = (
     proxyProtocol: upstream.proxyProtocol,
     egressPolicy: upstream.egressPolicy
       ? {
-          regions: upstream.egressPolicy.regions
-            ? [...upstream.egressPolicy.regions]
-            : undefined,
+          regions: upstream.egressPolicy.regions ? [...upstream.egressPolicy.regions] : undefined,
         }
       : undefined,
   }));
@@ -278,9 +266,8 @@ const listOwned = (project: string) =>
           }),
           (
             page,
-          ):
-            | readonly beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1Application[]
-            | undefined => page.applications,
+          ): readonly beyondcorp.GoogleCloudBeyondcorpSecuritygatewaysV1Application[] | undefined =>
+            page.applications,
         ),
       { concurrency: 4 },
     );
@@ -289,14 +276,7 @@ const listOwned = (project: string) =>
 
 export const SecurityGatewaysApplicationProvider = () =>
   Provider.succeed(SecurityGatewaysApplication, {
-    stables: [
-      "name",
-      "applicationId",
-      "securityGateway",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "applicationId", "securityGateway", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -311,8 +291,7 @@ export const SecurityGatewaysApplicationProvider = () =>
           : (olds?.applicationId ?? output?.applicationId),
         previousLocation,
         nextLocation: normalizeLocation(
-          news.location ??
-            locationFromParent(news.securityGateway, previousLocation),
+          news.location ?? locationFromParent(news.securityGateway, previousLocation),
           DEFAULT_GLOBAL,
         ),
         previousParent: olds?.securityGateway ?? output?.securityGateway,
@@ -339,16 +318,12 @@ export const SecurityGatewaysApplicationProvider = () =>
       const parent = olds?.securityGateway
         ? parentGatewayName(env.project, location, olds.securityGateway)
         : output?.securityGateway;
-      const name =
-        output?.name ??
-        (parent ? resourceNameOf(parent, applicationId) : undefined);
+      const name = output?.name ?? (parent ? resourceNameOf(parent, applicationId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -372,17 +347,10 @@ export const SecurityGatewaysApplicationProvider = () =>
         output?.applicationId,
         "application",
       );
-      const parent = parentGatewayName(
-        env.project,
-        location,
-        news.securityGateway,
-      );
+      const parent = parentGatewayName(env.project, location, news.securityGateway);
       const name = resourceNameOf(parent, applicationId);
       const ownership = yield* createInternalLabels(id);
-      const desiredDisplayName = encodeOwnershipLine(
-        ownership,
-        news.displayName,
-      );
+      const desiredDisplayName = encodeOwnershipLine(ownership, news.displayName);
       const endpointMatchers = news.endpointMatchers.map((matcher) => ({
         hostname: matcher.hostname,
         ports: matcher.ports,
@@ -416,30 +384,25 @@ export const SecurityGatewaysApplicationProvider = () =>
 
       const mask = fieldMask([
         (current.displayName ?? "") !== desiredDisplayName && "display_name",
-        fingerprint(toMatchers(current.endpointMatchers)) !==
-          fingerprint(endpointMatchers) && "endpoint_matchers",
+        fingerprint(toMatchers(current.endpointMatchers)) !== fingerprint(endpointMatchers) &&
+          "endpoint_matchers",
         (current.schema ?? "") !== (news.schema ?? "") && "schema",
-        fingerprint(toUpstreams(current.upstreams)) !==
-          fingerprint(upstreams) && "upstreams",
+        fingerprint(toUpstreams(current.upstreams)) !== fingerprint(upstreams) && "upstreams",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* beyondcorp.patchProjectsLocationsSecurityGatewaysApplications({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              displayName: desiredDisplayName,
-              endpointMatchers,
-              schema: news.schema,
-              upstreams,
-            },
-          });
+        const operation = yield* beyondcorp.patchProjectsLocationsSecurityGatewaysApplications({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            displayName: desiredDisplayName,
+            endpointMatchers,
+            schema: news.schema,
+            upstreams,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

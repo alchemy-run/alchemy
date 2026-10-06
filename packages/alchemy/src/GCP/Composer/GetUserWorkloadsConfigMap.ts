@@ -44,7 +44,6 @@ export interface GetUserWorkloadsConfigMap extends Binding.Service<
   >
 > {}
 
-export const GetUserWorkloadsConfigMap =
-  Binding.Service<GetUserWorkloadsConfigMap>(
-    "GCP.Composer.GetUserWorkloadsConfigMap",
-  );
+export const GetUserWorkloadsConfigMap = Binding.Service<GetUserWorkloadsConfigMap>(
+  "GCP.Composer.GetUserWorkloadsConfigMap",
+);

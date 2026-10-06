@@ -162,8 +162,7 @@ const toAttrs = (model: ml.GoogleCloudMlV1__Model, project: string) => {
     labels: userLabels(model.labels),
     regions: normalizeRegions(model.regions, []),
     onlinePredictionLogging: model.onlinePredictionLogging === true,
-    onlinePredictionConsoleLogging:
-      model.onlinePredictionConsoleLogging === true,
+    onlinePredictionConsoleLogging: model.onlinePredictionConsoleLogging === true,
     defaultVersion: model.defaultVersion?.name,
     etag: model.etag,
   };
@@ -184,9 +183,7 @@ const deleteVersions = (parent: string) =>
       (version) =>
         version.name
           ? ml.deleteProjectsModelsVersions({ name: version.name }).pipe(
-              Effect.flatMap((operation) =>
-                waitForOperation(operation, { notFoundOk: true }),
-              ),
+              Effect.flatMap((operation) => waitForOperation(operation, { notFoundOk: true })),
               Effect.catchTag("NotFound", () => Effect.void),
             )
           : Effect.void,
@@ -201,25 +198,16 @@ export const ModelProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousRegions = normalizeRegions(
-        olds?.regions ?? output?.regions,
-        [env.region],
-      );
-      const nextRegions = normalizeRegions(
-        news.regions ?? olds?.regions ?? output?.regions,
-        [env.region],
-      );
+      const previousRegions = normalizeRegions(olds?.regions ?? output?.regions, [env.region]);
+      const nextRegions = normalizeRegions(news.regions ?? olds?.regions ?? output?.regions, [
+        env.region,
+      ]);
       const previousLogging =
-        olds?.onlinePredictionLogging ??
-        output?.onlinePredictionLogging ??
-        false;
+        olds?.onlinePredictionLogging ?? output?.onlinePredictionLogging ?? false;
       const nextLogging = news.onlinePredictionLogging ?? previousLogging;
       const previousConsole =
-        olds?.onlinePredictionConsoleLogging ??
-        output?.onlinePredictionConsoleLogging ??
-        false;
-      const nextConsole =
-        news.onlinePredictionConsoleLogging ?? previousConsole;
+        olds?.onlinePredictionConsoleLogging ?? output?.onlinePredictionConsoleLogging ?? false;
+      const nextConsole = news.onlinePredictionConsoleLogging ?? previousConsole;
       return replaceOnIdentity({
         previousId: olds?.modelId ?? output?.modelId,
         nextId: news.modelId ?? olds?.modelId ?? output?.modelId,
@@ -232,19 +220,12 @@ export const ModelProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const modelId = yield* toPhysicalId(
-        id,
-        olds?.modelId,
-        output?.modelId,
-        "model",
-      );
+      const modelId = yield* toPhysicalId(id, olds?.modelId, output?.modelId, "model");
       const name = output?.name ?? modelResourceName(env.project, modelId);
       const existing = yield* getModel(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* modelOwnedByAlchemy(id, existing))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* modelOwnedByAlchemy(id, existing)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -256,12 +237,7 @@ export const ModelProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const modelId = yield* toPhysicalId(
-        id,
-        news.modelId,
-        output?.modelId,
-        "model",
-      );
+      const modelId = yield* toPhysicalId(id, news.modelId, output?.modelId, "model");
       const name = modelResourceName(env.project, modelId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -269,12 +245,9 @@ export const ModelProvider = () =>
         ...toLabels(news.labels),
         ...ownership,
       };
-      const regions = normalizeRegions(news.regions ?? output?.regions, [
-        env.region,
-      ]);
+      const regions = normalizeRegions(news.regions ?? output?.regions, [env.region]);
       const onlinePredictionLogging = news.onlinePredictionLogging === true;
-      const onlinePredictionConsoleLogging =
-        news.onlinePredictionConsoleLogging === true;
+      const onlinePredictionConsoleLogging = news.onlinePredictionConsoleLogging === true;
       const defaultVersion = desiredDefaultVersion(news.defaultVersion);
 
       let current = yield* getModel(output?.name ?? name);
@@ -302,11 +275,8 @@ export const ModelProvider = () =>
 
       const currentName = current.name ?? name;
       const descriptionChanged = !sameText(current.description, description);
-      const observedDefault = desiredDefaultVersion(
-        current.defaultVersion?.name,
-      );
-      const defaultChanged =
-        defaultVersion !== undefined && observedDefault !== defaultVersion;
+      const observedDefault = desiredDefaultVersion(current.defaultVersion?.name);
+      const defaultChanged = defaultVersion !== undefined && observedDefault !== defaultVersion;
       const mask = fieldMask([
         descriptionChanged && "description",
         defaultChanged && "default_version.name",
@@ -322,9 +292,7 @@ export const ModelProvider = () =>
             defaultVersion:
               defaultVersion !== undefined
                 ? {
-                    name: defaultVersion.includes("/")
-                      ? defaultVersion
-                      : defaultVersion,
+                    name: defaultVersion.includes("/") ? defaultVersion : defaultVersion,
                   }
                 : undefined,
           },
@@ -349,8 +317,7 @@ export const ModelProvider = () =>
         }
       }).pipe(
         Effect.retry({
-          while: (error) =>
-            error._tag === "Conflict" || error._tag === "BadRequest",
+          while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
@@ -359,5 +326,4 @@ export const ModelProvider = () =>
     }),
   });
 
-export const modelNameOf = (project: string, model: string) =>
-  expandModel(project, model);
+export const modelNameOf = (project: string, model: string) => expandModel(project, model);

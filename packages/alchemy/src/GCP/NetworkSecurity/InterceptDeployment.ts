@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -34,9 +29,7 @@ import {
 
 const COLLECTION = "interceptDeployments";
 
-export type InterceptDeploymentState =
-  | networksecurity.InterceptDeploymentStateEnum
-  | (string & {});
+export type InterceptDeploymentState = networksecurity.InterceptDeploymentStateEnum | (string & {});
 
 export type InterceptDeploymentProps = {
   /**
@@ -138,17 +131,10 @@ export const InterceptDeployment = Resource<InterceptDeployment>(
   "GCP.NetworkSecurity.InterceptDeployment",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  interceptDeploymentId: string,
-) =>
+const resourceName = (project: string, location: string, interceptDeploymentId: string) =>
   `projects/${project}/locations/${location}/interceptDeployments/${interceptDeploymentId}`;
 
-const toAttrs = (
-  deployment: networksecurity.InterceptDeployment,
-  project: string,
-) => {
+const toAttrs = (deployment: networksecurity.InterceptDeployment, project: string) => {
   const name = deployment.name ?? "";
   const parsed = parseName(name, COLLECTION, DEFAULT_ZONE);
   return {
@@ -190,15 +176,11 @@ export const InterceptDeploymentProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.interceptDeploymentId ?? output?.interceptDeploymentId;
+      const previousId = olds?.interceptDeploymentId ?? output?.interceptDeploymentId;
       const nextId = news.interceptDeploymentId
         ? rfc1035(news.interceptDeploymentId, "intercept-deployment")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         DEFAULT_ZONE,
@@ -207,14 +189,10 @@ export const InterceptDeploymentProvider = () =>
         olds?.interceptDeploymentGroup ?? output?.interceptDeploymentGroup,
       );
       const nextGroup = linkKey(news.interceptDeploymentGroup);
-      const previousRule = linkKey(
-        olds?.forwardingRule ?? output?.forwardingRule,
-      );
+      const previousRule = linkKey(olds?.forwardingRule ?? output?.forwardingRule);
       const nextRule = linkKey(news.forwardingRule);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousGroup.length > 0 && previousGroup !== nextGroup) ||
         (previousRule.length > 0 && previousRule !== nextRule)
@@ -232,19 +210,12 @@ export const InterceptDeploymentProvider = () =>
         output?.interceptDeploymentId,
         "intercept-deployment",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, interceptDeploymentId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_ZONE);
+      const name = output?.name ?? resourceName(env.project, location, interceptDeploymentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -270,18 +241,13 @@ export const InterceptDeploymentProvider = () =>
         output?.interceptDeploymentId,
         "intercept-deployment",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_ZONE,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_ZONE);
       const name = resourceName(env.project, location, interceptDeploymentId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const interceptDeploymentGroup = canonicalizeLink(
-        news.interceptDeploymentGroup,
-      );
+      const interceptDeploymentGroup = canonicalizeLink(news.interceptDeploymentGroup);
       const forwardingRule = canonicalizeLink(news.forwardingRule);
 
       let current = yield* getByName(name);
@@ -315,29 +281,24 @@ export const InterceptDeploymentProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const updateMask = changedFields([
         ["labels", labelsChanged],
         ["description", descriptionChanged],
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networksecurity.patchProjectsLocationsInterceptDeployments({
+        const operation = yield* networksecurity.patchProjectsLocationsInterceptDeployments({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilReady(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilReady(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

@@ -10,21 +10,13 @@ export const DEFAULT_UPLOAD_KEY_TYPES: datamanager.IngestedUserListInfoUploadKey
 export const PROBE_PARENT = "accountTypes/GOOGLE_ADS/accounts/0";
 export const PROBE_NAME = `${PROBE_PARENT}/userLists/0`;
 
-export type AccountType =
-  | datamanager.ProductAccountAccountTypeEnum
-  | (string & {});
+export type AccountType = datamanager.ProductAccountAccountTypeEnum | (string & {});
 
-export type MembershipStatus =
-  | datamanager.UserListMembershipStatusEnum
-  | (string & {});
+export type MembershipStatus = datamanager.UserListMembershipStatusEnum | (string & {});
 
-export type AccountAccessStatus =
-  | datamanager.UserListAccountAccessStatusEnum
-  | (string & {});
+export type AccountAccessStatus = datamanager.UserListAccountAccessStatusEnum | (string & {});
 
-export type UploadKeyType =
-  | datamanager.IngestedUserListInfoUploadKeyTypesItemEnum
-  | (string & {});
+export type UploadKeyType = datamanager.IngestedUserListInfoUploadKeyTypesItemEnum | (string & {});
 
 export type TargetNetworkInfoProps = {
   /** Whether the list is eligible for the Google Display Network. */
@@ -35,9 +27,7 @@ export type TargetNetworkInfoProps = {
 
 export type PartnerAudienceInfoProps = {
   /** Immutable source of the partner audience. */
-  partnerAudienceSource?:
-    | datamanager.PartnerAudienceInfoPartnerAudienceSourceEnum
-    | (string & {});
+  partnerAudienceSource?: datamanager.PartnerAudienceInfoPartnerAudienceSourceEnum | (string & {});
   /** Commerce partner name. Only for `COMMERCE_AUDIENCE`. */
   commercePartner?: string;
 };
@@ -99,8 +89,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeResourceName = (value: string) =>
-  value.replace(/\/+$/, "").trim();
+export const normalizeResourceName = (value: string) => value.replace(/\/+$/, "").trim();
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -111,8 +100,7 @@ export const jsonEqual = (left: unknown, right: unknown) =>
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
-export const accountIdOf = (value: string) =>
-  lastSegment(value).replace(/-/g, "");
+export const accountIdOf = (value: string) => lastSegment(value).replace(/-/g, "");
 
 export const parentOf = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -219,11 +207,7 @@ export const collectPages = <A, Page, E, R>(
   );
 
 export const ignoreMissing = <A, R>(
-  effect: Effect.Effect<
-    A,
-    datamanager.DeleteAccountTypesAccountsUserListsError,
-    R
-  >,
+  effect: Effect.Effect<A, datamanager.DeleteAccountTypesAccountsUserListsError, R>,
 ) => effect.pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 export const getUserList = (name: string) =>
@@ -247,17 +231,12 @@ export const listUserLists = (parent: string) =>
         Effect.catchTag("NotFound", () => emptyList<datamanager.UserList>()),
       );
 
-export const findUserListByDisplayName = (
-  displayName: string,
-  parent: string,
-) =>
+export const findUserListByDisplayName = (displayName: string, parent: string) =>
   listUserLists(parent).pipe(
     Effect.map((rows) => rows.find((row) => row.displayName === displayName)),
   );
 
-export const ingestedIdentity = (
-  info: IngestedUserListInfoProps | undefined,
-) => {
+export const ingestedIdentity = (info: IngestedUserListInfoProps | undefined) => {
   if (info === undefined) return undefined;
   return {
     uploadKeyTypes: [...(info.uploadKeyTypes ?? [])].slice().sort(),
@@ -286,9 +265,7 @@ export const ingestedIdentity = (
     contactIdInfo: info.contactIdInfo
       ? { dataSourceType: info.contactIdInfo.dataSourceType }
       : undefined,
-    userIdInfo: info.userIdInfo
-      ? { dataSourceType: info.userIdInfo.dataSourceType }
-      : undefined,
+    userIdInfo: info.userIdInfo ? { dataSourceType: info.userIdInfo.dataSourceType } : undefined,
   };
 };
 
@@ -323,9 +300,7 @@ export const ingestedFromRow = (
     contactIdInfo: info.contactIdInfo
       ? { dataSourceType: info.contactIdInfo.dataSourceType }
       : undefined,
-    userIdInfo: info.userIdInfo
-      ? { dataSourceType: info.userIdInfo.dataSourceType }
-      : undefined,
+    userIdInfo: info.userIdInfo ? { dataSourceType: info.userIdInfo.dataSourceType } : undefined,
   };
 };
 

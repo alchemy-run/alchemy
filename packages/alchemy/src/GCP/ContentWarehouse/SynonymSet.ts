@@ -86,18 +86,12 @@ const DEFAULT_SYNONYMS: Synonym[] = [{ words: ["sale", "invoice", "bill"] }];
  * @resource
  * @category ContentWarehouse
  */
-export const SynonymSet = Resource<SynonymSet>(
-  "GCP.ContentWarehouse.SynonymSet",
-);
+export const SynonymSet = Resource<SynonymSet>("GCP.ContentWarehouse.SynonymSet");
 
 const resourceName = (project: string, location: string, context: string) =>
   `${locationParent(project, location)}/synonymSets/${context}`;
 
-const contextOf = (
-  id: string,
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+const contextOf = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) {
       return rfc1035(explicit, "sales").slice(0, MAX_CONTEXT_LENGTH);
@@ -106,10 +100,7 @@ const contextOf = (
     return yield* toPhysicalId(id, undefined, undefined, "syn");
   });
 
-const toAttrs = (
-  item: cw.GoogleCloudContentwarehouseV1SynonymSet,
-  project: string,
-) => {
+const toAttrs = (item: cw.GoogleCloudContentwarehouseV1SynonymSet, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "synonymSets");
   return {
@@ -152,9 +143,7 @@ export const SynonymSetProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // State or the generated context proves ownership.
-      return output !== undefined || olds?.context === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.context === undefined ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

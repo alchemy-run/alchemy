@@ -9,15 +9,11 @@ export const DEFAULT_LOCATION = "us-central1";
 const MAX_DISPLAY_NAME_LENGTH = 32;
 const MAX_ID_LENGTH = 63;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Translate.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Translate.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.Translate.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.Translate.ResourceStillExists")<{
   name: string;
 }> {}
 
@@ -48,16 +44,10 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -79,11 +69,7 @@ export const expandParent = (
   return `${locationParent(project, location)}/${collection}/${trimmed}`;
 };
 
-export const resourceNameOf = (
-  parent: string,
-  collection: string,
-  id: string,
-) => {
+export const resourceNameOf = (parent: string, collection: string, id: string) => {
   if (id.length === 0) return "";
   if (id.includes(`/${collection}/`)) return id.replace(/\/+$/, "");
   return `${parent}/${collection}/${lastSegment(id)}`;
@@ -113,11 +99,9 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const replaceOnIdentity = (input: {
   previousId?: string;
@@ -129,13 +113,9 @@ export const replaceOnIdentity = (input: {
   extra?: boolean;
 }) => {
   const previousLocation =
-    input.previousLocation !== undefined
-      ? normalizeLocation(input.previousLocation)
-      : undefined;
+    input.previousLocation !== undefined ? normalizeLocation(input.previousLocation) : undefined;
   const nextLocation =
-    input.nextLocation !== undefined
-      ? normalizeLocation(input.nextLocation)
-      : undefined;
+    input.nextLocation !== undefined ? normalizeLocation(input.nextLocation) : undefined;
   const replace =
     (input.extra ?? false) ||
     (input.previousId !== undefined &&
@@ -150,8 +130,7 @@ export const replaceOnIdentity = (input: {
   if (!replace) return undefined;
   const samePhysical =
     (previousLocation === undefined || previousLocation === nextLocation) &&
-    (input.previousParent === undefined ||
-      input.previousParent === input.nextParent) &&
+    (input.previousParent === undefined || input.previousParent === input.nextParent) &&
     input.previousId !== undefined &&
     input.nextId === input.previousId;
   return {
@@ -187,11 +166,7 @@ export const toPhysicalId = (
 export const toRestrictedDisplayName = (
   text: string,
   maxLength = MAX_DISPLAY_NAME_LENGTH,
-): string =>
-  (text.replace(/[^A-Za-z0-9_]/g, "_").slice(0, maxLength) || "_").slice(
-    0,
-    maxLength,
-  );
+): string => (text.replace(/[^A-Za-z0-9_]/g, "_").slice(0, maxLength) || "_").slice(0, maxLength);
 
 export const retryTransient = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,

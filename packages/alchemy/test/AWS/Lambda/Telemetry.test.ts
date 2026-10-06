@@ -1,26 +1,18 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
-import {
-  OtelTestFunction,
-  OtelTestFunctionLive,
-} from "./fixtures/otel-handler.ts";
+import { OtelTestFunction, OtelTestFunctionLive } from "./fixtures/otel-handler.ts";
 
-const { test } = Test.make({
-  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
-});
+const { test } = Test.make({ providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()) });
 
-const collectorMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-collector-worker.ts",
-);
+const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/otel-collector-worker.ts");
 
 // The OTLP sink the Lambda exports to. A workers.dev URL is fine here —
 // the 1042 worker-to-worker restriction doesn't apply to requests coming
@@ -29,9 +21,7 @@ const collectorMain = pathe.resolve(
 const collectorWorker = () =>
   Cloudflare.Worker("OtelCollector", {
     main: collectorMain,
-    env: {
-      SINK: Cloudflare.DurableObject<OtelSink>("OtelSink"),
-    },
+    env: { SINK: Cloudflare.DurableObject<OtelSink>("OtelSink") },
     compatibility: { date: "2024-09-23" },
   });
 
@@ -61,9 +51,7 @@ describe(
             }),
           );
           const collected = `${collector.url}/collected`;
-          yield* expectUrlContains(collected, "otel-collector-ok", {
-            timeout: "180 seconds",
-          });
+          yield* expectUrlContains(collected, "otel-collector-ok", { timeout: "180 seconds" });
 
           // The fixture's telemetry binding layer reads `COLLECTOR_URL` via
           // `Config` at Init. The test harness snapshots its ConfigProvider
@@ -74,9 +62,7 @@ describe(
             .deploy(
               Effect.gen(function* () {
                 yield* collectorWorker();
-                const fn = yield* OtelTestFunction.pipe(
-                  Effect.provide(OtelTestFunctionLive),
-                );
+                const fn = yield* OtelTestFunction.pipe(Effect.provide(OtelTestFunctionLive));
                 return { fn };
               }),
             )
@@ -84,9 +70,7 @@ describe(
               Effect.provideService(
                 ConfigProvider.ConfigProvider,
                 ConfigProvider.orElse(
-                  ConfigProvider.fromUnknown({
-                    COLLECTOR_URL: collector.url,
-                  }),
+                  ConfigProvider.fromUnknown({ COLLECTOR_URL: collector.url }),
                   currentConfig,
                 ),
               ),
@@ -103,9 +87,7 @@ describe(
           });
 
           // Drive one traced invocation.
-          yield* expectUrlContains(`${fnUrl}/work`, "lambda-did-work", {
-            timeout: "120 seconds",
-          });
+          yield* expectUrlContains(`${fnUrl}/work`, "lambda-did-work", { timeout: "120 seconds" });
 
           // The invocation scope's flush ships everything the invocation
           // produced before the response is returned.
