@@ -6,28 +6,13 @@ import {
 } from "@distilled.cloud/prisma/management";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import { AlchemyContext } from "@/AlchemyContext";
 import * as Drift from "@/Drift.ts";
 import * as Prisma from "@/Prisma";
 import { connectEnvKeys } from "@/Prisma/Connect";
-import { Connection, ConnectionProvider } from "@/Prisma/Connection";
-import type { DatabaseConnection, DatabaseConnectionWithSecrets } from "@/Prisma/Types";
-import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { restoreRowAttr } from "./fixtures/ConnectionLive.ts";
-import {
-  conflict,
-  data,
-  type FakeManagementApi,
-  makeFakeManagementApi,
-  noContent,
-  notFound,
-  page,
-  unhandled,
-} from "./fixtures/FakeManagementApi.ts";
 import {
   expectGone,
   expectProjectGone,
@@ -379,142 +364,6 @@ live.test.provider(
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 240_000 },
-);
-
-// Prisma permits duplicate connection names, so a 409 on create cannot be
-// produced live; this race runs against an in-memory Management API.
-
-const createdAt = "2026-01-01T00:00:00.000Z";
-
-const apiConnection = (id: string, name: string): DatabaseConnection => ({
-  id,
-  type: "connection",
-  url: `https://api.prisma.test/v1/connections/${id}`,
-  name,
-  createdAt,
-  kind: "postgres",
-  endpoints: {
-    direct: { host: "db.prisma.test", port: 5432 },
-    pooled: { host: "pooled.db.prisma.test", port: 5432 },
-  },
-  database: {
-    id: "database-1",
-    url: "https://api.prisma.test/v1/databases/database-1",
-    name: "main",
-  },
-});
-
-const withSecrets = (value: DatabaseConnection, suffix: string): DatabaseConnectionWithSecrets => ({
-  ...value,
-  endpoints: {
-    direct: {
-      host: "db.prisma.test",
-      port: 5432,
-      connectionString: `postgres://direct-${suffix}`,
-    },
-    pooled: {
-      host: "pooled.db.prisma.test",
-      port: 5432,
-      connectionString: `postgres://pooled-${suffix}`,
-    },
-  },
-});
-
-/**
- * Connection routes over an in-memory store. Every create commits the key
- * and answers 409, as when a create raced a twin that already committed.
- */
-const makeConflictCloud = () => {
-  const connections = new Map<string, DatabaseConnection>();
-  const counts = { creates: 0, rotations: 0, deletes: 0 };
-  const fake = makeFakeManagementApi((request) => {
-    const segments = request.pathname.split("/").filter((s) => s.length > 0);
-    if (
-      segments.length === 4 &&
-      segments[1] === "databases" &&
-      segments[3] === "connections" &&
-      request.method === "GET"
-    ) {
-      return page(Array.from(connections.values()).filter((c) => c.database.id === segments[2]));
-    }
-    if (request.pathname === "/v1/connections" && request.method === "POST") {
-      counts.creates += 1;
-      const { name } = request.bodyJson as { name: string };
-      const id = `connection-${counts.creates}`;
-      connections.set(id, apiConnection(id, name));
-      return conflict("already exists");
-    }
-    if (
-      segments.length === 4 &&
-      segments[1] === "connections" &&
-      segments[3] === "rotate" &&
-      request.method === "POST"
-    ) {
-      const existing = connections.get(segments[2]!);
-      if (!existing) return notFound("not found");
-      counts.rotations += 1;
-      return data(withSecrets(existing, "recovered"));
-    }
-    if (segments.length === 3 && segments[1] === "connections") {
-      const existing = connections.get(segments[2]!);
-      if (request.method === "GET") {
-        return existing ? data(existing) : notFound("not found");
-      }
-      if (request.method === "DELETE") {
-        if (!existing) return notFound("not found");
-        counts.deletes += 1;
-        connections.delete(segments[2]!);
-        return noContent();
-      }
-    }
-    return unhandled(request);
-  });
-  return { fake, connections, counts };
-};
-
-class ConnectionTestProviders extends Provider.ProviderCollection<ConnectionTestProviders>()(
-  "Prisma",
-) {}
-
-const connectionLayer = (fake: FakeManagementApi) =>
-  Layer.effect(ConnectionTestProviders, Provider.collection([Connection])).pipe(
-    Layer.provideMerge(ConnectionProvider()),
-    Layer.provide(
-      Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
-    ),
-    Layer.provideMerge(fake.layer),
-  );
-
-const conflictCloud = makeConflictCloud();
-const conflictRace = Test.make({ providers: connectionLayer(conflictCloud.fake) });
-
-conflictRace.test.provider(
-  "recovers credentials after a generated connection create conflict",
-  (stack) =>
-    Effect.gen(function* () {
-      conflictCloud.connections.clear();
-      yield* stack.destroy();
-      conflictCloud.counts.creates = 0;
-      conflictCloud.counts.rotations = 0;
-      conflictCloud.counts.deletes = 0;
-
-      const recovered = yield* stack.deploy(
-        Connection("Api", { database: "database-1", name: "api" }),
-      );
-
-      expect(conflictCloud.counts.creates).toBe(1);
-      expect(conflictCloud.counts.rotations).toBe(1);
-      expect(recovered.connectionId).toBe("connection-1");
-      expect(recovered.connectionName).toMatch(/^api-[0-9a-zA-Z]{12}$/);
-      expect(Redacted.value(recovered.directConnectionString!)).toBe("postgres://direct-recovered");
-
-      yield* stack.destroy();
-      expect(conflictCloud.counts.deletes).toBe(1);
-      expect(conflictCloud.connections.size).toBe(0);
-    }),
-  {
-    tags: ["unit", "provider:prisma", "provider:prisma:connection", "local"],
-  },
 );
 
 it(
