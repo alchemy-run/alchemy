@@ -147,6 +147,14 @@ export const codexDriver = (
 
     yield* Effect.all(
       [
+        // Codex retries transport failures itself; surface each attempt so a
+        // stuck turn is visible instead of silent.
+        route(Codex.error, (r, n) =>
+          emit(r, {
+            type: "error",
+            message: `${n.error.message}${n.willRetry ? " (retrying)" : ""}`,
+          }),
+        ),
         route(Codex.itemAgentMessageDelta, (r, n) => {
           if (r.turn) r.turn.text += n.delta;
           return emit(r, {

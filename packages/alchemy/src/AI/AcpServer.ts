@@ -1,9 +1,15 @@
 import * as Effect from "effect/Effect";
-import type { ImageLayer } from "../Docker/ImageEnvironment.ts";
+import type { ImageLayer } from "../Docker/ImageLayer.ts";
 import { acpDriver } from "./AcpDriver.ts";
-import { makeHarnessServer, type HarnessServerOptions } from "./HarnessServer.ts";
+import { DEFAULT_CWD, makeHarnessServer, type HarnessServerOptions } from "./HarnessServer.ts";
 
 export interface AcpServerProps {
+  /**
+   * Directory sessions work in by default — usually an environment's
+   * `workdir` (`cwd: app.workdir`). Sessions can override it on `start`.
+   * @default "/workspace"
+   */
+  cwd?: string;
   /** The agent executable, e.g. `"gemini"`. */
   command: string;
   /** Arguments that put it in ACP mode, e.g. `["--experimental-acp"]`. */
@@ -37,6 +43,7 @@ export interface AcpServerProps {
 export const AcpServer = (id: string, props: AcpServerProps) =>
   makeHarnessServer({
     id,
+    cwd: props.cwd ?? DEFAULT_CWD,
     ...(props.install ? { image: props.install } : {}),
     ...(props.env ? { env: props.env } : {}),
     driver: Effect.suspend(() =>
@@ -44,7 +51,7 @@ export const AcpServer = (id: string, props: AcpServerProps) =>
         name: id,
         command: props.command,
         ...(props.args ? { args: props.args } : {}),
-        cwd: process.env.ALCHEMY_WORKDIR ?? "/workspace",
+        cwd: props.cwd ?? DEFAULT_CWD,
       }),
     ),
   });

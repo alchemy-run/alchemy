@@ -6,7 +6,7 @@ import Worker from "./worker.ts";
 
 export default (state = Cloudflare.state()) =>
   Alchemy.Stack(
-    "AiClaudeContainerStack",
+    "AiHarnessStack",
     { providers: Cloudflare.providers(), state },
     Effect.gen(function* () {
       const worker = yield* Worker;

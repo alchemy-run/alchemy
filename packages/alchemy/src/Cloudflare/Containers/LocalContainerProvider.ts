@@ -60,6 +60,9 @@ export const LocalContainerProvider = () =>
       // `Output`s there and get skipped. Caching env here would freeze that
       // incomplete env and start the container without its bindings;
       // `makeAttributes` attaches the freshly-computed env instead.
+      const imageMemoKey = (id: string, news: AnyContainerApplicationProps) =>
+        `container-image:${id}${news.imageLayers?.length ? `:${news.imageLayers.map((l) => l.id).join(",")}` : ""}`;
+
       const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
           yield* validateContainerImageProps(news);
@@ -135,9 +138,7 @@ export const LocalContainerProvider = () =>
           // Binding-contributed image layers are part of the key: `precreate`
           // warms this cache before bindings resolve, and reconcile must not
           // reuse that layer-less image.
-          Artifacts.cached(
-            `container-image:${id}${news.imageLayers?.length ? `:${news.imageLayers.map((l) => l.id).join(",")}` : ""}`,
-          ),
+          Artifacts.cached(imageMemoKey(id, news)),
         );
 
       /**
@@ -230,7 +231,7 @@ export const LocalContainerProvider = () =>
 
       return {
         stables: ["accountId", "applicationId"],
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ id, news, output, newBindings }) {
           if (!output) return { action: "update" };
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
@@ -241,14 +242,19 @@ export const LocalContainerProvider = () =>
           // never "resolved", and requiring full resolution silently
           // disabled this check for every effectful container.
           const imageInputs = resolvedImageInputs(news);
-          if (imageInputs !== undefined) {
+          if (imageInputs !== undefined && isResolved(newBindings)) {
             // Recompute fresh on every plan. `prepareImage` is memoized so
             // a plan's diff→precreate→reconcile chain bundles once — but
             // this provider runs in the RPC sidecar, whose `ArtifactStore`
             // outlives every run, so without this eviction the FIRST run's
             // hash would be compared forever.
-            yield* (yield* Artifacts.Artifacts).delete(`container-image:${id}`);
-            const input = yield* prepareImage(id, imageInputs);
+            //
+            // Bindings' image layers are part of the image: computing it
+            // without them would also rewrite the shared build context with
+            // a layer-less Dockerfile that the dev runtime then builds.
+            const withLayers = withImageLayers(imageInputs, newBindings);
+            yield* (yield* Artifacts.Artifacts).delete(imageMemoKey(id, withLayers));
+            const input = yield* prepareImage(id, withLayers);
             if (input.hash !== output.hash?.image || !output.dev) {
               return { action: "update" };
             }

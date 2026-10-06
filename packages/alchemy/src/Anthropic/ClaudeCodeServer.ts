@@ -6,13 +6,19 @@ import {
   claudeCodeDriver,
   type ClaudeCodeOptions,
 } from "../AI/ClaudeCodeDriver.ts";
-import { makeHarnessServer, npmInstallLayer } from "../AI/HarnessServer.ts";
+import { DEFAULT_CWD, makeHarnessServer, npmInstallLayer } from "../AI/HarnessServer.ts";
 
 /** The container env var carrying a named account's token. */
 const accountEnvKey = (name: string) =>
   `ALCHEMY_CLAUDE_ACCOUNT_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
 
 export interface ClaudeCodeServerProps {
+  /**
+   * Directory sessions work in by default — usually an environment's
+   * `workdir` (`cwd: app.workdir`). Sessions can override it on `start`.
+   * @default "/workspace"
+   */
+  cwd?: string;
   /**
    * Anthropic API key for the `claude` process (`ANTHROPIC_API_KEY`). Bound
    * into the host's environment — never baked into the image.
@@ -63,18 +69,20 @@ export interface ClaudeCodeServerProps {
  * import * as Anthropic from "alchemy/Anthropic";
  *
  * export default Sandbox.make(
- *   { main: import.meta.url, runtime: "node", environment: Workspace },
+ *   { main: import.meta.url, runtime: "node", image: "node:22-bookworm" },
  *   Effect.gen(function* () {
+ *     const app = yield* App; // an AI.Environment
  *     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
- *       apiKey: Alchemy.Secret("ANTHROPIC_API_KEY"),
+ *       apiKey: yield* Config.Redacted("ANTHROPIC_API_KEY"),
+ *       cwd: app.workdir,
  *     });
  *     return { fetch: yield* AI.serveHarnessHttp(claude) };
  *   }),
  * );
  * ```
  *
- * The image needs Node.js (e.g. `environment: { base: "node:22-bookworm" }`
- * with `runtime: "node"`).
+ * The image needs Node.js (e.g. `image: "node:22-bookworm"` with
+ * `runtime: "node"`).
  *
  * @binding
  * @product Claude Code
@@ -83,6 +91,7 @@ export interface ClaudeCodeServerProps {
 export const ClaudeCodeServer = (id = "ClaudeCode", props: ClaudeCodeServerProps = {}) =>
   makeHarnessServer({
     id,
+    cwd: props.cwd ?? DEFAULT_CWD,
     image: [
       npmInstallLayer(
         `claude-agent-sdk@${props.version ?? CLAUDE_AGENT_SDK_VERSION}`,
@@ -99,7 +108,7 @@ export const ClaudeCodeServer = (id = "ClaudeCode", props: ClaudeCodeServerProps
     },
     driver: Effect.sync(() =>
       claudeCodeDriver({
-        cwd: process.env.ALCHEMY_WORKDIR ?? "/workspace",
+        cwd: props.cwd ?? DEFAULT_CWD,
         accountEnv: (account): Record<string, string> | undefined => {
           const names = Object.keys(props.accounts ?? {});
           const hasDefault = props.apiKey !== undefined || props.oauthToken !== undefined;

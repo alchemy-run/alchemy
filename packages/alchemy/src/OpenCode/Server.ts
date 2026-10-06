@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { acpDriver } from "../AI/AcpDriver.ts";
 import {
+  DEFAULT_CWD,
   makeHarnessServer,
   npmInstallLayer,
   type HarnessServerOptions,
@@ -11,11 +12,22 @@ export const OPENCODE_VERSION = "1.18.18";
 
 export interface ServerProps {
   /**
+   * Directory sessions work in by default — usually an environment's
+   * `workdir` (`cwd: app.workdir`). Sessions can override it on `start`.
+   * @default "/workspace"
+   */
+  cwd?: string;
+  /**
    * Provider credentials OpenCode reads from its environment, e.g.
    * `{ ANTHROPIC_API_KEY: Alchemy.Secret("ANTHROPIC_API_KEY") }` or an
    * OpenCode Zen/Go key. Bound into the host's environment.
    */
   env?: HarnessServerOptions<never>["env"];
+  /**
+   * Default model as `provider/model`, e.g. `anthropic/claude-haiku-4-5`.
+   * @default OpenCode's own default for the configured provider
+   */
+  model?: string;
   /** `opencode-ai` version installed into the image. */
   version?: string;
 }
@@ -39,6 +51,7 @@ export interface ServerProps {
 export const Server = (id = "OpenCode", props: ServerProps = {}) =>
   makeHarnessServer({
     id,
+    cwd: props.cwd ?? DEFAULT_CWD,
     image: [
       npmInstallLayer(`opencode@${props.version ?? OPENCODE_VERSION}`, [
         `opencode-ai@${props.version ?? OPENCODE_VERSION}`,
@@ -50,7 +63,10 @@ export const Server = (id = "OpenCode", props: ServerProps = {}) =>
         name: "opencode",
         command: "opencode",
         args: ["acp"],
-        cwd: process.env.ALCHEMY_WORKDIR ?? "/workspace",
+        ...(props.model
+          ? { env: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: props.model }) } }
+          : {}),
+        cwd: props.cwd ?? DEFAULT_CWD,
       }),
     ),
   });

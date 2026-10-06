@@ -6,31 +6,22 @@ import * as Redacted from "effect/Redacted";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Scope from "effect/Scope";
-import * as Binding from "../Binding.ts";
-import type { ImageLayer } from "../Docker/ImageEnvironment.ts";
-import type { Resource, ResourceLike } from "../Resource.ts";
+import type { ImageLayer } from "../Docker/ImageLayer.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import { makeHarness, type HarnessDriver } from "./HarnessEngine.ts";
+import { bindIntoImageHost } from "./ImageHost.ts";
 import { SessionError, type Harness } from "./Session.ts";
 import { HarnessRpcs, serveHarness } from "./SessionRpcs.ts";
 import { MemorySessionStore } from "./SessionStore.ts";
 
-/** Host types a harness server can install itself into (they accept `image` layers). */
-const IMAGE_HOSTS = new Set(["Cloudflare.Container"]);
-
-/** A host whose binding contract accepts image layers and env. */
-type ImageBindingHost = Resource<
-  string,
-  object | undefined,
-  object,
-  { image?: ImageLayer[]; env?: Record<string, unknown> }
->;
-
-const isImageHost = (host: ResourceLike): host is ImageBindingHost => IMAGE_HOSTS.has(host.Type);
+/** Where sessions work when neither the server nor the session names a directory. */
+export const DEFAULT_CWD = "/workspace";
 
 export interface HarnessServerOptions<R> {
   /** Binding key on the host (one per harness instance in a box). */
   readonly id: string;
+  /** Default working directory; created in the image if no environment provides it. */
+  readonly cwd?: string;
   /** Dockerfile layers that install the harness into the host's image. */
   readonly image?: ReadonlyArray<ImageLayer>;
   /** Environment the harness process needs (credentials, base URLs). */
@@ -61,6 +52,27 @@ export const npmInstallLayer = (
         : `RUN if command -v npm >/dev/null 2>&1; then npm install -g ${pkgs}; else bun add -g ${pkgs}; fi`,
   };
 };
+
+/**
+ * An image layer that installs system packages with whichever package
+ * manager the base image has (`apt-get` or `apk`); a no-op on images with
+ * neither.
+ */
+export const systemPackagesLayer = (id: string, packages: ReadonlyArray<string>): ImageLayer => {
+  const pkgs = packages.join(" ");
+  return {
+    id,
+    stage: "setup",
+    instructions: `RUN if command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y --no-install-recommends ${pkgs} && rm -rf /var/lib/apt/lists/*; elif command -v apk >/dev/null 2>&1; then apk add --no-cache ${pkgs}; fi`,
+  };
+};
+
+/**
+ * What every harness needs from its box: CA certificates (the Rust and Go
+ * CLIs verify TLS against the system store — slim images ship none) and
+ * `git` (agents diff, commit and inspect history).
+ */
+const harnessEssentials = systemPackagesLayer("harness-essentials", ["ca-certificates", "git"]);
 
 const unavailable = (name: string) =>
   Effect.die(
@@ -103,19 +115,22 @@ export const makeHarnessServer = <R>(
 ): Effect.Effect<Harness, never, Exclude<R, Scope.Scope>> =>
   Effect.gen(function* () {
     if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (host && isImageHost(host)) {
-        yield* host.bind`harness:${options.id}`({
-          ...(options.image?.length ? { image: [...options.image] } : {}),
-          ...(options.env ? { env: options.env } : {}),
-        });
-      } else if (host) {
-        return yield* Effect.die(
-          new Error(
-            `${options.id}: harness servers install into a container host (${[...IMAGE_HOSTS].join(", ")}), got ${host.Type}`,
-          ),
-        );
-      }
+      yield* bindIntoImageHost(`harness:${options.id}`, {
+        image: [
+          harnessEssentials,
+          ...(options.cwd
+            ? [
+                {
+                  id: `workdir:${options.cwd}`,
+                  stage: "setup" as const,
+                  instructions: `RUN mkdir -p ${JSON.stringify(options.cwd)}`,
+                },
+              ]
+            : []),
+          ...(options.image ?? []),
+        ],
+        ...(options.env ? { env: options.env } : {}),
+      });
       return deployStub(options.id);
     }
     // Bound env values travel packed (Redacted markers, JSON) for Alchemy's
@@ -151,7 +166,11 @@ export const makeHarnessServer = <R>(
 export const serveHarnessHttp = (
   harness: Harness,
 ): Effect.Effect<
-  Effect.Effect<HttpServerResponse.HttpServerResponse, never, HttpServerRequest.HttpServerRequest>,
+  Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    never,
+    HttpServerRequest.HttpServerRequest | Scope.Scope
+  >,
   never,
   RuntimeContext
 > =>
@@ -163,10 +182,10 @@ export const serveHarnessHttp = (
       Effect.provideService(Scope.Scope, scope),
     );
     // Only POSTs are RPC calls; everything else (container readiness probes,
-    // health checks) gets a plain 200.
+    // health checks) gets a plain 200. RPC responses stream (`events`), so
+    // they run in the server's request scope, which stays open until the
+    // body is fully written — never a scope closed when the handler returns.
     return Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
-      request.method === "POST"
-        ? Effect.scoped(handler)
-        : Effect.succeed(HttpServerResponse.text("ok")),
+      request.method === "POST" ? handler : Effect.succeed(HttpServerResponse.text("ok")),
     );
   });

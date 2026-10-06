@@ -6,6 +6,7 @@ export {
   makeHarnessServer,
   npmInstallLayer,
   serveHarnessHttp,
+  systemPackagesLayer,
   type HarnessServerOptions,
 } from "./HarnessServer.ts";
 export * from "./Parameter.ts";

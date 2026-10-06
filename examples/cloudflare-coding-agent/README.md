@@ -7,8 +7,8 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per session) ──�
                      AI.SessionRpcs                              Claude Code
 ```
 
-- `src/Workspace.ts` — the image every agent wakes up in (`AI.Environment`).
-- `src/Sandbox.runtime.ts` — the container program. `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port.
+- `src/Workspace.ts` — the repository every agent works in (`AI.Environment`, a binding that installs its checkout into whatever container yields it).
+- `src/Sandbox.runtime.ts` — the container program. It yields the workspace, and `Anthropic.ClaudeCodeServer` installs the official Agent SDK (and the unmodified `claude` binary) into the image and serves sessions on the container port.
 - `src/Agent.ts` — one Durable Object per session, serving the standard `AI.SessionRpcs` contract.
 - `src/worker.ts` — the HTTP API.
 

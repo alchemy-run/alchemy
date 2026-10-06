@@ -2,7 +2,7 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
-import type { ImageEnvironment, ImageLayer } from "../../Docker/ImageEnvironment.ts";
+import type { ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
@@ -271,13 +271,6 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
   /**
-   * The environment the program runs in: base image, setup steps, a source
-   * checkout and working directory (see `AI.Environment`). Bindings yielded
-   * in the program (e.g. coding-agent harness servers) layer their own
-   * installs on top. Exclusive with {@link image} and {@link dockerfile}.
-   */
-  environment?: ImageEnvironment;
-  /**
    * Environment image for the generated Dockerfile — a plain registry
    * reference, e.g. `"oven/bun:latest"`. Alchemy synthesizes the `FROM` line
    * and appends the statements that copy the bundled program and set the
@@ -403,7 +396,6 @@ export type ContainerApplicationProps =
  */
 export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
   main?: string;
-  environment?: ImageEnvironment;
   /**
    * @internal Image layers contributed by bindings (folded in from the
    * binding contract's `image` by the provider; never set by users).
@@ -815,8 +807,9 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     env?: Record<string, any>;
     /**
-     * Dockerfile layers a binding installs into the container image (e.g. a
-     * coding-agent CLI). Deduplicated by `id` across bindings.
+     * Dockerfile layers a binding installs into the container image (an
+     * `AI.Environment`, a coding-agent CLI). Deduplicated by `id` across
+     * bindings and rendered between the base image and the program.
      */
     image?: ImageLayer[];
   },

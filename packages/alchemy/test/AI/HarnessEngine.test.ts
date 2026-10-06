@@ -1,5 +1,6 @@
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
@@ -170,19 +171,36 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
       Effect.gen(function* () {
         const local = yield* harness;
         const handler = yield* serveHarnessHttp(local);
+        // Like a real HTTP server: the request scope outlives the handler
+        // and closes only after the (streamed) body is fully consumed.
+        const requestScope = yield* Effect.scope;
         const http = toHttpClient({
-          fetch: (request) => handler.pipe(Effect.provideService(HttpServerRequest, request)),
+          fetch: (request) =>
+            handler.pipe(
+              Effect.provideService(HttpServerRequest, request),
+              Effect.provideService(Scope.Scope, requestScope),
+            ),
         });
         const remote = yield* connectHarness(http);
         const session = yield* remote.start({ id: "h1" });
+        // Tail live (the session stays open): the event stream must keep
+        // flowing after the RPC handler returns.
+        const live = yield* session.events().pipe(
+          Stream.takeUntil((e) => e.type === "turn.completed"),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.yieldNow;
         const turn = yield* session.prompt("over http");
         const result = yield* session.result(turn.turnId);
+        const liveTypes = Array.from(yield* Fiber.join(live)).map((e) => e.type);
         yield* session.close();
         const events = Array.from(yield* Stream.runCollect(session.events()));
-        return { result, types: events.map((e) => e.type) };
+        return { result, liveTypes, types: events.map((e) => e.type) };
       }),
     );
     expect(out.result.message).toEqual([{ type: "text", text: "echo: over http" }]);
+    expect(out.liveTypes).toEqual(["state", "turn.started", "message.delta", "turn.completed"]);
     expect(out.types).toEqual([
       "state",
       "turn.started",

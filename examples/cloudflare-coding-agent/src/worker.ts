@@ -30,21 +30,24 @@ export default Cloudflare.Worker(
         const match = /^\/agents\/([\w-]+)(?:\/(steer|interrupt|events))?$/.exec(url.pathname);
         if (!match) return HttpServerResponse.text("POST /agents/:id { prompt }", { status: 404 });
         const [, id, action] = match;
-        const agent = yield* agents.getByName(id!);
 
         if (action === "events") {
           const after = Number(url.searchParams.get("after") ?? 0);
+          // The body is read after this handler returns, so the stream opens
+          // (and owns) its own connection to the agent.
+          const events = Stream.unwrap(
+            Effect.map(agents.getByName(id!), (agent) => agent.events({ after })),
+          ).pipe(Stream.scoped);
           return HttpServerResponse.stream(
-            agent
-              .events({ after })
-              .pipe(
-                Stream.map((event) =>
-                  encoder.encode(`id: ${event.cursor}\ndata: ${JSON.stringify(event)}\n\n`),
-                ),
+            events.pipe(
+              Stream.map((event) =>
+                encoder.encode(`id: ${event.cursor}\ndata: ${JSON.stringify(event)}\n\n`),
               ),
+            ),
             { contentType: "text/event-stream" },
           );
         }
+        const agent = yield* agents.getByName(id!);
         if (action === "interrupt") {
           yield* agent.interrupt();
           return HttpServerResponse.empty({ status: 202 });

@@ -7,11 +7,7 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
-import {
-  dedupeImageLayers,
-  renderImageEnvironment,
-  type ImageLayer,
-} from "../../Docker/ImageEnvironment.ts";
+import { dedupeImageLayers, renderImageLayers, type ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Stack } from "../../Stack.ts";
@@ -107,29 +103,10 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
-  props: Pick<
-    AnyContainerApplicationProps,
-    "main" | "image" | "dockerfile" | "context" | "environment"
-  >,
+  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
-  if (props.environment !== undefined) {
-    if (!props.main) {
-      return Effect.die(
-        new Error(
-          "`environment` requires `main` — it describes the box a bundled program runs in.",
-        ),
-      );
-    }
-    if (props.image !== undefined || df !== undefined) {
-      return Effect.die(
-        new Error(
-          "`environment` is exclusive with `image` and `dockerfile` — set the base with `environment.base` or `environment.dockerfile`.",
-        ),
-      );
-    }
-  }
   if (props.main) {
     if (props.image !== undefined && df !== undefined) {
       return Effect.die(
@@ -188,28 +165,19 @@ export const validateContainerImageProps = (
  * - neither → `undefined` (callers fall back to the runtime default base).
  */
 export const containerEnvPreamble = (
-  props: Pick<
-    AnyContainerApplicationProps,
-    "image" | "dockerfile" | "environment" | "imageLayers" | "runtime"
-  >,
+  props: Pick<AnyContainerApplicationProps, "image" | "dockerfile" | "imageLayers" | "runtime">,
 ): Effect.Effect<string | undefined> =>
   baseEnvPreamble(props).pipe(
-    Effect.flatMap((base) => {
-      if (props.environment === undefined && !props.imageLayers?.length) {
-        return Effect.succeed(base);
-      }
-      // An `environment` and/or binding-contributed image layers wrap the
-      // base: environment base/setup → layers → source checkout.
-      return Effect.try({
-        try: () =>
-          renderImageEnvironment({
-            environment: props.environment,
-            defaultPreamble: base ?? runtimeDefaultBase(props.runtime ?? "bun"),
+    Effect.map((base) =>
+      props.imageLayers?.length
+        ? // Binding-contributed layers (environments, harness installs) sit
+          // between the base and the program layers.
+          renderImageLayers({
+            preamble: base ?? runtimeDefaultBase(props.runtime ?? "bun"),
             layers: props.imageLayers,
-          }),
-        catch: (cause) => cause,
-      }).pipe(Effect.orDie);
-    }),
+          })
+        : base,
+    ),
   );
 
 /** The runtime's default `FROM` line for generated Dockerfiles. */
