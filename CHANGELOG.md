@@ -1,3 +1,13 @@
+## v2.0.0-beta.81
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Sync OAuth scopes with registered client &nbsp;-&nbsp; by **Rahul Mishra** and **Benjamin Tang** in https://github.com/alchemy-run/alchemy/issues/1983 [<samp>(33716)</samp>](https://github.com/alchemy-run/alchemy/commit/33716211d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.80...HEAD)
+
+---
+
 ## v2.0.0-beta.80
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

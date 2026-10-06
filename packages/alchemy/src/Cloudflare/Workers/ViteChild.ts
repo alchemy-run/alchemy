@@ -153,8 +153,8 @@ export const startViteChild = (
     return { url, pid: child.pid, exitCode } satisfies ViteChildHandle;
   });
 
-/** Number of trailing output lines echoed into a failed build's error. */
-const BUILD_ERROR_TAIL = 50;
+/** Number of trailing stderr lines echoed into a failed build's error. */
+const BUILD_ERROR_TAIL = 200;
 
 /**
  * Run a one-shot production Vite build in a child process whose working
@@ -206,11 +206,15 @@ export const runViteBuildChild = (
         ),
       );
 
-      const tail: string[] = [];
+      // stdout is build progress; the failure cause lands on stderr.
+      const stderrTail: string[] = [];
+      let stderrLines = 0;
       const forward = (channel: "stdout" | "stderr") => (line: string) =>
         Effect.sync(() => {
-          tail.push(line);
-          if (tail.length > BUILD_ERROR_TAIL) tail.shift();
+          if (channel !== "stderr") return;
+          stderrLines++;
+          stderrTail.push(line);
+          if (stderrTail.length > BUILD_ERROR_TAIL) stderrTail.shift();
         }).pipe(Effect.andThen(onOutput(channel, line)));
       const stdoutFiber = yield* Effect.forkChild(
         child.stdout.pipe(
@@ -232,9 +236,18 @@ export const runViteBuildChild = (
       yield* Fiber.join(stdoutFiber).pipe(Effect.ignore);
       yield* Fiber.join(stderrFiber).pipe(Effect.ignore);
       if (exitCode !== 0) {
+        const truncated = stderrLines > stderrTail.length;
         return yield* Effect.fail(
           new BundleError({
-            message: `Vite build child exited with code ${exitCode}:\n${tail.join("\n")}`,
+            message: [
+              `Vite build child exited with code ${exitCode}.`,
+              ...(stderrTail.length === 0
+                ? []
+                : [
+                    truncated ? `stderr (last ${stderrTail.length} lines):` : "stderr:",
+                    ...stderrTail,
+                  ]),
+            ].join("\n"),
           }),
         );
       }

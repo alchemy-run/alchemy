@@ -1525,10 +1525,11 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
         content: "";
         position: absolute;
         top: 50%;
-        right: -380px;
+        right: -240px;
         z-index: -1;
-        width: 1000px;
-        height: 1000px;
+        /* Smaller than the landing page's 1000px: these sections are shorter. */
+        width: 640px;
+        height: 640px;
         translate: 0 -50%;
         pointer-events: none;
         background: var(--alc-fg-1);
@@ -1561,7 +1562,7 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
     .cmp-pat-4::before,
     .cmp-pat-6::before {
         right: auto;
-        left: -380px;
+        left: -240px;
     }
     :global(.cmp-divider) {
         margin: 0 auto;

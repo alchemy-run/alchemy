@@ -156,7 +156,7 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
           }): { standaloneDir: string };
         }>,
       catch: failFramework(
-        "Failed to load vinext standalone packaging; install vinext 1.0.0-beta.10 or newer",
+        "Failed to load vinext standalone packaging; install vinext 1.0.1 or newer",
       ),
     });
     const packaged = yield* Effect.try({

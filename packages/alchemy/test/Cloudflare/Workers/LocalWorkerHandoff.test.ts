@@ -1,9 +1,9 @@
 import * as Os from "node:os";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -69,19 +69,31 @@ const registryEntryExists = (workerName: string) =>
   });
 
 /**
- * The registry entry's inode. A make-before-break handoff only ever
- * overwrites `{scriptName}.json` in place (the replacement re-registers,
- * then the owner-aware unregister of the old instance no-ops), so the inode
- * is stable across a redeploy. The broken path unlinks the entry when the
- * old instance is torn down and recreates it when the replacement finally
- * serves — observable as an inode change even when the dark window itself
- * is too short to catch with a request.
+ * Poll the registry entry's existence in a tight loop, counting every probe
+ * that finds it missing. A make-before-break handoff only ever overwrites
+ * `{scriptName}.json` (an atomic temp-file + rename, so the path always
+ * resolves; the owner-aware unregister of the old instance no-ops). The
+ * broken path unlinks the entry when the old instance is torn down and
+ * recreates it when the replacement finally serves — a dark window the
+ * millisecond poller catches even when it is too short to observe with a
+ * request. (The inode is NOT a usable signal: every atomic rename publishes
+ * a fresh inode.)
  */
-const registryEntryIno = (workerName: string) =>
+const watchRegistryEntryMisses = (workerName: string) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const stat = yield* fs.stat(yield* registryEntryPath(workerName));
-    return Option.getOrUndefined(stat.ino);
+    let probes = 0;
+    let misses = 0;
+    const fiber = yield* registryEntryExists(workerName).pipe(
+      Effect.tap((exists) =>
+        Effect.sync(() => {
+          probes++;
+          if (!exists) misses++;
+        }),
+      ),
+      Effect.repeat(Schedule.spaced("2 millis")),
+      Effect.forkChild,
+    );
+    return Fiber.interrupt(fiber).pipe(Effect.map(() => ({ probes, misses })));
   });
 
 /**
@@ -113,7 +125,7 @@ test(
     );
     expect(initial).toBe("1");
     expect(yield* registryEntryExists(first.workerName)).toBe(true);
-    const inoBefore = yield* registryEntryIno(first.workerName);
+    const stopWatching = yield* watchRegistryEntryMisses(first.workerName);
 
     // Redeploy with a changed env var: the Worker's structural signature
     // changes, so the provider replaces the instance. The deploy returns as
@@ -143,9 +155,11 @@ test(
     );
     expect(final).toBe("2");
     expect(yield* registryEntryExists(second.workerName)).toBe(true);
-    // The entry was overwritten in place by the replacement, never deleted —
+    // The entry was overwritten by the replacement, never deleted —
     // cross-script DO bindings resolving through it never saw it vanish.
-    expect(yield* registryEntryIno(second.workerName)).toBe(inoBefore);
+    const { probes, misses } = yield* stopWatching;
+    expect(probes).toBeGreaterThan(0);
+    expect(misses).toBe(0);
 
     yield* destroy(Stack);
   }).pipe(logLevel),

@@ -65,6 +65,40 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           return yield* HttpServerResponse.json({ id, colo, locationHintRead });
         }
 
+        // The same name addresses a different object inside a jurisdiction,
+        // so the two ids differ when `jurisdiction()` is honoured.
+        if (request.method === "GET" && url.pathname === "/jurisdiction") {
+          const name = url.searchParams.get("name") ?? "default";
+          const global = yield* objects.getByName(name).identity().pipe(Effect.orDie);
+          const eu = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          const euAgain = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ global, eu, euAgain });
+        }
+
+        // Calling a method the object does not define fails instead of
+        // resolving to `undefined` (e.g. an untyped caller, or a stub newer
+        // than the deployed object).
+        if (request.method === "GET" && url.pathname === "/unknown-rpc") {
+          const object = objects.getByName("unknown-rpc") as unknown as {
+            missing: () => Effect.Effect<unknown, Error>;
+          };
+          const missing = yield* object.missing().pipe(
+            Effect.match({
+              onFailure: (error) => String(error.message),
+              onSuccess: (value) => `unexpected success: ${String(value)}`,
+            }),
+          );
+          return yield* HttpServerResponse.json({ missing });
+        }
+
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the
         // Stream returned by the DO's `tick` RPC method straight onto the
         // HTTP response.

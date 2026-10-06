@@ -17,9 +17,7 @@ export const authorizeWith =
       Effect.flatMap((value) =>
         eff.pipe(
           Effect.provide(
-            fromApiToken({ apiToken: Redacted.value(value) }).pipe(
-              Layer.provideMerge(FetchHttpClient.layer),
-            ),
+            fromApiToken({ apiToken: value }).pipe(Layer.provideMerge(FetchHttpClient.layer)),
           ),
         ),
       ),

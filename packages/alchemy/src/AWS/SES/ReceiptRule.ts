@@ -1,5 +1,6 @@
 import * as ses from "@distilled.cloud/aws/ses";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -158,6 +159,21 @@ const observedPredecessor = (
   return rules[index - 1]?.Name;
 };
 
+/**
+ * An IAM role can exist before SES is able to assume it, so create and
+ * update retry that specific rejection while the role propagates.
+ */
+const retryRolePropagation = <A, R>(
+  effect: Effect.Effect<A, ses.CreateReceiptRuleError | ses.UpdateReceiptRuleError, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ReceiptRuleRoleNotAssumable",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 12,
+    }),
+  );
+
 export const ReceiptRuleProvider = () =>
   Provider.effect(
     ReceiptRule,
@@ -238,18 +254,23 @@ export const ReceiptRuleProvider = () =>
                 Rule: rule,
               })
               .pipe(
+                retryRolePropagation,
                 Effect.catchTag("AlreadyExistsException", () =>
-                  ses.updateReceiptRule({
-                    RuleSetName: ruleSetName,
-                    Rule: rule,
-                  }),
+                  ses
+                    .updateReceiptRule({
+                      RuleSetName: ruleSetName,
+                      Rule: rule,
+                    })
+                    .pipe(retryRolePropagation),
                 ),
               );
           } else {
-            yield* ses.updateReceiptRule({
-              RuleSetName: ruleSetName,
-              Rule: rule,
-            });
+            yield* ses
+              .updateReceiptRule({
+                RuleSetName: ruleSetName,
+                Rule: rule,
+              })
+              .pipe(retryRolePropagation);
           }
 
           // SYNC POSITION — updateReceiptRule never moves the rule, so diff the

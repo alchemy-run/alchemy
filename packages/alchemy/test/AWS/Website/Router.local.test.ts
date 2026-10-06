@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { assert, describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as AWS from "@/AWS";
 import { flociServices } from "@/AWS/Local/FlociServices.ts";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
@@ -154,6 +156,59 @@ const makeViteFixture = Effect.fn("makeViteFixture")(function* (slug: string, ma
 });
 
 describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:website"] }, () => {
+  test.provider(
+    "inline URL and bucket routes serve their own origins",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const cwd = yield* makeSiteFixture("api", "router-inline-url");
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const origin = yield* AWS.Website.StaticSite("Origin", {
+              path: cwd,
+              dev: { command: "bun serve.mjs" },
+            });
+            const bucket = yield* AWS.S3.Bucket("Assets", {
+              forceDestroy: true,
+            });
+            const router = yield* AWS.Website.Router("InlineRouter", {
+              routes: {
+                // An Output url, as in the Router JSDoc (`api.functionUrl`).
+                "/api/*": { url: Output.interpolate`${origin.url}`, origin: { protocol: "http" } },
+                "/assets/*": { bucket },
+              },
+            });
+            return { routerUrl: router.url, bucketName: bucket.bucketName };
+          }),
+        );
+
+        yield* s3
+          .putObject({
+            Bucket: deployed.bucketName,
+            Key: "assets/marker.txt",
+            Body: "router-inline-bucket",
+            ContentType: "text/plain",
+          })
+          .pipe(Effect.provide(flociServices()));
+
+        const routerUrl = deployed.routerUrl;
+        assert(typeof routerUrl === "string");
+        expect(routerUrl).toMatch(/^http:\/\/localhost:\d+$/);
+        yield* expectRouterBody(routerUrl, "/api/", {
+          includes: ["router-inline-url"],
+          excludes: ["router-inline-bucket"],
+        });
+        yield* expectRouterBody(routerUrl, "/assets/marker.txt", {
+          includes: ["router-inline-bucket"],
+          excludes: ["router-inline-url"],
+        });
+
+        yield* stack.destroy();
+      }),
+    { tags: ["local"], timeout: 120_000 },
+  );
+
   /**
    * The whole point of the local Router: two sites, one Router, real HTTP
    * through the emulated CloudFront distribution, each path prefix reaching
