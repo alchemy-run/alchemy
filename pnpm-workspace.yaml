@@ -46,7 +46,7 @@ catalog:
   "@cloudflare/puppeteer": "^1.1.0"
   "@cloudflare/unenv-preset": "^2.16.1"
   "@cloudflare/vitest-plugin": "^1.3.4"
-  "@cloudflare/workers-types": "5.20260918.1"
+  "@cloudflare/workers-types": "5.20261002.1"
   "@effect/atom-react": "^4.0.0"
   "@effect/platform-bun": "^4.0.0"
   "@effect/platform-node": "^4.0.0"
@@ -211,7 +211,7 @@ catalog:
   vue-router: "^5.0.4"
   vue-tsc: "^3.2.6"
   waku: "1.0.0-beta.7"
-  workerd: "1.20260918.1"
+  workerd: "1.20261002.1"
   wrangler: "^4.103.0"
   ws: "^8.21.0"
   yaml: "^2.9.0"
@@ -249,8 +249,8 @@ catalogs:
     "@vitejs/plugin-react": "^5.1.4"
 
 overrides:
-  "@cloudflare/workers-types": 5.20260918.1
-  workerd: 1.20260918.1
+  "@cloudflare/workers-types": 5.20261002.1
+  workerd: 1.20261002.1
   effect: 4.0.0
   "@effect/platform-browser": 4.0.0
   drizzle-kit: 1.0.0-rc.5-ab785fc
@@ -281,13 +281,13 @@ minimumReleaseAgeExclude:
   - effect@4.0.0
   - foldkit@0.165.0
   - "@solidjs/start@2.0.4"
-  - "@cloudflare/workers-types@5.20260918.1"
-  - "@cloudflare/workerd-darwin-64@1.20260918.1"
-  - "@cloudflare/workerd-darwin-arm64@1.20260918.1"
-  - "@cloudflare/workerd-linux-64@1.20260918.1"
-  - "@cloudflare/workerd-linux-arm64@1.20260918.1"
-  - "@cloudflare/workerd-windows-64@1.20260918.1"
-  - workerd@1.20260918.1
+  - "@cloudflare/workers-types@5.20261002.1"
+  - "@cloudflare/workerd-darwin-64@1.20261002.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20261002.1"
+  - "@cloudflare/workerd-linux-64@1.20261002.1"
+  - "@cloudflare/workerd-linux-arm64@1.20261002.1"
+  - "@cloudflare/workerd-windows-64@1.20261002.1"
+  - workerd@1.20261002.1
   - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
   - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
   - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1"
