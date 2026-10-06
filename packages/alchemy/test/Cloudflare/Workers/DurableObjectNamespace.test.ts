@@ -101,12 +101,12 @@ test(
 );
 
 test(
-  "durable object RPC returns plain values and rejects undefined methods",
+  "calling an undefined durable object RPC method fails",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const client = freshConn(yield* HttpClient.HttpClient);
 
-    const res = yield* client.get(`${url}/plain-rpc`).pipe(
+    const res = yield* client.get(`${url}/unknown-rpc`).pipe(
       Effect.flatMap((res) =>
         res.status === 200
           ? Effect.succeed(res)
@@ -114,9 +114,8 @@ test(
       ),
       Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
     );
-    const body = (yield* res.json) as { label: string; missing: string };
+    const body = (yield* res.json) as { missing: string };
 
-    expect(body.label).toBe("plain-value");
     expect(body.missing).toContain('Method "missing" not found on Durable Object');
   }).pipe(logLevel),
   {

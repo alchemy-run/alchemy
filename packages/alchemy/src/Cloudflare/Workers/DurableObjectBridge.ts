@@ -7,6 +7,7 @@ import * as Exit from "effect/Exit";
 import { HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import {
@@ -118,7 +119,19 @@ export const makeDurableObjectBridge =
                       typeof member === "function"
                         ? (member as (...args: unknown[]) => unknown)(...args)
                         : member;
-                    return Effect.isEffect(result) ? result : Effect.succeed(result);
+                    // Effects (including nested-RPC values built by
+                    // `asEffectOrStream`, which are Effects branded as Streams)
+                    // run as effects; a genuine Stream is lifted into the
+                    // success channel for `handleRpcExit` to encode. The RPC
+                    // Shape constraint rejects any other member at
+                    // declaration, so anything else got past it with a cast.
+                    if (Effect.isEffect(result)) return result;
+                    if (Stream.isStream(result)) return Effect.succeed(result);
+                    return Effect.die(
+                      new Error(
+                        `Durable Object RPC member "${prop}" must return an Effect or a Stream`,
+                      ),
+                    );
                   }),
                 handleRpcExit,
               );

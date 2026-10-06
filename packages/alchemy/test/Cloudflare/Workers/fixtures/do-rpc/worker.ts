@@ -83,25 +83,20 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           return yield* HttpServerResponse.json({ global, eu, euAgain });
         }
 
-        // A DO method that returns a plain value, and one the object does not
-        // define. The stub always returns an Effect, whatever the declared
-        // return type, so the plain-valued call is widened to an Effect here.
-        if (request.method === "GET" && url.pathname === "/plain-rpc") {
-          const object = objects.getByName("plain-rpc");
-          const label = yield* (object.label() as unknown as Effect.Effect<string>).pipe(
-            Effect.orDie,
+        // Calling a method the object does not define fails instead of
+        // resolving to `undefined` (e.g. an untyped caller, or a stub newer
+        // than the deployed object).
+        if (request.method === "GET" && url.pathname === "/unknown-rpc") {
+          const object = objects.getByName("unknown-rpc") as unknown as {
+            missing: () => Effect.Effect<unknown, Error>;
+          };
+          const missing = yield* object.missing().pipe(
+            Effect.match({
+              onFailure: (error) => String(error.message),
+              onSuccess: (value) => `unexpected success: ${String(value)}`,
+            }),
           );
-          const missing = yield* (
-            object as unknown as { missing: () => Effect.Effect<unknown, Error> }
-          )
-            .missing()
-            .pipe(
-              Effect.match({
-                onFailure: (error) => String(error.message),
-                onSuccess: () => "unexpected success",
-              }),
-            );
-          return yield* HttpServerResponse.json({ label, missing });
+          return yield* HttpServerResponse.json({ missing });
         }
 
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the

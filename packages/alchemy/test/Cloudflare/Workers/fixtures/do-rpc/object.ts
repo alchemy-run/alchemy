@@ -16,8 +16,6 @@ export class WorkerEnvironmentKVObject extends Cloudflare.DurableObject<WorkerEn
       const state = yield* Cloudflare.DurableObjectState;
       return {
         identity: () => Effect.sync(() => state.id.toString()),
-        // A method that returns a plain value rather than an Effect.
-        label: () => "plain-value",
         put: (key: string, value: string) => kv.put(key, value),
         get: (key: string) => kv.get(key),
         // Egress colo is diagnostic, not a placement guarantee.
