@@ -33,10 +33,7 @@ export interface DescribeTimeToLive extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeTimeToLiveRequest,
-    ) => Effect.Effect<
-      DynamoDB.DescribeTimeToLiveOutput,
-      DynamoDB.DescribeTimeToLiveError
-    >
+    ) => Effect.Effect<DynamoDB.DescribeTimeToLiveOutput, DynamoDB.DescribeTimeToLiveError>
   >
 > {}
 export const DescribeTimeToLive = Binding.Service<DescribeTimeToLive>(

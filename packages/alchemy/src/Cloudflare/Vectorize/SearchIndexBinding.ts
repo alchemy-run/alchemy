@@ -34,10 +34,8 @@ export const SearchIndexBinding = Layer.effect(
       return {
         raw: rawEff,
         describe: () => withRuntime((raw) => raw.describe()),
-        query: (vector, options) =>
-          withRuntime((raw) => raw.query(vector, options)),
-        queryById: (vectorId, options) =>
-          withRuntime((raw) => raw.queryById(vectorId, options)),
+        query: (vector, options) => withRuntime((raw) => raw.query(vector, options)),
+        queryById: (vectorId, options) => withRuntime((raw) => raw.queryById(vectorId, options)),
         insert: (vectors) => withRuntime((raw) => raw.insert(vectors)),
         upsert: (vectors) => withRuntime((raw) => raw.upsert(vectors)),
         deleteByIds: (ids) => withRuntime((raw) => raw.deleteByIds(ids)),

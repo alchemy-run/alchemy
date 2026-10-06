@@ -1,3 +1,9 @@
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as S3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
 import type { PolicyStatement } from "@/AWS/IAM/Policy";
@@ -6,12 +12,6 @@ import { AssetDeployment } from "@/AWS/Website/AssetDeployment.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import * as S3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,12 +23,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const bucket = yield* Bucket("WebsiteBucket", {
-            forceDestroy: true,
-          });
-          const oac = yield* OriginAccessControl("WebsiteOac", {
-            originType: "s3",
-          });
+          const bucket = yield* Bucket("WebsiteBucket", { forceDestroy: true });
+          const oac = yield* OriginAccessControl("WebsiteOac", { originType: "s3" });
           const distribution = yield* Distribution("WebsiteDistribution", {
             origins: [
               {
@@ -45,50 +41,30 @@ test.provider.skipIf(!!process.env.FAST)(
               compress: true,
               allowedMethods: ["GET", "HEAD"],
               cachedMethods: ["GET", "HEAD"],
-              forwardedValues: {
-                QueryString: false,
-                Cookies: {
-                  Forward: "none",
-                },
-              },
+              forwardedValues: { QueryString: false, Cookies: { Forward: "none" } },
             },
           });
 
           const statement: PolicyStatement = {
             Effect: "Allow",
-            Principal: {
-              Service: "cloudfront.amazonaws.com",
-            },
+            Principal: { Service: "cloudfront.amazonaws.com" },
             Action: ["s3:GetObject"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
-            Condition: {
-              StringEquals: {
-                "AWS:SourceArn": distribution.distributionArn as any,
-              },
-            },
+            Condition: { StringEquals: { "AWS:SourceArn": distribution.distributionArn as any } },
           };
 
-          yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
-            {
-              policyStatements: [statement],
-            },
-          );
+          yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
+            policyStatements: [statement],
+          });
 
-          const invalidation = yield* AWS.CloudFront.Invalidation(
-            "InvalidateDocs",
-            {
-              distributionId: distribution.distributionId,
-              version: "v2",
-              wait: true,
-              paths: ["/index.html", "/docs/*"],
-            },
-          );
+          const invalidation = yield* AWS.CloudFront.Invalidation("InvalidateDocs", {
+            distributionId: distribution.distributionId,
+            version: "v2",
+            wait: true,
+            paths: ["/index.html", "/docs/*"],
+          });
 
-          return {
-            bucket,
-            distribution,
-            invalidation,
-          };
+          return { bucket, distribution, invalidation };
         }),
       );
 
@@ -105,11 +81,10 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(current.Invalidation?.Status).toEqual("Completed");
       // CloudFront returns invalidation paths in arbitrary order.
-      expect(
-        [
-          ...(current.Invalidation?.InvalidationBatch?.Paths?.Items ?? []),
-        ].sort(),
-      ).toEqual(["/docs/*", "/index.html"]);
+      expect([...(current.Invalidation?.InvalidationBatch?.Paths?.Items ?? [])].sort()).toEqual([
+        "/docs/*",
+        "/index.html",
+      ]);
 
       yield* stack.destroy();
       yield* assertDistributionDeleted(deployed.distribution.distributionId);
@@ -132,11 +107,7 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const site = (version: "v1" | "v2") =>
-        path.join(
-          import.meta.dirname,
-          "fixtures",
-          `invalidation-site-${version}`,
-        );
+        path.join(import.meta.dirname, "fixtures", `invalidation-site-${version}`);
 
       // `version` comes from an AssetDeployment, so on a content change it is
       // unresolved at plan time and the Invalidation plans as an update rather
@@ -168,13 +139,10 @@ test.provider.skipIf(!!process.env.FAST)(
               bucket,
               sourcePath,
             });
-            const invalidation = yield* AWS.CloudFront.Invalidation(
-              "SiteInvalidation",
-              {
-                distributionId: distribution.distributionId,
-                version: files.version,
-              },
-            );
+            const invalidation = yield* AWS.CloudFront.Invalidation("SiteInvalidation", {
+              distributionId: distribution.distributionId,
+              version: files.version,
+            });
             return { distribution, files, invalidation };
           }),
         );
@@ -187,17 +155,13 @@ test.provider.skipIf(!!process.env.FAST)(
       const second = yield* deploySite(site("v2"));
       expect(second.files.version).not.toEqual(first.files.version);
       expect(second.invalidation.version).toEqual(second.files.version);
-      expect(second.invalidation.invalidationId).not.toEqual(
-        first.invalidation.invalidationId,
-      );
+      expect(second.invalidation.invalidationId).not.toEqual(first.invalidation.invalidationId);
 
       const issued = yield* cloudfront.getInvalidation({
         DistributionId: second.distribution.distributionId,
         Id: second.invalidation.invalidationId,
       });
-      expect(issued.Invalidation?.InvalidationBatch?.CallerReference).toEqual(
-        second.files.version,
-      );
+      expect(issued.Invalidation?.InvalidationBatch?.CallerReference).toEqual(second.files.version);
 
       yield* stack.destroy();
       yield* assertDistributionDeleted(second.distribution.distributionId);
@@ -218,9 +182,7 @@ test.provider(
   "list returns [] for the non-listable ephemeral invalidation",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        AWS.CloudFront.Invalidation,
-      );
+      const provider = yield* Provider.findProvider(AWS.CloudFront.Invalidation);
       const all = yield* provider.list();
       expect(all).toEqual([]);
     }),
@@ -232,11 +194,7 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.flatMap(() => Effect.fail(new Error("DistributionStillExists"))),
     Effect.catchTag("NoSuchDistribution", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      while: (error) => error instanceof Error && error.message === "DistributionStillExists",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

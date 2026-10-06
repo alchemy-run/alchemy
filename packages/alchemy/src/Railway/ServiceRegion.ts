@@ -1,4 +1,5 @@
-import * as railway from "@distilled.cloud/railway";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -8,14 +9,9 @@ import { withEnvironmentConfigLock } from "./transient.ts";
  * `deploy.multiRegionConfig` on one service. `null` removes a region.
  * Railway ignores `ServiceInstance.region`; this map is the placement.
  */
-export type RegionPlacement = Record<
-  string,
-  { readonly numReplicas?: number | null } | null
->;
+export type RegionPlacement = Record<string, { readonly numReplicas?: number | null } | null>;
 
-export class ServiceRegionNotApplied extends Data.TaggedError(
-  "Railway.ServiceRegionNotApplied",
-)<{
+export class ServiceRegionNotApplied extends Data.TaggedError("Railway.ServiceRegionNotApplied")<{
   serviceId: string;
   environmentId: string;
   region: string;
@@ -27,9 +23,7 @@ export class ServiceRegionNotApplied extends Data.TaggedError(
   }
 }
 
-class ServiceRegionPending extends Data.TaggedError(
-  "Railway.ServiceRegionPending",
-)<{
+class ServiceRegionPending extends Data.TaggedError("Railway.ServiceRegionPending")<{
   serviceId: string;
   region: string;
 }> {}
@@ -86,9 +80,7 @@ export const regionPlacementPatch = (
   const current = active.find((row) => row.region === desired)?.replicas;
   const moved = active.reduce((sum, row) => sum + row.replicas, 0);
   const fallback =
-    typeof fallbackReplicas === "number" && fallbackReplicas >= 1
-      ? fallbackReplicas
-      : 1;
+    typeof fallbackReplicas === "number" && fallbackReplicas >= 1 ? fallbackReplicas : 1;
   const numReplicas = current ?? (moved > 0 ? moved : fallback);
   const patch: Record<string, { numReplicas: number } | null> = {
     [desired]: { numReplicas },
@@ -100,10 +92,7 @@ export const regionPlacementPatch = (
 };
 
 /** `deploy.multiRegionConfig` for `serviceId` inside an environment config. */
-export const serviceRegionPlacement = (
-  config: unknown,
-  serviceId: string,
-): RegionPlacement => {
+export const serviceRegionPlacement = (config: unknown, serviceId: string): RegionPlacement => {
   if (!isRecord(config)) return {};
   const services = config.services;
   if (!isRecord(services)) return {};
@@ -122,32 +111,29 @@ export const serviceRegionPlacement = (
     }
     if (!isRecord(value)) continue;
     const replicas = value.numReplicas;
-    placement[region] =
-      typeof replicas === "number" ? { numReplicas: replicas } : {};
+    placement[region] = typeof replicas === "number" ? { numReplicas: replicas } : {};
   }
   return placement;
 };
 
-const readPlacement = (input: {
-  environmentId: string;
-  projectId: string;
-  serviceId: string;
-}) =>
-  railway
-    .environment(
-      input.projectId.length > 0
-        ? { id: input.environmentId, projectId: input.projectId }
-        : { id: input.environmentId },
-      { config: { where: { decryptVariables: false } } },
-    )
-    .pipe(
-      Effect.map((environment) =>
-        serviceRegionPlacement(environment.config, input.serviceId),
-      ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as RegionPlacement),
-      ),
-    );
+const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }) => ({
+  config: Railway.environment(args).config,
+}));
+
+const environmentPatchCommit = Query.fn(
+  (args: { environmentId: string; commitMessage: string; patch: unknown }) =>
+    Railway.environmentPatchCommit(args),
+);
+
+const readPlacement = (input: { environmentId: string; projectId: string; serviceId: string }) =>
+  readEnvironmentConfig(
+    input.projectId.length > 0
+      ? { id: input.environmentId, projectId: input.projectId }
+      : { id: input.environmentId },
+  ).pipe(
+    Effect.map((environment) => serviceRegionPlacement(environment.config, input.serviceId)),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed({} as RegionPlacement)),
+  );
 
 /** Region reported by the environment config, without writing. */
 export const readServiceRegion = Effect.fn(function* (input: {
@@ -224,13 +210,9 @@ export const syncServiceRegion = Effect.fn(function* (input: {
     input.environmentId,
     Effect.gen(function* () {
       const placement = yield* readPlacement(input);
-      const patch = regionPlacementPatch(
-        desired,
-        placement,
-        input.fallbackReplicas ?? undefined,
-      );
+      const patch = regionPlacementPatch(desired, placement, input.fallbackReplicas ?? undefined);
       if (patch === undefined) return false;
-      yield* railway.environmentPatchCommit({
+      yield* environmentPatchCommit({
         environmentId: input.environmentId,
         commitMessage: `Pin Railway service region to ${desired}`,
         patch: {

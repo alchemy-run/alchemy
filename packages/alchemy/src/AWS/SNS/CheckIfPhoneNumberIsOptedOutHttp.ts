@@ -10,9 +10,6 @@ export const CheckIfPhoneNumberIsOptedOutHttp = Layer.effect(
     operation: sns.checkIfPhoneNumberIsOptedOut,
     // Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers`
     // (probe-verified).
-    actions: [
-      "sns:CheckIfPhoneNumberIsOptedOut",
-      "sms-voice:DescribeOptedOutNumbers",
-    ],
+    actions: ["sns:CheckIfPhoneNumberIsOptedOut", "sms-voice:DescribeOptedOutNumbers"],
   }),
 );

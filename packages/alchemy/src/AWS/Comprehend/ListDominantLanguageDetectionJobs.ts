@@ -37,7 +37,6 @@ export interface ListDominantLanguageDetectionJobs extends Binding.Service<
     >
   >
 > {}
-export const ListDominantLanguageDetectionJobs =
-  Binding.Service<ListDominantLanguageDetectionJobs>(
-    "AWS.Comprehend.ListDominantLanguageDetectionJobs",
-  );
+export const ListDominantLanguageDetectionJobs = Binding.Service<ListDominantLanguageDetectionJobs>(
+  "AWS.Comprehend.ListDominantLanguageDetectionJobs",
+);

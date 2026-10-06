@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface ExecuteCommandRequest extends Omit<
-  ECS.ExecuteCommandRequest,
-  "cluster"
-> {}
+export interface ExecuteCommandRequest extends Omit<ECS.ExecuteCommandRequest, "cluster"> {}
 
 /**
  * Runtime binding for `ecs:ExecuteCommand` (ECS Exec).
@@ -46,6 +43,4 @@ export interface ExecuteCommand extends Binding.Service<
     ) => Effect.Effect<ECS.ExecuteCommandResponse, ECS.ExecuteCommandError>
   >
 > {}
-export const ExecuteCommand = Binding.Service<ExecuteCommand>(
-  "AWS.ECS.ExecuteCommand",
-);
+export const ExecuteCommand = Binding.Service<ExecuteCommand>("AWS.ECS.ExecuteCommand");

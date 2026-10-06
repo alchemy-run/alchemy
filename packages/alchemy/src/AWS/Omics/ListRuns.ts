@@ -24,9 +24,7 @@ export interface ListRuns extends Binding.Service<
   ListRuns,
   "AWS.Omics.ListRuns",
   () => Effect.Effect<
-    (
-      request?: ListRunsRequest,
-    ) => Effect.Effect<omics.ListRunsResponse, omics.ListRunsError>
+    (request?: ListRunsRequest) => Effect.Effect<omics.ListRunsResponse, omics.ListRunsError>
   >
 > {}
 

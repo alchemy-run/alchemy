@@ -22,9 +22,7 @@ import {
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
-export class NetworkNotCreated extends Data.TaggedError(
-  "Hetzner.NetworkNotCreated",
-)<{
+export class NetworkNotCreated extends Data.TaggedError("Hetzner.NetworkNotCreated")<{
   name: string;
 }> {}
 
@@ -266,9 +264,7 @@ const subnetKey = (subnet: {
 const routeKey = (route: { destination: string; gateway: string }): string =>
   `${route.destination}|${route.gateway}`;
 
-const toSubnetAttr = (
-  subnet: ObservedNetwork["subnets"][number],
-): NetworkSubnetAttr => ({
+const toSubnetAttr = (subnet: ObservedNetwork["subnets"][number]): NetworkSubnetAttr => ({
   type: subnet.type as NetworkSubnetType,
   ipRange: subnet.ip_range,
   networkZone: subnet.network_zone,
@@ -293,9 +289,7 @@ const toAttrs = (network: ObservedNetwork): Network["Attributes"] => ({
   created: network.created,
 });
 
-const parseCidr = (
-  cidr: string,
-): { ip: number; prefix: number } | undefined => {
+const parseCidr = (cidr: string): { ip: number; prefix: number } | undefined => {
   const [addr, prefixRaw] = cidr.split("/");
   if (addr === undefined || prefixRaw === undefined) return undefined;
   const parts = addr.split(".").map(Number);
@@ -307,9 +301,7 @@ const parseCidr = (
   }
   const prefix = Number(prefixRaw);
   if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return undefined;
-  const ip =
-    ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>>
-    0;
+  const ip = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
   return { ip, prefix };
 };
 
@@ -332,9 +324,7 @@ const getById = (id: number) =>
 const findByName = (name: string) =>
   Hetzner.networks
     .listNetworks({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ networks }) => networks.find((item) => item.name === name)),
-    );
+    .pipe(Effect.map(({ networks }) => networks.find((item) => item.name === name)));
 
 const findByLabels = (labels: Record<string, string>) =>
   Hetzner.networks
@@ -386,16 +376,13 @@ const syncMetadata = (args: {
     const { removed, upsert } = diffLabels(observedLabels, args.labels);
     const labelsChanged = removed.length > 0 || upsert.length > 0;
     const nameChanged = args.observed.name !== args.name;
-    const exposeChanged =
-      args.observed.expose_routes_to_vswitch !== args.exposeRoutesToVswitch;
+    const exposeChanged = args.observed.expose_routes_to_vswitch !== args.exposeRoutesToVswitch;
     if (!labelsChanged && !nameChanged && !exposeChanged) return;
     yield* Hetzner.networks
       .updateNetwork({
         id: args.networkId,
         name: nameChanged ? args.name : undefined,
-        expose_routes_to_vswitch: exposeChanged
-          ? args.exposeRoutesToVswitch
-          : undefined,
+        expose_routes_to_vswitch: exposeChanged ? args.exposeRoutesToVswitch : undefined,
         labels: labelsChanged ? args.labels : undefined,
       })
       .pipe(Effect.retry(busyRetry));
@@ -473,11 +460,7 @@ const syncRoutes = (
     }
   });
 
-const syncProtection = (
-  networkId: number,
-  observed: boolean,
-  desired: boolean,
-) =>
+const syncProtection = (networkId: number, observed: boolean, desired: boolean) =>
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
@@ -518,9 +501,7 @@ export const NetworkProvider = () =>
       const observed = yield* observe(output?.networkId, name, id);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed);
-      return (yield* hasAlchemyLabels(id, tagRecord(observed.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(observed.labels))) ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -597,11 +578,7 @@ export const NetworkProvider = () =>
       const afterSubnets = (yield* getById(current.id)) ?? afterMeta;
       yield* syncRoutes(current.id, afterSubnets.routes, desiredRoutes);
       const afterRoutes = (yield* getById(current.id)) ?? afterSubnets;
-      yield* syncProtection(
-        current.id,
-        afterRoutes.protection.delete,
-        deleteProtection,
-      );
+      yield* syncProtection(current.id, afterRoutes.protection.delete, deleteProtection);
 
       const fresh = yield* getById(current.id);
       return toAttrs(fresh ?? afterRoutes);

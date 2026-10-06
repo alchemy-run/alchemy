@@ -8,16 +8,13 @@ import type { Service } from "./Service.ts";
  * `apprunner:DescribeCustomDomains` with the Lambda's IAM role, scoped to
  * the bound service.
  */
-export const DescribeCustomDomainsHttp = makeAppRunnerHttpBinding(
-  DescribeCustomDomains,
-  {
-    operation: apprunner.describeCustomDomains,
-    spec: (service: Service) => ({
-      identifiers: { ServiceArn: service.serviceArn },
-      iam: () => ({
-        actions: ["apprunner:DescribeCustomDomains"],
-        resources: [service.serviceArn],
-      }),
+export const DescribeCustomDomainsHttp = makeAppRunnerHttpBinding(DescribeCustomDomains, {
+  operation: apprunner.describeCustomDomains,
+  spec: (service: Service) => ({
+    identifiers: { ServiceArn: service.serviceArn },
+    iam: () => ({
+      actions: ["apprunner:DescribeCustomDomains"],
+      resources: [service.serviceArn],
     }),
-  },
-);
+  }),
+});

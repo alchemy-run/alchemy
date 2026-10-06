@@ -43,6 +43,12 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "GCP",
+    href: "/gcp",
+    prefixes: ["/gcp", "/providers/gcp"],
+    slot: "primary",
+  },
+  {
     label: "Hetzner",
     href: "/hetzner",
     prefixes: ["/hetzner", "/providers/hetzner"],
@@ -125,6 +131,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "more",
     category: "Containers",
     hint: "images · containers · networks",
+  },
+  {
+    label: "Kubernetes",
+    href: "/kubernetes",
+    prefixes: ["/kubernetes", "/providers/kubernetes"],
+    slot: "more",
+    category: "Containers",
+    hint: "deployments · jobs · manifests · helm",
   },
   {
     label: "SQL",

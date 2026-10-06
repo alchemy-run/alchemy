@@ -1,8 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { isLocalId } from "@/Cloudflare/LocalRuntime";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -12,6 +7,11 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
@@ -19,17 +19,10 @@ import { expectUrlContains } from "../Utils/Http.ts";
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "astro-app");
-const staticFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "astro-static-app",
-);
+const staticFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "astro-static-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 class DevResponseMismatch extends Data.TaggedError("DevResponseMismatch")<{
@@ -42,10 +35,7 @@ class DevResponseMismatch extends Data.TaggedError("DevResponseMismatch")<{
 }
 
 const devRetry = Effect.retry({
-  schedule: Schedule.min([
-    Schedule.exponential("500 millis", 1.5),
-    Schedule.spaced("4 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("500 millis", 1.5), Schedule.spaced("4 seconds")]),
   times: 10,
 });
 
@@ -59,23 +49,14 @@ const fetchSession = (url: string, cookie?: string) =>
       const res = await fetch(url, {
         signal,
         cache: "no-store",
-        headers: {
-          "cache-control": "no-cache",
-          accept: "*/*",
-          ...(cookie ? { cookie } : {}),
-        },
+        headers: { "cache-control": "no-cache", accept: "*/*", ...(cookie ? { cookie } : {}) },
       });
       const body = await res.text();
-      const sessionCookie = res.headers
-        .get("set-cookie")
-        ?.match(/astro-session=[^;,\s]+/)?.[0];
+      const sessionCookie = res.headers.get("set-cookie")?.match(/astro-session=[^;,\s]+/)?.[0];
       return { status: res.status, body, sessionCookie };
     },
     catch: (e) =>
-      new DevResponseMismatch({
-        url,
-        detail: e instanceof Error ? e.message : String(e),
-      }),
+      new DevResponseMismatch({ url, detail: e instanceof Error ? e.message : String(e) }),
   });
 
 /**
@@ -94,10 +75,7 @@ const expectStatusBody = (url: string, status: number, marker: string) =>
       return { status: res.status, body: await res.text() };
     },
     catch: (e) =>
-      new DevResponseMismatch({
-        url,
-        detail: e instanceof Error ? e.message : String(e),
-      }),
+      new DevResponseMismatch({ url, detail: e instanceof Error ? e.message : String(e) }),
   }).pipe(
     Effect.filterOrFail(
       (r) => r.status === status && r.body.includes(marker),
@@ -135,20 +113,12 @@ describe.concurrent(
               const site = yield* Cloudflare.Website.Astro("AstroLocal", {
                 rootDir,
                 dev: { port: 0 },
-                memo: {
-                  include: [
-                    "src/**",
-                    "public/**",
-                    "astro.config.mjs",
-                    "package.json",
-                  ],
-                },
+                memo: { include: ["src/**", "public/**", "astro.config.mjs", "package.json"] },
                 env: { TEST_MARKER: marker },
               });
               // Dedupes by logical id — a handle on the session namespace the
               // Astro resource auto-provisioned, for the dev-identity assertion.
-              const sessions =
-                yield* Cloudflare.KV.Namespace("AstroLocalSession");
+              const sessions = yield* Cloudflare.KV.Namespace("AstroLocalSession");
               return { site, sessions };
             }),
           );
@@ -176,14 +146,10 @@ describe.concurrent(
           });
 
           // Static asset from `public/` through the dev server.
-          yield* expectUrlContains(
-            `${site.url!}/static.txt`,
-            "astro-static-asset",
-            {
-              timeout: "60 seconds",
-              label: "astro dev static asset",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/static.txt`, "astro-static-asset", {
+            timeout: "60 seconds",
+            label: "astro dev static asset",
+          });
 
           // ── sessions round-trip against the LOCAL simulator ────────────────
           const first = yield* fetchSession(`${site.url!}/session`).pipe(
@@ -199,10 +165,7 @@ describe.concurrent(
           );
           expect(first.sessionCookie).toBeDefined();
 
-          const second = yield* fetchSession(
-            `${site.url!}/session`,
-            first.sessionCookie,
-          ).pipe(
+          const second = yield* fetchSession(`${site.url!}/session`, first.sessionCookie).pipe(
             Effect.filterOrFail(
               (r) => r.body.includes("session-count=2"),
               (r) =>
@@ -219,13 +182,11 @@ describe.concurrent(
           // auto-provisioned session KV. (Physical titles embed the logical id
           // verbatim: `{stack}-AstroLocalSession-{stage}-{suffix}`.)
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const cloudNamespace = yield* kv.listNamespaces
-            .items({ accountId })
-            .pipe(
-              Stream.filter((ns) => ns.title.includes("AstroLocalSession")),
-              Stream.runHead,
-              Effect.map(Option.getOrUndefined),
-            );
+          const cloudNamespace = yield* kv.listNamespaces.items({ accountId }).pipe(
+            Stream.filter((ns) => ns.title.includes("AstroLocalSession")),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
           expect(cloudNamespace).toBeUndefined();
 
           yield* stack.destroy();
@@ -256,9 +217,7 @@ describe.concurrent(
               return yield* Cloudflare.Website.Astro("AstroStaticLocal", {
                 rootDir,
                 dev: { port: 0 },
-                memo: {
-                  include: ["src/**", "public/**", "package.json"],
-                },
+                memo: { include: ["src/**", "public/**", "package.json"] },
                 astro: { output: "static" },
                 assets: { notFoundHandling: "404-page" },
               });
@@ -277,11 +236,7 @@ describe.concurrent(
             label: "astro dev static about",
           });
           // Unknown routes serve the custom 404 page with a real 404 status.
-          yield* expectStatusBody(
-            `${site.url!}/definitely-not-a-page`,
-            404,
-            "static-404",
-          );
+          yield* expectStatusBody(`${site.url!}/definitely-not-a-page`, 404, "static-404");
 
           yield* stack.destroy();
         }).pipe(logLevel),
@@ -310,20 +265,13 @@ describe.concurrent(
 
           const { site, liveKv } = yield* stack.deploy(
             Effect.gen(function* () {
-              const liveKv = yield* Cloudflare.KV.Namespace(
-                "AstroRemoteSiteKV",
-              ).pipe(Alchemy.remote());
+              const liveKv = yield* Cloudflare.KV.Namespace("AstroRemoteSiteKV").pipe(
+                Alchemy.remote(),
+              );
               const site = yield* Cloudflare.Website.Astro("AstroRemoteLocal", {
                 rootDir,
                 dev: { port: 0 },
-                memo: {
-                  include: [
-                    "src/**",
-                    "public/**",
-                    "astro.config.mjs",
-                    "package.json",
-                  ],
-                },
+                memo: { include: ["src/**", "public/**", "astro.config.mjs", "package.json"] },
                 env: { TEST_MARKER: marker, SITE_KV: liveKv },
               });
               return { site, liveKv };
@@ -344,10 +292,11 @@ describe.concurrent(
           // /api/kv route, then read it back through the same binding.
           yield* Effect.tryPromise({
             try: async (signal) => {
-              const res = await fetch(
-                `${site.url!}/api/kv?key=remote-key&value=${marker}`,
-                { signal, method: "PUT", cache: "no-store" },
-              );
+              const res = await fetch(`${site.url!}/api/kv?key=remote-key&value=${marker}`, {
+                signal,
+                method: "PUT",
+                cache: "no-store",
+              });
               return { status: res.status, body: await res.text() };
             },
             catch: (e) =>
@@ -367,11 +316,7 @@ describe.concurrent(
             devRetry,
           );
 
-          yield* expectStatusBody(
-            `${site.url!}/api/kv?key=remote-key`,
-            200,
-            `"value":"${marker}"`,
-          );
+          yield* expectStatusBody(`${site.url!}/api/kv?key=remote-key`, 200, `"value":"${marker}"`);
 
           // Out-of-band: the write landed in the REAL cloud namespace.
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -384,15 +329,10 @@ describe.concurrent(
             .pipe(
               Effect.flatMap((res) =>
                 Effect.tryPromise(() =>
-                  new Response(
-                    Stream.toReadableStream(res.body) as BodyInit,
-                  ).text(),
+                  new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
                 ),
               ),
-              Effect.retry({
-                schedule: Schedule.exponential("1 second", 1.5),
-                times: 8,
-              }),
+              Effect.retry({ schedule: Schedule.exponential("1 second", 1.5), times: 8 }),
             );
           expect(observed).toBe(marker);
 
@@ -401,12 +341,10 @@ describe.concurrent(
           // The live namespace was deleted from the cloud on destroy (its
           // state row is stamped live, so the live provider handles the
           // delete even in a dev run).
-          const gone = yield* kv
-            .getNamespace({ accountId, namespaceId: liveKv.namespaceId })
-            .pipe(
-              Effect.as(false),
-              Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
-            );
+          const gone = yield* kv.getNamespace({ accountId, namespaceId: liveKv.namespaceId }).pipe(
+            Effect.as(false),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
+          );
           expect(gone).toBe(true);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:kv", "live"], timeout: 300_000 },

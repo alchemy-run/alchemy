@@ -22,8 +22,7 @@ export const detectLayout = (dir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const exists = (p: string) =>
-      fs.exists(p).pipe(Effect.catch(() => Effect.succeed(false)));
+    const exists = (p: string) => fs.exists(p).pipe(Effect.catch(() => Effect.succeed(false)));
 
     if (yield* exists(path.join(dir, "meta", "_journal.json"))) {
       return yield* new DrizzleV0LayoutError({

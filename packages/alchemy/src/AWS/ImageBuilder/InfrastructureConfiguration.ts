@@ -135,10 +135,9 @@ export interface InfrastructureConfiguration extends Resource<
  *
  * @resource
  */
-export const InfrastructureConfiguration =
-  Resource<InfrastructureConfiguration>(
-    "AWS.ImageBuilder.InfrastructureConfiguration",
-  );
+export const InfrastructureConfiguration = Resource<InfrastructureConfiguration>(
+  "AWS.ImageBuilder.InfrastructureConfiguration",
+);
 
 /**
  * A freshly created IAM instance profile takes a few seconds to become
@@ -169,30 +168,21 @@ export const InfrastructureConfigurationProvider = () =>
           ? Effect.succeed(props.infrastructureConfigurationName)
           : createPhysicalName({ id, maxLength: 126 });
 
-      const toArn = (name: string) =>
-        imageBuilderArn("infrastructure-configuration", name);
+      const toArn = (name: string) => imageBuilderArn("infrastructure-configuration", name);
 
       const getConfiguration = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getInfrastructureConfiguration({
             infrastructureConfigurationArn: arn,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.infrastructureConfiguration;
       });
 
-      const toAttrs = Effect.fn(function* (
-        config: imagebuilder.InfrastructureConfiguration,
-      ) {
+      const toAttrs = Effect.fn(function* (config: imagebuilder.InfrastructureConfiguration) {
         if (!config.arn || !config.name) {
           return yield* Effect.fail(
-            new Error(
-              "Image Builder infrastructure configuration is missing its ARN or name",
-            ),
+            new Error("Image Builder infrastructure configuration is missing its ARN or name"),
           );
         }
         return {
@@ -223,10 +213,7 @@ export const InfrastructureConfigurationProvider = () =>
       ] as const;
 
       return {
-        stables: [
-          "infrastructureConfigurationName",
-          "infrastructureConfigurationArn",
-        ],
+        stables: ["infrastructureConfigurationName", "infrastructureConfigurationArn"],
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -237,8 +224,7 @@ export const InfrastructureConfigurationProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
-            output?.infrastructureConfigurationArn ??
-            (yield* toArn(yield* toName(id, olds)));
+            output?.infrastructureConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));
           const config = yield* getConfiguration(arn);
           if (config === undefined) return undefined;
           const attrs = yield* toAttrs(config);
@@ -250,16 +236,13 @@ export const InfrastructureConfigurationProvider = () =>
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
           const clientToken = yield* Effect.sync(() => crypto.randomUUID());
-          const name =
-            output?.infrastructureConfigurationName ??
-            (yield* toName(id, news));
+          const name = output?.infrastructureConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
           // 1. Observe — the configuration ARN is deterministic from the
           //    name; cloud state is authoritative.
-          const arn =
-            output?.infrastructureConfigurationArn ?? (yield* toArn(name));
+          const arn = output?.infrastructureConfigurationArn ?? (yield* toArn(name));
           let observed = yield* getConfiguration(arn);
 
           // 2. Ensure — create if missing; tolerate an AlreadyExists race
@@ -284,13 +267,9 @@ export const InfrastructureConfigurationProvider = () =>
                 clientToken,
               }),
             ).pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
             );
-            observed = yield* getConfiguration(
-              created?.infrastructureConfigurationArn ?? arn,
-            );
+            observed = yield* getConfiguration(created?.infrastructureConfigurationArn ?? arn);
             if (observed === undefined) {
               return yield* Effect.fail(
                 new Error(
@@ -342,12 +321,9 @@ export const InfrastructureConfigurationProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* retryWhileDependedOn(
             imagebuilder.deleteInfrastructureConfiguration({
-              infrastructureConfigurationArn:
-                output.infrastructureConfigurationArn,
+              infrastructureConfigurationArn: output.infrastructureConfigurationArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

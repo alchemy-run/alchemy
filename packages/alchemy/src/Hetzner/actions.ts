@@ -22,13 +22,9 @@ export class ActionTimeout extends Data.TaggedError("ActionTimeout")<{
   status: string;
 }> {}
 
-export type ActionRef =
-  | number
-  | Pick<GetActionResponseAction, "id">
-  | GetActionResponseAction;
+export type ActionRef = number | Pick<GetActionResponseAction, "id"> | GetActionResponseAction;
 
-const actionIdOf = (ref: ActionRef): number =>
-  typeof ref === "number" ? ref : ref.id;
+const actionIdOf = (ref: ActionRef): number => (typeof ref === "number" ? ref : ref.id);
 
 const isErrorStatus = (status: string): boolean => status === "error";
 const isSuccessStatus = (status: string): boolean => status === "success";

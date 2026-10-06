@@ -1,6 +1,6 @@
-import * as Alchemist from "@/Alchemist";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Alchemist from "@/Alchemist";
 
 describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
   test("provides every service required by the programmatic stack API", () => {
@@ -59,9 +59,7 @@ describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
 
   test("legacy PlanInput stays full and optional filter inputs stay optional", () => {
     type Equal<A, B> =
-      (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-        ? true
-        : false;
+      (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
     type Output = { readonly url: string };
     type Module = {
       readonly default: Effect.Effect<{ readonly output: Output }>;
@@ -89,10 +87,7 @@ describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
       Equal<Effect.Success<typeof full>["native"]["output"], Output>,
       Equal<Effect.Success<typeof excluded>["native"]["output"], undefined>,
       Equal<Effect.Success<typeof absent>["native"]["output"], Output>,
-      Equal<
-        Effect.Success<ReturnType<typeof optional>>["native"]["output"],
-        Output | undefined
-      >,
+      Equal<Effect.Success<ReturnType<typeof optional>>["native"]["output"], Output | undefined>,
       Equal<
         Effect.Success<ReturnType<typeof optionalExclude>>["native"]["output"],
         Output | undefined
@@ -117,9 +112,7 @@ describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
 
   test("preserves explicit module output inference through higher-order planning", () => {
     type Equal<A, B> =
-      (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-        ? true
-        : false;
+      (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
     type Output = { readonly url: string };
     type Module = {
       readonly default: Effect.Effect<{ readonly output: Output }>;
@@ -132,9 +125,7 @@ describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
     const included = { ...input, include: ["Branch"] };
     const excluded = { ...input, exclude: ["Other"] };
     const optionalInput: Alchemist.Stack.FilteredPlanInput = input;
-    const full = Effect.succeed(input).pipe(
-      Effect.flatMap(Alchemist.Stack.plan<Module>),
-    );
+    const full = Effect.succeed(input).pipe(Effect.flatMap(Alchemist.Stack.plan<Module>));
     const selected = Effect.succeed(included).pipe(
       Effect.flatMap(Alchemist.Stack.plan<Module, typeof included>),
     );
@@ -142,9 +133,7 @@ describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
       Effect.flatMap(Alchemist.Stack.plan<Module, typeof excluded>),
     );
     const optional = Effect.succeed(optionalInput).pipe(
-      Effect.flatMap(
-        Alchemist.Stack.plan<Module, Alchemist.Stack.FilteredPlanInput>,
-      ),
+      Effect.flatMap(Alchemist.Stack.plan<Module, Alchemist.Stack.FilteredPlanInput>),
     );
     const selectedCallback = Effect.succeed(included).pipe(
       Effect.flatMap((input) => Alchemist.Stack.plan<Module>(input)),
@@ -159,18 +148,9 @@ describe("Alchemist runtime", { tags: ["unit", "local"] }, () => {
       Equal<Effect.Success<typeof full>["native"]["output"], Output>,
       Equal<Effect.Success<typeof selected>["native"]["output"], undefined>,
       Equal<Effect.Success<typeof excludedPlan>["native"]["output"], undefined>,
-      Equal<
-        Effect.Success<typeof optional>["native"]["output"],
-        Output | undefined
-      >,
-      Equal<
-        Effect.Success<typeof selectedCallback>["native"]["output"],
-        undefined
-      >,
-      Equal<
-        Effect.Success<typeof optionalCallback>["native"]["output"],
-        Output | undefined
-      >,
+      Equal<Effect.Success<typeof optional>["native"]["output"], Output | undefined>,
+      Equal<Effect.Success<typeof selectedCallback>["native"]["output"], undefined>,
+      Equal<Effect.Success<typeof optionalCallback>["native"]["output"], Output | undefined>,
       Equal<Effect.Success<typeof fullApply>, Output>,
       Equal<Effect.Success<typeof selectedApply>, undefined>,
       Equal<Effect.Success<typeof optionalApply>, Output | undefined>,

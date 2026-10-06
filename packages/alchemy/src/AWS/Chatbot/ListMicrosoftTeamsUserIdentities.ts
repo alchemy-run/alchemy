@@ -33,7 +33,6 @@ export interface ListMicrosoftTeamsUserIdentities extends Binding.Service<
   >
 > {}
 
-export const ListMicrosoftTeamsUserIdentities =
-  Binding.Service<ListMicrosoftTeamsUserIdentities>(
-    "AWS.Chatbot.ListMicrosoftTeamsUserIdentities",
-  );
+export const ListMicrosoftTeamsUserIdentities = Binding.Service<ListMicrosoftTeamsUserIdentities>(
+  "AWS.Chatbot.ListMicrosoftTeamsUserIdentities",
+);

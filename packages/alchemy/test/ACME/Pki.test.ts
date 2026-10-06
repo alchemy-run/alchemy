@@ -1,10 +1,10 @@
-import * as ACME from "@/ACME";
 import { describe, expect } from "alchemy-test";
-import * as Test from "@/Test/Alchemy";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
+import * as ACME from "@/ACME";
+import * as Test from "@/Test/Alchemy";
 import { ROOT_CERTIFICATE } from "./fixtures/root-certificate.ts";
 
 const { test } = Test.make({ providers: ACME.providers() });
@@ -39,9 +39,7 @@ describe("ACME PKI", { tags: ["provider:acme", "local"] }, () => {
       `${algorithm} CSR verifies and carries every identifier as a SAN`,
       Effect.gen(function* () {
         const key = yield* ACME.generateKey(algorithm);
-        expect(Redacted.value(key.privateKeyPem)).toContain(
-          "BEGIN PRIVATE KEY",
-        );
+        expect(Redacted.value(key.privateKeyPem)).toContain("BEGIN PRIVATE KEY");
         const csr = yield* ACME.createCsr({
           key,
           identifiers: ["*.example.test", "example.test"],
@@ -52,9 +50,7 @@ describe("ACME PKI", { tags: ["provider:acme", "local"] }, () => {
         expect(text).toContain("DNS:*.example.test");
         expect(text).toContain("DNS:example.test");
         expect(text).toContain(
-          algorithm === "ES256"
-            ? "ecdsa-with-SHA256"
-            : "sha256WithRSAEncryption",
+          algorithm === "ES256" ? "ecdsa-with-SHA256" : "sha256WithRSAEncryption",
         );
       }),
     );
@@ -80,9 +76,11 @@ describe("ACME PKI", { tags: ["provider:acme", "local"] }, () => {
       const key = yield* ACME.generateKey("ES256");
       const imported = yield* ACME.importPrivateKey(key.privateKeyPem);
       expect(imported.algorithm).toBe("ES256");
-      const jwk = JSON.parse(
-        Redacted.value(yield* ACME.privateKeyToJwk(key.privateKeyPem)),
-      ) as { kty: string; crv: string; d?: string };
+      const jwk = JSON.parse(Redacted.value(yield* ACME.privateKeyToJwk(key.privateKeyPem))) as {
+        kty: string;
+        crv: string;
+        d?: string;
+      };
       expect(jwk.kty).toBe("EC");
       expect(jwk.crv).toBe("P-256");
       expect(jwk.d).toBeDefined();

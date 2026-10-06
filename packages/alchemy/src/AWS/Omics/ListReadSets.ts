@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
 
-export interface ListReadSetsRequest extends Omit<
-  omics.ListReadSetsRequest,
-  "sequenceStoreId"
-> {}
+export interface ListReadSetsRequest extends Omit<omics.ListReadSetsRequest, "sequenceStoreId"> {}
 
 /**
  * Runtime binding for `omics:ListReadSets`.
@@ -38,6 +35,4 @@ export interface ListReadSets extends Binding.Service<
   >
 > {}
 
-export const ListReadSets = Binding.Service<ListReadSets>(
-  "AWS.Omics.ListReadSets",
-);
+export const ListReadSets = Binding.Service<ListReadSets>("AWS.Omics.ListReadSets");

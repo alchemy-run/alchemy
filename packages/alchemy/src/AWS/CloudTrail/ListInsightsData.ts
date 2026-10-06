@@ -33,10 +33,7 @@ export interface ListInsightsData extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudtrail.ListInsightsDataRequest,
-    ) => Effect.Effect<
-      cloudtrail.ListInsightsDataResponse,
-      cloudtrail.ListInsightsDataError
-    >
+    ) => Effect.Effect<cloudtrail.ListInsightsDataResponse, cloudtrail.ListInsightsDataError>
   >
 > {}
 export const ListInsightsData = Binding.Service<ListInsightsData>(

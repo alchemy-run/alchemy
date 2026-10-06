@@ -1,8 +1,8 @@
-import * as Effect from "effect/Effect";
 import {
   type GetServiceDeploymentsResponse,
   getServiceDeployments,
 } from "@distilled.cloud/prisma/management";
+import * as Effect from "effect/Effect";
 import { PrismaPaginationError } from "./Pagination.ts";
 
 /** Prove that a deployment belongs to an App before mutating or deleting it. */
@@ -18,9 +18,7 @@ export const ensureDeploymentMembership = Effect.fn(function* (
   let cursor: string | undefined;
   while (true) {
     const page = yield* getServiceDeployments(
-      cursor === undefined
-        ? { serviceId: appId }
-        : { serviceId: appId, cursor },
+      cursor === undefined ? { serviceId: appId } : { serviceId: appId, cursor },
     );
     deployments.push(...page.data);
     const nextCursor = page.pagination.nextCursor;
@@ -35,13 +33,8 @@ export const ensureDeploymentMembership = Effect.fn(function* (
     }
     cursor = nextCursor;
   }
-  const matches = deployments.filter(
-    (candidate) => candidate.id === deployment.id,
-  );
-  if (
-    matches.length !== 1 ||
-    matches[0]?.foundryVersionId !== deployment.foundryVersionId
-  ) {
+  const matches = deployments.filter((candidate) => candidate.id === deployment.id);
+  if (matches.length !== 1 || matches[0]?.foundryVersionId !== deployment.foundryVersionId) {
     return yield* Effect.fail(
       new Error(
         `Prisma deployment '${deployment.id}' with Foundry version '${deployment.foundryVersionId}' is not uniquely owned by App '${appId}'. Refusing to start, promote, or delete a mismatched deployment.`,

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AgentCoreTestFunctionLive, { AgentCoreTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "AgentCoreBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -35,19 +32,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -71,9 +63,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
         yield* Effect.logInfo("AgentCore bindings: destroying previous stack");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "AgentCore bindings: deploying fixture (memory takes ~2.5min)",
-        );
+        yield* Effect.logInfo("AgentCore bindings: deploying fixture (memory takes ~2.5min)");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* AgentCoreTestFunction;
@@ -87,9 +77,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -103,18 +91,12 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
       test.provider("records a conversational event", (_stack) =>
         Effect.gen(function* () {
           const response = (yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/events`),
-              {
-                actorId: "actor-1",
-                sessionId: "session-1",
-                text: "My favorite color is teal.",
-              },
-            ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            eventId: string;
-            sessionId: string;
-          };
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/events`), {
+              actorId: "actor-1",
+              sessionId: "session-1",
+              text: "My favorite color is teal.",
+            }),
+          ).pipe(Effect.flatMap((r) => r.json))) as { eventId: string; sessionId: string };
           expect(response.eventId).toBeTruthy();
           expect(response.sessionId).toBe("session-1");
         }),
@@ -125,19 +107,14 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
       test.provider("lists the session's events", (_stack) =>
         Effect.gen(function* () {
           yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/events`),
-              {
-                actorId: "actor-2",
-                sessionId: "session-2",
-                text: "I prefer window seats.",
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/events`), {
+              actorId: "actor-2",
+              sessionId: "session-2",
+              text: "I prefer window seats.",
+            }),
           );
           const response = (yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/events?actorId=actor-2&sessionId=session-2`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/events?actorId=actor-2&sessionId=session-2`),
           ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(1);
         }),
@@ -147,9 +124,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
     describe("GetEvent + DeleteEvent", () => {
       test.provider("creates, fetches, and deletes an event", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/events/roundtrip`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/events/roundtrip`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             eventId: string;
             fetchedEventId: string;
             deleted: boolean;
@@ -165,18 +142,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
       test.provider("lists actors that recorded events", (_stack) =>
         Effect.gen(function* () {
           yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/events`),
-              {
-                actorId: "actor-list",
-                sessionId: "session-list",
-                text: "hello",
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/events`), {
+              actorId: "actor-list",
+              sessionId: "session-list",
+              text: "hello",
+            }),
           );
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/actors`),
-          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/actors`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(1);
         }),
       );
@@ -186,14 +160,11 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
       test.provider("lists the actor's sessions", (_stack) =>
         Effect.gen(function* () {
           yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/events`),
-              {
-                actorId: "actor-3",
-                sessionId: "session-3",
-                text: "hello",
-              },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/events`), {
+              actorId: "actor-3",
+              sessionId: "session-3",
+              text: "hello",
+            }),
           );
           const response = (yield* send(
             HttpClientRequest.get(`${baseUrl}/sessions?actorId=actor-3`),
@@ -204,17 +175,15 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
     });
 
     describe("ListMemoryRecords", () => {
-      test.provider(
-        "lists long-term records in the strategy namespace",
-        (_stack) =>
-          Effect.gen(function* () {
-            // extraction is asynchronous — an empty result set proves the
-            // namespaced query path and IAM; records appear minutes later.
-            const response = (yield* send(
-              HttpClientRequest.get(`${baseUrl}/records?actorId=actor-1`),
-            ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
-            expect(response.count).toBeGreaterThanOrEqual(0);
-          }),
+      test.provider("lists long-term records in the strategy namespace", (_stack) =>
+        Effect.gen(function* () {
+          // extraction is asynchronous — an empty result set proves the
+          // namespaced query path and IAM; records appear minutes later.
+          const response = (yield* send(
+            HttpClientRequest.get(`${baseUrl}/records?actorId=actor-1`),
+          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          expect(response.count).toBeGreaterThanOrEqual(0);
+        }),
       );
     });
 
@@ -222,9 +191,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
       test.provider("semantically searches the namespace", (_stack) =>
         Effect.gen(function* () {
           const response = (yield* send(
-            HttpClientRequest.get(
-              `${baseUrl}/retrieve?actorId=actor-1&query=favorite%20color`,
-            ),
+            HttpClientRequest.get(`${baseUrl}/retrieve?actorId=actor-1&query=favorite%20color`),
           ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
@@ -256,9 +223,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
     describe("ListMemoryExtractionJobs", () => {
       test.provider("lists the memory's extraction jobs", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/extraction/jobs`),
-          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/extraction/jobs`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { count: number };
           expect(response.count).toBeGreaterThanOrEqual(0);
         }),
       );
@@ -271,9 +238,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
         "starts, inspects, screenshots, and stops a browser session",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/browser/run`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/browser/run`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               sessionId: string;
               sessionStatus: string;
               sessionCount: number;
@@ -295,9 +262,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
         "starts a session, executes python, inspects, stops the session",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/code/run`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/code/run`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
               sessionId: string;
               sessionStatus: string;
               sessionCount: number;
@@ -317,9 +284,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
         "execution output is streamed back",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/code/run`),
-            ).pipe(Effect.flatMap((r) => r.json))) as { chunks: unknown[] };
+            const response = (yield* send(HttpClientRequest.post(`${baseUrl}/code/run`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as { chunks: unknown[] };
             expect(response.chunks.length).toBeGreaterThan(0);
           }),
         { timeout: 120_000 },
@@ -333,9 +300,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW).sequential(
           Effect.gen(function* () {
             // covered by /code/run (stop succeeds inline); this asserts the
             // route completes twice back-to-back, i.e. sessions are isolated.
-            const first = yield* send(
-              HttpClientRequest.post(`${baseUrl}/code/run`),
-            );
+            const first = yield* send(HttpClientRequest.post(`${baseUrl}/code/run`));
             expect(first.status).toBe(200);
           }),
         { timeout: 120_000 },

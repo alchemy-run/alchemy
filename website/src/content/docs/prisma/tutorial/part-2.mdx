@@ -18,7 +18,7 @@ Create `src/Api.ts`:
 ```typescript
 import * as Prisma from "alchemy/Prisma";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Project } from "./Database.ts";
 
 export default class Api extends Prisma.Compute<Api>()(
@@ -65,7 +65,7 @@ still creates only one Project in this Stack.
 
 ```diff lang="typescript"
 // src/Api.ts
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
 
   Effect.gen(function* () {
 -    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Prisma")) };

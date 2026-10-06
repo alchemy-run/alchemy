@@ -27,10 +27,7 @@ export interface DescribeStandards extends Binding.Service<
   () => Effect.Effect<
     (
       request?: securityhub.DescribeStandardsRequest,
-    ) => Effect.Effect<
-      securityhub.DescribeStandardsResponse,
-      securityhub.DescribeStandardsError
-    >
+    ) => Effect.Effect<securityhub.DescribeStandardsResponse, securityhub.DescribeStandardsError>
   >
 > {}
 export const DescribeStandards = Binding.Service<DescribeStandards>(
