@@ -162,7 +162,6 @@ export const LiveContainerProvider = () =>
       });
 
       const createApplication = Effect.fn(function* ({
-        id,
         news,
         bindings,
         name,
@@ -170,7 +169,6 @@ export const LiveContainerProvider = () =>
         durableObjects,
         session,
       }: {
-        id: string;
         news: AnyContainerApplicationProps;
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         name: string;
@@ -210,7 +208,6 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container create: adopting existing application ${name}`,
           );
           return yield* upsertApplication({
-            id,
             news,
             bindings,
             existing: toAttributes(existingByName),
@@ -234,7 +231,6 @@ export const LiveContainerProvider = () =>
             );
           }
           return yield* upsertApplication({
-            id,
             news,
             bindings,
             existing: toAttributes(existing),
@@ -271,7 +267,6 @@ export const LiveContainerProvider = () =>
                     );
                   }
                   return yield* upsertApplication({
-                    id,
                     news,
                     bindings,
                     existing: toAttributes(existing),
@@ -298,14 +293,12 @@ export const LiveContainerProvider = () =>
       });
 
       const upsertApplication = Effect.fn(function* ({
-        id,
         news,
         bindings,
         existing,
         durableObjects,
         session,
       }: {
-        id: string;
         news: AnyContainerApplicationProps;
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         existing: ContainerApplication["Attributes"];
@@ -584,7 +577,6 @@ export const LiveContainerProvider = () =>
                   );
                 }
                 return yield* upsertApplication({
-                  id,
                   news,
                   bindings,
                   existing: toAttributes(owner),
@@ -616,7 +608,6 @@ export const LiveContainerProvider = () =>
             // update a now-gone id (see `waitForApplicationDeleted`).
             yield* waitForApplicationDeleted(name, existing.applicationId);
             const result = yield* createApplication({
-              id,
               news,
               bindings,
               name,
@@ -640,7 +631,6 @@ export const LiveContainerProvider = () =>
           // through the upsert path, creating a rollout when configuration drifted.
           if (existing) {
             return yield* upsertApplication({
-              id,
               news,
               bindings,
               existing,
@@ -661,7 +651,6 @@ export const LiveContainerProvider = () =>
             configuration,
           );
           const result = yield* createApplication({
-            id,
             news,
             bindings,
             name,
