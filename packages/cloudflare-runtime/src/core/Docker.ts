@@ -186,6 +186,10 @@ export const DockerLive = Layer.effect(
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
     const registeredImages = new Map<string, { tag: string; env: Record<string, string> }>();
+    // Every container created through the proxy carries this runtime's label.
+    // Native containers can start from images nobody prepared (snapshots,
+    // managed `cloudflare/*` images), so per-image cleanup cannot find them.
+    const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();
@@ -262,7 +266,11 @@ export const DockerLive = Layer.effect(
           const isCreateRequest =
             req.method === "POST" && req.url?.startsWith("/containers/create");
           if (isCreateRequest && !req.url!.endsWith("-proxy")) {
-            const original = yield* readJson<{ Image: string; Env: Array<string> }>(req);
+            const original = yield* readJson<{
+              Image: string;
+              Env: Array<string>;
+              Labels?: Record<string, string>;
+            }>(req);
             const image = registeredImages.get(original.Image);
             // A native `start({ image })` can name an image that was never
             // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
@@ -275,6 +283,7 @@ export const DockerLive = Layer.effect(
                 ...original,
                 Image: image?.tag ?? original.Image,
                 Env: mergeContainerCreateEnv(original.Env, image?.env),
+                Labels: { ...original.Labels, ...runtimeLabels },
               }),
             });
           }
@@ -287,6 +296,7 @@ export const DockerLive = Layer.effect(
             // 127.0.0.1). Native Linux maps it to 127.0.0.1 in this netns and
             // bind-mounts unix sockets; a SYN to the bridge IP is host INPUT (UFW).
             const original = yield* readJson<{
+              Labels?: Record<string, string>;
               HostConfig?: {
                 ExtraHosts?: Array<string>;
                 Binds?: Array<string>;
@@ -298,6 +308,7 @@ export const DockerLive = Layer.effect(
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,
+                Labels: { ...original.Labels, ...runtimeLabels },
                 HostConfig: {
                   ...mergeSidecarLoopbackHostConfig(original.HostConfig, ports),
                   Sysctls: {
@@ -465,6 +476,25 @@ export const DockerLive = Layer.effect(
             .filter((container) => container.image === ancestor),
         ),
       );
+
+    // Runs after the runtime (and its workerd) has shut down.
+    yield* Effect.addFinalizer(() =>
+      run([
+        "ps",
+        "--all",
+        "--quiet",
+        "--filter",
+        `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
+      ]).pipe(
+        Effect.flatMap(({ stdout }) => {
+          const ids = stdout.split("\n").filter((id) => id.trim() !== "");
+          return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
+        }),
+        Effect.timeout("30 seconds"),
+        Effect.withLogSpan("docker: remove runtime containers"),
+        Effect.ignore,
+      ),
+    );
 
     const docker = yield* Effect.zipWith(
       DockerHost.pipe(
@@ -654,6 +684,9 @@ export const DockerLive = Layer.effect(
     });
   }),
 );
+
+/** Label identifying the runtime that created a container through the proxy. */
+export const RUNTIME_LABEL = "alchemy.runtime";
 
 const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;

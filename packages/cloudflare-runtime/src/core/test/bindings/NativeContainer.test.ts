@@ -1,4 +1,5 @@
-import { expect, layer } from "@effect/vitest";
+import { execFileSync } from "node:child_process";
+import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
 import { isDockerAvailable } from "../helpers/docker.ts";
@@ -39,71 +40,94 @@ export class Sandbox extends DurableObject {
 export default { fetch(request, env) { return env.SANDBOX.getByName("workspace").fetch(request); } };
 `;
 
-layer(localRuntimeLayer, { excludeTestServices: true, timeout: 120_000 })(
-  "native container images",
-  (it) => {
-    it.effect.skipIf(!isDockerAvailable())(
-      "selects named images, executes processes, and restores a filesystem snapshot",
-      () =>
-        Effect.gen(function* () {
-          const worker = yield* startTestWorker({
-            name: "native-container-images",
-            compatibilityDate: "2026-09-18",
-            compatibilityFlags: [],
-            bindings: [
-              DurableObjectNamespace.local({
-                binding: "SANDBOX",
-                className: "Sandbox",
-              }),
-            ],
-            modules: [{ name: "main.js", type: "ESModule", content: script }],
-            durableObjectNamespaces: [
-              {
-                className: "Sandbox",
-                sql: true,
-                container: {
-                  images: {
-                    alpine: { imageUri: "alpine:3.21" },
-                    "alpine:3.21": { imageUri: "alpine:3.21" },
-                  },
+const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
+const docker = (...args: string[]) =>
+  Effect.sync(() =>
+    execFileSync(DOCKER_BIN, args, { encoding: "utf8" })
+      .split("\n")
+      .filter((line) => line.trim() !== ""),
+  );
+const workerContainers = docker(
+  "ps",
+  "--all",
+  "--format",
+  "{{.Names}}",
+  "--filter",
+  "name=^workerd-native-container-",
+);
+const snapshotImages = docker(
+  "images",
+  "--quiet",
+  "--filter",
+  "reference=workerd-container-snap-*",
+);
+
+it.live.skipIf(!isDockerAvailable())(
+  "native container images: selects named images, executes processes, restores a snapshot, and removes every container on shutdown",
+  () =>
+    Effect.gen(function* () {
+      const snapshotsBefore = new Set(yield* snapshotImages);
+      yield* Effect.gen(function* () {
+        const worker = yield* startTestWorker({
+          name: "native-container-images",
+          compatibilityDate: "2026-09-18",
+          compatibilityFlags: [],
+          bindings: [
+            DurableObjectNamespace.local({
+              binding: "SANDBOX",
+              className: "Sandbox",
+            }),
+          ],
+          modules: [{ name: "main.js", type: "ESModule", content: script }],
+          durableObjectNamespaces: [
+            {
+              className: "Sandbox",
+              sql: true,
+              container: {
+                images: {
+                  alpine: { imageUri: "alpine:3.21" },
+                  "alpine:3.21": { imageUri: "alpine:3.21" },
                 },
               },
-            ],
-          });
-          const images = yield* worker.fetchJson<Record<string, string>>("/images");
-          expect(Object.keys(images).sort()).toEqual(["alpine", "alpine:3.21"]);
-          for (const name of ["alpine", "alpine:3.21"]) {
-            expect(yield* worker.fetchJson(`/${name}`)).toEqual({
-              stdout: "hello",
-              stderr: "error",
-              exitCode: 7,
-            });
-          }
-          expect(yield* worker.fetchText("/snapshot")).toBe("persisted");
-          expect(yield* worker.fetchText("/stdin")).toBe("input".repeat(65536));
-          const builtin = yield* startTestWorker({
-            name: "native-container-no-images",
-            compatibilityDate: "2026-09-18",
-            compatibilityFlags: [],
-            bindings: [
-              DurableObjectNamespace.local({
-                binding: "SANDBOX",
-                className: "Sandbox",
-              }),
-            ],
-            modules: [{ name: "main.js", type: "ESModule", content: script }],
-            durableObjectNamespaces: [
-              { className: "Sandbox", sql: true, container: { images: {} } },
-            ],
-          });
-          expect(yield* builtin.fetchJson("/images")).toEqual({});
-          expect(yield* builtin.fetchJson("/builtin")).toEqual({
+            },
+          ],
+        });
+        const images = yield* worker.fetchJson<Record<string, string>>("/images");
+        expect(Object.keys(images).sort()).toEqual(["alpine", "alpine:3.21"]);
+        for (const name of ["alpine", "alpine:3.21"]) {
+          expect(yield* worker.fetchJson(`/${name}`)).toEqual({
             stdout: "hello",
             stderr: "error",
             exitCode: 7,
           });
-        }).pipe(Effect.scoped),
-      { timeout: 120_000 },
-    );
-  },
+        }
+        expect(yield* worker.fetchText("/snapshot")).toBe("persisted");
+        expect(yield* worker.fetchText("/stdin")).toBe("input".repeat(65536));
+        const builtin = yield* startTestWorker({
+          name: "native-container-no-images",
+          compatibilityDate: "2026-09-18",
+          compatibilityFlags: [],
+          bindings: [
+            DurableObjectNamespace.local({
+              binding: "SANDBOX",
+              className: "Sandbox",
+            }),
+          ],
+          modules: [{ name: "main.js", type: "ESModule", content: script }],
+          durableObjectNamespaces: [{ className: "Sandbox", sql: true, container: { images: {} } }],
+        });
+        expect(yield* builtin.fetchJson("/images")).toEqual({});
+        expect(yield* builtin.fetchJson("/builtin")).toEqual({
+          stdout: "hello",
+          stderr: "error",
+          exitCode: 7,
+        });
+      }).pipe(Effect.provide(localRuntimeLayer), Effect.scoped);
+      // Snapshot restores and managed images start containers from images the
+      // runtime never prepared; shutdown must still remove all of them.
+      expect(yield* workerContainers).toEqual([]);
+      const created = (yield* snapshotImages).filter((id) => !snapshotsBefore.has(id));
+      if (created.length > 0) yield* docker("rmi", "--force", ...new Set(created));
+    }),
+  { timeout: 120_000 },
 );
