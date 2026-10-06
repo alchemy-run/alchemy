@@ -67,9 +67,10 @@ export interface SecretProps {
    * `ForceDeleteWithoutRecovery` and its value cannot be restored. When set,
    * the secret stays scheduled for deletion for this many days and can be
    * restored with `RestoreSecret`. While it is scheduled, AWS does not allow
-   * another secret with the same name, so re-adding the same `Secret` restores
-   * the pending secret and converges it to the desired props instead of
-   * creating a new one.
+   * another secret with the same name, so re-adding a `Secret` with the same
+   * explicit {@link name} restores the pending secret and converges it to the
+   * desired props instead of creating a new one. (Without `name`, a re-added
+   * `Secret` gets a new generated name and creates a new secret.)
    *
    * @default undefined (delete immediately, no recovery window)
    */
