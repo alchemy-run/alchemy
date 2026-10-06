@@ -1,13 +1,11 @@
 import { fileURLToPath } from "node:url";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { describe, expect, it } from "alchemy-test";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import { type Alias, AliasProvider } from "@/AWS/Lambda/Alias.ts";
-import { stripUnresolved } from "@/Diff.ts";
-import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
@@ -84,6 +82,50 @@ test.provider(
       expect(liveV1!.FunctionVersion).toBe(version1);
       expect(liveV1!.Description).toBe("live v1");
       expect(liveV1!.RoutingConfig?.AdditionalVersionWeights ?? {}).toEqual({});
+
+      // --- crash before the Version reference resolved ---
+      // An interrupted first create persists the Version reference as missing
+      // (it was still an unresolved Output at checkpoint time). The recovery
+      // read finds nothing to recover instead of crashing (#2002), and the
+      // re-driven create converges on the same alias.
+      const state = yield* yield* State;
+      const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
+      const rows = yield* Effect.forEach(fqns, (fqn) =>
+        state
+          .get({ stack: stack.name, stage: stack.stage, fqn })
+          .pipe(Effect.map((row) => ({ fqn, row }))),
+      );
+      const aliasRow = rows.find(
+        (row): row is { fqn: string; row: ResourceState } =>
+          isResourceState(row.row) && row.row.resourceType === "AWS.Lambda.Alias",
+      );
+      if (!aliasRow?.row.props) {
+        return yield* Effect.die(
+          new Error("no persisted AWS.Lambda.Alias props found after deploy"),
+        );
+      }
+      yield* state.set({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: aliasRow.fqn,
+        value: {
+          ...aliasRow.row,
+          props: { ...aliasRow.row.props, version: undefined },
+          status: "creating",
+          attr: undefined,
+        },
+      });
+      const recovered = yield* stack.deploy(
+        program({
+          envVersion: "1",
+          alias: {
+            aliasName: "live",
+            description: "live v1",
+          },
+        }),
+      );
+      expect(recovered.live!.aliasArn).toBe(createdAlias.aliasArn);
+      expect(recovered.live!.functionVersion).toBe(version1);
 
       // --- update (function version + weighted routing + description) ---
       const updated = yield* stack.deploy(
@@ -218,46 +260,3 @@ const getAliasOrUndefined = Effect.fn(function* (functionName: string, name: str
     Name: name,
   }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 });
-
-// The first `creating` checkpoint persists `stripUnresolved(node.props)`.
-// When the Version is created in the same deploy, `version` is still an
-// unresolved Output at that point and is stripped. If the deploy fails
-// before the Alias's own create runs, the next plan's recovery `read`
-// receives those props as `olds` with no `output`, and has no function name
-// to look an alias up by.
-describe(
-  "recovery read after an interrupted create",
-  { tags: ["unit", "provider:aws", "provider:aws:lambda", "local"] },
-  () => {
-    it.effect("finds nothing when the Version reference was never resolved", () =>
-      Effect.gen(function* () {
-        const checkpointProps = stripUnresolved({
-          version: Output.literal("unresolved Version reference"),
-          aliasName: "live",
-        });
-        expect(checkpointProps).toEqual({ version: undefined, aliasName: "live" });
-        const recovered = yield* Effect.gen(function* () {
-          const provider = yield* Provider.Provider<Alias>("AWS.Lambda.Alias");
-          return yield* Effect.all(
-            [
-              // in-memory state store: stripped keys survive as `undefined`
-              checkpointProps,
-              // JSON state store: stripped keys are dropped
-              JSON.parse(JSON.stringify(checkpointProps)),
-            ].map((olds) =>
-              provider.read!({
-                id: "Live",
-                fqn: "Live",
-                instanceId: "0123456789abcdef0123456789abcdef",
-                olds,
-                output: undefined,
-              }),
-            ),
-          );
-          // No AWS services are provided: finding nothing must not reach Lambda.
-        }).pipe(Effect.provide(AliasProvider())) as Effect.Effect<unknown[]>;
-        expect(recovered).toEqual([undefined, undefined]);
-      }),
-    );
-  },
-);

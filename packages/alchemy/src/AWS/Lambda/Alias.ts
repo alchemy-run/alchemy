@@ -193,6 +193,9 @@ export const AliasProvider = () =>
           if (!isResolved(news)) return;
           const resolvedOlds = resolvedProps(olds);
           const resolvedNews = resolvedProps(news);
+          // An interrupted create persists the Version reference as missing
+          // (see stripUnresolved); there is no old function to compare.
+          if (resolvedOlds.version === undefined) return;
           const oldAliasName = yield* createAliasName(id, resolvedOlds.aliasName);
           const newAliasName = yield* createAliasName(id, resolvedNews.aliasName);
           if (
