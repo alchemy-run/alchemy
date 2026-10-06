@@ -60,6 +60,21 @@ export interface SecretProps {
    */
   resourcePolicy?: PolicyDocument | string;
   /**
+   * Number of days (7 to 30) AWS keeps the secret recoverable after Alchemy
+   * deletes it (`DeleteSecret`'s `RecoveryWindowInDays`).
+   *
+   * When omitted, deletion is immediate: the secret is deleted with
+   * `ForceDeleteWithoutRecovery` and its value cannot be restored. When set,
+   * the secret stays scheduled for deletion for this many days and can be
+   * restored with `RestoreSecret`. While it is scheduled, AWS does not allow
+   * another secret with the same name, so re-adding the same `Secret` restores
+   * the pending secret and converges it to the desired props instead of
+   * creating a new one.
+   *
+   * @default undefined (delete immediately, no recovery window)
+   */
+  recoveryWindowInDays?: number;
+  /**
    * User-defined tags for the secret.
    */
   tags?: Record<string, string>;
@@ -270,6 +285,21 @@ export const SecretProvider = () =>
           },
         );
 
+      // A secret deleted with a recovery window keeps its name until the
+      // window ends, so re-adding the same `Secret` must bring it back rather
+      // than create a second one (`CreateSecret` would be refused). Only
+      // applies when the caller opted into a recovery window; the default
+      // force-deletion path keeps its create-through-the-window retry.
+      const restoreIfPendingDeletion = (secretId: string) =>
+        secretsmanager.describeSecret({ SecretId: secretId }).pipe(
+          Effect.flatMap((described) =>
+            described.DeletedDate
+              ? secretsmanager.restoreSecret({ SecretId: secretId }).pipe(Effect.asVoid)
+              : Effect.void,
+          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+
       // Force deletion is asynchronous. `DeletedDate` means the operation was
       // accepted, not that the resource is absent, so deletion completion must
       // be checked with the raw API rather than `readSecret`.
@@ -328,6 +358,11 @@ export const SecretProvider = () =>
           // and fail with `InvalidRequestException` ("already scheduled for
           // deletion") — force deletions complete within seconds, so retry
           // through that window (bounded).
+          if (!observed?.ARN && news.recoveryWindowInDays !== undefined) {
+            yield* restoreIfPendingDeletion(secretName);
+            observed = yield* readSecret(secretName);
+          }
+
           if (!observed?.ARN) {
             // Data-FIRST `Effect.retry(self, options)`: the data-last form
             // infers `Retry.Options<E>`'s `E` from BOTH `while` and the
@@ -432,11 +467,14 @@ export const SecretProvider = () =>
             tags: desiredTags,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output }) {
+          const recoveryWindowInDays = olds?.recoveryWindowInDays;
           yield* secretsmanager
             .deleteSecret({
               SecretId: output.secretArn,
-              ForceDeleteWithoutRecovery: true,
+              ...(recoveryWindowInDays === undefined
+                ? { ForceDeleteWithoutRecovery: true }
+                : { RecoveryWindowInDays: recoveryWindowInDays }),
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -444,7 +482,11 @@ export const SecretProvider = () =>
                 isDeletionInProgress(error.message) ? Effect.void : Effect.fail(error),
               ),
             );
-          yield* waitForSecretAbsence(output.secretArn);
+          // With a recovery window the secret intentionally stays visible to
+          // `DescribeSecret` (scheduled for deletion) until the window ends.
+          if (recoveryWindowInDays === undefined) {
+            yield* waitForSecretAbsence(output.secretArn);
+          }
         }),
         // `listSecrets` returns full secret metadata (ARN, name, description,
         // KMS key, and tags) inline, so we hydrate the exact `read` Attributes
