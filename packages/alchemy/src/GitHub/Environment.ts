@@ -238,7 +238,7 @@ export const EnvironmentProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, olds }) {
       const octokit = yield* octokitFor(news.baseUrl);
 
       // Resolve reviewer logins/slugs to the numeric IDs the API expects.
@@ -268,17 +268,26 @@ export const EnvironmentProvider = () =>
       });
 
       // Ensure & Sync — the PUT is a full upsert of the environment's
-      // protection configuration; send explicit values (not omissions) so
-      // removed props converge back to their defaults.
+      // configuration. Each protection field is sent only while managed (set
+      // now, or set before so removal resets it to its default): private
+      // repos below GitHub Enterprise (e.g. Team plan) reject these fields
+      // with 422 even at their default values. deployment_branch_policy works
+      // on every plan and sends an explicit null so its removal converges.
       const environment = yield* Effect.tryPromise({
         try: async () => {
           const { data } = await octokit.rest.repos.createOrUpdateEnvironment({
             owner: news.owner,
             repo: news.repository,
             environment_name: news.name,
-            wait_timer: news.waitTimer ?? 0,
-            prevent_self_review: news.preventSelfReview ?? false,
-            reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers,
+            ...(news.waitTimer !== undefined || olds?.waitTimer !== undefined
+              ? { wait_timer: news.waitTimer ?? 0 }
+              : {}),
+            ...(news.preventSelfReview !== undefined || olds?.preventSelfReview !== undefined
+              ? { prevent_self_review: news.preventSelfReview ?? false }
+              : {}),
+            ...(news.reviewers !== undefined || olds?.reviewers !== undefined
+              ? { reviewers: reviewers === null || reviewers.length === 0 ? null : reviewers }
+              : {}),
             deployment_branch_policy:
               news.deploymentBranchPolicy === undefined
                 ? null

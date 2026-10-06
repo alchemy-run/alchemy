@@ -1,7 +1,11 @@
+import { Octokit as OctokitClient } from "@octokit/rest";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as GitHub from "@/GitHub";
+import { GitHubCredentials } from "@/GitHub/Credentials.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Output from "@/Output";
 import { destroy } from "@/RemovalPolicy";
@@ -256,4 +260,91 @@ test.provider.skipIf(!owner)(
     tags: ["provider:github", "provider:github:repository", "provider:github:variable", "live"],
     timeout: 120_000,
   },
+);
+
+// Records every environment upsert body against a mocked GitHub API, so the
+// exact request the provider sends can be asserted without a live org.
+const mockedEnvironmentTest = (
+  name: string,
+  body: (
+    stack: Test.ScratchStack,
+    upserts: Array<Record<string, unknown>>,
+  ) => Effect.Effect<void, any, any>,
+) => {
+  const upserts: Array<Record<string, unknown>> = [];
+  const path = "/repos/alchemy-run-test/alchemy-environment-unit/environments/staging";
+  const credentials = Effect.succeed({
+    token: Redacted.make("test-token"),
+    octokit: () =>
+      new OctokitClient({
+        auth: "test-token",
+        request: {
+          fetch: (url: string | URL | Request, options?: RequestInit) =>
+            Effect.runPromise(
+              Effect.sync(() => {
+                const method = options?.method ?? "GET";
+                if (new URL(String(url)).pathname !== path) {
+                  throw new Error(`Unexpected mock request ${method} ${url}`);
+                }
+                if (method === "PUT") {
+                  upserts.push(JSON.parse(String(options?.body)));
+                  return Response.json({
+                    id: 1,
+                    node_id: "EN_1",
+                    name: "staging",
+                    html_url:
+                      "https://github.com/alchemy-run-test/alchemy-environment-unit/deployments",
+                    created_at: "2026-01-01T00:00:00Z",
+                    updated_at: "2026-01-01T00:00:00Z",
+                  });
+                }
+                if (method === "DELETE") return new Response(null, { status: 204 });
+                throw new Error(`Unexpected mock method ${method}`);
+              }),
+            ),
+        },
+      }),
+  });
+  const { test } = Test.make({
+    providers: Layer.succeed(GitHubCredentials, credentials).pipe(
+      Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" })),
+    ),
+  });
+  test.provider(name, (stack) => body(stack, upserts), {
+    tags: ["unit", "provider:github", "provider:github:environment", "local"],
+  });
+};
+
+const unitEnvironment = (props: Partial<GitHub.EnvironmentProps>) =>
+  GitHub.Environment("Env", {
+    owner: "alchemy-run-test",
+    repository: "alchemy-environment-unit",
+    name: "staging",
+    ...props,
+  }).pipe(destroy());
+
+mockedEnvironmentTest("unit: unmanaged protection fields are omitted", (stack, upserts) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    yield* stack.deploy(unitEnvironment({ deploymentBranchPolicy: { protectedBranches: true } }));
+    expect(upserts).toEqual([
+      { deployment_branch_policy: { protected_branches: true, custom_branch_policies: false } },
+    ]);
+    yield* stack.destroy();
+  }),
+);
+
+mockedEnvironmentTest("unit: a removed protection field resets to its default", (stack, upserts) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    yield* stack.deploy(unitEnvironment({ waitTimer: 5, preventSelfReview: true }));
+    yield* stack.deploy(unitEnvironment({ preventSelfReview: true }));
+    yield* stack.deploy(unitEnvironment({}));
+    expect(upserts).toEqual([
+      { wait_timer: 5, prevent_self_review: true, deployment_branch_policy: null },
+      { wait_timer: 0, prevent_self_review: true, deployment_branch_policy: null },
+      { prevent_self_review: false, deployment_branch_policy: null },
+    ]);
+    yield* stack.destroy();
+  }),
 );
