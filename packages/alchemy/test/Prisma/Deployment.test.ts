@@ -3,130 +3,65 @@ import {
   type RequestListener,
   type Server as NodeHttpServer,
 } from "node:http";
+import { BadRequest } from "@distilled.cloud/prisma";
+import {
+  createDeploymentStop,
+  deleteDeployment,
+  getServiceDeployments,
+} from "@distilled.cloud/prisma/management";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientError from "effect/http/HttpClientError";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { WebSocketServer } from "ws";
-import { AlchemyContext } from "@/AlchemyContext";
-import * as Output from "@/Output";
-import { PrismaApiError, PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
-import { Credentials } from "@/Prisma/Credentials";
+import * as Drift from "@/Drift";
+import * as Prisma from "@/Prisma";
 import {
   Deployment as PrismaDeployment,
-  DeploymentProvider,
   MAX_DEPLOYMENT_ARTIFACT_BYTES,
   readUploadArtifact,
-  uploadArtifact,
   validateDeploymentArtifactBytes,
 } from "@/Prisma/Deployment";
 import { executeArtifactUpload } from "@/Prisma/Internal/ArtifactUpload";
-import { PrismaHttpClientLive, PrismaUploadClient } from "@/Prisma/Internal/HttpClient";
-import * as Provider from "@/Provider";
+import { PrismaHttpClientLive } from "@/Prisma/Internal/HttpClient";
 import { encodeState } from "@/State/StateEncoding";
+import * as Test from "@/Test/Alchemy";
 import { PlatformServices } from "@/Util/PlatformServices";
-import { sha256, sha256Object } from "@/Util/sha256";
 import {
-  dispatchTo,
-  failure,
-  makeFakeManagementApi,
-  notFound,
-  unhandled,
-} from "./fixtures/FakeManagementApi.ts";
+  type DeploymentCloudOptions,
+  deploymentLayer,
+  makeDeploymentCloud,
+  SIGNED_URL_SECRET,
+  UPLOAD_ERROR_BODY,
+  UPLOAD_HOST,
+} from "./fixtures/DeploymentFake.ts";
+import {
+  artifactV1Path,
+  artifactV2Path,
+  expectAppGone,
+  expectDeploymentGone,
+  observeApp,
+  observeDeployment,
+  stateRow,
+  tailFromState,
+  waitForStatus,
+} from "./fixtures/DeploymentLive.ts";
+import { routesOf } from "./fixtures/FakeManagementApi.ts";
+import { expectProjectGone, failureOf, forgetState, patchStateAttr } from "./fixtures/Live.ts";
 
-const currentClient = <T extends object>(client: T): PrismaManagementClient => {
-  return client as unknown as PrismaManagementClient;
-};
-
-const fixtureArtifactPath = `${import.meta.dirname}/fixtures/artifact-archive.bin`;
-const sameArtifactPath = `${import.meta.dirname}/fixtures/artifact-same-version.bin`;
-
-const liveProviderContext = Layer.succeed(AlchemyContext, {
-  dotAlchemy: ".alchemy-test",
-  dev: false,
-  adopt: false,
-});
-
-const deploymentProviderLive = () => DeploymentProvider().pipe(Layer.provide(liveProviderContext));
-
-/**
- * Serve the Management API from the same hermetic client-shaped handlers this
- * suite declares, for the routes Deployment now reaches through distilled
- * operations (list/create under /v1/services/{serviceId}/deployments). The handlers
- * are synchronous, so the fake runs them directly: an injected
- * `PrismaApiError` becomes its real status, `undefined` becomes a 404,
- * everything else a `{ data }` (or `{ data, pagination }`) envelope. The
- * observe/start/promote/delete paths still resolve the hand-rolled client
- * (their helpers are D3), so the `PrismaClient` layer stays provided
- * alongside; tests that stub uploads provide `PrismaUploadClient` because
- * the ambient `HttpClient` is now this management fake.
- */
-const clientBackedApi = (client: any) =>
-  makeFakeManagementApi((request) => {
-    // segments[0] is the "v1" prefix.
-    const [head, id, tail] = request.pathname
-      .split("/")
-      .filter((segment) => segment.length > 0)
-      .slice(1);
-    const body = request.bodyJson as any;
-    const query = Object.fromEntries(new URLSearchParams(request.search));
-    const { call, callVoid, list } = dispatchTo(request);
-
-    if (head === "services" && id !== undefined) {
-      if (tail === "deployments") {
-        return request.method === "GET"
-          ? call(client.listAppDeployments, [id, query], list)
-          : call(client.createAppDeployment, [id, body]);
-      }
-      if (tail === "promote") return call(client.promoteApp, [id, body]);
-      if (tail === "rollback") return call(client.rollbackApp, [id, body]);
-      if (tail === undefined && request.method === "GET") {
-        return call(client.getApp, [id]);
-      }
-    }
-    if (head === "deployments" && id !== undefined) {
-      if (tail === "start") return call(client.startDeployment, [id]);
-      if (tail === "stop") return callVoid(client.stopDeployment, [id]);
-      if (request.method === "GET") return call(client.getDeployment, [id]);
-      if (request.method === "DELETE") {
-        return callVoid(client.deleteDeployment, [id]);
-      }
-    }
-    return unhandled(request);
-  });
+// ---------------------------------------------------------------------------
+// Pure artifact helpers (no provider involved)
+// ---------------------------------------------------------------------------
 
 describe(
-  "Prisma Deployment",
+  "Prisma Deployment artifact helpers",
   { tags: ["unit", "provider:prisma", "provider:prisma:deployment", "local"] },
   () => {
-    it.effect("redacts signed upload URLs from transport failures", () => {
-      const secret = "SIGNED_QUERY_SECRET_SENTINEL";
-      const http = HttpClient.make((request) =>
-        Effect.fail(new Error(`transport failed for ${request.url}`) as never),
-      );
-
-      return Effect.gen(function* () {
-        const error = yield* uploadArtifact(
-          `https://upload.prisma.test/artifact?signature=${secret}`,
-          new Uint8Array([1]),
-          "application/octet-stream",
-        ).pipe(Effect.flip);
-
-        expect(error.message).toContain("transport failed");
-        expect(String(error)).not.toContain(secret);
-        expect(String(error)).not.toContain("upload.prisma.test");
-        expect(JSON.stringify(error)).not.toContain(secret);
-      }).pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, http)));
-    });
-
     it.effect("rejects final artifacts above the upload byte limit", () =>
       Effect.gen(function* () {
         const error = yield* validateDeploymentArtifactBytes(new Uint8Array(9), 8).pipe(
@@ -147,66 +82,6 @@ describe(
         expect(error.message).toContain("hard limit");
       }),
     );
-
-    it.effect("rejects symbolic-link artifact paths", () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-artifact-symlink-" });
-        const target = path.join(root, "artifact.tar.gz");
-        const link = path.join(root, "artifact-link.tar.gz");
-        yield* fs.writeFileString(target, "archive");
-        yield* fs.symlink(target, link);
-
-        const error = yield* readUploadArtifact({ artifactPath: link, output: "file" }).pipe(
-          Effect.flip,
-        );
-
-        expect(error.message).toContain("symbolic link");
-      }).pipe(Effect.provide(PlatformServices)),
-    );
-
-    it.effect("refuses to upload a file changed after validation", () => {
-      const http = HttpClient.make((request) => {
-        const body = request.body as HttpBody.HttpBody;
-        const consume = body._tag === "Stream" ? Stream.runDrain(body.stream) : Effect.void;
-        return consume.pipe(
-          Effect.mapError(
-            (cause) =>
-              new HttpClientError.HttpClientError({
-                reason: new HttpClientError.TransportError({
-                  request,
-                  cause,
-                  description: "test request body stream failed",
-                }),
-              }),
-          ),
-          Effect.as(HttpClientResponse.fromWeb(request, new Response(null))),
-        );
-      });
-
-      return Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-artifact-mutation-" });
-        const artifactPath = path.join(root, "artifact.tar.gz");
-        yield* fs.writeFileString(artifactPath, "first!!");
-        const artifact = yield* readUploadArtifact({ artifactPath, output: "file" });
-        yield* fs.writeFileString(artifactPath, "second!");
-
-        const error = yield* uploadArtifact(
-          "https://upload.prisma.test/artifact.tar.gz?signature=secret",
-          artifact!,
-          "application/gzip",
-        ).pipe(Effect.flip);
-
-        expect(error.message).toContain("transport failed");
-        expect(String(error)).not.toContain("signature=secret");
-      }).pipe(
-        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    });
 
     it.effect("streams file-backed artifacts with a fixed Content-Length", () => {
       let contentLength: string | undefined;
@@ -245,1852 +120,848 @@ describe(
           ),
       );
     });
+  },
+);
 
-    it.effect("fails when Prisma omits an upload URL for version artifacts", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        createAppDeployment: () => {
-          calls.push(["createAppDeployment"]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        deleteDeployment: (id: string) => {
-          calls.push(["deleteDeployment", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
+// ---------------------------------------------------------------------------
+// Fault injection: the live provider over an in-memory Management API
+// ---------------------------------------------------------------------------
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", artifactPath: fixtureArtifactPath },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
+const fakeTags = ["unit", "provider:prisma", "provider:prisma:deployment", "local"];
 
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("did not return an upload URL");
-        expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
+/** One fake cloud per scenario, so concurrent tests never share fault switches. */
+const fakeSuite = (options?: DeploymentCloudOptions) => {
+  const cloud = makeDeploymentCloud(options);
+  return { cloud, test: Test.make({ providers: deploymentLayer(cloud) }).test };
+};
 
-    it.effect("deletes created deployment when artifact upload fails", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        createAppDeployment: () => {
-          calls.push(["createAppDeployment"]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/version.tar.gz",
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        deleteDeployment: (id: string) => {
-          calls.push(["deleteDeployment", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
-      const http = HttpClient.make((request) =>
-        Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response("SIGNED_UPLOAD_SECRET_SENTINEL", { status: 500 }),
-          ),
+const tempArtifact = (contents: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-deployment-" });
+    const artifactPath = path.join(root, "artifact.tar.gz");
+    yield* fs.writeFileString(artifactPath, contents);
+    return artifactPath;
+  }).pipe(Effect.provide(PlatformServices));
+
+const uploadsAndStarts = fakeSuite();
+
+uploadsAndStarts.test.provider(
+  "uploads artifactPath bytes, requests the default port, and starts through the canonical routes",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = uploadsAndStarts;
+      yield* stack.destroy();
+      const artifactPath = yield* tempArtifact("version-archive");
+      const declare = PrismaDeployment("Version", {
+        app: "service-1",
+        artifactPath,
+        portMapping: { http: null },
+        start: true,
+      });
+      cloud.fake.captured.length = 0;
+
+      const deployed = yield* stack.deploy(declare);
+
+      expect(deployed.deploymentId).toBe("version-1");
+      expect(deployed.status).toBe("running");
+      expect(deployed.artifactHash).toBeDefined();
+      expect(cloud.createBodies).toEqual([{ portMapping: { http: null } }]);
+      expect(cloud.uploads).toHaveLength(1);
+      expect(cloud.uploads[0]!.url).toContain(`${UPLOAD_HOST}/version-1.tar.gz`);
+      expect(cloud.uploads[0]!.contentType).toBe("application/octet-stream");
+      expect(new TextDecoder().decode(cloud.uploads[0]!.bytes)).toBe("version-archive");
+      // The cold read before create neither enumerates nor adopts the App's
+      // deployments: the first request is the create itself.
+      expect(routesOf(cloud.fake.captured)).toEqual([
+        "POST /v1/services/service-1/deployments",
+        "GET /v1/deployments/version-1",
+        "POST /v1/deployments/version-1/start",
+        "GET /v1/deployments/version-1",
+      ]);
+
+      // Asserted start always reconciles, even with unchanged props.
+      const plan = yield* stack.plan(declare);
+      expect(plan.resources.Version?.action).toBe("update");
+
+      yield* stack.destroy();
+      expect(cloud.deployments.size).toBe(0);
+    }),
+  { tags: fakeTags },
+);
+
+const missingUploadUrl = fakeSuite({ uploadUrl: null });
+
+missingUploadUrl.test.provider(
+  "deletes the created deployment when Prisma omits an upload URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = missingUploadUrl;
+      yield* stack.destroy();
+
+      const failed = yield* failureOf(
+        stack.deploy(
+          PrismaDeployment("Version", { app: "service-1", artifactPath: artifactV1Path }),
         ),
       );
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", artifactPath: fixtureArtifactPath },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
+      expect(failed.text).toContain("did not return an upload URL");
+      expect(routesOf(cloud.fake.captured)).toContain("DELETE /v1/deployments/version-1");
+      expect(cloud.deployments.size).toBe(0);
 
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("artifact upload failed");
-        expect(error.message).toContain("HTTP 500");
-        expect(error.message).toContain("29 bytes");
-        expect(error.message).not.toContain("SIGNED_UPLOAD_SECRET_SENTINEL");
-        expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(Layer.succeed(PrismaUploadClient, http)),
-        Effect.provide(PlatformServices),
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const uploadRejected = fakeSuite({ upload: "status500" });
+
+uploadRejected.test.provider(
+  "deletes the created deployment when the artifact upload fails, without echoing the upload body",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = uploadRejected;
+      yield* stack.destroy();
+
+      const failed = yield* failureOf(
+        stack.deploy(
+          PrismaDeployment("Version", { app: "service-1", artifactPath: artifactV1Path }),
+        ),
       );
-    });
 
-    it.effect("preserves reconcile and cleanup failures for an orphaned deployment", () => {
-      const startError = new PrismaApiError({
-        method: "POST",
-        path: "/v1/deployments/version-1/start",
-        status: 400,
-        message: "start failed",
+      expect(failed.text).toContain("artifact upload failed");
+      expect(failed.text).toContain("HTTP 500");
+      expect(failed.text).toContain(`${UPLOAD_ERROR_BODY.length} bytes`);
+      expect(failed.text).not.toContain(UPLOAD_ERROR_BODY);
+      expect(failed.text).not.toContain(SIGNED_URL_SECRET);
+      expect(routesOf(cloud.fake.captured)).toContain("DELETE /v1/deployments/version-1");
+      expect(cloud.deployments.size).toBe(0);
+
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const uploadTransportFailure = fakeSuite({ upload: "transportError" });
+
+uploadTransportFailure.test.provider(
+  "redacts the signed upload URL from transport failures",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = uploadTransportFailure;
+      yield* stack.destroy();
+
+      const failed = yield* failureOf(
+        stack.deploy(
+          PrismaDeployment("Version", { app: "service-1", artifactPath: artifactV1Path }),
+        ),
+      );
+
+      expect(failed.text).toContain("transport failed");
+      expect(failed.text).not.toContain(SIGNED_URL_SECRET);
+      expect(failed.text).not.toContain(UPLOAD_HOST);
+      expect(JSON.stringify(failed.errors)).not.toContain(SIGNED_URL_SECRET);
+      expect(routesOf(cloud.fake.captured)).toContain("DELETE /v1/deployments/version-1");
+
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const changedArtifact = fakeSuite({ upload: "mutateFile" });
+
+changedArtifact.test.provider(
+  "refuses to upload an artifact file that changed after validation",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = changedArtifact;
+      yield* stack.destroy();
+      const artifactPath = yield* tempArtifact("first!!");
+      cloud.knobs.mutatePath = artifactPath;
+
+      const failed = yield* failureOf(
+        stack.deploy(PrismaDeployment("Version", { app: "service-1", artifactPath })),
+      );
+
+      expect(failed.text).toContain("transport failed");
+      expect(failed.text).not.toContain(SIGNED_URL_SECRET);
+      expect(cloud.uploadFailures.join("\n")).toContain("changed after it was validated");
+      expect(cloud.uploads).toHaveLength(0);
+      expect(routesOf(cloud.fake.captured)).toContain("DELETE /v1/deployments/version-1");
+
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const startFails = fakeSuite({ startFails: true });
+
+startFails.test.provider(
+  "deletes the created deployment when start fails",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = startFails;
+      yield* stack.destroy();
+
+      const failed = yield* failureOf(
+        stack.deploy(
+          PrismaDeployment("Version", { app: "service-1", skipCodeUpload: true, start: true }),
+        ),
+      );
+
+      expect(
+        failed.errors.some(
+          (error) => error instanceof BadRequest && error.message === "start failed",
+        ),
+      ).toBe(true);
+      expect(routesOf(cloud.fake.captured)).toContain("DELETE /v1/deployments/version-1");
+      expect(cloud.deployments.size).toBe(0);
+
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const startAndCleanupFail = fakeSuite({ startFails: true, deleteFails: true });
+
+startAndCleanupFail.test.provider(
+  "preserves both the start failure and the cleanup failure for an orphaned deployment",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = startAndCleanupFail;
+      yield* stack.destroy();
+
+      const failed = yield* failureOf(
+        stack.deploy(
+          PrismaDeployment("Version", { app: "service-1", skipCodeUpload: true, start: true }),
+        ),
+      );
+
+      const aggregate = failed.errors.find((error) => error instanceof AggregateError);
+      expect(aggregate).toBeInstanceOf(AggregateError);
+      if (aggregate instanceof AggregateError) {
+        expect(aggregate.message).toContain("version-1");
+        expect(aggregate.message).toContain("DELETE /v1/deployments/version-1");
+        expect(aggregate.errors).toHaveLength(2);
+        expect(String(aggregate.errors[0])).toContain("start failed");
+        expect(String(aggregate.errors[1])).toContain("cleanup failed");
+      }
+      expect(cloud.deployments.has("version-1")).toBe(true);
+
+      cloud.knobs.deleteFails = false;
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const ambiguousPromotion = fakeSuite({ promotionFails: true });
+
+ambiguousPromotion.test.provider(
+  "preserves the deployment when the promotion commit state is ambiguous",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = ambiguousPromotion;
+      yield* stack.destroy();
+
+      const failed = yield* failureOf(
+        stack.deploy(
+          PrismaDeployment("Version", { app: "service-1", skipCodeUpload: true, promote: true }),
+        ),
+      );
+
+      const aggregate = failed.errors.find((error) => error instanceof AggregateError);
+      expect(aggregate).toBeInstanceOf(AggregateError);
+      expect(String(aggregate)).toContain("commit state");
+      const routes = routesOf(cloud.fake.captured);
+      expect(routes).toContain("POST /v1/services/service-1/promote");
+      expect(routes).toContain("POST /v1/services/service-1/rollback");
+      expect(routes).not.toContain("DELETE /v1/deployments/version-1");
+      expect(cloud.deployments.has("version-1")).toBe(true);
+
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
+
+const recovery = fakeSuite();
+
+recovery.test.provider(
+  "refresh recovers a deployment by its Foundry version ID and refuses an ambiguous match",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = recovery;
+      yield* stack.destroy();
+      const identity = { name: stack.name, stage: stack.stage };
+      const detect = Drift.detect(identity).pipe(Effect.provide(stack.state));
+
+      yield* stack.deploy(PrismaDeployment("Version", { app: "service-1", skipCodeUpload: true }));
+
+      // A saved deployment is read through its own route and proven to be
+      // a member of the App.
+      cloud.fake.captured.length = 0;
+      const unchanged = yield* detect;
+      expect(unchanged.resources.Version).toMatchObject({
+        attr: { deploymentId: "version-1", appId: "service-1" },
       });
-      const deleteError = new PrismaApiError({
-        method: "DELETE",
-        path: "/v1/deployments/version-1",
-        status: 400,
-        message: "cleanup failed",
-      });
-      const client = {
-        createAppDeployment: () =>
-          Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          }),
-        getDeployment: (id: string) =>
-          Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          }),
-        startDeployment: () => Effect.fail(startError),
-        deleteDeployment: () => Effect.fail(deleteError),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, start: true },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(AggregateError);
-        expect((error as AggregateError).message).toContain("version-1");
-        expect((error as AggregateError).message).toContain("DELETE /v1/deployments/version-1");
-        expect((error as AggregateError).errors).toHaveLength(2);
-        // Over the wire the injected failures decode into the typed errors.
-        expect(((error as AggregateError).errors[0] as Error).message).toContain("start failed");
-        expect(((error as AggregateError).errors[1] as Error).message).toContain("cleanup failed");
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("deletes created deployment when start fails", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        createAppDeployment: () => {
-          calls.push(["createAppDeployment"]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        startDeployment: (id: string) => {
-          calls.push(["startDeployment", id]);
-          return Effect.fail(
-            new PrismaApiError({
-              method: "POST",
-              path: `/v1/deployments/${id}/start`,
-              status: 400,
-              message: "start failed",
-            }),
-          );
-        },
-        deleteDeployment: (id: string) => {
-          calls.push(["deleteDeployment", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, start: true },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        // Over the wire the injected failure decodes into the typed error.
-        expect(error._tag).toBe("BadRequest");
-        expect(error.message).toBe("start failed");
-        expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("preserves a deployment when promotion commit state is ambiguous", () => {
-      const calls: Array<[string, unknown?]> = [];
-      let status = "new";
-      const client = {
-        createAppDeployment: () => {
-          calls.push(["createAppDeployment"]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status,
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listAppDeployments: () =>
-          Effect.succeed([
-            {
-              id: "version-1",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/version-1",
-              foundryVersionId: "foundry-1",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-        startDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["startDeployment", id]);
-            status = "running";
-            return { previewDomain: "version-1.preview.prisma.build" };
-          }),
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed({
-            id,
-            type: "app" as const,
-            url: `https://api.prisma.test/v1/services/${id}`,
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
-            branchId: null,
-            latestDeploymentId: null,
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) => {
-          calls.push(["promoteApp", { appId, deploymentId }]);
-          return Effect.fail(
-            new PrismaApiError({
-              method: "POST",
-              path: `/v1/services/${appId}/promote`,
-              status: 400,
-              message: "promote failed",
-            }),
-          );
-        },
-        rollbackApp: () =>
-          Effect.fail(
-            new PrismaApiError({
-              method: "POST",
-              path: "/v1/services/service-1/rollback",
-              status: 400,
-              message: "promotion recovery failed",
-            }),
-          ),
-        stopDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["stopDeployment", id]);
-            status = "stopped";
-          }),
-        deleteDeployment: (id: string) => {
-          calls.push(["deleteDeployment", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, promote: true },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(AggregateError);
-        expect((error as AggregateError).message).toContain("commit state");
-        expect(calls).not.toContainEqual(["deleteDeployment", "version-1"]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("uploads version artifact bytes from artifactPath", () => {
-      let uploaded: { url: string; contentType: string | undefined; bytes: Uint8Array } | undefined;
-      const client = {
-        createAppDeployment: (_appId: string, input: unknown) =>
-          Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: "https://upload.prisma.test/version.tar.gz",
-            input,
-          }),
-        getDeployment: (id: string) =>
-          Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          }),
-      } as unknown as PrismaManagementClient;
-      const http = HttpClient.make((request) =>
-        Effect.gen(function* () {
-          const body = request.body as HttpBody.HttpBody;
-          const bytes =
-            body._tag === "Uint8Array"
-              ? body.body
-              : body._tag === "Stream"
-                ? yield* Stream.runCollect(body.stream).pipe(
-                    Effect.orDie,
-                    Effect.map((chunks) => {
-                      const output = new Uint8Array(
-                        chunks.reduce((total, chunk) => total + chunk.byteLength, 0),
-                      );
-                      let offset = 0;
-                      for (const chunk of chunks) {
-                        output.set(chunk, offset);
-                        offset += chunk.byteLength;
-                      }
-                      return output;
-                    }),
-                  )
-                : new Uint8Array();
-          uploaded = {
-            url: request.url,
-            contentType:
-              body._tag === "Uint8Array" || body._tag === "Stream" ? body.contentType : undefined,
-            bytes,
-          };
-          return HttpClientResponse.fromWeb(request, new Response(null));
-        }),
-      );
-
-      return Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-version-artifact-" });
-        const artifactPath = path.join(root, "version.tar.gz");
-        yield* fs.writeFileString(artifactPath, "version-archive");
-
-        const provider = yield* PrismaDeployment.Provider;
-        const output = yield* provider.reconcile({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          news: { app: "service-1", artifactPath },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(output.deploymentId).toBe("version-1");
-        expect(output.artifactHash).toBeDefined();
-        expect(uploaded?.url).toBe("https://upload.prisma.test/version.tar.gz");
-        expect(uploaded?.contentType).toBe("application/octet-stream");
-        expect(new TextDecoder().decode(uploaded?.bytes)).toBe("version-archive");
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(Layer.succeed(PrismaUploadClient, http)),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("reads a saved deployment through the canonical route", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        listAppDeployments: (appId: string) =>
-          Effect.sync(() => {
-            calls.push(["listAppDeployments", appId]);
-            return [
-              {
-                id: "version-1",
-                type: "deployment" as const,
-                serviceId: "service-1",
-                url: "https://api.prisma.test/v1/deployments/version-1",
-                foundryVersionId: "foundry-1",
-                createdAt: "2026-01-01T00:00:00Z",
-              },
-            ];
-          }),
-        getDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["getDeployment", id]);
-            return {
-              id,
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: `https://api.prisma.test/v1/deployments/${id}`,
-              foundryVersionId: "foundry-1",
-              status: "stopped",
-              previewDomain: "version-1.preview.prisma.build",
-              createdAt: "2026-01-01T00:00:00Z",
-            };
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(PrismaDeployment);
-        const output = yield* provider.read!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1" },
-          output: {
-            deploymentId: "version-1",
-            appId: "service-1",
-            foundryVersionId: "foundry-1",
-            status: "running",
-            previewDomain: undefined,
-            artifactHash: undefined,
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        });
-
-        expect(output?.deploymentId).toBe("version-1");
-        expect(output?.status).toBe("stopped");
-        expect(calls).toEqual([
-          ["getDeployment", "version-1"],
-          ["listAppDeployments", "service-1"],
-        ]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("does not adopt an unrelated latest deployment on a cold read", () => {
-      const client = {
-        listAppDeployments: () => Effect.die("cold reads must not enumerate or adopt deployments"),
-        getDeployment: () => Effect.die("cold reads have no persisted deployment identity"),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(PrismaDeployment);
-        const output = yield* provider.read!({
-          id: "Deployment",
-          fqn: "Deployment",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "app-1" },
-          output: undefined,
-        });
-
-        expect(output).toBeUndefined();
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("uses the output App ID when reading a saved deployment", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        listAppDeployments: (appId: string) =>
-          Effect.sync(() => {
-            calls.push(["listAppDeployments", appId]);
-            return [
-              {
-                id: "version-1",
-                type: "deployment" as const,
-                serviceId: "service-from-output",
-                url: "https://api.prisma.test/v1/deployments/version-1",
-                foundryVersionId: "foundry-1",
-                createdAt: "2026-01-01T00:00:00Z",
-              },
-            ];
-          }),
-        getDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["getDeployment", id]);
-            return {
-              id,
-              type: "deployment" as const,
-              serviceId: "service-from-output",
-              url: `https://api.prisma.test/v1/deployments/${id}`,
-              foundryVersionId: "foundry-1",
-              status: "running",
-              previewDomain: "version-1.preview.prisma.build",
-              createdAt: "2026-01-01T00:00:00Z",
-            };
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(PrismaDeployment);
-        const output = yield* provider.read!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-from-olds" },
-          output: {
-            deploymentId: "version-1",
-            appId: "service-from-output",
-            foundryVersionId: "foundry-1",
-            status: "stopped",
-            previewDomain: undefined,
-            artifactHash: undefined,
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        });
-
-        expect(output?.appId).toBe("service-from-output");
-        expect(output?.status).toBe("running");
-        expect(calls).toEqual([
-          ["getDeployment", "version-1"],
-          ["listAppDeployments", "service-from-output"],
-        ]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("falls back to the foundry version ID when the saved deployment is gone", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const notFound = (path: string) =>
-        new PrismaApiError({ method: "GET", path, status: 404, message: "not found" });
-      const client = {
-        listAppDeployments: (appId: string, query: unknown) =>
-          Effect.sync(() => {
-            calls.push(["listAppDeployments", { appId, query }]);
-            return [
-              {
-                id: "version-new",
-                type: "deployment" as const,
-                serviceId: "service-from-output",
-                url: "https://api.prisma.test/v1/deployments/version-new",
-                foundryVersionId: "foundry-1",
-                createdAt: "2026-01-01T00:00:00Z",
-              },
-            ];
-          }),
-        getDeployment: (id: string) =>
-          Effect.gen(function* () {
-            calls.push(["getDeployment", id]);
-            if (id === "version-old") {
-              return yield* Effect.fail(notFound(`/v1/deployments/${id}`));
-            }
-            return {
-              id,
-              type: "deployment" as const,
-              serviceId: "service-from-output",
-              url: `https://api.prisma.test/v1/deployments/${id}`,
-              foundryVersionId: "foundry-1",
-              status: "running",
-              previewDomain: "version-new.preview.prisma.build",
-              createdAt: "2026-01-01T00:00:00Z",
-            };
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(PrismaDeployment);
-        const output = yield* provider.read!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-from-olds" },
-          output: {
-            deploymentId: "version-old",
-            appId: "service-from-output",
-            foundryVersionId: "foundry-1",
-            status: "stopped",
-            previewDomain: undefined,
-            artifactHash: undefined,
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        });
-
-        expect(output?.deploymentId).toBe("version-new");
-        expect(output?.appId).toBe("service-from-output");
-        expect(calls).toEqual([
-          ["getDeployment", "version-old"],
-          [
-            "listAppDeployments",
-            // Over the wire, query params arrive as strings.
-            { appId: "service-from-output", query: { limit: "100" } },
-          ],
-          ["getDeployment", "version-new"],
-        ]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("rejects ambiguous Foundry-version recovery matches", () => {
-      const client = {
-        getDeployment: (id: string) =>
-          Effect.fail(
-            new PrismaApiError({
-              method: "GET",
-              path: `/v1/deployments/${id}`,
-              status: 404,
-              message: "not found",
-            }),
-          ),
-        listAppDeployments: () =>
-          Effect.succeed([
-            {
-              id: "deployment-a",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/deployment-a",
-              foundryVersionId: "foundry-1",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-            {
-              id: "deployment-b",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/deployment-b",
-              foundryVersionId: "foundry-1",
-              createdAt: "2026-01-01T00:00:01Z",
-            },
-          ]),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* Provider.findProvider(PrismaDeployment);
-        const error = yield* provider.read!({
-          id: "Deployment",
-          fqn: "Deployment",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "app-1" },
-          output: {
-            deploymentId: "deployment-missing",
-            appId: "app-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            appEndpointDomain: undefined,
-            createdAt: undefined,
-          },
-        }).pipe(Effect.flip);
-
-        expect(error.message).toContain("ambiguous recovery match");
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replaces when artifactPath contents change", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-version-diff-" });
-        const artifactPath = path.join(root, "version.tar.gz");
-        yield* fs.writeFileString(artifactPath, "new-version");
-
-        const provider = yield* PrismaDeployment.Provider;
-        const diff = yield* provider.diff!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1", artifactPath },
-          news: { app: "service-1", artifactPath },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            deploymentId: "version-1",
-            appId: "service-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            artifactHash: "old-hash",
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        } as never);
-
-        expect(diff).toEqual({ action: "replace" });
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replaces changed artifacts even when app is unresolved", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-version-unresolved-diff-",
-        });
-        const artifactPath = path.join(root, "version.tar.gz");
-        yield* fs.writeFileString(artifactPath, "new-version");
-
-        const provider = yield* PrismaDeployment.Provider;
-        const diff = yield* provider.diff!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1", artifactPath },
-          news: { app: Output.asOutput("service-1"), artifactPath },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            deploymentId: "version-1",
-            appId: "service-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            artifactHash: "old-hash",
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        } as never);
-
-        expect(diff).toEqual({ action: "replace" });
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replaces when the persisted App changes from an unresolved old prop", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const artifact = new TextEncoder().encode("same-version\n");
-        const artifactHash = yield* sha256Object({
-          artifact: yield* sha256(artifact),
-          contentType: "application/octet-stream",
-        });
-        const provider = yield* PrismaDeployment.Provider;
-        const diff = yield* provider.diff!({
-          id: "Deployment",
-          fqn: "Deployment",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: Output.asOutput("app-old"), artifactPath: sameArtifactPath },
-          news: { app: "app-new", artifactPath: sameArtifactPath },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            deploymentId: "deployment-1",
-            appId: "app-old",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            artifactHash,
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        } as never);
-
-        expect(diff).toEqual({ action: "replace" });
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("does not replace when artifact bytes are unchanged", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const artifact = new TextEncoder().encode("same-version\n");
-        const artifactHash = yield* sha256Object({
-          artifact: yield* sha256(artifact),
-          contentType: "application/octet-stream",
-        });
-
-        const provider = yield* PrismaDeployment.Provider;
-        const diff = yield* provider.diff!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: { app: "service-1", artifactPath: sameArtifactPath },
-          news: { app: "service-1", artifactPath: sameArtifactPath },
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            deploymentId: "version-1",
-            appId: "service-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            artifactHash,
-            appEndpointDomain: undefined,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        } as never);
-
-        expect(diff).toBeUndefined();
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replays promotion to repair Compute endpoint drift", () => {
-      const calls: Array<[string, unknown?]> = [];
-      let latestDeploymentId: string | null = null;
-      let status = "new";
-
-      const service = () => ({
-        id: "service-1",
-        type: "app" as const,
-        url: "https://api.prisma.test/v1/services/service-1",
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId: null,
-        latestDeploymentId,
-        appEndpointDomain: "api.prisma.build",
-        createdAt: "2026-01-01T00:00:00Z",
-      });
-
-      const client = {
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status,
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listAppDeployments: () =>
-          Effect.succeed([
-            {
-              id: "version-1",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/version-1",
-              foundryVersionId: "foundry-1",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-        startDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["startDeployment", id]);
-            status = "running";
-            return { previewDomain: "version-1.preview.prisma.build" };
-          }),
-        getApp: (id: string) => {
-          calls.push(["getApp", id]);
-          return Effect.succeed(service());
-        },
-        promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
-          Effect.sync(() => {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            latestDeploymentId = deploymentId;
-            return { appEndpointDomain: "api.prisma.build" };
-          }),
-      } as unknown as PrismaManagementClient;
-
-      const news = { app: "service-1", skipCodeUpload: true, promote: true };
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const first = yield* provider.reconcile({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          news,
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        // Simulate an out-of-band stop between deployments. Reconcile must
-        // restore both running state and App routing even though props match.
-        status = "stopped";
-
-        const second = yield* provider.reconcile({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          news,
-          olds: news,
-          output: first,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(first.deploymentId).toBe("version-1");
-        expect(second.deploymentId).toBe("version-1");
-        expect(second.appEndpointDomain).toBe("api.prisma.build");
-        expect(calls.filter(([name]) => name === "startDeployment")).toEqual([
-          ["startDeployment", "version-1"],
-          ["startDeployment", "version-1"],
-        ]);
-        expect(calls.filter(([name]) => name === "promoteApp")).toEqual([
-          ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
-          ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
-        ]);
-        expect(calls.filter(([name]) => name === "createAppDeployment")).toHaveLength(1);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replaces a terminal failed deployment before deleting the failed generation", () => {
-      const calls: Array<[string, unknown?]> = [];
-      let latestDeploymentId: string | null = "version-failed";
-      const deployments = new Map<
-        string,
-        {
-          id: string;
-          type: "deployment";
-          serviceId: string;
-          url: string;
-          foundryVersionId: string;
-          status: string;
-          previewDomain: string | null;
-          createdAt: string;
-        }
-      >([
-        [
-          "version-failed",
-          {
-            id: "version-failed",
-            type: "deployment",
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/version-failed",
-            foundryVersionId: "foundry-failed",
-            status: "failed",
-            previewDomain: "version-failed.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        ],
+      expect(unchanged.resources.Version?.action).not.toBe("missing");
+      expect(routesOf(cloud.fake.captured)).toEqual([
+        "GET /v1/deployments/version-1",
+        "GET /v1/services/service-1/deployments",
       ]);
-      const client = {
-        createAppDeployment: (appId: string, input: unknown) =>
-          Effect.sync(() => {
-            calls.push(["createAppDeployment", { appId, input }]);
-            deployments.set("version-replacement", {
-              id: "version-replacement",
-              type: "deployment",
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/version-replacement",
-              foundryVersionId: "foundry-replacement",
-              status: "new",
-              previewDomain: "version-replacement.preview.prisma.build",
-              createdAt: "2026-01-02T00:00:00Z",
-            });
-            return {
-              id: "version-replacement",
-              type: "deployment" as const,
-              url: "https://api.prisma.test/v1/deployments/version-replacement",
-              foundryVersionId: "foundry-replacement",
-              uploadUrl: null,
-            };
-          }),
-        getDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["getDeployment", id]);
-            return deployments.get(id)!;
-          }),
-        listAppDeployments: () =>
-          Effect.succeed(
-            Array.from(deployments.values()).map(
-              ({ id, type, serviceId, url, foundryVersionId, createdAt }) => ({
-                id,
-                type,
-                serviceId,
-                url,
-                foundryVersionId,
-                createdAt,
-              }),
-            ),
-          ),
-        startDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["startDeployment", id]);
-            deployments.get(id)!.status = "running";
-            return { previewDomain: deployments.get(id)!.previewDomain! };
-          }),
-        promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
-          Effect.sync(() => {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            expect(deployments.has("version-failed")).toBe(true);
-            latestDeploymentId = deploymentId;
-            return { appEndpointDomain: "api.prisma.build", reassignedDomains: 0 };
-          }),
-        getApp: (appId: string) =>
-          Effect.succeed({
-            id: appId,
-            type: "app" as const,
-            url: `https://api.prisma.test/v1/services/${appId}`,
-            name: "api",
-            region: { id: "us-east-1", name: "US East" },
-            projectId: "project-1",
-            branchId: "branch-main",
-            latestDeploymentId,
-            appEndpointDomain: "api.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          }),
-        deleteDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["deleteDeployment", id]);
-            deployments.delete(id);
-          }),
-      } as unknown as PrismaManagementClient;
-      const news = { app: "service-1", skipCodeUpload: true, promote: true } as const;
-      const failedOutput: PrismaDeployment["Attributes"] = {
-        deploymentId: "version-failed",
-        appId: "service-1",
-        foundryVersionId: "foundry-failed",
-        status: "failed",
-        previewDomain: "version-failed.preview.prisma.build",
-        artifactHash: undefined,
-        appEndpointDomain: "api.prisma.build",
-        createdAt: "2026-01-01T00:00:00Z",
-      };
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const action = yield* provider.diff!({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: news,
-          news,
-          oldBindings: [],
-          newBindings: [],
-          output: failedOutput,
-        } as never);
-        expect(action).toEqual({ action: "replace" });
+      // The saved deployment ID is gone, but its Foundry version survives
+      // under a new deployment ID.
+      const original = cloud.deployments.get("version-1")!;
+      cloud.deployments.delete("version-1");
+      cloud.deployments.set("version-9", { ...original, id: "version-9" });
+      cloud.fake.captured.length = 0;
+      const recovered = yield* detect;
+      expect(recovered.resources.Version).toMatchObject({
+        action: "drifted",
+        attr: { deploymentId: "version-9", appId: "service-1" },
+      });
+      expect(cloud.fake.captured.map((request) => `${request.pathname}${request.search}`)).toEqual([
+        "/v1/deployments/version-1",
+        "/v1/services/service-1/deployments?limit=100",
+        "/v1/deployments/version-9",
+      ]);
 
-        // The engine executes replacement create-before-delete. Reconcile the
-        // replacement to its requested running/promoted state before invoking
-        // delete for the failed generation.
-        const replacement = yield* provider.reconcile({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "11111111111111111111111111111111",
-          news,
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-        expect(replacement.deploymentId).toBe("version-replacement");
-        expect(replacement.status).toBe("running");
-        expect(deployments.has("version-failed")).toBe(true);
+      // Two deployments sharing the Foundry version cannot be told apart.
+      cloud.deployments.set("version-10", { ...original, id: "version-10" });
+      const ambiguous = yield* failureOf(detect);
+      expect(ambiguous.text).toContain("ambiguous recovery match");
 
-        yield* provider.delete({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          olds: news,
-          output: failedOutput,
-          session: undefined as never,
-          bindings: [],
-        });
+      cloud.deployments.clear();
+      yield* stack.destroy();
+    }),
+  { tags: fakeTags },
+);
 
-        const createIndex = calls.findIndex(([operation]) => operation === "createAppDeployment");
-        const promoteIndex = calls.findIndex(([operation]) => operation === "promoteApp");
-        const deleteIndex = calls.findIndex(
-          ([operation, id]) => operation === "deleteDeployment" && id === "version-failed",
-        );
-        expect(createIndex).toBeGreaterThanOrEqual(0);
-        expect(createIndex).toBeLessThan(promoteIndex);
-        expect(promoteIndex).toBeLessThan(deleteIndex);
-        expect(deployments.has("version-failed")).toBe(false);
-        expect(deployments.get("version-replacement")?.status).toBe("running");
-        expect(calls).not.toContainEqual(["startDeployment", "version-failed"]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
+const outputApp = fakeSuite();
+
+outputApp.test.provider(
+  "refresh reads a saved deployment through the App ID recorded in its attributes",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = outputApp;
+      yield* stack.destroy();
+
+      yield* stack.deploy(PrismaDeployment("Version", { app: "service-1", skipCodeUpload: true }));
+      // The recorded App ID, not the declared one, owns the deployment.
+      cloud.deployments.get("version-1")!.serviceId = "service-2";
+      yield* patchStateAttr(stack, "Version", { appId: "service-2" });
+
+      cloud.fake.captured.length = 0;
+      const detected = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
       );
-    });
+      expect(detected.resources.Version).toMatchObject({
+        attr: { deploymentId: "version-1", appId: "service-2" },
+      });
+      const routes = routesOf(cloud.fake.captured);
+      expect(routes).toContain("GET /v1/services/service-2/deployments");
+      expect(routes).not.toContain("GET /v1/services/service-1/deployments");
 
-    it.live("reports a deployment that is still stopping as a delete in progress", () => {
-      const calls: Array<[string, string]> = [];
-      let status = "running";
-      // The stop wait reads the wall clock, so jump it instead of sleeping two minutes.
+      yield* stack.destroy();
+      expect(cloud.deployments.size).toBe(0);
+    }),
+  { tags: fakeTags },
+);
+
+const failedGeneration = fakeSuite();
+
+failedGeneration.test.provider(
+  "replaces a terminal failed deployment and promotes the replacement before deleting it",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = failedGeneration;
+      yield* stack.destroy();
+      const declare = PrismaDeployment("Version", {
+        app: "service-1",
+        skipCodeUpload: true,
+        promote: true,
+      });
+
+      const first = yield* stack.deploy(declare);
+      expect(first.deploymentId).toBe("version-1");
+      // Foundry's failed status is terminal; the refreshed attributes say so.
+      cloud.deployments.get("version-1")!.status = "failed";
+      yield* patchStateAttr(stack, "Version", { status: "failed" });
+
+      const plan = yield* stack.plan(declare);
+      expect(plan.resources.Version?.action).toBe("replace");
+
+      cloud.fake.captured.length = 0;
+      const replaced = yield* stack.deploy(declare);
+      expect(replaced.deploymentId).toBe("version-2");
+      expect(replaced.status).toBe("running");
+
+      const routes = routesOf(cloud.fake.captured);
+      const createIndex = routes.indexOf("POST /v1/services/service-1/deployments");
+      const promoteIndex = routes.indexOf("POST /v1/services/service-1/promote");
+      const deleteIndex = routes.indexOf("DELETE /v1/deployments/version-1");
+      expect(createIndex).toBeGreaterThanOrEqual(0);
+      expect(createIndex).toBeLessThan(promoteIndex);
+      expect(promoteIndex).toBeLessThan(deleteIndex);
+      expect(routes).not.toContain("POST /v1/deployments/version-1/start");
+      expect(cloud.deployments.has("version-1")).toBe(false);
+      expect(cloud.appOf("service-1").latestDeploymentId).toBe("version-2");
+
+      yield* stack.destroy();
+      expect(cloud.deployments.size).toBe(0);
+    }),
+  { tags: fakeTags },
+);
+
+const stillStopping = fakeSuite();
+
+stillStopping.test.provider(
+  "reports a deployment that is still stopping as a delete in progress",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = stillStopping;
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        PrismaDeployment("Version", { app: "service-1", skipCodeUpload: true, start: true }),
+      );
+      expect(deployed.status).toBe("running");
+
+      // The stop wait reads the wall clock, so jump it on every poll that
+      // still observes `stopping` instead of sleeping two minutes.
+      cloud.knobs.stickyStop = true;
       const realNow = Date.now;
       let skippedMs = 0;
-      const client = {
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          if (status === "stopping") skippedMs += 61_000;
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status,
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        listAppDeployments: () =>
-          Effect.succeed([
-            {
-              id: "version-old",
-              type: "deployment" as const,
-              serviceId: "service-1",
-              url: "https://api.prisma.test/v1/deployments/version-old",
-              foundryVersionId: "foundry-1",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-        stopDeployment: (id: string) => {
-          calls.push(["stopDeployment", id]);
-          status = "stopping";
-          return Effect.void;
-        },
-        deleteDeployment: (id: string) => {
-          calls.push(["deleteDeployment", id]);
-          return Effect.void;
-        },
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
+      cloud.onGetDeployment.push((deployment) => {
+        if (deployment.status === "stopping") skippedMs += 61_000;
+      });
+      cloud.fake.captured.length = 0;
+      const failed = yield* Effect.sync(() => {
         Date.now = () => realNow() + skippedMs;
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .delete({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            olds: { app: "service-1", skipCodeUpload: true },
-            output: {
-              deploymentId: "version-old",
-              appId: "service-1",
-              foundryVersionId: "foundry-1",
-              status: "running",
-              previewDomain: undefined,
-              artifactHash: undefined,
-              triggersHash: undefined,
-              appEndpointDomain: undefined,
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(Provider.DeleteInProgress);
-        expect(error.message).toContain("last status: 'stopping'");
-        expect(calls).toContainEqual(["stopDeployment", "version-old"]);
-        expect(calls).not.toContainEqual(["deleteDeployment", "version-old"]);
       }).pipe(
+        Effect.andThen(failureOf(stack.destroy())),
         Effect.ensuring(
           Effect.sync(() => {
             Date.now = realNow;
           }),
         ),
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
       );
-    });
 
-    it.effect("rejects promotion when start is explicitly disabled", () => {
-      const client = {} as PrismaManagementClient;
+      expect(failed.text).toContain("last status: 'stopping'");
+      expect(failed.text).toContain("only a stopped deployment can be deleted");
+      const routes = routesOf(cloud.fake.captured);
+      expect(routes).toContain("POST /v1/deployments/version-1/stop");
+      expect(routes).not.toContain("DELETE /v1/deployments/version-1");
+      expect(cloud.deployments.get("version-1")?.status).toBe("stopping");
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Version",
-            fqn: "Version",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "service-1", skipCodeUpload: true, start: false, promote: true },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("promote cannot be combined with start: false");
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("rejects invalid deployment HTTP ports", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        for (const http of [0, 65_536, 1.5]) {
-          const error = yield* provider
-            .reconcile({
-              id: "Deployment",
-              fqn: "Deployment",
-              instanceId: "00000000000000000000000000000000",
-              news: { app: "app-1", skipCodeUpload: true, portMapping: { http } },
-              olds: undefined,
-              output: undefined,
-              session: undefined as never,
-              bindings: [],
-            })
-            .pipe(Effect.flip);
-          expect(error.message).toContain(
-            "portMapping.http must be an integer between 1 and 65535",
-          );
-        }
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("allows null HTTP port to request the Foundry 8080 default", () => {
-      const calls: Array<[string, unknown?]> = [];
-      const client = {
-        createAppDeployment: (appId: string, input: unknown) =>
-          Effect.sync(() => {
-            calls.push(["createAppDeployment", { appId, input }]);
-            return {
-              id: "deployment-1",
-              type: "deployment" as const,
-              url: "https://api.prisma.test/v1/deployments/deployment-1",
-              foundryVersionId: "foundry-1",
-              uploadUrl: null,
-            };
-          }),
-        getDeployment: () =>
-          Effect.succeed({
-            id: "deployment-1",
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: "https://api.prisma.test/v1/deployments/deployment-1",
-            foundryVersionId: "foundry-1",
-            status: "new",
-            previewDomain: null,
-            createdAt: "2026-01-01T00:00:00Z",
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const output = yield* provider.reconcile({
-          id: "Deployment",
-          fqn: "Deployment",
-          instanceId: "00000000000000000000000000000000",
-          news: { app: "app-1", skipCodeUpload: true, portMapping: { http: null } },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(output.deploymentId).toBe("deployment-1");
-        expect(calls).toEqual([
-          [
-            "createAppDeployment",
-            { appId: "app-1", input: { portMapping: { http: null }, skipCodeUpload: true } },
-          ],
-        ]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("forces reconcile while start or promotion is asserted", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const base = {
-          id: "Deployment",
-          fqn: "Deployment",
-          instanceId: "00000000000000000000000000000000",
-          oldBindings: [],
-          newBindings: [],
-          output: {
-            deploymentId: "deployment-1",
-            appId: "app-1",
-            foundryVersionId: "foundry-1",
-            status: "running",
-            previewDomain: null,
-            appEndpointDomain: undefined,
-            createdAt: undefined,
-          },
-        };
-        const start = yield* provider.diff!({
-          ...base,
-          olds: { app: "app-1", skipCodeUpload: true, start: true },
-          news: { app: "app-1", skipCodeUpload: true, start: true },
-        } as never);
-        const promote = yield* provider.diff!({
-          ...base,
-          olds: { app: "app-1", skipCodeUpload: true, promote: true },
-          news: { app: "app-1", skipCodeUpload: true, promote: true },
-        } as never);
-
-        expect(start).toEqual({ action: "update" });
-        expect(promote).toEqual({ action: "update" });
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("rejects a deployment with no artifact source", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const error = yield* provider
-          .reconcile({
-            id: "Deployment",
-            fqn: "Deployment",
-            instanceId: "00000000000000000000000000000000",
-            news: { app: "app-1" },
-            olds: undefined,
-            output: undefined,
-            session: undefined as never,
-            bindings: [],
-          })
-          .pipe(Effect.flip);
-
-        expect(error.message).toContain("requires artifactPath or skipCodeUpload: true");
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("starts a deployment through the canonical route", () => {
-      const calls: Array<[string, unknown?]> = [];
-      let status = "new";
-      const client = {
-        createAppDeployment: (appId: string, input: unknown) => {
-          calls.push(["createAppDeployment", { appId, input }]);
-          return Effect.succeed({
-            id: "version-1",
-            type: "deployment" as const,
-            url: "https://api.prisma.test/v1/deployments/version-1",
-            foundryVersionId: "foundry-1",
-            uploadUrl: null,
-          });
-        },
-        getDeployment: (id: string) => {
-          calls.push(["getDeployment", id]);
-          return Effect.succeed({
-            id,
-            type: "deployment" as const,
-            serviceId: "service-1",
-            url: `https://api.prisma.test/v1/deployments/${id}`,
-            foundryVersionId: "foundry-1",
-            status,
-            previewDomain: "version-1.preview.prisma.build",
-            createdAt: "2026-01-01T00:00:00Z",
-          });
-        },
-        startDeployment: (id: string) =>
-          Effect.sync(() => {
-            calls.push(["startDeployment", id]);
-            status = "running";
-            return { previewDomain: "version-1.preview.prisma.build" };
-          }),
-      } as unknown as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const output = yield* provider.reconcile({
-          id: "Version",
-          fqn: "Version",
-          instanceId: "00000000000000000000000000000000",
-          news: { app: "service-1", skipCodeUpload: true, start: true },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(output.status).toBe("running");
-        expect(calls).toEqual([
-          [
-            "createAppDeployment",
-            { appId: "service-1", input: { portMapping: undefined, skipCodeUpload: true } },
-          ],
-          ["getDeployment", "version-1"],
-          ["startDeployment", "version-1"],
-          ["getDeployment", "version-1"],
-        ]);
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("tails Deployment logs through the provider", () =>
-      withWebSocketServer((server) =>
-        Effect.gen(function* () {
-          const url = yield* listenUrl(server);
-          let authorization: string | undefined;
-          let requestUrl: string | undefined;
-
-          server.on("connection", (socket, request) => {
-            authorization = request.headers.authorization;
-            requestUrl = request.url;
-            socket.send(
-              JSON.stringify({
-                type: "log",
-                text: "direct version log",
-                byteStart: 0,
-                byteEnd: 18,
-              }),
-            );
-            socket.send(
-              JSON.stringify({
-                type: "terminal",
-                kind: "end",
-                code: "vm_stopped",
-                message: "done",
-                retryable: false,
-                cursor: null,
-              }),
-            );
-          });
-
-          const provider = yield* Provider.findProvider(PrismaDeployment).pipe(
-            Effect.provide(deploymentProviderLive()),
-            Effect.provide(makeFakeManagementApi(unhandled).layer),
-            Effect.provide(PlatformServices),
-          );
-          const lines = yield* provider.tail!({
-            id: "Deployment",
-            fqn: "Deployment",
-            instanceId: "00000000000000000000000000000000",
-            props: { app: "service-1" },
-            output: {
-              deploymentId: "version-1",
-              appId: "service-1",
-              foundryVersionId: "foundry-1",
-              status: "running",
-              previewDomain: "version-1.preview.prisma.build",
-              appEndpointDomain: undefined,
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          }).pipe(
-            // The carved-out logs client resolves the distilled Credentials
-            // service directly: the test WebSocket server is the API base.
-            Stream.provideService(
-              Credentials,
-              Effect.succeed({ apiToken: Redacted.make("version-token"), apiBaseUrl: url }),
-            ),
-            Stream.runCollect,
-          );
-
-          expect(lines.map((line) => line.message)).toEqual(["direct version log"]);
-          expect(authorization).toBe("Bearer version-token");
-          expect(requestUrl).toBe("/v1/deployments/version-1/logs");
-        }).pipe(Effect.provide(FetchHttpClient.layer)),
-      ),
-    );
-    it.effect("records a redacted triggers fingerprint and replaces when a value changes", () => {
-      const secret = "REDEPLOY_SECRET_SENTINEL";
-      const client = redeployClient();
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const output = yield* provider.reconcile({
-          id: "Deployment",
-          fqn: "Deployment",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Redacted.make(secret) },
-          },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(Redacted.isRedacted(output.triggersHash!)).toBe(true);
-        const fingerprint = Redacted.value(output.triggersHash!);
-        expect(fingerprint).not.toBe(secret);
-        expect(fingerprint).not.toContain(secret);
-        // encodeState unwraps Redacted, so this is what a state store writes.
-        expect(JSON.stringify(encodeState(output))).not.toContain(secret);
-
-        const unchanged = yield* provider.diff!({
-          ...triggersDiffBase(output.triggersHash),
-          olds: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Redacted.make(secret) },
-          },
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Redacted.make(secret) },
-          },
-        } as never);
-        const changed = yield* provider.diff!({
-          ...triggersDiffBase(output.triggersHash),
-          olds: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Redacted.make(secret) },
-          },
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
-          },
-        } as never);
-
-        expect(unchanged).toBeUndefined();
-        expect(changed).toEqual({ action: "replace" });
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replaces when a plain triggers value changes", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const diff = yield* provider.diff!({
-          ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
-          olds: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "off" } },
-          news: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
-        } as never);
-
-        expect(diff).toEqual({ action: "replace" });
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("keeps a deployment recorded before triggers existed when nothing changed", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const diff = yield* provider.diff!({
-          ...triggersDiffBase(undefined),
-          olds: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
-          news: { app: "app-1", skipCodeUpload: true, triggers: { FEATURE_FLAG: "on" } },
-        } as never);
-
-        expect(diff).toBeUndefined();
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-
-    it.effect("replaces when triggers cannot be resolved while planning", () => {
-      const client = {} as PrismaManagementClient;
-
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const recorded = yield* provider.diff!({
-          ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
-          olds: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: "postgres://old" },
-          },
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
-          },
-        } as never);
-        const neverRecorded = yield* provider.diff!({
-          ...triggersDiffBase(undefined),
-          olds: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: "postgres://old" },
-          },
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
-          },
-        } as never);
-
-        expect(recorded).toEqual({ action: "replace" });
-        expect(neverRecorded).toBeUndefined();
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(clientBackedApi(client).layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-  },
+      // Once the stop drains, the retried delete completes.
+      cloud.knobs.stickyStop = false;
+      cloud.deployments.get("version-1")!.status = "stopped";
+      yield* stack.destroy();
+      expect(cloud.deployments.size).toBe(0);
+    }),
+  // Patches the process-wide `Date.now`.
+  { tags: fakeTags, exclusive: true },
 );
 
-const redeployClient = () =>
-  ({
-    createAppDeployment: () =>
-      Effect.succeed({
-        id: "deployment-1",
-        type: "deployment" as const,
-        url: "https://api.prisma.test/v1/deployments/deployment-1",
-        foundryVersionId: "foundry-1",
-      }),
-    getDeployment: (id: string) =>
-      Effect.succeed({
-        id,
-        type: "deployment" as const,
-        serviceId: "app-1",
-        url: "https://api.prisma.test/v1/deployments/deployment-1",
-        foundryVersionId: "foundry-1",
-        status: "new",
-        previewDomain: null,
-        createdAt: "2026-01-01T00:00:00Z",
-      }),
-  }) as unknown as PrismaManagementClient;
+// ---------------------------------------------------------------------------
+// Live: the real Prisma Management API
+// ---------------------------------------------------------------------------
 
-const triggersDiffBase = (triggersHash: Redacted.Redacted<string> | undefined) => ({
-  id: "Deployment",
-  fqn: "Deployment",
-  instanceId: "00000000000000000000000000000000",
-  oldBindings: [],
-  newBindings: [],
-  output: {
-    deploymentId: "deployment-1",
-    appId: "app-1",
-    foundryVersionId: "foundry-1",
-    status: "new",
-    previewDomain: null,
-    artifactHash: undefined,
-    triggersHash,
-    appEndpointDomain: undefined,
-    createdAt: "2026-01-01T00:00:00Z",
-  },
-});
+const live = Test.make({ providers: Prisma.providers() });
 
-const withWebSocketServer = <A, E, R>(f: (server: WebSocketServer) => Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => new WebSocketServer({ host: "127.0.0.1", port: 0 })),
-    f,
-    (server) =>
-      Effect.callback<void>((resume) => {
-        server.close(() => resume(Effect.void));
-      }).pipe(Effect.ignore),
+const liveTags = [
+  "provider:prisma",
+  "provider:prisma:deployment",
+  "provider:prisma:app",
+  "provider:prisma:project",
+  "live",
+];
+
+const fetchText = (url: string) =>
+  Effect.gen(function* () {
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    const response = yield* client.get(url);
+    return yield* response.text;
+  }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 10 }),
+    Effect.provide(FetchHttpClient.layer),
   );
 
-const listenUrl = (server: WebSocketServer) =>
-  Effect.callback<string, Error>((resume) => {
-    const complete = () => {
-      cleanup();
-      const address = server.address();
-      if (address && typeof address === "object") {
-        resume(Effect.succeed(`http://127.0.0.1:${address.port}`));
-      } else {
-        resume(Effect.fail(new Error("WebSocket server has no TCP address")));
-      }
-    };
-    const fail = (cause: unknown) => {
-      cleanup();
-      resume(Effect.fail(cause instanceof Error ? cause : new Error(String(cause))));
-    };
-    const cleanup = () => {
-      server.off("listening", complete);
-      server.off("error", fail);
-    };
+live.test.provider(
+  "uploads an artifact, starts and promotes it, and replays start and promotion after an out-of-band stop",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
 
-    if (server.address()) {
-      complete();
-      return;
+    const resources = Effect.gen(function* () {
+      const project = yield* Prisma.Project("Project", { createDatabase: false });
+      const app = yield* Prisma.App("Web", { project });
+      const deployment = yield* Prisma.Deployment("Deployment", {
+        app,
+        artifactPath: artifactV1Path,
+        promote: true,
+      });
+      return { project, app, deployment };
+    });
+
+    const initial = yield* stack.deploy(resources);
+    const deploymentId = initial.deployment.deploymentId;
+    expect(initial.deployment.appId).toBe(initial.app.appId);
+    expect(initial.deployment.status).toBe("running");
+    expect(initial.deployment.artifactHash).toBeDefined();
+    expect(initial.deployment.appEndpointDomain).toBeDefined();
+    const observed = yield* observeDeployment(deploymentId);
+    expect(observed.status).toBe("running");
+    expect(observed.serviceId).toBe(initial.app.appId);
+    expect((yield* observeApp(initial.app.appId)).latestDeploymentId).toBe(deploymentId);
+
+    // Logs stream through the provider's tail, the way `alchemy logs --tail`
+    // reaches it; the request below makes the uploaded server log a line.
+    const tail = yield* tailFromState(stack, "Deployment").pipe(
+      Stream.filter((line) => line.message.includes("alchemy deployment fixture v1")),
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("90 seconds"),
+      Effect.forkChild({ startImmediately: true }),
+    );
+    // The App's stable endpoint serves the uploaded artifact.
+    expect(yield* fetchText(Prisma.toDeploymentUrl(initial.deployment.appEndpointDomain)!)).toBe(
+      "v1",
+    );
+    const lines = yield* Fiber.join(tail);
+    expect(lines.length).toBe(1);
+
+    // Stop the deployment out of band. Refresh observes it.
+    yield* createDeploymentStop({ deploymentId });
+    expect((yield* waitForStatus(deploymentId, "stopped")).status).toBe("stopped");
+    const detected = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+      Effect.provide(stack.state),
+    );
+    expect(detected.resources.Deployment).toMatchObject({
+      action: "drifted",
+      attr: { deploymentId, status: "stopped" },
+    });
+
+    // Asserted promotion always reconciles, even with unchanged props.
+    const plan = yield* stack.plan(resources);
+    expect(plan.resources.Deployment?.action).toBe("update");
+
+    const repaired = yield* stack.deploy(resources);
+    expect(repaired.deployment.deploymentId).toBe(deploymentId);
+    expect(repaired.deployment.status).toBe("running");
+    expect((yield* observeDeployment(deploymentId)).status).toBe("running");
+    expect((yield* observeApp(initial.app.appId)).latestDeploymentId).toBe(deploymentId);
+
+    yield* stack.destroy();
+    yield* expectDeploymentGone(deploymentId);
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "replaces the deployment when its artifact bytes or App change and keeps it when nothing changed",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-deployment-artifact-" });
+    const artifactPath = path.join(root, "app.tar.gz");
+    yield* fs.copyFile(artifactV1Path, artifactPath);
+
+    const resources = (options: { target?: "web" | "admin"; webProject?: "main" | "other" }) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const other = yield* Prisma.Project("Other", { createDatabase: false });
+        const web = yield* Prisma.App("Web", {
+          project: options.webProject === "other" ? other : project,
+        });
+        const admin = yield* Prisma.App("Admin", { project });
+        const deployment = yield* Prisma.Deployment("Deployment", {
+          app: options.target === "admin" ? admin : web,
+          artifactPath,
+        });
+        return { project, other, web, admin, deployment };
+      });
+
+    const initial = yield* stack.deploy(resources({}));
+    expect(initial.deployment.appId).toBe(initial.web.appId);
+    expect(initial.deployment.artifactHash).toBeDefined();
+
+    // Same bytes, same App: nothing to do.
+    const unchanged = yield* stack.plan(resources({}));
+    expect(unchanged.resources.Deployment?.action).toBe("noop");
+
+    // A different App is a different deployment.
+    const moved = yield* stack.plan(resources({ target: "admin" }));
+    expect(moved.resources.Deployment?.action).toBe("replace");
+
+    yield* fs.copyFile(artifactV2Path, artifactPath);
+    // New bytes replace the deployment even while its App is being
+    // replaced and so has no ID yet at plan time.
+    const unresolvedApp = yield* stack.plan(resources({ webProject: "other" }));
+    expect(unresolvedApp.resources.Web?.action).toBe("replace");
+    expect(unresolvedApp.resources.Deployment?.action).toBe("replace");
+
+    const replaced = yield* stack.deploy(resources({}));
+    expect(replaced.deployment.deploymentId).not.toBe(initial.deployment.deploymentId);
+    expect(replaced.deployment.artifactHash).not.toBe(initial.deployment.artifactHash);
+    yield* expectDeploymentGone(initial.deployment.deploymentId);
+    expect((yield* observeDeployment(replaced.deployment.deploymentId)).serviceId).toBe(
+      initial.web.appId,
+    );
+
+    yield* stack.destroy();
+    yield* expectDeploymentGone(replaced.deployment.deploymentId);
+    yield* expectAppGone(initial.web.appId);
+    yield* expectAppGone(initial.admin.appId);
+    yield* expectProjectGone(initial.project.projectId);
+    yield* expectProjectGone(initial.other.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "replaces on changed triggers, keeps their fingerprint redacted, and tolerates a missing fingerprint",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const secret = "REDEPLOY_SECRET_SENTINEL";
+
+    const resources = (options: { secret?: string; flag?: string; appName?: string } = {}) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const app = yield* Prisma.App("Web", {
+          project,
+          ...(options.appName === undefined ? {} : { displayName: options.appName }),
+        });
+        const redacted = yield* Prisma.Deployment("Redacted", {
+          app,
+          artifactPath: artifactV1Path,
+          triggers: { DATABASE_URL: Redacted.make(options.secret ?? secret) },
+        });
+        const plain = yield* Prisma.Deployment("Plain", {
+          app,
+          artifactPath: artifactV1Path,
+          triggers: { FEATURE_FLAG: options.flag ?? "off" },
+        });
+        // Reads an App attribute that an App rename leaves unknown at plan time.
+        const named = yield* Prisma.Deployment("Named", {
+          app,
+          artifactPath: artifactV1Path,
+          triggers: { APP_NAME: app.name },
+        });
+        return { project, app, redacted, plain, named };
+      });
+
+    const initial = yield* stack.deploy(resources());
+    const fingerprint = initial.redacted.triggersHash;
+    expect(Redacted.isRedacted(fingerprint)).toBe(true);
+    expect(Redacted.value(fingerprint!)).not.toContain(secret);
+    // encodeState is what a state store writes for the attributes.
+    const row = yield* stateRow(stack, "Redacted");
+    expect(JSON.stringify(encodeState(row.attr))).not.toContain(secret);
+
+    const unchanged = yield* stack.plan(resources());
+    expect(unchanged.resources.Redacted?.action).toBe("noop");
+    expect(unchanged.resources.Plain?.action).toBe("noop");
+    expect(unchanged.resources.Named?.action).toBe("noop");
+
+    const rotated = yield* stack.plan(resources({ secret: `${secret}-rotated` }));
+    expect(rotated.resources.Redacted?.action).toBe("replace");
+    expect(rotated.resources.Plain?.action).toBe("noop");
+
+    const flagged = yield* stack.plan(resources({ flag: "on" }));
+    expect(flagged.resources.Plain?.action).toBe("replace");
+
+    // An unresolved trigger with a recorded fingerprint replaces conservatively.
+    const renamed = yield* stack.plan(resources({ appName: "renamed-web" }));
+    expect(renamed.resources.Web?.action).toBe("update");
+    expect(renamed.resources.Named?.action).toBe("replace");
+
+    // A deployment recorded before triggers existed has no fingerprint:
+    // nothing to compare against, so neither a resolved nor an unresolved
+    // trigger replaces it.
+    yield* patchStateAttr(stack, "Plain", { triggersHash: undefined });
+    yield* patchStateAttr(stack, "Named", { triggersHash: undefined });
+    const unrecorded = yield* stack.plan(resources());
+    expect(unrecorded.resources.Plain?.action).toBe("noop");
+    const unrecordedRenamed = yield* stack.plan(resources({ appName: "renamed-web" }));
+    expect(unrecordedRenamed.resources.Named?.action).toBe("update");
+
+    const redeployed = yield* stack.deploy(resources({ secret: `${secret}-rotated` }));
+    expect(redeployed.redacted.deploymentId).not.toBe(initial.redacted.deploymentId);
+    expect(redeployed.plain.deploymentId).toBe(initial.plain.deploymentId);
+    expect(redeployed.named.deploymentId).toBe(initial.named.deploymentId);
+    yield* expectDeploymentGone(initial.redacted.deploymentId);
+
+    yield* stack.destroy();
+    yield* expectDeploymentGone(redeployed.redacted.deploymentId);
+    yield* expectDeploymentGone(initial.plain.deploymentId);
+    yield* expectDeploymentGone(initial.named.deploymentId);
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "rejects invalid ports, start/promotion flags, missing sources, symbolic links, and oversized artifacts, and accepts the null port",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-deployment-invalid-" });
+    const symlinkPath = path.join(root, "artifact-link.tar.gz");
+    yield* fs.symlink(artifactV1Path, symlinkPath);
+    // Sparse, so the over-limit file costs no disk.
+    const oversizedPath = path.join(root, "oversized.tar.gz");
+    yield* fs.writeFileString(oversizedPath, "");
+    yield* fs.truncate(oversizedPath, MAX_DEPLOYMENT_ARTIFACT_BYTES + 1);
+
+    const resources = (id: string, props?: Omit<Prisma.DeploymentProps, "app">) =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const app = yield* Prisma.App("Web", { project });
+        const deployment =
+          props === undefined ? undefined : yield* Prisma.Deployment(id, { app, ...props });
+        return { project, app, deployment };
+      });
+
+    const base = yield* stack.deploy(resources("None"));
+
+    const invalid: Array<[string, Omit<Prisma.DeploymentProps, "app">, string]> = [
+      [
+        "PortZero",
+        { artifactPath: artifactV1Path, portMapping: { http: 0 } },
+        "portMapping.http must be an integer between 1 and 65535",
+      ],
+      [
+        "PortTooLarge",
+        { artifactPath: artifactV1Path, portMapping: { http: 65_536 } },
+        "portMapping.http must be an integer between 1 and 65535",
+      ],
+      [
+        "PortFractional",
+        { artifactPath: artifactV1Path, portMapping: { http: 1.5 } },
+        "portMapping.http must be an integer between 1 and 65535",
+      ],
+      [
+        "PromoteWithoutStart",
+        { skipCodeUpload: true, start: false, promote: true },
+        "promote cannot be combined with start: false",
+      ],
+      ["NoSource", {}, "requires artifactPath or skipCodeUpload: true"],
+      ["Symlink", { artifactPath: symlinkPath }, "symbolic link"],
+      [
+        "Oversized",
+        { artifactPath: oversizedPath },
+        `exceeds the ${MAX_DEPLOYMENT_ARTIFACT_BYTES} byte upload safety limit`,
+      ],
+    ];
+    for (const [id, props, message] of invalid) {
+      const failed = yield* failureOf(stack.deploy(resources(id, props)));
+      expect(failed.text).toContain(message);
+    }
+    // Every rejection happened before Prisma was asked to create anything.
+    const listed = yield* getServiceDeployments({ serviceId: base.app.appId });
+    expect(listed.data).toHaveLength(0);
+
+    // `null` asks Foundry for its default port.
+    const nullPort = yield* stack.deploy(
+      resources("NullPort", { artifactPath: artifactV1Path, portMapping: { http: null } }),
+    );
+    const observed = yield* observeDeployment(nullPort.deployment!.deploymentId);
+    expect(observed.serviceId).toBe(base.app.appId);
+    if (observed.portMapping?.http !== undefined) {
+      expect(observed.portMapping.http).toBe(8080);
     }
 
-    server.once("listening", complete);
-    server.once("error", fail);
-    return Effect.sync(cleanup);
-  });
+    yield* stack.destroy();
+    yield* expectDeploymentGone(nullPort.deployment!.deploymentId);
+    yield* expectAppGone(base.app.appId);
+    yield* expectProjectGone(base.project.projectId);
+  }),
+  { tags: liveTags, timeout: 240_000 },
+);
+
+live.test.provider(
+  "after lost state, creates a new deployment instead of adopting the App's latest one",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = Effect.gen(function* () {
+      const project = yield* Prisma.Project("Project", { createDatabase: false });
+      const app = yield* Prisma.App("Web", { project });
+      const deployment = yield* Prisma.Deployment("Deployment", {
+        app,
+        artifactPath: artifactV1Path,
+      });
+      return { project, app, deployment };
+    });
+
+    const initial = yield* stack.deploy(resources);
+    yield* forgetState(stack, "Deployment");
+
+    // Prisma has no idempotency key for deployments, so nothing proves the
+    // existing one is ours.
+    const recreated = yield* stack.deploy(resources);
+    expect(recreated.deployment.deploymentId).not.toBe(initial.deployment.deploymentId);
+    const listed = yield* getServiceDeployments({ serviceId: initial.app.appId });
+    expect(listed.data.map((deployment) => deployment.id).sort()).toEqual(
+      [initial.deployment.deploymentId, recreated.deployment.deploymentId].sort(),
+    );
+
+    // Destroying the App cascades the untracked deployment.
+    yield* stack.destroy();
+    yield* expectDeploymentGone(recreated.deployment.deploymentId);
+    yield* expectDeploymentGone(initial.deployment.deploymentId);
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "refresh reports a deployment deleted out of band as missing and recreates it",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const app = yield* Prisma.App("Web", { project });
+        const deployment = yield* Prisma.Deployment("Deployment", {
+          app,
+          artifactPath: artifactV1Path,
+        });
+        return { project, app, deployment };
+      }),
+    );
+    yield* deleteDeployment({ deploymentId: initial.deployment.deploymentId });
+    yield* expectDeploymentGone(initial.deployment.deploymentId);
+
+    const identity = { name: stack.name, stage: stack.stage };
+    const detected = yield* Drift.detect(identity).pipe(Effect.provide(stack.state));
+    expect(detected.resources.Deployment?.action).toBe("missing");
+
+    const repaired = yield* Drift.repair(identity).pipe(Effect.provide(stack.state));
+    expect(repaired.resources.Deployment?.action).toBe("recreated");
+    const recreatedId: string = repaired.resources.Deployment?.attr.deploymentId;
+    expect(recreatedId).not.toBe(initial.deployment.deploymentId);
+    const observed = yield* observeDeployment(recreatedId);
+    expect(observed.serviceId).toBe(initial.app.appId);
+
+    yield* stack.destroy();
+    yield* expectDeploymentGone(recreatedId);
+    yield* expectAppGone(initial.app.appId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+// ---------------------------------------------------------------------------
 
 const withHttpServer = <A, E, R>(
   handler: RequestListener,
