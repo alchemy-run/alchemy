@@ -9,6 +9,10 @@ import { nodePath, nodeSupportsDevMode } from "../nodeProbe.ts";
 
 const CLI = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 
+const DESTROY_FIXTURE = fileURLToPath(
+  new URL("./fixtures/destroy-requires-dev-stack.ts", import.meta.url),
+);
+
 /**
  * Run the CLI with no TTY on any stdio and return its exit code. Each
  * invocation is a real `bun bin/cli.js` child with `ALCHEMY_HOME` pointed at
@@ -38,7 +42,7 @@ const exitCodeOf = (
     return yield* handle.exitCode;
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
-/** Like {@link exitCodeOf}, but from an empty project directory with stderr captured. */
+/** Like {@link exitCodeOf}, but from an empty project directory with stdout and stderr captured. */
 const runInEmptyProject = (args: ReadonlyArray<string>, runtime = "bun") =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -53,16 +57,20 @@ const runInEmptyProject = (args: ReadonlyArray<string>, runtime = "bun") =>
       env: { ALCHEMY_HOME: home },
       extendEnv: true,
       stdin: "ignore",
-      stdout: "ignore",
+      stdout: "pipe",
       stderr: "pipe",
       killSignal: "SIGTERM",
       forceKillAfter: "1 second",
     });
-    const [stderr, exitCode] = yield* Effect.all(
-      [handle.stderr.pipe(Stream.decodeText, Stream.mkString), handle.exitCode],
-      { concurrency: 2 },
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [
+        handle.stdout.pipe(Stream.decodeText, Stream.mkString),
+        handle.stderr.pipe(Stream.decodeText, Stream.mkString),
+        handle.exitCode,
+      ],
+      { concurrency: 3 },
     );
-    return { stderr, exitCode };
+    return { stdout, stderr, exitCode };
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
 
 describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
@@ -93,6 +101,28 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
       expect(exitCode).toBe(1);
       expect(stderr).not.toContain("Unrecognized flag");
       expect(stderr).toContain("Stack entrypoint 'alchemy.run.ts' does not exist");
+    }),
+  );
+
+  // `alchemy dev` evaluates the stack with local providers, so its stage must
+  // be destroyable the same way, without evaluating declarations against the
+  // real cloud (#1976). The fixture stack fails unless it is evaluated in dev
+  // mode, standing in for a declaration that calls a cloud API.
+  it.live("destroy --dev evaluates the stack in dev mode", () =>
+    Effect.gen(function* () {
+      const args = ["destroy", DESTROY_FIXTURE, "--stage", "dev_exit_codes", "--yes"];
+      const { stdout, stderr, exitCode } = yield* runInEmptyProject([...args, "--dev"]);
+      expect(stdout + stderr).not.toContain("evaluated in live mode");
+      expect(exitCode).toBe(0);
+    }),
+  );
+
+  it.live("destroy without --dev still evaluates the stack in live mode", () =>
+    Effect.gen(function* () {
+      const args = ["destroy", DESTROY_FIXTURE, "--stage", "live_exit_codes", "--yes"];
+      const { stdout, stderr, exitCode } = yield* runInEmptyProject(args);
+      expect(stdout + stderr).toContain("evaluated in live mode");
+      expect(exitCode).toBe(1);
     }),
   );
 

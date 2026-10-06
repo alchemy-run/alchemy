@@ -29,6 +29,7 @@ Proceed?
 | ------------------- | ----------------------------------------------------------------- |
 | `--config, -c <file>`            | Stack file to destroy (defaults to `alchemy.run.ts`)              |
 | `--stage <name>`    | Stage to destroy (defaults to `$ALCHEMY_STAGE` or `live_$USER`)   |
+| `--dev`             | Destroy a stage created by `alchemy dev` using local providers (no cloud credentials; stage defaults to `dev_$USER`) |
 | `--yes`             | Skip the approval prompt                                          |
 | `--dry-run`         | Show what would be deleted without actually deleting              |
 | `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE` or `default`) |
@@ -44,7 +45,7 @@ alchemy destroy --stage pr-42 --yes
 alchemy destroy --stage live_sam
 
 # Destroy the local-dev stage created by alchemy dev
-alchemy destroy --stage dev_sam
+alchemy destroy --dev --stage dev_sam
 ```
 
 ## Retained resources

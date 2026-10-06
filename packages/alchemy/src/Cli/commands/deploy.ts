@@ -37,6 +37,7 @@ interface StackCommandOptions {
   readonly exclude?: ReadonlyArray<string>;
   readonly yes?: boolean;
   readonly destroy?: boolean;
+  readonly dev?: boolean;
   readonly adopt?: boolean;
   readonly detailed?: boolean;
   readonly detectDrift?: boolean;
@@ -49,6 +50,7 @@ const stackSpanAttrs = (args: StackCommandOptions) => ({
   "alchemy.dry_run": !!args.dryRun,
   "alchemy.force": !!args.force,
   "alchemy.destroy": !!args.destroy,
+  "alchemy.dev": !!args.dev,
   "alchemy.adopt": !!args.adopt,
   "alchemy.detailed": !!args.detailed,
   "alchemy.detect_drift": !!args.detectDrift,
@@ -58,6 +60,14 @@ const adopt = Flag.Boolean("adopt").pipe(
   Flag.withDescription(
     "Adopt pre-existing cloud resources that conflict with this stack instead of failing. " +
       "Useful for re-importing infrastructure into a fresh state store.",
+  ),
+  Flag.withDefault(false),
+);
+
+const dev = Flag.Boolean("dev").pipe(
+  Flag.withDescription(
+    "Destroy a stage created by `alchemy dev`: evaluate the stack with local providers " +
+      "(no cloud credentials needed) and default the stage to dev_$USER",
   ),
   Flag.withDefault(false),
 );
@@ -181,6 +191,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     exclude: options.exclude,
     adopt: options.adopt,
     updateStateStore: options.yes,
+    dev: options.dev,
   }).pipe(withPlanningProgress);
 
   if (options.dryRun) {
@@ -247,9 +258,10 @@ export const destroyCommand = Command.make(
     stage,
     yes,
     profile,
+    dev,
   },
   (args) =>
-    resolveStackArgs("live")(args).pipe(
+    resolveStackArgs(args.dev ? "dev" : "live")(args).pipe(
       Effect.flatMap(
         instrumentCommand(
           "destroy",
