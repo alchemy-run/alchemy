@@ -2464,11 +2464,18 @@ export const FunctionProvider = () =>
             }),
           );
 
-          // CloudWatch Logs is not implemented by the floci emulator. The
-          // live reap below (flush watch + observe→delete) would sit on
-          // describe/delete timeouts for minutes; emulator log groups die
-          // with the container anyway.
+          // The floci emulator serves CloudWatch Logs but never recreates a
+          // group after the function is gone, so there is no flush window to
+          // watch. One bounded delete is enough; the live reap below (flush
+          // watch + observe→delete) would only add minutes of waiting.
           if (yield* AWSEnvironment.isLocalEmulator) {
+            yield* logs.deleteLogGroup({ logGroupName: `/aws/lambda/${output.functionName}` }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                orElse: () => Effect.void,
+              }),
+            );
             return null as any;
           }
 
