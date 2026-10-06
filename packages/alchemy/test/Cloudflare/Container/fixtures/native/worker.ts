@@ -3,7 +3,7 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Cloudflare from "@/Cloudflare";
 import { NativeImages } from "./images.ts";
-import { NativeObject } from "./object.ts";
+import { INTERCEPT_HOST, NativeObject } from "./object.ts";
 
 const execModeFor = (path: string) => {
   if (path === "/snapshot") return "snapshot";
@@ -25,6 +25,10 @@ export const NativeWorker = Cloudflare.Worker(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const url = new URL(request.url, "http://worker");
+        // The container's intercepted requests reach this default entrypoint.
+        if (request.headers.host === INTERCEPT_HOST) {
+          return HttpServerResponse.text(`intercepted ${request.headers.host}${url.pathname}`);
+        }
         // Probe routes share one long-lived object; `?object=` overrides it.
         const probe = objects.getByName(url.searchParams.get("object") ?? "probe");
 

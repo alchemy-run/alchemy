@@ -1,6 +1,5 @@
+import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as Cloudflare from "@/Cloudflare";
@@ -25,15 +24,19 @@ const READ_RELEASE_AND_SEED = [
 
 const decode = (bytes: ArrayBuffer) => new TextDecoder().decode(bytes);
 
-/** Only the owning object's `interceptOutboundHttp` answers this host. */
-const INTERCEPT_HOST = "intercept.internal";
+/** Only the registered interception answers this host (see worker.ts). */
+export const INTERCEPT_HOST = "intercept.internal";
+
+/** `ctx.exports` entrypoints; workers-types does not type them on DurableObjectState. */
+interface InterceptExports {
+  default(options: { props: Record<string, never> }): cf.Fetcher;
+}
 
 export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
   "NativeObject",
   Effect.gen(function* () {
     const container = yield* Cloudflare.Containers.bind(NativeImage);
     const state = yield* DurableObjectState;
-    const env = yield* Cloudflare.WorkerEnvironment;
     /** Changes whenever the runtime re-creates this object. */
     let incarnation: string | undefined;
 
@@ -99,8 +102,11 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
       if (mode === "intercept") {
         // Started without internet: only this object's interception can answer.
         yield* ensureShell;
-        const self = Cloudflare.fromCloudflareFetcher(env.NativeObject.get(state.id));
-        yield* container.interceptOutboundHttp(INTERCEPT_HOST, self);
+        // Cloudflare routes intercepted traffic only to a Worker entrypoint or
+        // service binding, so register this Worker's default entrypoint.
+        const exports = (state.raw as unknown as { exports: InterceptExports }).exports;
+        const entrypoint = Cloudflare.fromCloudflareFetcher(exports.default({ props: {} }));
+        yield* container.interceptOutboundHttp(INTERCEPT_HOST, entrypoint);
         const output = yield* run(["wget", "-qO-", `http://${INTERCEPT_HOST}/hello`]);
         return {
           exitCode: output.exitCode,
@@ -147,11 +153,6 @@ export class NativeObject extends Cloudflare.DurableObject<NativeObject>()(
     });
 
     return Effect.succeed({
-      // Requests the container makes to INTERCEPT_HOST arrive here.
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        return HttpServerResponse.text(`intercepted ${request.headers.host}${request.url}`);
-      }),
       lifecycle,
       metadata: Effect.fn(function* () {
         incarnation ??= crypto.randomUUID();

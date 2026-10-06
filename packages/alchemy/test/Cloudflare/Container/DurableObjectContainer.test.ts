@@ -422,18 +422,12 @@ for (const dev of [true, false]) {
                     failed: true,
                     tag: "ContainerError",
                   });
-                  // The container's outbound HTTP reaches the owning object.
-                  // TODO: Live interception registers (the host resolves to
-                  // 11.9.0.1) but the connection closes with no bytes: wget
-                  // reports "error getting response: Invalid argument". Same
-                  // with a stub for another instance and with internet enabled.
-                  if (dev) {
-                    expect(yield* lifecycle("intercept")).toEqual({
-                      exitCode: 0,
-                      stdout: "intercepted intercept.internal/hello",
-                      stderr: "",
-                    });
-                  }
+                  // The container's outbound HTTP reaches the Worker entrypoint.
+                  expect(yield* lifecycle("intercept")).toEqual({
+                    exitCode: 0,
+                    stdout: "intercepted intercept.internal/hello",
+                    stderr: "",
+                  });
 
                   if (dev) {
                     // Local emulation never creates a cloud application.
