@@ -2,8 +2,8 @@ import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import type { ConsumedRecord, DecodedRecord, RecordSchema, StartAt } from "./K2Types.ts";
-import type { Stream as K2Stream } from "./Stream.ts";
+import type { StartAt } from "./K2Types.ts";
+import type { Stream as K2Stream, StreamConsumedRecord } from "./Stream.ts";
 import type { Subscription } from "./Subscription.ts";
 
 /** Settings for {@link consumeStreamRecords}. */
@@ -44,18 +44,13 @@ export interface ConsumeStreamRecordsProps {
   workerId?: string;
 }
 
-/** {@link ConsumeStreamRecordsProps} with a schema decoding JSON content into `record.value`. */
-export interface ConsumeStreamRecordsSchemaProps<A> extends ConsumeStreamRecordsProps {
-  schema: RecordSchema<A>;
-}
-
 export type ConsumeStreamRecordsHandler<Rec, Req> = (
   records: Stream.Stream<Rec>,
 ) => Effect.Effect<void, unknown, Req>;
 
 export type StreamEventSourceService = (
-  stream: K2Stream,
-  props: ConsumeStreamRecordsProps & { schema?: RecordSchema<any> },
+  stream: K2Stream<any>,
+  props: ConsumeStreamRecordsProps,
   process: ConsumeStreamRecordsHandler<any, any>,
 ) => Effect.Effect<void, never, never>;
 
@@ -82,7 +77,9 @@ export class StreamEventSource extends Context.Service<
  *   (unless `subscription` is passed — hosts sharing one compete for
  *   batches).
  * - **Runtime**: `concurrency` pollers lease batches of records, run the
- *   handler, and acknowledge each batch when the handler succeeds. A failed
+ *   handler, and acknowledge each batch when the handler succeeds. When the
+ *   stream was declared with a `schema`, each record's JSON content is
+ *   decoded into `record.value`. A failed
  *   handler is logged and the batch is released for redelivery. Leases are
  *   extended every two minutes while the handler runs.
  *
@@ -108,11 +105,13 @@ export class StreamEventSource extends Context.Service<
  * ```
  *
  * ### Typed Records
- * **Example:** Decode JSON records with a Schema
+ * **Example:** Records decoded with the stream's schema
  * ```typescript
+ * const Orders = Cloudflare.K2.Stream("Orders", { schema: Order });
+ *
  * yield* Cloudflare.K2.consumeStreamRecords(
  *   Orders,
- *   { schema: Order, startAt: "earliest", concurrency: 4 },
+ *   { startAt: "earliest", concurrency: 4 },
  *   (records) =>
  *     records.pipe(Stream.runForEach((record) => Effect.log(record.value.id))),
  * );
@@ -137,25 +136,18 @@ export class StreamEventSource extends Context.Service<
  * @product K2
  * @category Storage & Databases
  */
-export function consumeStreamRecords<Req = never>(
-  stream: K2Stream,
-  process: ConsumeStreamRecordsHandler<ConsumedRecord, Req>,
+export function consumeStreamRecords<A, Req = never>(
+  stream: K2Stream<A>,
+  process: ConsumeStreamRecordsHandler<StreamConsumedRecord<A>, Req>,
 ): Effect.Effect<void, never, StreamEventSource>;
 export function consumeStreamRecords<A, Req = never>(
-  stream: K2Stream,
-  props: ConsumeStreamRecordsSchemaProps<A>,
-  process: ConsumeStreamRecordsHandler<DecodedRecord<A>, Req>,
-): Effect.Effect<void, never, StreamEventSource>;
-export function consumeStreamRecords<Req = never>(
-  stream: K2Stream,
+  stream: K2Stream<A>,
   props: ConsumeStreamRecordsProps,
-  process: ConsumeStreamRecordsHandler<ConsumedRecord, Req>,
+  process: ConsumeStreamRecordsHandler<StreamConsumedRecord<A>, Req>,
 ): Effect.Effect<void, never, StreamEventSource>;
 export function consumeStreamRecords(
-  stream: K2Stream,
-  propsOrProcess:
-    | (ConsumeStreamRecordsProps & { schema?: RecordSchema<any> })
-    | ConsumeStreamRecordsHandler<any, any>,
+  stream: K2Stream<any>,
+  propsOrProcess: ConsumeStreamRecordsProps | ConsumeStreamRecordsHandler<any, any>,
   maybeProcess?: ConsumeStreamRecordsHandler<any, any>,
 ): Effect.Effect<void, never, StreamEventSource> {
   const [props, process] =

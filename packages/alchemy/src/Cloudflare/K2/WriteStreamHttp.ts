@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { toProduceRecords } from "./K2Codec.ts";
 import { type K2Auth, makeK2HttpAuth } from "./K2Http.ts";
-import type { EncodedRecord } from "./K2Types.ts";
+import type { EncodedRecord, RecordSchema } from "./K2Types.ts";
 import type { Stream } from "./Stream.ts";
-import { WriteStream, type WriteStreamOptions } from "./WriteStream.ts";
+import { WriteStream } from "./WriteStream.ts";
 import { makeWriteStreamClient } from "./WriteStreamClient.ts";
 
 /**
@@ -36,9 +36,9 @@ export const WriteStreamHttp = Layer.effect(
   WriteStream,
   Effect.gen(function* () {
     const auth = yield* makeK2HttpAuth;
-    return Effect.fn(function* (stream: Stream, options?: WriteStreamOptions<any>) {
+    return Effect.fn(function* (stream: Stream<any>) {
       const streamAuth = yield* auth(stream, "K2 Produce");
-      return makeWriteStreamHttpClient(streamAuth, yield* stream.streamId, options);
+      return makeWriteStreamHttpClient(streamAuth, yield* stream.streamId, stream.RecordSchema);
     });
   }),
 );
@@ -50,9 +50,9 @@ export const WriteStreamHttp = Layer.effect(
 export const makeWriteStreamHttpClient = (
   auth: K2Auth,
   streamId: Effect.Effect<string>,
-  options: WriteStreamOptions<any> | undefined,
+  schema: RecordSchema<any> | undefined,
 ) =>
-  makeWriteStreamClient(options, (records: ReadonlyArray<EncodedRecord>) =>
+  makeWriteStreamClient(schema, (records: ReadonlyArray<EncodedRecord>) =>
     streamId.pipe(
       Effect.flatMap((id) =>
         auth.authorize(k2.produce({ streamId: id, records: toProduceRecords(records) })),

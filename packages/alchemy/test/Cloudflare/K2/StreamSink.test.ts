@@ -36,22 +36,18 @@ const record = (bytes: number): EncodedRecord => ({ content: new Uint8Array(byte
 const fakeClient = (failures: ReadonlyArray<k2.ProduceError["_tag"]> = []) => {
   const sent: EncodedRecord[][] = [];
   let attempt = 0;
-  const client: WriteStreamClient<{ id: number }> = makeWriteStreamClient(
-    { schema: Order },
-    (records) =>
-      Effect.suspend((): Effect.Effect<void, k2.K2Unavailable | k2.K2AppendOutcomeUnknown> => {
-        const tag = failures[attempt++];
-        if (tag === "K2Unavailable") {
-          return Effect.fail(new k2.K2Unavailable({ code: 10211, message: "unavailable" }));
-        }
-        if (tag === "K2AppendOutcomeUnknown") {
-          return Effect.fail(
-            new k2.K2AppendOutcomeUnknown({ code: 10212, message: "maybe stored" }),
-          );
-        }
-        sent.push([...records]);
-        return Effect.void;
-      }),
+  const client: WriteStreamClient<{ id: number }> = makeWriteStreamClient(Order, (records) =>
+    Effect.suspend((): Effect.Effect<void, k2.K2Unavailable | k2.K2AppendOutcomeUnknown> => {
+      const tag = failures[attempt++];
+      if (tag === "K2Unavailable") {
+        return Effect.fail(new k2.K2Unavailable({ code: 10211, message: "unavailable" }));
+      }
+      if (tag === "K2AppendOutcomeUnknown") {
+        return Effect.fail(new k2.K2AppendOutcomeUnknown({ code: 10212, message: "maybe stored" }));
+      }
+      sent.push([...records]);
+      return Effect.void;
+    }),
   );
   return { client, sent, attempts: () => attempt };
 };

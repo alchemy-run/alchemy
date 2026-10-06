@@ -2,9 +2,8 @@ import type * as Effect from "effect/Effect";
 import type * as Sink from "effect/Sink";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { ProduceError, Record as K2Record } from "./K2Types.ts";
-import type { Stream } from "./Stream.ts";
-import type { WriteStreamOptions } from "./WriteStream.ts";
+import type { ProduceError } from "./K2Types.ts";
+import type { Stream, StreamRecord } from "./Stream.ts";
 
 /**
  * Binding service that exposes a K2 {@link Stream} as an Effect `Sink`: run
@@ -53,13 +52,9 @@ import type { WriteStreamOptions } from "./WriteStream.ts";
 export interface StreamSink extends Binding.Service<
   StreamSink,
   "Cloudflare.K2.StreamSink",
-  (stream: Stream, options?: WriteStreamOptions<any>) => Effect.Effect<StreamSinkClient<any>>
+  (stream: Stream<any>) => Effect.Effect<StreamSinkClient<any>>
 > {
-  <A>(
-    stream: Stream,
-    options: WriteStreamOptions<A>,
-  ): Effect.Effect<StreamSinkClient<A>, never, StreamSink>;
-  (stream: Stream): Effect.Effect<StreamSinkClient<K2Record>, never, StreamSink>;
+  <A>(stream: Stream<A>): Effect.Effect<StreamSinkClient<StreamRecord<A>>, never, StreamSink>;
 }
 
 export const StreamSink = Binding.Service<StreamSink>("Cloudflare.K2.StreamSink");

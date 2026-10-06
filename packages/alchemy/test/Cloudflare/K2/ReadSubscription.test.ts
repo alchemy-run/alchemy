@@ -47,7 +47,7 @@ test.provider(
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const events = yield* Cloudflare.K2.Stream("LocalEvents", { http: true });
+          const events = yield* Cloudflare.K2.Stream("LocalEvents", { http: true, schema: Event });
           const poller = yield* Cloudflare.K2.Subscription("Poller", {
             streamId: events.streamId,
             startAt: "earliest",
@@ -60,8 +60,8 @@ test.provider(
           const Roundtrip = Action(
             "Roundtrip",
             Effect.gen(function* () {
-              const writer = yield* Cloudflare.K2.WriteStream(events, { schema: Event });
-              const sink = yield* Cloudflare.K2.StreamSink(events, { schema: Event });
+              const writer = yield* Cloudflare.K2.WriteStream(events);
+              const sink = yield* Cloudflare.K2.StreamSink(events);
 
               const seen = new Set<string>();
               let failures = 0;
@@ -70,7 +70,6 @@ test.provider(
                 events,
                 {
                   subscription: poller,
-                  schema: Event,
                   workerId: "alchemy-k2-poller",
                   idleBackoff: "500 millis",
                   concurrency: 2,

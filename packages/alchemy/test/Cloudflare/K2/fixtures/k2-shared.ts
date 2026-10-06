@@ -12,11 +12,11 @@ export const Order = Schema.Struct({
 });
 export type Order = typeof Order.Type;
 
-/** Worker-binding input only (the default). */
-export const BindingOrders = Cloudflare.K2.Stream("K2BindingOrders");
+/** Worker-binding input only (the default), typed by `Order`. */
+export const BindingOrders = Cloudflare.K2.Stream("K2BindingOrders", { schema: Order });
 
-/** HTTP input enabled for the `*Http` producer layers. */
-export const HttpOrders = Cloudflare.K2.Stream("K2HttpOrders", { http: true });
+/** HTTP input enabled for the `*Http` producer layers, typed by `Order`. */
+export const HttpOrders = Cloudflare.K2.Stream("K2HttpOrders", { http: true, schema: Order });
 
 const params = (url: URL) => ({
   run: url.searchParams.get("run") ?? "default",
@@ -27,13 +27,12 @@ const failed = (error: { _tag: string; message?: string }) =>
   HttpServerResponse.json({ error: error._tag, message: error.message }, { status: 500 });
 
 /**
- * Producer routes over a raw client, a schema-typed client, and a typed
- * sink: `POST /raw|/typed|/sink?run=R&count=N`.
+ * Producer routes over the stream's typed client and typed sink:
+ * `POST /typed|/sink?run=R&count=N`.
  */
 export const produceRoutes = (
   url: URL,
   clients: {
-    raw: Cloudflare.K2.WriteStreamClient<Cloudflare.K2.Record>;
     typed: Cloudflare.K2.WriteStreamClient<Order>;
     sink: Cloudflare.K2.StreamSinkClient<Order>;
   },
@@ -42,18 +41,11 @@ export const produceRoutes = (
     const { run, count } = params(url);
     const orders = Array.from({ length: count }, (_, index): Order => ({ run, index }));
     const sent =
-      url.pathname === "/raw"
-        ? clients.raw.send(
-            orders.map((order) => ({
-              content: `${order.run}:${order.index}`,
-              headers: { run: order.run },
-            })),
-          )
-        : url.pathname === "/typed"
-          ? clients.typed.send(orders)
-          : url.pathname === "/sink"
-            ? Stream.fromIterable(orders).pipe(Stream.run(clients.sink))
-            : undefined;
+      url.pathname === "/typed"
+        ? clients.typed.send(orders)
+        : url.pathname === "/sink"
+          ? Stream.fromIterable(orders).pipe(Stream.run(clients.sink))
+          : undefined;
     if (sent === undefined) {
       return HttpServerResponse.text("Not Found", { status: 404 });
     }

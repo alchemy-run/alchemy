@@ -51,16 +51,10 @@ const byRun = (records: ReadonlyArray<VerifiedRecord>, run: string) =>
 
 const verifyRoutes = (url: string, streamId: string, subscriptionId: string) =>
   Effect.gen(function* () {
-    yield* produce(url, "/raw", "raw", 3);
     yield* produce(url, "/typed", "typed", 4);
     yield* produce(url, "/sink", "sink", 250);
 
-    const records = yield* drainSubscription(streamId, subscriptionId, 3 + 4 + 250);
-
-    // Raw records keep their bytes and headers.
-    const raw = byRun(records, "raw");
-    expect(raw.map((r) => r.text).sort()).toEqual(["raw:0", "raw:1", "raw:2"]);
-    expect(raw.every((r) => r.headers.run === "raw")).toBe(true);
+    const records = yield* drainSubscription(streamId, subscriptionId, 4 + 250);
 
     // Typed records are JSON with a content-type header.
     const typed = byRun(records, "typed");

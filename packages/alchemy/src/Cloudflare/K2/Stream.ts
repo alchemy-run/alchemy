@@ -1,17 +1,20 @@
 import * as k2 from "@distilled.cloud/cloudflare/k2";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as EffectStream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
+import type { PropsInput } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceClass } from "../../Resource.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type { ConsumedRecord, DecodedRecord, Record as K2Record, RecordSchema } from "./K2Types.ts";
 
 const StreamTypeId = "Cloudflare.K2.Stream" as const;
 type StreamTypeId = typeof StreamTypeId;
@@ -92,7 +95,90 @@ export interface StreamAttributes {
   modifiedAt: string;
 }
 
-export type Stream = Resource<StreamTypeId, StreamProps, StreamAttributes, never, Providers>;
+/**
+ * A K2 stream. `A` is the record type its producers send and its consumers
+ * decode — the Effect Schema's `Type` when the stream was declared with
+ * `schema`, unknown otherwise.
+ */
+export interface Stream<A = unknown> extends Resource<
+  StreamTypeId,
+  StreamProps,
+  StreamAttributes,
+  never,
+  Providers
+> {
+  /**
+   * The Effect Schema the stream was declared with, if any. Producers encode
+   * records with it and consumers decode them; it is never persisted, because
+   * K2 itself stores bytes.
+   */
+  readonly RecordSchema: RecordSchema<any> | undefined;
+  /** Phantom record type. */
+  readonly "~record"?: A;
+}
+
+/**
+ * The record a producer sends to a `Stream<A>`: the schema's type, or raw
+ * bytes plus headers ({@link K2Record}) for a stream without a schema.
+ */
+export type StreamRecord<A> = unknown extends A ? K2Record : A;
+
+/**
+ * The record a consumer receives from a `Stream<A>`: decoded into `value` for
+ * a stream with a schema, raw bytes otherwise.
+ */
+export type StreamConsumedRecord<A> = unknown extends A ? ConsumedRecord : DecodedRecord<A>;
+
+/** Props of a stream declared with an Effect Schema. */
+export type StreamSchemaProps<S extends RecordSchema<any>> = PropsInput<StreamProps> & {
+  /**
+   * Encode every record as JSON with this schema on the way in, and decode
+   * it on the way out. A client-side codec only: K2 stores bytes, so
+   * changing the schema never updates or replaces the stream.
+   */
+  schema: S;
+};
+
+const StreamResource = Resource<Stream>(StreamTypeId);
+
+/**
+ * The Stream constructor: the plain resource constructor plus an overload
+ * that types the stream's records from an Effect Schema `schema`.
+ */
+export type StreamClass = {
+  <const S extends RecordSchema<any>>(
+    id: string,
+    props: StreamSchemaProps<S>,
+  ): Effect.Effect<Stream<S["Type"]>, never, Providers>;
+} & ResourceClass<Stream>;
+
+/** Split the client-side `schema` off the props the engine persists. */
+const splitSchema = (props: unknown): { props: unknown; schema: RecordSchema<any> | undefined } => {
+  if (props === null || typeof props !== "object" || !("schema" in props)) {
+    return { props, schema: undefined };
+  }
+  const { schema, ...rest } = props as { schema?: RecordSchema<any> };
+  return { props: rest, schema };
+};
+
+const constructStream = (id: string, props: unknown) =>
+  Effect.gen(function* () {
+    let schema: RecordSchema<any> | undefined;
+    const capture = (split: { props: unknown; schema: RecordSchema<any> | undefined }) => {
+      schema = split.schema;
+      return split.props;
+    };
+    const persisted = Effect.isEffect(props)
+      ? (props as Effect.Effect<unknown>).pipe(Effect.map((p) => capture(splitSchema(p))))
+      : capture(splitSchema(props));
+    const construct = StreamResource as unknown as (
+      id: string,
+      props: unknown,
+    ) => Effect.Effect<Stream, never, Providers>;
+    const stream = yield* construct(id, persisted);
+    (stream as { RecordSchema: RecordSchema<any> | undefined }).RecordSchema = schema;
+    return stream;
+  });
 
 /**
  * A Cloudflare K2 stream — a durable, ordered log of records. Producers
@@ -114,6 +200,15 @@ export type Stream = Resource<StreamTypeId, StreamProps, StreamAttributes, never
  * const orders = yield* Cloudflare.K2.Stream("Orders", {
  *   retention: "30 days",
  * });
+ * ```
+ *
+ * ### Typed Records
+ * **Example:** Stream with an Effect Schema
+ * ```typescript
+ * const Order = Schema.Struct({ orderId: Schema.String, amountCents: Schema.Number });
+ *
+ * // Producers send `Order`s; consumers receive them decoded in `record.value`.
+ * const orders = yield* Cloudflare.K2.Stream("Orders", { schema: Order });
  * ```
  *
  * ### HTTP Input
@@ -166,7 +261,17 @@ export type Stream = Resource<StreamTypeId, StreamProps, StreamAttributes, never
  * @product K2
  * @category Storage & Databases
  */
-export const Stream = Resource<Stream>(StreamTypeId);
+export const Stream: StreamClass = Object.assign(
+  (...args: [id: string, props?: unknown] | [methods: object]) =>
+    typeof args[0] === "object"
+      ? Object.assign(Stream, args[0])
+      : constructStream(args[0], (args as [string, unknown])[1]),
+  StreamResource,
+  Effectable.Prototype({
+    label: `Resource<${StreamTypeId}>`,
+    evaluate: () => Effect.succeed((id: string, props: unknown) => constructStream(id, props)),
+  }),
+) as unknown as StreamClass;
 
 /** Returns true if the given value is a K2 Stream resource. */
 export const isStream = (value: unknown): value is Stream =>

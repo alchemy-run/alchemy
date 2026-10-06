@@ -11,7 +11,7 @@ import * as Namespace from "../../Namespace.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { ServerHost } from "../../Server/Process.ts";
 import { decodeWithSchema } from "./K2Codec.ts";
-import type { Batch, ConsumedRecord, K2SchemaError, RecordSchema } from "./K2Types.ts";
+import type { Batch, ConsumedRecord, K2SchemaError } from "./K2Types.ts";
 import { ReadSubscription, type ReadSubscriptionClient } from "./ReadSubscription.ts";
 import type { Stream as K2Stream } from "./Stream.ts";
 import {
@@ -58,8 +58,8 @@ export const StreamEventSourcePolling = Layer.effect(
     const readSubscription = yield* ReadSubscription;
 
     return Effect.fn(function* (
-      stream: K2Stream,
-      props: ConsumeStreamRecordsProps & { schema?: RecordSchema<any> },
+      stream: K2Stream<any>,
+      props: ConsumeStreamRecordsProps,
       process: ConsumeStreamRecordsHandler<any, any>,
     ) {
       const host = yield* Binding.Host;
@@ -76,8 +76,8 @@ export const StreamEventSourcePolling = Layer.effect(
           }),
         ));
       const client = yield* readSubscription(subscription);
-      const decode = props.schema
-        ? decodeWithSchema(props.schema)
+      const decode = stream.RecordSchema
+        ? decodeWithSchema(stream.RecordSchema)
         : (records: ReadonlyArray<ConsumedRecord>) => Effect.succeed(records);
 
       yield* run(

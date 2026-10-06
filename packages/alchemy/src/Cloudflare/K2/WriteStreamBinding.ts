@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { EncodedRecord, ProduceError } from "./K2Types.ts";
 import type { Stream } from "./Stream.ts";
-import { WriteStream, type WriteStreamOptions } from "./WriteStream.ts";
+import { WriteStream } from "./WriteStream.ts";
 import { makeWriteStreamClient } from "./WriteStreamClient.ts";
 
 /**
@@ -59,7 +59,7 @@ export const WriteStreamBinding = Layer.effect(
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (stream: Stream, options?: WriteStreamOptions<any>) {
+    return Effect.fn(function* (stream: Stream<any>) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${stream}`({
           bindings: [
@@ -72,7 +72,7 @@ export const WriteStreamBinding = Layer.effect(
         });
       }
       const raw = Effect.sync(() => (env as { [key: string]: K2StreamBinding })[stream.LogicalId]!);
-      return makeWriteStreamClient(options, (records) =>
+      return makeWriteStreamClient(stream.RecordSchema, (records) =>
         raw.pipe(Effect.flatMap((binding) => sendViaBinding(binding, records))),
       );
     });

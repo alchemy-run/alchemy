@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeK2LocalAuth } from "./K2Http.ts";
 import type { Stream } from "./Stream.ts";
-import { WriteStream, type WriteStreamOptions } from "./WriteStream.ts";
+import { WriteStream } from "./WriteStream.ts";
 import { makeWriteStreamHttpClient } from "./WriteStreamHttp.ts";
 
 /**
@@ -37,10 +37,10 @@ export const WriteStreamLocal = Layer.effect(
   WriteStream,
   Effect.gen(function* () {
     const auth = yield* makeK2LocalAuth;
-    return Effect.fn(function* (stream: Stream, options?: WriteStreamOptions<any>) {
+    return Effect.fn(function* (stream: Stream<any>) {
       // Deferred accessor — resolves the id at apply time. No `host.bind`:
       // the local variant registers no binding.
-      return makeWriteStreamHttpClient(auth, yield* stream.streamId, options);
+      return makeWriteStreamHttpClient(auth, yield* stream.streamId, stream.RecordSchema);
     });
   }),
 );

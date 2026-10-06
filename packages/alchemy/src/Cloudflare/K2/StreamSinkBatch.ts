@@ -7,7 +7,7 @@ import { wireSize } from "./K2Codec.ts";
 import type { EncodedRecord } from "./K2Types.ts";
 import type { Stream } from "./Stream.ts";
 import { StreamSink, type StreamSinkClient } from "./StreamSink.ts";
-import { WriteStream, type WriteStreamClient, type WriteStreamOptions } from "./WriteStream.ts";
+import { WriteStream, type WriteStreamClient } from "./WriteStream.ts";
 
 /**
  * Batch packing for {@link StreamSink}. Internal — not exported from the K2
@@ -78,8 +78,8 @@ export const StreamSinkFromWriteStream = Layer.effect(
   StreamSink,
   Effect.gen(function* () {
     const writeStream = yield* WriteStream;
-    return Effect.fn(function* (stream: Stream, options?: WriteStreamOptions<any>) {
-      const client = yield* writeStream(stream, options);
+    return Effect.fn(function* (stream: Stream<any>) {
+      const client = yield* writeStream(stream);
       return makeStreamSink(client);
     });
   }),

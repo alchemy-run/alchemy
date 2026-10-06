@@ -1,24 +1,8 @@
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type {
-  EncodedRecord,
-  K2SchemaError,
-  ProduceError,
-  Record as K2Record,
-  RecordSchema,
-} from "./K2Types.ts";
-import type { Stream } from "./Stream.ts";
-
-/** Options accepted by `WriteStream(stream, options)` and `StreamSink(stream, options)`. */
-export interface WriteStreamOptions<A> {
-  /**
-   * Encode every value with this schema and send it as JSON with a
-   * `content-type: application/json` header. Without a schema, `send`
-   * takes raw {@link K2Record}s.
-   */
-  schema: RecordSchema<A>;
-}
+import type { EncodedRecord, K2SchemaError, ProduceError } from "./K2Types.ts";
+import type { Stream, StreamRecord } from "./Stream.ts";
 
 /**
  * Binding service that turns a K2 {@link Stream} into a typed
@@ -44,10 +28,12 @@ export interface WriteStreamOptions<A> {
  * ```
  *
  * ### Typed Records
- * **Example:** Encode values with a Schema
+ * **Example:** Send values of the stream's schema
  * ```typescript
  * const Order = Schema.Struct({ id: Schema.Number, total: Schema.Number });
- * const orders = yield* Cloudflare.K2.WriteStream(Orders, { schema: Order });
+ * const Orders = Cloudflare.K2.Stream("Orders", { schema: Order });
+ *
+ * const orders = yield* Cloudflare.K2.WriteStream(Orders);
  * // JSON-encoded, sent with `content-type: application/json`
  * yield* orders.send([{ id: 1, total: 42 }]);
  * ```
@@ -76,20 +62,16 @@ export interface WriteStreamOptions<A> {
 export interface WriteStream extends Binding.Service<
   WriteStream,
   "Cloudflare.K2.WriteStream",
-  (stream: Stream, options?: WriteStreamOptions<any>) => Effect.Effect<WriteStreamClient<any>>
+  (stream: Stream<any>) => Effect.Effect<WriteStreamClient<any>>
 > {
-  <A>(
-    stream: Stream,
-    options: WriteStreamOptions<A>,
-  ): Effect.Effect<WriteStreamClient<A>, never, WriteStream>;
-  (stream: Stream): Effect.Effect<WriteStreamClient<K2Record>, never, WriteStream>;
+  <A>(stream: Stream<A>): Effect.Effect<WriteStreamClient<StreamRecord<A>>, never, WriteStream>;
 }
 
 export const WriteStream = Binding.Service<WriteStream>("Cloudflare.K2.WriteStream");
 
 /**
- * Producer client for a K2 stream. `A` is {@link K2Record} without a
- * schema, or the schema's type with one.
+ * Producer client for a K2 stream. `A` is the stream's schema type, or raw
+ * bytes plus headers (`Cloudflare.K2.Record`) for a stream without one.
  */
 export interface WriteStreamClient<A> {
   /** Append a batch of records atomically. */
