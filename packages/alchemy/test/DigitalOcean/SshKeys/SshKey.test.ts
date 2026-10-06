@@ -1,11 +1,11 @@
+import { getSshKey } from "@distilled.cloud/digitalocean";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as DigitalOcean from "@/DigitalOcean";
 import { diffSshKey, SshKey } from "@/DigitalOcean/SshKeys/SshKey";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { getSshKey } from "@distilled.cloud/digitalocean";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { isGone, logLevel, outOfBand, skipLive } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -20,26 +20,17 @@ const KEY_NAME = "alchemy-test-ssh-key";
 const RENAMED_KEY_NAME = "alchemy-test-ssh-key-renamed";
 const OTHER_KEY_NAME = "alchemy-test-ssh-key-other";
 
-const UNIT_TAGS = [
-  "unit",
-  "provider:digitalocean",
-  "provider:digitalocean:sshkey",
-  "local",
-];
+const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:sshkey", "local"];
 
 describe("diffSshKey", { tags: UNIT_TAGS }, () => {
   const olds = { name: KEY_NAME, publicKey: PUBLIC_KEY };
 
   it("ignores surrounding whitespace in publicKey", () => {
-    expect(diffSshKey({ ...olds, publicKey: `${PUBLIC_KEY}\n` }, olds)).toBe(
-      undefined,
-    );
+    expect(diffSshKey({ ...olds, publicKey: `${PUBLIC_KEY}\n` }, olds)).toBe(undefined);
   });
 
   it("leaves a rename to the engine's update", () => {
-    expect(diffSshKey({ ...olds, name: RENAMED_KEY_NAME }, olds)).toBe(
-      undefined,
-    );
+    expect(diffSshKey({ ...olds, name: RENAMED_KEY_NAME }, olds)).toBe(undefined);
   });
 
   it("replaces on new key material", () => {
@@ -89,9 +80,7 @@ test.provider.skipIf(skipLive)(
 
       const provider = yield* Provider.findProvider(SshKey);
       const all = yield* provider.list();
-      expect(
-        all.find((key) => key.sshKeyId === created.sshKeyId)?.name,
-      ).toEqual(RENAMED_KEY_NAME);
+      expect(all.find((key) => key.sshKeyId === created.sshKeyId)?.name).toEqual(RENAMED_KEY_NAME);
 
       // The same key under another name belongs to someone else. The deploy
       // must fail and must not rename the key.

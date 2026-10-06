@@ -144,8 +144,7 @@ const revisionParent = (
   environmentId: string,
   api: string,
   revision: string,
-) =>
-  `${environmentNameOf(organizationId, environmentId)}/apis/${api}/revisions/${revision}`;
+) => `${environmentNameOf(organizationId, environmentId)}/apis/${api}/revisions/${revision}`;
 
 const sessionName = (parent: string, debugsessionId: string) =>
   `${parent}/debugsessions/${debugsessionId}`;
@@ -208,7 +207,7 @@ const listAtRevision = (parent: string) =>
           Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
             Effect.succeed([] as apigee.GoogleCloudApigeeV1Session[]),
           ),
         );
@@ -223,16 +222,14 @@ const listOrgApis = (organizationId: string) =>
   ).pipe(Effect.map((page) => page.proxies ?? []));
 
 const listApiSessions = (apiName: string) =>
-  apigee.listOrganizationsApisDebugsessions
-    .pages({ parent: apiName, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as apigee.GoogleCloudApigeeV1ApiDebugSession[]),
-      ),
-    );
+  apigee.listOrganizationsApisDebugsessions.pages({ parent: apiName, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
+      Effect.succeed([] as apigee.GoogleCloudApigeeV1ApiDebugSession[]),
+    ),
+  );
 
 const isAlchemySessionId = (id: string | undefined) =>
   (id ?? "").startsWith("alch-") || (id ?? "").includes("alchemy");
@@ -259,13 +256,11 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       if (
         (previousOrg !== undefined &&
           news.organization !== undefined &&
-          organizationIdOf(news.organization, "") !==
-            organizationIdOf(previousOrg, "")) ||
+          organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "")) ||
         (previousEnv !== undefined &&
           environmentIdOf(news.environment) !== environmentIdOf(previousEnv)) ||
         (previousApi !== undefined && news.api !== previousApi) ||
-        (previousRevision !== undefined &&
-          news.revision !== previousRevision) ||
+        (previousRevision !== undefined && news.revision !== previousRevision) ||
         (previousId !== undefined &&
           news.debugsessionId !== undefined &&
           news.debugsessionId !== previousId)
@@ -281,32 +276,19 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
       const api = olds?.api ?? output?.api ?? "";
       const revision = olds?.revision ?? output?.revision ?? "";
-      const debugsessionId = yield* toResourceId(
-        id,
-        olds?.debugsessionId,
-        output?.debugsessionId,
-        { maxLength: 63, rfc1035: true },
-      );
+      const debugsessionId = yield* toResourceId(id, olds?.debugsessionId, output?.debugsessionId, {
+        maxLength: 63,
+        rfc1035: true,
+      });
       const name =
         output?.name ??
-        sessionName(
-          revisionParent(organizationId, environmentId, api, revision),
-          debugsessionId,
-        );
+        sessionName(revisionParent(organizationId, environmentId, api, revision), debugsessionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        organizationId,
-        environmentId,
-        api,
-        revision,
-      );
+      const attrs = toAttrs(existing, organizationId, environmentId, api, revision);
       return output !== undefined || isAlchemySessionId(attrs.debugsessionId)
         ? attrs
         : Unowned(attrs);
@@ -316,9 +298,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       Effect.gen(function* () {
         const environments = yield* listProjectEnvironments();
         const found: EnvironmentsApisRevisionsDebugsession["Attributes"][] = [];
-        const orgs = Array.from(
-          new Set(environments.map((item) => item.organizationId)),
-        );
+        const orgs = Array.from(new Set(environments.map((item) => item.organizationId)));
         const apis = yield* Effect.forEach(orgs, listOrgApis, {
           concurrency: 2,
         });
@@ -327,16 +307,13 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
           (proxy) =>
             proxy.name
               ? listApiSessions(proxy.name)
-              : Effect.succeed(
-                  [] as apigee.GoogleCloudApigeeV1ApiDebugSession[],
-                ),
+              : Effect.succeed([] as apigee.GoogleCloudApigeeV1ApiDebugSession[]),
           { concurrency: 4 },
         );
         for (const [proxy, listed] of apis.flat().map((proxy, index) => {
           return [proxy, sessions[index] ?? []] as const;
         })) {
-          const organizationId =
-            segmentAfter(proxy.name ?? "", "organizations") ?? "";
+          const organizationId = segmentAfter(proxy.name ?? "", "organizations") ?? "";
           const api = lastSegment(proxy.name ?? "");
           for (const session of listed) {
             if (!isAlchemySessionId(session.id)) continue;
@@ -371,25 +348,15 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       const environmentId = environmentIdOf(news.environment);
       const api = news.api;
       const revision = news.revision;
-      const debugsessionId = yield* toResourceId(
-        id,
-        news.debugsessionId,
-        output?.debugsessionId,
-        { maxLength: 63, rfc1035: true },
-      );
-      const parent = revisionParent(
-        organizationId,
-        environmentId,
-        api,
-        revision,
-      );
+      const debugsessionId = yield* toResourceId(id, news.debugsessionId, output?.debugsessionId, {
+        maxLength: 63,
+        rfc1035: true,
+      });
+      const parent = revisionParent(organizationId, environmentId, api, revision);
       const name = sessionName(parent, debugsessionId);
 
       let current = yield* getByName(output?.name ?? name);
-      if (
-        current !== undefined &&
-        !sameText(lastSegment(current.name ?? ""), debugsessionId)
-      ) {
+      if (current !== undefined && !sameText(lastSegment(current.name ?? ""), debugsessionId)) {
         current = undefined;
       }
 
@@ -426,6 +393,6 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
         .deleteDataOrganizationsEnvironmentsApisRevisionsDebugsessions({
           name: output.name,
         })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

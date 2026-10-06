@@ -1,5 +1,5 @@
-import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { createHash } from "node:crypto";
+import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -119,7 +119,6 @@ export type Sharedflow = Resource<
  * **Example:** New description (creates a revision)
  * ```typescript
  * const flow = yield* GCP.Apigee.Sharedflow("Traffic", {
- *   sharedflowId: existing.sharedflowId,
  *   description: "rate limit only",
  * });
  * ```
@@ -129,9 +128,7 @@ export type Sharedflow = Resource<
  */
 export const Sharedflow = Resource<Sharedflow>("GCP.Apigee.Sharedflow");
 
-export class SharedflowNotResolved extends Data.TaggedError(
-  "GCP.Apigee.SharedflowNotResolved",
-)<{
+export class SharedflowNotResolved extends Data.TaggedError("GCP.Apigee.SharedflowNotResolved")<{
   name: string;
 }> {}
 
@@ -152,11 +149,7 @@ const sharedflowIdOf = (flow: apigee.GoogleCloudApigeeV1SharedFlow) => {
   return raw.includes("/") ? lastSegment(raw) : raw;
 };
 
-const toId = (
-  id: string,
-  sharedflowId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, sharedflowId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (sharedflowId !== undefined) return sanitizeId(sharedflowId);
     if (existing !== undefined) return existing;
@@ -170,9 +163,7 @@ const toId = (
   });
 
 const sha12 = (value: string) =>
-  Effect.sync(() =>
-    createHash("sha256").update(value).digest("hex").slice(0, 12),
-  );
+  Effect.sync(() => createHash("sha256").update(value).digest("hex").slice(0, 12));
 
 const bundleXml = (sharedflowId: string, description: string) =>
   `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -191,8 +182,7 @@ const defaultFlowXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </SharedFlow>
 `;
 
-const toBase64 = (bytes: Uint8Array) =>
-  Effect.sync(() => Buffer.from(bytes).toString("base64"));
+const toBase64 = (bytes: Uint8Array) => Effect.sync(() => Buffer.from(bytes).toString("base64"));
 
 const makeEmptyBundle = (sharedflowId: string, description: string) =>
   zipFiles([
@@ -215,16 +205,11 @@ const stampBundle = (base64: string, description: string) =>
     const entries = yield* unzipFiles(bytes);
     const xmlPath = bundleXmlPath(Object.keys(entries));
     if (xmlPath !== undefined) {
-      const xml = yield* Effect.sync(() =>
-        Buffer.from(entries[xmlPath]!).toString("utf8"),
-      );
+      const xml = yield* Effect.sync(() => Buffer.from(entries[xmlPath]!).toString("utf8"));
       const escaped = `<Description>${xmlEscape(description)}</Description>`;
       const next = xml.includes("<Description>")
         ? xml.replace(/<Description>[\s\S]*?<\/Description>/, escaped)
-        : xml.replace(
-            /<\/SharedFlowBundle>/,
-            `  ${escaped}\n</SharedFlowBundle>`,
-          );
+        : xml.replace(/<\/SharedFlowBundle>/, `  ${escaped}\n</SharedFlowBundle>`);
       entries[xmlPath] = yield* Effect.sync(() => Buffer.from(next, "utf8"));
     }
     // zipFiles sorts entries and stamps a fixed timestamp, so restamping the
@@ -235,11 +220,7 @@ const stampBundle = (base64: string, description: string) =>
     return yield* toBase64(archive);
   });
 
-const desiredBundle = (
-  sharedflowId: string,
-  description: string,
-  bundle: string | undefined,
-) =>
+const desiredBundle = (sharedflowId: string, description: string, bundle: string | undefined) =>
   bundle !== undefined
     ? stampBundle(bundle, description)
     : makeEmptyBundle(sharedflowId, description);
@@ -267,20 +248,12 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSharedflows({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const getRevision = (name: string) =>
   apigee
     .getOrganizationsSharedflowsRevisions({ name, format: "bundle" })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const descriptionFromBundle = (body: apigee.GoogleApiHttpBody | undefined) =>
   Effect.gen(function* () {
@@ -290,9 +263,7 @@ const descriptionFromBundle = (body: apigee.GoogleApiHttpBody | undefined) =>
     const entries = yield* unzipFiles(bytes);
     const xmlPath = bundleXmlPath(Object.keys(entries));
     if (xmlPath === undefined) return undefined;
-    const xml = yield* Effect.sync(() =>
-      Buffer.from(entries[xmlPath]!).toString("utf8"),
-    );
+    const xml = yield* Effect.sync(() => Buffer.from(entries[xmlPath]!).toString("utf8"));
     const match = xml.match(/<Description>([\s\S]*?)<\/Description>/);
     if (match?.[1] === undefined) return undefined;
     return xmlUnescape(match[1]);
@@ -301,26 +272,16 @@ const descriptionFromBundle = (body: apigee.GoogleApiHttpBody | undefined) =>
 const revisionName = (org: string, sharedflowId: string, revisionId: string) =>
   `${resourceName(org, sharedflowId)}/revisions/${revisionId}`;
 
-const observedDescription = (
-  org: string,
-  flow: apigee.GoogleCloudApigeeV1SharedFlow,
-) =>
+const observedDescription = (org: string, flow: apigee.GoogleCloudApigeeV1SharedFlow) =>
   Effect.gen(function* () {
     const sharedflowId = sharedflowIdOf(flow);
     const latest = flow.latestRevisionId;
     if (!sharedflowId || !latest) return undefined;
-    const revision = yield* getRevision(
-      revisionName(org, sharedflowId, latest),
-    );
+    const revision = yield* getRevision(revisionName(org, sharedflowId, latest));
     return yield* descriptionFromBundle(revision);
   });
 
-const importBundle = (input: {
-  org: string;
-  sharedflowId: string;
-  space?: string;
-  data: string;
-}) =>
+const importBundle = (input: { org: string; sharedflowId: string; space?: string; data: string }) =>
   apigee.createOrganizationsSharedflows({
     parent: orgParent(input.org),
     action: "import",
@@ -335,9 +296,7 @@ const importBundle = (input: {
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((flow) =>
-      flow
-        ? Effect.succeed(flow)
-        : Effect.fail(new SharedflowNotResolved({ name })),
+      flow ? Effect.succeed(flow) : Effect.fail(new SharedflowNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.SharedflowNotResolved",
@@ -370,15 +329,8 @@ export const SharedflowProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        olds?.organization ?? output?.organization,
-        env.project,
-      );
-      const sharedflowId = yield* toId(
-        id,
-        olds?.sharedflowId,
-        output?.sharedflowId,
-      );
+      const org = orgIdOf(olds?.organization ?? output?.organization, env.project);
+      const sharedflowId = yield* toId(id, olds?.sharedflowId, output?.sharedflowId);
       const name = output?.name ?? resourceName(org, sharedflowId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -399,7 +351,7 @@ export const SharedflowProvider = () =>
             includeMetaData: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({ sharedFlows: [] }),
             ),
           );
@@ -418,31 +370,13 @@ export const SharedflowProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        news.organization ?? output?.organization,
-        env.project,
-      );
-      const sharedflowId = yield* toId(
-        id,
-        news.sharedflowId,
-        output?.sharedflowId,
-      );
+      const org = orgIdOf(news.organization ?? output?.organization, env.project);
+      const sharedflowId = yield* toId(id, news.sharedflowId, output?.sharedflowId);
       const name = resourceName(org, sharedflowId);
       const ownership = yield* createInternalLabels(id);
-      const extra =
-        news.bundle !== undefined
-          ? { bundle: yield* sha12(news.bundle) }
-          : undefined;
-      const desiredDescription = encodeOwnership(
-        ownership,
-        news.description,
-        extra,
-      );
-      const data = yield* desiredBundle(
-        sharedflowId,
-        desiredDescription,
-        news.bundle,
-      );
+      const extra = news.bundle !== undefined ? { bundle: yield* sha12(news.bundle) } : undefined;
+      const desiredDescription = encodeOwnership(ownership, news.description, extra);
+      const data = yield* desiredBundle(sharedflowId, desiredDescription, news.bundle);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -486,6 +420,6 @@ export const SharedflowProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSharedflows({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

@@ -22,6 +22,7 @@ import {
   toPhysicalId,
   waitForOperation,
   zoneOf,
+  collectPages,
 } from "./operations.ts";
 
 const DEFAULT_STORAGE_TYPE = "SSD";
@@ -212,22 +213,16 @@ export type Cluster = Resource<
  */
 export const Cluster = Resource<Cluster>("GCP.Bigtable.Cluster");
 
-export class ClusterNotResolved extends Data.TaggedError(
-  "GCP.Bigtable.ClusterNotResolved",
-)<{
+export class ClusterNotResolved extends Data.TaggedError("GCP.Bigtable.ClusterNotResolved")<{
   name: string;
 }> {}
 
-export class ClusterNotReady extends Data.TaggedError(
-  "GCP.Bigtable.ClusterNotReady",
-)<{
+export class ClusterNotReady extends Data.TaggedError("GCP.Bigtable.ClusterNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ClusterStillExists extends Data.TaggedError(
-  "GCP.Bigtable.ClusterStillExists",
-)<{
+export class ClusterStillExists extends Data.TaggedError("GCP.Bigtable.ClusterStillExists")<{
   name: string;
 }> {}
 
@@ -238,8 +233,7 @@ const normalizeStorage = (storage: string | undefined) => {
   return value === "STORAGE_TYPE_UNSPECIFIED" ? DEFAULT_STORAGE_TYPE : value;
 };
 
-const normalizeScaling = (factor: string | undefined) =>
-  (factor ?? "").toUpperCase();
+const normalizeScaling = (factor: string | undefined) => (factor ?? "").toUpperCase();
 
 const encryptionOf = (
   config: bigtable.EncryptionConfig | EncryptionConfig | undefined,
@@ -249,15 +243,11 @@ const encryptionOf = (
   return { kmsKeyName };
 };
 
-const encryptionKey = (
-  config: bigtable.EncryptionConfig | EncryptionConfig | undefined,
-) => encryptionOf(config)?.kmsKeyName ?? "";
+const encryptionKey = (config: bigtable.EncryptionConfig | EncryptionConfig | undefined) =>
+  encryptionOf(config)?.kmsKeyName ?? "";
 
 const autoscalingOf = (
-  config:
-    | bigtable.ClusterAutoscalingConfig
-    | ClusterAutoscalingConfig
-    | undefined,
+  config: bigtable.ClusterAutoscalingConfig | ClusterAutoscalingConfig | undefined,
 ): ClusterAutoscalingConfig | undefined => {
   if (config === undefined) return undefined;
   const limits = config.autoscalingLimits;
@@ -287,15 +277,12 @@ const clusterConfigOf = (
   return { clusterAutoscalingConfig: autoscaling };
 };
 
-const autoscalingKey = (
-  config: bigtable.ClusterConfig | ClusterConfig | undefined,
-) => {
+const autoscalingKey = (config: bigtable.ClusterConfig | ClusterConfig | undefined) => {
   const autoscaling = clusterConfigOf(config)?.clusterAutoscalingConfig;
   return JSON.stringify({
     minServeNodes: autoscaling?.autoscalingLimits?.minServeNodes ?? null,
     maxServeNodes: autoscaling?.autoscalingLimits?.maxServeNodes ?? null,
-    cpuUtilizationPercent:
-      autoscaling?.autoscalingTargets?.cpuUtilizationPercent ?? null,
+    cpuUtilizationPercent: autoscaling?.autoscalingTargets?.cpuUtilizationPercent ?? null,
     storageUtilizationGibPerNode:
       autoscaling?.autoscalingTargets?.storageUtilizationGibPerNode ?? null,
   });
@@ -323,11 +310,7 @@ const toAttrs = (cluster: bigtable.Cluster, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClusters({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" ||
@@ -338,9 +321,7 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster
-        ? Effect.succeed(cluster)
-        : Effect.fail(new ClusterNotResolved({ name })),
+      cluster ? Effect.succeed(cluster) : Effect.fail(new ClusterNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.ClusterNotResolved",
@@ -375,9 +356,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined
-        ? Effect.void
-        : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.ClusterStillExists",
@@ -385,15 +364,6 @@ const waitUntilGone = (name: string) =>
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
-
-const isLastClusterError = (error: { message: string }) => {
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("last cluster") ||
-    message.includes("only cluster") ||
-    message.includes("cannot delete")
-  );
-};
 
 const toCreateBody = (
   news: ClusterResourceProps,
@@ -407,24 +377,14 @@ const toCreateBody = (
     defaultStorageType: storage,
     nodeScalingFactor: news.nodeScalingFactor,
     encryptionConfig: news.encryptionConfig,
-    serveNodes:
-      autoscaling === undefined
-        ? (news.serveNodes ?? DEFAULT_SERVE_NODES)
-        : undefined,
+    serveNodes: autoscaling === undefined ? (news.serveNodes ?? DEFAULT_SERVE_NODES) : undefined,
     clusterConfig: autoscaling,
   };
 };
 
 export const ClusterProvider = () =>
   Provider.succeed(Cluster, {
-    stables: [
-      "name",
-      "clusterId",
-      "instance",
-      "instanceId",
-      "project",
-      "location",
-    ],
+    stables: ["name", "clusterId", "instance", "instanceId", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -440,43 +400,29 @@ export const ClusterProvider = () =>
       const previousStorage = normalizeStorage(
         olds?.defaultStorageType ?? output?.defaultStorageType,
       );
-      const nextStorage = normalizeStorage(
-        news.defaultStorageType ?? output?.defaultStorageType,
-      );
+      const nextStorage = normalizeStorage(news.defaultStorageType ?? output?.defaultStorageType);
       const previousScaling = normalizeScaling(
         olds?.nodeScalingFactor ?? output?.nodeScalingFactor,
       );
-      const nextScaling = normalizeScaling(
-        news.nodeScalingFactor ?? output?.nodeScalingFactor,
-      );
-      const previousCmek = encryptionKey(
-        olds?.encryptionConfig ?? output?.encryptionConfig,
-      );
-      const nextCmek = encryptionKey(
-        news.encryptionConfig ?? output?.encryptionConfig,
-      );
+      const nextScaling = normalizeScaling(news.nodeScalingFactor ?? output?.nodeScalingFactor);
+      const previousCmek = encryptionKey(olds?.encryptionConfig ?? output?.encryptionConfig);
+      const nextCmek = encryptionKey(news.encryptionConfig ?? output?.encryptionConfig);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         (previousInstance.length > 0 &&
           nextInstance.length > 0 &&
           previousInstance !== nextInstance) ||
         previousZone !== nextZone ||
         previousStorage !== nextStorage ||
-        (previousScaling.length > 0 &&
-          nextScaling.length > 0 &&
-          previousScaling !== nextScaling) ||
+        (previousScaling.length > 0 && nextScaling.length > 0 && previousScaling !== nextScaling) ||
         previousCmek !== nextCmek;
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousInstance === nextInstance &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousInstance === nextInstance && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -493,8 +439,7 @@ export const ClusterProvider = () =>
         MAX_CLUSTER_ID_LENGTH,
         MIN_CLUSTER_ID_LENGTH,
       );
-      const name =
-        output?.name ?? clusterName(env.project, instanceId, clusterId);
+      const name = output?.name ?? clusterName(env.project, instanceId, clusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -506,24 +451,17 @@ export const ClusterProvider = () =>
         const env = yield* GcpEnvironment.current;
         const instances = yield* listAlchemyInstances(env.project);
         const labeled = new Set(
-          instances
-            .map((instance) => instance.name ?? "")
-            .filter((name) => name.length > 0),
+          instances.map((instance) => instance.name ?? "").filter((name) => name.length > 0),
         );
         if (labeled.size === 0) return [];
-        const page = yield* bigtable
-          .listProjectsInstancesClusters({
+        const clusters = yield* collectPages(
+          bigtable.listProjectsInstancesClusters.pages({
             parent: `projects/${env.project}/instances/-`,
-          })
-          .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed({ clusters: [] as bigtable.Cluster[] }),
-            ),
-          );
-        return (page.clusters ?? [])
-          .filter((cluster) =>
-            labeled.has(parseResourceName(cluster.name ?? "").instance),
-          )
+          }),
+          (page) => page.clusters,
+        );
+        return clusters
+          .filter((cluster) => labeled.has(parseResourceName(cluster.name ?? "").instance))
           .map((cluster) => toAttrs(cluster, env.project));
       }),
 
@@ -565,8 +503,7 @@ export const ClusterProvider = () =>
       const observedAutoscaling = clusterConfigOf(current.clusterConfig);
       const autoscalingChanged =
         desiredAutoscaling !== undefined &&
-        autoscalingKey(current.clusterConfig) !==
-          autoscalingKey(news.clusterConfig);
+        autoscalingKey(current.clusterConfig) !== autoscalingKey(news.clusterConfig);
       const disableAutoscaling =
         desiredAutoscaling === undefined &&
         news.serveNodes !== undefined &&
@@ -577,32 +514,28 @@ export const ClusterProvider = () =>
         (current.serveNodes ?? DEFAULT_SERVE_NODES) !== news.serveNodes;
 
       if (autoscalingChanged) {
-        const patched =
-          yield* bigtable.partialUpdateClusterProjectsInstancesClusters({
+        const patched = yield* bigtable.partialUpdateClusterProjectsInstancesClusters({
+          name,
+          updateMask: "cluster_config.cluster_autoscaling_config",
+          body: {
             name,
-            updateMask: "cluster_config.cluster_autoscaling_config",
-            body: {
-              name,
-              clusterConfig: desiredAutoscaling,
-            },
-          });
+            clusterConfig: desiredAutoscaling,
+          },
+        });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
       } else if (disableAutoscaling || serveNodesChanged) {
-        const serveNodes =
-          news.serveNodes ?? current.serveNodes ?? DEFAULT_SERVE_NODES;
+        const serveNodes = news.serveNodes ?? current.serveNodes ?? DEFAULT_SERVE_NODES;
         if (disableAutoscaling) {
-          const patched =
-            yield* bigtable.partialUpdateClusterProjectsInstancesClusters({
+          const patched = yield* bigtable.partialUpdateClusterProjectsInstancesClusters({
+            name,
+            updateMask: "serve_nodes,cluster_config.cluster_autoscaling_config",
+            body: {
               name,
-              updateMask:
-                "serve_nodes,cluster_config.cluster_autoscaling_config",
-              body: {
-                name,
-                serveNodes,
-                clusterConfig: {},
-              },
-            });
+              serveNodes,
+              clusterConfig: {},
+            },
+          });
           yield* waitForOperation(patched);
         } else {
           const updated = yield* bigtable.updateProjectsInstancesClusters({
@@ -623,23 +556,17 @@ export const ClusterProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const result = yield* bigtable
-        .deleteProjectsInstancesClusters({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-          Effect.as("deleted" as const),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed("deleted" as const),
-          ),
-          Effect.catchIf(
-            (error) => error._tag === "BadRequest" && isLastClusterError(error),
-            () => Effect.succeed("kept" as const),
-          ),
-        );
+      const result = yield* bigtable.deleteProjectsInstancesClusters({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+        Effect.as("deleted" as const),
+        Effect.catchTag("NotFound", () => Effect.succeed("deleted" as const)),
+        // The instance's last cluster goes away with the instance.
+        Effect.catchTag("LastClusterDeletion", () => Effect.succeed("kept" as const)),
+      );
       if (result === "deleted") {
         yield* waitUntilGone(output.name);
       }

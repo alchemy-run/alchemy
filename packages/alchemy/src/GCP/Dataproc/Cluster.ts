@@ -17,7 +17,9 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { OperationFailed } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import { MAX_POLLS, waitForOperation } from "./internal.ts";
 
 const DEFAULT_CLUSTER_TYPE = "SINGLE_NODE";
 const DEFAULT_MACHINE_TYPE = "e2-standard-2";
@@ -181,9 +183,7 @@ export type ClusterProps = {
    * Secondary worker preemptibility (`PREEMPTIBLE`, `SPOT`,
    * `NON_PREEMPTIBLE`). Immutable.
    */
-  secondaryWorkerPreemptibility?:
-    | dataproc.InstanceGroupConfigPreemptibilityEnum
-    | (string & {});
+  secondaryWorkerPreemptibility?: dataproc.InstanceGroupConfigPreemptibilityEnum | (string & {});
   /**
    * Autoscaling policy resource name. Updated in place.
    */
@@ -333,44 +333,23 @@ export type Cluster = Resource<
  */
 export const Cluster = Resource<Cluster>("GCP.Dataproc.Cluster");
 
-export class ClusterNotResolved extends Data.TaggedError(
-  "GCP.Dataproc.ClusterNotResolved",
-)<{
+export class ClusterNotResolved extends Data.TaggedError("GCP.Dataproc.ClusterNotResolved")<{
   clusterName: string;
   region: string;
 }> {}
 
-export class ClusterFailed extends Data.TaggedError(
-  "GCP.Dataproc.ClusterFailed",
-)<{
+export class ClusterFailed extends Data.TaggedError("GCP.Dataproc.ClusterFailed")<{
   clusterName: string;
   state: string | undefined;
   detail: string | undefined;
 }> {}
 
-export class ClusterNotReady extends Data.TaggedError(
-  "GCP.Dataproc.ClusterNotReady",
-)<{
+export class ClusterNotReady extends Data.TaggedError("GCP.Dataproc.ClusterNotReady")<{
   clusterName: string;
   state: string | undefined;
 }> {}
 
-export class ClusterOperationFailed extends Data.TaggedError(
-  "GCP.Dataproc.ClusterOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ClusterOperationPending extends Data.TaggedError(
-  "GCP.Dataproc.ClusterOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class ClusterStillExists extends Data.TaggedError(
-  "GCP.Dataproc.ClusterStillExists",
-)<{
+export class ClusterStillExists extends Data.TaggedError("GCP.Dataproc.ClusterStillExists")<{
   clusterName: string;
 }> {}
 
@@ -386,16 +365,9 @@ const normalizeRegion = (region: string | undefined, fallback: string) =>
 const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
 
-const normalizeClusterType = (
-  type: string | undefined,
-  workerNumInstances: number | undefined,
-) => {
+const normalizeClusterType = (type: string | undefined, workerNumInstances: number | undefined) => {
   const value = (type ?? "").toUpperCase();
-  if (
-    value !== "" &&
-    value !== "CLUSTER_TYPE_UNSPECIFIED" &&
-    value !== "UNSPECIFIED"
-  ) {
+  if (value !== "" && value !== "CLUSTER_TYPE_UNSPECIFIED" && value !== "UNSPECIFIED") {
     return value;
   }
   if (workerNumInstances === 0) return "SINGLE_NODE";
@@ -427,16 +399,10 @@ const parseName = (name: string, fallbackRegion: string) => {
   const regionsAt = parts.lastIndexOf("regions");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    region:
-      regionsAt >= 0 && parts[regionsAt + 1]
-        ? parts[regionsAt + 1]!
-        : fallbackRegion,
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    region: regionsAt >= 0 && parts[regionsAt + 1] ? parts[regionsAt + 1]! : fallbackRegion,
     clusterName:
-      clustersAt >= 0 && parts[clustersAt + 1]
-        ? parts[clustersAt + 1]!
-        : lastSegment(name),
+      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : lastSegment(name),
   };
 };
 
@@ -469,24 +435,17 @@ const configsOf = (
   );
 
 const sortedKey = (values: readonly string[] | undefined) =>
-  JSON.stringify(
-    [...(values ?? [])].map((value) => value.toUpperCase()).sort(),
-  );
+  JSON.stringify([...(values ?? [])].map((value) => value.toUpperCase()).sort());
 
-const propertiesKey = (
-  properties: Record<string, string | undefined> | null | undefined,
-) =>
+const propertiesKey = (properties: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
     Object.fromEntries(
-      Object.entries(configsOf(properties)).sort(([a], [b]) =>
-        a.localeCompare(b),
-      ),
+      Object.entries(configsOf(properties)).sort(([a], [b]) => a.localeCompare(b)),
     ),
   );
 
-const metadataKey = (
-  metadata: Record<string, string | undefined> | null | undefined,
-) => propertiesKey(metadata);
+const metadataKey = (metadata: Record<string, string | undefined> | null | undefined) =>
+  propertiesKey(metadata);
 
 const initKey = (actions: InitializationAction[] | undefined) =>
   JSON.stringify(
@@ -496,29 +455,17 @@ const initKey = (actions: InitializationAction[] | undefined) =>
     })),
   );
 
-const imageMatches = (
-  desired: string | undefined,
-  observed: string | undefined,
-) => {
+const imageMatches = (desired: string | undefined, observed: string | undefined) => {
   if (desired === undefined || desired === "") return true;
   if (observed === undefined || observed === "") return false;
   const next = desired.toLowerCase();
   const current = observed.toLowerCase();
-  return (
-    current === next ||
-    current.startsWith(`${next}-`) ||
-    current.startsWith(`${next}.`)
-  );
+  return current === next || current.startsWith(`${next}-`) || current.startsWith(`${next}.`);
 };
 
-const groupNum = (group: dataproc.InstanceGroupConfig | undefined) =>
-  group?.numInstances;
+const groupNum = (group: dataproc.InstanceGroupConfig | undefined) => group?.numInstances;
 
-const toAttrs = (
-  cluster: dataproc.Cluster,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (cluster: dataproc.Cluster, project: string, region: string) => {
   const clusterName = cluster.clusterName ?? "";
   const config = cluster.config;
   const master = config?.masterConfig;
@@ -533,10 +480,7 @@ const toAttrs = (
     state: cluster.status?.state,
     statusDetail: cluster.status?.detail,
     labels: userLabels(cluster.labels),
-    clusterType: normalizeClusterType(
-      config?.clusterType,
-      worker?.numInstances,
-    ),
+    clusterType: normalizeClusterType(config?.clusterType, worker?.numInstances),
     imageVersion: config?.softwareConfig?.imageVersion,
     zone: config?.gceClusterConfig?.zoneUri
       ? lastSegment(config.gceClusterConfig.zoneUri)
@@ -548,15 +492,11 @@ const toAttrs = (
       ? lastSegment(config.gceClusterConfig.subnetworkUri)
       : undefined,
     masterNumInstances: master?.numInstances,
-    masterMachineType: master?.machineTypeUri
-      ? lastSegment(master.machineTypeUri)
-      : undefined,
+    masterMachineType: master?.machineTypeUri ? lastSegment(master.machineTypeUri) : undefined,
     masterBootDiskSizeGb: master?.diskConfig?.bootDiskSizeGb,
     masterBootDiskType: master?.diskConfig?.bootDiskType,
     workerNumInstances: worker?.numInstances,
-    workerMachineType: worker?.machineTypeUri
-      ? lastSegment(worker.machineTypeUri)
-      : undefined,
+    workerMachineType: worker?.machineTypeUri ? lastSegment(worker.machineTypeUri) : undefined,
     workerBootDiskSizeGb: worker?.diskConfig?.bootDiskSizeGb,
     workerBootDiskType: worker?.diskConfig?.bootDiskType,
     internalIpOnly: config?.gceClusterConfig?.internalIpOnly,
@@ -574,76 +514,7 @@ const getById = (projectId: string, region: string, clusterName: string) =>
     .getProjectsRegionsClusters({ projectId, region, clusterName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: dataproc.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new ClusterOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new ClusterOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = dataproc.getProjectsRegionsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<dataproc.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ClusterOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        return error
-          ? Effect.fail(
-              new ClusterOperationFailed({
-                operation: name,
-                message: error.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Dataproc.ClusterOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("8 seconds"),
-      }),
-    );
-  });
-
-const waitUntilExists = (
-  projectId: string,
-  region: string,
-  clusterName: string,
-) =>
+const waitUntilExists = (projectId: string, region: string, clusterName: string) =>
   getById(projectId, region, clusterName).pipe(
     Effect.flatMap((cluster) =>
       cluster
@@ -660,11 +531,7 @@ const waitUntilExists = (
 const terminalError = (state: string | undefined) =>
   state === "ERROR" || state === "ERROR_DUE_TO_UPDATE";
 
-const waitUntilRunning = (
-  projectId: string,
-  region: string,
-  clusterName: string,
-) =>
+const waitUntilRunning = (projectId: string, region: string, clusterName: string) =>
   getById(projectId, region, clusterName).pipe(
     Effect.filterOrFail(
       (cluster): cluster is dataproc.Cluster => cluster !== undefined,
@@ -691,26 +558,79 @@ const waitUntilRunning = (
       while: (error) =>
         error._tag === "GCP.Dataproc.ClusterNotReady" ||
         error._tag === "GCP.Dataproc.ClusterNotResolved",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
     }),
   );
 
-const waitUntilGone = (
-  projectId: string,
-  region: string,
-  clusterName: string,
-) =>
+const waitUntilGone = (projectId: string, region: string, clusterName: string) =>
   getById(projectId, region, clusterName).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined
-        ? Effect.void
-        : Effect.fail(new ClusterStillExists({ clusterName })),
+      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ clusterName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataproc.ClusterStillExists",
-      times: 10,
-      schedule: Schedule.spaced("8 seconds"),
+      times: MAX_POLLS,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+  );
+
+const deleteCluster = (projectId: string, region: string, clusterName: string) =>
+  Effect.gen(function* () {
+    const operation = yield* dataproc
+      .deleteProjectsRegionsClusters({ projectId, region, clusterName })
+      .pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+      );
+    if (operation !== undefined) {
+      yield* waitForOperation(operation, { notFoundOk: true });
+    }
+    yield* waitUntilGone(projectId, region, clusterName);
+  });
+
+/**
+ * A create operation that fails because the VPC subnet is transiently busy
+ * (`The resource '.../subnetworks/default' is not ready`, raised while other
+ * operations mutate the shared subnet). LRO errors carry only a code and a
+ * message, so the message is the only discriminator.
+ */
+const isSubnetNotReady = (error: { readonly _tag: string }) =>
+  error instanceof OperationFailed &&
+  error.message.includes("/subnetworks/") &&
+  error.message.includes("is not ready");
+
+/**
+ * Create the cluster and wait for the create operation. A create that fails
+ * on a busy subnet leaves the cluster in `ERROR`; it is deleted and the
+ * create retried.
+ */
+const createCluster = (
+  projectId: string,
+  region: string,
+  clusterName: string,
+  body: dataproc.Cluster,
+) =>
+  Effect.gen(function* () {
+    const existing = yield* getById(projectId, region, clusterName);
+    if (existing !== undefined && terminalError(existing.status?.state)) {
+      yield* deleteCluster(projectId, region, clusterName);
+    }
+    const created = yield* dataproc
+      .createProjectsRegionsClusters({ projectId, region, body })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    if (created !== undefined) {
+      yield* waitForOperation(created);
+    }
+  }).pipe(
+    Effect.retry({
+      while: isSubnetNotReady,
+      times: 6,
+      schedule: Schedule.spaced("30 seconds"),
     }),
   );
 
@@ -719,9 +639,7 @@ const instanceGroup = (options: {
   machineType?: string;
   bootDiskSizeGb?: number;
   bootDiskType?: string;
-  preemptibility?:
-    | dataproc.InstanceGroupConfigPreemptibilityEnum
-    | (string & {});
+  preemptibility?: dataproc.InstanceGroupConfigPreemptibilityEnum | (string & {});
 }): dataproc.InstanceGroupConfig | undefined => {
   const group: dataproc.InstanceGroupConfig = {};
   if (options.numInstances !== undefined) {
@@ -754,30 +672,23 @@ const toCreateBody = (
 ): dataproc.Cluster => {
   const clusterType = desiredClusterType(news);
   const singleNode = clusterType === "SINGLE_NODE";
-  const workerNum =
-    news.workerNumInstances ?? (singleNode ? 0 : DEFAULT_STANDARD_WORKERS);
+  const workerNum = news.workerNumInstances ?? (singleNode ? 0 : DEFAULT_STANDARD_WORKERS);
   const masterNum = news.masterNumInstances ?? DEFAULT_MASTER_INSTANCES;
   const masterMachine = news.masterMachineType ?? DEFAULT_MACHINE_TYPE;
-  const workerMachine =
-    news.workerMachineType ?? news.masterMachineType ?? DEFAULT_MACHINE_TYPE;
+  const workerMachine = news.workerMachineType ?? news.masterMachineType ?? DEFAULT_MACHINE_TYPE;
   const masterDiskGb = news.masterBootDiskSizeGb ?? DEFAULT_BOOT_DISK_GB;
   const workerDiskGb =
-    news.workerBootDiskSizeGb ??
-    news.masterBootDiskSizeGb ??
-    DEFAULT_BOOT_DISK_GB;
+    news.workerBootDiskSizeGb ?? news.masterBootDiskSizeGb ?? DEFAULT_BOOT_DISK_GB;
   const masterDiskType = news.masterBootDiskType ?? DEFAULT_BOOT_DISK_TYPE;
   const workerDiskType =
-    news.workerBootDiskType ??
-    news.masterBootDiskType ??
-    DEFAULT_BOOT_DISK_TYPE;
+    news.workerBootDiskType ?? news.masterBootDiskType ?? DEFAULT_BOOT_DISK_TYPE;
 
   const gce: dataproc.GceClusterConfig = {};
   if (news.zone !== undefined) gce.zoneUri = news.zone;
   if (news.network !== undefined) gce.networkUri = news.network;
   if (news.subnetwork !== undefined) gce.subnetworkUri = news.subnetwork;
   gce.internalIpOnly = news.internalIpOnly === true;
-  if (news.serviceAccount !== undefined)
-    gce.serviceAccount = news.serviceAccount;
+  if (news.serviceAccount !== undefined) gce.serviceAccount = news.serviceAccount;
   if (news.serviceAccountScopes !== undefined) {
     gce.serviceAccountScopes = news.serviceAccountScopes;
   }
@@ -785,18 +696,15 @@ const toCreateBody = (
   if (news.metadata !== undefined) gce.metadata = news.metadata;
 
   const software: dataproc.SoftwareConfig = {};
-  if (news.imageVersion !== undefined)
-    software.imageVersion = news.imageVersion;
+  if (news.imageVersion !== undefined) software.imageVersion = news.imageVersion;
   if (news.optionalComponents !== undefined) {
     software.optionalComponents = news.optionalComponents;
   }
   if (news.properties !== undefined) software.properties = news.properties;
 
   const lifecycle: dataproc.LifecycleConfig = {};
-  if (news.idleDeleteTtl !== undefined)
-    lifecycle.idleDeleteTtl = news.idleDeleteTtl;
-  if (news.autoDeleteTtl !== undefined)
-    lifecycle.autoDeleteTtl = news.autoDeleteTtl;
+  if (news.idleDeleteTtl !== undefined) lifecycle.idleDeleteTtl = news.idleDeleteTtl;
+  if (news.autoDeleteTtl !== undefined) lifecycle.autoDeleteTtl = news.autoDeleteTtl;
 
   const config: dataproc.ClusterConfig = {
     clusterType,
@@ -863,15 +771,12 @@ const listRegion = (projectId: string, region: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.clusters ?? [])),
       Stream.filter((cluster) =>
-        Object.keys(cluster.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(cluster.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((cluster) => toAttrs(cluster, projectId, region)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 export const ClusterProvider = () =>
@@ -884,38 +789,25 @@ export const ClusterProvider = () =>
 
       const previousName = olds?.clusterName ?? output?.clusterName;
       const nextName = news.clusterName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const previousType = normalizeClusterType(
         olds?.clusterType ?? output?.clusterType,
         olds?.workerNumInstances ?? output?.workerNumInstances,
       );
       const nextType = desiredClusterType({
         clusterType: news.clusterType ?? previousType,
-        workerNumInstances:
-          news.workerNumInstances ?? output?.workerNumInstances,
+        workerNumInstances: news.workerNumInstances ?? output?.workerNumInstances,
       });
 
       const replace =
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          nextName !== previousName) ||
+        (previousName !== undefined && nextName !== undefined && nextName !== previousName) ||
         previousRegion !== nextRegion ||
         previousType !== nextType ||
         (news.imageVersion !== undefined &&
-          !imageMatches(
-            news.imageVersion,
-            olds?.imageVersion ?? output?.imageVersion,
-          )) ||
+          !imageMatches(news.imageVersion, olds?.imageVersion ?? output?.imageVersion)) ||
         (news.masterNumInstances !== undefined &&
-          news.masterNumInstances !==
-            (olds?.masterNumInstances ?? output?.masterNumInstances)) ||
+          news.masterNumInstances !== (olds?.masterNumInstances ?? output?.masterNumInstances)) ||
         (news.masterMachineType !== undefined &&
           linkKey(news.masterMachineType) !==
             linkKey(olds?.masterMachineType ?? output?.masterMachineType)) ||
@@ -930,47 +822,30 @@ export const ClusterProvider = () =>
             (olds?.workerBootDiskSizeGb ?? output?.workerBootDiskSizeGb)) ||
         (news.masterBootDiskType !== undefined &&
           news.masterBootDiskType.toLowerCase() !==
-            (
-              olds?.masterBootDiskType ??
-              output?.masterBootDiskType ??
-              ""
-            ).toLowerCase()) ||
+            (olds?.masterBootDiskType ?? output?.masterBootDiskType ?? "").toLowerCase()) ||
         (news.workerBootDiskType !== undefined &&
           news.workerBootDiskType.toLowerCase() !==
-            (
-              olds?.workerBootDiskType ??
-              output?.workerBootDiskType ??
-              ""
-            ).toLowerCase()) ||
-        (news.zone !== undefined &&
-          linkKey(news.zone) !== linkKey(olds?.zone ?? output?.zone)) ||
+            (olds?.workerBootDiskType ?? output?.workerBootDiskType ?? "").toLowerCase()) ||
+        (news.zone !== undefined && linkKey(news.zone) !== linkKey(olds?.zone ?? output?.zone)) ||
         (news.network !== undefined &&
-          linkKey(news.network) !==
-            linkKey(olds?.network ?? output?.network)) ||
+          linkKey(news.network) !== linkKey(olds?.network ?? output?.network)) ||
         (news.subnetwork !== undefined &&
-          linkKey(news.subnetwork) !==
-            linkKey(olds?.subnetwork ?? output?.subnetwork)) ||
+          linkKey(news.subnetwork) !== linkKey(olds?.subnetwork ?? output?.subnetwork)) ||
         (news.internalIpOnly !== undefined &&
-          news.internalIpOnly !==
-            (olds?.internalIpOnly ?? output?.internalIpOnly)) ||
+          news.internalIpOnly !== (olds?.internalIpOnly ?? output?.internalIpOnly)) ||
         (news.serviceAccount !== undefined &&
-          news.serviceAccount !==
-            (olds?.serviceAccount ?? output?.serviceAccount)) ||
+          news.serviceAccount !== (olds?.serviceAccount ?? output?.serviceAccount)) ||
         (news.serviceAccountScopes !== undefined &&
-          sortedKey(news.serviceAccountScopes) !==
-            sortedKey(olds?.serviceAccountScopes)) ||
-        (news.tags !== undefined &&
-          sortedKey(news.tags) !== sortedKey(olds?.tags)) ||
+          sortedKey(news.serviceAccountScopes) !== sortedKey(olds?.serviceAccountScopes)) ||
+        (news.tags !== undefined && sortedKey(news.tags) !== sortedKey(olds?.tags)) ||
         (news.metadata !== undefined &&
           metadataKey(news.metadata) !== metadataKey(olds?.metadata)) ||
         (news.optionalComponents !== undefined &&
-          sortedKey(news.optionalComponents) !==
-            sortedKey(olds?.optionalComponents)) ||
+          sortedKey(news.optionalComponents) !== sortedKey(olds?.optionalComponents)) ||
         (news.properties !== undefined &&
           propertiesKey(news.properties) !== propertiesKey(olds?.properties)) ||
         (news.secondaryWorkerMachineType !== undefined &&
-          linkKey(news.secondaryWorkerMachineType) !==
-            linkKey(olds?.secondaryWorkerMachineType)) ||
+          linkKey(news.secondaryWorkerMachineType) !== linkKey(olds?.secondaryWorkerMachineType)) ||
         (news.secondaryWorkerBootDiskSizeGb !== undefined &&
           news.secondaryWorkerBootDiskSizeGb !==
             (olds?.secondaryWorkerBootDiskSizeGb ?? undefined)) ||
@@ -986,42 +861,29 @@ export const ClusterProvider = () =>
         (news.tempBucket !== undefined &&
           news.tempBucket !== (olds?.tempBucket ?? output?.tempBucket)) ||
         (news.enableHttpPortAccess !== undefined &&
-          news.enableHttpPortAccess !==
-            (olds?.enableHttpPortAccess ?? undefined)) ||
+          news.enableHttpPortAccess !== (olds?.enableHttpPortAccess ?? undefined)) ||
         (news.kmsKey !== undefined && news.kmsKey !== (olds?.kmsKey ?? "")) ||
         (news.initializationActions !== undefined &&
-          initKey(news.initializationActions) !==
-            initKey(olds?.initializationActions));
+          initKey(news.initializationActions) !== initKey(olds?.initializationActions));
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousRegion === nextRegion &&
-          previousName !== undefined &&
-          nextName === previousName,
+          previousRegion === nextRegion && previousName !== undefined && nextName === previousName,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const clusterName = yield* toId(
-        id,
-        olds?.clusterName,
-        output?.clusterName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const clusterName = yield* toId(id, olds?.clusterName, output?.clusterName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const parsed = output?.name ? parseName(output.name, region) : undefined;
       const project = parsed?.project || env.project;
       const existing = yield* getById(project, region, clusterName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, project, region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -1037,11 +899,7 @@ export const ClusterProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const clusterName = yield* toId(
-        id,
-        news.clusterName,
-        output?.clusterName,
-      );
+      const clusterName = yield* toId(id, news.clusterName, output?.clusterName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const parsed = output?.name ? parseName(output.name, region) : undefined;
       const projectId = parsed?.project || env.project;
@@ -1050,11 +908,7 @@ export const ClusterProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
 
-      let current = yield* getById(
-        projectId,
-        region,
-        output?.clusterName ?? clusterName,
-      );
+      let current = yield* getById(projectId, region, output?.clusterName ?? clusterName);
 
       if (current?.status?.state === "DELETING") {
         yield* waitUntilGone(projectId, region, clusterName);
@@ -1062,16 +916,12 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        const created = yield* dataproc
-          .createProjectsRegionsClusters({
-            projectId,
-            region,
-            body: toCreateBody(news, projectId, clusterName, desiredLabels),
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        if (created !== undefined) {
-          yield* waitForOperation(created);
-        }
+        yield* createCluster(
+          projectId,
+          region,
+          clusterName,
+          toCreateBody(news, projectId, clusterName, desiredLabels),
+        );
         current = yield* waitUntilExists(projectId, region, clusterName);
       }
 
@@ -1107,32 +957,22 @@ export const ClusterProvider = () =>
 
       const observedWorkers = groupNum(current.config?.workerConfig);
       const desiredWorkers = news.workerNumInstances;
-      const workersChanged =
-        desiredWorkers !== undefined && observedWorkers !== desiredWorkers;
+      const workersChanged = desiredWorkers !== undefined && observedWorkers !== desiredWorkers;
 
       const observedSecondary = groupNum(current.config?.secondaryWorkerConfig);
       const desiredSecondary = news.secondaryWorkerNumInstances;
       const secondaryChanged =
-        desiredSecondary !== undefined &&
-        observedSecondary !== desiredSecondary;
+        desiredSecondary !== undefined && observedSecondary !== desiredSecondary;
 
       const observedPolicy = current.config?.autoscalingConfig?.policyUri ?? "";
       const desiredPolicy = news.autoscalingPolicyUri;
-      const policyChanged =
-        desiredPolicy !== undefined && observedPolicy !== desiredPolicy;
+      const policyChanged = desiredPolicy !== undefined && observedPolicy !== desiredPolicy;
 
-      if (
-        labelsChanged ||
-        workersChanged ||
-        secondaryChanged ||
-        policyChanged
-      ) {
+      if (labelsChanged || workersChanged || secondaryChanged || policyChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           workersChanged ? "config.worker_config.num_instances" : undefined,
-          secondaryChanged
-            ? "config.secondary_worker_config.num_instances"
-            : undefined,
+          secondaryChanged ? "config.secondary_worker_config.num_instances" : undefined,
           policyChanged ? "config.autoscaling_config.policy_uri" : undefined,
         ].filter((field): field is string => field !== undefined);
 
@@ -1148,17 +988,11 @@ export const ClusterProvider = () =>
               labels: desiredLabels,
               config: {
                 workerConfig:
-                  desiredWorkers !== undefined
-                    ? { numInstances: desiredWorkers }
-                    : undefined,
+                  desiredWorkers !== undefined ? { numInstances: desiredWorkers } : undefined,
                 secondaryWorkerConfig:
-                  desiredSecondary !== undefined
-                    ? { numInstances: desiredSecondary }
-                    : undefined,
+                  desiredSecondary !== undefined ? { numInstances: desiredSecondary } : undefined,
                 autoscalingConfig:
-                  desiredPolicy !== undefined
-                    ? { policyUri: desiredPolicy }
-                    : undefined,
+                  desiredPolicy !== undefined ? { policyUri: desiredPolicy } : undefined,
               },
             },
           })
@@ -1177,23 +1011,6 @@ export const ClusterProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* dataproc
-        .deleteProjectsRegionsClusters({
-          projectId: output.project,
-          region: output.region,
-          clusterName: output.clusterName,
-        })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-        );
-      if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
-      }
-      yield* waitUntilGone(output.project, output.region, output.clusterName);
+      yield* deleteCluster(output.project, output.region, output.clusterName);
     }),
   });

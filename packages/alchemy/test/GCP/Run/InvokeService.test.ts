@@ -1,28 +1,22 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
+import { spawnSync } from "node:child_process";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import { spawnSync } from "node:child_process";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import InvokeCallee from "./fixtures/invoke-callee.ts";
 import InvokeCaller from "./fixtures/invoke-caller.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -85,8 +79,7 @@ test.provider.skipIf(!dockerAvailable)(
         resource: out.callee.name,
       });
       const invokers =
-        policy.bindings?.find((binding) => binding.role === "roles/run.invoker")
-          ?.members ?? [];
+        policy.bindings?.find((binding) => binding.role === "roles/run.invoker")?.members ?? [];
       expect(invokers).toContain(`serviceAccount:${out.caller.serviceAccount}`);
 
       // Without a token Cloud Run rejects the call at its front end.
@@ -99,8 +92,7 @@ test.provider.skipIf(!dockerAvailable)(
 
       const viaCaller = yield* getUntil(
         `${out.caller.uri}/`,
-        (status, body) =>
-          status === 200 ? (JSON.parse(body) as CallerBody) : { status },
+        (status, body) => (status === 200 ? (JSON.parse(body) as CallerBody) : { status }),
         (value) => value.status === 200,
       );
       expect(viaCaller).toEqual({
@@ -110,8 +102,7 @@ test.provider.skipIf(!dockerAvailable)(
 
       const posted = yield* getUntil(
         `${out.caller.uri}/post`,
-        (status, body) =>
-          status === 200 ? (JSON.parse(body) as CallerBody) : { status },
+        (status, body) => (status === 200 ? (JSON.parse(body) as CallerBody) : { status }),
         (value) => value.status === 200,
       );
       expect(posted.body).toEqual({
@@ -124,12 +115,10 @@ test.provider.skipIf(!dockerAvailable)(
       yield* stack.destroy();
 
       for (const name of [out.callee.name, out.caller.name]) {
-        const gone = yield* cloudrun
-          .getProjectsLocationsServices({ name })
-          .pipe(
-            Effect.as("found" as const),
-            Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-          );
+        const gone = yield* cloudrun.getProjectsLocationsServices({ name }).pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        );
         expect(gone).toEqual("gone");
       }
     }).pipe(logLevel),

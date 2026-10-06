@@ -1,16 +1,16 @@
-import * as AWS from "@/AWS";
-import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as deadline from "@distilled.cloud/aws/deadline";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as EffectStream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as EffectStream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { reapFarmChildren } from "@/AWS/Deadline/internal.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import DeadlineTestFunctionLive, { DeadlineTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "DeadlineBindings");
 
 // Bounded Lambda function URL cold-start/DNS/IAM propagation probe.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("6 seconds"),
-  Schedule.recurs(9),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("6 seconds"), Schedule.recurs(9)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -45,9 +42,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -57,17 +52,12 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       // Deadline's control plane can need several seconds to settle a fresh
       // farm/queue and sometimes returns a run of 5xx responses meanwhile.
       // Keep the retry bounded to nine attempts and 24 seconds of backoff.
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 /**
  * The account's farm quota is 2 and a deploy killed mid-crash leaks a farm
@@ -80,9 +70,7 @@ const reapLeakedFarms = Effect.gen(function* () {
     EffectStream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
   );
-  const leaked = farms.filter((farm) =>
-    /TestFarm|BindingsFarm|FleetFarm/.test(farm.displayName),
-  );
+  const leaked = farms.filter((farm) => /TestFarm|BindingsFarm|FleetFarm/.test(farm.displayName));
   yield* Effect.forEach(
     leaked,
     (farm) =>
@@ -95,49 +83,27 @@ const reapLeakedFarms = Effect.gen(function* () {
         // with ConflictException until they finish. Bounded.
         yield* Effect.retry(deadline.deleteFarm({ farmId }), {
           while: (e): boolean => e._tag === "ConflictException",
-          schedule: Schedule.max([
-            Schedule.spaced("6 seconds"),
-            Schedule.recurs(9),
-          ]),
-        }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-        );
-        yield* Effect.logInfo(
-          `reaped leaked farm ${farmId} (${farm.displayName})`,
-        );
+          schedule: Schedule.max([Schedule.spaced("6 seconds"), Schedule.recurs(9)]),
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+        yield* Effect.logInfo(`reaped leaked farm ${farmId} (${farm.displayName})`);
       }),
     { discard: true },
   );
 });
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "Deadline Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:deadline",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:deadline", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "Deadline test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("Deadline test setup: destroying previous resources");
         yield* sharedStack.destroy();
         // Raw distilled calls need the provider environment (credentials).
-        yield* Core.withProviders(
-          reapLeakedFarms,
-          testOptions,
-          "DeadlineBindings",
-        );
+        yield* Core.withProviders(reapLeakedFarms, testOptions, "DeadlineBindings");
 
         yield* Effect.logInfo("Deadline test setup: deploying fixture");
         const attrs = yield* sharedStack.deploy(
@@ -151,21 +117,15 @@ describe.sequential(
         functionArn = attrs.functionArn;
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `Deadline test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`Deadline test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `Deadline test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`Deadline test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -206,9 +166,7 @@ describe.sequential(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
                 until: (j): boolean =>
-                  settled.includes(
-                    (j as { lifecycleStatus: string }).lifecycleStatus,
-                  ),
+                  settled.includes((j as { lifecycleStatus: string }).lifecycleStatus),
                 times: 10,
               }),
             )) as { jobId: string; priority: number; lifecycleStatus: string };
@@ -220,8 +178,7 @@ describe.sequential(
             const listed = (yield* getJson("/jobs").pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
-                until: (j): boolean =>
-                  (j as { ids: string[] }).ids.includes(jobId),
+                until: (j): boolean => (j as { ids: string[] }).ids.includes(jobId),
                 times: 10,
               }),
             )) as { ids: string[] };
@@ -231,9 +188,7 @@ describe.sequential(
             // fresh farm can take minutes to index its first job, so exercise
             // the live binding and validate its response without polling past
             // the suite's provisioning budget.
-            const searched = (yield* postJson("/search")) as {
-              ids: string[];
-            };
+            const searched = (yield* postJson("/search")) as { ids: string[] };
             expect(Array.isArray(searched.ids)).toBe(true);
 
             // Reprioritize and verify the mutation landed. GetJob is
@@ -242,8 +197,7 @@ describe.sequential(
             const updated = (yield* getJson(`/job?jobId=${jobId}`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
-                until: (j): boolean =>
-                  (j as { priority: number }).priority === 75,
+                until: (j): boolean => (j as { priority: number }).priority === 75,
                 times: 10,
               }),
             )) as { priority: number };
@@ -269,15 +223,16 @@ describe.sequential(
             expect(steps.names).toContain("Echo");
             stepId = steps.ids[0]!;
 
-            const step = (yield* getJson(
-              `/step?jobId=${jobId}&stepId=${stepId}`,
-            )) as { stepId: string; name: string };
+            const step = (yield* getJson(`/step?jobId=${jobId}&stepId=${stepId}`)) as {
+              stepId: string;
+              name: string;
+            };
             expect(step.stepId).toBe(stepId);
             expect(step.name).toBe("Echo");
 
-            const tasks = (yield* getJson(
-              `/tasks?jobId=${jobId}&stepId=${stepId}`,
-            )) as { ids: string[] };
+            const tasks = (yield* getJson(`/tasks?jobId=${jobId}&stepId=${stepId}`)) as {
+              ids: string[];
+            };
             expect(tasks.ids.length).toBeGreaterThanOrEqual(1);
 
             const task = (yield* getJson(
@@ -302,9 +257,7 @@ describe.sequential(
             // SearchTasks below. The authoritative ListSteps/GetStep test above
             // already proves the step exists, so exercise the live binding and
             // validate its response without waiting on an optional index entry.
-            const steps = (yield* postJson(`/search/steps?jobId=${jobId}`)) as {
-              ids: string[];
-            };
+            const steps = (yield* postJson(`/search/steps?jobId=${jobId}`)) as { ids: string[] };
             expect(Array.isArray(steps.ids)).toBe(true);
 
             // SearchTasks uses a separate asynchronously provisioned index.
@@ -312,15 +265,11 @@ describe.sequential(
             // minutes even though ListTasks/GetTask above are authoritative.
             // Exercise the live binding and validate its response without
             // polling past the suite's bounded provisioning budget.
-            const tasks = (yield* postJson(`/search/tasks?jobId=${jobId}`)) as {
-              ids: string[];
-            };
+            const tasks = (yield* postJson(`/search/tasks?jobId=${jobId}`)) as { ids: string[] };
             expect(Array.isArray(tasks.ids)).toBe(true);
 
             // The fixture template declares no parameters.
-            const params = (yield* getJson(`/params?jobId=${jobId}`)) as {
-              count: number;
-            };
+            const params = (yield* getJson(`/params?jobId=${jobId}`)) as { count: number };
             expect(params.count).toBe(0);
           }),
         { timeout: 90_000 },
@@ -332,17 +281,15 @@ describe.sequential(
         "cancels a READY task, then requeues the step",
         (_stack) =>
           Effect.gen(function* () {
-            const tasks = (yield* getJson(
-              `/tasks?jobId=${jobId}&stepId=${stepId}`,
-            )) as { ids: string[] };
+            const tasks = (yield* getJson(`/tasks?jobId=${jobId}&stepId=${stepId}`)) as {
+              ids: string[];
+            };
             const taskId = tasks.ids[0]!;
 
             // Cancel the single task and watch it converge to CANCELED. (The
             // fixture queue has no fleet, so the pending state is READY or
             // NOT_COMPATIBLE — never RUNNING.)
-            yield* postJson(
-              `/task/cancel?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
-            );
+            yield* postJson(`/task/cancel?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`);
             const canceled = (yield* getJson(
               `/task?jobId=${jobId}&stepId=${stepId}&taskId=${taskId}`,
             ).pipe(
@@ -381,16 +328,14 @@ describe.sequential(
         "a job with no workers has no sessions and no session actions",
         (_stack) =>
           Effect.gen(function* () {
-            const sessions = (yield* getJson(`/sessions?jobId=${jobId}`)) as {
-              ids: string[];
-            };
+            const sessions = (yield* getJson(`/sessions?jobId=${jobId}`)) as { ids: string[] };
             expect(sessions.ids).toEqual([]);
 
             // ListSessionActions requires a sessionId or taskId scope — use
             // the job's single task.
-            const tasks = (yield* getJson(
-              `/tasks?jobId=${jobId}&stepId=${stepId}`,
-            )) as { ids: string[] };
+            const tasks = (yield* getJson(`/tasks?jobId=${jobId}&stepId=${stepId}`)) as {
+              ids: string[];
+            };
             const actions = (yield* getJson(
               `/session-actions?jobId=${jobId}&taskId=${tasks.ids[0]}`,
             )) as { ids: string[] };
@@ -405,22 +350,17 @@ describe.sequential(
         "starts an aggregation on the farm and polls it to completion",
         (_stack) =>
           Effect.gen(function* () {
-            const { queueId } = (yield* getJson("/queue")) as {
-              queueId: string;
-            };
+            const { queueId } = (yield* getJson("/queue")) as { queueId: string };
             expect(queueId).toMatch(/^queue-/);
             const started = (yield* postJson(`/stats?queueId=${queueId}`)) as {
               aggregationId: string;
             };
             expect(started.aggregationId).toBeTruthy();
 
-            const result = (yield* getJson(
-              `/stats?aggregationId=${started.aggregationId}`,
-            ).pipe(
+            const result = (yield* getJson(`/stats?aggregationId=${started.aggregationId}`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("6 seconds"),
-                until: (r): boolean =>
-                  (r as { status: string }).status !== "IN_PROGRESS",
+                until: (r): boolean => (r as { status: string }).status !== "IN_PROGRESS",
                 times: 9,
               }),
             )) as { status: string; count: number };
@@ -431,24 +371,18 @@ describe.sequential(
       );
     });
 
-    describe(
-      "consumeFarmEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          (_stack) =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeFarmEvents must
-              // have materialized as a rule on the default bus with the Lambda
-              // as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeFarmEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeFarmEvents must
+          // have materialized as a rule on the default bus with the Lambda
+          // as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );

@@ -1,27 +1,27 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST;
+// The API Management API is not enabled in the testing project: every call
+// answers 403 SERVICE_DISABLED (typed `ServiceDisabled`). Set GCP_TEST_APIM=1
+// on a project with the API enabled to run the lifecycle.
+const apimEnabled = !!process.env.GCP_TEST_APIM;
+const runLifecycle = !process.env.FAST && apimEnabled;
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
   apim.getProjectsLocationsObservationJobs({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -29,22 +29,8 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const probeAccess = GcpEnvironment.current.pipe(
-  Effect.flatMap(({ project }) =>
-    apim.listProjectsLocationsObservationJobs({
-      parent: `projects/${project}/locations/${location}`,
-      pageSize: 1,
-    }),
-  ),
-
-  Effect.as("ok" as const),
-  Effect.catchTag(["Forbidden", "NotFound"], (error) =>
-    Effect.succeed(error._tag),
-  ),
-);
-
 test.provider(
-  "getProjectsLocationsObservationJobs on a missing job fails with a typed tag",
+  "getProjectsLocationsObservationJobs on a missing job fails with ServiceDisabled while the API is disabled",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -57,10 +43,7 @@ test.provider(
           name: `${parent}/observationJobs/alchemy-missing-job`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("API Management API has not been used");
-      }
+      expect(error._tag).toEqual(apimEnabled ? "NotFound" : "ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -75,25 +58,6 @@ test.provider.skipIf(!runLifecycle)(
       const parent = `projects/${project}/locations/${location}`;
 
       yield* stack.destroy();
-
-      const access = yield* probeAccess;
-      if (access !== "ok") {
-        expect(access).toEqual("Forbidden");
-        const listed = yield* Effect.flip(
-          apim.listProjectsLocationsObservationJobs({
-            parent,
-            pageSize: 1,
-          }),
-        );
-        expect(listed._tag).toEqual("Forbidden");
-        if (listed._tag === "Forbidden") {
-          expect(listed.message).toContain(
-            "API Management API has not been used",
-          );
-        }
-        yield* stack.destroy();
-        return;
-      }
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {

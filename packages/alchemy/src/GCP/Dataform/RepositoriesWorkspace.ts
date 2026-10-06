@@ -113,11 +113,7 @@ export class RepositoriesWorkspaceNotResolved extends Data.TaggedError(
 const resourceName = (repository: string, workspaceId: string) =>
   `${repository}/workspaces/${workspaceId}`;
 
-const toAttrs = (
-  workspace: dataform.Workspace,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (workspace: dataform.Workspace, project: string, region: string) => {
   const name = workspace.name ?? "";
   const parsed = parseResourceName(name, "workspaces", region);
   return {
@@ -141,14 +137,7 @@ const getByName = (name: string) =>
 
 export const RepositoriesWorkspaceProvider = () =>
   Provider.succeed(RepositoriesWorkspace, {
-    stables: [
-      "name",
-      "workspaceId",
-      "repository",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "workspaceId", "repository", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -176,33 +165,22 @@ export const RepositoriesWorkspaceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "workspaces", env.region)
-            .parent,
+          parseResourceName(output?.name ?? "", "workspaces", env.region).parent,
         env.project,
         location,
       );
-      const workspaceId = yield* toPhysicalId(
-        id,
-        olds?.workspaceId,
-        output?.workspaceId,
-      );
+      const workspaceId = yield* toPhysicalId(id, olds?.workspaceId, output?.workspaceId);
       const name = output?.name ?? resourceName(repository, workspaceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),
@@ -210,30 +188,17 @@ export const RepositoriesWorkspaceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const workspaces = yield* forEachOwnedRepository(
-          env.project,
-          env.region,
-          (repo) => listWorkspaces(repo.name ?? ""),
+        const workspaces = yield* forEachOwnedRepository(env.project, env.region, (repo) =>
+          listWorkspaces(repo.name ?? ""),
         );
         return workspaces.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
-      const workspaceId = yield* toPhysicalId(
-        id,
-        news.workspaceId,
-        output?.workspaceId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandRepository(news.repository, env.project, location);
+      const workspaceId = yield* toPhysicalId(id, news.workspaceId, output?.workspaceId);
       const name = resourceName(repository, workspaceId);
 
       let current = yield* getByName(output?.name ?? name);

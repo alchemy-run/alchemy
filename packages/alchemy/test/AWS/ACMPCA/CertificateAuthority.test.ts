@@ -1,15 +1,11 @@
-import * as AWS from "@/AWS";
-import {
-  CertificateAuthority,
-  CertificateAuthorityPolicy,
-  Permission,
-} from "@/AWS/ACMPCA";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import * as Test from "@/Test/Alchemy";
 import * as acmpca from "@distilled.cloud/aws/acm-pca";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CertificateAuthority, CertificateAuthorityPolicy, Permission } from "@/AWS/ACMPCA";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -70,22 +66,13 @@ test.provider(
 const assertCaDeleted = (arn: string) =>
   acmpca.describeCertificateAuthority({ CertificateAuthorityArn: arn }).pipe(
     Effect.map((r) => r.CertificateAuthority?.Status ?? "gone"),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     Effect.flatMap((status) =>
       status === "gone" || status === "DELETED"
         ? Effect.void
-        : Effect.fail(
-            new Error(`CA '${arn}' still exists (status: ${status})`),
-          ),
+        : Effect.fail(new Error(`CA '${arn}' still exists (status: ${status})`)),
     ),
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]) }),
   );
 
 // A private CA bills a monthly fee (prorated) for as long as it exists, so
@@ -100,10 +87,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
       yield* stack.destroy();
       const { accountId } = yield* AWSEnvironment.current;
 
-      const deployCa = (props: {
-        commonName: string;
-        tags: Record<string, string>;
-      }) =>
+      const deployCa = (props: { commonName: string; tags: Record<string, string> }) =>
         stack.deploy(
           Effect.gen(function* () {
             const ca = yield* CertificateAuthority("TestCA", {
@@ -145,9 +129,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
         commonName: "alchemy-test.internal",
         tags: { fixture: "acmpca" },
       });
-      expect(first.ca.certificateAuthorityArn).toContain(
-        ":certificate-authority/",
-      );
+      expect(first.ca.certificateAuthorityArn).toContain(":certificate-authority/");
       expect(first.ca.status).toBe("PENDING_CERTIFICATE");
       expect(first.permission.principal).toBe("acm.amazonaws.com");
 
@@ -155,23 +137,16 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
       const described = yield* acmpca.describeCertificateAuthority({
         CertificateAuthorityArn: first.ca.certificateAuthorityArn,
       });
-      expect(described.CertificateAuthority?.Status).toBe(
-        "PENDING_CERTIFICATE",
-      );
+      expect(described.CertificateAuthority?.Status).toBe("PENDING_CERTIFICATE");
       expect(
-        described.CertificateAuthority?.CertificateAuthorityConfiguration
-          ?.Subject?.CommonName,
+        described.CertificateAuthority?.CertificateAuthorityConfiguration?.Subject?.CommonName,
       ).toBe("alchemy-test.internal");
-      expect(described.CertificateAuthority?.UsageMode).toBe(
-        "SHORT_LIVED_CERTIFICATE",
-      );
+      expect(described.CertificateAuthority?.UsageMode).toBe("SHORT_LIVED_CERTIFICATE");
 
       const perms = yield* acmpca.listPermissions({
         CertificateAuthorityArn: first.ca.certificateAuthorityArn,
       });
-      const acmPerm = perms.Permissions?.find(
-        (p) => p.Principal === "acm.amazonaws.com",
-      );
+      const acmPerm = perms.Permissions?.find((p) => p.Principal === "acm.amazonaws.com");
       expect(acmPerm).toBeDefined();
       expect([...(acmPerm?.Actions ?? [])].sort()).toEqual([
         "GetCertificate",
@@ -180,15 +155,11 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
       ]);
 
       // The resource-based policy is attached (out-of-band via distilled).
-      expect(first.policy.certificateAuthorityArn).toBe(
-        first.ca.certificateAuthorityArn,
-      );
+      expect(first.policy.certificateAuthorityArn).toBe(first.ca.certificateAuthorityArn);
       const attachedPolicy = yield* acmpca.getPolicy({
         ResourceArn: first.ca.certificateAuthorityArn,
       });
-      expect(attachedPolicy.Policy).toContain(
-        "acm-pca:DescribeCertificateAuthority",
-      );
+      expect(attachedPolicy.Policy).toContain("acm-pca:DescribeCertificateAuthority");
 
       // 2. UPDATE — same CA (stable ARN); tags converge in place. (The
       // permission's action set cannot shrink: AWS requires all three
@@ -198,9 +169,7 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
         commonName: "alchemy-test.internal",
         tags: { fixture: "acmpca", updated: "true" },
       });
-      expect(second.ca.certificateAuthorityArn).toBe(
-        first.ca.certificateAuthorityArn,
-      );
+      expect(second.ca.certificateAuthorityArn).toBe(first.ca.certificateAuthorityArn);
       const tags = yield* acmpca.listTags({
         CertificateAuthorityArn: second.ca.certificateAuthorityArn,
       });
@@ -212,12 +181,8 @@ test.provider.skipIf(!process.env.AWS_TEST_ACMPCA)(
         commonName: "alchemy-test-replaced.internal",
         tags: { fixture: "acmpca" },
       });
-      expect(third.ca.certificateAuthorityArn).not.toBe(
-        first.ca.certificateAuthorityArn,
-      );
-      expect(third.permission.certificateAuthorityArn).toBe(
-        third.ca.certificateAuthorityArn,
-      );
+      expect(third.ca.certificateAuthorityArn).not.toBe(first.ca.certificateAuthorityArn);
+      expect(third.permission.certificateAuthorityArn).toBe(third.ca.certificateAuthorityArn);
       yield* assertCaDeleted(first.ca.certificateAuthorityArn);
 
       // 4. DESTROY — CA enters its restoration window (DELETED).

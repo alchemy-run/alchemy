@@ -68,19 +68,14 @@ export const resolveHostIdentity = Effect.fn(function* (options: {
   bindings: readonly ResourceBinding<GcpHostBinding>[];
   output: Partial<HostIdentityAttrs> | undefined;
 }) {
-  const hasGrants = options.bindings.some(
-    (binding) => (binding.data?.iam?.length ?? 0) > 0,
-  );
+  const hasGrants = options.bindings.some((binding) => (binding.data?.iam?.length ?? 0) > 0);
   const userSa =
-    options.userServiceAccount !== undefined &&
-    options.userServiceAccount.length > 0
+    options.userServiceAccount !== undefined && options.userServiceAccount.length > 0
       ? options.userServiceAccount
       : undefined;
   const managed =
     userSa === undefined &&
-    (options.effectNative ||
-      hasGrants ||
-      options.output?.managedServiceAccount === true);
+    (options.effectNative || hasGrants || options.output?.managedServiceAccount === true);
 
   let serviceAccount: string;
   let created = false;
@@ -101,9 +96,7 @@ export const resolveHostIdentity = Effect.fn(function* (options: {
   // Grants recorded against a different account (the host switched
   // identity) belong to that account; never replay them onto this one.
   const previous =
-    options.output?.serviceAccount === serviceAccount
-      ? options.output.iamGrants
-      : undefined;
+    options.output?.serviceAccount === serviceAccount ? options.output.iamGrants : undefined;
   const synced = yield* syncHostIam({
     project: options.project,
     serviceAccount,
@@ -222,30 +215,18 @@ export const mountCloudSqlInstances = <T extends CloudSqlTemplate>(
   template: T,
   bindings: readonly ResourceBinding<GcpHostBinding>[],
 ): T => {
-  const requested = bindings.flatMap(
-    (binding) => binding.data?.cloudSqlInstances ?? [],
-  );
+  const requested = bindings.flatMap((binding) => binding.data?.cloudSqlInstances ?? []);
   if (requested.length === 0) return template;
-  const existing = template.volumes?.find(
-    (volume) => volume.name === CLOUD_SQL_VOLUME,
-  );
+  const existing = template.volumes?.find((volume) => volume.name === CLOUD_SQL_VOLUME);
   const instances = [
-    ...new Set([
-      ...(existing?.cloudSqlInstance?.instances ?? []),
-      ...requested,
-    ]),
+    ...new Set([...(existing?.cloudSqlInstance?.instances ?? []), ...requested]),
   ].sort();
   const volumes = [
-    ...(template.volumes ?? []).filter(
-      (volume) => volume.name !== CLOUD_SQL_VOLUME,
-    ),
+    ...(template.volumes ?? []).filter((volume) => volume.name !== CLOUD_SQL_VOLUME),
     { name: CLOUD_SQL_VOLUME, cloudSqlInstance: { instances } },
   ];
   const containers = (template.containers ?? []).map((container, index) =>
-    index === 0 &&
-    !(container.volumeMounts ?? []).some(
-      (mount) => mount.name === CLOUD_SQL_VOLUME,
-    )
+    index === 0 && !(container.volumeMounts ?? []).some((mount) => mount.name === CLOUD_SQL_VOLUME)
       ? {
           ...container,
           volumeMounts: [

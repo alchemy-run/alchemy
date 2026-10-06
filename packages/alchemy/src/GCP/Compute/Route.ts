@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_PRIORITY = 1000;
 const DEFAULT_INTERNET_GATEWAY = "default-internet-gateway";
@@ -171,19 +167,8 @@ export type Route = Resource<
  */
 export const Route = Resource<Route>("GCP.Compute.Route");
 
-export class RouteNotResolved extends Data.TaggedError(
-  "GCP.Compute.RouteNotResolved",
-)<{
+export class RouteNotResolved extends Data.TaggedError("GCP.Compute.RouteNotResolved")<{
   routeName: string;
-}> {}
-
-export class RouteOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RouteOperationFailed",
-)<{
-  routeName: string;
-  operation: string;
-  message: string;
-  code?: string;
 }> {}
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
@@ -278,8 +263,7 @@ const hopOf = (props: {
       kind: "vpn" as const,
       value: lastToken(props.nextHopVpnTunnel),
     };
-  if (props.nextHopIlb)
-    return { kind: "ilb" as const, value: lastToken(props.nextHopIlb) };
+  if (props.nextHopIlb) return { kind: "ilb" as const, value: lastToken(props.nextHopIlb) };
   return undefined;
 };
 
@@ -295,9 +279,7 @@ const toBody = (
   description: encodeDescription(ownership, props.description),
   priority: props.priority ?? DEFAULT_PRIORITY,
   tags: props.tags,
-  nextHopGateway: props.nextHopGateway
-    ? gatewayUrl(project, props.nextHopGateway)
-    : undefined,
+  nextHopGateway: props.nextHopGateway ? gatewayUrl(project, props.nextHopGateway) : undefined,
   nextHopIp: props.nextHopIp,
   nextHopInstance: props.nextHopInstance,
   nextHopVpnTunnel: props.nextHopVpnTunnel,
@@ -333,81 +315,10 @@ const getByName = (project: string, route: string) =>
     .getRoutes({ project, route })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationName = (operation: compute.Operation) =>
-  operation.name?.split("/").pop() ?? operation.name ?? "";
-
-const isNotFoundOp = (
-  errors: ReadonlyArray<{ code?: string; message?: string }>,
-) =>
-  errors.length > 0 &&
-  errors.every((error) => {
-    const code = (error.code ?? "").toLowerCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "notfound" ||
-      code === "resource_not_found" ||
-      message.includes("was not found") ||
-      message.includes("not found")
-    );
-  });
-
-const failIfErrored = (
-  routeName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length === 0 &&
-    (operation.httpErrorStatusCode === undefined ||
-      operation.httpErrorStatusCode < 400)
-  ) {
-    return Effect.succeed(operation);
-  }
-  if (options?.allowNotFound && isNotFoundOp(errors)) {
-    return Effect.succeed(operation);
-  }
-  return Effect.fail(
-    new RouteOperationFailed({
-      routeName,
-      operation: operation.name ?? "",
-      message:
-        errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-        operation.httpErrorMessage ||
-        "operation failed",
-      code: errors[0]?.code,
-    }),
-  );
-};
-
-const isAlreadyExists = (error: RouteOperationFailed) =>
-  error.code === "RESOURCE_ALREADY_EXISTS" ||
-  error.message.toLowerCase().includes("already exists");
-
-const waitUntilDone = (
-  project: string,
-  routeName: string,
-  operation: compute.Operation,
-  options?: { allowNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(routeName, operation, options);
-    }
-    const name = operationName(operation);
-    if (!name) {
-      return yield* failIfErrored(routeName, operation, options);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name });
-    return yield* failIfErrored(routeName, done, options);
-  });
-
 const requireRoute = (project: string, routeName: string) =>
   getByName(project, routeName).pipe(
     Effect.flatMap((route) =>
-      route
-        ? Effect.succeed(route)
-        : Effect.fail(new RouteNotResolved({ routeName })),
+      route ? Effect.succeed(route) : Effect.fail(new RouteNotResolved({ routeName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RouteNotResolved",
@@ -432,8 +343,8 @@ const removeRoute = (project: string, routeName: string) =>
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
     if (operation !== undefined) {
-      yield* waitUntilDone(project, routeName, operation, {
-        allowNotFound: true,
+      yield* waitGlobalOperation(project, operation, {
+        ignore: ["RESOURCE_NOT_FOUND"],
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     }
   });
@@ -441,9 +352,7 @@ const removeRoute = (project: string, routeName: string) =>
 const matchesDesired = (route: compute.Route, news: RouteProps) => {
   if ((route.destRange ?? "") !== news.destRange) return false;
   if (!sameRef(route.network, news.network)) return false;
-  if (
-    (route.priority ?? DEFAULT_PRIORITY) !== (news.priority ?? DEFAULT_PRIORITY)
-  ) {
+  if ((route.priority ?? DEFAULT_PRIORITY) !== (news.priority ?? DEFAULT_PRIORITY)) {
     return false;
   }
   const parsed = parseDescription(route.description);
@@ -475,14 +384,10 @@ const immutableChanged = (
     return true;
   }
   const previousNetwork = olds?.network ?? output?.network;
-  if (
-    previousNetwork !== undefined &&
-    !sameRef(news.network, previousNetwork)
-  ) {
+  if (previousNetwork !== undefined && !sameRef(news.network, previousNetwork)) {
     return true;
   }
-  const previousPriority =
-    olds?.priority ?? output?.priority ?? DEFAULT_PRIORITY;
+  const previousPriority = olds?.priority ?? output?.priority ?? DEFAULT_PRIORITY;
   if ((news.priority ?? DEFAULT_PRIORITY) !== previousPriority) {
     return true;
   }
@@ -554,9 +459,7 @@ export const RouteProvider = () =>
         return yield* compute.listRoutes.items({ project: env.project }).pipe(
           Stream.filter((route) => {
             const { labels } = parseDescription(route.description);
-            return Object.keys(labels).some((key) =>
-              key.startsWith("alchemy-"),
-            );
+            return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
           }),
           Stream.map((route) => toAttrs(route, env.project)),
           Stream.runCollect,
@@ -585,13 +488,9 @@ export const RouteProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, routeName, operation),
-            ),
-            Effect.catchIf(
-              (error): error is RouteOperationFailed =>
-                error._tag === "GCP.Compute.RouteOperationFailed" &&
-                isAlreadyExists(error),
-              () => Effect.void,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );

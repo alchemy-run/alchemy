@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -32,8 +29,8 @@ export type LicenseProps = {
   /**
    * Optional description. Compute licenses have no labels field, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke. Updated in
-   * place via `licenses.update`.
+   * is stored in a `[alchemy …]` prefix for `list` / nuke. Immutable —
+   * `licenses.update` rejects it, so changing it replaces the license.
    */
   description?: string;
   /**
@@ -46,6 +43,7 @@ export type LicenseProps = {
   /**
    * When `false`, licenses are not copied from the source when creating
    * an image from a disk (or disk from snapshot, snapshot from disk).
+   * Immutable — changing it replaces the license.
    * @default true
    */
   transferable?: boolean;
@@ -60,10 +58,12 @@ export type LicenseProps = {
   removableFromDisk?: boolean;
   /**
    * When `true`, this license can only be used on multi-tenant nodes.
+   * Immutable — changing it replaces the license.
    */
   multiTenantOnly?: boolean;
   /**
    * When `true`, this license can only be used on sole-tenant nodes.
+   * Immutable — changing it replaces the license.
    */
   soleTenantOnly?: boolean;
   /**
@@ -71,7 +71,8 @@ export type LicenseProps = {
    */
   minimumRetention?: LicenseDuration;
   /**
-   * License codes that are incompatible with this license.
+   * License codes that are incompatible with this license. Immutable —
+   * changing it replaces the license.
    */
   incompatibleLicenses?: string[];
   /**
@@ -172,23 +173,11 @@ export type License = Resource<
  */
 export const License = Resource<License>("GCP.Compute.License");
 
-export class LicenseNotResolved extends Data.TaggedError(
-  "GCP.Compute.LicenseNotResolved",
-)<{
+export class LicenseNotResolved extends Data.TaggedError("GCP.Compute.LicenseNotResolved")<{
   licenseName: string;
 }> {}
 
-export class LicenseOperationFailed extends Data.TaggedError(
-  "GCP.Compute.LicenseOperationFailed",
-)<{
-  licenseName: string;
-  operation: string;
-  message: string;
-}> {}
-
-export class LicenseStillExists extends Data.TaggedError(
-  "GCP.Compute.LicenseStillExists",
-)<{
+export class LicenseStillExists extends Data.TaggedError("GCP.Compute.LicenseStillExists")<{
   licenseName: string;
 }> {}
 
@@ -253,9 +242,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const sorted = (values: ReadonlyArray<string> | undefined) =>
   [...(values ?? [])].map((value) => lastSegment(value)).sort();
@@ -263,10 +250,16 @@ const sorted = (values: ReadonlyArray<string> | undefined) =>
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
-const toAttrs = (
-  license: compute.License,
-  project: string,
-): License["Attributes"] => {
+const immutableChanged = (olds: LicenseProps, news: LicenseProps) =>
+  (olds.description ?? "") !== (news.description ?? "") ||
+  (olds.transferable ?? true) !== (news.transferable ?? true) ||
+  (olds.multiTenantOnly ?? false) !== (news.multiTenantOnly ?? false) ||
+  (olds.soleTenantOnly ?? false) !== (news.soleTenantOnly ?? false) ||
+  sorted(olds.incompatibleLicenses).join(",") !== sorted(news.incompatibleLicenses).join(",") ||
+  sorted(olds.requiredCoattachedLicenses).join(",") !==
+    sorted(news.requiredCoattachedLicenses).join(",");
+
+const toAttrs = (license: compute.License, project: string): License["Attributes"] => {
   const parsed = parseDescription(license.description);
   return {
     licenseName: license.name ?? "",
@@ -293,89 +286,10 @@ const toAttrs = (
   };
 };
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  licenseName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new LicenseOperationFailed({
-        licenseName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, license: string) =>
   compute
     .getLicenses({ project, license })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  licenseName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new LicenseOperationFailed({
-        licenseName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(licenseName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, licenseName: string) =>
   getByName(project, licenseName).pipe(
@@ -394,9 +308,7 @@ const awaitResource = (project: string, licenseName: string) =>
 const waitUntilGone = (project: string, licenseName: string) =>
   getByName(project, licenseName).pipe(
     Effect.flatMap((license) =>
-      license === undefined
-        ? Effect.void
-        : Effect.fail(new LicenseStillExists({ licenseName })),
+      license === undefined ? Effect.void : Effect.fail(new LicenseStillExists({ licenseName })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.LicenseStillExists",
@@ -414,7 +326,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, operation, licenseName, options),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -461,9 +375,7 @@ export const LicenseProvider = () =>
       const previousName = olds?.licenseName ?? output?.licenseName;
       const nextName = news.licenseName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const previousOs = olds?.osLicense ?? output?.osLicense ?? false;
       const nextOs = news.osLicense ?? previousOs;
       if (nameChanged) {
@@ -472,16 +384,21 @@ export const LicenseProvider = () =>
       if (previousOs !== nextOs) {
         return { action: "replace" as const, deleteFirst: true };
       }
+      // `licenses.update` only accepts appendableToDisk, removableFromDisk,
+      // allowedReplacementLicenses, and minimumRetention; every other field
+      // is fixed at insert.
+      if (olds !== undefined && immutableChanged(olds, news)) {
+        return {
+          action: "replace" as const,
+          deleteFirst: news.licenseName !== undefined,
+        };
+      }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const licenseName = yield* toName(
-        id,
-        olds?.licenseName,
-        output?.licenseName,
-      );
+      const licenseName = yield* toName(id, olds?.licenseName, output?.licenseName);
       const existing = yield* getByName(env.project, licenseName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -502,19 +419,13 @@ export const LicenseProvider = () =>
             Stream.map((license) => toAttrs(license, env.project)),
             Stream.runCollect,
             Effect.map((items) => Array.from(items)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as License["Attributes"][]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as License["Attributes"][])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const licenseName = yield* toName(
-        id,
-        news.licenseName,
-        output?.licenseName,
-      );
+      const licenseName = yield* toName(id, news.licenseName, output?.licenseName);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
@@ -528,8 +439,8 @@ export const LicenseProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, licenseName, {
-                ignoreAlreadyExists: true,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -537,59 +448,34 @@ export const LicenseProvider = () =>
         current = yield* awaitResource(env.project, licenseName);
       }
 
-      const transferable = news.transferable ?? current.transferable !== false;
-      const appendable =
-        news.appendableToDisk ?? current.appendableToDisk === true;
-      const removable =
-        news.removableFromDisk ?? current.removableFromDisk === true;
-      const multiTenant =
-        news.multiTenantOnly ?? current.multiTenantOnly === true;
-      const soleTenant = news.soleTenantOnly ?? current.soleTenantOnly === true;
-      const needsUpdate =
-        (current.description ?? "") !== desiredDescription ||
-        (current.transferable !== false) !== transferable ||
-        (current.appendableToDisk === true) !== appendable ||
-        (current.removableFromDisk === true) !== removable ||
-        (current.multiTenantOnly === true) !== multiTenant ||
-        (current.soleTenantOnly === true) !== soleTenant ||
-        (news.incompatibleLicenses !== undefined &&
-          sorted(current.incompatibleLicenses).join(",") !==
-            sorted(news.incompatibleLicenses).join(",")) ||
-        (news.allowedReplacementLicenses !== undefined &&
+      const appendable = news.appendableToDisk ?? current.appendableToDisk === true;
+      const removable = news.removableFromDisk ?? current.removableFromDisk === true;
+      const updateMask = [
+        (current.appendableToDisk === true) !== appendable && "appendableToDisk",
+        (current.removableFromDisk === true) !== removable && "removableFromDisk",
+        news.allowedReplacementLicenses !== undefined &&
           sorted(current.allowedReplacementLicenses).join(",") !==
-            sorted(news.allowedReplacementLicenses).join(",")) ||
-        (news.requiredCoattachedLicenses !== undefined &&
-          sorted(current.requiredCoattachedLicenses).join(",") !==
-            sorted(news.requiredCoattachedLicenses).join(",")) ||
-        (news.minimumRetention !== undefined &&
-          !sameJson(current.minimumRetention, news.minimumRetention));
+            sorted(news.allowedReplacementLicenses).join(",") &&
+          "allowedReplacementLicenses",
+        news.minimumRetention !== undefined &&
+          !sameJson(current.minimumRetention, news.minimumRetention) &&
+          "minimumRetention",
+      ].filter((field): field is string => typeof field === "string");
 
-      if (needsUpdate) {
+      if (updateMask.length > 0) {
         yield* runOp(
           env.project,
           licenseName,
           compute.updateLicenses({
             project: env.project,
             license: licenseName,
-            updateMask:
-              "description,transferable,appendableToDisk,removableFromDisk,multiTenantOnly,soleTenantOnly,incompatibleLicenses,allowedReplacementLicenses,requiredCoattachedLicenses,minimumRetention",
+            updateMask: updateMask.join(","),
             body: {
-              description: desiredDescription,
-              transferable,
               appendableToDisk: appendable,
               removableFromDisk: removable,
-              multiTenantOnly: multiTenant,
-              soleTenantOnly: soleTenant,
-              incompatibleLicenses:
-                news.incompatibleLicenses ?? current.incompatibleLicenses,
               allowedReplacementLicenses:
-                news.allowedReplacementLicenses ??
-                current.allowedReplacementLicenses,
-              requiredCoattachedLicenses:
-                news.requiredCoattachedLicenses ??
-                current.requiredCoattachedLicenses,
-              minimumRetention:
-                news.minimumRetention ?? current.minimumRetention,
+                news.allowedReplacementLicenses ?? current.allowedReplacementLicenses,
+              minimumRetention: news.minimumRetention ?? current.minimumRetention,
             },
           }),
         );
@@ -610,8 +496,8 @@ export const LicenseProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.licenseName, {
-              ignoreNotFound: true,
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),

@@ -1,8 +1,6 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -10,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type TargetGrpcProxyProps = {
   /**
@@ -116,22 +111,12 @@ export type TargetGrpcProxy = Resource<
  * @resource
  * @category Compute
  */
-export const TargetGrpcProxy = Resource<TargetGrpcProxy>(
-  "GCP.Compute.TargetGrpcProxy",
-);
+export const TargetGrpcProxy = Resource<TargetGrpcProxy>("GCP.Compute.TargetGrpcProxy");
 
 export class TargetGrpcProxyNotResolved extends Data.TaggedError(
   "GCP.Compute.TargetGrpcProxyNotResolved",
 )<{
   targetGrpcProxyName: string;
-}> {}
-
-export class TargetGrpcProxyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.TargetGrpcProxyOperationFailed",
-)<{
-  targetGrpcProxyName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
@@ -209,53 +194,6 @@ const getByName = (project: string, targetGrpcProxy: string) =>
     .getTargetGrpcProxies({ project, targetGrpcProxy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const failIfErrored = (
-  targetGrpcProxyName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new TargetGrpcProxyOperationFailed({
-        targetGrpcProxyName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  targetGrpcProxyName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(targetGrpcProxyName, operation);
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return yield* failIfErrored(targetGrpcProxyName, operation);
-    }
-    const done = yield* waitGlobalOperations({ project, operation: name }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (op) => op.status === "DONE",
-        times: 8,
-      }),
-    );
-    return yield* failIfErrored(targetGrpcProxyName, done);
-  });
-
 export const TargetGrpcProxyProvider = () =>
   Provider.succeed(TargetGrpcProxy, {
     stables: [
@@ -281,8 +219,7 @@ export const TargetGrpcProxyProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousProxyless =
-        olds?.validateForProxyless ?? output?.validateForProxyless ?? false;
+      const previousProxyless = olds?.validateForProxyless ?? output?.validateForProxyless ?? false;
       const nextProxyless = news.validateForProxyless ?? false;
       if (previousProxyless !== nextProxyless) {
         return { action: "replace" as const, deleteFirst: true };
@@ -312,9 +249,7 @@ export const TargetGrpcProxyProvider = () =>
           .pipe(
             Stream.filter((proxy) => {
               const { labels } = parseDescription(proxy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((proxy) => toAttrs(proxy, env.project)),
             Stream.runCollect,
@@ -351,9 +286,7 @@ export const TargetGrpcProxyProvider = () =>
             body,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetGrpcProxyName, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* getByName(env.project, targetGrpcProxyName);
@@ -363,12 +296,9 @@ export const TargetGrpcProxyProvider = () =>
         return yield* new TargetGrpcProxyNotResolved({ targetGrpcProxyName });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const urlMapChanged =
-        resourceTail(current.urlMap) !== resourceTail(desiredUrlMap);
-      const proxylessChanged =
-        (current.validateForProxyless === true) !== desiredProxyless;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const urlMapChanged = resourceTail(current.urlMap) !== resourceTail(desiredUrlMap);
+      const proxylessChanged = (current.validateForProxyless === true) !== desiredProxyless;
 
       if (descriptionChanged || urlMapChanged || proxylessChanged) {
         const body: compute.TargetGrpcProxy = {
@@ -387,11 +317,7 @@ export const TargetGrpcProxyProvider = () =>
             targetGrpcProxy: targetGrpcProxyName,
             body,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, targetGrpcProxyName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetGrpcProxyName);
         if (current === undefined) {
           return yield* new TargetGrpcProxyNotResolved({
@@ -412,11 +338,9 @@ export const TargetGrpcProxyProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          output.targetGrpcProxyName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitGlobalOperation(env.project, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

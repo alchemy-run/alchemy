@@ -158,10 +158,9 @@ export type ModelDeploymentMonitoringJob = Resource<
  * @resource
  * @category AIPlatform
  */
-export const ModelDeploymentMonitoringJob =
-  Resource<ModelDeploymentMonitoringJob>(
-    "GCP.AIPlatform.ModelDeploymentMonitoringJob",
-  );
+export const ModelDeploymentMonitoringJob = Resource<ModelDeploymentMonitoringJob>(
+  "GCP.AIPlatform.ModelDeploymentMonitoringJob",
+);
 
 export class ModelDeploymentMonitoringJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ModelDeploymentMonitoringJobNotResolved",
@@ -208,44 +207,27 @@ const listPage = (parent: string, filter?: string) =>
     .pipe(
       Stream.runCollect,
       Effect.map((pages) =>
-        Array.from(pages).flatMap(
-          (page) => page.modelDeploymentMonitoringJobs ?? [],
-        ),
+        Array.from(pages).flatMap((page) => page.modelDeploymentMonitoringJobs ?? []),
       ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(
-          [] as aiplatform.GoogleCloudAiplatformV1ModelDeploymentMonitoringJob[],
-        ),
+      Effect.catchTag("NotFound", () =>
+        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1ModelDeploymentMonitoringJob[]),
       ),
     );
 
-const findOwned = (
-  project: string,
-  location: string,
-  labels: Record<string, string>,
-) =>
-  listPage(
-    `projects/${project}/locations/${location}`,
-    alchemyIdFilter(labels),
-  ).pipe(
-    Effect.map(
-      (items) =>
-        items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined,
-    ),
+const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+  listPage(`projects/${project}/locations/${location}`, alchemyIdFilter(labels)).pipe(
+    Effect.map((items) => items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined),
   );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        job,
-      ): job is aiplatform.GoogleCloudAiplatformV1ModelDeploymentMonitoringJob =>
+      (job): job is aiplatform.GoogleCloudAiplatformV1ModelDeploymentMonitoringJob =>
         job !== undefined,
       () => new ModelDeploymentMonitoringJobNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.ModelDeploymentMonitoringJobNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.ModelDeploymentMonitoringJobNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -259,8 +241,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.ModelDeploymentMonitoringJobStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.ModelDeploymentMonitoringJobStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -280,10 +261,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -303,20 +281,14 @@ export const ModelDeploymentMonitoringJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const existing =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(env.project, location, ownership));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(env.project, location, ownership));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -324,8 +296,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listPage(`projects/${env.project}/locations/${location}`),
+          (location) => listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         return pages
@@ -336,15 +307,8 @@ export const ModelDeploymentMonitoringJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -352,9 +316,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
       const enableLogs = news.enableMonitoringPipelineLogs === true;
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ??
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
         (yield* findOwned(env.project, location, desiredLabels));
 
       if (current === undefined) {
@@ -366,8 +328,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
               labels: desiredLabels,
               endpoint: news.endpoint,
               loggingSamplingStrategy: news.loggingSamplingStrategy,
-              modelDeploymentMonitoringScheduleConfig:
-                news.modelDeploymentMonitoringScheduleConfig,
+              modelDeploymentMonitoringScheduleConfig: news.modelDeploymentMonitoringScheduleConfig,
               modelDeploymentMonitoringObjectiveConfigs:
                 news.modelDeploymentMonitoringObjectiveConfigs,
               modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
@@ -381,8 +342,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current =
-          created ?? (yield* findOwned(env.project, location, desiredLabels));
+        current = created ?? (yield* findOwned(env.project, location, desiredLabels));
       }
 
       if (current === undefined || current.name === undefined) {
@@ -394,11 +354,9 @@ export const ModelDeploymentMonitoringJobProvider = () =>
       const name = current.name;
       const displayChanged = (current.displayName ?? "") !== displayName;
       const labelsChanged = labelsDiffer(current.labels, desiredLabels);
-      const logsChanged =
-        (current.enableMonitoringPipelineLogs === true) !== enableLogs;
+      const logsChanged = (current.enableMonitoringPipelineLogs === true) !== enableLogs;
       const samplingChanged =
-        stableJson(current.loggingSamplingStrategy) !==
-        stableJson(news.loggingSamplingStrategy);
+        stableJson(current.loggingSamplingStrategy) !== stableJson(news.loggingSamplingStrategy);
       const scheduleChanged =
         stableJson(current.modelDeploymentMonitoringScheduleConfig) !==
         stableJson(news.modelDeploymentMonitoringScheduleConfig);
@@ -421,41 +379,33 @@ export const ModelDeploymentMonitoringJobProvider = () =>
         alertChanged ||
         logTtlChanged
       ) {
-        const operation =
-          yield* aiplatform.patchProjectsLocationsModelDeploymentMonitoringJobs(
-            {
-              name,
-              updateMask: [
-                displayChanged ? "display_name" : undefined,
-                labelsChanged ? "labels" : undefined,
-                logsChanged ? "enable_monitoring_pipeline_logs" : undefined,
-                samplingChanged ? "logging_sampling_strategy" : undefined,
-                scheduleChanged
-                  ? "model_deployment_monitoring_schedule_config"
-                  : undefined,
-                objectivesChanged
-                  ? "model_deployment_monitoring_objective_configs"
-                  : undefined,
-                alertChanged ? "model_monitoring_alert_config" : undefined,
-                logTtlChanged ? "log_ttl" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name,
-                displayName,
-                labels: desiredLabels,
-                enableMonitoringPipelineLogs: enableLogs,
-                loggingSamplingStrategy: news.loggingSamplingStrategy,
-                modelDeploymentMonitoringScheduleConfig:
-                  news.modelDeploymentMonitoringScheduleConfig,
-                modelDeploymentMonitoringObjectiveConfigs:
-                  news.modelDeploymentMonitoringObjectiveConfigs,
-                modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
-                logTtl: news.logTtl,
-              },
-            },
-          );
+        const operation = yield* aiplatform.patchProjectsLocationsModelDeploymentMonitoringJobs({
+          name,
+          updateMask: [
+            displayChanged ? "display_name" : undefined,
+            labelsChanged ? "labels" : undefined,
+            logsChanged ? "enable_monitoring_pipeline_logs" : undefined,
+            samplingChanged ? "logging_sampling_strategy" : undefined,
+            scheduleChanged ? "model_deployment_monitoring_schedule_config" : undefined,
+            objectivesChanged ? "model_deployment_monitoring_objective_configs" : undefined,
+            alertChanged ? "model_monitoring_alert_config" : undefined,
+            logTtlChanged ? "log_ttl" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name,
+            displayName,
+            labels: desiredLabels,
+            enableMonitoringPipelineLogs: enableLogs,
+            loggingSamplingStrategy: news.loggingSamplingStrategy,
+            modelDeploymentMonitoringScheduleConfig: news.modelDeploymentMonitoringScheduleConfig,
+            modelDeploymentMonitoringObjectiveConfigs:
+              news.modelDeploymentMonitoringObjectiveConfigs,
+            modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
+            logTtl: news.logTtl,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);
       }
@@ -469,12 +419,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
           name: output.name,
           body: {},
         })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict", "Forbidden"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.void));
       const operation = yield* aiplatform
         .deleteProjectsLocationsModelDeploymentMonitoringJobs({
           name: output.name,

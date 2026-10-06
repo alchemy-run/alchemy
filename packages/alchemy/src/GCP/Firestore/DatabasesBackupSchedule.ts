@@ -9,21 +9,14 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  createInternalLabels,
   databaseIdOf,
   databaseNameOf,
-  deleteChildOwnership,
   lastSegment,
-  listOwnedDatabaseNames,
   parseDatabaseName,
-  parentOwned,
   retryConcurrentChanges,
-  stampChildOwnership,
 } from "./internal.ts";
 
 const DEFAULT_RETENTION = "604800s";
-const OWNERSHIP_COLLECTION = "_alchemy_backup_schedules";
-
 export type WeeklyRecurrenceDay =
   | firestore.GoogleFirestoreAdminV1WeeklyRecurrenceDayEnum
   | (string & {});
@@ -91,9 +84,9 @@ export type DatabasesBackupSchedule = Resource<
  * At most one daily and one weekly schedule can exist per database.
  * The schedule id is assigned by the API. Retention updates in place;
  * switching daily vs weekly or moving to another database replaces the
- * schedule. Backup schedules have no labels field — Alchemy treats a
- * schedule as owned when its parent database carries Alchemy ownership,
- * so `list` / `pnpm nuke:gcp` can find it.
+ * schedule. Backup schedules have no labels field: `read` reports a
+ * schedule it finds without prior state as unowned (adopt it with
+ * `--adopt`).
  *
  * ### Creating a Backup Schedule
  * **Example:** Daily backups retained for 7 days
@@ -136,12 +129,8 @@ export class BackupScheduleStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const desiredWeeklyDay = (
-  news: DatabasesBackupScheduleProps,
-): string | undefined =>
-  news.weeklyRecurrence?.day !== undefined
-    ? news.weeklyRecurrence.day.toUpperCase()
-    : undefined;
+const desiredWeeklyDay = (news: DatabasesBackupScheduleProps): string | undefined =>
+  news.weeklyRecurrence?.day !== undefined ? news.weeklyRecurrence.day.toUpperCase() : undefined;
 
 const desiredDaily = (news: DatabasesBackupScheduleProps) =>
   news.weeklyRecurrence === undefined && news.dailyRecurrence !== false;
@@ -169,16 +158,12 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesBackupSchedules({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesBackupSchedules({ parent }).pipe(
     Effect.map((page) => page.backupSchedules ?? []),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
+    Effect.catchTag("NotFound", () =>
       Effect.succeed([] as firestore.GoogleFirestoreAdminV1BackupSchedule[]),
     ),
   );
@@ -201,8 +186,7 @@ const waitUntilGone = (name: string) =>
       () => new BackupScheduleStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Firestore.BackupScheduleStillExists",
+      while: (error) => error._tag === "GCP.Firestore.BackupScheduleStillExists",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -211,14 +195,7 @@ const waitUntilGone = (name: string) =>
 
 export const DatabasesBackupScheduleProvider = () =>
   Provider.succeed(DatabasesBackupSchedule, {
-    stables: [
-      "name",
-      "backupScheduleId",
-      "database",
-      "databaseId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "backupScheduleId", "database", "databaseId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -246,42 +223,24 @@ export const DatabasesBackupScheduleProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const name = output?.name;
       if (name === undefined || name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const parent =
-        olds?.database !== undefined
-          ? databaseNameOf(env.project, olds.database)
-          : attrs.database;
-      return (yield* parentOwned(parent)) ? attrs : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const databases = yield* listOwnedDatabaseNames(env.project);
-        const pages = yield* Effect.forEach(
-          databases,
-          (parent) => listOnDatabase(parent),
-          { concurrency: 4 },
-        );
-        return pages.flat().map((schedule) => toAttrs(schedule, env.project));
-      }),
-
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = databaseNameOf(env.project, news.database);
       const weeklyDay = desiredWeeklyDay(news);
       const daily = desiredDaily(news);
       const retention = news.retention ?? DEFAULT_RETENTION;
-      const labels = yield* createInternalLabels(id);
-
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
 
       if (current === undefined) {
         const existing = yield* listOnDatabase(parent);
@@ -294,10 +253,8 @@ export const DatabasesBackupScheduleProvider = () =>
             parent,
             body: {
               retention,
-              dailyRecurrence:
-                daily && weeklyDay === undefined ? {} : undefined,
-              weeklyRecurrence:
-                weeklyDay !== undefined ? { day: weeklyDay } : undefined,
+              dailyRecurrence: daily && weeklyDay === undefined ? {} : undefined,
+              weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -326,18 +283,13 @@ export const DatabasesBackupScheduleProvider = () =>
         );
       }
 
-      yield* stampChildOwnership(parent, OWNERSHIP_COLLECTION, labels, name);
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ id, output }) {
-      const env = yield* GcpEnvironment.current;
-      const parent = databaseNameOf(env.project, output.database);
-      const labels = yield* createInternalLabels(id);
+    delete: Effect.fn(function* ({ output }) {
       yield* firestore
         .deleteProjectsDatabasesBackupSchedules({ name: output.name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(output.name);
-      yield* deleteChildOwnership(parent, OWNERSHIP_COLLECTION, labels);
     }),
   });

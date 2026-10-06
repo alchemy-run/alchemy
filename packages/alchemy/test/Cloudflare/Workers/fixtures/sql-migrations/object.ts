@@ -1,8 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Cloudflare from "@/Cloudflare";
 import { applySqlMigrations } from "@/Cloudflare/Workers/SqlMigrationsApply.ts";
 import * as Drizzle from "@/Drizzle/Cloudflare.ts";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { relations, users } from "./schema.ts";
 
 export type HistoryRow = {
@@ -17,16 +17,12 @@ type State = Cloudflare.DurableObjectState["Service"];
 
 const history = (state: State, table: string) =>
   state.storage.sql
-    .exec<HistoryRow>(
-      `SELECT id, hash, created_at, name, applied_at FROM "${table}" ORDER BY id`,
-    )
+    .exec<HistoryRow>(`SELECT id, hash, created_at, name, applied_at FROM "${table}" ORDER BY id`)
     .pipe(Effect.flatMap((cursor) => cursor.toArray()));
 
 const tables = (state: State) =>
   state.storage.sql
-    .exec<{ name: string }>(
-      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
-    )
+    .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
     .pipe(Effect.flatMap((cursor) => cursor.toArray()));
 
 export class MigratedObject extends Cloudflare.DurableObject<MigratedObject>()(
@@ -47,9 +43,7 @@ export class MigratedObject extends Cloudflare.DurableObject<MigratedObject>()(
       const inspect = () =>
         Effect.gen(function* () {
           const payload = yield* state.storage.sql
-            .exec<{ length: number }>(
-              "SELECT length(value) AS length FROM payload",
-            )
+            .exec<{ length: number }>("SELECT length(value) AS length FROM payload")
             .pipe(Effect.flatMap((cursor) => cursor.one()));
           const rows = yield* db.query.users.findMany({
             with: { posts: true },
@@ -77,16 +71,14 @@ export class MigratedObject extends Cloudflare.DurableObject<MigratedObject>()(
 
       return {
         inspect,
-        addUser: (name: string) =>
-          db.insert(users).values({ name }).pipe(Effect.asVoid),
+        addUser: (name: string) => db.insert(users).values({ name }).pipe(Effect.asVoid),
         repeat: () =>
           Effect.gen(function* () {
             yield* Drizzle.DurableObject({ migrations: snapshot, relations });
             yield* snapshot.apply();
             return yield* inspect();
           }).pipe(Effect.provideService(Cloudflare.DurableObjectState, state)),
-        reset: () =>
-          state.abort("sql migration reactivation", { retryAlarm: false }),
+        reset: () => state.abort("sql migration reactivation", { retryAlarm: false }),
       };
     });
   }),
@@ -105,9 +97,7 @@ export class CustomMigratedObject extends Cloudflare.DurableObject<CustomMigrate
       const inspect = () =>
         Effect.gen(function* () {
           const rows = yield* state.storage.sql
-            .exec<{ value: string }>(
-              "SELECT value FROM flat_values ORDER BY id",
-            )
+            .exec<{ value: string }>("SELECT value FROM flat_values ORDER BY id")
             .pipe(Effect.flatMap((cursor) => cursor.toArray()));
           return {
             tag: snapshot._tag,
@@ -148,9 +138,7 @@ export class MigrationScenarios extends Cloudflare.DurableObject<MigrationScenar
           Effect.gen(function* () {
             const result = yield* broken.apply().pipe(Effect.result);
             const rows = yield* state.storage.sql
-              .exec<{ value: string }>(
-                "SELECT value FROM stable_values ORDER BY id",
-              )
+              .exec<{ value: string }>("SELECT value FROM stable_values ORDER BY id")
               .pipe(Effect.flatMap((cursor) => cursor.toArray()));
             return {
               error: Result.isFailure(result) ? result.failure._tag : null,

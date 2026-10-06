@@ -11,10 +11,7 @@ export interface PollBudget {
 }
 
 const backoffUpTo = (every: Duration.Input) =>
-  Schedule.min([
-    Schedule.exponential(Duration.millis(500), 1.5),
-    Schedule.spaced(every),
-  ]);
+  Schedule.min([Schedule.exponential(Duration.millis(500), 1.5), Schedule.spaced(every)]);
 
 /**
  * Observes until `until` holds and returns that observation. Fails with

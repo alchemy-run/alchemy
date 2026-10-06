@@ -16,20 +16,15 @@ export * from "./HealthCheck.ts";
 export {
   HttpHealthCheck,
   HttpHealthCheckNotResolved,
-  HttpHealthCheckOperationFailed,
   HttpHealthCheckProvider,
 } from "./HttpHealthCheck.ts";
 export type { HttpHealthCheckProps } from "./HttpHealthCheck.ts";
 export {
   HttpsHealthCheck,
   HttpsHealthCheckNotResolved,
-  HttpsHealthCheckOperationFailed,
   HttpsHealthCheckProvider,
 } from "./HttpsHealthCheck.ts";
-export type {
-  HttpsHealthCheckProps,
-  HttpsHealthCheckResource,
-} from "./HttpsHealthCheck.ts";
+export type { HttpsHealthCheckProps, HttpsHealthCheckResource } from "./HttpsHealthCheck.ts";
 export * from "./RegionHealthCheck.ts";
 export * from "./CrossSiteNetwork.ts";
 export * from "./FutureReservation.ts";

@@ -8,7 +8,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -16,6 +15,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import type { Providers } from "../Providers.ts";
 import {
   PROJECT_DISPLAY_MAX,
   PROJECT_DISPLAY_MIN,
@@ -29,6 +29,7 @@ import {
   resourceNameFromOperation,
   sameHierarchyParent,
   waitForOperation,
+  waitForCreate,
 } from "./internal.ts";
 
 export type ProjectProps = {
@@ -128,15 +129,11 @@ export type Project = Resource<
  */
 export const Project = Resource<Project>("GCP.ResourceManager.Project");
 
-export class ProjectNotResolved extends Data.TaggedError(
-  "GCP.ResourceManager.ProjectNotResolved",
-)<{
+export class ProjectNotResolved extends Data.TaggedError("GCP.ResourceManager.ProjectNotResolved")<{
   name: string;
 }> {}
 
-export class ProjectStillExists extends Data.TaggedError(
-  "GCP.ResourceManager.ProjectStillExists",
-)<{
+export class ProjectStillExists extends Data.TaggedError("GCP.ResourceManager.ProjectStillExists")<{
   name: string;
 }> {}
 
@@ -160,11 +157,7 @@ const sanitizeProjectId = (value: string) => {
   return next;
 };
 
-const toProjectId = (
-  id: string,
-  projectId: string | undefined,
-  existing?: string,
-) =>
+const toProjectId = (id: string, projectId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (projectId !== undefined) return sanitizeProjectId(projectId);
     if (existing !== undefined) return existing;
@@ -183,8 +176,7 @@ const sanitizeDisplayName = (value: string | undefined, fallback: string) => {
     .replace(/\s+/g, " ")
     .trim();
   if (next.length === 0) next = fallback;
-  if (next.length > PROJECT_DISPLAY_MAX)
-    next = next.slice(0, PROJECT_DISPLAY_MAX);
+  if (next.length > PROJECT_DISPLAY_MAX) next = next.slice(0, PROJECT_DISPLAY_MAX);
   if (next.length < PROJECT_DISPLAY_MIN) {
     next = `${next} proj`.slice(0, PROJECT_DISPLAY_MIN);
   }
@@ -208,11 +200,7 @@ const toAttrs = (project: resourcemanager.Project) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getProjects({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)));
 
 const observe = (resourceName: string | undefined, projectId: string) =>
   Effect.gen(function* () {
@@ -263,10 +251,7 @@ const ensureActive = (project: resourcemanager.Project) =>
       body: {},
     });
     yield* waitForOperation(operation);
-    return yield* waitUntilExists(
-      project.name,
-      project.projectId ?? lastSegment(project.name),
-    );
+    return yield* waitUntilExists(project.name, project.projectId ?? lastSegment(project.name));
   });
 
 export const ProjectProvider = () =>
@@ -276,30 +261,19 @@ export const ProjectProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.projectId ?? output?.projectId;
-      const nextId =
-        news.projectId !== undefined
-          ? sanitizeProjectId(news.projectId)
-          : previousId;
+      const nextId = news.projectId !== undefined ? sanitizeProjectId(news.projectId) : previousId;
       const idChanged =
-        previousId !== undefined &&
-        news.projectId !== undefined &&
-        nextId !== previousId;
+        previousId !== undefined && news.projectId !== undefined && nextId !== previousId;
       if (!idChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId = yield* toProjectId(
-        id,
-        olds?.projectId,
-        output?.projectId,
-      );
+      const projectId = yield* toProjectId(id, olds?.projectId, output?.projectId);
       const existing = yield* observe(output?.name, projectId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -313,21 +287,15 @@ export const ProjectProvider = () =>
         Effect.map((projects) =>
           projects
             .filter((project) =>
-              Object.keys(project.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(project.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map(toAttrs),
         ),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
       ),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const projectId = yield* toProjectId(
-        id,
-        news.projectId,
-        output?.projectId,
-      );
+      const projectId = yield* toProjectId(id, news.projectId, output?.projectId);
       const parent = yield* resolveParent(news.parent, output?.parent);
       const displayName = sanitizeDisplayName(news.displayName, projectId);
       const desiredLabels = {
@@ -349,15 +317,11 @@ export const ProjectProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          const settled = yield* waitForOperation(created, {
-            allowAlreadyExists: true,
-          });
+          const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
             resourceNameFromOperation(settled, "projects/") ??
               resourceNameFromOperation(created, "projects/"),
-            projectIdFromOperation(settled) ??
-              projectIdFromOperation(created) ??
-              projectId,
+            projectIdFromOperation(settled) ?? projectIdFromOperation(created) ?? projectId,
           );
         } else {
           current = yield* waitUntilExists(undefined, projectId);
@@ -422,18 +386,14 @@ export const ProjectProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* resourcemanager
-        .deleteProjects({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const operation = yield* resourcemanager.deleteProjects({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

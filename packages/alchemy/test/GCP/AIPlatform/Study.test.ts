@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsStudies({ name }).pipe(
@@ -49,26 +42,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsStudies({
-          name: `projects/${project}/locations/us-central1/studies/alchemy-study-missing`,
+          name: `projects/${project}/locations/us-central1/studies/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsStudies({
-          parent: `projects/${project}/locations/us-central1`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ studies: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.studies ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsStudies({
+        parent: `projects/${project}/locations/us-central1`,
+        pageSize: 10,
+      });
+      expect((page.studies ?? []).map((item) => item.name)).not.toContain(
+        `projects/${project}/locations/us-central1/studies/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -78,7 +62,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create and delete a vizier study",
   (stack) =>
     Effect.gen(function* () {
@@ -88,27 +72,27 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.Study("Tune", {
             location: "us-central1",
-            displayName: "accuracy-search",
+            displayName: "accuracy_search",
             studySpec,
           });
         }),
       );
 
       expect(created.name).toContain("/studies/");
-      expect(created.displayName).toEqual("accuracy-search");
+      expect(created.displayName).toEqual("accuracy_search");
       expect(created.studySpec?.metrics?.[0]?.metricId).toEqual("accuracy");
 
       const fetched = yield* aiplatform.getProjectsLocationsStudies({
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.displayName).toContain("alchemy-id=");
+      expect(fetched.displayName).toContain("accuracy_search_alchemy_");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.Study("Tune", {
             location: "us-central1",
-            displayName: "accuracy-search",
+            displayName: "accuracy_search",
             studySpec,
           });
         }),

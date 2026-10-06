@@ -2,11 +2,13 @@ import * as vpcaccess from "@distilled.cloud/gcp/vpcaccess_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_NETWORK = "default";
@@ -176,49 +178,26 @@ export type Connector = Resource<
  */
 export const Connector = Resource<Connector>("GCP.VpcAccess.Connector");
 
-export class ConnectorNotResolved extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorNotResolved",
-)<{
+export class ConnectorNotResolved extends Data.TaggedError("GCP.VpcAccess.ConnectorNotResolved")<{
   name: string;
 }> {}
 
-export class ConnectorRangeMissing extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorRangeMissing",
-)<{
+export class ConnectorRangeMissing extends Data.TaggedError("GCP.VpcAccess.ConnectorRangeMissing")<{
   name: string;
   message: string;
 }> {}
 
-export class ConnectorFailed extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorFailed",
-)<{
+export class ConnectorFailed extends Data.TaggedError("GCP.VpcAccess.ConnectorFailed")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class ConnectorOperationFailed extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class ConnectorOperationPending extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class ConnectorNotReady extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorNotReady",
-)<{
+export class ConnectorNotReady extends Data.TaggedError("GCP.VpcAccess.ConnectorNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class ConnectorStillExists extends Data.TaggedError(
-  "GCP.VpcAccess.ConnectorStillExists",
-)<{
+export class ConnectorStillExists extends Data.TaggedError("GCP.VpcAccess.ConnectorStillExists")<{
   name: string;
 }> {}
 
@@ -228,10 +207,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const linkKey = (value: string | undefined) =>
   value === undefined || value === "" ? "" : lastSegment(value).toLowerCase();
@@ -244,8 +221,7 @@ const subnetKey = (subnet: ConnectorSubnet | undefined) => {
 const resourceName = (project: string, location: string, connectorId: string) =>
   `projects/${project}/locations/${location}/connectors/${connectorId}`;
 
-const parentOf = (project: string, location: string) =>
-  `projects/${project}/locations/${location}`;
+const parentOf = (project: string, location: string) => `projects/${project}/locations/${location}`;
 
 const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -253,28 +229,19 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     connectorId:
-      connectorsAt >= 0 && parts[connectorsAt + 1]
-        ? parts[connectorsAt + 1]!
-        : lastSegment(name),
+      connectorsAt >= 0 && parts[connectorsAt + 1] ? parts[connectorsAt + 1]! : lastSegment(name),
   };
 };
 
-const toSubnet = (
-  subnet: vpcaccess.Subnet | undefined,
-): ConnectorSubnet | undefined => {
+const toSubnet = (subnet: vpcaccess.Subnet | undefined): ConnectorSubnet | undefined => {
   if (subnet === undefined) return undefined;
   const name = subnet.name ? lastSegment(subnet.name) : undefined;
   if (name === undefined || name.length === 0) {
-    return subnet.projectId
-      ? { name: "", projectId: subnet.projectId }
-      : undefined;
+    return subnet.projectId ? { name: "", projectId: subnet.projectId } : undefined;
   }
   return subnet.projectId ? { name, projectId: subnet.projectId } : { name };
 };
@@ -305,16 +272,10 @@ const toId = (id: string, connectorId: string | undefined, existing?: string) =>
     );
   });
 
-const toAttrs = (
-  connector: vpcaccess.Connector,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (connector: vpcaccess.Connector, project: string, region: string) => {
   const name = connector.name ?? "";
   const parsed = parseName(name, region);
-  const network = connector.network
-    ? lastSegment(connector.network)
-    : undefined;
+  const network = connector.network ? lastSegment(connector.network) : undefined;
   return {
     name,
     connectorId: parsed.connectorId,
@@ -338,81 +299,10 @@ const getByName = (name: string) =>
     .getProjectsLocationsConnectors({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: vpcaccess.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        return yield* new ConnectorOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new ConnectorOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = vpcaccess.getProjectsLocationsOperations({ name });
-    const resolved: Effect.Effect<
-      vpcaccess.Operation,
-      vpcaccess.GetProjectsLocationsOperationsError,
-      vpcaccess.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<vpcaccess.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      vpcaccess.Operation,
-      | ConnectorOperationFailed
-      | ConnectorOperationPending
-      | vpcaccess.GetProjectsLocationsOperationsError,
-      vpcaccess.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new ConnectorOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => current.error === undefined,
-        (current) =>
-          new ConnectorOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.VpcAccess.ConnectorOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("20 seconds"),
-      }),
-    );
+// Connector create/delete takes 2-5 minutes.
+const waitForOperation = (operation: vpcaccess.Operation) =>
+  waitForGcpOperation(operation, (name) => vpcaccess.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
   });
 
 const waitUntilReady = (name: string) => {
@@ -433,8 +323,7 @@ const waitUntilReady = (name: string) => {
       (connector) => new ConnectorFailed({ name, state: connector.state }),
     ),
     Effect.filterOrFail(
-      (connector) =>
-        connector.state === "READY" || connector.state === undefined,
+      (connector) => connector.state === "READY" || connector.state === undefined,
       (connector) => new ConnectorNotReady({ name, state: connector.state }),
     ),
   );
@@ -452,9 +341,7 @@ const waitUntilReady = (name: string) => {
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connector) =>
-      connector === undefined
-        ? Effect.void
-        : Effect.fail(new ConnectorStillExists({ name })),
+      connector === undefined ? Effect.void : Effect.fail(new ConnectorStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.VpcAccess.ConnectorStillExists",
@@ -463,53 +350,22 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const listConnectors = (parent: string) =>
-  Effect.gen(function* () {
-    const found: vpcaccess.Connector[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* vpcaccess.listProjectsLocationsConnectors({
-        parent,
-        pageSize: 100,
-        pageToken,
-      });
-      found.push(...(response.connectors ?? []));
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  });
-
+// A location without the API answers NotFound: nothing lives there.
 const listAt = (parent: string) =>
-  listConnectors(parent).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as vpcaccess.Connector[]),
-    ),
-    Effect.catchTag("Forbidden", () =>
-      Effect.succeed([] as vpcaccess.Connector[]),
-    ),
+  vpcaccess.listProjectsLocationsConnectors.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.connectors ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as vpcaccess.Connector[])),
   );
 
 const listLocations = (project: string) =>
-  Effect.gen(function* () {
-    const found: string[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const response = yield* vpcaccess.listProjectsLocations({
-        name: `projects/${project}`,
-        pageSize: 100,
-        pageToken,
-      });
-      for (const location of response.locations ?? []) {
-        if (location.name) found.push(location.name);
-      }
-      pageToken = response.nextPageToken;
-      if (pageToken === undefined || pageToken === "") break;
-    }
-    return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
+  vpcaccess.listProjectsLocations.pages({ name: `projects/${project}`, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
+    Stream.map((location) => location.name ?? ""),
+    Stream.filter((name) => name.length > 0),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
   );
 
 const createBody = (news: ConnectorProps): vpcaccess.Connector => {
@@ -547,15 +403,7 @@ const createBody = (news: ConnectorProps): vpcaccess.Connector => {
 
 export const ConnectorProvider = () =>
   Provider.succeed(Connector, {
-    stables: [
-      "name",
-      "connectorId",
-      "project",
-      "location",
-      "network",
-      "ipCidrRange",
-      "subnet",
-    ],
+    stables: ["name", "connectorId", "project", "location", "network", "ipCidrRange", "subnet"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -563,43 +411,23 @@ export const ConnectorProvider = () =>
 
       const previousId = olds?.connectorId ?? output?.connectorId;
       const nextId = news.connectorId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
 
       const previousNetwork = linkKey(olds?.network ?? output?.network);
-      const nextNetwork =
-        news.network !== undefined ? linkKey(news.network) : previousNetwork;
-      const networkChanged =
-        news.network !== undefined && nextNetwork !== previousNetwork;
+      const nextNetwork = news.network !== undefined ? linkKey(news.network) : previousNetwork;
+      const networkChanged = news.network !== undefined && nextNetwork !== previousNetwork;
 
       const previousCidr = olds?.ipCidrRange ?? output?.ipCidrRange ?? "";
-      const cidrChanged =
-        news.ipCidrRange !== undefined && news.ipCidrRange !== previousCidr;
+      const cidrChanged = news.ipCidrRange !== undefined && news.ipCidrRange !== previousCidr;
 
       const previousSubnet = subnetKey(olds?.subnet ?? output?.subnet);
-      const nextSubnet =
-        news.subnet !== undefined ? subnetKey(news.subnet) : previousSubnet;
-      const subnetChanged =
-        news.subnet !== undefined && nextSubnet !== previousSubnet;
+      const nextSubnet = news.subnet !== undefined ? subnetKey(news.subnet) : previousSubnet;
+      const subnetChanged = news.subnet !== undefined && nextSubnet !== previousSubnet;
 
-      if (
-        !idChanged &&
-        !locationChanged &&
-        !networkChanged &&
-        !cidrChanged &&
-        !subnetChanged
-      ) {
+      if (!idChanged && !locationChanged && !networkChanged && !cidrChanged && !subnetChanged) {
         return undefined;
       }
       return {
@@ -610,17 +438,9 @@ export const ConnectorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const connectorId = yield* toId(
-        id,
-        olds?.connectorId,
-        output?.connectorId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectorId);
+      const connectorId = yield* toId(id, olds?.connectorId, output?.connectorId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       // Connectors have no labels or description. Existence at the computed
@@ -635,29 +455,16 @@ export const ConnectorProvider = () =>
         if (parents.length === 0) {
           parents.push(parentOf(env.project, env.region));
         }
-        const pages = yield* Effect.forEach(
-          parents,
-          (parent) => listAt(parent),
-          {
-            concurrency: 4,
-          },
-        );
-        return pages
-          .flat()
-          .map((connector) => toAttrs(connector, env.project, env.region));
+        const pages = yield* Effect.forEach(parents, (parent) => listAt(parent), {
+          concurrency: 4,
+        });
+        return pages.flat().map((connector) => toAttrs(connector, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const connectorId = yield* toId(
-        id,
-        news.connectorId,
-        output?.connectorId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const connectorId = yield* toId(id, news.connectorId, output?.connectorId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, connectorId);
 
       if (news.subnet === undefined && news.ipCidrRange === undefined) {
@@ -691,12 +498,7 @@ export const ConnectorProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created).pipe(
-            Effect.catchTag(
-              "GCP.VpcAccess.ConnectorOperationPending",
-              () => Effect.void,
-            ),
-          );
+          yield* waitForOperation(created);
         } else {
           const raced = yield* getByName(name);
           if (raced === undefined) {
@@ -717,25 +519,16 @@ export const ConnectorProvider = () =>
         news.machineType !== undefined &&
         (current.machineType ?? DEFAULT_MACHINE_TYPE) !== desiredMachine;
       const minChanged =
-        news.minInstances !== undefined &&
-        news.minInstances !== current.minInstances;
+        news.minInstances !== undefined && news.minInstances !== current.minInstances;
       const maxChanged =
-        news.maxInstances !== undefined &&
-        news.maxInstances !== current.maxInstances;
+        news.maxInstances !== undefined && news.maxInstances !== current.maxInstances;
       const minThroughputChanged =
-        news.minThroughput !== undefined &&
-        news.minThroughput !== current.minThroughput;
+        news.minThroughput !== undefined && news.minThroughput !== current.minThroughput;
       const maxThroughputChanged =
-        news.maxThroughput !== undefined &&
-        news.maxThroughput !== current.maxThroughput;
+        news.maxThroughput !== undefined && news.maxThroughput !== current.maxThroughput;
       const instancesChanged = minChanged || maxChanged;
 
-      if (
-        machineChanged ||
-        instancesChanged ||
-        minThroughputChanged ||
-        maxThroughputChanged
-      ) {
+      if (machineChanged || instancesChanged || minThroughputChanged || maxThroughputChanged) {
         const updateMask = [
           machineChanged ? "machineType" : undefined,
           instancesChanged ? "minInstances" : undefined,
@@ -756,12 +549,7 @@ export const ConnectorProvider = () =>
             maxThroughput: news.maxThroughput ?? current.maxThroughput,
           },
         });
-        yield* waitForOperation(operation).pipe(
-          Effect.catchTag(
-            "GCP.VpcAccess.ConnectorOperationPending",
-            () => Effect.void,
-          ),
-        );
+        yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);
       }
 
@@ -780,10 +568,10 @@ export const ConnectorProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
-          Effect.catchTag(
-            "GCP.VpcAccess.ConnectorOperationPending",
-            () => Effect.void,
+        // NOT_FOUND (5): the connector was already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
           ),
         );
       }

@@ -1,17 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsMetadataFeeds({ name }).pipe(
@@ -24,7 +22,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a metadata feed",
   (stack) =>
     Effect.gen(function* () {
@@ -78,6 +76,6 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.feed.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 120_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

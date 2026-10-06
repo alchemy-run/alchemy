@@ -23,9 +23,7 @@ import {
 
 const DEFAULT_EDITION = "ENTERPRISE";
 
-export type CapacityCommitmentPlan =
-  | bigqueryreservation.CapacityCommitmentPlanEnum
-  | (string & {});
+export type CapacityCommitmentPlan = bigqueryreservation.CapacityCommitmentPlanEnum | (string & {});
 
 export type CapacityCommitmentEdition =
   | bigqueryreservation.CapacityCommitmentEditionEnum
@@ -181,11 +179,7 @@ export class CapacityCommitmentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  capacityCommitmentId: string,
-) =>
+const resourceName = (project: string, location: string, capacityCommitmentId: string) =>
   `projects/${project}/locations/${location}/capacityCommitments/${capacityCommitmentId}`;
 
 const normalizeEdition = (edition: string | undefined) => {
@@ -195,10 +189,7 @@ const normalizeEdition = (edition: string | undefined) => {
 
 const normalizePlan = (plan: string) => plan.toUpperCase();
 
-const toAttrs = (
-  current: bigqueryreservation.CapacityCommitment,
-  project: string,
-) => {
+const toAttrs = (current: bigqueryreservation.CapacityCommitment, project: string) => {
   const name = current.name ?? "";
   const parsed = parseResourceName(name, "capacityCommitments");
   return {
@@ -240,15 +231,12 @@ const listOwnedAt = (project: string, location: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.capacityCommitments ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.capacityCommitments ?? [])),
       Stream.filter((item) => hasOwnershipMarker(lastSegment(item.name ?? ""))),
       Stream.map((item) => toAttrs(item, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const toBody = (
@@ -265,12 +253,7 @@ const toBody = (
 
 const stillCommitted = (
   error: bigqueryreservation.DeleteProjectsLocationsCapacityCommitmentsError,
-) =>
-  error._tag === "Conflict" ||
-  (error._tag === "BadRequest" &&
-    /precondition|committed period|commitment_end_time|cannot be deleted|still active/i.test(
-      error.message,
-    ));
+) => error._tag === "Conflict" || error._tag === "CapacityCommitmentNotExpired";
 
 export const CapacityCommitmentProvider = () =>
   Provider.succeed(CapacityCommitment, {
@@ -288,25 +271,13 @@ export const CapacityCommitmentProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousId =
-        olds?.capacityCommitmentId ?? output?.capacityCommitmentId;
-      const nextId = yield* toResourceId(
-        id,
-        news.capacityCommitmentId,
-        previousId,
-      );
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const previousEdition = normalizeEdition(
-        olds?.edition ?? output?.edition,
-      );
+      const previousId = olds?.capacityCommitmentId ?? output?.capacityCommitmentId;
+      const nextId = yield* toResourceId(id, news.capacityCommitmentId, previousId);
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const previousEdition = normalizeEdition(olds?.edition ?? output?.edition);
       const nextEdition = normalizeEdition(news.edition ?? previousEdition);
-      const previousAuxiliary =
-        olds?.multiRegionAuxiliary ?? output?.multiRegionAuxiliary ?? false;
+      const previousAuxiliary = olds?.multiRegionAuxiliary ?? output?.multiRegionAuxiliary ?? false;
       const nextAuxiliary = news.multiRegionAuxiliary ?? previousAuxiliary;
       const previousSlots = olds?.slotCount ?? output?.slotCount;
       const nextSlots = news.slotCount ?? previousSlots;
@@ -316,17 +287,13 @@ export const CapacityCommitmentProvider = () =>
         previousLocation !== nextLocation ||
         previousEdition !== nextEdition ||
         previousAuxiliary !== nextAuxiliary ||
-        (previousSlots !== undefined &&
-          nextSlots !== undefined &&
-          previousSlots !== nextSlots);
+        (previousSlots !== undefined && nextSlots !== undefined && previousSlots !== nextSlots);
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -337,18 +304,12 @@ export const CapacityCommitmentProvider = () =>
         olds?.capacityCommitmentId,
         output?.capacityCommitmentId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, capacityCommitmentId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, capacityCommitmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, lastSegment(existing.name ?? "")))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, lastSegment(existing.name ?? ""))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -373,9 +334,7 @@ export const CapacityCommitmentProvider = () =>
         news.capacityCommitmentId,
         output?.capacityCommitmentId,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, capacityCommitmentId);
       const parent = parentOf(env.project, location);
       const edition = normalizeEdition(news.edition ?? output?.edition);
@@ -388,8 +347,7 @@ export const CapacityCommitmentProvider = () =>
           .createProjectsLocationsCapacityCommitments({
             parent,
             capacityCommitmentId,
-            enforceSingleAdminProjectPerOrg:
-              news.enforceSingleAdminProjectPerOrg,
+            enforceSingleAdminProjectPerOrg: news.enforceSingleAdminProjectPerOrg,
             body: createBody,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
@@ -407,8 +365,7 @@ export const CapacityCommitmentProvider = () =>
       const observedPlan = normalizePlan(current.plan ?? desiredPlan);
       const planChanged = observedPlan !== desiredPlan;
       const renewalChanged =
-        news.renewalPlan !== undefined &&
-        (current.renewalPlan ?? "") !== news.renewalPlan;
+        news.renewalPlan !== undefined && (current.renewalPlan ?? "") !== news.renewalPlan;
 
       const updateMask = [
         planChanged ? "plan" : undefined,
@@ -416,15 +373,14 @@ export const CapacityCommitmentProvider = () =>
       ].filter((field): field is string => field !== undefined);
 
       if (updateMask.length > 0) {
-        current =
-          yield* bigqueryreservation.patchProjectsLocationsCapacityCommitments({
-            name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: compact({
-              plan: news.plan,
-              renewalPlan: news.renewalPlan,
-            }),
-          });
+        current = yield* bigqueryreservation.patchProjectsLocationsCapacityCommitments({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: compact({
+            plan: news.plan,
+            renewalPlan: news.renewalPlan,
+          }),
+        });
       }
 
       return toAttrs(current, env.project);

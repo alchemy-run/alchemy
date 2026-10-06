@@ -77,9 +77,7 @@ export type KeyRing = Resource<
  */
 export const KeyRing = Resource<KeyRing>("GCP.KMS.KeyRing");
 
-export class KeyRingNotResolved extends Data.TaggedError(
-  "GCP.KMS.KeyRingNotResolved",
-)<{
+export class KeyRingNotResolved extends Data.TaggedError("GCP.KMS.KeyRingNotResolved")<{
   name: string;
 }> {}
 
@@ -101,16 +99,11 @@ const parseName = (name: string, fallbackLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     keyRingId:
-      keyRingsAt >= 0 && parts[keyRingsAt + 1]
-        ? parts[keyRingsAt + 1]!
-        : lastSegment(name),
+      keyRingsAt >= 0 && parts[keyRingsAt + 1] ? parts[keyRingsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -151,10 +144,7 @@ const listKeyRingsAt = (parent: string) =>
       if (pageToken === undefined || pageToken === "") break;
     }
     return found;
-  }).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as kms.KeyRing[])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([] as kms.KeyRing[])),
-  );
+  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as kms.KeyRing[])));
 
 export const KeyRingProvider = () =>
   Provider.succeed(KeyRing, {
@@ -168,19 +158,10 @@ export const KeyRingProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.keyRingId ?? output?.keyRingId;
       const nextId = news.keyRingId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const locationChanged = previousLocation !== nextLocation;
 
       if (idChanged || locationChanged) {
@@ -193,12 +174,8 @@ export const KeyRingProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const keyRingId = yield* toId(id, olds?.keyRingId, output?.keyRingId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, keyRingId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, keyRingId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       // KeyRings have no labels, so ownership cannot be checked. A ring at
@@ -223,11 +200,9 @@ export const KeyRingProvider = () =>
           const parents = (response.locations ?? [])
             .map((location) => location.name)
             .filter((name): name is string => !!name);
-          const pages = yield* Effect.forEach(
-            parents,
-            (parent) => listKeyRingsAt(parent),
-            { concurrency: 4 },
-          );
+          const pages = yield* Effect.forEach(parents, (parent) => listKeyRingsAt(parent), {
+            concurrency: 4,
+          });
           for (const keyRings of pages) {
             for (const keyRing of keyRings) {
               found.push(toAttrs(keyRing, env.project, env.region));
@@ -242,10 +217,7 @@ export const KeyRingProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const keyRingId = yield* toId(id, news.keyRingId, output?.keyRingId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, keyRingId);
 
       // A ring already at this name is adopted as ours (see `read`).

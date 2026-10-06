@@ -24,6 +24,7 @@ import {
   sameText,
   updateMaskOf,
   waitForOperation,
+  retryQuota,
 } from "./internal.ts";
 
 export type AgentsFlowsVersionProps = {
@@ -93,11 +94,12 @@ export type AgentsFlowsVersion = Resource<
  * ```
  *
  * ### Updating a Version
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Rename
  * ```typescript
  * const version = yield* GCP.Dialogflow.AgentsFlowsVersion("V1", {
  *   flow: flow.name,
- *   versionId: existing.versionId,
  *   displayName: "v1-ga",
  *   description: "ga snapshot",
  * });
@@ -106,9 +108,7 @@ export type AgentsFlowsVersion = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsFlowsVersion = Resource<AgentsFlowsVersion>(
-  "GCP.Dialogflow.AgentsFlowsVersion",
-);
+export const AgentsFlowsVersion = Resource<AgentsFlowsVersion>("GCP.Dialogflow.AgentsFlowsVersion");
 
 export class AgentsFlowsVersionNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsVersionNotResolved",
@@ -116,10 +116,7 @@ export class AgentsFlowsVersionNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  version: dialogflow.GoogleCloudDialogflowCxV3Version,
-  project: string,
-) => {
+const toAttrs = (version: dialogflow.GoogleCloudDialogflowCxV3Version, project: string) => {
   const name = version.name ?? "";
   const parsed = parseResourceName(name, "versions");
   return {
@@ -145,8 +142,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (version): version is dialogflow.GoogleCloudDialogflowCxV3Version =>
-        version !== undefined,
+      (version): version is dialogflow.GoogleCloudDialogflowCxV3Version => version !== undefined,
       () => new DialogflowOperationPending({ operation: name }),
     ),
     Effect.filterOrFail(
@@ -197,10 +193,8 @@ const listOwned = (project: string) =>
     return versions
       .filter(
         (version) =>
-          parseOwnership(version.description).labels["alchemy-id"] !==
-            undefined ||
-          parseOwnership(version.displayName).labels["alchemy-id"] !==
-            undefined,
+          parseOwnership(version.description).labels["alchemy-id"] !== undefined ||
+          parseOwnership(version.displayName).labels["alchemy-id"] !== undefined,
       )
       .map((version) => toAttrs(version, project));
   });
@@ -215,16 +209,12 @@ export const AgentsFlowsVersionProvider = () =>
       const previousId = olds?.versionId ?? output?.versionId;
       if (
         (previousFlow !== undefined && news.flow !== previousFlow) ||
-        (previousId !== undefined &&
-          news.versionId !== undefined &&
-          news.versionId !== previousId)
+        (previousId !== undefined && news.versionId !== undefined && news.versionId !== previousId)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousFlow === news.flow &&
-            previousId !== undefined &&
-            news.versionId === previousId,
+            previousFlow === news.flow && previousId !== undefined && news.versionId === previousId,
         };
       }
       return undefined;
@@ -241,9 +231,7 @@ export const AgentsFlowsVersionProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -274,9 +262,7 @@ export const AgentsFlowsVersionProvider = () =>
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (operation !== undefined) {
           const done = yield* waitForOperation(operation);
-          const name =
-            resourceNameFromOperation(done) ??
-            resourceNameFromOperation(operation);
+          const name = resourceNameFromOperation(done) ?? resourceNameFromOperation(operation);
           if (name !== undefined) {
             current = yield* waitUntilReady(name);
           }
@@ -288,8 +274,7 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowsVersionNotResolved({
-          name:
-            output?.name ?? `${flow}/versions/${news.versionId ?? "unknown"}`,
+          name: output?.name ?? `${flow}/versions/${news.versionId ?? "unknown"}`,
         });
       }
 
@@ -313,11 +298,11 @@ export const AgentsFlowsVersionProvider = () =>
       }
 
       return toAttrs(current, env.project);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsAgentsFlowsVersions({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

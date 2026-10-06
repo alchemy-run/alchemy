@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as metastore from "@distilled.cloud/gcp/metastore_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "getProjectsLocationsFederations on a missing federation fails with a typed tag",
@@ -25,19 +22,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/federations/alchemy-missing-federation`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-
-      const page = yield* metastore
-        .listProjectsLocationsFederations({
-          parent: `projects/${project}/locations/-`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed({ federations: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.federations ?? [])).toEqual(true);
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,8 +53,7 @@ test.provider(
           }),
         ),
       );
-      expect(error._tag).toEqual("Forbidden");
-      expect(error.message).toContain("Dataproc Metastore API");
+      expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
     }).pipe(logLevel),

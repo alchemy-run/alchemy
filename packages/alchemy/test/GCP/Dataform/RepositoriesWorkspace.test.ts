@@ -1,8 +1,8 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dataform from "@distilled.cloud/gcp/dataform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -19,7 +19,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/repositories/missing/workspaces/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -50,10 +50,9 @@ test.provider(
       expect(created.workspace.repository).toEqual(created.repo.name);
       expect(created.workspace.disableMoves).toEqual(false);
 
-      const fetched =
-        yield* dataform.getProjectsLocationsRepositoriesWorkspaces({
-          name: created.workspace.name,
-        });
+      const fetched = yield* dataform.getProjectsLocationsRepositoriesWorkspaces({
+        name: created.workspace.name,
+      });
       expect(fetched.name).toEqual(created.workspace.name);
 
       const updated = yield* stack.deploy(

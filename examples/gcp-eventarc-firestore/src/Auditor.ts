@@ -19,7 +19,6 @@ export default class Auditor extends GCP.Function<Auditor>()(
   "Auditor",
   {
     main: import.meta.url,
-    location: LOCATION,
   },
   Effect.gen(function* () {
     const shop = yield* Shop;
@@ -62,14 +61,10 @@ export default class Auditor extends GCP.Function<Auditor>()(
               eventId: event.id,
               eventType: event.type,
               eventTime: event.time ?? null,
-              payloadBytes:
-                event.data instanceof Uint8Array ? event.data.length : null,
+              payloadBytes: event.data instanceof Uint8Array ? event.data.length : null,
             })
             .pipe(
-              Effect.catchTag(
-                "GCP.Firestore.DocumentAlreadyExists",
-                () => Effect.void,
-              ),
+              Effect.catchTag("GCP.Firestore.DocumentAlreadyExists", () => Effect.void),
               // A failure answers 500, and Eventarc redelivers later.
               Effect.orDie,
             );

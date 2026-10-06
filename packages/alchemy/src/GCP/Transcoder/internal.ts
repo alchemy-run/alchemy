@@ -41,19 +41,14 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+export const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const resourceName = (
-  project: string,
-  location: string,
-  jobTemplateId: string,
-) => `${locationParent(project, location)}/jobTemplates/${jobTemplateId}`;
+export const resourceName = (project: string, location: string, jobTemplateId: string) =>
+  `${locationParent(project, location)}/jobTemplates/${jobTemplateId}`;
 
 export const parseName = (name: string, defaultLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -61,16 +56,11 @@ export const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     jobTemplateId:
-      templatesAt >= 0 && parts[templatesAt + 1]
-        ? parts[templatesAt + 1]!
-        : lastSegment(name),
+      templatesAt >= 0 && parts[templatesAt + 1] ? parts[templatesAt + 1]! : lastSegment(name),
     parent:
       templatesAt > 0
         ? parts.slice(0, templatesAt).join("/")
@@ -80,17 +70,11 @@ export const parseName = (name: string, defaultLocation: string) => {
 
 export const parentOfName = (name: string, defaultLocation: string) => {
   const parsed = parseName(name, defaultLocation);
-  return parsed.parent.length > 0
-    ? parsed.parent
-    : locationParent(parsed.project, parsed.location);
+  return parsed.parent.length > 0 ? parsed.parent : locationParent(parsed.project, parsed.location);
 };
 
 /** Job template ids are 4-63 chars matching `[a-zA-Z][a-zA-Z0-9_-]*`. */
-export const rfc1035 = (
-  name: string,
-  maxLength = MAX_ID_LENGTH,
-  fallback = "tmpl",
-): string => {
+export const rfc1035 = (name: string, maxLength = MAX_ID_LENGTH, fallback = "tmpl"): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "-")
@@ -131,10 +115,7 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const desiredLabelsOf = (
-  id: string,
-  labels: Record<string, string> | undefined,
-) =>
+export const desiredLabelsOf = (id: string, labels: Record<string, string> | undefined) =>
   Effect.gen(function* () {
     return {
       ...toLabels(labels),
@@ -142,9 +123,7 @@ export const desiredLabelsOf = (
     };
   });
 
-export const hasOwnershipMarker = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasOwnershipMarker = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 export const ownedByAlchemy = (
@@ -165,14 +144,12 @@ const stable = (value: unknown): unknown => {
   return value;
 };
 
-export const jsonKey = (value: unknown) =>
-  JSON.stringify(stable(value ?? null));
+export const jsonKey = (value: unknown) => JSON.stringify(stable(value ?? null));
 
 export const labelsKey = (labels: Record<string, string> | undefined): string =>
   jsonKey(toLabels(labels));
 
-export const configKey = (config: transcoder.JobConfig | undefined): string =>
-  jsonKey(config);
+export const configKey = (config: transcoder.JobConfig | undefined): string => jsonKey(config);
 
 export const getJobTemplate = (name: string) =>
   name.length === 0
@@ -184,9 +161,7 @@ export const getJobTemplate = (name: string) =>
 export const waitUntilGone = (name: string) =>
   getJobTemplate(name).pipe(
     Effect.flatMap((template) =>
-      template === undefined
-        ? Effect.void
-        : Effect.fail(new JobTemplateStillExists({ name })),
+      template === undefined ? Effect.void : Effect.fail(new JobTemplateStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Transcoder.JobTemplateStillExists",
@@ -207,7 +182,7 @@ export const listJobTemplatesAt = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.jobTemplates ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => emptyList()),
+      Effect.catchTag("NotFound", () => emptyList()),
     );
 
 export const listOwnedJobTemplates = (project: string, region: string) =>
@@ -229,12 +204,7 @@ export const listOwnedJobTemplates = (project: string, region: string) =>
     return owned;
   });
 
-export const findOwnedJobTemplate = (
-  id: string,
-  project: string,
-  region: string,
-  name?: string,
-) =>
+export const findOwnedJobTemplate = (id: string, project: string, region: string, name?: string) =>
   Effect.gen(function* () {
     const existing = yield* getJobTemplate(name ?? "");
     if (existing !== undefined) return existing;

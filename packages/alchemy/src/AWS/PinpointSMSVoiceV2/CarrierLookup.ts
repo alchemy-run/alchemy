@@ -31,12 +31,7 @@ export interface CarrierLookup extends Binding.Service<
   () => Effect.Effect<
     (
       request: smsvoice.CarrierLookupRequest,
-    ) => Effect.Effect<
-      smsvoice.CarrierLookupResult,
-      smsvoice.CarrierLookupError
-    >
+    ) => Effect.Effect<smsvoice.CarrierLookupResult, smsvoice.CarrierLookupError>
   >
 > {}
-export const CarrierLookup = Binding.Service<CarrierLookup>(
-  "AWS.PinpointSMSVoiceV2.CarrierLookup",
-);
+export const CarrierLookup = Binding.Service<CarrierLookup>("AWS.PinpointSMSVoiceV2.CarrierLookup");

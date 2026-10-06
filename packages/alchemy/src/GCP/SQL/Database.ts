@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { recoverIfInstanceMissing, waitForSqlOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -140,30 +141,12 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("GCP.SQL.Database");
 
-export class DatabaseNotResolved extends Data.TaggedError(
-  "GCP.SQL.DatabaseNotResolved",
-)<{
+export class DatabaseNotResolved extends Data.TaggedError("GCP.SQL.DatabaseNotResolved")<{
   instance: string;
   databaseName: string;
 }> {}
 
-export class DatabaseOperationFailed extends Data.TaggedError(
-  "GCP.SQL.DatabaseOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class DatabaseOperationPending extends Data.TaggedError(
-  "GCP.SQL.DatabaseOperationPending",
-)<{
-  operation: string;
-  status: string | undefined;
-}> {}
-
-export class DatabaseStillExists extends Data.TaggedError(
-  "GCP.SQL.DatabaseStillExists",
-)<{
+export class DatabaseStillExists extends Data.TaggedError("GCP.SQL.DatabaseStillExists")<{
   instance: string;
   databaseName: string;
 }> {}
@@ -181,13 +164,10 @@ const isUserDatabase = (database: sqladmin.Database) => {
   return name.length > 0 && !SYSTEM_DATABASES.has(name);
 };
 
-const hasAlchemyInstanceLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyInstanceLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
-const normalizeText = (value: string | undefined) =>
-  (value ?? "").toLowerCase();
+const normalizeText = (value: string | undefined) => (value ?? "").toLowerCase();
 
 const sqlServerKey = (details: SqlServerDatabaseDetails | undefined) =>
   JSON.stringify({
@@ -206,11 +186,7 @@ const toSqlIdentifier = (name: string) => {
   return next.length > 0 ? next : "database";
 };
 
-const toDatabaseName = (
-  id: string,
-  databaseName: string | undefined,
-  existing?: string,
-) =>
+const toDatabaseName = (id: string, databaseName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (databaseName !== undefined) return databaseName;
     if (existing !== undefined) return existing;
@@ -224,11 +200,7 @@ const toDatabaseName = (
     );
   });
 
-const toAttrs = (
-  database: sqladmin.Database,
-  project: string,
-  instance: string,
-) => ({
+const toAttrs = (database: sqladmin.Database, project: string, instance: string) => ({
   databaseName: database.name ?? "",
   instance: database.instance ?? instance,
   project: database.project ?? project,
@@ -240,119 +212,22 @@ const toAttrs = (
 });
 
 const getByName = (project: string, instance: string, databaseName: string) =>
-  sqladmin
-    .getDatabases({ project, instance, database: databaseName })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
-
-const operationNameOf = (operation: sqladmin.Operation) =>
-  lastSegment(operation.name ?? "") || lastSegment(operation.selfLink ?? "");
-
-const operationErrors = (operation: sqladmin.Operation) =>
-  operation.error?.errors ?? [];
-
-const isAlreadyExists = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return (
-      code.includes("ALREADY_EXISTS") || message.includes("already exists")
-    );
-  });
-
-const isNotFoundOp = (operation: sqladmin.Operation) =>
-  operationErrors(operation).some((item) => {
-    const code = (item.code ?? "").toUpperCase();
-    const message = (item.message ?? "").toLowerCase();
-    return code.includes("NOT_FOUND") || message.includes("not found");
-  });
-
-const assertOperationOk = (
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) => {
-  if (isAlreadyExists(operation)) return Effect.void;
-  if (options?.notFoundOk === true && isNotFoundOp(operation)) {
-    return Effect.void;
-  }
-  const errors = operationErrors(operation)
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((message) => message.length > 0);
-  if (errors.length > 0) {
-    return Effect.fail(
-      new DatabaseOperationFailed({
-        operation: operationNameOf(operation),
-        message: errors.join("; "),
-      }),
-    );
-  }
-  return Effect.void;
-};
+  sqladmin.getDatabases({ project, instance, database: databaseName }).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    recoverIfInstanceMissing(project, instance, () => undefined),
+  );
 
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operationNameOf(operation);
-    if (operation.status === "DONE") {
-      yield* assertOperationOk(operation, options);
-      return;
-    }
-    if (name.length === 0) {
-      if (operation.status === undefined) return;
-      return yield* new DatabaseOperationFailed({
-        operation: "",
-        message: "sql operation is missing a name",
-      });
-    }
-
-    const getOperation = sqladmin.getOperations({ project, operation: name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                status: "DONE",
-              } satisfies sqladmin.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        (current) =>
-          new DatabaseOperationPending({
-            operation: name,
-            status: current.status,
-          }),
-      ),
-      Effect.flatMap((current) => assertOperationOk(current, options)),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.SQL.DatabaseOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
-    );
+  waitForSqlOperation(project, operation, {
+    budget: "10 minutes",
+    notFoundOk: options?.notFoundOk,
   });
 
-const waitUntilExists = (
-  project: string,
-  instance: string,
-  databaseName: string,
-) =>
+const waitUntilExists = (project: string, instance: string, databaseName: string) =>
   getByName(project, instance, databaseName).pipe(
     Effect.flatMap((database) =>
       database
@@ -366,11 +241,7 @@ const waitUntilExists = (
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  instance: string,
-  databaseName: string,
-) =>
+const waitUntilGone = (project: string, instance: string, databaseName: string) =>
   getByName(project, instance, databaseName).pipe(
     Effect.flatMap((database) =>
       database === undefined
@@ -412,9 +283,7 @@ export const DatabaseProvider = () =>
         previousInstance !== undefined &&
         instanceIdOf(previousInstance) !== instanceIdOf(nextInstance);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       if (!instanceChanged && !nameChanged) return undefined;
       return {
         action: "replace" as const,
@@ -426,11 +295,7 @@ export const DatabaseProvider = () =>
       const env = yield* GcpEnvironment.current;
       const instance = instanceIdOf(olds?.instance ?? output?.instance ?? "");
       if (instance.length === 0) return undefined;
-      const databaseName = yield* toDatabaseName(
-        id,
-        olds?.databaseName,
-        output?.databaseName,
-      );
+      const databaseName = yield* toDatabaseName(id, olds?.databaseName, output?.databaseName);
       const existing = yield* getByName(env.project, instance, databaseName);
       if (existing === undefined) return undefined;
       return toAttrs(existing, env.project, instance);
@@ -446,14 +311,10 @@ export const DatabaseProvider = () =>
             filter: "instanceType:CLOUD_SQL_INSTANCE",
           })
           .pipe(
-            Stream.filter((instance) =>
-              hasAlchemyInstanceLabels(instance.settings?.userLabels),
-            ),
+            Stream.filter((instance) => hasAlchemyInstanceLabels(instance.settings?.userLabels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([] as sqladmin.DatabaseInstance[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as sqladmin.DatabaseInstance[])),
           );
         const pages = yield* Effect.forEach(
           instances,
@@ -471,12 +332,14 @@ export const DatabaseProvider = () =>
                 Effect.map((page) =>
                   (page.items ?? [])
                     .filter(isUserDatabase)
-                    .map((database) =>
-                      toAttrs(database, env.project, instanceName),
-                    ),
+                    .map((database) => toAttrs(database, env.project, instanceName)),
                 ),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as Database["Attributes"][]),
+                // The instance may be deleted mid-listing.
+                Effect.catchTag("NotFound", () => Effect.succeed([] as Database["Attributes"][])),
+                recoverIfInstanceMissing(
+                  env.project,
+                  instanceName,
+                  () => [] as Database["Attributes"][],
                 ),
               );
           },
@@ -488,11 +351,7 @@ export const DatabaseProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const instance = instanceIdOf(news.instance);
-      const databaseName = yield* toDatabaseName(
-        id,
-        news.databaseName,
-        output?.databaseName,
-      );
+      const databaseName = yield* toDatabaseName(id, news.databaseName, output?.databaseName);
 
       let current = yield* getByName(env.project, instance, databaseName);
 
@@ -504,14 +363,10 @@ export const DatabaseProvider = () =>
             body: toBody(news, databaseName, instance, env.project),
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitForOperation(env.project, operation)),
             Effect.catchTag("Conflict", (error) =>
               getByName(env.project, instance, databaseName).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.void : Effect.fail(error),
-                ),
+                Effect.flatMap((existing) => (existing ? Effect.void : Effect.fail(error))),
               ),
             ),
             Effect.retry({
@@ -560,10 +415,9 @@ export const DatabaseProvider = () =>
           database: databaseName,
         })
         .pipe(
-          Effect.flatMap((operation) =>
-            waitForOperation(project, operation, { notFoundOk: true }),
-          ),
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.flatMap((operation) => waitForOperation(project, operation, { notFoundOk: true })),
+          Effect.catchTag("NotFound", () => Effect.void),
+          recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

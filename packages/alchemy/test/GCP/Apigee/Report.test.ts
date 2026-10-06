@@ -1,26 +1,27 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_APIGEE && !process.env.FAST;
+// Needs a provisioned Apigee organization on the testing project (paid, or
+// ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
+// denied on resource \"organizations/{project}\" (or it may not exist)").
+// Set GCP_TEST_APIGEE_ORG=1 when the org exists.
+const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG;
 
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsReports({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("ApigeeResourceNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -29,7 +30,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getOrganizationsReports on a missing report fails with NotFound or Forbidden",
+  "getOrganizationsReports on a missing report fails with ApigeeResourceNotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -42,7 +43,7 @@ test.provider(
           name: `${org}/reports/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("ApigeeResourceNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,19 +69,15 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.reportId).toEqual(expect.any(String));
       expect(created.displayName).toEqual("alchemy traffic");
-      expect(created.comments).toEqual(
-        expect.arrayContaining(["initial report"]),
-      );
+      expect(created.comments).toEqual(expect.arrayContaining(["initial report"]));
 
       const fetched = yield* apigee.getOrganizationsReports({
         name: created.name,
       });
       expect(fetched.displayName).toEqual("alchemy traffic");
-      expect(
-        (fetched.comments ?? []).some((comment) =>
-          comment.includes("alchemy-id="),
-        ),
-      ).toEqual(true);
+      expect((fetched.comments ?? []).some((comment) => comment.includes("alchemy-id="))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -96,9 +93,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(updated.name).toEqual(created.name);
       expect(updated.displayName).toEqual("alchemy traffic updated");
-      expect(updated.comments).toEqual(
-        expect.arrayContaining(["updated report"]),
-      );
+      expect(updated.comments).toEqual(expect.arrayContaining(["updated report"]));
 
       yield* stack.destroy();
 

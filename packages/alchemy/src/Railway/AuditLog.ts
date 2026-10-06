@@ -34,10 +34,7 @@ const readAuditLog = Query.fn((id: string, workspaceId: string) =>
 
 const readAuditLogEventTypes = Query.fn(() =>
   Railway.auditLogEventTypeInfo().pipe(
-    Query.map((info) => ({
-      description: info.description,
-      eventType: info.eventType,
-    })),
+    Query.map((info) => ({ description: info.description, eventType: info.eventType })),
   ),
 );
 type AuditLogEventTypeInfoResultItem = UnwrapPlan<
@@ -48,18 +45,14 @@ type AuditLogEventTypeInfoResultItem = UnwrapPlan<
  * Project identity for {@link listAuditLogs}. Accepts a `Railway.Project`
  * or a `{ projectId }` stub.
  */
-export type AuditLogProject = {
-  readonly projectId: string;
-};
+export type AuditLogProject = { readonly projectId: string };
 
 /**
  * Environment identity for {@link listAuditLogs}. Accepts a
  * `Railway.Project` (primary environment), a `Railway.Environment`, or
  * `{ environmentId }`.
  */
-export type AuditLogEnvironment = {
-  readonly environmentId: string;
-};
+export type AuditLogEnvironment = { readonly environmentId: string };
 
 export interface ListAuditLogsOptions {
   /**
@@ -134,26 +127,20 @@ const toEntry = (row: AuditLogRow): AuditLogEntry => ({
   context: row.context ?? undefined,
 });
 
-const projectIdOf = (
-  value: AuditLogProject | string | undefined,
-): string | undefined => {
+const projectIdOf = (value: AuditLogProject | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
   if (typeof value === "string") return value;
   return value.projectId;
 };
 
-const environmentIdOf = (
-  value: AuditLogEnvironment | string | undefined,
-): string | undefined => {
+const environmentIdOf = (value: AuditLogEnvironment | string | undefined): string | undefined => {
   if (value === undefined) return undefined;
   if (typeof value === "string") return value;
   return value.environmentId;
 };
 
 const workspaceOf = (workspaceId: string | undefined) =>
-  workspaceId !== undefined
-    ? Effect.succeed(workspaceId)
-    : resolveWorkspaceId();
+  workspaceId !== undefined ? Effect.succeed(workspaceId) : resolveWorkspaceId();
 
 /**
  * List workspace audit logs. Query-only — Railway has no audit-log
@@ -208,15 +195,9 @@ export const AuditLog = Effect.fn(function* (options?: ListAuditLogsOptions) {
       ? {
           ...(projectId !== undefined ? { projectId } : {}),
           ...(environmentId !== undefined ? { environmentId } : {}),
-          ...(options?.eventTypes !== undefined
-            ? { eventTypes: [...options.eventTypes] }
-            : {}),
-          ...(options?.startDate !== undefined
-            ? { startDate: options.startDate }
-            : {}),
-          ...(options?.endDate !== undefined
-            ? { endDate: options.endDate }
-            : {}),
+          ...(options?.eventTypes !== undefined ? { eventTypes: [...options.eventTypes] } : {}),
+          ...(options?.startDate !== undefined ? { startDate: options.startDate } : {}),
+          ...(options?.endDate !== undefined ? { endDate: options.endDate } : {}),
         }
       : undefined;
 
@@ -242,10 +223,7 @@ export const listAuditLogs = AuditLog;
  * const log = yield* Railway.getAuditLog({ id: logs[0].id });
  * ```
  */
-export const getAuditLog = Effect.fn(function* (options: {
-  id: string;
-  workspaceId?: string;
-}) {
+export const getAuditLog = Effect.fn(function* (options: { id: string; workspaceId?: string }) {
   const workspaceId = yield* workspaceOf(options.workspaceId);
   const row = yield* readAuditLog(options.id, workspaceId);
   return toEntry(row);

@@ -1,10 +1,10 @@
-import * as GCP from "alchemy/GCP";
 import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as GCP from "alchemy/GCP";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schema from "effect/Schema";
 import { database } from "./database.ts";
 import { migrate } from "./migrate.ts";
 import { todos } from "./schema.ts";
@@ -27,7 +27,6 @@ export default class Api extends GCP.Function<Api>()(
     const schemaVersion = yield* migrate;
     return {
       main: import.meta.url,
-      location: "us-central1",
       invokerIamDisabled: true,
       env: { SCHEMA_VERSION: schemaVersion },
     };
@@ -39,9 +38,7 @@ export default class Api extends GCP.Function<Api>()(
       user,
       passwordSecret,
     });
-    const db = yield* Drizzle.Postgres(
-      connect.pipe(Effect.map((info) => info.url)),
-    );
+    const db = yield* Drizzle.Postgres(connect.pipe(Effect.map((info) => info.url)));
 
     return {
       fetch: Effect.gen(function* () {
@@ -59,42 +56,26 @@ export default class Api extends GCP.Function<Api>()(
         if (url.pathname === "/todos" && request.method === "POST") {
           const input = yield* request.json.pipe(
             Effect.flatMap(
-              Schema.decodeUnknownEffect(
-                Schema.Struct({ id: Id, title: Schema.NonEmptyString }),
-              ),
+              Schema.decodeUnknownEffect(Schema.Struct({ id: Id, title: Schema.NonEmptyString })),
             ),
           );
-          return yield* HttpServerResponse.json(
-            yield* db.insert(todos).values(input).returning(),
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json(yield* db.insert(todos).values(input).returning(), {
+            status: 201,
+          });
         }
         if (url.pathname.startsWith("/todos/")) {
-          const id = yield* Schema.decodeUnknownEffect(Id)(
-            url.pathname.slice("/todos/".length),
-          );
+          const id = yield* Schema.decodeUnknownEffect(Id)(url.pathname.slice("/todos/".length));
           if (request.method === "GET") {
-            const [todo] = yield* db
-              .select()
-              .from(todos)
-              .where(eq(todos.id, id));
+            const [todo] = yield* db.select().from(todos).where(eq(todos.id, id));
             return todo
               ? yield* HttpServerResponse.json(todo)
               : HttpServerResponse.text("Not found", { status: 404 });
           }
           if (request.method === "PATCH") {
             const input = yield* request.json.pipe(
-              Effect.flatMap(
-                Schema.decodeUnknownEffect(
-                  Schema.Struct({ done: Schema.Boolean }),
-                ),
-              ),
+              Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ done: Schema.Boolean }))),
             );
-            const [todo] = yield* db
-              .update(todos)
-              .set(input)
-              .where(eq(todos.id, id))
-              .returning();
+            const [todo] = yield* db.update(todos).set(input).where(eq(todos.id, id)).returning();
             return todo
               ? yield* HttpServerResponse.json(todo)
               : HttpServerResponse.text("Not found", { status: 404 });
@@ -107,9 +88,7 @@ export default class Api extends GCP.Function<Api>()(
         return HttpServerResponse.text("Not found", { status: 404 });
       }).pipe(
         Effect.catchTag("SchemaError", () =>
-          Effect.succeed(
-            HttpServerResponse.text("Invalid request", { status: 400 }),
-          ),
+          Effect.succeed(HttpServerResponse.text("Invalid request", { status: 400 })),
         ),
         Effect.orDie,
       ),

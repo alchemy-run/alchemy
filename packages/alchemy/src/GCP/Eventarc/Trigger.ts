@@ -1,6 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
-import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -20,6 +19,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitForOperation } from "./internal.ts";
 
 const DEFAULT_CONTENT_TYPE = "application/json";
 const MAX_NAME_LENGTH = 63;
@@ -309,14 +309,23 @@ export type Trigger = Resource<
  * ```
  *
  * ### Updating a Trigger
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical trigger and patches it in place.
+ *
  * **Example:** Change labels and the CloudEvent content type
  * ```typescript
  * const trigger = yield* GCP.Eventarc.Trigger("orders", {
- *   triggerId: existing.triggerId,
- *   location: existing.location,
- *   eventFilters: existing.eventFilters,
- *   destination: existing.destination!,
- *   transport: { pubsub: { topic: existing.transport?.pubsub?.topic } },
+ *   eventFilters: [
+ *     {
+ *       attribute: "type",
+ *       value: "google.cloud.pubsub.topic.v1.messagePublished",
+ *     },
+ *   ],
+ *   destination: {
+ *     workflow:
+ *       "projects/my-project/locations/us-central1/workflows/orders",
+ *   },
+ *   transport: { pubsub: { topic: topic.name } },
  *   eventDataContentType: "application/json",
  *   labels: { env: "prod", role: "events" },
  * });
@@ -327,32 +336,16 @@ export type Trigger = Resource<
  */
 export const Trigger = Resource<Trigger>("GCP.Eventarc.Trigger");
 
-export class TriggerNotHealthy extends Data.TaggedError(
-  "GCP.Eventarc.TriggerNotHealthy",
-)<{ name: string; conditions: string }> {}
+export class TriggerNotHealthy extends Data.TaggedError("GCP.Eventarc.TriggerNotHealthy")<{
+  name: string;
+  conditions: string;
+}> {}
 
-export class TriggerNotResolved extends Data.TaggedError(
-  "GCP.Eventarc.TriggerNotResolved",
-)<{
+export class TriggerNotResolved extends Data.TaggedError("GCP.Eventarc.TriggerNotResolved")<{
   name: string;
 }> {}
 
-export class TriggerOperationFailed extends Data.TaggedError(
-  "GCP.Eventarc.TriggerOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class TriggerOperationPending extends Data.TaggedError(
-  "GCP.Eventarc.TriggerOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class TriggerStillExists extends Data.TaggedError(
-  "GCP.Eventarc.TriggerStillExists",
-)<{
+export class TriggerStillExists extends Data.TaggedError("GCP.Eventarc.TriggerStillExists")<{
   name: string;
 }> {}
 
@@ -368,10 +361,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -393,16 +384,11 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
     triggerId:
-      triggersAt >= 0 && parts[triggersAt + 1]
-        ? parts[triggersAt + 1]!
-        : lastSegment(name),
+      triggersAt >= 0 && parts[triggersAt + 1] ? parts[triggersAt + 1]! : lastSegment(name),
   };
 };
 
@@ -431,9 +417,7 @@ const compact = <T extends Record<string, unknown>>(value: T): T => {
   return next as T;
 };
 
-const toEventFilters = (
-  filters: eventarc.EventFilterList | undefined,
-): EventFilter[] =>
+const toEventFilters = (filters: eventarc.EventFilterList | undefined): EventFilter[] =>
   (filters ?? [])
     .filter(
       (
@@ -441,9 +425,7 @@ const toEventFilters = (
       ): filter is eventarc.EventFilter & {
         attribute: string;
         value: string;
-      } =>
-        typeof filter.attribute === "string" &&
-        typeof filter.value === "string",
+      } => typeof filter.attribute === "string" && typeof filter.value === "string",
     )
     .map((filter) =>
       compact({
@@ -453,9 +435,7 @@ const toEventFilters = (
       }),
     );
 
-const toDestination = (
-  destination: eventarc.Destination | undefined,
-): Destination | undefined => {
+const toDestination = (destination: eventarc.Destination | undefined): Destination | undefined => {
   if (destination === undefined) return undefined;
   const next = compact({
     cloudRun: destination.cloudRun
@@ -516,9 +496,7 @@ const fromDestination = (destination: Destination): eventarc.Destination =>
       : undefined,
   });
 
-const toTransport = (
-  transport: eventarc.Transport | undefined,
-): Transport | undefined => {
+const toTransport = (transport: eventarc.Transport | undefined): Transport | undefined => {
   if (transport?.pubsub === undefined) return undefined;
   return {
     pubsub: compact({
@@ -536,9 +514,7 @@ const topicKey = (topic: string | undefined, project: string) => {
 
 const saKey = (serviceAccount: string | undefined) => {
   if (serviceAccount === undefined || serviceAccount.length === 0) return "";
-  return serviceAccount.includes("/")
-    ? lastSegment(serviceAccount)
-    : serviceAccount;
+  return serviceAccount.includes("/") ? lastSegment(serviceAccount) : serviceAccount;
 };
 
 const filtersKey = (filters: EventFilter[] | undefined) =>
@@ -560,27 +536,12 @@ const destinationKey = (destination: Destination | undefined) =>
   JSON.stringify(toDestination(fromDestination(destination ?? {})) ?? {});
 
 const contentTypeKey = (value: string | undefined) =>
-  (value === undefined || value.length === 0
-    ? DEFAULT_CONTENT_TYPE
-    : value
-  ).toLowerCase();
+  (value === undefined || value.length === 0 ? DEFAULT_CONTENT_TYPE : value).toLowerCase();
 
 const retryKey = (policy: RetryPolicy | undefined) =>
   JSON.stringify({ maxAttempts: policy?.maxAttempts ?? null });
 
-const alreadyExists = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: eventarc.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const toAttrs = (
-  trigger: eventarc.Trigger,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (trigger: eventarc.Trigger, project: string, region: string) => {
   const name = trigger.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -612,113 +573,6 @@ const getByName = (name: string) =>
     .getProjectsLocationsTriggers({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  operation: eventarc.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; allowAlreadyExists?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (
-          options?.allowAlreadyExists === true &&
-          alreadyExists(operation.error)
-        ) {
-          return operation;
-        }
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new TriggerOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    // Eventarc `allowMissing` delete of a missing trigger returns `{}`
-    // (no name, done unset). Treat that as already-gone.
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new TriggerOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const fetched = eventarc.getProjectsLocationsOperations({ name });
-    const observe: Effect.Effect<
-      eventarc.GoogleLongrunningOperation,
-      eventarc.GetProjectsLocationsOperationsError,
-      GcpOpContext
-    > =
-      options?.notFoundOk === true
-        ? fetched.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<eventarc.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : fetched.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    const wait: Effect.Effect<
-      eventarc.GoogleLongrunningOperation,
-      | TriggerOperationFailed
-      | TriggerOperationPending
-      | eventarc.GetProjectsLocationsOperationsError,
-      GcpOpContext
-    > = observe.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        (): TriggerOperationPending =>
-          new TriggerOperationPending({ operation: name }),
-      ),
-      Effect.flatMap(
-        (
-          current,
-        ): Effect.Effect<
-          eventarc.GoogleLongrunningOperation,
-          TriggerOperationFailed
-        > => {
-          const status = current.error;
-          if (status) {
-            if (options?.allowAlreadyExists === true && alreadyExists(status)) {
-              return Effect.succeed(current);
-            }
-            if (options?.notFoundOk === true && isNotFoundStatus(status)) {
-              return Effect.succeed(current);
-            }
-            return Effect.fail(
-              new TriggerOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            );
-          }
-          return Effect.succeed(current);
-        },
-      ),
-    );
-
-    return yield* wait.pipe(
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Eventarc.TriggerOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
-
 /**
  * Block until Eventarc reports every trigger condition healthy (`OK`), so
  * nothing downstream assumes a trigger that is still provisioning its
@@ -728,8 +582,7 @@ const waitUntilHealthy = (name: string) =>
   waitUntilExists(name).pipe(
     Effect.flatMap((trigger) => {
       const failing = Object.entries(trigger.conditions ?? {}).filter(
-        ([, condition]) =>
-          condition?.code !== undefined && condition.code !== "OK",
+        ([, condition]) => condition?.code !== undefined && condition.code !== "OK",
       );
       return failing.length === 0
         ? Effect.succeed(trigger)
@@ -737,10 +590,7 @@ const waitUntilHealthy = (name: string) =>
             new TriggerNotHealthy({
               name,
               conditions: failing
-                .map(
-                  ([key, condition]) =>
-                    `${key}: ${condition?.code} ${condition?.message ?? ""}`,
-                )
+                .map(([key, condition]) => `${key}: ${condition?.code} ${condition?.message ?? ""}`)
                 .join("; "),
             }),
           );
@@ -755,9 +605,7 @@ const waitUntilHealthy = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
-      trigger
-        ? Effect.succeed(trigger)
-        : Effect.fail(new TriggerNotResolved({ name })),
+      trigger ? Effect.succeed(trigger) : Effect.fail(new TriggerNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.TriggerNotResolved",
@@ -769,9 +617,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
-      trigger === undefined
-        ? Effect.void
-        : Effect.fail(new TriggerStillExists({ name })),
+      trigger === undefined ? Effect.void : Effect.fail(new TriggerStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.TriggerStillExists",
@@ -780,9 +626,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const desiredTransport = (
-  news: TriggerProps,
-): eventarc.Transport | undefined => {
+const desiredTransport = (news: TriggerProps): eventarc.Transport | undefined => {
   const topic = news.transport?.pubsub?.topic;
   if (topic === undefined || topic.length === 0) return undefined;
   return { pubsub: { topic } };
@@ -795,9 +639,7 @@ const defaultServiceAccount = (project: string) =>
       if (!/^\d+$/.test(projectNumber)) {
         return Effect.fail(new TriggerServiceAccountMissing({ project }));
       }
-      return Effect.succeed(
-        `${projectNumber}-compute@developer.gserviceaccount.com`,
-      );
+      return Effect.succeed(`${projectNumber}-compute@developer.gserviceaccount.com`);
     }),
   );
 
@@ -810,10 +652,7 @@ const resolveServiceAccount = (
     if (news.serviceAccount !== undefined && news.serviceAccount.length > 0) {
       return news.serviceAccount;
     }
-    if (
-      current?.serviceAccount !== undefined &&
-      current.serviceAccount.length > 0
-    ) {
+    if (current?.serviceAccount !== undefined && current.serviceAccount.length > 0) {
       return current.serviceAccount;
     }
     return yield* defaultServiceAccount(project);
@@ -821,15 +660,7 @@ const resolveServiceAccount = (
 
 export const TriggerProvider = () =>
   Provider.succeed(Trigger, {
-    stables: [
-      "name",
-      "triggerId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-      "channel",
-    ],
+    stables: ["name", "triggerId", "project", "location", "uid", "createTime", "channel"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -837,14 +668,8 @@ export const TriggerProvider = () =>
 
       const previousId = olds?.triggerId ?? output?.triggerId;
       const nextId = news.triggerId ? rfc1035(news.triggerId) : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const project = output?.project ?? "";
       const previousChannel = olds?.channel ?? output?.channel ?? "";
       const nextChannel = news.channel ?? previousChannel;
@@ -856,47 +681,33 @@ export const TriggerProvider = () =>
         news.transport?.pubsub?.topic !== undefined
           ? topicKey(news.transport.pubsub.topic, project)
           : previousTopic;
-      const previousFilters = filtersKey(
-        olds?.eventFilters ?? output?.eventFilters,
-      );
+      const previousFilters = filtersKey(olds?.eventFilters ?? output?.eventFilters);
       const nextFilters = filtersKey(news.eventFilters);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousChannel !== nextChannel ||
-        (nextTopic.length > 0 &&
-          previousTopic.length > 0 &&
-          nextTopic !== previousTopic) ||
+        (nextTopic.length > 0 && previousTopic.length > 0 && nextTopic !== previousTopic) ||
         previousFilters !== nextFilters;
 
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const triggerId = yield* toId(id, olds?.triggerId, output?.triggerId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, triggerId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, triggerId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -910,9 +721,7 @@ export const TriggerProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.triggers ?? [])),
             Stream.filter((trigger) =>
-              Object.keys(trigger.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(trigger.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((trigger) => toAttrs(trigger, env.project, env.region)),
             Stream.runCollect,
@@ -923,10 +732,7 @@ export const TriggerProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const triggerId = yield* toId(id, news.triggerId, output?.triggerId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, triggerId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -943,11 +749,7 @@ export const TriggerProvider = () =>
       const transport = desiredTransport(news);
 
       let current = yield* getByName(name);
-      const serviceAccount = yield* resolveServiceAccount(
-        env.project,
-        news,
-        current,
-      );
+      const serviceAccount = yield* resolveServiceAccount(env.project, news, current);
 
       if (current === undefined) {
         const created = yield* eventarc
@@ -968,7 +770,7 @@ export const TriggerProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { allowAlreadyExists: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }
@@ -981,14 +783,11 @@ export const TriggerProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const destinationChanged =
-        destinationKey(toDestination(current.destination)) !==
-        destinationKey(news.destination);
-      const serviceAccountChanged =
-        saKey(serviceAccount) !== saKey(current.serviceAccount);
+        destinationKey(toDestination(current.destination)) !== destinationKey(news.destination);
+      const serviceAccountChanged = saKey(serviceAccount) !== saKey(current.serviceAccount);
       const contentTypeChanged =
         news.eventDataContentType !== undefined &&
-        contentTypeKey(current.eventDataContentType) !==
-          contentTypeKey(news.eventDataContentType);
+        contentTypeKey(current.eventDataContentType) !== contentTypeKey(news.eventDataContentType);
       const retryChanged =
         news.retryPolicy !== undefined &&
         retryKey(current.retryPolicy) !== retryKey(news.retryPolicy);

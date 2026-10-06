@@ -47,9 +47,7 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sortedStrings = (values: readonly string[] | undefined) =>
   [...(values ?? [])].slice().sort();
@@ -57,13 +55,10 @@ export const sortedStrings = (values: readonly string[] | undefined) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
+) => JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right));
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const expandProjectName = (value: string, project: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -72,20 +67,12 @@ export const expandProjectName = (value: string, project: string) => {
   return `projects/${lastSegment(trimmed)}`;
 };
 
-export const expandResourceNames = (
-  names: readonly string[] | undefined,
-  project: string,
-) =>
-  (names === undefined || names.length === 0
-    ? [`projects/${project}`]
-    : [...names]
-  ).map((name) => expandProjectName(name, project));
+export const expandResourceNames = (names: readonly string[] | undefined, project: string) =>
+  (names === undefined || names.length === 0 ? [`projects/${project}`] : [...names]).map((name) =>
+    expandProjectName(name, project),
+  );
 
-export const toScopeId = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toScopeId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -94,16 +81,10 @@ export const toScopeId = (
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z0-9]/.test(generated)
-      ? generated
-      : `s${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z0-9]/.test(generated) ? generated : `s${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
-export const toLinkId = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toLinkId = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -114,9 +95,7 @@ export const toLinkId = (
       delimiter: "_",
     });
     const cleaned = generated.replace(/-/g, "_").replace(/[^a-z0-9_]/g, "_");
-    return /^[a-z]/.test(cleaned)
-      ? cleaned
-      : `l${cleaned}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(cleaned) ? cleaned : `l${cleaned}`.slice(0, MAX_NAME_LENGTH);
   });
 
 export type ParsedLinkName = {
@@ -156,9 +135,7 @@ export const parseDatasetName = (name: string) => {
 };
 
 export const parseBucketName = (name: string) => {
-  const match = name.match(
-    /^projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/,
-  );
+  const match = name.match(/^projects\/([^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/);
   if (!match) return undefined;
   return {
     name: match[0]!,
@@ -169,9 +146,7 @@ export const parseBucketName = (name: string) => {
 };
 
 export const parseScopeName = (name: string) => {
-  const match = name.match(
-    /^projects\/([^/]+)\/locations\/([^/]+)\/traceScopes\/([^/]+)$/,
-  );
+  const match = name.match(/^projects\/([^/]+)\/locations\/([^/]+)\/traceScopes\/([^/]+)$/);
   if (!match) return undefined;
   return {
     project: match[1]!,
@@ -185,8 +160,7 @@ export const datasetResourceName = (
   location: string,
   bucketId: string,
   datasetId: string,
-) =>
-  `projects/${project}/locations/${location}/buckets/${bucketId}/datasets/${datasetId}`;
+) => `projects/${project}/locations/${location}/buckets/${bucketId}/datasets/${datasetId}`;
 
 export const linkResourceName = (
   project: string,
@@ -194,14 +168,10 @@ export const linkResourceName = (
   bucketId: string,
   datasetId: string,
   linkId: string,
-) =>
-  `${datasetResourceName(project, location, bucketId, datasetId)}/links/${linkId}`;
+) => `${datasetResourceName(project, location, bucketId, datasetId)}/links/${linkId}`;
 
-export const scopeResourceName = (
-  project: string,
-  location: string,
-  traceScopeId: string,
-) => `projects/${project}/locations/${location}/traceScopes/${traceScopeId}`;
+export const scopeResourceName = (project: string, location: string, traceScopeId: string) =>
+  `projects/${project}/locations/${location}/traceScopes/${traceScopeId}`;
 
 export const resolveDatasetParent = (
   dataset: string,
@@ -214,20 +184,12 @@ export const resolveDatasetParent = (
   const fromBucket = bucket ? parseBucketName(bucket) : undefined;
   const bucketId =
     fromBucket?.bucketId ??
-    (bucket !== undefined && bucket.length > 0
-      ? lastSegment(bucket)
-      : DEFAULT_BUCKET_ID);
+    (bucket !== undefined && bucket.length > 0 ? lastSegment(bucket) : DEFAULT_BUCKET_ID);
   const resolvedLocation = fromBucket?.location ?? location;
   const resolvedProject = fromBucket?.project ?? project;
-  const datasetId =
-    dataset.length > 0 ? lastSegment(dataset) : DEFAULT_DATASET_ID;
+  const datasetId = dataset.length > 0 ? lastSegment(dataset) : DEFAULT_DATASET_ID;
   return {
-    name: datasetResourceName(
-      resolvedProject,
-      resolvedLocation,
-      bucketId,
-      datasetId,
-    ),
+    name: datasetResourceName(resolvedProject, resolvedLocation, bucketId, datasetId),
     project: resolvedProject,
     location: resolvedLocation,
     bucketId,
@@ -243,9 +205,7 @@ export const listLocationIds = (project: string, region: string) =>
     })
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.locations ?? [])),
-      Stream.map(
-        (location) => location.locationId ?? lastSegment(location.name ?? ""),
-      ),
+      Stream.map((location) => location.locationId ?? lastSegment(location.name ?? "")),
       Stream.filter((id) => id.length > 0),
       Stream.runCollect,
       Effect.map((chunk) => {
@@ -254,9 +214,7 @@ export const listLocationIds = (project: string, region: string) =>
         ids.add(region);
         return [...ids];
       }),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([DEFAULT_TRACE_LOCATION, region]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([DEFAULT_TRACE_LOCATION, region])),
     );
 
 const listBucketsAt = (parent: string) =>
@@ -270,23 +228,18 @@ const listBucketsAt = (parent: string) =>
       Stream.filter((bucket) => (bucket.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as observability.Bucket[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as observability.Bucket[])),
     );
 
 export const listProjectBuckets = () =>
   Effect.gen(function* () {
     const env = yield* GcpEnvironment.current;
-    const wildcard = yield* listBucketsAt(
-      `projects/${env.project}/locations/-`,
-    );
+    const wildcard = yield* listBucketsAt(`projects/${env.project}/locations/-`);
     if (wildcard.length > 0) return wildcard;
     const locations = yield* listLocationIds(env.project, env.region);
     const pages = yield* Effect.forEach(
       locations,
-      (location) =>
-        listBucketsAt(`projects/${env.project}/locations/${location}`),
+      (location) => listBucketsAt(`projects/${env.project}/locations/${location}`),
       { concurrency: 4 },
     );
     const byName = new Map<string, observability.Bucket>();
@@ -307,19 +260,15 @@ const listDatasetsAt = (parent: string) =>
       Stream.filter((dataset) => (dataset.name ?? "").length > 0),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as observability.Dataset[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as observability.Dataset[])),
     );
 
 export const listProjectDatasets = () =>
   Effect.gen(function* () {
     const buckets = yield* listProjectBuckets();
-    const pages = yield* Effect.forEach(
-      buckets,
-      (bucket) => listDatasetsAt(bucket.name!),
-      { concurrency: 4 },
-    );
+    const pages = yield* Effect.forEach(buckets, (bucket) => listDatasetsAt(bucket.name!), {
+      concurrency: 4,
+    });
     return pages.flat();
   });
 
@@ -333,7 +282,5 @@ export const listLinksAt = (parent: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.links ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as observability.Link[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as observability.Link[])),
     );

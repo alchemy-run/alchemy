@@ -6,39 +6,29 @@ import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { tagRecord } from "../../Tags.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_NAME_LENGTH = 63;
+
+/**
+ * Generated ids are shorter than the 63-character id limit: GCP rejects a
+ * workstation's full resource name as "Malformed name" once it passes ~280
+ * characters, which three 63-character ids (cluster, config, workstation)
+ * exceed.
+ */
+const GENERATED_NAME_LENGTH = 50;
 export const DEFAULT_NETWORK = "default";
 export const DEFAULT_SUBNETWORK = "default";
 
-export class WorkstationsOperationFailed extends Data.TaggedError(
-  "GCP.Workstations.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class WorkstationsOperationPending extends Data.TaggedError(
-  "GCP.Workstations.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Workstations.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Workstations.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.Workstations.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.Workstations.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.Workstations.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.Workstations.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -62,10 +52,8 @@ export const rfc1035 = (name: string, fallback = "workstation"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -82,33 +70,23 @@ export const toPhysicalId = (
     return rfc1035(
       yield* createPhysicalName({
         id,
-        maxLength: MAX_NAME_LENGTH,
+        maxLength: GENERATED_NAME_LENGTH,
         lowercase: true,
       }),
       fallback,
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -132,20 +110,13 @@ export const networkName = (value: string | undefined, project: string) => {
   return `projects/${project}/global/networks/${next}`;
 };
 
-export const subnetworkName = (
-  value: string | undefined,
-  project: string,
-  location: string,
-) => {
+export const subnetworkName = (value: string | undefined, project: string, location: string) => {
   const next = (value ?? DEFAULT_SUBNETWORK).replace(/\/+$/, "");
   if (next.includes("/")) return next;
   return `projects/${project}/regions/${location}/subnetworks/${next}`;
 };
 
-export const sameResource = (
-  left: string | undefined,
-  right: string | undefined,
-) => {
+export const sameResource = (left: string | undefined, right: string | undefined) => {
   if ((left ?? "") === (right ?? "")) return true;
   if (left === undefined || right === undefined) return false;
   return lastSegment(left) === lastSegment(right);
@@ -155,9 +126,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -180,26 +150,19 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left === true) === (right === true);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left === true) === (right === true);
 
-export const sameNumber = (
-  left: number | undefined,
-  right: number | undefined,
-) => (left ?? 0) === (right ?? 0);
+export const sameNumber = (left: number | undefined, right: number | undefined) =>
+  (left ?? 0) === (right ?? 0);
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -214,8 +177,7 @@ export const replaceOnIdentity = (input: {
     (input.previousParent ?? "") !== "" &&
     (input.nextParent ?? "") !== "" &&
     (input.previousParent ?? "") !== (input.nextParent ?? "") &&
-    lastSegment(input.previousParent ?? "") !==
-      lastSegment(input.nextParent ?? "");
+    lastSegment(input.previousParent ?? "") !== lastSegment(input.nextParent ?? "");
   const replace =
     (input.extra ?? false) ||
     parentChanged ||
@@ -235,90 +197,12 @@ export const replaceOnIdentity = (input: {
   };
 };
 
-const alreadyExists = (error: workstations.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: workstations.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: workstations.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-export const waitForOperation = (
-  operation: workstations.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    interval?: `${number} seconds`;
-  },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new WorkstationsOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new WorkstationsOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = workstations.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<workstations.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new WorkstationsOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new WorkstationsOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Workstations.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "8 seconds"),
-      }),
-    );
+/**
+ * Wait for a Cloud Workstations long-running operation. Cluster creates and deletes take up to ~20 minutes.
+ */
+export const waitForOperation = (operation: workstations.Operation) =>
+  waitForGcpOperation(operation, (name) => workstations.getProjectsLocationsOperations({ name }), {
+    budget: "30 minutes",
   });
 
 export const waitUntilExists = <A, E extends object, R>(
@@ -361,13 +245,11 @@ export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/-`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () =>
         list(`projects/${project}/locations/${region}`).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-              error._tag === "NotFound" || error._tag === "Forbidden",
+            (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
             () => Effect.succeed([] as A[]),
           ),
         ),
@@ -382,13 +264,11 @@ export const listAtNested = <A, E extends { readonly _tag: string }, R>(
 ) =>
   list(`projects/${project}/locations/-/${nested}`).pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-        error._tag === "NotFound" || error._tag === "Forbidden",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () =>
         list(`projects/${project}/locations/${region}/${nested}`).pipe(
           Effect.catchIf(
-            (error): error is E & { readonly _tag: "NotFound" | "Forbidden" } =>
-              error._tag === "NotFound" || error._tag === "Forbidden",
+            (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
             () => Effect.succeed([] as A[]),
           ),
         ),

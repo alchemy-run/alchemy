@@ -6,9 +6,10 @@ import {
   type GqlTransport,
 } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 
 /** Dashboard host used by `railway login --browserless` pairing URLs. */
 export const RAILWAY_CLI_LOGIN_HOST = "https://railway.com";
@@ -42,10 +43,7 @@ export const loginSessionUrl = (
   const hostname = options?.hostname ?? "alchemy";
   const host = (options?.host ?? RAILWAY_CLI_LOGIN_HOST).replace(/\/+$/, "");
   const payload = `wordCode=${code}&hostname=${hostname}`;
-  const encoded = Buffer.from(payload)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  const encoded = Buffer.from(payload).toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
   return `${host}/cli-login?d=${encoded}`;
 };
 
@@ -54,40 +52,25 @@ export const loginSessionUrl = (
  * mutations are public: they run before the user has a token.
  */
 const anonymousRailwayCredentials = (apiBaseUrl?: string) =>
-  CredentialsFromToken({
-    token: "",
-    tokenKind: "account",
-    apiBaseUrl,
-  });
+  CredentialsFromToken({ token: Redacted.make(""), tokenKind: "account", apiBaseUrl });
 
 const anonymousRailway = (apiBaseUrl?: string) =>
-  Layer.mergeAll(
-    GraphQLLive,
-    anonymousRailwayCredentials(apiBaseUrl),
-    FetchHttpClient.layer,
-  );
+  Layer.mergeAll(GraphQLLive, anonymousRailwayCredentials(apiBaseUrl), FetchHttpClient.layer);
 
 export const provideAnonymousRailway = <A, E>(
   effect: Effect.Effect<A, E, GqlTransport>,
   apiBaseUrl?: string,
-): Effect.Effect<A, E> =>
-  effect.pipe(Effect.provide(anonymousRailway(apiBaseUrl)));
+): Effect.Effect<A, E> => effect.pipe(Effect.provide(anonymousRailway(apiBaseUrl)));
 
 const LOGIN_POLL_TIMES = 300;
 
 export const createLoginSession = Query.fn(() => Railway.loginSessionCreate());
 
-export const cancelLoginSession = Query.fn((code: string) =>
-  Railway.loginSessionCancel({ code }),
-);
+export const cancelLoginSession = Query.fn((code: string) => Railway.loginSessionCancel({ code }));
 
-const verifyLoginSession = Query.fn((code: string) =>
-  Railway.loginSessionVerify({ code }),
-);
+const verifyLoginSession = Query.fn((code: string) => Railway.loginSessionVerify({ code }));
 
-const consumeLoginSession = Query.fn((code: string) =>
-  Railway.loginSessionConsume({ code }),
-);
+const consumeLoginSession = Query.fn((code: string) => Railway.loginSessionConsume({ code }));
 
 /**
  * Poll `loginSessionVerify` then
@@ -107,9 +90,7 @@ export const pollLoginSessionToken = (code: string) =>
         Effect.catchTag("RailwayNotFound", () => Effect.succeed(null)),
       ),
     ),
-    Effect.map((token) =>
-      token != null && token.length > 0 ? token : undefined,
-    ),
+    Effect.map((token) => (token != null && token.length > 0 ? token : undefined)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       while: (token) => token == null,

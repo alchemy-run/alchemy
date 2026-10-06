@@ -10,14 +10,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
   encodeOwnership,
   hasAlchemyLabelKeys,
@@ -32,6 +26,7 @@ import {
   userLabels,
   waitForOperation,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 
 export type AgentTool = {
   /**
@@ -162,15 +157,11 @@ export type Agent = Resource<
  */
 export const Agent = Resource<Agent>("GCP.AIPlatform.Agent");
 
-export class AgentNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.AgentNotResolved",
-)<{
+export class AgentNotResolved extends Data.TaggedError("GCP.AIPlatform.AgentNotResolved")<{
   name: string;
 }> {}
 
-export class AgentStillExists extends Data.TaggedError(
-  "GCP.AIPlatform.AgentStillExists",
-)<{
+export class AgentStillExists extends Data.TaggedError("GCP.AIPlatform.AgentStillExists")<{
   name: string;
 }> {}
 
@@ -193,10 +184,7 @@ const toId = (id: string, agentId: string | undefined, existing?: string) =>
   });
 
 const toolsOf = (
-  tools:
-    | readonly AgentTool[]
-    | readonly aiplatform.GoogleCloudAiplatformV1AgentTool[]
-    | undefined,
+  tools: readonly AgentTool[] | readonly aiplatform.GoogleCloudAiplatformV1AgentTool[] | undefined,
 ): AgentTool[] =>
   (tools ?? []).map((tool) => ({
     type: tool.type,
@@ -205,10 +193,7 @@ const toolsOf = (
     headers: stringMapOf(tool.headers),
   }));
 
-const toAttrs = (
-  agent: aiplatform.GoogleCloudAiplatformV1Agent,
-  project: string,
-) => {
+const toAttrs = (agent: aiplatform.GoogleCloudAiplatformV1Agent, project: string) => {
   const name = agent.name ?? "";
   const parsed = parseResourceName(name, "agents");
   const ownership = parseOwnership(agent.description);
@@ -236,43 +221,26 @@ const getByName = (name: string) =>
 
 const listAgents = (project: string, region: string) => {
   const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsAgents
-      .pages({ parent, pageSize: 100 })
-      .pipe(
-        Stream.flatMap((page) => Stream.fromIterable(page.agents ?? [])),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    aiplatform.listProjectsLocationsAgents.pages({ parent, pageSize: 100 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.agents ?? [])),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
-const isOwnedAgent = (
-  agent: aiplatform.GoogleCloudAiplatformV1Agent,
-  id: string,
-) =>
+const isOwnedAgent = (agent: aiplatform.GoogleCloudAiplatformV1Agent, id: string) =>
   Effect.gen(function* () {
     if (yield* hasAlchemyLabels(id, tagRecord(agent.metadata))) return true;
     const { labels } = parseOwnership(agent.description);
     return yield* hasAlchemyLabels(id, labels);
   });
 
-const findOwned = (
-  id: string,
-  project: string,
-  region: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, region: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -288,9 +256,7 @@ const findOwned = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((agent) =>
-      agent
-        ? Effect.succeed(agent)
-        : Effect.fail(new AgentNotResolved({ name })),
+      agent ? Effect.succeed(agent) : Effect.fail(new AgentNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.AgentNotResolved",
@@ -302,9 +268,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((agent) =>
-      agent === undefined
-        ? Effect.void
-        : Effect.fail(new AgentStillExists({ name })),
+      agent === undefined ? Effect.void : Effect.fail(new AgentStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.AgentStillExists",
@@ -322,21 +286,15 @@ export const AgentProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.agentId ?? output?.agentId;
       const nextId = news.agentId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
-      const previousBase =
-        olds?.baseAgent ?? output?.baseAgent ?? DEFAULT_BASE_AGENT;
+      const previousBase = olds?.baseAgent ?? output?.baseAgent ?? DEFAULT_BASE_AGENT;
       const nextBase = news.baseAgent ?? previousBase;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          rfc1035(nextId) !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && rfc1035(nextId) !== previousId) ||
         previousLocation !== nextLocation ||
         previousBase !== nextBase;
       if (!replace) return undefined;
@@ -352,10 +310,7 @@ export const AgentProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const agentId = yield* toId(id, olds?.agentId, output?.agentId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, agentId);
       const existing = yield* findOwned(id, env.project, env.region, name);
       if (existing === undefined) return undefined;
@@ -369,19 +324,14 @@ export const AgentProvider = () =>
         const agents = yield* listAgents(env.project, env.region);
         return agents
           .filter(
-            (agent) =>
-              hasAlchemyLabelKeys(agent.metadata) ||
-              hasOwnershipMarker(agent.description),
+            (agent) => hasAlchemyLabelKeys(agent.metadata) || hasOwnershipMarker(agent.description),
           )
           .map((agent) => toAttrs(agent, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const agentId = yield* toId(id, news.agentId, output?.agentId);
       const name = resourceName(env.project, location, agentId);
       const internal = yield* createInternalLabels(id);
@@ -393,12 +343,7 @@ export const AgentProvider = () =>
       const baseAgent = news.baseAgent ?? DEFAULT_BASE_AGENT;
       const tools = toolsOf(news.tools);
 
-      let current = yield* findOwned(
-        id,
-        env.project,
-        env.region,
-        output?.name ?? name,
-      );
+      let current = yield* findOwned(id, env.project, env.region, output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -433,19 +378,12 @@ export const AgentProvider = () =>
       const observedMetadata = tagRecord(current.metadata);
       const { upsert, removed } = diffLabels(observedMetadata, desiredMetadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const instructionChanged =
         (current.system_instruction ?? "") !== (news.systemInstruction ?? "");
-      const toolsChanged =
-        JSON.stringify(toolsOf(current.tools)) !== JSON.stringify(tools);
+      const toolsChanged = JSON.stringify(toolsOf(current.tools)) !== JSON.stringify(tools);
 
-      if (
-        metadataChanged ||
-        descriptionChanged ||
-        instructionChanged ||
-        toolsChanged
-      ) {
+      if (metadataChanged || descriptionChanged || instructionChanged || toolsChanged) {
         current = yield* aiplatform.patchProjectsLocationsAgents({
           name: currentName,
           updateMask: [

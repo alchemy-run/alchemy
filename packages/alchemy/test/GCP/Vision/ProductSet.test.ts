@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vision from "@distilled.cloud/gcp/vision_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -12,7 +12,6 @@ const waitUntilGone = (name: string) =>
   vision.getProjectsLocationsProductSets({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,10 +31,7 @@ test.provider(
           name: `projects/${project}/locations/${location}/productSets/alchemy-missing-set`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Vision API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -65,9 +61,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(
-        created.set.name.startsWith(
-          `projects/${project}/locations/${location}/productSets/`,
-        ),
+        created.set.name.startsWith(`projects/${project}/locations/${location}/productSets/`),
       ).toEqual(true);
       expect(created.set.productSetId.length).toBeGreaterThan(0);
       expect(created.set.displayName).toEqual("Summer");
@@ -78,8 +72,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.set.name,
       });
       expect(fetched.name).toEqual(created.set.name);
-      expect(fetched.displayName).toContain("[alchemy ");
-      expect(fetched.displayName).toContain("Summer");
+      expect(fetched.displayName).toEqual("Summer");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -106,7 +99,7 @@ test.provider.skipIf(!runLifecycle)(
       const fetchedUpdate = yield* vision.getProjectsLocationsProductSets({
         name: created.set.name,
       });
-      expect(fetchedUpdate.displayName).toContain("Fall");
+      expect(fetchedUpdate.displayName).toEqual("Fall");
 
       const members = yield* vision.listProjectsLocationsProductSetsProducts({
         name: created.set.name,

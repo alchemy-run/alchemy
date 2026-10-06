@@ -10,19 +10,6 @@ export const MAX_NAME_LENGTH = 63;
 export const DEFAULT_TABULAR_METADATA_SCHEMA_URI =
   "gs://google-cloud-aiplatform/schema/dataset/metadata/tabular_1.0.0.yaml";
 
-export class AIPlatformOperationFailed extends Data.TaggedError(
-  "GCP.AIPlatform.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class AIPlatformOperationPending extends Data.TaggedError(
-  "GCP.AIPlatform.OperationPending",
-)<{
-  operation: string;
-}> {}
-
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -42,10 +29,8 @@ export const rfc1035 = (name: string): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -59,8 +44,7 @@ export const stringMapOf = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[1].length > 0,
+      (entry): entry is [string, string] => entry[1] !== undefined && entry[1].length > 0,
     ),
   );
 
@@ -74,14 +58,9 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -92,9 +71,7 @@ export const encodeOwnership = (
 ): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   const trimmed = text?.trim();
-  return trimmed && trimmed.length > 0
-    ? `${marker}${separator}${trimmed}`
-    : marker;
+  return trimmed && trimmed.length > 0 ? `${marker}${separator}${trimmed}` : marker;
 };
 
 export const parseOwnership = (
@@ -120,17 +97,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
-
-const alreadyExists = (error: aiplatform.GoogleRpcStatus | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toLowerCase().includes("already exists");
-
-const isNotFoundStatus = (error: aiplatform.GoogleRpcStatus | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const resourceNameFromOperation = (
   operation: aiplatform.GoogleLongrunningOperation,
@@ -143,82 +110,7 @@ export const resourceNameFromOperation = (
   return undefined;
 };
 
-export const waitForOperation = (
-  operation: aiplatform.GoogleLongrunningOperation,
-  options?: {
-    notFoundOk?: boolean;
-    times?: number;
-    space?: `${number} seconds`;
-  },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (alreadyExists(operation.error)) return operation;
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new AIPlatformOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) return operation;
-      return yield* new AIPlatformOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = aiplatform.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<aiplatform.GoogleLongrunningOperation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new AIPlatformOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (!error) return Effect.succeed(current);
-        if (alreadyExists(error)) return Effect.succeed(current);
-        if (options?.notFoundOk === true && isNotFoundStatus(error)) {
-          return Effect.succeed(current);
-        }
-        return Effect.fail(
-          new AIPlatformOperationFailed({
-            operation: name,
-            message: error.message ?? "operation failed",
-          }),
-        );
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.AIPlatform.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.space ?? "4 seconds"),
-      }),
-    );
-  });
+export { waitForOperation } from "./operations.ts";
 
 export const JOB_TERMINAL_STATES = new Set([
   "JOB_STATE_SUCCEEDED",

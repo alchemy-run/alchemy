@@ -108,7 +108,6 @@ export type ObservationJob = Resource<
  * **Example:** Enable collection
  * ```typescript
  * const job = yield* GCP.Apim.ObservationJob("Shadow", {
- *   observationJobId: existing.observationJobId,
  *   sources: [source.name],
  *   enabled: true,
  * });
@@ -117,15 +116,9 @@ export type ObservationJob = Resource<
  * @resource
  * @category Apim
  */
-export const ObservationJob = Resource<ObservationJob>(
-  "GCP.Apim.ObservationJob",
-);
+export const ObservationJob = Resource<ObservationJob>("GCP.Apim.ObservationJob");
 
-const toAttrs = (
-  location: string,
-  item: apim.ObservationJob,
-  project: string,
-) => {
+const toAttrs = (location: string, item: apim.ObservationJob, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION);
   const state = item.state;
@@ -147,11 +140,7 @@ const getByName = (name: string) =>
     ? Effect.succeed(undefined)
     : apim
         .getProjectsLocationsObservationJobs({ name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -164,9 +153,7 @@ const listOwned = (project: string, region: string) =>
     ),
   ).pipe(
     Effect.map((items) =>
-      items.filter((item) =>
-        hasAlchemyId(parseName(item.name ?? "", COLLECTION).id),
-      ),
+      items.filter((item) => hasAlchemyId(parseName(item.name ?? "", COLLECTION).id)),
     ),
   );
 
@@ -187,13 +174,8 @@ export const ObservationJobProvider = () =>
       const previousSources = olds?.sources ?? output?.sources;
       return replaceOnIdentity({
         previousId: olds?.observationJobId ?? output?.observationJobId,
-        nextId:
-          news.observationJobId ??
-          olds?.observationJobId ??
-          output?.observationJobId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.observationJobId ?? olds?.observationJobId ?? output?.observationJobId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -212,12 +194,9 @@ export const ObservationJobProvider = () =>
         output?.observationJobId,
         "job",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, observationJobId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, observationJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(location, existing, env.project);
@@ -242,15 +221,8 @@ export const ObservationJobProvider = () =>
         output?.observationJobId,
         "job",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        observationJobId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, observationJobId);
       const sources = (news.sources ?? []).map((source) =>
         expandObservationSource(source, env.project, location),
       );
@@ -279,12 +251,7 @@ export const ObservationJobProvider = () =>
       }
 
       const resource = current.name ?? name;
-      current = yield* waitUntilReady(
-        getByName(resource),
-        resource,
-        (item) => item.state,
-        CREATED,
-      );
+      current = yield* waitUntilReady(getByName(resource), resource, (item) => item.state, CREATED);
 
       const state = (current.state ?? "").toUpperCase();
       if (wantEnabled && state !== "ENABLED") {
@@ -323,20 +290,13 @@ export const ObservationJobProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getByName(output.name);
       const state = (existing?.state ?? "").toUpperCase();
-      if (
-        existing !== undefined &&
-        (state === "ENABLED" || state === "ENABLING")
-      ) {
+      if (existing !== undefined && (state === "ENABLED" || state === "ENABLING")) {
         const disable = yield* apim
           .disableProjectsLocationsObservationJobs({
             name: output.name,
             body: {},
           })
-          .pipe(
-            Effect.catchTag(["NotFound", "Conflict"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)));
         if (disable !== undefined) {
           yield* waitForOperation(disable, { notFoundOk: true });
         }

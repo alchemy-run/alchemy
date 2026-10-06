@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   changedFields,
@@ -153,13 +148,15 @@ export type Enrollment = Resource<
  * ```
  *
  * ### Updating an Enrollment
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical enrollment and patches it in place.
+ *
  * **Example:** Tighten the CEL match
  * ```typescript
  * const enrollment = yield* GCP.Eventarc.Enrollment("All", {
- *   enrollmentId: existing.enrollmentId,
- *   location: existing.location,
- *   messageBus: existing.messageBus!,
- *   destination: existing.destination!,
+ *   location: "us-central1",
+ *   messageBus: bus.name,
+ *   destination: pipeline.name,
  *   celMatch: "message.type == 'google.cloud.pubsub.topic.v1.messagePublished'",
  *   labels: { env: "prod", role: "enrollment" },
  * });
@@ -170,11 +167,7 @@ export type Enrollment = Resource<
  */
 export const Enrollment = Resource<Enrollment>("GCP.Eventarc.Enrollment");
 
-const toAttrs = (
-  enrollment: eventarc.Enrollment,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (enrollment: eventarc.Enrollment, project: string, region: string) => {
   const name = enrollment.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -202,27 +195,14 @@ const getByName = (name: string) =>
 
 export const EnrollmentProvider = () =>
   Provider.succeed(Enrollment, {
-    stables: [
-      "name",
-      "enrollmentId",
-      "project",
-      "location",
-      "messageBus",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "enrollmentId", "project", "location", "messageBus", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.enrollmentId ?? output?.enrollmentId;
-      const nextId = news.enrollmentId
-        ? rfc1035(news.enrollmentId, "enrollment")
-        : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const nextId = news.enrollmentId ? rfc1035(news.enrollmentId, "enrollment") : previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -230,9 +210,7 @@ export const EnrollmentProvider = () =>
       const previousBus = olds?.messageBus ?? output?.messageBus ?? "";
       const nextBus = news.messageBus;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousBus.length > 0 && previousBus !== nextBus)
       ) {
@@ -256,19 +234,12 @@ export const EnrollmentProvider = () =>
         output?.enrollmentId,
         "enrollment",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, enrollmentId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, enrollmentId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -294,35 +265,15 @@ export const EnrollmentProvider = () =>
         output?.enrollmentId,
         "enrollment",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        enrollmentId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, enrollmentId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const messageBus = expandResource(
-        news.messageBus,
-        env.project,
-        location,
-        "messageBuses",
-      );
-      const destination = expandResource(
-        news.destination,
-        env.project,
-        location,
-        "pipelines",
-      );
-      const desiredAnnotations = news.annotations
-        ? tagRecord(news.annotations)
-        : undefined;
+      const messageBus = expandResource(news.messageBus, env.project, location, "messageBuses");
+      const destination = expandResource(news.destination, env.project, location, "pipelines");
+      const desiredAnnotations = news.annotations ? tagRecord(news.annotations) : undefined;
 
       let current = yield* getByName(name);
 
@@ -361,14 +312,8 @@ export const EnrollmentProvider = () =>
         ["labels", upsert.length > 0 || removed.length > 0],
         ["destination", textKey(current.destination) !== destination],
         ["celMatch", textKey(current.celMatch) !== news.celMatch],
-        [
-          "displayName",
-          textKey(current.displayName) !== textKey(news.displayName),
-        ],
-        [
-          "annotations",
-          !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {}),
-        ],
+        ["displayName", textKey(current.displayName) !== textKey(news.displayName)],
+        ["annotations", !sameJson(tagRecord(current.annotations), desiredAnnotations ?? {})],
       ]);
 
       if (updateMask.length > 0) {
@@ -385,10 +330,7 @@ export const EnrollmentProvider = () =>
           },
         });
         yield* waitForOperation(patched);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -410,11 +352,9 @@ export const EnrollmentProvider = () =>
           }
         }),
       ).pipe(
-        Effect.catchTag("GCP.Eventarc.OperationFailed", (error) =>
+        Effect.catchTag("GCP.OperationFailed", (error) =>
           getByName(output.name).pipe(
-            Effect.flatMap((current) =>
-              current === undefined ? Effect.void : Effect.fail(error),
-            ),
+            Effect.flatMap((current) => (current === undefined ? Effect.void : Effect.fail(error))),
           ),
         ),
       );

@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type ImageRawDisk = {
   /** GCS URI of a gzip-compressed tarball (`gs://` or `https://storage.googleapis.com/`). */
@@ -181,9 +181,7 @@ export type Image = Resource<
  */
 export const Image = Resource<Image>("GCP.Compute.Image");
 
-export class ImageNotResolved extends Data.TaggedError(
-  "GCP.Compute.ImageNotResolved",
-)<{
+export class ImageNotResolved extends Data.TaggedError("GCP.Compute.ImageNotResolved")<{
   imageName: string;
 }> {}
 
@@ -197,24 +195,12 @@ export class ImageFailed extends Data.TaggedError("GCP.Compute.ImageFailed")<{
   status: string;
 }> {}
 
-export class ImageStillExists extends Data.TaggedError(
-  "GCP.Compute.ImageStillExists",
-)<{
+export class ImageStillExists extends Data.TaggedError("GCP.Compute.ImageStillExists")<{
   imageName: string;
   status: string;
 }> {}
 
-export class ImageOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ImageOperationFailed",
-)<{
-  imageName: string;
-  operation: string;
-  message: string;
-}> {}
-
-export class ImageSourceRequired extends Data.TaggedError(
-  "GCP.Compute.ImageSourceRequired",
-)<{
+export class ImageSourceRequired extends Data.TaggedError("GCP.Compute.ImageSourceRequired")<{
   imageName: string;
 }> {}
 
@@ -231,8 +217,7 @@ const userLabels = (
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
 const sameStrings = (left?: readonly string[], right?: readonly string[]) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+  JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -243,9 +228,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `i${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `i${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const toAttrs = (image: compute.Image, project: string) => ({
@@ -272,90 +255,6 @@ const getByName = (project: string, image: string) =>
     .getImages({ project, image })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationErrorMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  "operation failed";
-
-const isAlreadyExists = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).some((error) => {
-    const code = (error.code ?? "").toUpperCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "ALREADY_EXISTS" ||
-      code === "RESOURCE_ALREADY_EXISTS" ||
-      message.includes("already exists")
-    );
-  });
-
-const isNotFoundOperation = (operation: compute.Operation) =>
-  operation.httpErrorStatusCode === 404 ||
-  (operation.error?.errors ?? []).some((error) => {
-    const code = (error.code ?? "").toUpperCase();
-    const message = (error.message ?? "").toLowerCase();
-    return (
-      code === "RESOURCE_NOT_FOUND" ||
-      code === "NOT_FOUND" ||
-      message.includes("not found")
-    );
-  });
-
-const failIfErrored = (
-  imageName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.succeed(operation);
-  }
-  if (options?.ignoreNotFound === true && isNotFoundOperation(operation)) {
-    return Effect.succeed(operation);
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new ImageOperationFailed({
-        imageName,
-        operation: operation.name ?? "",
-        message: operationErrorMessage(operation),
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  imageName: string,
-  operation: compute.Operation,
-  options?: {
-    ignoreAlreadyExists?: boolean;
-    ignoreNotFound?: boolean;
-    times?: number;
-  },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(imageName, operation, options);
-    }
-    const name = lastSegment(operation.name) || operation.name;
-    if (name === undefined || name.length === 0) {
-      return yield* failIfErrored(imageName, operation, options);
-    }
-    const done = yield* waitGlobalOperations(
-      { project, operation: name },
-      { times: options?.times ?? 24 },
-    );
-    return yield* failIfErrored(imageName, done, options);
-  });
-
 const waitUntilReady = (project: string, imageName: string) =>
   getByName(project, imageName).pipe(
     Effect.flatMap((image) =>
@@ -364,8 +263,7 @@ const waitUntilReady = (project: string, imageName: string) =>
         : Effect.succeed(image),
     ),
     Effect.filterOrFail(
-      (image): image is compute.Image =>
-        image !== undefined && image.status === "READY",
+      (image): image is compute.Image => image !== undefined && image.status === "READY",
       (image) =>
         new ImagePending({
           imageName,
@@ -417,8 +315,7 @@ const insertBody = (
         containerType: news.rawDisk.containerType ?? "TAR",
       }
     : undefined,
-  diskSizeGb:
-    news.diskSizeGb !== undefined ? String(news.diskSizeGb) : undefined,
+  diskSizeGb: news.diskSizeGb !== undefined ? String(news.diskSizeGb) : undefined,
   storageLocations: news.storageLocations,
   architecture: news.architecture,
   licenses: news.licenses,
@@ -471,9 +368,7 @@ export const ImageProvider = () =>
       const previousName = olds.imageName ?? output?.imageName;
       const nextName = news.imageName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousSize = olds.diskSizeGb ?? Number(output?.diskSizeGb);
       const sizeChanged =
@@ -489,10 +384,7 @@ export const ImageProvider = () =>
 
       const storageChanged =
         news.storageLocations !== undefined &&
-        !sameStrings(
-          news.storageLocations,
-          olds.storageLocations ?? output?.storageLocations,
-        );
+        !sameStrings(news.storageLocations, olds.storageLocations ?? output?.storageLocations);
 
       const licensesChanged =
         news.licenses !== undefined &&
@@ -511,9 +403,7 @@ export const ImageProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          nextName === previousName,
+          previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
 
@@ -523,9 +413,7 @@ export const ImageProvider = () =>
       const existing = yield* getByName(env.project, imageName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -539,9 +427,7 @@ export const ImageProvider = () =>
           })
           .pipe(
             Stream.filter((image) =>
-              Object.keys(image.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(image.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((image) => toAttrs(image, env.project)),
             Stream.runCollect,
@@ -574,9 +460,8 @@ export const ImageProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitUntilDone(env.project, imageName, inserted, {
-            ignoreAlreadyExists: true,
-            times: 45,
+          yield* waitGlobalOperation(env.project, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
           });
         }
         current = yield* waitUntilReady(env.project, imageName);
@@ -595,8 +480,7 @@ export const ImageProvider = () =>
       }
 
       const familyChanged = (current.family ?? "") !== (news.family ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       if (familyChanged || descriptionChanged) {
         yield* compute
           .patchImages({
@@ -607,11 +491,7 @@ export const ImageProvider = () =>
               description: news.description,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, imageName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, imageName)) ?? current;
       }
 
@@ -627,11 +507,7 @@ export const ImageProvider = () =>
               labelFingerprint: current.labelFingerprint,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitUntilDone(env.project, imageName, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, imageName)) ?? current;
       }
 
@@ -658,13 +534,9 @@ export const ImageProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(env.project, output.imageName, operation, {
-          ignoreNotFound: true,
-          times: 45,
-        }).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-        );
+        yield* waitGlobalOperation(env.project, operation, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
       yield* waitUntilGone(env.project, output.imageName);
     }),

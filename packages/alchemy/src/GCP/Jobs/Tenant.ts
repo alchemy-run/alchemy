@@ -81,10 +81,12 @@ export type Tenant = Resource<
  * ```
  *
  * ### Updating a Tenant
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Change the client identifier
  * ```typescript
  * const tenant = yield* GCP.Jobs.Tenant("Acme", {
- *   tenantId: existing.tenantId,
  *   externalId: "acme-holdings",
  * });
  * ```
@@ -94,9 +96,7 @@ export type Tenant = Resource<
  */
 export const Tenant = Resource<Tenant>("GCP.Jobs.Tenant");
 
-export class TenantNotResolved extends Data.TaggedError(
-  "GCP.Jobs.TenantNotResolved",
-)<{
+export class TenantNotResolved extends Data.TaggedError("GCP.Jobs.TenantNotResolved")<{
   name: string;
 }> {}
 
@@ -126,17 +126,14 @@ export const TenantProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const name =
-        output?.name ??
-        tenantNameOf(env.project, olds?.tenantId ?? output?.tenantId ?? "");
+        output?.name ?? tenantNameOf(env.project, olds?.tenantId ?? output?.tenantId ?? "");
       let existing = yield* getTenant(name);
       if (existing === undefined) {
         existing = yield* findOwnedTenant(env.project, id);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.externalId))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.externalId)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -149,18 +146,9 @@ export const TenantProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const ownership = yield* ownershipLabels(id);
-      const clientId = yield* toGeneratedName(
-        id,
-        news.externalId,
-        output?.externalId,
-      );
-      const externalId = encodeOwnershipLine(
-        ownership,
-        clientId,
-        MAX_EXTERNAL_ID_LENGTH,
-      );
-      const name =
-        output?.name ?? tenantNameOf(env.project, news.tenantId ?? "");
+      const clientId = yield* toGeneratedName(id, news.externalId, output?.externalId);
+      const externalId = encodeOwnershipLine(ownership, clientId, MAX_EXTERNAL_ID_LENGTH);
+      const name = output?.name ?? tenantNameOf(env.project, news.tenantId ?? "");
 
       let current = yield* getTenant(name);
       if (current === undefined) {
@@ -173,9 +161,7 @@ export const TenantProvider = () =>
             parent: projectParent(env.project),
             body: { externalId },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findOwnedTenant(env.project, id)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwnedTenant(env.project, id)));
         current = created ?? undefined;
       }
 

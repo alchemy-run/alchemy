@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionInstantSnapshotGroupProps = {
   /**
@@ -115,13 +111,6 @@ export class RegionInstantSnapshotGroupNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionInstantSnapshotGroupOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionInstantSnapshotGroupOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
 export class RegionInstantSnapshotGroupNotReady extends Data.TaggedError(
   "GCP.Compute.RegionInstantSnapshotGroupNotReady",
 )<{
@@ -196,15 +185,9 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toPolicyRef = (
-  project: string,
-  region: string,
-  policy: string,
-): string => {
+const toPolicyRef = (project: string, region: string, policy: string): string => {
   if (policy.includes("/")) return policy;
   return `projects/${project}/regions/${region}/resourcePolicies/${policy}`;
 };
@@ -234,11 +217,7 @@ const toAttrs = (group: compute.InstantSnapshotGroup, project: string) => {
   };
 };
 
-const getByName = (
-  project: string,
-  region: string,
-  instantSnapshotGroup: string,
-) =>
+const getByName = (project: string, region: string, instantSnapshotGroup: string) =>
   compute
     .getRegionInstantSnapshotGroups({
       project,
@@ -247,89 +226,7 @@ const getByName = (
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationMessage = (operation: compute.Operation): string => {
-  const errors = operation.error?.errors ?? [];
-  return (
-    errors.map((item) => item.message ?? item.code ?? "unknown").join("; ") ||
-    operation.httpErrorMessage ||
-    operation.statusMessage ||
-    "operation failed"
-  );
-};
-
-const operationCodes = (operation: compute.Operation): string[] =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.code)
-    .filter((code): code is string => code !== undefined);
-
-const isAlreadyExists = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_ALREADY_EXISTS" || code === "ALREADY_EXISTS",
-  ) || /already exists/i.test(operationMessage(operation));
-
-const isNotFound = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_NOT_FOUND" || code === "NOT_FOUND",
-  ) || /not found/i.test(operationMessage(operation));
-
-const waitOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      if (isAlreadyExists(operation) || isNotFound(operation)) {
-        return operation;
-      }
-      if (
-        (operation.error?.errors?.length ?? 0) > 0 ||
-        (operation.httpErrorStatusCode !== undefined &&
-          operation.httpErrorStatusCode >= 400)
-      ) {
-        return yield* new RegionInstantSnapshotGroupOperationFailed({
-          operation: operation.name ?? "",
-          message: operationMessage(operation),
-        });
-      }
-      return operation;
-    }
-
-    const operationName = lastSegment(operation.name);
-    if (operationName.length === 0) {
-      return yield* new RegionInstantSnapshotGroupOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const current = yield* waitRegionOperations(
-      { project, region, operation: operationName },
-      { times: options?.times ?? 12 },
-    );
-
-    if (isAlreadyExists(current) || isNotFound(current)) {
-      return current;
-    }
-    if (
-      (current.error?.errors?.length ?? 0) > 0 ||
-      (current.httpErrorStatusCode !== undefined &&
-        current.httpErrorStatusCode >= 400)
-    ) {
-      return yield* new RegionInstantSnapshotGroupOperationFailed({
-        operation: operationName,
-        message: operationMessage(current),
-      });
-    }
-    return current;
-  });
-
-const waitReady = (
-  project: string,
-  region: string,
-  instantSnapshotGroupName: string,
-) =>
+const waitReady = (project: string, region: string, instantSnapshotGroupName: string) =>
   getByName(project, region, instantSnapshotGroupName).pipe(
     Effect.flatMap((group) =>
       group?.status === "FAILED" || group?.status === "INVALID"
@@ -351,18 +248,13 @@ const waitReady = (
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionInstantSnapshotGroupNotReady",
+      while: (error) => error._tag === "GCP.Compute.RegionInstantSnapshotGroupNotReady",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
-const waitGone = (
-  project: string,
-  region: string,
-  instantSnapshotGroupName: string,
-) =>
+const waitGone = (project: string, region: string, instantSnapshotGroupName: string) =>
   getByName(project, region, instantSnapshotGroupName).pipe(
     Effect.flatMap((group) =>
       group === undefined
@@ -397,33 +289,21 @@ export const RegionInstantSnapshotGroupProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousName =
-        olds?.instantSnapshotGroupName ?? output?.instantSnapshotGroupName;
+      const previousName = olds?.instantSnapshotGroupName ?? output?.instantSnapshotGroupName;
       const nextName = news.instantSnapshotGroupName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const previousSource = canonicalizePolicy(
         olds?.sourceConsistencyGroup ?? output?.sourceConsistencyGroup,
       );
       const nextSource = canonicalizePolicy(news.sourceConsistencyGroup);
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
 
       const replace =
         previousRegion !== nextRegion ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
-        (nextSource.length > 0 &&
-          previousSource.length > 0 &&
-          previousSource !== nextSource) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
+        (nextSource.length > 0 && previousSource.length > 0 && previousSource !== nextSource) ||
         previousDescription !== nextDescription;
 
       if (!replace) return undefined;
@@ -444,15 +324,8 @@ export const RegionInstantSnapshotGroupProvider = () =>
         olds?.instantSnapshotGroupName,
         output?.instantSnapshotGroupName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        instantSnapshotGroupName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, instantSnapshotGroupName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -487,17 +360,9 @@ export const RegionInstantSnapshotGroupProvider = () =>
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
-      const desiredSource = toPolicyRef(
-        env.project,
-        region,
-        news.sourceConsistencyGroup,
-      );
+      const desiredSource = toPolicyRef(env.project, region, news.sourceConsistencyGroup);
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        instantSnapshotGroupName,
-      );
+      let current = yield* getByName(env.project, region, instantSnapshotGroupName);
       if (current?.status === "DELETING") {
         yield* waitGone(env.project, region, instantSnapshotGroupName);
         current = undefined;
@@ -517,17 +382,11 @@ export const RegionInstantSnapshotGroupProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
-          yield* waitOperation(env.project, region, inserted, {
-            times: 12,
-          }).pipe(
-            Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-          );
+          yield* waitRegionOperation(env.project, region, inserted, {
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
-        current = yield* waitReady(
-          env.project,
-          region,
-          instantSnapshotGroupName,
-        );
+        current = yield* waitReady(env.project, region, instantSnapshotGroupName);
       }
 
       if (current === undefined) {
@@ -538,11 +397,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
       }
 
       if (current.status !== "READY") {
-        current = yield* waitReady(
-          env.project,
-          region,
-          instantSnapshotGroupName,
-        );
+        current = yield* waitReady(env.project, region, instantSnapshotGroupName);
       }
 
       if (current === undefined) {
@@ -573,15 +428,9 @@ export const RegionInstantSnapshotGroupProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitOperation(output.project, region, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof RegionInstantSnapshotGroupOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-        );
+        yield* waitRegionOperation(output.project, region, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitGone(output.project, region, output.instantSnapshotGroupName);
     }),

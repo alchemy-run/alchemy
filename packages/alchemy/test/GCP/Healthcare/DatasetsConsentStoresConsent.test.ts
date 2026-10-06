@@ -1,20 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as healthcare from "@distilled.cloud/gcp/healthcare_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_HEALTHCARE;
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   healthcare.getProjectsLocationsDatasetsConsentStoresConsents({ name }).pipe(
@@ -39,7 +34,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/datasets/missing/consentStores/missing/consents/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -49,7 +44,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a consent",
   (stack) =>
     Effect.gen(function* () {
@@ -64,25 +59,18 @@ test.provider.skipIf(!runLifecycle)(
             dataset: dataset.name,
             labels: { env: "test" },
           });
-          const artifact =
-            yield* GCP.Healthcare.DatasetsConsentStoresConsentArtifact(
-              "Proof",
-              {
-                consentStore: store.name,
-                userId: "user-123",
-                consentContentVersion: "v1",
-              },
-            );
-          const consent = yield* GCP.Healthcare.DatasetsConsentStoresConsent(
-            "Grant",
-            {
-              consentStore: store.name,
-              userId: "user-123",
-              consentArtifact: artifact.name,
-              state: "DRAFT",
-              metadata: { source: "app" },
-            },
-          );
+          const artifact = yield* GCP.Healthcare.DatasetsConsentStoresConsentArtifact("Proof", {
+            consentStore: store.name,
+            userId: "user-123",
+            consentContentVersion: "v1",
+          });
+          const consent = yield* GCP.Healthcare.DatasetsConsentStoresConsent("Grant", {
+            consentStore: store.name,
+            userId: "user-123",
+            consentArtifact: artifact.name,
+            state: "DRAFT",
+            metadata: { source: "app" },
+          });
           return { dataset, store, artifact, consent };
         }),
       );
@@ -92,10 +80,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.consent.state).toEqual("DRAFT");
       expect(created.consent.metadata).toMatchObject({ source: "app" });
 
-      const fetched =
-        yield* healthcare.getProjectsLocationsDatasetsConsentStoresConsents({
-          name: created.consent.name,
-        });
+      const fetched = yield* healthcare.getProjectsLocationsDatasetsConsentStoresConsents({
+        name: created.consent.name,
+      });
       expect(fetched.name).toEqual(created.consent.name);
       expect(fetched.state).toEqual("DRAFT");
       expect(fetched.metadata?.source).toEqual("app");
@@ -112,25 +99,18 @@ test.provider.skipIf(!runLifecycle)(
             consentStoreId: created.store.consentStoreId,
             labels: { env: "test" },
           });
-          const artifact =
-            yield* GCP.Healthcare.DatasetsConsentStoresConsentArtifact(
-              "Proof",
-              {
-                consentStore: store.name,
-                userId: "user-123",
-                consentContentVersion: "v1",
-              },
-            );
-          const consent = yield* GCP.Healthcare.DatasetsConsentStoresConsent(
-            "Grant",
-            {
-              consentStore: store.name,
-              userId: "user-123",
-              consentArtifact: artifact.name,
-              state: "DRAFT",
-              metadata: { source: "portal" },
-            },
-          );
+          const artifact = yield* GCP.Healthcare.DatasetsConsentStoresConsentArtifact("Proof", {
+            consentStore: store.name,
+            userId: "user-123",
+            consentContentVersion: "v1",
+          });
+          const consent = yield* GCP.Healthcare.DatasetsConsentStoresConsent("Grant", {
+            consentStore: store.name,
+            userId: "user-123",
+            consentArtifact: artifact.name,
+            state: "DRAFT",
+            metadata: { source: "portal" },
+          });
           return { dataset, store, artifact, consent };
         }),
       );

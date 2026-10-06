@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 export type RegionSslCertificateType = "SELF_MANAGED" | "MANAGED";
 
@@ -167,14 +163,6 @@ export class RegionSslCertificateNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class RegionSslCertificateOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionSslCertificateOperationFailed",
-)<{
-  sslCertificateName: string;
-  operation: string;
-  message: string;
-}> {}
-
 const lastSegment = (value: string | undefined) => {
   if (value === undefined || value.length === 0) return "";
   const trimmed = value.replace(/\/+$/, "");
@@ -270,8 +258,7 @@ const selfManagedOf = (props: {
   privateKey: props.privateKey ?? props.selfManaged?.privateKey,
 });
 
-const normalizePem = (pem: string | undefined): string =>
-  (pem ?? "").replace(/\s+/g, "");
+const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\s+/g, "");
 
 const sameDomains = (left?: readonly string[], right?: readonly string[]) =>
   [...(left ?? [])].sort().join("\0") === [...(right ?? [])].sort().join("\0");
@@ -335,11 +322,7 @@ const getByName = (project: string, region: string, sslCertificate: string) =>
     .getRegionSslCertificates({ project, region, sslCertificate })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const awaitResource = (
-  project: string,
-  region: string,
-  sslCertificateName: string,
-) =>
+const awaitResource = (project: string, region: string, sslCertificateName: string) =>
   getByName(project, region, sslCertificateName).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -347,67 +330,6 @@ const awaitResource = (
       times: 8,
     }),
   );
-
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfErrored = (
-  sslCertificateName: string,
-  operation: compute.Operation,
-) => {
-  const errors = operation.error?.errors ?? [];
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.succeed(operation);
-  }
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new RegionSslCertificateOperationFailed({
-        sslCertificateName,
-        operation: operation.name ?? "",
-        message:
-          errors.map((error) => error.message ?? error.code ?? "").join("; ") ||
-          operation.httpErrorMessage ||
-          "operation failed",
-      }),
-    );
-  }
-  return Effect.succeed(operation);
-};
-
-const waitUntilDone = (
-  project: string,
-  region: string,
-  sslCertificateName: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(sslCertificateName, operation);
-    }
-    const name = operationId(operation);
-    if (!name) {
-      return yield* failIfErrored(sslCertificateName, operation);
-    }
-    const done = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    return yield* failIfErrored(sslCertificateName, done);
-  });
 
 const immutableChanged = (
   news: RegionSslCertificateProps,
@@ -426,8 +348,7 @@ const immutableChanged = (
   if ((news.description ?? "") !== previousDescription) return true;
 
   if (typeOf(news) === "MANAGED") {
-    const previousDomains =
-      olds?.managed?.domains ?? output?.managedDomains ?? [];
+    const previousDomains = olds?.managed?.domains ?? output?.managedDomains ?? [];
     if (
       news.managed?.domains !== undefined &&
       !sameDomains(news.managed.domains, previousDomains)
@@ -445,16 +366,14 @@ const immutableChanged = (
   });
   if (
     nextMaterial.certificate !== undefined &&
-    normalizePem(nextMaterial.certificate) !==
-      normalizePem(previousMaterial.certificate)
+    normalizePem(nextMaterial.certificate) !== normalizePem(previousMaterial.certificate)
   ) {
     return true;
   }
   if (
     nextMaterial.privateKey !== undefined &&
     previousMaterial.privateKey !== undefined &&
-    normalizePem(nextMaterial.privateKey) !==
-      normalizePem(previousMaterial.privateKey)
+    normalizePem(nextMaterial.privateKey) !== normalizePem(previousMaterial.privateKey)
   ) {
     return true;
   }
@@ -476,27 +395,16 @@ export const RegionSslCertificateProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.sslCertificateName ?? output?.sslCertificateName;
+      const previousName = olds?.sslCertificateName ?? output?.sslCertificateName;
       const nextName = news.sslCertificateName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
       const nameChanged =
         news.sslCertificateName !== undefined &&
         previousName !== undefined &&
         news.sslCertificateName !== previousName;
-      if (
-        nameChanged ||
-        regionChanged ||
-        immutableChanged(news, olds, output)
-      ) {
+      if (nameChanged || regionChanged || immutableChanged(news, olds, output)) {
         return {
           action: "replace" as const,
           deleteFirst: !regionChanged && nextName === previousName,
@@ -512,15 +420,8 @@ export const RegionSslCertificateProvider = () =>
         olds?.sslCertificateName,
         output?.sslCertificateName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        sslCertificateName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, sslCertificateName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
@@ -536,7 +437,7 @@ export const RegionSslCertificateProvider = () =>
             returnPartialSuccess: true,
             maxResults: 500,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.sslCertificates ?? [])
@@ -569,7 +470,9 @@ export const RegionSslCertificateProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitUntilDone(env.project, region, sslCertificateName, operation),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
@@ -607,12 +510,9 @@ export const RegionSslCertificateProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitUntilDone(
-          env.project,
-          region,
-          output.sslCertificateName,
-          operation,
-        ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        yield* waitRegionOperation(env.project, region, operation).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }
     }),
   });

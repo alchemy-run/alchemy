@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_SCHEME = "EXTERNAL";
 const DEFAULT_NETWORK_TIER = "PREMIUM";
@@ -88,10 +88,7 @@ export type ForwardingRuleProps = {
    * changing it replaces the rule.
    * @default "EXTERNAL"
    */
-  loadBalancingScheme?:
-    | compute.ForwardingRuleLoadBalancingSchemeEnum
-    | ""
-    | (string & {});
+  loadBalancingScheme?: compute.ForwardingRuleLoadBalancingSchemeEnum | "" | (string & {});
   /**
    * VPC network URL or name. Used for internal load balancing and PSC.
    * Immutable — changing it replaces the rule.
@@ -288,9 +285,7 @@ export type ForwardingRule = Resource<
  * @resource
  * @category Compute
  */
-export const ForwardingRule = Resource<ForwardingRule>(
-  "GCP.Compute.ForwardingRule",
-);
+export const ForwardingRule = Resource<ForwardingRule>("GCP.Compute.ForwardingRule");
 
 export class ForwardingRuleNotResolved extends Data.TaggedError(
   "GCP.Compute.ForwardingRuleNotResolved",
@@ -299,19 +294,9 @@ export class ForwardingRuleNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class ForwardingRulePending extends Data.TaggedError(
-  "GCP.Compute.ForwardingRulePending",
-)<{
+export class ForwardingRulePending extends Data.TaggedError("GCP.Compute.ForwardingRulePending")<{
   forwardingRuleName: string;
   status: string;
-}> {}
-
-export class ForwardingRuleOperationFailed extends Data.TaggedError(
-  "GCP.Compute.ForwardingRuleOperationFailed",
-)<{
-  forwardingRuleName: string;
-  operation: string;
-  message: string;
 }> {}
 
 const userLabels = (
@@ -332,11 +317,9 @@ const resourceRefOf = (value: string | undefined) => {
   return lastSegment(value);
 };
 
-const schemeOf = (value: string | undefined) =>
-  value === undefined ? DEFAULT_SCHEME : value;
+const schemeOf = (value: string | undefined) => (value === undefined ? DEFAULT_SCHEME : value);
 
-const networkTierOf = (value: string | undefined) =>
-  value ?? DEFAULT_NETWORK_TIER;
+const networkTierOf = (value: string | undefined) => value ?? DEFAULT_NETWORK_TIER;
 
 const ipVersionOf = (value: string | undefined) =>
   value && value !== "UNSPECIFIED_VERSION" ? value : "";
@@ -354,9 +337,7 @@ const rangesKey = (ranges: ReadonlyArray<string> | undefined) =>
   [...(ranges ?? [])].map(String).sort().join(",");
 
 const registrationsKey = (
-  registrations:
-    | ReadonlyArray<ForwardingRuleServiceDirectoryRegistration>
-    | undefined,
+  registrations: ReadonlyArray<ForwardingRuleServiceDirectoryRegistration> | undefined,
 ) =>
   JSON.stringify(
     (registrations ?? []).map((item) => ({
@@ -381,9 +362,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `f${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `f${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const toAttrs = (rule: compute.ForwardingRule, project: string) => ({
@@ -429,14 +408,8 @@ const toInsertBody = (
   description: news.description,
   IPAddress: news.ipAddress,
   IPProtocol: news.ipProtocol,
-  portRange:
-    news.allPorts === true || news.ports !== undefined
-      ? undefined
-      : news.portRange,
-  ports:
-    news.allPorts === true || news.portRange !== undefined
-      ? undefined
-      : news.ports,
+  portRange: news.allPorts === true || news.ports !== undefined ? undefined : news.portRange,
+  ports: news.allPorts === true || news.portRange !== undefined ? undefined : news.ports,
   allPorts: news.allPorts,
   target: news.target,
   backendService: news.backendService,
@@ -455,112 +428,17 @@ const toInsertBody = (
   serviceDirectoryRegistrations: news.serviceDirectoryRegistrations,
 });
 
-const operationId = (operation: compute.Operation) => {
-  const name = operation.name ?? "";
-  return name.split("/").pop() ?? name;
-};
-
-const operationText = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => `${error.code ?? ""} ${error.message ?? ""}`)
-    .join("; ")
-    .toLowerCase();
-
-const failIfOpError = (
-  operation: compute.Operation,
-  forwardingRuleName: string,
-) => {
-  const errors = operation.error?.errors ?? [];
-  if (errors.length === 0) return Effect.void;
-  const text = operationText(operation);
-  if (text.includes("already_exists") || text.includes("already exists")) {
-    return Effect.void;
-  }
-  if (text.includes("not_found") || text.includes("not found")) {
-    return Effect.void;
-  }
-  return Effect.fail(
-    new ForwardingRuleOperationFailed({
-      forwardingRuleName,
-      operation: operation.name ?? "",
-      message: errors
-        .map((error) => error.message ?? error.code ?? "unknown")
-        .join("; "),
-    }),
-  );
-};
-
 const getByName = (project: string, region: string, forwardingRule: string) =>
   compute
     .getForwardingRules({ project, region, forwardingRule })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  forwardingRuleName: string,
-) =>
-  Effect.gen(function* () {
-    const name = operationId(operation);
-    if (!name) {
-      if (operation.status === "DONE") {
-        yield* failIfOpError(operation, forwardingRuleName);
-        return;
-      }
-      return yield* new ForwardingRuleOperationFailed({
-        forwardingRuleName,
-        operation: "",
-        message: "compute operation is missing a name",
-      });
-    }
-    if (operation.status === "DONE") {
-      yield* failIfOpError(operation, forwardingRuleName);
-      return;
-    }
-    const waited = yield* waitRegionOperations({
-      project,
-      region,
-      operation: name,
-    });
-    if (waited.status === "DONE") {
-      yield* failIfOpError(waited, forwardingRuleName);
-      return;
-    }
-    yield* compute
-      .getRegionOperations({ project, region, operation: name })
-      .pipe(
-        Effect.filterOrFail(
-          (op) => op.status === "DONE",
-          (op) =>
-            new ForwardingRulePending({
-              forwardingRuleName,
-              status: op.status ?? "UNKNOWN",
-            }),
-        ),
-        Effect.flatMap((op) => failIfOpError(op, forwardingRuleName)),
-        Effect.retry({
-          while: (e) =>
-            e._tag === "GCP.Compute.ForwardingRulePending" ||
-            e._tag === "NotFound",
-          times: 10,
-          schedule: Schedule.spaced("2 seconds"),
-        }),
-      );
-  });
-
-const requireForwardingRule = (
-  project: string,
-  region: string,
-  forwardingRuleName: string,
-) =>
+const requireForwardingRule = (project: string, region: string, forwardingRuleName: string) =>
   getByName(project, region, forwardingRuleName).pipe(
     Effect.flatMap((rule) =>
       rule
         ? Effect.succeed(rule)
-        : Effect.fail(
-            new ForwardingRuleNotResolved({ forwardingRuleName, region }),
-          ),
+        : Effect.fail(new ForwardingRuleNotResolved({ forwardingRuleName, region })),
     ),
     Effect.retry({
       while: (e) => e._tag === "GCP.Compute.ForwardingRuleNotResolved",
@@ -569,11 +447,7 @@ const requireForwardingRule = (
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  forwardingRuleName: string,
-) =>
+const waitUntilGone = (project: string, region: string, forwardingRuleName: string) =>
   getByName(project, region, forwardingRuleName).pipe(
     Effect.flatMap((rule) =>
       rule === undefined
@@ -616,10 +490,7 @@ const immutableChanged = (
     allowGlobalAccess: boolean;
   },
 ) => {
-  if (
-    news.description !== undefined &&
-    (news.description ?? "") !== previous.description
-  ) {
+  if (news.description !== undefined && (news.description ?? "") !== previous.description) {
     return true;
   }
   if (
@@ -632,15 +503,11 @@ const immutableChanged = (
   }
   if (
     news.ipProtocol !== undefined &&
-    news.ipProtocol.toUpperCase() !==
-      (previous.ipProtocol || "TCP").toUpperCase()
+    news.ipProtocol.toUpperCase() !== (previous.ipProtocol || "TCP").toUpperCase()
   ) {
     return true;
   }
-  if (
-    news.portRange !== undefined &&
-    normalizePortRange(news.portRange) !== previous.portRange
-  ) {
+  if (news.portRange !== undefined && normalizePortRange(news.portRange) !== previous.portRange) {
     return true;
   }
   if (news.ports !== undefined && portsKey(news.ports) !== previous.ports) {
@@ -661,28 +528,16 @@ const immutableChanged = (
   ) {
     return true;
   }
-  if (
-    news.network !== undefined &&
-    resourceRefOf(news.network) !== previous.network
-  ) {
+  if (news.network !== undefined && resourceRefOf(news.network) !== previous.network) {
     return true;
   }
-  if (
-    news.subnetwork !== undefined &&
-    resourceRefOf(news.subnetwork) !== previous.subnetwork
-  ) {
+  if (news.subnetwork !== undefined && resourceRefOf(news.subnetwork) !== previous.subnetwork) {
     return true;
   }
-  if (
-    news.networkTier !== undefined &&
-    networkTierOf(news.networkTier) !== previous.networkTier
-  ) {
+  if (news.networkTier !== undefined && networkTierOf(news.networkTier) !== previous.networkTier) {
     return true;
   }
-  if (
-    news.ipVersion !== undefined &&
-    ipVersionOf(news.ipVersion) !== previous.ipVersion
-  ) {
+  if (news.ipVersion !== undefined && ipVersionOf(news.ipVersion) !== previous.ipVersion) {
     return true;
   }
   if (
@@ -697,10 +552,7 @@ const immutableChanged = (
   ) {
     return true;
   }
-  if (
-    news.serviceLabel !== undefined &&
-    (news.serviceLabel ?? "") !== previous.serviceLabel
-  ) {
+  if (news.serviceLabel !== undefined && (news.serviceLabel ?? "") !== previous.serviceLabel) {
     return true;
   }
   if (
@@ -717,14 +569,12 @@ const immutableChanged = (
   }
   if (
     news.serviceDirectoryRegistrations !== undefined &&
-    registrationsKey(news.serviceDirectoryRegistrations) !==
-      previous.serviceDirectoryRegistrations
+    registrationsKey(news.serviceDirectoryRegistrations) !== previous.serviceDirectoryRegistrations
   ) {
     return true;
   }
   if (
-    schemeOf(news.loadBalancingScheme ?? previous.loadBalancingScheme) ===
-      "INTERNAL_MANAGED" &&
+    schemeOf(news.loadBalancingScheme ?? previous.loadBalancingScheme) === "INTERNAL_MANAGED" &&
     news.allowGlobalAccess !== undefined &&
     news.allowGlobalAccess !== previous.allowGlobalAccess
   ) {
@@ -754,22 +604,13 @@ export const ForwardingRuleProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds.forwardingRuleName ?? output?.forwardingRuleName;
+      const previousName = olds.forwardingRuleName ?? output?.forwardingRuleName;
       const nextName = news.forwardingRuleName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousRegion = normalizeRegion(
-        olds.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
       const previous = {
@@ -779,30 +620,19 @@ export const ForwardingRuleProvider = () =>
         portRange: normalizePortRange(olds.portRange ?? output?.portRange),
         ports: portsKey(olds.ports ?? output?.ports),
         allPorts: olds.allPorts ?? output?.allPorts ?? false,
-        backendService: resourceRefOf(
-          olds.backendService ?? output?.backendService,
-        ),
-        loadBalancingScheme: schemeOf(
-          olds.loadBalancingScheme ?? output?.loadBalancingScheme,
-        ),
+        backendService: resourceRefOf(olds.backendService ?? output?.backendService),
+        loadBalancingScheme: schemeOf(olds.loadBalancingScheme ?? output?.loadBalancingScheme),
         network: resourceRefOf(olds.network ?? output?.network),
         subnetwork: resourceRefOf(olds.subnetwork ?? output?.subnetwork),
         networkTier: networkTierOf(olds.networkTier ?? output?.networkTier),
         ipVersion: ipVersionOf(olds.ipVersion ?? output?.ipVersion),
-        noAutomateDnsZone:
-          olds.noAutomateDnsZone ?? output?.noAutomateDnsZone ?? false,
-        isMirroringCollector:
-          olds.isMirroringCollector ?? output?.isMirroringCollector ?? false,
+        noAutomateDnsZone: olds.noAutomateDnsZone ?? output?.noAutomateDnsZone ?? false,
+        isMirroringCollector: olds.isMirroringCollector ?? output?.isMirroringCollector ?? false,
         serviceLabel: olds.serviceLabel ?? output?.serviceLabel ?? "",
-        sourceIpRanges: rangesKey(
-          olds.sourceIpRanges ?? output?.sourceIpRanges,
-        ),
+        sourceIpRanges: rangesKey(olds.sourceIpRanges ?? output?.sourceIpRanges),
         ipCollection: resourceRefOf(olds.ipCollection ?? output?.ipCollection),
-        serviceDirectoryRegistrations: registrationsKey(
-          olds.serviceDirectoryRegistrations,
-        ),
-        allowGlobalAccess:
-          olds.allowGlobalAccess ?? output?.allowGlobalAccess ?? false,
+        serviceDirectoryRegistrations: registrationsKey(olds.serviceDirectoryRegistrations),
+        allowGlobalAccess: olds.allowGlobalAccess ?? output?.allowGlobalAccess ?? false,
       };
 
       if (nameChanged || regionChanged) {
@@ -821,20 +651,11 @@ export const ForwardingRuleProvider = () =>
         olds?.forwardingRuleName,
         output?.forwardingRuleName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        forwardingRuleName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, forwardingRuleName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -853,9 +674,7 @@ export const ForwardingRuleProvider = () =>
             (scoped?.forwardingRules ?? [])
               .filter((item) => item.region !== undefined)
               .filter((item) =>
-                Object.keys(item.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -886,18 +705,11 @@ export const ForwardingRuleProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                forwardingRuleName,
-              ).pipe(
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }).pipe(
                 Effect.flatMap(() =>
-                  requireForwardingRule(
-                    env.project,
-                    region,
-                    forwardingRuleName,
-                  ),
+                  requireForwardingRule(env.project, region, forwardingRuleName),
                 ),
               ),
             ),
@@ -927,19 +739,8 @@ export const ForwardingRuleProvider = () =>
             forwardingRule: forwardingRuleName,
             body: { target: news.target },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                forwardingRuleName,
-              ),
-            ),
-          );
-        current =
-          (yield* getByName(env.project, region, forwardingRuleName)) ??
-          current;
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
+        current = (yield* getByName(env.project, region, forwardingRuleName)) ?? current;
       }
 
       const scheme = schemeOf(current.loadBalancingScheme);
@@ -955,19 +756,8 @@ export const ForwardingRuleProvider = () =>
             forwardingRule: forwardingRuleName,
             body: { allowGlobalAccess: news.allowGlobalAccess },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                forwardingRuleName,
-              ),
-            ),
-          );
-        current =
-          (yield* getByName(env.project, region, forwardingRuleName)) ??
-          current;
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
+        current = (yield* getByName(env.project, region, forwardingRuleName)) ?? current;
       }
 
       if (
@@ -984,28 +774,15 @@ export const ForwardingRuleProvider = () =>
               allowPscGlobalAccess: news.allowPscGlobalAccess,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                forwardingRuleName,
-              ),
-            ),
-          );
-        current =
-          (yield* getByName(env.project, region, forwardingRuleName)) ??
-          current;
+          .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
+        current = (yield* getByName(env.project, region, forwardingRuleName)) ?? current;
       }
 
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, region, forwardingRuleName)) ??
-            resolved;
+          const latest = (yield* getByName(env.project, region, forwardingRuleName)) ?? resolved;
           yield* compute
             .setLabelsForwardingRules({
               project: env.project,
@@ -1017,14 +794,7 @@ export const ForwardingRuleProvider = () =>
               },
             })
             .pipe(
-              Effect.flatMap((operation) =>
-                waitForOperation(
-                  env.project,
-                  region,
-                  operation,
-                  forwardingRuleName,
-                ),
-              ),
+              Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             );
         }).pipe(
           Effect.retry({
@@ -1033,9 +803,7 @@ export const ForwardingRuleProvider = () =>
             schedule: Schedule.spaced("1 second"),
           }),
         );
-        current =
-          (yield* getByName(env.project, region, forwardingRuleName)) ??
-          resolved;
+        current = (yield* getByName(env.project, region, forwardingRuleName)) ?? resolved;
       }
 
       return toAttrs(current ?? resolved, env.project);
@@ -1053,12 +821,9 @@ export const ForwardingRuleProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              region,
-              operation,
-              output.forwardingRuleName,
-            ),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

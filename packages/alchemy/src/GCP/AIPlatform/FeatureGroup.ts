@@ -9,14 +9,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   fingerprint,
   hasAlchemyLabelMap,
@@ -26,6 +20,8 @@ import {
   toPhysicalSnake,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 60;
 
@@ -140,9 +136,7 @@ export type FeatureGroup = Resource<
  * @resource
  * @category AIPlatform
  */
-export const FeatureGroup = Resource<FeatureGroup>(
-  "GCP.AIPlatform.FeatureGroup",
-);
+export const FeatureGroup = Resource<FeatureGroup>("GCP.AIPlatform.FeatureGroup");
 
 export class FeatureGroupNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupNotResolved",
@@ -163,16 +157,12 @@ const inputUriOf = (bigQuery: FeatureGroupBigQuery | undefined) =>
   bigQuery?.inputUri ?? bigQuery?.bigQuerySource?.inputUri;
 
 const toBigQuery = (
-  source:
-    | aiplatform.GoogleCloudAiplatformV1FeatureGroupBigQuery
-    | FeatureGroupBigQuery
-    | undefined,
+  source: aiplatform.GoogleCloudAiplatformV1FeatureGroupBigQuery | FeatureGroupBigQuery | undefined,
 ): FeatureGroupBigQuery | undefined => {
   if (source === undefined) return undefined;
   const inputUri =
     "inputUri" in source
-      ? (source.inputUri ??
-        (source as FeatureGroupBigQuery).bigQuerySource?.inputUri)
+      ? (source.inputUri ?? (source as FeatureGroupBigQuery).bigQuerySource?.inputUri)
       : source.bigQuerySource?.inputUri;
   return {
     inputUri,
@@ -198,10 +188,7 @@ const toBigQueryBody = (
   };
 };
 
-const toAttrs = (
-  group: aiplatform.GoogleCloudAiplatformV1FeatureGroup,
-  project: string,
-) => {
+const toAttrs = (group: aiplatform.GoogleCloudAiplatformV1FeatureGroup, project: string) => {
   const name = group.name ?? "";
   const parsed = parseResourceName(name, "featureGroups");
   return {
@@ -228,9 +215,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group
-        ? Effect.succeed(group)
-        : Effect.fail(new FeatureGroupNotResolved({ name })),
+      group ? Effect.succeed(group) : Effect.fail(new FeatureGroupNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupNotResolved",
@@ -242,9 +227,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group === undefined
-        ? Effect.void
-        : Effect.fail(new FeatureGroupStillExists({ name })),
+      group === undefined ? Effect.void : Effect.fail(new FeatureGroupStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupStillExists",
@@ -262,30 +245,19 @@ export const FeatureGroupProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.featureGroupId ?? output?.featureGroupId;
       const nextId = news.featureGroupId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousUri =
-        inputUriOf(olds?.bigQuery) ?? inputUriOf(output?.bigQuery) ?? "";
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousUri = inputUriOf(olds?.bigQuery) ?? inputUriOf(output?.bigQuery) ?? "";
       const nextUri = inputUriOf(news.bigQuery) ?? previousUri;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (news.bigQuery !== undefined && nextUri !== previousUri);
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -297,38 +269,33 @@ export const FeatureGroupProvider = () =>
         output?.featureGroupId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, featureGroupId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, featureGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* aiplatform.listProjectsLocationsFeatureGroups
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        return yield* Stream.fromIterable(listLocations(env.region))
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.featureGroups ?? []),
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeatureGroups.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
             ),
+          )
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.featureGroups ?? [])),
             Stream.filter((group) => hasAlchemyLabelMap(group.labels)),
             Stream.map((group) => toAttrs(group, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
@@ -340,10 +307,7 @@ export const FeatureGroupProvider = () =>
         output?.featureGroupId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, featureGroupId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -379,8 +343,7 @@ export const FeatureGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const agentChanged =
         news.serviceAgentType !== undefined &&
         (current.serviceAgentType ?? "") !== news.serviceAgentType;
@@ -390,17 +353,13 @@ export const FeatureGroupProvider = () =>
           fingerprint(news.bigQuery.entityIdColumns);
       const staticChanged =
         news.bigQuery?.staticDataSource !== undefined &&
-        (current.bigQuery?.staticDataSource === true) !==
-          (news.bigQuery.staticDataSource === true);
+        (current.bigQuery?.staticDataSource === true) !== (news.bigQuery.staticDataSource === true);
       const denseChanged =
         news.bigQuery?.dense !== undefined &&
         (current.bigQuery?.dense === true) !== (news.bigQuery.dense === true);
       const timeSeriesChanged =
         news.bigQuery?.timeSeries !== undefined &&
-        !specifiedEquals(
-          news.bigQuery.timeSeries,
-          current.bigQuery?.timeSeries,
-        );
+        !specifiedEquals(news.bigQuery.timeSeries, current.bigQuery?.timeSeries);
 
       if (
         labelsChanged ||

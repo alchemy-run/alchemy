@@ -9,14 +9,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   hasAlchemyLabelMap,
   normalizeLocation,
@@ -25,6 +19,8 @@ import {
   toPhysicalSnake,
   userLabels,
 } from "./helpers.ts";
+import { listLocations } from "./names.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 60;
 
@@ -72,6 +68,7 @@ export type FeatureOnlineStoreProps = {
   /**
    * Bigtable storage. Mutually exclusive with `optimized`. Immutable
    * storage type — switching to Optimized replaces the store.
+   * @default { autoScaling: { minNodeCount: 1, maxNodeCount: 1 } } when `optimized` is unset
    */
   bigtable?: FeatureOnlineStoreBigtable;
   /**
@@ -141,13 +138,13 @@ export type FeatureOnlineStore = Resource<
  *
  * Id, location, storage type (Bigtable vs Optimized), Bigtable zone, and
  * encryption are identity. Labels and Bigtable autoscaling update in
- * place. Defaults to Optimized storage when neither backend is set.
+ * place. Defaults to a one-node Bigtable backend when neither backend is
+ * set (Vertex AI no longer creates new Optimized stores for most projects).
  *
  * ### Creating a Feature Online Store
- * **Example:** Optimized store
+ * **Example:** Default one-node Bigtable store
  * ```typescript
  * const store = yield* GCP.AIPlatform.FeatureOnlineStore("Serving", {
- *   optimized: true,
  *   labels: { env: "prod" },
  * });
  * ```
@@ -164,9 +161,7 @@ export type FeatureOnlineStore = Resource<
  * @resource
  * @category AIPlatform
  */
-export const FeatureOnlineStore = Resource<FeatureOnlineStore>(
-  "GCP.AIPlatform.FeatureOnlineStore",
-);
+export const FeatureOnlineStore = Resource<FeatureOnlineStore>("GCP.AIPlatform.FeatureOnlineStore");
 
 export class FeatureOnlineStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
@@ -183,8 +178,16 @@ export class FeatureOnlineStoreStillExists extends Data.TaggedError(
 const resourceName = (project: string, location: string, storeId: string) =>
   `projects/${project}/locations/${location}/featureOnlineStores/${storeId}`;
 
+// Vertex no longer creates Optimized stores unless asked explicitly, so
+// the default backend is the smallest Bigtable one.
 const wantsOptimized = (news: FeatureOnlineStoreProps) =>
-  news.bigtable === undefined && news.optimized !== false;
+  news.bigtable === undefined && news.optimized !== undefined && news.optimized !== false;
+
+const DEFAULT_BIGTABLE: FeatureOnlineStoreBigtable = {
+  autoScaling: { minNodeCount: 1, maxNodeCount: 1 },
+};
+
+const bigtableOf = (news: FeatureOnlineStoreProps) => news.bigtable ?? DEFAULT_BIGTABLE;
 
 const toBigtable = (
   config:
@@ -206,10 +209,7 @@ const toBigtable = (
   };
 };
 
-const toAttrs = (
-  store: aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore,
-  project: string,
-) => {
+const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore, project: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "featureOnlineStores");
   const endpoint = store.dedicatedServingEndpoint;
@@ -231,10 +231,8 @@ const toAttrs = (
             privateServiceConnectConfig: endpoint.privateServiceConnectConfig
               ? {
                   enablePrivateServiceConnect:
-                    endpoint.privateServiceConnectConfig
-                      .enablePrivateServiceConnect === true,
-                  projectAllowlist:
-                    endpoint.privateServiceConnectConfig.projectAllowlist,
+                    endpoint.privateServiceConnectConfig.enablePrivateServiceConnect === true,
+                  projectAllowlist: endpoint.privateServiceConnectConfig.projectAllowlist,
                 }
               : undefined,
           },
@@ -255,13 +253,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store
-        ? Effect.succeed(store)
-        : Effect.fail(new FeatureOnlineStoreNotResolved({ name })),
+      store ? Effect.succeed(store) : Effect.fail(new FeatureOnlineStoreNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -270,13 +265,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined
-        ? Effect.void
-        : Effect.fail(new FeatureOnlineStoreStillExists({ name })),
+      store === undefined ? Effect.void : Effect.fail(new FeatureOnlineStoreStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeatureOnlineStoreStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -290,8 +282,7 @@ const isReady = (state: string | undefined) => {
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (store): store is aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore =>
-        store !== undefined,
+      (store): store is aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore => store !== undefined,
       () => new FeatureOnlineStoreNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -299,8 +290,7 @@ const waitUntilReady = (name: string) =>
       () => new FeatureOnlineStoreNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
@@ -308,32 +298,17 @@ const waitUntilReady = (name: string) =>
 
 export const FeatureOnlineStoreProvider = () =>
   Provider.succeed(FeatureOnlineStore, {
-    stables: [
-      "name",
-      "featureOnlineStoreId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "featureOnlineStoreId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.featureOnlineStoreId ?? output?.featureOnlineStoreId;
+      const previousId = olds?.featureOnlineStoreId ?? output?.featureOnlineStoreId;
       const nextId = news.featureOnlineStoreId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const previousOptimized =
-        olds?.optimized !== undefined
-          ? olds.optimized !== false
-          : (output?.optimized ?? false);
+        olds?.optimized !== undefined ? olds.optimized !== false : (output?.optimized ?? false);
       const nextOptimized =
         news.bigtable !== undefined
           ? false
@@ -343,14 +318,10 @@ export const FeatureOnlineStoreProvider = () =>
       const previousZone = olds?.bigtable?.zone ?? output?.bigtable?.zone ?? "";
       const nextZone = news.bigtable?.zone ?? previousZone;
       const previousKey =
-        olds?.encryptionSpec?.kmsKeyName ??
-        output?.encryptionSpec?.kmsKeyName ??
-        "";
+        olds?.encryptionSpec?.kmsKeyName ?? output?.encryptionSpec?.kmsKeyName ?? "";
       const nextKey = news.encryptionSpec?.kmsKeyName ?? previousKey;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousOptimized !== nextOptimized ||
         previousZone !== nextZone ||
@@ -359,9 +330,7 @@ export const FeatureOnlineStoreProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -373,37 +342,33 @@ export const FeatureOnlineStoreProvider = () =>
         output?.featureOnlineStoreId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, storeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* aiplatform.listProjectsLocationsFeatureOnlineStores
-          .pages({
-            parent: `projects/${env.project}/locations/-`,
-            pageSize: 100,
-          })
+        return yield* Stream.fromIterable(listLocations(env.region))
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.featureOnlineStores ?? []),
+            Stream.flatMap((location) =>
+              aiplatform.listProjectsLocationsFeatureOnlineStores.pages({
+                parent: `projects/${env.project}/locations/${location}`,
+                pageSize: 100,
+              }),
             ),
+          )
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.featureOnlineStores ?? [])),
             Stream.filter((store) => hasAlchemyLabelMap(store.labels)),
             Stream.map((store) => toAttrs(store, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
           );
       }),
 
@@ -415,10 +380,7 @@ export const FeatureOnlineStoreProvider = () =>
         output?.featureOnlineStoreId,
         MAX_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, storeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -435,7 +397,7 @@ export const FeatureOnlineStoreProvider = () =>
             featureOnlineStoreId: storeId,
             body: {
               labels: desiredLabels,
-              bigtable: optimized ? undefined : news.bigtable,
+              bigtable: optimized ? undefined : bigtableOf(news),
               optimized: optimized ? {} : undefined,
               dedicatedServingEndpoint: news.dedicatedServingEndpoint,
               encryptionSpec: news.encryptionSpec,
@@ -461,10 +423,7 @@ export const FeatureOnlineStoreProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const scalingChanged =
         news.bigtable?.autoScaling !== undefined &&
-        !specifiedEquals(
-          news.bigtable.autoScaling,
-          current.bigtable?.autoScaling,
-        );
+        !specifiedEquals(news.bigtable.autoScaling, current.bigtable?.autoScaling);
       const directChanged =
         news.bigtable?.enableDirectBigtableAccess !== undefined &&
         (current.bigtable?.enableDirectBigtableAccess === true) !==

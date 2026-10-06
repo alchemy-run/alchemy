@@ -7,9 +7,9 @@ const MAX_PER_PAGE = 200;
 /** Guards against a list whose `next` link never ends. */
 const MAX_PAGES = 500;
 
-export class DigitalOceanPageOverflow extends Data.TaggedError(
-  "DigitalOceanPageOverflow",
-)<{ readonly pages: number }> {
+export class DigitalOceanPageOverflow extends Data.TaggedError("DigitalOceanPageOverflow")<{
+  readonly pages: number;
+}> {
   override get message() {
     return `DigitalOcean list did not end after ${this.pages} pages.`;
   }

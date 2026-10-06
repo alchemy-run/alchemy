@@ -1,24 +1,22 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as siteVerification from "@distilled.cloud/gcp/siteVerification_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const ENTITLEMENT_TAGS = [
-  "Forbidden",
-  "NotFound",
-  "Unauthorized",
-  "BadRequest",
-] as const;
+// Site Verification needs a credential with the siteverification OAuth
+// scope (a Cloud Platform service-account token is rejected with
+// InsufficientAuthenticationScopes) and a site whose verification token is
+// already placed; set GCP_TEST_SITE_VERIFICATION=1 when both hold.
+const runLifecycle = !process.env.FAST && process.env.GCP_TEST_SITE_VERIFICATION === "1";
+
+const identifier = "https://alchemy-site-verification.test/";
 
 const waitUntilGone = (webResourceId: string) =>
   siteVerification
@@ -28,8 +26,6 @@ const waitUntilGone = (webResourceId: string) =>
     .pipe(
       Effect.as("found" as const),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
-      Effect.catchTag("Unauthorized", () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status === "gone",
@@ -37,16 +33,8 @@ const waitUntilGone = (webResourceId: string) =>
       }),
     );
 
-const probeAccess = () =>
-  siteVerification.listWebResource({}).pipe(
-    Effect.as("ok" as const),
-    Effect.catchTag(["Forbidden", "NotFound", "Unauthorized"], (error) =>
-      Effect.succeed(error._tag),
-    ),
-  );
-
-test.provider(
-  "getWebResource on a missing site fails with a typed tag",
+test.provider.skipIf(!runLifecycle)(
+  "getWebResource on a missing site fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -56,12 +44,7 @@ test.provider(
           id: "http://alchemy-missing.example.com/",
         }),
       );
-      expect(["NotFound", "Forbidden", "Unauthorized", "BadRequest"]).toContain(
-        error._tag,
-      );
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("insufficient authentication scopes");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -71,45 +54,21 @@ test.provider(
   },
 );
 
-test.provider(
-  "getTokenWebResource returns a token or a typed entitlement tag",
+test.provider.skipIf(runLifecycle)(
+  "getTokenWebResource without the siteverification scope fails with InsufficientAuthenticationScopes",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* siteVerification
-        .getTokenWebResource({
+      const error = yield* Effect.flip(
+        siteVerification.getTokenWebResource({
           body: {
-            site: {
-              identifier: "https://alchemy-site-verification.test/",
-              type: "SITE",
-            },
+            site: { identifier, type: "SITE" },
             verificationMethod: "FILE",
           },
-        })
-        .pipe(
-          Effect.map((token) => ({
-            _tag: "ok" as const,
-            token: token.token,
-            method: token.method,
-          })),
-          Effect.catchTag(
-            ["Forbidden", "NotFound", "Unauthorized", "BadRequest"],
-            (error) =>
-              Effect.succeed({
-                _tag: error._tag,
-                token: undefined,
-                method: undefined,
-              }),
-          ),
-        );
-
-      if (result._tag === "ok") {
-        expect(result.token?.length).toBeGreaterThan(0);
-        expect(result.method).toEqual("FILE");
-      } else {
-        expect([...ENTITLEMENT_TAGS]).toContain(result._tag);
-      }
+        }),
+      );
+      expect(error._tag).toEqual("InsufficientAuthenticationScopes");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -119,61 +78,19 @@ test.provider(
   },
 );
 
-test.provider(
-  "insertWebResource without a placed token fails with a typed tag",
+test.provider.skipIf(runLifecycle)(
+  "insertWebResource without the siteverification scope fails with InsufficientAuthenticationScopes",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* siteVerification
-        .insertWebResource({
+      const error = yield* Effect.flip(
+        siteVerification.insertWebResource({
           verificationMethod: "FILE",
-          body: {
-            site: {
-              identifier: "https://alchemy-site-verification.test/",
-              type: "SITE",
-            },
-          },
-        })
-        .pipe(
-          Effect.map((resource) => ({
-            _tag: "ok" as const,
-            id: resource.id,
-          })),
-          Effect.catchTag(
-            ["Forbidden", "NotFound", "Unauthorized", "BadRequest", "Conflict"],
-            (error) => Effect.succeed({ _tag: error._tag, id: undefined }),
-          ),
-        );
-
-      if (result._tag === "ok") {
-        if (result.id) {
-          yield* siteVerification
-            .deleteWebResource({
-              id: decodeURIComponent(result.id),
-            })
-            .pipe(
-              Effect.catchTag(
-                [
-                  "NotFound",
-                  "Forbidden",
-                  "Unauthorized",
-                  "BadRequest",
-                  "Conflict",
-                ],
-                () => Effect.void,
-              ),
-            );
-        }
-      } else {
-        expect([
-          "Forbidden",
-          "NotFound",
-          "Unauthorized",
-          "BadRequest",
-          "Conflict",
-        ]).toContain(result._tag);
-      }
+          body: { site: { identifier, type: "SITE" } },
+        }),
+      );
+      expect(error._tag).toEqual("InsufficientAuthenticationScopes");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -183,64 +100,11 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a web resource",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-
-      const access = yield* probeAccess();
-      if (access !== "ok") {
-        expect(["Forbidden", "NotFound", "Unauthorized"]).toContain(access);
-        yield* stack.destroy();
-        return;
-      }
-
-      const identifier = "https://alchemy-site-verification.test/";
-      const probe = yield* siteVerification
-        .insertWebResource({
-          verificationMethod: "FILE",
-          body: { site: { identifier, type: "SITE" } },
-        })
-        .pipe(
-          Effect.map((resource) => ({
-            _tag: "ok" as const,
-            id: resource.id,
-          })),
-          Effect.catchTag(
-            ["BadRequest", "Forbidden", "Unauthorized", "NotFound", "Conflict"],
-            (error) => Effect.succeed({ _tag: error._tag, id: undefined }),
-          ),
-        );
-
-      if (probe._tag !== "ok") {
-        expect([
-          "BadRequest",
-          "Forbidden",
-          "Unauthorized",
-          "NotFound",
-          "Conflict",
-        ]).toContain(probe._tag);
-        yield* stack.destroy();
-        return;
-      }
-
-      if (probe.id) {
-        yield* siteVerification
-          .deleteWebResource({ id: decodeURIComponent(probe.id) })
-          .pipe(
-            Effect.catchTag(
-              [
-                "NotFound",
-                "Forbidden",
-                "Unauthorized",
-                "BadRequest",
-                "Conflict",
-              ],
-              () => Effect.void,
-            ),
-          );
-      }
 
       const resource = yield* stack.deploy(
         Effect.gen(function* () {

@@ -10,15 +10,15 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
-import { DeleteNotConfirmed } from "../Errors.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { DeleteNotConfirmed } from "../Errors.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
-  createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_PAYLOAD_FORMAT = "JSON_API_V1";
@@ -58,9 +58,9 @@ export type NotificationProps = {
   objectNamePrefix?: string;
   /**
    * Extra attributes attached to every published Pub/Sub message. Alchemy
-   * ownership labels (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * are merged in automatically so `list` / `pnpm nuke:gcp` can find the
-   * config. Immutable — changing user attributes replaces the notification.
+   * writes no ownership markers here (they would reach every subscriber);
+   * the config is tracked by its server-assigned id. Immutable — changing
+   * attributes replaces the notification.
    */
   customAttributes?: Record<string, string>;
 };
@@ -103,6 +103,11 @@ export type Notification = Resource<
  * immutable and changing it replaces the config. The Cloud Storage
  * service account is granted `roles/pubsub.publisher` on the topic
  * during reconcile so events can actually be published.
+ *
+ * Notifications carry no labels, and `customAttributes` are delivered on
+ * every message, so Alchemy does not stamp ownership markers. `read` finds
+ * the config by its recorded id; without one, an identical config on the
+ * bucket is reported as unowned.
  *
  * ### Creating a Notification
  * **Example:** Notify on every object event
@@ -164,8 +169,7 @@ const toPubsubName = (topic: string, project: string) => {
     : canonical;
 };
 
-const topicKey = (topic: string, project: string) =>
-  toPubsubName(topic, project);
+const topicKey = (topic: string, project: string) => toPubsubName(topic, project);
 
 const userAttributes = (
   attributes: Record<string, string | undefined> | null | undefined,
@@ -187,18 +191,10 @@ const sameAttributes = (
 const normalizeEventTypes = (eventTypes: string[] | undefined) =>
   [...(eventTypes ?? [])].map((event) => event.toUpperCase()).sort();
 
-const sameEventTypes = (
-  left: string[] | undefined,
-  right: string[] | undefined,
-) =>
-  normalizeEventTypes(left).join("\0") ===
-  normalizeEventTypes(right).join("\0");
+const sameEventTypes = (left: string[] | undefined, right: string[] | undefined) =>
+  normalizeEventTypes(left).join("\0") === normalizeEventTypes(right).join("\0");
 
-const toAttrs = (
-  notification: storage.Notification,
-  bucketName: string,
-  project: string,
-) => {
+const toAttrs = (notification: storage.Notification, bucketName: string, project: string) => {
   const topic = notification.topic ?? "";
   return {
     bucketName,
@@ -228,10 +224,7 @@ const matchesDesired = (
     (notification.payload_format ?? DEFAULT_PAYLOAD_FORMAT) === payloadFormat &&
     sameEventTypes(notification.event_types, news.eventTypes) &&
     (notification.object_name_prefix ?? "") === (news.objectNamePrefix ?? "") &&
-    sameAttributes(
-      userAttributes(notification.custom_attributes),
-      toLabels(news.customAttributes),
-    )
+    sameAttributes(userAttributes(notification.custom_attributes), toLabels(news.customAttributes))
   );
 };
 
@@ -252,18 +245,14 @@ const immutableChanged = (
   ) {
     return true;
   }
-  const previousPayload =
-    olds?.payloadFormat ?? output?.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;
+  const previousPayload = olds?.payloadFormat ?? output?.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;
   if ((news.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT) !== previousPayload) {
     return true;
   }
-  if (
-    !sameEventTypes(news.eventTypes, olds?.eventTypes ?? output?.eventTypes)
-  ) {
+  if (!sameEventTypes(news.eventTypes, olds?.eventTypes ?? output?.eventTypes)) {
     return true;
   }
-  const previousPrefix =
-    olds?.objectNamePrefix ?? output?.objectNamePrefix ?? "";
+  const previousPrefix = olds?.objectNamePrefix ?? output?.objectNamePrefix ?? "";
   if ((news.objectNamePrefix ?? "") !== previousPrefix) {
     return true;
   }
@@ -285,30 +274,18 @@ const getById = (bucketName: string, notificationId: string) =>
 const listOnBucket = (bucketName: string) =>
   storage.listNotifications({ bucket: bucketName }).pipe(
     Effect.map((page) => page.items ?? []),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as Array<storage.Notification>),
-    ),
-    Effect.catchTag("Forbidden", () =>
-      Effect.succeed([] as Array<storage.Notification>),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as Array<storage.Notification>)),
   );
 
-const findOwned = (bucketName: string, id: string) =>
-  Effect.gen(function* () {
-    const items = yield* listOnBucket(bucketName);
-    for (const item of items) {
-      if (yield* hasAlchemyLabels(id, tagRecord(item.custom_attributes))) {
-        return item;
-      }
-    }
-    return undefined;
-  });
+/** A config on the bucket identical to the desired one (props match). */
+const findMatching = (bucketName: string, props: NotificationProps, project: string) =>
+  listOnBucket(bucketName).pipe(
+    Effect.map((items) => items.find((item) => matchesDesired(item, props, project))),
+  );
 
 const waitUntilGone = (bucketName: string, notificationId: string) =>
   getById(bucketName, notificationId).pipe(
-    Effect.map((existing) =>
-      existing === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((existing) => (existing === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -333,13 +310,6 @@ const deleteById = (bucketName: string, notificationId: string) =>
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
-const publisherDenied = (error: { _tag: string; message: string }) =>
-  error._tag === "BadRequest" &&
-  /publish|permission|not authorized|does not exist/i.test(error.message);
-
-const identityMissing = (error: { _tag: string; message: string }) =>
-  error._tag === "BadRequest" && /does not exist/i.test(error.message);
-
 const ensureGcsServiceIdentity = (project: string, email: string) =>
   Effect.gen(function* () {
     const projectNumber = email.match(/^service-(\d+)@/)?.[1] ?? project;
@@ -347,24 +317,12 @@ const ensureGcsServiceIdentity = (project: string, email: string) =>
       .generateServiceIdentityServices({
         parent: `projects/${projectNumber}/services/storage.googleapis.com`,
       })
-      .pipe(
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-        Effect.catchTag("BadRequest", () => Effect.succeed(undefined)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-      );
-    if (!operation || operation.done === true || !operation.name) {
-      return;
-    }
-    yield* serviceusage.getOperations({ name: operation.name }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (op) => op.done === true,
-        times: 8,
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.catchTag("Forbidden", () => Effect.void),
-    );
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    if (operation === undefined) return;
+    yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
+      budget: "2 minutes",
+      interval: "2 seconds",
+    });
   });
 
 const ensureTopicPublisher = (project: string, topic: string) =>
@@ -387,9 +345,7 @@ const ensureTopicPublisher = (project: string, topic: string) =>
         ...binding,
         members: [...(binding.members ?? [])],
       }));
-      const publisher = bindings.find(
-        (binding) => binding.role === PUBLISHER_ROLE,
-      );
+      const publisher = bindings.find((binding) => binding.role === PUBLISHER_ROLE);
       if (publisher?.members?.includes(member)) {
         return;
       }
@@ -410,12 +366,10 @@ const ensureTopicPublisher = (project: string, topic: string) =>
     });
     yield* grant.pipe(
       Effect.retry({
-        while: (error) => error._tag === "Conflict" || identityMissing(error),
+        while: (error) => error._tag === "Conflict" || error._tag === "IamMemberNotFound",
         times: 8,
         schedule: Schedule.spaced("2 seconds"),
       }),
-      Effect.catchTag("Forbidden", () => Effect.void),
-      Effect.catchTag("BadRequest", () => Effect.void),
     );
   });
 
@@ -441,17 +395,16 @@ export const NotificationProvider = () =>
         output?.notificationId !== undefined
           ? yield* getById(bucketName, output.notificationId)
           : undefined;
-      if (existing === undefined) {
-        existing = yield* findOwned(bucketName, id);
+      if (existing === undefined && olds !== undefined) {
+        existing = yield* findMatching(bucketName, olds, env.project);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, bucketName, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.custom_attributes),
-      ))
-        ? attrs
-        : Unowned(attrs);
+      // Configs created before markers were dropped still carry them.
+      const owned =
+        (existing.id !== undefined && existing.id === output?.notificationId) ||
+        (yield* hasAlchemyLabels(id, tagRecord(existing.custom_attributes)));
+      return owned ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -470,6 +423,8 @@ export const NotificationProvider = () =>
             if (!bucketName) {
               return Effect.succeed([] as Array<Notification["Attributes"]>);
             }
+            // Only configs from before ownership markers were dropped are
+            // identifiable; the rest go away with their bucket.
             return listOnBucket(bucketName).pipe(
               Effect.map((items) =>
                 items
@@ -492,26 +447,14 @@ export const NotificationProvider = () =>
       const bucketName = news.bucketName;
       const payloadFormat = news.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;
       const canonicalTopic = toCanonicalTopic(news.topic, env.project);
-      const desiredAttributes = {
-        ...toLabels(news.customAttributes),
-        ...(yield* createInternalLabels(id)),
-      };
+      const desiredAttributes = toLabels(news.customAttributes);
 
       let current: storage.Notification | undefined;
       if (output?.notificationId) {
-        current = yield* getById(
-          output.bucketName ?? bucketName,
-          output.notificationId,
-        );
+        current = yield* getById(output.bucketName ?? bucketName, output.notificationId);
       }
       if (current === undefined) {
-        const owned = yield* findOwned(bucketName, id);
-        if (owned !== undefined && matchesDesired(owned, news, env.project)) {
-          current = owned;
-        } else if (owned !== undefined && owned.id) {
-          yield* deleteById(bucketName, owned.id);
-          yield* waitUntilGone(bucketName, owned.id);
-        }
+        current = yield* findMatching(bucketName, news, env.project);
       }
 
       if (current === undefined) {
@@ -523,16 +466,14 @@ export const NotificationProvider = () =>
               topic: canonicalTopic,
               payload_format: payloadFormat,
               event_types:
-                news.eventTypes && news.eventTypes.length > 0
-                  ? news.eventTypes
-                  : undefined,
+                news.eventTypes && news.eventTypes.length > 0 ? news.eventTypes : undefined,
               object_name_prefix: news.objectNamePrefix,
               custom_attributes: desiredAttributes,
             },
           })
           .pipe(
             Effect.retry({
-              while: publisherDenied,
+              while: (error) => error._tag === "NotificationTopicUnavailable",
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),

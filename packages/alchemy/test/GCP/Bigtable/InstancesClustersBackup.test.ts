@@ -1,24 +1,18 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Cloud Bigtable Admin API is disabled on the default testing project
-// (`Forbidden`: "Cloud Bigtable Admin API has not been used in project
-// 457525637530 before or it is disabled."). Set GCP_TEST_BIGTABLE=1 on an
-// entitled project to run the full lifecycle.
-const runLifecycle = !!process.env.GCP_TEST_BIGTABLE && !process.env.FAST;
+// Lifecycles provision a Bigtable instance; skipped with --fast.
+const runLifecycle = !process.env.FAST;
 
 const expireInDays = (days: number) =>
   new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
@@ -26,9 +20,7 @@ const expireInDays = (days: number) =>
 const waitUntilGone = (name: string) =>
   bigtable.getProjectsInstancesClustersBackups({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -37,7 +29,7 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsInstancesClustersBackups on a missing instance fails with Forbidden or NotFound",
+  "getProjectsInstancesClustersBackups on a missing instance fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -49,7 +41,7 @@ test.provider(
           name: `projects/${project}/instances/alchemybtmissing/clusters/cluster/backups/missing`,
         }),
       );
-      expect(error._tag).toBeOneOf(["Forbidden", "NotFound"]);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -82,15 +74,12 @@ test.provider.skipIf(!runLifecycle)(
             instance: instance.name,
             columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
           });
-          const backup = yield* GCP.Bigtable.InstancesClustersBackup(
-            "Nightly",
-            {
-              instance: instance.name,
-              cluster: "cluster",
-              sourceTable: table.name,
-              expireTime: firstExpire,
-            },
-          );
+          const backup = yield* GCP.Bigtable.InstancesClustersBackup("Nightly", {
+            instance: instance.name,
+            cluster: "cluster",
+            sourceTable: table.name,
+            expireTime: firstExpire,
+          });
           return { instance, table, backup };
         }),
       );
@@ -127,16 +116,13 @@ test.provider.skipIf(!runLifecycle)(
             tableId: created.table.tableId,
             columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
           });
-          const backup = yield* GCP.Bigtable.InstancesClustersBackup(
-            "Nightly",
-            {
-              instance: instance.name,
-              cluster: "cluster",
-              sourceTable: table.name,
-              backupId: created.backup.backupId,
-              expireTime: secondExpire,
-            },
-          );
+          const backup = yield* GCP.Bigtable.InstancesClustersBackup("Nightly", {
+            instance: instance.name,
+            cluster: "cluster",
+            sourceTable: table.name,
+            backupId: created.backup.backupId,
+            expireTime: secondExpire,
+          });
           return { instance, table, backup };
         }),
       );

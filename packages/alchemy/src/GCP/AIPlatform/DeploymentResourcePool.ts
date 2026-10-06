@@ -10,7 +10,6 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { listLocations } from "./names.ts";
 import {
   lastSegment,
   normalizeLocation,
@@ -20,6 +19,7 @@ import {
   resourceNameFromOperation,
   waitForOperation,
 } from "./internal.ts";
+import { listLocations } from "./names.ts";
 import type { EncryptionSpec } from "./shared.ts";
 
 export type MachineSpec = {
@@ -85,7 +85,8 @@ export type DeploymentResourcePoolProps = {
    */
   dedicatedResources?: DedicatedResources;
   /**
-   * Disable container stdout/stderr logging.
+   * Disable container stdout/stderr logging. Vertex AI accepts but does not
+   * apply updates to it, so changing it replaces the pool.
    */
   disableContainerLogging?: boolean;
   /**
@@ -150,8 +151,8 @@ export type DeploymentResourcePool = Resource<
  * ### Scaling a Pool
  * **Example:** Raise max replicas
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const pool = yield* GCP.AIPlatform.DeploymentResourcePool("Shared", {
- *   deploymentResourcePoolId: existing.deploymentResourcePoolId,
  *   dedicatedResources: {
  *     minReplicaCount: 1,
  *     maxReplicaCount: 2,
@@ -207,10 +208,7 @@ const toId = (id: string, poolId: string | undefined, existing?: string) =>
   });
 
 const dedicatedOf = (
-  resources:
-    | DedicatedResources
-    | aiplatform.GoogleCloudAiplatformV1DedicatedResources
-    | undefined,
+  resources: DedicatedResources | aiplatform.GoogleCloudAiplatformV1DedicatedResources | undefined,
 ): DedicatedResources | undefined => {
   if (resources === undefined) return undefined;
   return {
@@ -236,8 +234,7 @@ const desiredDedicated = (
   resources: DedicatedResources | undefined,
 ): aiplatform.GoogleCloudAiplatformV1DedicatedResources => ({
   minReplicaCount: resources?.minReplicaCount ?? 1,
-  maxReplicaCount:
-    resources?.maxReplicaCount ?? resources?.minReplicaCount ?? 1,
+  maxReplicaCount: resources?.maxReplicaCount ?? resources?.minReplicaCount ?? 1,
   requiredReplicaCount: resources?.requiredReplicaCount,
   spot: resources?.spot,
   autoscalingMetricSpecs: resources?.autoscalingMetricSpecs,
@@ -274,27 +271,16 @@ const getByName = (name: string) =>
 
 const listPools = (project: string, region: string) => {
   const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsDeploymentResourcePools
-      .pages({ parent, pageSize: 1000 })
-      .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.deploymentResourcePools ?? []),
-        ),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    aiplatform.listProjectsLocationsDeploymentResourcePools.pages({ parent, pageSize: 100 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.deploymentResourcePools ?? [])),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const fallback = Effect.forEach(listLocations(region), (location) =>
     collect(`projects/${project}/locations/${location}`),
   ).pipe(Effect.map((pages) => pages.flat()));
-  return collect(`projects/${project}/locations/-`).pipe(
-    Effect.catchTag("NotFound", () => fallback),
-    Effect.catchTag("Forbidden", () =>
-      fallback.pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-        Effect.catchTag("Forbidden", () => Effect.succeed([])),
-      ),
-    ),
-  );
+  // Vertex AI has no `locations/-` wildcard; scan known locations.
+  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
 const findOwned = (hinted: string | undefined) =>
@@ -306,13 +292,10 @@ const findOwned = (hinted: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool
-        ? Effect.succeed(pool)
-        : Effect.fail(new DeploymentResourcePoolNotResolved({ name })),
+      pool ? Effect.succeed(pool) : Effect.fail(new DeploymentResourcePoolNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.DeploymentResourcePoolNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.DeploymentResourcePoolNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -326,8 +309,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new DeploymentResourcePoolStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.DeploymentResourcePoolStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.DeploymentResourcePoolStillExists",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -338,47 +320,35 @@ const machineKey = (spec: MachineSpec | undefined) =>
 
 export const DeploymentResourcePoolProvider = () =>
   Provider.succeed(DeploymentResourcePool, {
-    stables: [
-      "name",
-      "deploymentResourcePoolId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "deploymentResourcePoolId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.deploymentResourcePoolId ?? output?.deploymentResourcePoolId;
+      const previousId = olds?.deploymentResourcePoolId ?? output?.deploymentResourcePoolId;
       const nextId = news.deploymentResourcePoolId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const previousMachine = machineKey(
-        olds?.dedicatedResources?.machineSpec ??
-          output?.dedicatedResources?.machineSpec,
+        olds?.dedicatedResources?.machineSpec ?? output?.dedicatedResources?.machineSpec,
       );
       const nextMachine = machineKey(
         news.dedicatedResources?.machineSpec ??
           olds?.dedicatedResources?.machineSpec ??
           output?.dedicatedResources?.machineSpec,
       );
-      const previousKey =
-        olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
+      const previousKey = olds?.encryptionSpec?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKey = news.encryptionSpec?.kmsKeyName ?? previousKey;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          rfc1035(nextId) !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && rfc1035(nextId) !== previousId) ||
         previousLocation !== nextLocation ||
         previousMachine !== nextMachine ||
-        previousKey !== nextKey;
+        previousKey !== nextKey ||
+        (olds !== undefined &&
+          (news.disableContainerLogging === true) !== (olds.disableContainerLogging === true));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -396,16 +366,12 @@ export const DeploymentResourcePoolProvider = () =>
         olds?.deploymentResourcePoolId,
         output?.deploymentResourcePoolId,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, poolId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return isOwnedId(attrs.deploymentResourcePoolId) ||
-        output?.name === existing.name
+      return isOwnedId(attrs.deploymentResourcePoolId) || output?.name === existing.name
         ? attrs
         : Unowned(attrs);
     }),
@@ -421,10 +387,7 @@ export const DeploymentResourcePoolProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const poolId = yield* toId(
         id,
         news.deploymentResourcePoolId,
@@ -468,34 +431,29 @@ export const DeploymentResourcePoolProvider = () =>
 
       const currentName = current.name ?? name;
       const observed = dedicatedOf(current.dedicatedResources);
-      const minChanged =
-        (observed?.minReplicaCount ?? 1) !== (dedicated.minReplicaCount ?? 1);
+      const minChanged = (observed?.minReplicaCount ?? 1) !== (dedicated.minReplicaCount ?? 1);
       const maxChanged =
         (observed?.maxReplicaCount ?? observed?.minReplicaCount ?? 1) !==
         (dedicated.maxReplicaCount ?? dedicated.minReplicaCount ?? 1);
-      const loggingChanged =
-        (current.disableContainerLogging === true) !== disableContainerLogging;
-      const saChanged = (current.serviceAccount ?? "") !== serviceAccount;
+      const saChanged =
+        serviceAccount !== undefined && (current.serviceAccount ?? "") !== serviceAccount;
 
-      if (minChanged || maxChanged || loggingChanged || saChanged) {
-        const patched =
-          yield* aiplatform.patchProjectsLocationsDeploymentResourcePools({
+      if (minChanged || maxChanged || saChanged) {
+        const patched = yield* aiplatform.patchProjectsLocationsDeploymentResourcePools({
+          name: currentName,
+          updateMask: [
+            minChanged ? "dedicated_resources.min_replica_count" : undefined,
+            maxChanged ? "dedicated_resources.max_replica_count" : undefined,
+            saChanged ? "service_account" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: currentName,
-            updateMask: [
-              minChanged ? "dedicated_resources.min_replica_count" : undefined,
-              maxChanged ? "dedicated_resources.max_replica_count" : undefined,
-              loggingChanged ? "disable_container_logging" : undefined,
-              saChanged ? "service_account" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: currentName,
-              dedicatedResources: dedicated,
-              disableContainerLogging,
-              serviceAccount,
-            },
-          });
+            dedicatedResources: dedicated,
+            serviceAccount,
+          },
+        });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(currentName);
       }

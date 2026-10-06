@@ -53,9 +53,7 @@ export type IndexProps = {
    * How the index is updated. Immutable.
    * @default "STREAM_UPDATE"
    */
-  indexUpdateMethod?:
-    | aiplatform.GoogleCloudAiplatformV1IndexIndexUpdateMethodEnum
-    | (string & {});
+  indexUpdateMethod?: aiplatform.GoogleCloudAiplatformV1IndexIndexUpdateMethodEnum | (string & {});
   /**
    * Matching Engine metadata (`contentsDeltaUri`, `config.dimensions`,
    * algorithm config).
@@ -137,24 +135,17 @@ export type Index = Resource<
  */
 export const Index = Resource<Index>("GCP.AIPlatform.Index");
 
-export class IndexNotResolved extends Data.TaggedError(
-  "GCP.AIPlatform.IndexNotResolved",
-)<{
+export class IndexNotResolved extends Data.TaggedError("GCP.AIPlatform.IndexNotResolved")<{
   name: string;
 }> {}
 
-export class IndexStillExists extends Data.TaggedError(
-  "GCP.AIPlatform.IndexStillExists",
-)<{
+export class IndexStillExists extends Data.TaggedError("GCP.AIPlatform.IndexStillExists")<{
   name: string;
 }> {}
 
 const DEFAULT_UPDATE_METHOD = "STREAM_UPDATE";
 
-const toAttrs = (
-  index: aiplatform.GoogleCloudAiplatformV1Index,
-  project: string,
-) => {
+const toAttrs = (index: aiplatform.GoogleCloudAiplatformV1Index, project: string) => {
   const name = index.name ?? "";
   return {
     name,
@@ -179,38 +170,23 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listPage = (parent: string, filter?: string) =>
-  aiplatform.listProjectsLocationsIndexes
-    .pages({ parent, pageSize: 100, filter })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.indexes ?? []),
-      ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Index[]),
-      ),
-    );
-
-const findOwned = (
-  project: string,
-  location: string,
-  labels: Record<string, string>,
-) =>
-  listPage(
-    `projects/${project}/locations/${location}`,
-    alchemyIdFilter(labels),
-  ).pipe(
-    Effect.map(
-      (items) =>
-        items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined,
+  aiplatform.listProjectsLocationsIndexes.pages({ parent, pageSize: 100, filter }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.indexes ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Index[]),
     ),
+  );
+
+const findOwned = (project: string, location: string, labels: Record<string, string>) =>
+  listPage(`projects/${project}/locations/${location}`, alchemyIdFilter(labels)).pipe(
+    Effect.map((items) => items.find((item) => hasAlchemyPrefix(item.labels)) ?? undefined),
   );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (index): index is aiplatform.GoogleCloudAiplatformV1Index =>
-        index !== undefined,
+      (index): index is aiplatform.GoogleCloudAiplatformV1Index => index !== undefined,
       () => new IndexNotResolved({ name }),
     ),
     Effect.retry({
@@ -236,22 +212,12 @@ const waitUntilGone = (name: string) =>
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {
-    stables: [
-      "name",
-      "indexId",
-      "project",
-      "location",
-      "indexUpdateMethod",
-      "createTime",
-    ],
+    stables: ["name", "indexId", "project", "location", "indexUpdateMethod", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -261,11 +227,8 @@ export const IndexProvider = () =>
         output?.indexUpdateMethod ??
         DEFAULT_UPDATE_METHOD
       ).toUpperCase();
-      const nextMethod = (
-        news.indexUpdateMethod ?? previousMethod
-      ).toUpperCase();
-      const previousSchema =
-        olds?.metadataSchemaUri ?? output?.metadataSchemaUri ?? "";
+      const nextMethod = (news.indexUpdateMethod ?? previousMethod).toUpperCase();
+      const previousSchema = olds?.metadataSchemaUri ?? output?.metadataSchemaUri ?? "";
       const nextSchema = news.metadataSchemaUri ?? previousSchema;
       if (
         previousLocation !== nextLocation ||
@@ -279,20 +242,14 @@ export const IndexProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const ownership = yield* createInternalLabels(id);
       const existing =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(env.project, location, ownership));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(env.project, location, ownership));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -300,8 +257,7 @@ export const IndexProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listPage(`projects/${env.project}/locations/${location}`),
+          (location) => listPage(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         return pages
@@ -312,15 +268,8 @@ export const IndexProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -332,9 +281,7 @@ export const IndexProvider = () =>
       ).toUpperCase();
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ??
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
         (yield* findOwned(env.project, location, desiredLabels));
 
       if (current === undefined) {
@@ -372,20 +319,13 @@ export const IndexProvider = () =>
       }
 
       const name = current.name;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const displayChanged = (current.displayName ?? "") !== displayName;
       const labelsChanged = labelsDiffer(current.labels, desiredLabels);
       const metadataChanged =
-        news.metadata !== undefined &&
-        stableJson(current.metadata) !== stableJson(news.metadata);
+        news.metadata !== undefined && stableJson(current.metadata) !== stableJson(news.metadata);
 
-      if (
-        descriptionChanged ||
-        displayChanged ||
-        labelsChanged ||
-        metadataChanged
-      ) {
+      if (descriptionChanged || displayChanged || labelsChanged || metadataChanged) {
         const operation = yield* aiplatform.patchProjectsLocationsIndexes({
           name,
           updateMask: [

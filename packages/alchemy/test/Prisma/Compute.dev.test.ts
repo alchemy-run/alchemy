@@ -1,12 +1,12 @@
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Prisma.providers(), dev: true });
 
@@ -22,9 +22,7 @@ test.provider(
             project: "project-dev",
             appName: "api",
             port: 8787,
-            dev: {
-              url: "http://localhost:8787",
-            },
+            dev: { url: "http://localhost:8787" },
           });
         }),
       );
@@ -54,9 +52,7 @@ test.provider(
             project,
             appName: "api",
             port: 8787,
-            dev: {
-              url: "http://localhost:8787",
-            },
+            dev: { url: "http://localhost:8787" },
           });
           return { project, app };
         }),
@@ -69,14 +65,7 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  {
-    tags: [
-      "provider:prisma",
-      "provider:prisma:compute",
-      "provider:prisma:project",
-      "local",
-    ],
-  },
+  { tags: ["provider:prisma", "provider:prisma:compute", "provider:prisma:project", "local"] },
 );
 
 test.provider(
@@ -87,20 +76,13 @@ test.provider(
 
       const output = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Prisma.Project("Project", {
-            name: "local-project",
-          });
+          const project = yield* Prisma.Project("Project", { name: "local-project" });
           const database = yield* Prisma.Database("Database", {
             project,
             name: "main",
-            dev: {
-              name: "alchemy-compute-dev-bind-env",
-            },
+            dev: { name: "alchemy-compute-dev-bind-env" },
           });
-          const connection = yield* Prisma.Connection("Connection", {
-            database,
-            name: "api",
-          });
+          const connection = yield* Prisma.Connection("Connection", { database, name: "api" });
           const keys = Prisma.connectEnvKeys(connection);
           const app = yield* Prisma.Compute(
             "App",
@@ -108,9 +90,7 @@ test.provider(
               project,
               appName: "api",
               main: import.meta.filename,
-              dev: {
-                url: "http://localhost:8787",
-              },
+              dev: { url: "http://localhost:8787" },
             },
             Effect.gen(function* () {
               const db = yield* Prisma.Connect(connection);
@@ -165,20 +145,13 @@ test.provider(
 
       const output = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Prisma.Project("Project", {
-            name: "local-project",
-          });
+          const project = yield* Prisma.Project("Project", { name: "local-project" });
           const database = yield* Prisma.Database("Database", {
             project,
             name: "main",
-            dev: {
-              name: "alchemy-compute-dev-owned-shapes",
-            },
+            dev: { name: "alchemy-compute-dev-owned-shapes" },
           });
-          const connection = yield* Prisma.Connection("Connection", {
-            database,
-            name: "api",
-          });
+          const connection = yield* Prisma.Connection("Connection", { database, name: "api" });
           const branch = yield* Prisma.Branch("Branch", {
             project,
             gitName: "main",
@@ -204,16 +177,7 @@ test.provider(
             providerRepositoryId: 123,
           });
 
-          return {
-            project,
-            database,
-            connection,
-            branch,
-            appResource,
-            deployment,
-            env,
-            repo,
-          };
+          return { project, database, connection, branch, appResource, deployment, env, repo };
         }),
       );
 
@@ -260,9 +224,7 @@ test.provider(
 
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-prisma-dev-",
-      });
+      const root = yield* fs.makeTempDirectory({ prefix: "alchemy-prisma-dev-" });
       const scriptPath = path.join(root, "dev-server.sh");
       const outputPath = path.join(root, "dev-output.json");
       const stoppedPath = path.join(root, "dev-stopped.txt");
@@ -284,14 +246,8 @@ test.provider(
             appName: "api",
             path: root,
             port: 8788,
-            env: {
-              GREETING: "hello-dev",
-            },
-            dev: {
-              command: "sh dev-server.sh",
-              cwd: root,
-              port: 8789,
-            },
+            env: { GREETING: "hello-dev" },
+            dev: { command: "sh dev-server.sh", cwd: root, port: 8789 },
           });
         }),
       );
@@ -301,10 +257,7 @@ test.provider(
 
       const output = yield* fs.readFileString(outputPath).pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("50 millis"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("50 millis"), Schedule.recurs(40)]),
         }),
       );
 
@@ -318,17 +271,11 @@ test.provider(
 
       const stopped = yield* fs.readFileString(stoppedPath).pipe(
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("50 millis"),
-            Schedule.recurs(40),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("50 millis"), Schedule.recurs(40)]),
         }),
       );
 
       expect(stopped).toBe("stopped");
     }),
-  {
-    tags: ["provider:prisma", "provider:prisma:compute", "local"],
-    timeout: 10_000,
-  },
+  { tags: ["provider:prisma", "provider:prisma:compute", "local"], timeout: 10_000 },
 );

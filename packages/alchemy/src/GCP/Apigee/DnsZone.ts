@@ -119,19 +119,14 @@ export const DnsZone = Resource<DnsZone>("GCP.Apigee.DnsZone");
 /** Alias matching the catalog name `Dn`. */
 export const Dn = DnsZone;
 
-export class DnsZoneNotResolved extends Data.TaggedError(
-  "GCP.Apigee.DnsZoneNotResolved",
-)<{
+export class DnsZoneNotResolved extends Data.TaggedError("GCP.Apigee.DnsZoneNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (organization: string, dnsZoneId: string) =>
   `${orgNameOf(organization)}/dnsZones/${dnsZoneId}`;
 
-const toAttrs = (
-  zone: apigee.GoogleCloudApigeeV1DnsZone,
-  organization: string,
-) => {
+const toAttrs = (zone: apigee.GoogleCloudApigeeV1DnsZone, organization: string) => {
   const name = zone.name ?? "";
   const parsed = parseDescription(zone.description);
   const peering = zone.peeringConfig;
@@ -141,8 +136,7 @@ const toAttrs = (
     organization: orgIdOf(organization),
     domain: zone.domain ?? "",
     peeringConfig:
-      peering?.targetNetworkId !== undefined ||
-      peering?.targetProjectId !== undefined
+      peering?.targetNetworkId !== undefined || peering?.targetProjectId !== undefined
         ? {
             targetNetworkId: peering.targetNetworkId ?? "",
             targetProjectId: peering.targetProjectId ?? "",
@@ -158,7 +152,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDnsZones({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const DnsZoneProvider = () =>
   Provider.succeed(DnsZone, {
@@ -171,15 +165,12 @@ export const DnsZoneProvider = () =>
       const previousDomain = olds?.domain ?? output?.domain;
       const previousPeer = olds?.peeringConfig ?? output?.peeringConfig;
       const idChanged =
-        previousId !== undefined &&
-        news.dnsZoneId !== undefined &&
-        news.dnsZoneId !== previousId;
+        previousId !== undefined && news.dnsZoneId !== undefined && news.dnsZoneId !== previousId;
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
         orgIdOf(news.organization) !== orgIdOf(previousOrg);
-      const domainChanged =
-        previousDomain !== undefined && news.domain !== previousDomain;
+      const domainChanged = previousDomain !== undefined && news.domain !== previousDomain;
       const peerChanged =
         previousPeer !== undefined &&
         (previousPeer.targetNetworkId !== news.peeringConfig.targetNetworkId ||
@@ -195,16 +186,8 @@ export const DnsZoneProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
-      const dnsZoneId = yield* letterPrefixedId(
-        id,
-        olds?.dnsZoneId,
-        output?.dnsZoneId,
-        63,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
+      const dnsZoneId = yield* letterPrefixedId(id, olds?.dnsZoneId, output?.dnsZoneId, 63);
       const name = output?.name ?? resourceName(organization, dnsZoneId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -225,7 +208,7 @@ export const DnsZoneProvider = () =>
             }),
             (page) => page.dnsZones,
           ).pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as apigee.GoogleCloudApigeeV1DnsZone[]),
             ),
           );
@@ -241,12 +224,7 @@ export const DnsZoneProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organization = defaultOrgName(env.project, news.organization);
-      const dnsZoneId = yield* letterPrefixedId(
-        id,
-        news.dnsZoneId,
-        output?.dnsZoneId,
-        63,
-      );
+      const dnsZoneId = yield* letterPrefixedId(id, news.dnsZoneId, output?.dnsZoneId, 63);
       const name = resourceName(organization, dnsZoneId);
       const ownership = yield* createOwnership(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -281,7 +259,9 @@ export const DnsZoneProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsDnsZones({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
+        );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

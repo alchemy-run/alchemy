@@ -10,9 +10,8 @@ import type { Providers } from "../Providers.ts";
 const unwrap = (v: string | Redacted.Redacted<string> | undefined) =>
   v === undefined ? undefined : Redacted.isRedacted(v) ? Redacted.value(v) : v;
 
-const unwrapAll = (
-  vs: readonly (string | Redacted.Redacted<string>)[] | undefined,
-) => (vs === undefined ? undefined : vs.map((v) => unwrap(v)!));
+const unwrapAll = (vs: readonly (string | Redacted.Redacted<string>)[] | undefined) =>
+  vs === undefined ? undefined : vs.map((v) => unwrap(v)!);
 
 /** Sorted copy, with empty/absent arrays collapsing to `undefined`. */
 const sortedOrUndefined = (vs: readonly string[] | undefined) =>
@@ -174,9 +173,7 @@ export interface IdentitySource extends Resource<
  *
  * @resource
  */
-export const IdentitySource = Resource<IdentitySource>(
-  "AWS.VerifiedPermissions.IdentitySource",
-);
+export const IdentitySource = Resource<IdentitySource>("AWS.VerifiedPermissions.IdentitySource");
 
 /** Desired props → the wire `Configuration` union. */
 const toConfiguration = (news: IdentitySourceProps): avp.Configuration =>
@@ -234,9 +231,7 @@ const toObservedConfiguration = (
         oidc.tokenSelection.accessTokenOnly !== undefined
           ? {
               accessTokenOnly: {
-                principalIdClaim: unwrap(
-                  oidc.tokenSelection.accessTokenOnly.principalIdClaim,
-                ),
+                principalIdClaim: unwrap(oidc.tokenSelection.accessTokenOnly.principalIdClaim),
                 audiences: oidc.tokenSelection.accessTokenOnly.audiences
                   ? [...oidc.tokenSelection.accessTokenOnly.audiences]
                   : undefined,
@@ -244,12 +239,8 @@ const toObservedConfiguration = (
             }
           : {
               identityTokenOnly: {
-                principalIdClaim: unwrap(
-                  oidc.tokenSelection.identityTokenOnly.principalIdClaim,
-                ),
-                clientIds: unwrapAll(
-                  oidc.tokenSelection.identityTokenOnly.clientIds,
-                ),
+                principalIdClaim: unwrap(oidc.tokenSelection.identityTokenOnly.principalIdClaim),
+                clientIds: unwrapAll(oidc.tokenSelection.identityTokenOnly.clientIds),
               },
             },
     },
@@ -281,22 +272,20 @@ const normalize = (config: IdentitySourceConfiguration): string => {
                 ? {
                     accessTokenOnly: {
                       principalIdClaim:
-                        config.openIdConnect.tokenSelection.accessTokenOnly
-                          .principalIdClaim ?? "sub",
+                        config.openIdConnect.tokenSelection.accessTokenOnly.principalIdClaim ??
+                        "sub",
                       audiences: sortedOrUndefined(
-                        config.openIdConnect.tokenSelection.accessTokenOnly
-                          .audiences,
+                        config.openIdConnect.tokenSelection.accessTokenOnly.audiences,
                       ),
                     },
                   }
                 : {
                     identityTokenOnly: {
                       principalIdClaim:
-                        config.openIdConnect.tokenSelection.identityTokenOnly
-                          .principalIdClaim ?? "sub",
+                        config.openIdConnect.tokenSelection.identityTokenOnly.principalIdClaim ??
+                        "sub",
                       clientIds: sortedOrUndefined(
-                        config.openIdConnect.tokenSelection.identityTokenOnly
-                          .clientIds,
+                        config.openIdConnect.tokenSelection.identityTokenOnly.clientIds,
                       ),
                     },
                   },
@@ -306,25 +295,17 @@ const normalize = (config: IdentitySourceConfiguration): string => {
 };
 
 /** Desired props → the wire `UpdateConfiguration` union (same field shapes). */
-const toUpdateConfiguration = (
-  news: IdentitySourceProps,
-): avp.UpdateConfiguration => toConfiguration(news) as avp.UpdateConfiguration;
+const toUpdateConfiguration = (news: IdentitySourceProps): avp.UpdateConfiguration =>
+  toConfiguration(news) as avp.UpdateConfiguration;
 
 export const IdentitySourceProvider = () =>
   Provider.effect(
     IdentitySource,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        policyStoreId: string,
-        identitySourceId: string,
-      ) {
+      const observe = Effect.fn(function* (policyStoreId: string, identitySourceId: string) {
         return yield* avp
           .getIdentitySource({ policyStoreId, identitySourceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return IdentitySource.Provider.of({
@@ -372,10 +353,7 @@ export const IdentitySourceProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e): boolean => e._tag === "ResourceNotFoundException",
-                  schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
-                    Schedule.recurs(5),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
                 }),
               );
             yield* session.note(created.identitySourceId);
@@ -393,13 +371,9 @@ export const IdentitySourceProvider = () =>
           );
           // If the response carries no configuration detail, we can't prove
           // convergence — treat it as drift and (re)apply the desired config.
-          const observedConfiguration = toObservedConfiguration(
-            existing.configuration,
-          );
+          const observedConfiguration = toObservedConfiguration(existing.configuration);
           const observed =
-            observedConfiguration === undefined
-              ? undefined
-              : normalize(observedConfiguration);
+            observedConfiguration === undefined ? undefined : normalize(observedConfiguration);
           const observedPrincipalType = unwrap(existing.principalEntityType);
           const principalDrift =
             news.principalEntityType !== undefined &&
@@ -426,9 +400,7 @@ export const IdentitySourceProvider = () =>
               policyStoreId: output.policyStoreId,
               identitySourceId: output.identitySourceId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

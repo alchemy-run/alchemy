@@ -5,27 +5,19 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
-  MAX_DISPLAY_NAME_LENGTH,
   ResourceNotResolved,
-  encodeRestrictedDisplayName,
-  findOwnedByDisplayName,
-  hasOwnershipMarker,
-  listAdaptiveMtDatasetsAt,
-  listProjectAdaptiveMtDatasets,
   locationParent,
   normalizeLocation,
-  ownedByAlchemy,
-  parseOwnership,
   parseResourceName,
   replaceOnIdentity,
   resourceNameOf,
   retryTransient,
   toPhysicalId,
   waitUntilGone,
+  toRestrictedDisplayName,
 } from "./internal.ts";
 
 export type AdaptiveMtDatasetProps = {
@@ -43,11 +35,8 @@ export type AdaptiveMtDatasetProps = {
    */
   location?: string;
   /**
-   * User-facing display name. Adaptive MT datasets have no labels field
-   * and display names may only use A-Z, a-z, 0-9, and underscore (max
-   * 32 characters), so Alchemy packs ownership as `alc_{stack}_{stage}_{id}`
-   * and strips it from attributes. There is no update API — changing
-   * display name replaces the dataset.
+   * User-facing display name. There is no update API — changing display name
+   * replaces the dataset.
    */
   displayName?: string;
   /**
@@ -74,7 +63,7 @@ export type AdaptiveMtDataset = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** User display name with the Alchemy ownership prefix stripped. */
+    /** Display name. */
     displayName: string | undefined;
     /** BCP-47 source language code. */
     sourceLanguageCode: string | undefined;
@@ -95,10 +84,10 @@ export type AdaptiveMtDataset = Resource<
  * An Adaptive MT dataset of source/target sentence pairs used to
  * customize Cloud Translation.
  *
- * Adaptive MT datasets are location-scoped and have no labels field.
- * Alchemy stamps ownership into `displayName` (restricted charset) for
- * `list` / nuke. Language pair, location, and display name are
- * immutable — there is no patch RPC.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
+ * Adaptive MT datasets are location-scoped and have no labels field. Language
+ * pair, location, and display name are immutable — there is no patch RPC.
  *
  * ### Creating a Dataset
  * **Example:** English to Spanish
@@ -123,27 +112,20 @@ export type AdaptiveMtDataset = Resource<
  * @resource
  * @category Translate
  */
-export const AdaptiveMtDataset = Resource<AdaptiveMtDataset>(
-  "GCP.Translate.AdaptiveMtDataset",
-);
+export const AdaptiveMtDataset = Resource<AdaptiveMtDataset>("GCP.Translate.AdaptiveMtDataset");
 
 const resourceName = (project: string, location: string, datasetId: string) =>
-  resourceNameOf(
-    locationParent(project, location),
-    "adaptiveMtDatasets",
-    datasetId,
-  );
+  resourceNameOf(locationParent(project, location), "adaptiveMtDatasets", datasetId);
 
 const toAttrs = (dataset: translate.AdaptiveMtDataset, project: string) => {
   const name = dataset.name ?? "";
   const parsed = parseResourceName(name, "adaptiveMtDatasets");
-  const ownership = parseOwnership(dataset.displayName);
   return {
     name,
     datasetId: parsed.id,
     project: parsed.project || project,
     location: parsed.location,
-    displayName: ownership.text,
+    displayName: dataset.displayName,
     sourceLanguageCode: dataset.sourceLanguageCode,
     targetLanguageCode: dataset.targetLanguageCode,
     exampleCount: dataset.exampleCount,
@@ -158,28 +140,6 @@ const getByName = (name: string) =>
     : translate
         .getProjectsLocationsAdaptiveMtDatasets({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const findOwned = (
-  id: string,
-  project: string,
-  parent: string,
-  hinted?: string,
-) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const local = yield* findOwnedByDisplayName(
-      id,
-      yield* listAdaptiveMtDatasetsAt(parent),
-    );
-    if (local !== undefined) return local;
-    return yield* findOwnedByDisplayName(
-      id,
-      yield* listProjectAdaptiveMtDatasets(project),
-    );
-  });
 
 export const AdaptiveMtDatasetProvider = () =>
   Provider.succeed(AdaptiveMtDataset, {
@@ -208,52 +168,29 @@ export const AdaptiveMtDatasetProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const datasetId = olds?.datasetId ?? output?.datasetId;
       const name =
-        output?.name ??
-        (datasetId ? resourceName(env.project, location, datasetId) : "");
-      const parent = locationParent(env.project, location);
-      const existing = yield* findOwned(id, env.project, parent, name);
+        output?.name ?? (datasetId ? resourceName(env.project, location, datasetId) : "");
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      // No labels field: without prior state it may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const datasets = yield* listProjectAdaptiveMtDatasets(env.project);
-        return datasets
-          .filter((dataset) => hasOwnershipMarker(dataset.displayName))
-          .map((dataset) => toAttrs(dataset, env.project));
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(env.project, location);
-      const datasetId = yield* toPhysicalId(
-        id,
-        news.datasetId,
-        output?.datasetId,
-      );
+      const datasetId = yield* toPhysicalId(id, news.datasetId, output?.datasetId);
       const name = resourceName(env.project, location, datasetId);
-      const ownership = yield* createInternalLabels(id);
-      const displayName = encodeRestrictedDisplayName(
-        ownership,
-        news.displayName ?? output?.displayName,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const displayName = toRestrictedDisplayName(news.displayName ?? datasetId);
       const hinted = output?.name ?? name;
 
-      let current = yield* findOwned(id, env.project, parent, hinted);
+      let current = yield* getByName(hinted);
 
       if (current === undefined) {
         const created = yield* retryTransient(
@@ -266,11 +203,7 @@ export const AdaptiveMtDatasetProvider = () =>
               targetLanguageCode: news.targetLanguageCode,
             },
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () =>
-            findOwned(id, env.project, parent, name),
-          ),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 

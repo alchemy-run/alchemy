@@ -6,7 +6,6 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandRepository,
@@ -94,9 +93,7 @@ export type RepositoriesWorkflowConfigProps = {
    */
   disabled?: boolean;
   /**
-   * Invocation options. Alchemy ownership tags are merged into
-   * `includedTags` when set; an empty tag list is left empty so all
-   * actions still run.
+   * Invocation options.
    */
   invocationConfig?: InvocationConfig;
 };
@@ -138,10 +135,8 @@ export type RepositoriesWorkflowConfig = Resource<
  * A Dataform workflow configuration — executes a release config's
  * compilation result on a schedule (or on demand).
  *
- * Workflow configs have no labels field. Alchemy stamps ownership into
- * `invocationConfig.includedTags` only when the caller already sets
- * tags; otherwise ownership is the parent repository's Alchemy labels
- * plus the generated physical id. Changing `workflowConfigId`,
+ * Workflow configs have no labels field, so ownership is the parent
+ * repository's Alchemy labels. Changing `workflowConfigId`,
  * `repository`, or `location` replaces the config. Release config,
  * schedule, disabled flag, and invocation options update in place.
  *
@@ -180,55 +175,22 @@ export class RepositoriesWorkflowConfigNotResolved extends Data.TaggedError(
 const resourceName = (repository: string, workflowConfigId: string) =>
   `${repository}/workflowConfigs/${workflowConfigId}`;
 
-const OWNERSHIP_TAG_PREFIX = "alchemy-";
-
-const ownedTags = (
-  tags: readonly string[] | undefined,
-  ownership: Record<string, string>,
-): string[] | undefined => {
-  if (tags === undefined) return undefined;
-  const extras = Object.entries(ownership).map(
-    ([key, value]) => `${key}:${value}`,
-  );
-  return [
-    ...tags.filter((tag) => !tag.startsWith(OWNERSHIP_TAG_PREFIX)),
-    ...extras,
-  ];
-};
-
-const userTags = (
-  tags: readonly string[] | undefined,
-): string[] | undefined => {
-  if (tags === undefined) return undefined;
-  const next = tags.filter((tag) => !tag.startsWith(OWNERSHIP_TAG_PREFIX));
-  return next;
-};
-
-const isOwnedTags = (tags: readonly string[] | undefined) =>
-  (tags ?? []).some((tag) => tag.startsWith(OWNERSHIP_TAG_PREFIX));
-
 const invocationOf = (
   config: InvocationConfig | undefined,
-  ownership: Record<string, string>,
 ): dataform.InvocationConfig | undefined => {
   if (config === undefined) return undefined;
   return {
     transitiveDependentsIncluded: config.transitiveDependentsIncluded,
     serviceAccount: config.serviceAccount,
-    includedTags: ownedTags(config.includedTags, ownership),
-    fullyRefreshIncrementalTablesEnabled:
-      config.fullyRefreshIncrementalTablesEnabled,
+    includedTags: config.includedTags,
+    fullyRefreshIncrementalTablesEnabled: config.fullyRefreshIncrementalTablesEnabled,
     queryPriority: config.queryPriority,
     transitiveDependenciesIncluded: config.transitiveDependenciesIncluded,
     includedTargets: config.includedTargets,
   };
 };
 
-const toAttrs = (
-  config: dataform.WorkflowConfig,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (config: dataform.WorkflowConfig, project: string, region: string) => {
   const name = config.name ?? "";
   const parsed = parseResourceName(name, "workflowConfigs", region);
   return {
@@ -241,7 +203,7 @@ const toAttrs = (
     cronSchedule: config.cronSchedule,
     timeZone: config.timeZone,
     disabled: config.disabled === true,
-    includedTags: userTags(config.invocationConfig?.includedTags),
+    includedTags: config.invocationConfig?.includedTags,
     createTime: config.createTime,
     updateTime: config.updateTime,
   };
@@ -256,14 +218,7 @@ const getByName = (name: string) =>
 
 export const RepositoriesWorkflowConfigProvider = () =>
   Provider.succeed(RepositoriesWorkflowConfig, {
-    stables: [
-      "name",
-      "workflowConfigId",
-      "repository",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "workflowConfigId", "repository", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -274,10 +229,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       );
       return replaceOnIdentity({
         previousId: olds?.workflowConfigId ?? output?.workflowConfigId,
-        nextId:
-          news.workflowConfigId ??
-          olds?.workflowConfigId ??
-          output?.workflowConfigId,
+        nextId: news.workflowConfigId ?? olds?.workflowConfigId ?? output?.workflowConfigId,
         previousLocation: olds?.location ?? output?.location,
         nextLocation: news.location ?? olds?.location ?? output?.location,
         previousParent: olds?.repository ?? output?.repository,
@@ -291,15 +243,11 @@ export const RepositoriesWorkflowConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const repository = expandRepository(
         olds?.repository ??
           output?.repository ??
-          parseResourceName(output?.name ?? "", "workflowConfigs", env.region)
-            .parent,
+          parseResourceName(output?.name ?? "", "workflowConfigs", env.region).parent,
         env.project,
         location,
       );
@@ -312,15 +260,9 @@ export const RepositoriesWorkflowConfigProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      if (isOwnedTags(existing.invocationConfig?.includedTags)) {
-        return attrs;
-      }
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),
@@ -328,37 +270,27 @@ export const RepositoriesWorkflowConfigProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const configs = yield* forEachOwnedRepository(
-          env.project,
-          env.region,
-          (repo) => listWorkflowConfigs(repo.name ?? ""),
+        const configs = yield* forEachOwnedRepository(env.project, env.region, (repo) =>
+          listWorkflowConfigs(repo.name ?? ""),
         );
         return configs.map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const repository = expandRepository(news.repository, env.project, location);
       const workflowConfigId = yield* toPhysicalId(
         id,
         news.workflowConfigId,
         output?.workflowConfigId,
       );
       const name = resourceName(repository, workflowConfigId);
-      const ownership = yield* createInternalLabels(id);
       const resolvedRelease = news.releaseConfig.includes("/")
         ? news.releaseConfig
         : `${repository}/releaseConfigs/${news.releaseConfig}`;
       const disabled = news.disabled === true;
-      const invocationConfig = invocationOf(news.invocationConfig, ownership);
+      const invocationConfig = invocationOf(news.invocationConfig);
 
       let current = yield* getByName(output?.name ?? name);
 

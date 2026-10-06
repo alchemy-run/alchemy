@@ -15,6 +15,10 @@ export interface PauseJobRequest extends Omit<
  * Bind this operation to a {@link Job} in a Function/Action init phase.
  * Provide {@link PauseJobHttp}.
  *
+ * Grants `roles/cloudscheduler.admin` on the project: it is the only
+ * predefined role with `cloudscheduler.jobs.pause`, and Cloud Scheduler has
+ * neither per-job IAM policies nor IAM Conditions on `resource.name`.
+ *
  * ### Pausing Jobs
  * **Example:** Pause the bound job
  * ```typescript
@@ -33,14 +37,8 @@ export interface PauseJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: PauseJobRequest,
-    ) => Effect.Effect<
-      scheduler.Job,
-      scheduler.PauseProjectsLocationsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<scheduler.Job, scheduler.PauseProjectsLocationsJobsError, RuntimeContext>
   >
 > {}
 
-export const PauseJob = Binding.Service<PauseJob>(
-  "GCP.CloudScheduler.PauseJob",
-);
+export const PauseJob = Binding.Service<PauseJob>("GCP.CloudScheduler.PauseJob");

@@ -4,8 +4,6 @@ export {
   CertificateTemplate,
   CertificateTemplateProvider,
   CertificateTemplateNotResolved,
-  CertificateTemplateOperationFailed,
-  CertificateTemplateOperationPending,
   CertificateTemplateStillExists,
 } from "./CertificateTemplate.ts";
 export type { CertificateTemplateProps } from "./CertificateTemplate.ts";

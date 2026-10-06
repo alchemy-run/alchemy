@@ -5,9 +5,7 @@ import * as Effect from "effect/Effect";
  * The container for the key. Cloud KMS has no key ring delete API, so
  * `alchemy destroy` only forgets the ring; an empty ring costs nothing.
  */
-export const Keys = GCP.KMS.KeyRing("Keys", {
-  location: "us-central1",
-});
+export const Keys = GCP.KMS.KeyRing("Keys", {});
 
 /**
  * The symmetric key the service encrypts with. Key material never leaves

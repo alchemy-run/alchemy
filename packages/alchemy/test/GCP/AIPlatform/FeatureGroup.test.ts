@@ -1,22 +1,16 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { UsersSource } from "./fixtures/features.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsFeatureGroups({ name }).pipe(
@@ -39,26 +33,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsFeatureGroups({
-          name: `${parent}/featureGroups/alchemy-missing`,
+          name: `${parent}/featureGroups/alchemy_missing`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsFeatureGroups({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ featureGroups: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.featureGroups ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsFeatureGroups({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.featureGroups ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/featureGroups/alchemy_missing`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,21 +53,21 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a feature group",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const inputUri = yield* UsersSource;
           return yield* GCP.AIPlatform.FeatureGroup("Users", {
             location: "us-central1",
             description: "user features",
             labels: { env: "test" },
             bigQuery: {
-              inputUri: `bq://${project}.alchemy_features.users`,
+              inputUri,
               entityIdColumns: ["entity_id"],
             },
           });
@@ -102,13 +87,14 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const inputUri = yield* UsersSource;
           return yield* GCP.AIPlatform.FeatureGroup("Users", {
             featureGroupId: created.featureGroupId,
             location: "us-central1",
             description: "user features v2",
             labels: { env: "prod", role: "features" },
             bigQuery: {
-              inputUri: `bq://${project}.alchemy_features.users`,
+              inputUri,
               entityIdColumns: ["entity_id"],
             },
           });
@@ -126,6 +112,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 180_000,
+    timeout: 600_000,
   },
 );

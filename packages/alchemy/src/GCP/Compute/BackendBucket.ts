@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type BackendBucketProps = {
   /**
@@ -131,22 +127,12 @@ export type BackendBucket = Resource<
  * @resource
  * @category Compute
  */
-export const BackendBucket = Resource<BackendBucket>(
-  "GCP.Compute.BackendBucket",
-);
+export const BackendBucket = Resource<BackendBucket>("GCP.Compute.BackendBucket");
 
 export class BackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendBucketNotResolved",
 )<{
   name: string;
-}> {}
-
-export class BackendBucketOperationFailed extends Data.TaggedError(
-  "GCP.Compute.BackendBucketOperationFailed",
-)<{
-  operation: string | undefined;
-  status: string | undefined;
-  errors: ReadonlyArray<{ code?: string; message?: string }> | undefined;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -176,10 +162,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
   return user ? `${marker}\n${user}` : marker;
 };
@@ -241,58 +224,6 @@ const sameCdnPolicy = (
   JSON.stringify(normalizeCdnPolicy(left) ?? null) ===
   JSON.stringify(normalizeCdnPolicy(right) ?? null);
 
-const operationErrors = (operation: compute.Operation) =>
-  operation.error?.errors?.map((error) => ({
-    code: error.code,
-    message: error.message,
-  }));
-
-const isFailedOperation = (operation: compute.Operation): boolean =>
-  (operation.error?.errors?.length ?? 0) > 0;
-
-const failOperation = (operation: compute.Operation) =>
-  new BackendBucketOperationFailed({
-    operation: operation.name,
-    status: operation.status,
-    errors: operationErrors(operation),
-  });
-
-const waitGlobal = (project: string, operation: compute.Operation) =>
-  Effect.gen(function* () {
-    let current = operation;
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* waitGlobalOperations(
-        {
-          project,
-          operation: current.name,
-        },
-        { times: 18 },
-      ).pipe(
-        Effect.catchTag("GCP.Compute.OperationPending", () =>
-          Effect.succeed(current),
-        ),
-      );
-    }
-    if (current.status !== "DONE" && current.name !== undefined) {
-      current = yield* compute
-        .getGlobalOperations({
-          project,
-          operation: current.name,
-        })
-        .pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (next) => next.status === "DONE",
-            times: 8,
-          }),
-        );
-    }
-    if (current.status !== "DONE" || isFailedOperation(current)) {
-      return yield* failOperation(current);
-    }
-    return current;
-  });
-
 const getByName = (project: string, name: string) =>
   compute
     .getBackendBuckets({ project, backendBucket: name })
@@ -314,22 +245,16 @@ export const BackendBucketProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousName = olds?.name ?? output?.name;
-      if (
-        news.name !== undefined &&
-        previousName !== undefined &&
-        news.name !== previousName
-      ) {
+      if (news.name !== undefined && previousName !== undefined && news.name !== previousName) {
         return { action: "replace" as const };
       }
-      const previousScheme =
-        olds?.loadBalancingScheme ?? output?.loadBalancingScheme;
+      const previousScheme = olds?.loadBalancingScheme ?? output?.loadBalancingScheme;
       const nextScheme = news.loadBalancingScheme;
       if ((previousScheme ?? "") !== (nextScheme ?? "")) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousName !== undefined &&
-            (news.name === undefined || news.name === previousName),
+            previousName !== undefined && (news.name === undefined || news.name === previousName),
         };
       }
       return undefined;
@@ -342,9 +267,7 @@ export const BackendBucketProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -380,14 +303,13 @@ export const BackendBucketProvider = () =>
               description: desiredDescription,
               enableCdn,
               compressionMode: news.compressionMode,
-              customResponseHeaders:
-                desiredHeaders.length > 0 ? desiredHeaders : undefined,
+              customResponseHeaders: desiredHeaders.length > 0 ? desiredHeaders : undefined,
               loadBalancingScheme: news.loadBalancingScheme,
               cdnPolicy: news.cdnPolicy,
             },
           })
           .pipe(
-            Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         if (inserted !== undefined) {
@@ -408,13 +330,9 @@ export const BackendBucketProvider = () =>
       const compressionChanged =
         news.compressionMode !== undefined &&
         (current.compressionMode ?? "") !== news.compressionMode;
-      const headersChanged = !sameList(
-        current.customResponseHeaders,
-        desiredHeaders,
-      );
+      const headersChanged = !sameList(current.customResponseHeaders, desiredHeaders);
       const policyChanged =
-        news.cdnPolicy !== undefined &&
-        !sameCdnPolicy(current.cdnPolicy, news.cdnPolicy);
+        news.cdnPolicy !== undefined && !sameCdnPolicy(current.cdnPolicy, news.cdnPolicy);
 
       if (
         descriptionChanged ||
@@ -437,9 +355,7 @@ export const BackendBucketProvider = () =>
               cdnPolicy: news.cdnPolicy,
             },
           })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobal(env.project, operation)),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);
       }
 
@@ -458,7 +374,7 @@ export const BackendBucketProvider = () =>
           backendBucket: output.name,
         })
         .pipe(
-          Effect.flatMap((operation) => waitGlobal(env.project, operation)),
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
           Effect.catchTag("NotFound", () => Effect.void),
         );
     }),

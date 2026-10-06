@@ -17,20 +17,15 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TYPE: privateca.CertificateAuthorityTypeEnum = "SELF_SIGNED";
 const DEFAULT_LIFETIME = "315360000s";
-const DEFAULT_ALGORITHM: privateca.KeyVersionSpecAlgorithmEnum =
-  "EC_P256_SHA256";
+const DEFAULT_ALGORITHM: privateca.KeyVersionSpecAlgorithmEnum = "EC_P256_SHA256";
 const DEFAULT_DESIRED_STATE: DesiredState = "ENABLED";
 const MAX_NAME_LENGTH = 63;
-const STEADY_STATES = new Set([
-  "ENABLED",
-  "DISABLED",
-  "STAGED",
-  "AWAITING_USER_ACTIVATION",
-]);
+const STEADY_STATES = new Set(["ENABLED", "DISABLED", "STAGED", "AWAITING_USER_ACTIVATION"]);
 
 export type DesiredState = "ENABLED" | "DISABLED" | "STAGED";
 
@@ -376,19 +371,6 @@ export class CertificateAuthorityNotReady extends Data.TaggedError(
   state: string;
 }> {}
 
-export class CertificateAuthorityOperationFailed extends Data.TaggedError(
-  "GCP.PrivateCA.CertificateAuthorityOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class CertificateAuthorityOperationPending extends Data.TaggedError(
-  "GCP.PrivateCA.CertificateAuthorityOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class CertificateAuthorityStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityStillExists",
 )<{
@@ -401,8 +383,7 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_TYPE).toUpperCase();
@@ -427,22 +408,17 @@ const parseName = (name: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const caPool = poolsAt >= 0 ? parts.slice(0, poolsAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     caPool,
-    certificateAuthorityId:
-      casAt >= 0 && parts[casAt + 1] ? parts[casAt + 1]! : lastSegment(name),
+    certificateAuthorityId: casAt >= 0 && parts[casAt + 1] ? parts[casAt + 1]! : lastSegment(name),
   };
 };
 
 const resolveParent = (project: string, caPool: string, location: string) => {
   if (caPool.includes("/")) {
     const parsed = parseName(
-      caPool.includes("/certificateAuthorities/")
-        ? caPool
-        : `${caPool}/certificateAuthorities/_`,
+      caPool.includes("/certificateAuthorities/") ? caPool : `${caPool}/certificateAuthorities/_`,
     );
     return {
       parent: parsed.caPool,
@@ -462,11 +438,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toId = (
-  id: string,
-  certificateAuthorityId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, certificateAuthorityId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       certificateAuthorityId ??
@@ -612,109 +584,32 @@ const getByName = (name: string) =>
     .getProjectsLocationsCaPoolsCertificateAuthorities({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: privateca.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: privateca.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toUpperCase().includes("NOT_FOUND");
-
-const waitForOperation = (
-  operation: privateca.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isAlreadyExists(operation.error)) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new CertificateAuthorityOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new CertificateAuthorityOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = privateca.getProjectsLocationsOperations({ name });
-    const resolved: Effect.Effect<
-      privateca.Operation,
-      privateca.GetProjectsLocationsOperationsError,
-      privateca.GcpOpContext
-    > = Effect.suspend(() =>
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<privateca.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          ),
-    );
-
-    const settled: Effect.Effect<
-      privateca.Operation,
-      | CertificateAuthorityOperationFailed
-      | CertificateAuthorityOperationPending
-      | privateca.GetProjectsLocationsOperationsError,
-      privateca.GcpOpContext
-    > = resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new CertificateAuthorityOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => {
-          const error = current.error;
-          const ignoreNotFound =
-            options?.notFoundOk === true && isNotFoundStatus(error);
-          return !error || isAlreadyExists(error) || ignoreNotFound;
-        },
-        (current) =>
-          new CertificateAuthorityOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-    );
-
-    return yield* settled.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.PrivateCA.CertificateAuthorityOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("5 seconds"),
-      }),
-    );
-  });
+/**
+ * Wait for a Certificate Authority Service operation; CA creation and
+ * activation take a few minutes. ALREADY_EXISTS (code 6) counts as success
+ * (create race); with `notFoundOk`, so does NOT_FOUND (code 5, delete race)
+ * and an operation that is already gone.
+ */
+const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk?: boolean }) =>
+  waitForGcpOperation(operation, (name) => privateca.getProjectsLocationsOperations({ name }), {
+    budget: "15 minutes",
+  }).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      ca
-        ? Effect.succeed(ca)
-        : Effect.fail(new CertificateAuthorityNotResolved({ name })),
+      ca ? Effect.succeed(ca) : Effect.fail(new CertificateAuthorityNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
+      while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -749,13 +644,10 @@ const isGone = (ca: privateca.CertificateAuthority | undefined) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      isGone(ca)
-        ? Effect.void
-        : Effect.fail(new CertificateAuthorityStillExists({ name })),
+      isGone(ca) ? Effect.void : Effect.fail(new CertificateAuthorityStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
+      while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -765,9 +657,7 @@ const runOperation = (
   operation: privateca.Operation | undefined,
   options?: { notFoundOk?: boolean },
 ) =>
-  operation === undefined
-    ? Effect.void
-    : waitForOperation(operation, options).pipe(Effect.asVoid);
+  operation === undefined ? Effect.void : waitForOperation(operation, options).pipe(Effect.asVoid);
 
 const listOwned = (project: string) =>
   privateca.listProjectsLocationsCaPoolsCertificateAuthorities
@@ -776,21 +666,16 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.certificateAuthorities ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.certificateAuthorities ?? [])),
       Stream.filter(
         (ca) =>
           (ca.state ?? "").toUpperCase() !== "DELETED" &&
-          Object.keys(ca.labels ?? {}).some((key) =>
-            key.startsWith("alchemy-"),
-          ),
+          Object.keys(ca.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((ca) => toAttrs(ca, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const disableIfNeeded = (current: privateca.CertificateAuthority) => {
@@ -912,17 +797,12 @@ export const CertificateAuthorityProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousId =
-        olds?.certificateAuthorityId ?? output?.certificateAuthorityId;
+      const previousId = olds?.certificateAuthorityId ?? output?.certificateAuthorityId;
       const nextId = news.certificateAuthorityId ?? previousId;
       const previousPool = olds?.caPool ?? output?.caPool ?? "";
       const nextPool = news.caPool;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
       const previousType = normalizeType(olds?.type ?? output?.type);
       const nextType = normalizeType(news.type ?? output?.type);
       const previousLifetime = olds?.lifetime ?? output?.lifetime ?? "";
@@ -930,17 +810,14 @@ export const CertificateAuthorityProvider = () =>
       const previousBucket = olds?.gcsBucket ?? output?.gcsBucket ?? "";
       const nextBucket = news.gcsBucket ?? previousBucket;
       const previousKey = keySpecKey(olds?.keySpec ?? output?.keySpec);
-      const nextKey =
-        news.keySpec === undefined ? previousKey : keySpecKey(news.keySpec);
+      const nextKey = news.keySpec === undefined ? previousKey : keySpecKey(news.keySpec);
       const configChanged =
         news.config !== undefined &&
         olds?.config !== undefined &&
         configKey(news.config) !== configKey(olds.config);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         (previousPool !== "" && nextPool !== previousPool) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
@@ -982,9 +859,7 @@ export const CertificateAuthorityProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -1043,8 +918,7 @@ export const CertificateAuthorityProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const urlsChanged =
         news.userDefinedAccessUrls !== undefined &&
-        urlsKey(urlsOf(current.userDefinedAccessUrls)) !==
-          urlsKey(news.userDefinedAccessUrls);
+        urlsKey(urlsOf(current.userDefinedAccessUrls)) !== urlsKey(news.userDefinedAccessUrls);
       const subordinateChanged =
         news.subordinateConfig !== undefined &&
         subordinateKey(subordinateOf(current.subordinateConfig)) !==

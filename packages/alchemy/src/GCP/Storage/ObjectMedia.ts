@@ -2,10 +2,10 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Schedule from "effect/Schedule";
 
 /**
  * Object content transfer over the Cloud Storage JSON API media endpoints
@@ -20,17 +20,13 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 const API = "https://storage.googleapis.com";
 
 /** The object (or bucket) does not exist. */
-export class ObjectNotFound extends Data.TaggedError(
-  "GCP.Storage.ObjectNotFound",
-)<{
+export class ObjectNotFound extends Data.TaggedError("GCP.Storage.ObjectNotFound")<{
   bucket: string;
   object: string;
 }> {}
 
 /** Cloud Storage rejected the request. */
-export class ObjectRequestFailed extends Data.TaggedError(
-  "GCP.Storage.ObjectRequestFailed",
-)<{
+export class ObjectRequestFailed extends Data.TaggedError("GCP.Storage.ObjectRequestFailed")<{
   bucket: string;
   object: string;
   status: number;
@@ -62,8 +58,7 @@ export interface PutObjectContent {
 }
 
 const isRetryable = (error: ObjectNotFound | ObjectRequestFailed) =>
-  error._tag === "GCP.Storage.ObjectRequestFailed" &&
-  (error.status === 429 || error.status >= 500);
+  error._tag === "GCP.Storage.ObjectRequestFailed" && (error.status === 429 || error.status >= 500);
 
 const failureOf = (
   bucket: string,
@@ -83,14 +78,13 @@ const failureOf = (
     });
   });
 
-const transportFailure =
-  (bucket: string, object: string) => (cause: { message?: string }) =>
-    new ObjectRequestFailed({
-      bucket,
-      object,
-      status: 0,
-      message: cause.message ?? String(cause),
-    });
+const transportFailure = (bucket: string, object: string) => (cause: { message?: string }) =>
+  new ObjectRequestFailed({
+    bucket,
+    object,
+    status: 0,
+    message: cause.message ?? String(cause),
+  });
 
 /**
  * Build the download / upload callables once, closing over the ambient
@@ -101,36 +95,38 @@ export const makeObjectMedia = Effect.gen(function* () {
   const credentials = yield* Credentials;
   const http = yield* HttpClient.HttpClient;
 
-  const authorized = (request: HttpClientRequest.HttpClientRequest) =>
+  // A failed token exchange (e.g. workload identity) fails the object request
+  // with status 401 rather than leaking `GCPCredentialsError` into the
+  // binding's typed errors.
+  const authorized = (
+    bucket: string,
+    object: string,
+    request: HttpClientRequest.HttpClientRequest,
+  ) =>
     credentials.pipe(
-      Effect.map((config) =>
-        request.pipe(HttpClientRequest.bearerToken(config.accessToken)),
+      Effect.mapError(
+        (cause) => new ObjectRequestFailed({ bucket, object, status: 401, message: cause.message }),
       ),
+      Effect.map((config) => request.pipe(HttpClientRequest.bearerToken(config.accessToken))),
     );
 
-  const download = (options: {
-    bucket: string;
-    object: string;
-    generation?: string;
-  }) =>
+  const download = (options: { bucket: string; object: string; generation?: string }) =>
     Effect.gen(function* () {
       const request = yield* authorized(
+        options.bucket,
+        options.object,
         HttpClientRequest.get(
           `${API}/storage/v1/b/${encodeURIComponent(options.bucket)}/o/${encodeURIComponent(options.object)}`,
         ).pipe(
           HttpClientRequest.setUrlParams({
             alt: "media",
-            ...(options.generation === undefined
-              ? {}
-              : { generation: options.generation }),
+            ...(options.generation === undefined ? {} : { generation: options.generation }),
           }),
         ),
       );
       const response = yield* http
         .execute(request)
-        .pipe(
-          Effect.mapError(transportFailure(options.bucket, options.object)),
-        );
+        .pipe(Effect.mapError(transportFailure(options.bucket, options.object)));
       if (response.status !== 200) {
         return yield* failureOf(options.bucket, options.object, response);
       }
@@ -153,17 +149,13 @@ export const makeObjectMedia = Effect.gen(function* () {
   const upload = (bucket: string, options: PutObjectContent) =>
     Effect.gen(function* () {
       const bytes =
-        typeof options.body === "string"
-          ? new TextEncoder().encode(options.body)
-          : options.body;
+        typeof options.body === "string" ? new TextEncoder().encode(options.body) : options.body;
       const contentType =
         options.contentType ??
         (typeof options.body === "string"
           ? "text/plain; charset=utf-8"
           : "application/octet-stream");
-      const boundary = yield* Effect.sync(
-        () => `alchemy-${crypto.randomUUID()}`,
-      );
+      const boundary = yield* Effect.sync(() => `alchemy-${crypto.randomUUID()}`);
       const metadata = JSON.stringify({
         name: options.name,
         contentType,
@@ -182,19 +174,16 @@ export const makeObjectMedia = Effect.gen(function* () {
       payload.set(tail, head.length + bytes.length);
 
       const request = yield* authorized(
-        HttpClientRequest.post(
-          `${API}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o`,
-        ).pipe(
+        bucket,
+        options.name,
+        HttpClientRequest.post(`${API}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o`).pipe(
           HttpClientRequest.setUrlParams({
             uploadType: "multipart",
             ...(options.ifGenerationMatch === undefined
               ? {}
               : { ifGenerationMatch: options.ifGenerationMatch }),
           }),
-          HttpClientRequest.bodyUint8Array(
-            payload,
-            `multipart/related; boundary=${boundary}`,
-          ),
+          HttpClientRequest.bodyUint8Array(payload, `multipart/related; boundary=${boundary}`),
         ),
       );
       const response = yield* http

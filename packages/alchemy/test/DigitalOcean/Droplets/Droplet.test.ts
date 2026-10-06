@@ -1,3 +1,7 @@
+import { dropletsDestroy, getDroplet } from "@distilled.cloud/digitalocean";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 import * as DigitalOcean from "@/DigitalOcean";
 import {
   diffDroplet,
@@ -9,10 +13,6 @@ import type { Input } from "@/Input";
 import * as Output from "@/Output";
 import { State } from "@/State/State";
 import * as Test from "@/Test/Alchemy";
-import { dropletsDestroy, getDroplet } from "@distilled.cloud/digitalocean";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as TestClock from "effect/testing/TestClock";
 import { isGone, logLevel, outOfBand, skipLive } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -32,17 +32,8 @@ const IMAGE = "ubuntu-24-04-x64";
 // A droplet takes one to two minutes to create and as long to destroy.
 const LIVE_TIMEOUT = 480_000;
 
-const UNIT_TAGS = [
-  "unit",
-  "provider:digitalocean",
-  "provider:digitalocean:droplet",
-  "local",
-];
-const LIVE_TAGS = [
-  "provider:digitalocean",
-  "provider:digitalocean:droplet",
-  "live",
-];
+const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:droplet", "local"];
+const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:droplet", "live"];
 
 const PROPS: DropletProps = { region: REGION, size: SIZE, image: IMAGE };
 
@@ -51,9 +42,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const daysAgo = (days: number) => new Date(NOW - days * DAY).toISOString();
 
-const observed = (
-  overrides: Partial<DropletAttributes> = {},
-): DropletAttributes => ({
+const observed = (overrides: Partial<DropletAttributes> = {}): DropletAttributes => ({
   dropletId: 1,
   name: "web",
   status: "active",
@@ -125,18 +114,16 @@ describe("Droplet diff", { tags: UNIT_TAGS }, () => {
     }),
   );
 
-  it.effect(
-    "adoption replaces when create-time props differ from the droplet",
-    () =>
-      Effect.gen(function* () {
-        const news = { ...PROPS };
-        const result = yield* diff({
-          olds: news,
-          news,
-          output: observed({ region: "nyc3", createdAt: daysAgo(31) }),
-        });
-        expect(result).toEqual(REPLACE);
-      }),
+  it.effect("adoption replaces when create-time props differ from the droplet", () =>
+    Effect.gen(function* () {
+      const news = { ...PROPS };
+      const result = yield* diff({
+        olds: news,
+        news,
+        output: observed({ region: "nyc3", createdAt: daysAgo(31) }),
+      });
+      expect(result).toEqual(REPLACE);
+    }),
   );
 
   it.effect("a copy of the prior props still sees observed drift", () =>
@@ -295,9 +282,7 @@ describe("propsDriftedFromCloud", { tags: UNIT_TAGS }, () => {
   ];
   for (const testCase of cases) {
     it(testCase.name, () => {
-      expect(propsDriftedFromCloud(testCase.news, testCase.droplet)).toEqual(
-        testCase.expected,
-      );
+      expect(propsDriftedFromCloud(testCase.news, testCase.droplet)).toEqual(testCase.expected);
     });
   }
 });
@@ -361,9 +346,7 @@ describe("propsChangedSinceLastDeploy", { tags: UNIT_TAGS }, () => {
   ];
   for (const testCase of cases) {
     it(testCase.name, () => {
-      expect(propsChangedSinceLastDeploy(testCase.news, testCase.olds)).toEqual(
-        testCase.expected,
-      );
+      expect(propsChangedSinceLastDeploy(testCase.news, testCase.olds)).toEqual(testCase.expected);
     });
   }
 });
@@ -404,9 +387,7 @@ describe("ownership tags", { tags: UNIT_TAGS }, () => {
   );
 
   it("tells two generations of one resource apart", () => {
-    expect(generationTagFor("a".repeat(32))).not.toEqual(
-      generationTagFor("b".repeat(32)),
-    );
+    expect(generationTagFor("a".repeat(32))).not.toEqual(generationTagFor("b".repeat(32)));
     expect(generationTagFor("a".repeat(32))).toMatch(/^[a-zA-Z0-9:_-]+$/);
   });
 });
@@ -436,21 +417,13 @@ test.provider.skipIf(skipLive)(
       expect(created.ipv4).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
       expect(created.tags).toEqual([DROPLET_TAG]);
 
-      const remote = yield* getDroplet({ droplet_id: created.dropletId }).pipe(
-        outOfBand,
-      );
+      const remote = yield* getDroplet({ droplet_id: created.dropletId }).pipe(outOfBand);
       expect(remote.droplet.name).toEqual(DROPLET_NAME);
-      const ownershipTag = yield* hashOwnershipTag(
-        stack.name,
-        stack.stage,
-        "TestDroplet",
-      );
+      const ownershipTag = yield* hashOwnershipTag(stack.name, stack.stage, "TestDroplet");
       expect(remote.droplet.tags).toHaveLength(3);
       expect(remote.droplet.tags).toContain(DROPLET_TAG);
       expect(remote.droplet.tags).toContain(ownershipTag);
-      expect(
-        remote.droplet.tags.some((tag) => tag.startsWith(generationTagFor(""))),
-      ).toBe(true);
+      expect(remote.droplet.tags.some((tag) => tag.startsWith(generationTagFor("")))).toBe(true);
 
       const renamed = yield* stack.deploy(
         droplet(RENAMED_DROPLET_NAME, [DROPLET_TAG, EXTRA_DROPLET_TAG]),
@@ -458,16 +431,11 @@ test.provider.skipIf(skipLive)(
       expect(renamed.dropletId).toEqual(created.dropletId);
       expect(renamed.name).toEqual(RENAMED_DROPLET_NAME);
       expect(renamed.ipv4).toEqual(created.ipv4);
-      expect([...renamed.tags].sort()).toEqual([
-        DROPLET_TAG,
-        EXTRA_DROPLET_TAG,
-      ]);
+      expect([...renamed.tags].sort()).toEqual([DROPLET_TAG, EXTRA_DROPLET_TAG]);
 
       yield* stack.destroy();
 
-      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(
-        true,
-      );
+      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );

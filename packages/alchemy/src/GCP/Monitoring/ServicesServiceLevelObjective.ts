@@ -17,12 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  jsonEqual,
-  lastSegment,
-  parentOf,
-  toEmptyObject,
-} from "./ownership.ts";
+import { jsonEqual, lastSegment, parentOf, toEmptyObject } from "./ownership.ts";
 
 const MAX_SLO_ID_LENGTH = 63;
 const DEFAULT_ROLLING_PERIOD = "86400s";
@@ -119,12 +114,7 @@ export type ServiceLevelIndicator = {
   requestBased?: RequestBasedSli;
 };
 
-export type CalendarPeriod =
-  | "DAY"
-  | "WEEK"
-  | "FORTNIGHT"
-  | "MONTH"
-  | (string & {});
+export type CalendarPeriod = "DAY" | "WEEK" | "FORTNIGHT" | "MONTH" | (string & {});
 
 export type ServicesServiceLevelObjectiveProps = {
   /**
@@ -255,10 +245,9 @@ export type ServicesServiceLevelObjective = Resource<
  * @resource
  * @category Monitoring
  */
-export const ServicesServiceLevelObjective =
-  Resource<ServicesServiceLevelObjective>(
-    "GCP.Monitoring.ServicesServiceLevelObjective",
-  );
+export const ServicesServiceLevelObjective = Resource<ServicesServiceLevelObjective>(
+  "GCP.Monitoring.ServicesServiceLevelObjective",
+);
 
 export class ServicesServiceLevelObjectiveNotResolved extends Data.TaggedError(
   "GCP.Monitoring.ServicesServiceLevelObjectiveNotResolved",
@@ -273,12 +262,9 @@ const parseSloName = (name: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const servicesAt = parts.lastIndexOf("services");
   const slosAt = parts.lastIndexOf("serviceLevelObjectives");
-  const project =
-    projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "";
-  const serviceId =
-    servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "";
-  const service =
-    servicesAt >= 0 ? parts.slice(0, servicesAt + 2).join("/") : "";
+  const project = projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "";
+  const serviceId = servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "";
+  const service = servicesAt >= 0 ? parts.slice(0, servicesAt + 2).join("/") : "";
   const serviceLevelObjectiveId =
     slosAt >= 0 && parts[slosAt + 1] ? parts[slosAt + 1]! : lastSegment(name);
   return { project, service, serviceId, serviceLevelObjectiveId };
@@ -308,9 +294,7 @@ const toId = (id: string, sloId: string | undefined, existing?: string) =>
     return generated.replace(/-+$/g, "").slice(0, MAX_SLO_ID_LENGTH);
   });
 
-const toBasicSli = (
-  sli: monitoring.BasicSli | undefined,
-): BasicSli | undefined => {
+const toBasicSli = (sli: monitoring.BasicSli | undefined): BasicSli | undefined => {
   if (sli === undefined) return undefined;
   return {
     location: sli.location,
@@ -340,9 +324,7 @@ const toWindowsBasedSli = (
     windowPeriod: sli.windowPeriod,
     metricSumInRange: sli.metricSumInRange,
     goodBadMetricFilter: sli.goodBadMetricFilter,
-    goodTotalRatioThreshold: toPerformanceThreshold(
-      sli.goodTotalRatioThreshold,
-    ),
+    goodTotalRatioThreshold: toPerformanceThreshold(sli.goodTotalRatioThreshold),
     metricMeanInRange: sli.metricMeanInRange,
   };
 };
@@ -378,10 +360,7 @@ const toAttrs = (slo: monitoring.ServiceLevelObjective, project: string) => {
 
 const periodBody = (
   news: ServicesServiceLevelObjectiveProps,
-): Pick<
-  monitoring.ServiceLevelObjective,
-  "rollingPeriod" | "calendarPeriod"
-> =>
+): Pick<monitoring.ServiceLevelObjective, "rollingPeriod" | "calendarPeriod"> =>
   news.calendarPeriod !== undefined
     ? { calendarPeriod: news.calendarPeriod }
     : { rollingPeriod: news.rollingPeriod ?? DEFAULT_ROLLING_PERIOD };
@@ -394,9 +373,7 @@ const toBody = (
   displayName,
   goal: news.goal,
   ...periodBody(news),
-  serviceLevelIndicator: news.serviceLevelIndicator as
-    | monitoring.ServiceLevelIndicator
-    | undefined,
+  serviceLevelIndicator: news.serviceLevelIndicator as monitoring.ServiceLevelIndicator | undefined,
   userLabels: desiredLabels,
 });
 
@@ -412,14 +389,10 @@ const listSlos = (parent: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.serviceLevelObjectives ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.serviceLevelObjectives ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as monitoring.ServiceLevelObjective[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as monitoring.ServiceLevelObjective[])),
     );
 
 const listServices = (project: string) =>
@@ -432,7 +405,7 @@ const listServices = (project: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.services ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
 const listOwned = (project: string) =>
@@ -447,7 +420,7 @@ const listOwned = (project: string) =>
         Stream.flatMap((page) => Stream.fromIterable(page.services ?? [])),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
       );
     const nested = yield* Effect.forEach(
       services,
@@ -459,11 +432,7 @@ const listOwned = (project: string) =>
     );
     return nested
       .flat()
-      .filter((slo) =>
-        Object.keys(slo.userLabels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      )
+      .filter((slo) => Object.keys(slo.userLabels ?? {}).some((key) => key.startsWith("alchemy-")))
       .map((slo) => toAttrs(slo, project));
   });
 
@@ -502,18 +471,11 @@ const observe = (
 
 export const ServicesServiceLevelObjectiveProvider = () =>
   Provider.succeed(ServicesServiceLevelObjective, {
-    stables: [
-      "name",
-      "serviceLevelObjectiveId",
-      "service",
-      "serviceId",
-      "project",
-    ],
+    stables: ["name", "serviceLevelObjectiveId", "service", "serviceId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.serviceLevelObjectiveId ?? output?.serviceLevelObjectiveId;
+      const previousId = olds?.serviceLevelObjectiveId ?? output?.serviceLevelObjectiveId;
       const idChanged =
         news.serviceLevelObjectiveId !== undefined &&
         previousId !== undefined &&
@@ -524,9 +486,7 @@ export const ServicesServiceLevelObjectiveProvider = () =>
         previousService !== undefined &&
         nextService !== previousService &&
         !previousService.endsWith(`/${nextService}`) &&
-        !nextService.endsWith(
-          `/${previousService.split(SERVICES).pop() ?? ""}`,
-        );
+        !nextService.endsWith(`/${previousService.split(SERVICES).pop() ?? ""}`);
       if (!idChanged && !serviceChanged) return undefined;
       return {
         action: "replace" as const,
@@ -536,17 +496,10 @@ export const ServicesServiceLevelObjectiveProvider = () =>
 
     read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
-      const existing = yield* observe(
-        env.project,
-        id,
-        output?.name,
-        output?.service,
-      );
+      const existing = yield* observe(env.project, id, output?.name, output?.service);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -558,11 +511,7 @@ export const ServicesServiceLevelObjectiveProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const service = resolveService(env.project, news.service);
-      const sloId = yield* toId(
-        id,
-        news.serviceLevelObjectiveId,
-        output?.serviceLevelObjectiveId,
-      );
+      const sloId = yield* toId(id, news.serviceLevelObjectiveId, output?.serviceLevelObjectiveId);
       const name = resourceName(service, sloId);
       const displayName = news.displayName ?? sloId;
       const desiredLabels = {
@@ -571,12 +520,7 @@ export const ServicesServiceLevelObjectiveProvider = () =>
       };
       const desiredPeriod = periodBody(news);
 
-      let current = yield* observe(
-        env.project,
-        id,
-        output?.name ?? name,
-        service,
-      );
+      let current = yield* observe(env.project, id, output?.name ?? name, service);
 
       const body = toBody(news, displayName, desiredLabels);
 
@@ -611,8 +555,7 @@ export const ServicesServiceLevelObjectiveProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
       const goalChanged = (current.goal ?? 0) !== news.goal;
-      const rollingChanged =
-        (current.rollingPeriod ?? "") !== (desiredPeriod.rollingPeriod ?? "");
+      const rollingChanged = (current.rollingPeriod ?? "") !== (desiredPeriod.rollingPeriod ?? "");
       const calendarChanged =
         (current.calendarPeriod ?? "") !== (desiredPeriod.calendarPeriod ?? "");
       const sliChanged = !jsonEqual(

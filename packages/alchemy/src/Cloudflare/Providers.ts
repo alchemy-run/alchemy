@@ -126,9 +126,7 @@ import * as Zone from "./Zone/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Cloudflare",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Cloudflare") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -344,6 +342,7 @@ export const providers = () =>
       Spectrum.Application,
       Speed.TestSchedule,
       Ssl.CertificatePack,
+      Ssl.CertificateTransparencyAlerting,
       Ssl.UniversalSsl,
       Stream.LiveInput,
       Stream.LiveInputOutput,
@@ -595,6 +594,7 @@ export const providers = () =>
           Spectrum.ApplicationProvider(),
           Speed.TestScheduleProvider(),
           Ssl.CertificatePackProvider(),
+          Ssl.CertificateTransparencyAlertingProvider(),
           Ssl.UniversalSslProvider(),
           Stream.LiveInputOutputProvider(),
           Stream.LiveInputProvider(),

@@ -196,11 +196,8 @@ export class InstancePartitionStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toId = (
-  id: string,
-  instancePartitionId: string | undefined,
-  existing?: string,
-) => toPhysicalId(id, instancePartitionId, existing, MAX_PARTITION_ID_LENGTH);
+const toId = (id: string, instancePartitionId: string | undefined, existing?: string) =>
+  toPhysicalId(id, instancePartitionId, existing, MAX_PARTITION_ID_LENGTH);
 
 const autoscalingOf = (
   config: spanner.AutoscalingConfig | undefined,
@@ -219,10 +216,8 @@ const autoscalingOf = (
       ? {
           highPriorityCpuUtilizationPercent:
             config.autoscalingTargets.highPriorityCpuUtilizationPercent,
-          totalCpuUtilizationPercent:
-            config.autoscalingTargets.totalCpuUtilizationPercent,
-          storageUtilizationPercent:
-            config.autoscalingTargets.storageUtilizationPercent,
+          totalCpuUtilizationPercent: config.autoscalingTargets.totalCpuUtilizationPercent,
+          storageUtilizationPercent: config.autoscalingTargets.storageUtilizationPercent,
         }
       : undefined,
   };
@@ -258,11 +253,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesInstancePartitions({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -272,8 +263,7 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new InstancePartitionNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Spanner.InstancePartitionNotResolved",
+      while: (error) => error._tag === "GCP.Spanner.InstancePartitionNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -282,8 +272,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (partition): partition is spanner.InstancePartition =>
-        partition !== undefined,
+      (partition): partition is spanner.InstancePartition => partition !== undefined,
       () => new InstancePartitionNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -311,8 +300,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new InstancePartitionStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Spanner.InstancePartitionStillExists",
+      while: (error) => error._tag === "GCP.Spanner.InstancePartitionStillExists",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
@@ -335,47 +323,28 @@ const toCreatePartition = (
   } else if (news.nodeCount !== undefined) {
     body.nodeCount = news.nodeCount;
   } else {
-    body.processingUnits =
-      news.processingUnits ?? DEFAULT_PARTITION_PROCESSING_UNITS;
+    body.processingUnits = news.processingUnits ?? DEFAULT_PARTITION_PROCESSING_UNITS;
   }
   return body;
 };
 
 export const InstancesInstancePartitionProvider = () =>
   Provider.succeed(InstancesInstancePartition, {
-    stables: [
-      "name",
-      "instancePartitionId",
-      "instanceId",
-      "project",
-      "config",
-      "createTime",
-    ],
+    stables: ["name", "instancePartitionId", "instanceId", "project", "config", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
 
-      const previousId =
-        olds?.instancePartitionId ?? output?.instancePartitionId;
+      const previousId = olds?.instancePartitionId ?? output?.instancePartitionId;
       const nextId = news.instancePartitionId ?? previousId;
-      const previousInstance = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const previousInstance = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       const nextInstance = instanceIdOf(news.instance);
-      const previousConfig = configIdOf(
-        olds?.config ?? output?.config,
-        env.region,
-      );
-      const nextConfig = configIdOf(
-        news.config ?? olds?.config ?? output?.config,
-        env.region,
-      );
+      const previousConfig = configIdOf(olds?.config ?? output?.config, env.region);
+      const nextConfig = configIdOf(news.config ?? olds?.config ?? output?.config, env.region);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         previousConfig !== nextConfig;
 
@@ -383,8 +352,7 @@ export const InstancesInstancePartitionProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousConfig !== nextConfig ||
-          (previousId !== undefined && nextId === previousId),
+          previousConfig !== nextConfig || (previousId !== undefined && nextId === previousId),
       };
     }),
 
@@ -395,13 +363,10 @@ export const InstancesInstancePartitionProvider = () =>
         olds?.instancePartitionId,
         output?.instancePartitionId,
       );
-      const instanceId = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       if (instanceId.length === 0) return undefined;
       const name =
-        output?.name ??
-        instancePartitionName(env.project, instanceId, instancePartitionId);
+        output?.name ?? instancePartitionName(env.project, instanceId, instancePartitionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -419,9 +384,7 @@ export const InstancesInstancePartitionProvider = () =>
           (instance) => {
             const parent = instance.name;
             if (parent === undefined || parent.length === 0) {
-              return Effect.succeed(
-                [] as InstancesInstancePartition["Attributes"][],
-              );
+              return Effect.succeed([] as InstancesInstancePartition["Attributes"][]);
             }
             return spanner.listProjectsInstancesInstancePartitions
               .pages({
@@ -429,16 +392,12 @@ export const InstancesInstancePartitionProvider = () =>
                 pageSize: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.instancePartitions ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.instancePartitions ?? [])),
                 Stream.map((partition) => toAttrs(partition, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed(
-                    [] as InstancesInstancePartition["Attributes"][],
-                  ),
+                Effect.catchTag("NotFound", () =>
+                  Effect.succeed([] as InstancesInstancePartition["Attributes"][]),
                 ),
               );
           },
@@ -455,11 +414,7 @@ export const InstancesInstancePartitionProvider = () =>
         news.instancePartitionId,
         output?.instancePartitionId,
       );
-      const name = instancePartitionName(
-        env.project,
-        instanceId,
-        instancePartitionId,
-      );
+      const name = instancePartitionName(env.project, instanceId, instancePartitionId);
       const displayName = displayNameOf(instancePartitionId, news.displayName);
 
       let current = yield* getByName(output?.name ?? name);
@@ -505,12 +460,7 @@ export const InstancesInstancePartitionProvider = () =>
         news.nodeCount !== undefined &&
         (current.nodeCount ?? 0) !== news.nodeCount;
 
-      if (
-        displayNameChanged ||
-        autoscalingChanged ||
-        processingUnitsChanged ||
-        nodeCountChanged
-      ) {
+      if (displayNameChanged || autoscalingChanged || processingUnitsChanged || nodeCountChanged) {
         const fieldMask = [
           displayNameChanged ? "display_name" : undefined,
           autoscalingChanged ? "autoscaling_config" : undefined,
@@ -549,16 +499,14 @@ export const InstancesInstancePartitionProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* spanner
-        .deleteProjectsInstancesInstancePartitions({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
-          }),
-        );
+      yield* spanner.deleteProjectsInstancesInstancePartitions({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("5 seconds"),
+        }),
+      );
       yield* waitUntilGone(output.name);
     }),
   });

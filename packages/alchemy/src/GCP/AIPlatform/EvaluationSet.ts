@@ -10,7 +10,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   fingerprint,
   normalizeLocation,
@@ -18,6 +17,7 @@ import {
   specifiedEquals,
   toPhysicalRfc1035,
 } from "./helpers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -86,8 +86,8 @@ export type EvaluationSet = Resource<
  * together.
  *
  * Evaluation Sets have no labels field, so Alchemy stamps ownership into
- * `metadata`. Display name, member items, agent configs, and metadata
- * update in place. Location is identity.
+ * `metadata`. Member items and agent configs update in place; display
+ * name, metadata, and location changes replace the set.
  *
  * ### Creating an Evaluation Set
  * **Example:** Group request items
@@ -100,8 +100,8 @@ export type EvaluationSet = Resource<
  * ### Updating an Evaluation Set
  * **Example:** Add items
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const set = yield* GCP.AIPlatform.EvaluationSet("Prompts", {
- *   evaluationSetId: existing.evaluationSetId,
  *   evaluationItems: [item.name, extra.name],
  * });
  * ```
@@ -109,9 +109,7 @@ export type EvaluationSet = Resource<
  * @resource
  * @category AIPlatform
  */
-export const EvaluationSet = Resource<EvaluationSet>(
-  "GCP.AIPlatform.EvaluationSet",
-);
+export const EvaluationSet = Resource<EvaluationSet>("GCP.AIPlatform.EvaluationSet");
 
 export class EvaluationSetNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationSetNotResolved",
@@ -146,9 +144,7 @@ const encodeMetadata = (
 
 const stripOwnershipMeta = (metadata: unknown): unknown => {
   const rest = Object.fromEntries(
-    Object.entries(metadataObject(metadata)).filter(
-      ([key]) => !key.startsWith("alchemy-"),
-    ),
+    Object.entries(metadataObject(metadata)).filter(([key]) => !key.startsWith("alchemy-")),
   );
   return Object.keys(rest).length === 0 ? undefined : rest;
 };
@@ -163,16 +159,12 @@ const metadataLabels = (metadata: unknown): Record<string, string> => {
   return out;
 };
 
-const hasOwnershipMarker = (metadata: unknown) =>
-  Object.keys(metadataLabels(metadata)).length > 0;
+const hasOwnershipMarker = (metadata: unknown) => Object.keys(metadataLabels(metadata)).length > 0;
 
 const sortedItems = (items: readonly string[] | undefined) =>
   [...(items ?? [])].sort((left, right) => left.localeCompare(right));
 
-const toAttrs = (
-  set: aiplatform.GoogleCloudAiplatformV1EvaluationSet,
-  project: string,
-) => {
+const toAttrs = (set: aiplatform.GoogleCloudAiplatformV1EvaluationSet, project: string) => {
   const name = set.name ?? "";
   const parsed = parseResourceName(name, "evaluationSets");
   return {
@@ -206,7 +198,6 @@ const listOwned = (project: string, location = "-") =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, project: string, location?: string) =>
@@ -223,13 +214,10 @@ const findOwned = (id: string, project: string, location?: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((set) =>
-      set === undefined
-        ? Effect.void
-        : Effect.fail(new EvaluationSetStillExists({ name })),
+      set === undefined ? Effect.void : Effect.fail(new EvaluationSetStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.EvaluationSetStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.EvaluationSetStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -244,36 +232,27 @@ export const EvaluationSetProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.evaluationSetId ?? output?.evaluationSetId;
       const nextId = news.evaluationSetId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const displayNameChanged = olds !== undefined && news.displayName !== olds.displayName;
+      const metadataChanged =
+        olds !== undefined &&
+        fingerprint(news.metadata ?? null) !== fingerprint(olds.metadata ?? null);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        previousLocation !== nextLocation;
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        previousLocation !== nextLocation ||
+        displayNameChanged ||
+        metadataChanged;
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const setId = olds?.evaluationSetId ?? output?.evaluationSetId;
-      const name =
-        output?.name ??
-        (setId ? resourceName(env.project, location, setId) : undefined);
-      const existing = name
-        ? yield* getByName(name)
-        : yield* findOwned(id, env.project, location);
+      const name = output?.name ?? (setId ? resourceName(env.project, location, setId) : undefined);
+      const existing = name ? yield* getByName(name) : yield* findOwned(id, env.project, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       return (yield* hasAlchemyLabels(id, metadataLabels(existing.metadata)))
@@ -290,24 +269,16 @@ export const EvaluationSetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const setId = news.evaluationSetId ?? output?.evaluationSetId;
-      const name =
-        output?.name ??
-        (setId ? resourceName(env.project, location, setId) : undefined);
+      const name = output?.name ?? (setId ? resourceName(env.project, location, setId) : undefined);
       const ownership = yield* createInternalLabels(id);
       const desiredMetadata = encodeMetadata(ownership, news.metadata);
       const displayName =
-        news.displayName ??
-        (yield* toPhysicalRfc1035(id, undefined, undefined, MAX_NAME_LENGTH));
+        news.displayName ?? (yield* toPhysicalRfc1035(id, undefined, undefined, MAX_NAME_LENGTH));
       const evaluationItems = sortedItems(news.evaluationItems);
 
-      let current = name
-        ? yield* getByName(name)
-        : yield* findOwned(id, env.project, location);
+      let current = name ? yield* getByName(name) : yield* findOwned(id, env.project, location);
 
       if (current === undefined) {
         current = yield* aiplatform
@@ -320,11 +291,7 @@ export const EvaluationSetProvider = () =>
               metadata: desiredMetadata,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, location),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }
 
       if (current === undefined) {
@@ -334,27 +301,18 @@ export const EvaluationSetProvider = () =>
       }
 
       const resolvedName = current.name ?? name ?? "";
-      const displayNameChanged = (current.displayName ?? "") !== displayName;
+      // Only `evaluation_items` and `agent_configs` are mutable; display
+      // name and metadata changes replace the set (see `diff`).
       const itemsChanged =
-        fingerprint(sortedItems(current.evaluationItems)) !==
-        fingerprint(evaluationItems);
+        fingerprint(sortedItems(current.evaluationItems)) !== fingerprint(evaluationItems);
       const agentChanged =
         news.agentConfigs !== undefined &&
         !specifiedEquals(news.agentConfigs, current.agentConfigs);
-      const metadataChanged =
-        fingerprint(current.metadata) !== fingerprint(desiredMetadata);
 
-      if (
-        displayNameChanged ||
-        itemsChanged ||
-        agentChanged ||
-        metadataChanged
-      ) {
+      if (itemsChanged || agentChanged) {
         const updateMask = [
-          displayNameChanged ? "display_name" : undefined,
           itemsChanged ? "evaluation_items" : undefined,
           agentChanged ? "agent_configs" : undefined,
-          metadataChanged ? "metadata" : undefined,
         ].filter((field): field is string => field !== undefined);
 
         current = yield* aiplatform
@@ -363,10 +321,8 @@ export const EvaluationSetProvider = () =>
             updateMask: updateMask.join(","),
             body: {
               name: resolvedName,
-              displayName,
               evaluationItems,
               agentConfigs: news.agentConfigs,
-              metadata: desiredMetadata,
             },
           })
           .pipe(

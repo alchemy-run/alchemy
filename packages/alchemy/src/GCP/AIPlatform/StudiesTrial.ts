@@ -10,13 +10,8 @@ import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
-import {
-  hasOwnershipMarker,
-  lastSegment,
-  locationOf,
-  locationParent,
-  parentOf,
-} from "./ownership.ts";
+import { lastSegment, locationOf, locationParent, parentOf } from "./ownership.ts";
+import { hasStudyOwnership } from "./Study.ts";
 
 export type TrialParameter = {
   /** Parameter id defined on the parent Study. */
@@ -93,9 +88,7 @@ export type StudiesTrial = Resource<
  * @resource
  * @category AIPlatform
  */
-export const StudiesTrial = Resource<StudiesTrial>(
-  "GCP.AIPlatform.StudiesTrial",
-);
+export const StudiesTrial = Resource<StudiesTrial>("GCP.AIPlatform.StudiesTrial");
 
 export class StudiesTrialNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.StudiesTrialNotResolved",
@@ -103,10 +96,7 @@ export class StudiesTrialNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  trial: aiplatform.GoogleCloudAiplatformV1Trial,
-  project: string,
-) => {
+const toAttrs = (trial: aiplatform.GoogleCloudAiplatformV1Trial, project: string) => {
   const name = trial.name ?? "";
   return {
     name,
@@ -136,34 +126,26 @@ const getByName = (name: string) =>
 const listStudies = (parent: string) =>
   aiplatform.listProjectsLocationsStudies.pages({ parent, pageSize: 100 }).pipe(
     Stream.flatMap((page) => Stream.fromIterable(page.studies ?? [])),
-    Stream.filter((study) => hasOwnershipMarker(study.displayName)),
+    Stream.filter((study) => hasStudyOwnership(study.displayName)),
     Stream.map((study) => study.name ?? ""),
     Stream.filter((name) => name.length > 0),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
     Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
   );
 
 const listAtParent = (parent: string, project: string, clientId?: string) =>
-  aiplatform.listProjectsLocationsStudiesTrials
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.trials ?? [])),
-      Stream.filter((trial) =>
-        clientId !== undefined ? trial.clientId === clientId : true,
-      ),
-      Stream.map((trial) => toAttrs(trial, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsStudiesTrials.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.trials ?? [])),
+    Stream.filter((trial) => (clientId !== undefined ? trial.clientId === clientId : true)),
+    Stream.map((trial) => toAttrs(trial, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByClientId = (parent: string, clientId: string, project: string) =>
-  listAtParent(parent, project, clientId).pipe(
-    Effect.map((trials) => trials[0]),
-  );
+  listAtParent(parent, project, clientId).pipe(Effect.map((trials) => trials[0]));
 
 export const StudiesTrialProvider = () =>
   Provider.succeed(StudiesTrial, {
@@ -198,9 +180,8 @@ export const StudiesTrialProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const studies = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listStudies(locationParent(env.project, location)),
+        const studies = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listStudies(locationParent(env.project, location)),
         )).flat();
         const pages = yield* Effect.forEach(
           studies,
@@ -229,6 +210,9 @@ export const StudiesTrialProvider = () =>
             parent: news.parent,
             body: {
               clientId,
+              // Vizier rejects user trials without a status ("Can not add
+              // trial with status: UNKNOWN").
+              state: "ACTIVE",
               parameters: news.parameters?.map((parameter) => ({
                 parameterId: parameter.parameterId,
                 value: parameter.value,

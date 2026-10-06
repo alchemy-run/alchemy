@@ -1,18 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsLakesZonesEntities({ name, view: "BASIC" }).pipe(
@@ -25,7 +23,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
+// A lake (~2.5 min) plus a bucket asset (~1.5 min), then teardown of both,
+// runs past 5 minutes.
+test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "create, update, and delete a lake entity",
   (stack) =>
     Effect.gen(function* () {
@@ -62,7 +62,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
             asset: asset.assetId,
             type: "TABLE",
             system: "CLOUD_STORAGE",
-            dataPath: `gs://${bucket.bucketName}/events`,
+            dataPath: Output.interpolate`gs://${bucket.bucketName}/events`,
             format: { format: "PARQUET" },
             displayName: "events a",
             description: "event table",
@@ -88,7 +88,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       });
       expect(fetched.name).toEqual(created.entity.name);
       expect(fetched.type).toEqual("TABLE");
-      expect(fetched.description ?? "").toContain("[alchemy ");
+      expect(fetched.description).toEqual("event table");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -126,7 +126,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
             asset: asset.assetId,
             type: "TABLE",
             system: "CLOUD_STORAGE",
-            dataPath: `gs://${bucket.bucketName}/events`,
+            dataPath: Output.interpolate`gs://${bucket.bucketName}/events`,
             format: { format: "PARQUET" },
             displayName: "events b",
             description: "event table b",
@@ -149,6 +149,6 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.entity.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 180_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

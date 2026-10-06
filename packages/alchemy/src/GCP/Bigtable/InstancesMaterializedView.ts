@@ -18,6 +18,7 @@ import {
   parseResourceName,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type InstancesMaterializedViewProps = {
@@ -67,9 +68,7 @@ export type InstancesMaterializedView = Resource<
     /** Whether Admin API deletes are blocked. */
     deletionProtection: boolean;
     /** Per-cluster replication state. */
-    clusterStates:
-      | bigtable.GoogleBigtableAdminV2MaterializedViewClusterStateMap
-      | undefined;
+    clusterStates: bigtable.GoogleBigtableAdminV2MaterializedViewClusterStateMap | undefined;
     /** Server etag. */
     etag: string | undefined;
   },
@@ -122,17 +121,8 @@ export class MaterializedViewStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toId = (
-  id: string,
-  materializedViewId: string | undefined,
-  existing?: string,
-) =>
-  toPhysicalId(
-    id,
-    materializedViewId,
-    existing,
-    MAX_MATERIALIZED_VIEW_ID_LENGTH,
-  );
+const toId = (id: string, materializedViewId: string | undefined, existing?: string) =>
+  toPhysicalId(id, materializedViewId, existing, MAX_MATERIALIZED_VIEW_ID_LENGTH);
 
 const queryOf = (value: string | undefined) => (value ?? "").trim();
 
@@ -155,22 +145,15 @@ const toAttrs = (view: bigtable.MaterializedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesMaterializedViews({ name, view: "FULL" })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view
-        ? Effect.succeed(view)
-        : Effect.fail(new MaterializedViewNotResolved({ name })),
+      view ? Effect.succeed(view) : Effect.fail(new MaterializedViewNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Bigtable.MaterializedViewNotResolved",
+      while: (error) => error._tag === "GCP.Bigtable.MaterializedViewNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -179,13 +162,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined
-        ? Effect.void
-        : Effect.fail(new MaterializedViewStillExists({ name })),
+      view === undefined ? Effect.void : Effect.fail(new MaterializedViewStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Bigtable.MaterializedViewStillExists",
+      while: (error) => error._tag === "GCP.Bigtable.MaterializedViewStillExists",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -203,13 +183,7 @@ const unprotect = (name: string, etag: string | undefined) =>
 
 export const InstancesMaterializedViewProvider = () =>
   Provider.succeed(InstancesMaterializedView, {
-    stables: [
-      "name",
-      "materializedViewId",
-      "instance",
-      "instanceId",
-      "project",
-    ],
+    stables: ["name", "materializedViewId", "instance", "instanceId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -222,9 +196,7 @@ export const InstancesMaterializedViewProvider = () =>
       const previousQuery = queryOf(olds?.query ?? output?.query);
       const nextQuery = queryOf(news.query);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         (previousQuery.length > 0 && previousQuery !== nextQuery)
       ) {
@@ -244,11 +216,7 @@ export const InstancesMaterializedViewProvider = () =>
       const name =
         output?.name ??
         (instanceRef
-          ? materializedViewName(
-              env.project,
-              instanceIdOf(instanceRef),
-              materializedViewId,
-            )
+          ? materializedViewName(env.project, instanceIdOf(instanceRef), materializedViewId)
           : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
@@ -267,17 +235,15 @@ export const InstancesMaterializedViewProvider = () =>
         const pages = yield* Effect.forEach(
           instances,
           (instance) =>
-            bigtable
-              .listProjectsInstancesMaterializedViews({
+            collectPages(
+              bigtable.listProjectsInstancesMaterializedViews.pages({
                 parent: instance.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.materializedViews ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.MaterializedView[]),
-                ),
-              ),
+              }),
+              (page) => page.materializedViews,
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.MaterializedView[])),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((view) => toAttrs(view, env.project));
@@ -306,7 +272,15 @@ export const InstancesMaterializedViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            // A just-created source table rejects views for a short while.
+            Effect.retry({
+              while: (error) => error._tag === "SourceTableNotReady",
+              times: 8,
+              schedule: Schedule.spaced("5 seconds"),
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -351,7 +325,7 @@ export const InstancesMaterializedViewProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

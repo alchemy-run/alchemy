@@ -37,9 +37,7 @@ export const pushHost = (source: string) =>
   Effect.gen(function* () {
     const host = yield* Binding.Host;
     if (!isGcpListenHost(host)) {
-      return yield* Effect.die(
-        new PushHostRequired(source, (host as { Type?: string })?.Type),
-      );
+      return yield* Effect.die(new PushHostRequired(source, (host as { Type?: string })?.Type));
     }
     return host as PushHost;
   });
@@ -68,8 +66,7 @@ export const hostEndpoint = (host: PushHost) => {
 };
 
 /** Deterministic path segment for a logical id. */
-export const pathSegment = (value: string) =>
-  value.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+export const pathSegment = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
 
 /**
  * OIDC audience for one delivery route: the route's own URL on the host.
@@ -123,6 +120,7 @@ const ownServiceAccount = Effect.gen(function* () {
 });
 
 const unauthorized = HttpServerResponse.text("unauthorized", { status: 401 });
+const unavailable = HttpServerResponse.text("unavailable", { status: 503 });
 
 /**
  * Claim `POST {path}` deliveries: verify the OIDC token (audience + the
@@ -143,16 +141,25 @@ export const listenForDeliveries = (
       if (request.method !== "POST") {
         return HttpServerResponse.text("method not allowed", { status: 405 });
       }
+      // Infrastructure failures (metadata server, Google's signing keys)
+      // answer 503 so the sender retries instead of dropping the event.
       const email = yield* ownServiceAccount.pipe(
-        Effect.catchCause(() => Effect.succeed(undefined)),
+        Effect.tapError((error) =>
+          Effect.logWarning("Cannot read the instance service account", error),
+        ),
+        Effect.option,
       );
-      if (email === undefined) return unauthorized;
-      const valid = yield* verifyGoogleIdToken({
+      if (email._tag === "None") return unavailable;
+      const verified = yield* verifyGoogleIdToken({
         authorization: request.headers["authorization"],
         audience: expectedAudience(request, path),
-        email,
-      });
-      if (!valid) {
+        email: email.value,
+      }).pipe(
+        Effect.tapError((error) => Effect.logWarning("Cannot load Google's signing keys", error)),
+        Effect.option,
+      );
+      if (verified._tag === "None") return unavailable;
+      if (!verified.value) {
         yield* Effect.logWarning(
           `Rejected delivery to ${path}: invalid OIDC token (aud=${unverifiedAudience(request.headers["authorization"]) ?? "none"})`,
         );

@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (parent: string, tagValue: string) =>
   resourcemanager
@@ -22,15 +19,12 @@ const waitUntilGone = (parent: string, tagValue: string) =>
     .pipe(
       Effect.map((page) =>
         (page.tagBindings ?? []).some(
-          (binding) =>
-            binding.tagValue === tagValue ||
-            binding.tagValueNamespacedName === tagValue,
+          (binding) => binding.tagValue === tagValue || binding.tagValueNamespacedName === tagValue,
         )
           ? ("found" as const)
           : ("gone" as const),
       ),
       Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status === "gone",
@@ -105,10 +99,7 @@ test.provider(
       expect(replaced.binding.tagValue).toEqual(replaced.valueB.name);
       expect(replaced.binding.name).not.toEqual(created.binding.name);
 
-      const previousGone = yield* waitUntilGone(
-        created.binding.parent,
-        created.valueA.name,
-      );
+      const previousGone = yield* waitUntilGone(created.binding.parent, created.valueA.name);
       expect(previousGone).toEqual("gone");
 
       const listedAfter = yield* resourcemanager.listTagBindings({
@@ -122,10 +113,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        replaced.binding.parent,
-        replaced.valueB.name,
-      );
+      const gone = yield* waitUntilGone(replaced.binding.parent, replaced.valueB.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {

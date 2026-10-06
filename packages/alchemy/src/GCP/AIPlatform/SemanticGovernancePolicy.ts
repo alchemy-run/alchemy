@@ -172,27 +172,21 @@ const waitUntilExists = (name: string) =>
         : Effect.fail(new SemanticGovernancePolicyNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.SemanticGovernancePolicyNotResolved",
+      while: (error) => error._tag === "GCP.AIPlatform.SemanticGovernancePolicyNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
   );
 
 const listAt = (parent: string, project: string) =>
-  aiplatform.listProjectsLocationsSemanticGovernancePolicies
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.semanticGovernancePolicies ?? []),
-      ),
-      Stream.filter((policy) => hasOwnershipMarker(policy.description)),
-      Stream.map((policy) => toAttrs(policy, project)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsSemanticGovernancePolicies.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.semanticGovernancePolicies ?? [])),
+    Stream.filter((policy) => hasOwnershipMarker(policy.description)),
+    Stream.map((policy) => toAttrs(policy, project)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const mcpKey = (tools: McpTool[] | undefined) =>
   JSON.stringify(
@@ -204,13 +198,7 @@ const mcpKey = (tools: McpTool[] | undefined) =>
 
 export const SemanticGovernancePolicyProvider = () =>
   Provider.succeed(SemanticGovernancePolicy, {
-    stables: [
-      "name",
-      "semanticGovernancePolicyId",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "semanticGovernancePolicyId", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -219,8 +207,7 @@ export const SemanticGovernancePolicyProvider = () =>
       if (previousLocation !== undefined && previousLocation !== nextLocation) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousId =
-        olds?.semanticGovernancePolicyId ?? output?.semanticGovernancePolicyId;
+      const previousId = olds?.semanticGovernancePolicyId ?? output?.semanticGovernancePolicyId;
       if (
         previousId !== undefined &&
         news.semanticGovernancePolicyId !== undefined &&
@@ -239,15 +226,11 @@ export const SemanticGovernancePolicyProvider = () =>
         output?.semanticGovernancePolicyId,
       );
       const location = olds?.location ?? output?.location ?? env.region;
-      const name =
-        output?.name ??
-        resourceName(locationParent(env.project, location), policyId);
+      const name = output?.name ?? resourceName(locationParent(env.project, location), policyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -308,43 +291,34 @@ export const SemanticGovernancePolicyProvider = () =>
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const agentChanged = (current.agent ?? "") !== news.agent;
       const constraintChanged =
-        (current.naturalLanguageConstraint ?? "") !==
-        news.naturalLanguageConstraint;
+        (current.naturalLanguageConstraint ?? "") !== news.naturalLanguageConstraint;
       const mcpChanged = mcpKey(current.mcpTools) !== mcpKey(news.mcpTools);
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        agentChanged ||
-        constraintChanged ||
-        mcpChanged
-      ) {
-        const patched =
-          yield* aiplatform.patchProjectsLocationsSemanticGovernancePolicies({
+      if (displayChanged || descriptionChanged || agentChanged || constraintChanged || mcpChanged) {
+        const patched = yield* aiplatform.patchProjectsLocationsSemanticGovernancePolicies({
+          name,
+          updateMask: [
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            agentChanged ? "agent" : undefined,
+            constraintChanged ? "naturalLanguageConstraint" : undefined,
+            mcpChanged ? "mcpTools" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              agentChanged ? "agent" : undefined,
-              constraintChanged ? "naturalLanguageConstraint" : undefined,
-              mcpChanged ? "mcpTools" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              description: desiredDescription,
-              agent: news.agent,
-              naturalLanguageConstraint: news.naturalLanguageConstraint,
-              mcpTools,
-              etag: current.etag,
-            },
-          });
+            displayName,
+            description: desiredDescription,
+            agent: news.agent,
+            naturalLanguageConstraint: news.naturalLanguageConstraint,
+            mcpTools,
+            etag: current.etag,
+          },
+        });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);
       }

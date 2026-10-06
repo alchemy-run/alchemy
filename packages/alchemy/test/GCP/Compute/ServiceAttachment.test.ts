@@ -1,18 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 const healthCheckName = "alchemy-sa-probe";
@@ -91,9 +89,7 @@ const ensureProducer = () =>
           Effect.catchTag("Conflict", () => Effect.void),
         )
         .pipe(
-          Effect.flatMap(() =>
-            compute.getHealthChecks({ project, healthCheck: healthCheckName }),
-          ),
+          Effect.flatMap(() => compute.getHealthChecks({ project, healthCheck: healthCheckName })),
         ));
 
     const existingBackend = yield* compute
@@ -149,13 +145,11 @@ const deleteProducer = () =>
         )
         .pipe(
           Effect.flatMap(() =>
-            compute
-              .deleteHealthChecks({ project, healthCheck: healthCheckName })
-              .pipe(
-                Effect.flatMap(waitGlobalOp),
-                Effect.catchTag("NotFound", () => Effect.void),
-                Effect.catchTag("Conflict", () => Effect.void),
-              ),
+            compute.deleteHealthChecks({ project, healthCheck: healthCheckName }).pipe(
+              Effect.flatMap(waitGlobalOp),
+              Effect.catchTag("NotFound", () => Effect.void),
+              Effect.catchTag("Conflict", () => Effect.void),
+            ),
           ),
         ),
     ),
@@ -172,25 +166,22 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ProducerSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.40.0.0/16",
+            ipCidrRange: "172.20.2.0/24",
           });
           const nat = yield* GCP.Compute.Subnetwork("NatSubnet", {
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.41.0.0/16",
+            ipCidrRange: "172.20.3.0/24",
             purpose: "PRIVATE_SERVICE_CONNECT",
           });
           const rule = yield* GCP.Compute.ForwardingRule("ProducerFr", {
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: producer.backend.selfLink,
-            network: network.selfLink,
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink,
             ipProtocol: "TCP",
             allPorts: true,
@@ -204,17 +195,13 @@ test.provider(
             description: "psc producer",
             labels: { env: "test" },
           });
-          return { network, subnet, nat, rule, attachment };
+          return { subnet, nat, rule, attachment };
         }),
       );
 
-      expect(created.attachment.serviceAttachmentName).toEqual(
-        expect.any(String),
-      );
+      expect(created.attachment.serviceAttachmentName).toEqual(expect.any(String));
       expect(created.attachment.region).toEqual(region);
-      expect(created.attachment.connectionPreference).toEqual(
-        "ACCEPT_AUTOMATIC",
-      );
+      expect(created.attachment.connectionPreference).toEqual("ACCEPT_AUTOMATIC");
       expect(created.attachment.enableProxyProtocol).toEqual(false);
       expect(created.attachment.description).toEqual("psc producer");
       expect(created.attachment.labels).toMatchObject({ env: "test" });
@@ -241,21 +228,17 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const network = yield* GCP.Compute.Network("Vpc", {
-            networkName: created.network.networkName,
-            autoCreateSubnetworks: false,
-          });
           const subnet = yield* GCP.Compute.Subnetwork("ProducerSubnet", {
             subnetworkName: created.subnet.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.40.0.0/16",
+            ipCidrRange: "172.20.2.0/24",
           });
           const nat = yield* GCP.Compute.Subnetwork("NatSubnet", {
             subnetworkName: created.nat.subnetworkName,
-            network: network.networkName,
+            network: DEFAULT_NETWORK,
             region,
-            ipCidrRange: "10.41.0.0/16",
+            ipCidrRange: "172.20.3.0/24",
             purpose: "PRIVATE_SERVICE_CONNECT",
           });
           const rule = yield* GCP.Compute.ForwardingRule("ProducerFr", {
@@ -263,7 +246,7 @@ test.provider(
             region,
             loadBalancingScheme: "INTERNAL",
             backendService: producer.backend.selfLink,
-            network: network.selfLink,
+            network: defaultNetworkSelfLink(project),
             subnetwork: subnet.selfLink,
             ipProtocol: "TCP",
             allPorts: true,
@@ -275,9 +258,7 @@ test.provider(
             natSubnets: [nat.selfLink.as<string>()],
             connectionPreference: "ACCEPT_MANUAL",
             enableProxyProtocol: false,
-            consumerAcceptLists: [
-              { projectIdOrNum: project, connectionLimit: 10 },
-            ],
+            consumerAcceptLists: [{ projectIdOrNum: project, connectionLimit: 10 }],
             reconcileConnections: true,
             description: "psc producer updated",
             labels: { env: "prod", role: "psc" },
@@ -285,17 +266,14 @@ test.provider(
         }),
       );
 
-      expect(updated.serviceAttachmentName).toEqual(
-        created.attachment.serviceAttachmentName,
-      );
+      expect(updated.serviceAttachmentName).toEqual(created.attachment.serviceAttachmentName);
       expect(updated.connectionPreference).toEqual("ACCEPT_MANUAL");
       expect(updated.description).toEqual("psc producer updated");
       expect(updated.labels).toMatchObject({ env: "prod", role: "psc" });
       expect(updated.reconcileConnections).toEqual(true);
       expect(
         updated.consumerAcceptLists.some(
-          (item) =>
-            item.projectIdOrNum === project && item.connectionLimit === 10,
+          (item) => item.projectIdOrNum === project && item.connectionLimit === 10,
         ),
       ).toEqual(true);
 
@@ -309,8 +287,7 @@ test.provider(
       expect(fetchedUpdated.description).toContain("env=prod");
       expect(
         fetchedUpdated.consumerAcceptLists?.some(
-          (item) =>
-            item.projectIdOrNum === project && item.connectionLimit === 10,
+          (item) => item.projectIdOrNum === project && item.connectionLimit === 10,
         ),
       ).toEqual(true);
 

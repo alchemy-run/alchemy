@@ -1,4 +1,5 @@
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
+import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +17,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 63;
@@ -149,19 +151,6 @@ export class RepositoryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-export class RepositoryOperationFailed extends Data.TaggedError(
-  "GCP.CloudBuild.RepositoryOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class RepositoryOperationPending extends Data.TaggedError(
-  "GCP.CloudBuild.RepositoryOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryStillExists",
 )<{
@@ -183,18 +172,12 @@ const parseName = (name: string) => {
   const connectionsAt = parts.lastIndexOf("connections");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const connection =
-    connectionsAt >= 0 ? parts.slice(0, connectionsAt + 2).join("/") : "";
+  const connection = connectionsAt >= 0 ? parts.slice(0, connectionsAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
     connection,
-    connectionId:
-      connectionsAt >= 0 && parts[connectionsAt + 1]
-        ? parts[connectionsAt + 1]!
-        : "",
+    connectionId: connectionsAt >= 0 && parts[connectionsAt + 1] ? parts[connectionsAt + 1]! : "",
     repositoryId:
       repositoriesAt >= 0 && parts[repositoriesAt + 1]
         ? parts[repositoriesAt + 1]!
@@ -247,11 +230,7 @@ const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(annotations));
 
-const toId = (
-  id: string,
-  repositoryId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, repositoryId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       repositoryId ??
@@ -264,17 +243,12 @@ const toId = (
     );
   });
 
-const annotationsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const annotationsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
@@ -302,97 +276,61 @@ const getByName = (name: string) =>
     .getProjectsLocationsConnectionsRepositories({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const isAlreadyExists = (error: cloudbuild.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: cloudbuild.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorableOperationError = (
-  error: cloudbuild.Status | undefined,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  (options?.alreadyExistsOk === true && isAlreadyExists(error)) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-const waitForOperation = (
-  operation: cloudbuild.Operation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
-) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (
-        operation.error &&
-        !isIgnorableOperationError(operation.error, options)
-      ) {
-        return yield* new RepositoryOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new RepositoryOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudbuild.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudbuild.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
+/**
+ * Wait on a Cloud Build repositories long-running operation (seconds to a minute).
+ * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
+ * when `notFoundOk` (deletes). Returns the final operation.
+ */
+const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundOk?: boolean }) =>
+  Effect.suspend(() => {
+    let latest = operation;
+    return waitForLongRunningOperation(
+      operation,
+      (name) => {
+        const get = cloudbuild.getProjectsLocationsOperations({ name }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
             }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new RepositoryOperationPending({ operation: name }),
+          ),
+        );
+        const observe: Effect.Effect<
+          cloudbuild.Operation,
+          cloudbuild.GetProjectsLocationsOperationsError,
+          GcpOpContext
+        > =
+          options?.notFoundOk === true
+            ? get.pipe(
+                Effect.catchTag("NotFound", () =>
+                  Effect.succeed<cloudbuild.Operation>({ name, done: true }),
+                ),
+              )
+            : get.pipe(
+                // A just-returned operation can briefly 404 on read.
+                Effect.retry({
+                  while: (error) => error._tag === "NotFound",
+                  times: 5,
+                  schedule: Schedule.exponential("250 millis"),
+                }),
+              );
+        return observe;
+      },
+      { budget: "5 minutes" },
+    ).pipe(
+      Effect.map(() => latest),
+      // google.rpc.Code ALREADY_EXISTS = 6, NOT_FOUND = 5.
+      Effect.catchTag("GCP.OperationFailed", (error) =>
+        error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+          ? Effect.succeed(latest)
+          : Effect.fail(error),
       ),
-      Effect.filterOrFail(
-        (current) =>
-          !current.error || isIgnorableOperationError(current.error, options),
-        (current) =>
-          new RepositoryOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "operation failed",
-          }),
-      ),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.CloudBuild.RepositoryOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("2 seconds"),
-      }),
     );
   });
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository
-        ? Effect.succeed(repository)
-        : Effect.fail(new RepositoryNotResolved({ name })),
+      repository ? Effect.succeed(repository) : Effect.fail(new RepositoryNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryNotResolved",
@@ -404,9 +342,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository === undefined
-        ? Effect.void
-        : Effect.fail(new RepositoryStillExists({ name })),
+      repository === undefined ? Effect.void : Effect.fail(new RepositoryStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryStillExists",
@@ -425,15 +361,12 @@ const listRepositoriesAt = (parent: string, project: string) =>
     .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.repositories ?? [])),
       Stream.filter((repository) =>
-        Object.keys(repository.annotations ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(repository.annotations ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((repository) => toAttrs(repository, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const listOwnedRepositories = (project: string) =>
@@ -448,12 +381,7 @@ const listOwnedRepositories = (project: string) =>
         Stream.flatMap((page) => Stream.fromIterable(page.connections ?? [])),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("NotFound", () =>
-          Effect.succeed([] as cloudbuild.Connection[]),
-        ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed([] as cloudbuild.Connection[]),
-        ),
+        Effect.catchTag("NotFound", () => Effect.succeed([] as cloudbuild.Connection[])),
       );
 
     const pages = yield* Effect.forEach(
@@ -488,10 +416,7 @@ export const RepositoryProvider = () =>
 
       const previousId = olds?.repositoryId ?? output?.repositoryId;
       const nextId = news.repositoryId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -511,15 +436,11 @@ export const RepositoryProvider = () =>
           : previousParent;
       const previousUri = olds?.remoteUri ?? output?.remoteUri ?? "";
       const nextUri = news.remoteUri ?? previousUri;
-      const previousAnnotations = toLabels(
-        olds?.annotations ?? output?.annotations,
-      );
+      const previousAnnotations = toLabels(olds?.annotations ?? output?.annotations);
       const nextAnnotations = toLabels(news.annotations);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousParent !== undefined &&
           nextParent !== undefined &&
@@ -546,11 +467,7 @@ export const RepositoryProvider = () =>
         if (typeof connectionRef !== "string" || connectionRef.length === 0) {
           return undefined;
         }
-        const repositoryId = yield* toId(
-          id,
-          olds?.repositoryId,
-          output?.repositoryId,
-        );
+        const repositoryId = yield* toId(id, olds?.repositoryId, output?.repositoryId);
         const parent = resolveParent(
           env.project,
           connectionRef,
@@ -575,11 +492,7 @@ export const RepositoryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const repositoryId = yield* toId(
-        id,
-        news.repositoryId,
-        output?.repositoryId,
-      );
+      const repositoryId = yield* toId(id, news.repositoryId, output?.repositoryId);
       const parent = resolveParent(
         env.project,
         news.connection ?? output?.connection ?? "",
@@ -606,7 +519,7 @@ export const RepositoryProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created, { alreadyExistsOk: true });
+          yield* waitForOperation(created);
         }
         current = yield* waitUntilExists(name);
       }

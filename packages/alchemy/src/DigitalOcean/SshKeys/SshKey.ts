@@ -133,8 +133,7 @@ const toAttrs = (key: ApiSshKey): SshKeyAttributes => ({
   publicKey: key.public_key,
 });
 
-const physicalName = (id: string) =>
-  createPhysicalName({ id, maxLength: NAME_MAX_LENGTH });
+const physicalName = (id: string) => createPhysicalName({ id, maxLength: NAME_MAX_LENGTH });
 
 const registeredBySomeoneElse = (id: string, key: ApiSshKey) =>
   new OwnedBySomeoneElse({
@@ -208,8 +207,7 @@ export const SshKeyProvider = () =>
           ...SSH_KEY_POLL,
           until: (observed): observed is Option.Some<ApiSshKey> =>
             Option.isSome(observed) && wait.until(observed.value),
-          onTimeout: () =>
-            new SshKeyWaitTimedOut({ sshKeyId, waitingFor: wait.waitingFor }),
+          onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: wait.waitingFor }),
         }).pipe(Effect.map((observed) => observed.value));
 
       const waitUntilGone = (sshKeyId: number) =>
@@ -266,9 +264,7 @@ export const SshKeyProvider = () =>
             const observed = yield* observeById(output.sshKeyId);
             return Option.getOrUndefined(Option.map(observed, toAttrs));
           }
-          const registration = yield* observeRegistration(
-            normalize(olds.publicKey),
-          );
+          const registration = yield* observeRegistration(normalize(olds.publicKey));
           if (Option.isNone(registration)) return undefined;
           const name = olds.name ?? (yield* physicalName(id));
           const attrs = toAttrs(registration.value);
@@ -279,12 +275,7 @@ export const SshKeyProvider = () =>
           const name = news.name ?? (yield* physicalName(id));
           const publicKey = normalize(news.publicKey);
 
-          const observed = yield* observeOwned(
-            id,
-            output?.sshKeyId,
-            publicKey,
-            name,
-          );
+          const observed = yield* observeOwned(id, output?.sshKeyId, publicKey, name);
           const key = yield* Option.match(observed, {
             onNone: () => register(id, publicKey, name),
             onSome: Effect.succeed,
@@ -292,9 +283,7 @@ export const SshKeyProvider = () =>
           return toAttrs(yield* syncName(key, name));
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* ignoreNotFound(
-            deleteSshKey({ ssh_key_identifier: String(output.sshKeyId) }),
-          );
+          yield* ignoreNotFound(deleteSshKey({ ssh_key_identifier: String(output.sshKeyId) }));
           yield* waitUntilGone(output.sshKeyId);
         }),
       };

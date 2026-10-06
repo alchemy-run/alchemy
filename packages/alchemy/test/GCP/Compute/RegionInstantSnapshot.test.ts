@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
@@ -26,9 +23,7 @@ const waitUntilGone = (project: string, instantSnapshot: string) =>
     }),
   );
 
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_REGION_INSTANT_SNAPSHOT,
-)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update labels, replace, and delete a regional instant snapshot",
   (stack) =>
     Effect.gen(function* () {
@@ -42,15 +37,12 @@ test.provider.skipIf(
             type: "pd-balanced",
             sizeGb: 200,
           });
-          const snapshot = yield* GCP.Compute.RegionInstantSnapshot(
-            "Checkpoint",
-            {
-              region,
-              sourceDisk: disk.selfLink.as<string>(),
-              description: "first checkpoint",
-              labels: { env: "test" },
-            },
-          );
+          const snapshot = yield* GCP.Compute.RegionInstantSnapshot("Checkpoint", {
+            region,
+            sourceDisk: disk.selfLink.as<string>(),
+            description: "first checkpoint",
+            labels: { env: "test" },
+          });
           return { disk, snapshot };
         }),
       );
@@ -79,31 +71,24 @@ test.provider.skipIf(
             type: "pd-balanced",
             sizeGb: 200,
           });
-          const snapshot = yield* GCP.Compute.RegionInstantSnapshot(
-            "Checkpoint",
-            {
-              instantSnapshotName: created.snapshot.instantSnapshotName,
-              region,
-              sourceDisk: disk.selfLink.as<string>(),
-              description: "first checkpoint",
-              labels: { env: "prod", role: "data" },
-            },
-          );
+          const snapshot = yield* GCP.Compute.RegionInstantSnapshot("Checkpoint", {
+            instantSnapshotName: created.snapshot.instantSnapshotName,
+            region,
+            sourceDisk: disk.selfLink.as<string>(),
+            description: "first checkpoint",
+            labels: { env: "prod", role: "data" },
+          });
           return { disk, snapshot };
         }),
       );
 
-      expect(updated.snapshot.instantSnapshotName).toEqual(
-        created.snapshot.instantSnapshotName,
-      );
+      expect(updated.snapshot.instantSnapshotName).toEqual(created.snapshot.instantSnapshotName);
       expect(updated.snapshot.labels).toMatchObject({
         env: "prod",
         role: "data",
       });
 
-      const nextName = `r${created.snapshot.instantSnapshotName}`
-        .slice(0, 63)
-        .replace(/-+$/, "x");
+      const nextName = `r${created.snapshot.instantSnapshotName}`.slice(0, 63).replace(/-+$/, "x");
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           const disk = yield* GCP.Compute.RegionDisk("Data", {
@@ -113,15 +98,12 @@ test.provider.skipIf(
             type: "pd-balanced",
             sizeGb: 200,
           });
-          const snapshot = yield* GCP.Compute.RegionInstantSnapshot(
-            "Checkpoint",
-            {
-              instantSnapshotName: nextName,
-              region,
-              sourceDisk: disk.selfLink.as<string>(),
-              description: "replaced checkpoint",
-            },
-          );
+          const snapshot = yield* GCP.Compute.RegionInstantSnapshot("Checkpoint", {
+            instantSnapshotName: nextName,
+            region,
+            sourceDisk: disk.selfLink.as<string>(),
+            description: "replaced checkpoint",
+          });
           return { disk, snapshot };
         }),
       );

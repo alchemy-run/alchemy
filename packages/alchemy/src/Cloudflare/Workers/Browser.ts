@@ -21,11 +21,7 @@ export type BrowserResponse = Awaited<ReturnType<cf.BrowserRun["fetch"]>>;
 type BrowserEffect<A> = Effect.Effect<A, BrowserError, RuntimeContext>;
 
 /** A byte stream produced by a binary {@link BrowserClient} action. */
-type BrowserByteStream = Stream.Stream<
-  Uint8Array,
-  BrowserError,
-  RuntimeContext
->;
+type BrowserByteStream = Stream.Stream<Uint8Array, BrowserError, RuntimeContext>;
 
 // Quick action option types, re-exported so callers don't reach into the
 // `@cloudflare/workers-types` namespace directly.
@@ -61,35 +57,21 @@ export interface BrowserClient {
   /** Effect resolving to the raw Cloudflare Browser Rendering runtime binding. */
   raw: Effect.Effect<cf.BrowserRun, never, RuntimeContext>;
   /** Send a raw HTTP request to the Browser Run API. */
-  fetch(
-    ...args: Parameters<cf.BrowserRun["fetch"]>
-  ): BrowserEffect<BrowserResponse>;
+  fetch(...args: Parameters<cf.BrowserRun["fetch"]>): BrowserEffect<BrowserResponse>;
   /** Run a Browser Run quick action, resolving to the parsed payload. */
-  quickAction(
-    action: "screenshot",
-    options: BrowserScreenshotOptions,
-  ): BrowserByteStream;
+  quickAction(action: "screenshot", options: BrowserScreenshotOptions): BrowserByteStream;
   quickAction(action: "pdf", options: BrowserPDFOptions): BrowserByteStream;
   quickAction(
     action: "content",
     options: BrowserContentOptions,
   ): BrowserEffect<BrowserContentResult>;
-  quickAction(
-    action: "scrape",
-    options: BrowserScrapeOptions,
-  ): BrowserEffect<BrowserScrapeResult>;
-  quickAction(
-    action: "links",
-    options: BrowserLinksOptions,
-  ): BrowserEffect<BrowserLinksResult>;
+  quickAction(action: "scrape", options: BrowserScrapeOptions): BrowserEffect<BrowserScrapeResult>;
+  quickAction(action: "links", options: BrowserLinksOptions): BrowserEffect<BrowserLinksResult>;
   quickAction(
     action: "snapshot",
     options: BrowserSnapshotOptions,
   ): BrowserEffect<BrowserSnapshotResult>;
-  quickAction(
-    action: "json",
-    options: BrowserJsonOptions,
-  ): BrowserEffect<BrowserJsonResult>;
+  quickAction(action: "json", options: BrowserJsonOptions): BrowserEffect<BrowserJsonResult>;
   quickAction(
     action: "markdown",
     options: BrowserMarkdownOptions,
@@ -105,15 +87,11 @@ export interface BrowserClient {
   /** Extract all links from a web page. */
   links(options: BrowserLinksOptions): BrowserEffect<BrowserLinksResult>;
   /** Get both the HTML content and a base64-encoded screenshot of a web page. */
-  snapshot(
-    options: BrowserSnapshotOptions,
-  ): BrowserEffect<BrowserSnapshotResult>;
+  snapshot(options: BrowserSnapshotOptions): BrowserEffect<BrowserSnapshotResult>;
   /** Extract structured JSON data from a web page using AI. */
   json(options: BrowserJsonOptions): BrowserEffect<BrowserJsonResult>;
   /** Convert a web page to Markdown. */
-  markdown(
-    options: BrowserMarkdownOptions,
-  ): BrowserEffect<BrowserMarkdownResult>;
+  markdown(options: BrowserMarkdownOptions): BrowserEffect<BrowserMarkdownResult>;
 }
 
 /**
@@ -176,11 +154,7 @@ export interface BrowserClient {
  * @product Browser Rendering
  * @category Developer Platform
  */
-export interface Browser extends Binding.Service<
-  Browser,
-  TypeId,
-  BrowserClient
-> {
+export interface Browser extends Binding.Service<Browser, TypeId, BrowserClient> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @default "BROWSER"

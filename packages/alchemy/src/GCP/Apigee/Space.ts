@@ -93,7 +93,6 @@ export type Space = Resource<
  * **Example:** Change the display name
  * ```typescript
  * const space = yield* GCP.Apigee.Space("Payments", {
- *   spaceId: existing.spaceId,
  *   displayName: "payments and billing",
  * });
  * ```
@@ -103,9 +102,7 @@ export type Space = Resource<
  */
 export const Space = Resource<Space>("GCP.Apigee.Space");
 
-export class SpaceNotResolved extends Data.TaggedError(
-  "GCP.Apigee.SpaceNotResolved",
-)<{
+export class SpaceNotResolved extends Data.TaggedError("GCP.Apigee.SpaceNotResolved")<{
   name: string;
 }> {}
 
@@ -123,8 +120,7 @@ const rfc1035 = (name: string): string => {
   return next.length > 0 ? next : "space";
 };
 
-const resourceName = (org: string, spaceId: string) =>
-  `${orgParent(org)}/spaces/${spaceId}`;
+const resourceName = (org: string, spaceId: string) => `${orgParent(org)}/spaces/${spaceId}`;
 
 const spaceIdOf = (space: apigee.GoogleCloudApigeeV1Space) => {
   const raw = space.name ?? "";
@@ -161,11 +157,7 @@ const toAttrs = (space: apigee.GoogleCloudApigeeV1Space, org: string) => {
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSpaces({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const SpaceProvider = () =>
   Provider.succeed(Space, {
@@ -191,10 +183,7 @@ export const SpaceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        olds?.organization ?? output?.organization,
-        env.project,
-      );
+      const org = orgIdOf(olds?.organization ?? output?.organization, env.project);
       const spaceId = yield* toId(id, olds?.spaceId, output?.spaceId);
       const name = output?.name ?? resourceName(org, spaceId);
       const existing = yield* getByName(name);
@@ -219,18 +208,13 @@ export const SpaceProvider = () =>
             Stream.map((space) => toAttrs(space, org)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        news.organization ?? output?.organization,
-        env.project,
-      );
+      const org = orgIdOf(news.organization ?? output?.organization, env.project);
       const spaceId = yield* toId(id, news.spaceId, output?.spaceId);
       const name = resourceName(org, spaceId);
       const ownership = yield* createInternalLabels(id);
@@ -271,6 +255,6 @@ export const SpaceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSpaces({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

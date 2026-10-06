@@ -1,18 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   dataplex.getProjectsLocationsLakesZonesEntitiesPartitions({ name }).pipe(
@@ -25,7 +23,9 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
+// A lake (~2.5 min) plus a bucket asset (~1.5 min), then teardown of both,
+// runs past 5 minutes.
+test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "create and delete a lake entity partition",
   (stack) =>
     Effect.gen(function* () {
@@ -62,7 +62,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
             asset: asset.assetId,
             type: "TABLE",
             system: "CLOUD_STORAGE",
-            dataPath: `gs://${bucket.bucketName}/events`,
+            dataPath: Output.interpolate`gs://${bucket.bucketName}/events`,
             format: { format: "PARQUET" },
             schema: {
               userManaged: true,
@@ -74,7 +74,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
           const partition = yield* GCP.Dataplex.LakesEntitiesPartition("Day", {
             entity: entity.name,
             values: ["2024-01-01"],
-            location: `gs://${bucket.bucketName}/events/dt=2024-01-01`,
+            location: Output.interpolate`gs://${bucket.bucketName}/events/dt=2024-01-01`,
           });
           return { bucket, lake, zone, asset, entity, partition };
         }),
@@ -85,16 +85,15 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_DATAPLEX)(
       expect(created.partition.entity).toEqual(created.entity.name);
       expect(created.partition.location).toContain("dt=2024-01-01");
 
-      const fetched =
-        yield* dataplex.getProjectsLocationsLakesZonesEntitiesPartitions({
-          name: created.partition.name,
-        });
+      const fetched = yield* dataplex.getProjectsLocationsLakesZonesEntitiesPartitions({
+        name: created.partition.name,
+      });
       expect(fetched.name).toEqual(created.partition.name);
       expect(fetched.values).toEqual(["2024-01-01"]);
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.partition.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 180_000 },
+    }).pipe(logLevel, withDataplexSlot),
+  { tags: ["provider:gcp", "provider:gcp:dataplex", "live"], timeout: 900_000 },
 );

@@ -6,14 +6,15 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import {
+  type OperationFailed,
+  type OperationTimedOut,
+  waitForOperation as waitForGcpOperation,
+} from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_STATE: kms.CryptoKeyVersionStateEnum = "ENABLED";
-const DELETABLE_STATES = new Set([
-  "DESTROYED",
-  "IMPORT_FAILED",
-  "GENERATION_FAILED",
-]);
+const DELETABLE_STATES = new Set(["DESTROYED", "IMPORT_FAILED", "GENERATION_FAILED"]);
 const DESTROYABLE_STATES = new Set(["ENABLED", "DISABLED"]);
 const PATCHABLE_STATES = new Set(["ENABLED", "DISABLED"]);
 
@@ -94,9 +95,7 @@ export type CryptoKeyVersionAttrs = {
   /** Protection level of this version. */
   protectionLevel: string | undefined;
   /** External key pointer, if any. */
-  externalProtectionLevelOptions:
-    | CryptoKeyVersionExternalProtectionLevelOptions
-    | undefined;
+  externalProtectionLevelOptions: CryptoKeyVersionExternalProtectionLevelOptions | undefined;
   /** Import job that produced this version, if imported. */
   importJob: string | undefined;
   /** Whether the version can be reimported. */
@@ -159,9 +158,7 @@ export type CryptoKeyVersion = Resource<
  * @resource
  * @category KMS
  */
-export const CryptoKeyVersion = Resource<CryptoKeyVersion>(
-  "GCP.KMS.CryptoKeyVersion",
-);
+export const CryptoKeyVersion = Resource<CryptoKeyVersion>("GCP.KMS.CryptoKeyVersion");
 
 export class CryptoKeyVersionNotResolved extends Data.TaggedError(
   "GCP.KMS.CryptoKeyVersionNotResolved",
@@ -176,15 +173,7 @@ export class CryptoKeyVersionOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class CryptoKeyVersionOperationPending extends Data.TaggedError(
-  "GCP.KMS.CryptoKeyVersionOperationPending",
-)<{
-  operation: string;
-}> {}
-
-export class CryptoKeyVersionNotReady extends Data.TaggedError(
-  "GCP.KMS.CryptoKeyVersionNotReady",
-)<{
+export class CryptoKeyVersionNotReady extends Data.TaggedError("GCP.KMS.CryptoKeyVersionNotReady")<{
   name: string;
   state: string;
 }> {}
@@ -205,23 +194,16 @@ const parseName = (name: string, fallbackLocation: string) => {
   const keyRingsAt = parts.lastIndexOf("keyRings");
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
-  const cryptoKey =
-    cryptoKeysAt >= 0 ? parts.slice(0, cryptoKeysAt + 2).join("/") : "";
-  const keyRing =
-    keyRingsAt >= 0 ? parts.slice(0, keyRingsAt + 2).join("/") : "";
+  const cryptoKey = cryptoKeysAt >= 0 ? parts.slice(0, cryptoKeysAt + 2).join("/") : "";
+  const keyRing = keyRingsAt >= 0 ? parts.slice(0, keyRingsAt + 2).join("/") : "";
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
     keyRing,
     cryptoKey,
     cryptoKeyVersionId:
-      versionsAt >= 0 && parts[versionsAt + 1]
-        ? parts[versionsAt + 1]!
-        : lastSegment(name),
+      versionsAt >= 0 && parts[versionsAt + 1] ? parts[versionsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -263,9 +245,7 @@ const resolveParent = (
 const resourceName = (parent: string, cryptoKeyVersionId: string) =>
   `${parent}/cryptoKeyVersions/${cryptoKeyVersionId}`;
 
-const desiredState = (
-  value: string | undefined,
-): kms.CryptoKeyVersionStateEnum =>
+const desiredState = (value: string | undefined): kms.CryptoKeyVersionStateEnum =>
   !value || value === "CRYPTO_KEY_VERSION_STATE_UNSPECIFIED"
     ? DEFAULT_STATE
     : (value as kms.CryptoKeyVersionStateEnum);
@@ -346,12 +326,6 @@ const listKeyRingsAt = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.KeyRing[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -366,19 +340,11 @@ const listAlchemyKeysInRing = (parent: string) =>
       .pipe(
         Effect.map((response) => ({
           items: (response.cryptoKeys ?? []).filter((key) =>
-            Object.keys(key.labels ?? {}).some((label) =>
-              label.startsWith("alchemy-"),
-            ),
+            Object.keys(key.labels ?? {}).some((label) => label.startsWith("alchemy-")),
           ),
           nextPageToken: response.nextPageToken,
         })),
         Effect.catchTag("NotFound", () =>
-          Effect.succeed({
-            items: [] as kms.CryptoKey[],
-            nextPageToken: undefined,
-          }),
-        ),
-        Effect.catchTag("Forbidden", () =>
           Effect.succeed({
             items: [] as kms.CryptoKey[],
             nextPageToken: undefined,
@@ -406,12 +372,6 @@ const listVersionsInKey = (parent: string) =>
             nextPageToken: undefined,
           }),
         ),
-        Effect.catchTag("Forbidden", () =>
-          Effect.succeed({
-            items: [] as kms.CryptoKeyVersion[],
-            nextPageToken: undefined,
-          }),
-        ),
       ),
   );
 
@@ -421,77 +381,30 @@ const listVersionsAt = (locationParent: string) =>
     const keyPages = yield* Effect.forEach(
       rings,
       (ring) =>
-        ring.name
-          ? listAlchemyKeysInRing(ring.name)
-          : Effect.succeed([] as kms.CryptoKey[]),
+        ring.name ? listAlchemyKeysInRing(ring.name) : Effect.succeed([] as kms.CryptoKey[]),
       { concurrency: 4 },
     );
     const keys = keyPages.flat();
     const versionPages = yield* Effect.forEach(
       keys,
       (key) =>
-        key.name
-          ? listVersionsInKey(key.name)
-          : Effect.succeed([] as kms.CryptoKeyVersion[]),
+        key.name ? listVersionsInKey(key.name) : Effect.succeed([] as kms.CryptoKeyVersion[]),
       { concurrency: 4 },
     );
     return versionPages.flat();
   });
 
-const waitOperation = (
-  operation: kms.Operation,
-): Effect.Effect<
-  kms.Operation,
-  | CryptoKeyVersionOperationFailed
-  | CryptoKeyVersionOperationPending
-  | kms.GetProjectsLocationsOperationsError,
-  kms.GcpOpContext
-> =>
-  Effect.gen(function* () {
-    if (operation.done === true) {
-      const status = operation.error;
-      if (status) {
-        return yield* new CryptoKeyVersionOperationFailed({
-          operation: operation.name ?? "",
-          message: status.message ?? "KMS operation failed",
-        });
-      }
-      return operation;
-    }
-    const name = operation.name;
-    if (name === undefined) {
-      return operation;
-    }
-    const wait: Effect.Effect<
-      kms.Operation,
-      | CryptoKeyVersionOperationFailed
-      | CryptoKeyVersionOperationPending
-      | kms.GetProjectsLocationsOperationsError,
-      kms.GcpOpContext
-    > = kms.getProjectsLocationsOperations({ name }).pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        (): CryptoKeyVersionOperationPending =>
-          new CryptoKeyVersionOperationPending({ operation: name }),
-      ),
-      Effect.filterOrFail(
-        (current) => current.error === undefined,
-        (current): CryptoKeyVersionOperationFailed =>
-          new CryptoKeyVersionOperationFailed({
-            operation: name,
-            message: current.error?.message ?? "KMS operation failed",
-          }),
-      ),
-    );
-    return yield* wait.pipe(
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.KMS.CryptoKeyVersionOperationPending",
-        times: 8,
-        schedule: Schedule.exponential("500 millis"),
-      }),
-    );
-  });
+const waitOperation = (operation: kms.Operation) =>
+  waitForGcpOperation(operation, (name) => kms.getProjectsLocationsOperations({ name }), {
+    budget: "10 minutes",
+  }).pipe(
+    // Re-read the finished operation for its typed response.
+    Effect.flatMap(() =>
+      operation.name === undefined
+        ? Effect.succeed(operation)
+        : kms.getProjectsLocationsOperations({ name: operation.name }),
+    ),
+  );
 
 const waitReady = (
   name: string,
@@ -516,9 +429,7 @@ const waitReady = (
         version,
       ): Effect.Effect<
         kms.CryptoKeyVersion,
-        | CryptoKeyVersionNotResolved
-        | CryptoKeyVersionOperationFailed
-        | CryptoKeyVersionNotReady
+        CryptoKeyVersionNotResolved | CryptoKeyVersionOperationFailed | CryptoKeyVersionNotReady
       > => {
         if (version === undefined) {
           return Effect.fail(new CryptoKeyVersionNotResolved({ name }));
@@ -572,8 +483,7 @@ const optionsEqual = (
   desired: CryptoKeyVersionExternalProtectionLevelOptions | undefined,
 ) =>
   (observed?.externalKeyUri ?? "") === (desired?.externalKeyUri ?? "") &&
-  (observed?.ekmConnectionKeyPath ?? "") ===
-    (desired?.ekmConnectionKeyPath ?? "");
+  (observed?.ekmConnectionKeyPath ?? "") === (desired?.ekmConnectionKeyPath ?? "");
 
 const destroyVersion = (name: string) =>
   kms
@@ -610,13 +520,11 @@ const deleteVersion = (name: string) =>
       ): Effect.Effect<
         void,
         | CryptoKeyVersionOperationFailed
-        | CryptoKeyVersionOperationPending
+        | OperationFailed
+        | OperationTimedOut
         | kms.GetProjectsLocationsOperationsError,
         kms.GcpOpContext
-      > =>
-        operation === undefined
-          ? Effect.void
-          : waitOperation(operation).pipe(Effect.asVoid),
+      > => (operation === undefined ? Effect.void : waitOperation(operation).pipe(Effect.asVoid)),
     ),
   );
 
@@ -628,9 +536,7 @@ const resolveName = (args: {
 }) => {
   if (args.outputName !== undefined) return args.outputName;
   const versionId = args.propsVersionId ?? args.outputVersionId;
-  return versionId !== undefined
-    ? resourceName(args.parent, versionId)
-    : undefined;
+  return versionId !== undefined ? resourceName(args.parent, versionId) : undefined;
 };
 
 export const CryptoKeyVersionProvider = () =>
@@ -653,21 +559,12 @@ export const CryptoKeyVersionProvider = () =>
 
       const previousId = olds?.cryptoKeyVersionId ?? output?.cryptoKeyVersionId;
       const nextId = news.cryptoKeyVersionId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
 
       const previousParent =
         output?.cryptoKey ??
         (olds?.cryptoKey
-          ? resolveParent(
-              "",
-              olds.cryptoKey,
-              olds.keyRing,
-              olds.location,
-              env.region,
-            ).parent
+          ? resolveParent("", olds.cryptoKey, olds.keyRing, olds.location, env.region).parent
           : undefined);
       const nextParent = resolveParent(
         output?.project ?? "",
@@ -676,8 +573,7 @@ export const CryptoKeyVersionProvider = () =>
         news.location ?? output?.location,
         env.region,
       ).parent;
-      const parentChanged =
-        previousParent !== undefined && previousParent !== nextParent;
+      const parentChanged = previousParent !== undefined && previousParent !== nextParent;
 
       if (!idChanged && !parentChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
@@ -725,11 +621,9 @@ export const CryptoKeyVersionProvider = () =>
           const parents = (response.locations ?? [])
             .map((location) => location.name)
             .filter((name): name is string => !!name);
-          const batches = yield* Effect.forEach(
-            parents,
-            (parent) => listVersionsAt(parent),
-            { concurrency: 4 },
-          );
+          const batches = yield* Effect.forEach(parents, (parent) => listVersionsAt(parent), {
+            concurrency: 4,
+          });
           for (const versions of batches) {
             for (const version of versions) {
               if (version.state === "DESTROY_SCHEDULED") continue;
@@ -774,8 +668,7 @@ export const CryptoKeyVersionProvider = () =>
             parent: parent.parent,
             body: {
               state: targetState === "DISABLED" ? "DISABLED" : undefined,
-              externalProtectionLevelOptions:
-                news.externalProtectionLevelOptions,
+              externalProtectionLevelOptions: news.externalProtectionLevelOptions,
             },
           })
           .pipe(
@@ -793,17 +686,11 @@ export const CryptoKeyVersionProvider = () =>
       }
 
       const currentName = current.name;
-      if (
-        current.state === "PENDING_GENERATION" ||
-        current.state === "PENDING_IMPORT"
-      ) {
+      if (current.state === "PENDING_GENERATION" || current.state === "PENDING_IMPORT") {
         current = yield* waitReady(currentName);
       }
 
-      if (
-        current.state === "DESTROY_SCHEDULED" &&
-        PATCHABLE_STATES.has(targetState)
-      ) {
+      if (current.state === "DESTROY_SCHEDULED" && PATCHABLE_STATES.has(targetState)) {
         const restored = yield* restoreVersion(currentName);
         current = restored ?? (yield* waitReady(currentName));
       }
@@ -815,10 +702,7 @@ export const CryptoKeyVersionProvider = () =>
         observedState !== targetState;
       const optionsChanged =
         news.externalProtectionLevelOptions !== undefined &&
-        !optionsEqual(
-          current.externalProtectionLevelOptions,
-          news.externalProtectionLevelOptions,
-        );
+        !optionsEqual(current.externalProtectionLevelOptions, news.externalProtectionLevelOptions);
 
       if (stateChanged || optionsChanged) {
         const updateMask = [
@@ -827,17 +711,16 @@ export const CryptoKeyVersionProvider = () =>
         ]
           .filter((field): field is string => field !== undefined)
           .join(",");
-        current =
-          yield* kms.patchProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-            name: currentName,
-            updateMask,
-            body: {
-              state: stateChanged ? targetState : undefined,
-              externalProtectionLevelOptions: optionsChanged
-                ? news.externalProtectionLevelOptions
-                : undefined,
-            },
-          });
+        current = yield* kms.patchProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
+          name: currentName,
+          updateMask,
+          body: {
+            state: stateChanged ? targetState : undefined,
+            externalProtectionLevelOptions: optionsChanged
+              ? news.externalProtectionLevelOptions
+              : undefined,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

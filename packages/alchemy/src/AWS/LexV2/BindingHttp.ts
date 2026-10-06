@@ -35,9 +35,7 @@ export interface LexAliasHttpBindingConfig<Req extends object, Out, Err> {
    * The distilled `lex-runtime-v2` operation implementing the capability.
    */
   operation: Effect.Effect<
-    (
-      input: Req & { botId: string; botAliasId: string },
-    ) => Effect.Effect<Out, Err>,
+    (input: Req & { botId: string; botAliasId: string }) => Effect.Effect<Out, Err>,
     never,
     LexRequirements
   >;
@@ -62,27 +60,25 @@ export const makeLexAliasHttpBinding = <Req extends object, Out, Err>(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.LexV2.${config.capability}(${alias}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...config.iamActions],
-                  Resource: [alias.botAliasArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.LexV2.${config.capability}(${alias}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...config.iamActions],
+                Resource: [alias.botAliasArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.LexV2.${config.capability}(${alias.LogicalId})`)(
-        function* (request: Req) {
-          return yield* op({
-            ...request,
-            botId: yield* BotId,
-            botAliasId: yield* BotAliasId,
-          });
-        },
-      );
+      return Effect.fn(`AWS.LexV2.${config.capability}(${alias.LogicalId})`)(function* (
+        request: Req,
+      ) {
+        return yield* op({
+          ...request,
+          botId: yield* BotId,
+          botAliasId: yield* BotAliasId,
+        });
+      });
     });
   });

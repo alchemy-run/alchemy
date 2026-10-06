@@ -39,60 +39,55 @@ const readEnvironment = Effect.gen(function* () {
     });
   }
   const apiBaseUrl = yield* getEnv(DIGITALOCEAN_API_BASE_URL_ENV);
-  const tokenName = fromToken
-    ? DIGITALOCEAN_TOKEN_ENV
-    : DIGITALOCEAN_ACCESS_TOKEN_ENV;
+  const tokenName = fromToken ? DIGITALOCEAN_TOKEN_ENV : DIGITALOCEAN_ACCESS_TOKEN_ENV;
   return {
     type: "apiToken" as const,
     apiToken,
     apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
     source: {
       type: "env" as const,
-      details: apiBaseUrl
-        ? `${tokenName}, ${DIGITALOCEAN_API_BASE_URL_ENV}`
-        : tokenName,
+      details: apiBaseUrl ? `${tokenName}, ${DIGITALOCEAN_API_BASE_URL_ENV}` : tokenName,
     },
   };
 });
 
-const digitalOceanAuth =
-  makeStoredAuthProvider<DigitalOceanResolvedCredentials>({
-    provider: DIGITALOCEAN_AUTH_PROVIDER_NAME,
-    fields: [
-      {
-        name: "apiToken",
-        label: "DigitalOcean Personal Access Token",
-        secret: true,
-      },
-      {
-        name: "apiBaseUrl",
-        label: "DigitalOcean API base URL",
-        optional: true,
-        placeholder: DEFAULT_API_BASE_URL,
-      },
-    ],
-    toResolved: (values) => ({
-      type: "apiToken",
-      apiToken: storedSecret(values.apiToken) ?? Redacted.make(""),
-      apiBaseUrl: storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL,
-      source: { type: "stored" },
-    }),
-    readEnvironment,
-    environment: [
-      {
-        name: DIGITALOCEAN_TOKEN_ENV,
-        required: true,
-        secret: true,
-        alternatives: [DIGITALOCEAN_ACCESS_TOKEN_ENV],
-        description: "Personal access token; doctl sets the alternative name.",
-      },
-      {
-        name: DIGITALOCEAN_API_BASE_URL_ENV,
-        required: false,
-        description: "API base URL override.",
-      },
-    ],
-  });
+const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>({
+  provider: DIGITALOCEAN_AUTH_PROVIDER_NAME,
+  fields: [
+    {
+      name: "apiToken",
+      label: "DigitalOcean Personal Access Token",
+      secret: true,
+    },
+    {
+      name: "apiBaseUrl",
+      label: "DigitalOcean API base URL",
+      optional: true,
+      placeholder: DEFAULT_API_BASE_URL,
+    },
+  ],
+  toResolved: (values) => ({
+    type: "apiToken",
+    apiToken: storedSecret(values.apiToken) ?? Redacted.make(""),
+    apiBaseUrl: storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL,
+    source: { type: "stored" },
+  }),
+  readEnvironment,
+  environment: [
+    {
+      name: DIGITALOCEAN_TOKEN_ENV,
+      required: true,
+      secret: true,
+      alternatives: [DIGITALOCEAN_ACCESS_TOKEN_ENV],
+      description: "Personal access token; doctl sets the alternative name.",
+    },
+    {
+      name: DIGITALOCEAN_API_BASE_URL_ENV,
+      required: false,
+      description: "API base URL override.",
+    },
+  ],
+});
 
 /**
  * Layer that registers the DigitalOcean {@link AuthProvider} into the

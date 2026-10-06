@@ -16,6 +16,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 // A zone, not a region: `GCP.Region` has no zone and a regional default would triple node count.
@@ -38,9 +39,7 @@ export type ClustersNodePoolAutoscaling = {
   /** Maximum nodes across all zones. */
   totalMaxNodeCount?: number;
   /** Scale-up location policy (`BALANCED`, `ANY`). */
-  locationPolicy?:
-    | container.NodePoolAutoscalingLocationPolicyEnum
-    | (string & {});
+  locationPolicy?: container.NodePoolAutoscalingLocationPolicyEnum | (string & {});
   /** Allow NAP to delete this pool. */
   autoprovisioned?: boolean;
 };
@@ -306,9 +305,7 @@ export type ClustersNodePool = Resource<
  * @resource
  * @category Container
  */
-export const ClustersNodePool = Resource<ClustersNodePool>(
-  "GCP.Container.ClustersNodePool",
-);
+export const ClustersNodePool = Resource<ClustersNodePool>("GCP.Container.ClustersNodePool");
 
 export class ClustersNodePoolNotResolved extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolNotResolved",
@@ -336,12 +333,6 @@ export class ClustersNodePoolOperationFailed extends Data.TaggedError(
   message: string;
 }> {}
 
-export class ClustersNodePoolOperationPending extends Data.TaggedError(
-  "GCP.Container.ClustersNodePoolOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class ClustersNodePoolStillExists extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolStillExists",
 )<{
@@ -354,8 +345,7 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeZone = (zone: string | undefined) =>
-  lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
+const normalizeZone = (zone: string | undefined) => lastSegment(zone ?? DEFAULT_ZONE).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -373,12 +363,8 @@ const rfc1035 = (name: string): string => {
 const clusterNameOf = (project: string, zone: string, clusterId: string) =>
   `projects/${project}/zones/${zone}/clusters/${clusterId}`;
 
-const resourceName = (
-  project: string,
-  zone: string,
-  clusterId: string,
-  nodePoolId: string,
-) => `${clusterNameOf(project, zone, clusterId)}/nodePools/${nodePoolId}`;
+const resourceName = (project: string, zone: string, clusterId: string, nodePoolId: string) =>
+  `${clusterNameOf(project, zone, clusterId)}/nodePools/${nodePoolId}`;
 
 const parseName = (name: string) => {
   const idx = name.indexOf("projects/");
@@ -391,15 +377,10 @@ const parseName = (name: string) => {
   const locAt = zonesAt >= 0 ? zonesAt : locationsAt;
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     zone: locAt >= 0 && parts[locAt + 1] ? parts[locAt + 1]! : DEFAULT_ZONE,
-    clusterId:
-      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
-    nodePoolId:
-      poolsAt >= 0 && parts[poolsAt + 1]
-        ? parts[poolsAt + 1]!
-        : lastSegment(name),
+    clusterId: clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
+    nodePoolId: poolsAt >= 0 && parts[poolsAt + 1] ? parts[poolsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -410,9 +391,7 @@ const parseClusterRef = (
 ) => {
   const trimmed = cluster.trim();
   if (trimmed.includes("/clusters/") || trimmed.includes("projects/")) {
-    const parsed = parseName(
-      trimmed.includes("/nodePools/") ? trimmed : `${trimmed}/nodePools/_`,
-    );
+    const parsed = parseName(trimmed.includes("/nodePools/") ? trimmed : `${trimmed}/nodePools/_`);
     return {
       project: parsed.project || fallbackProject,
       zone: normalizeZone(parsed.zone || fallbackZone),
@@ -448,10 +427,7 @@ const sameStringMap = (
   const a = stringMap(left);
   const b = stringMap(right);
   const keys = Object.keys(a);
-  return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => a[key] === b[key])
-  );
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 };
 
 const taintKey = (taint: ClustersNodePoolTaint) =>
@@ -505,17 +481,10 @@ const toId = (id: string, nodePoolId: string | undefined, existing?: string) =>
     );
   });
 
-const toAttrs = (
-  pool: container.NodePool,
-  project: string,
-  zone: string,
-  clusterId: string,
-) => {
+const toAttrs = (pool: container.NodePool, project: string, zone: string, clusterId: string) => {
   const selfLink = pool.selfLink ?? "";
   const parsed = parseName(
-    selfLink.length > 0
-      ? selfLink
-      : resourceName(project, zone, clusterId, pool.name ?? ""),
+    selfLink.length > 0 ? selfLink : resourceName(project, zone, clusterId, pool.name ?? ""),
   );
   const nodePoolId = pool.name || parsed.nodePoolId;
   const resolvedProject = parsed.project || project;
@@ -523,12 +492,7 @@ const toAttrs = (
   const resolvedCluster = parsed.clusterId || clusterId;
   const config = pool.config;
   return {
-    name: resourceName(
-      resolvedProject,
-      resolvedZone,
-      resolvedCluster,
-      nodePoolId,
-    ),
+    name: resourceName(resolvedProject, resolvedZone, resolvedCluster, nodePoolId),
     nodePoolId,
     clusterId: resolvedCluster,
     clusterName: clusterNameOf(resolvedProject, resolvedZone, resolvedCluster),
@@ -536,7 +500,8 @@ const toAttrs = (
     zone: resolvedZone,
     status: pool.status,
     version: pool.version,
-    nodeCount: pool.initialNodeCount ?? DEFAULT_NODE_COUNT,
+    // The API omits a zero count.
+    nodeCount: pool.initialNodeCount ?? 0,
     machineType: config?.machineType,
     diskSizeGb: config?.diskSizeGb,
     diskType: config?.diskType,
@@ -559,12 +524,7 @@ const toAttrs = (
   };
 };
 
-const getByRef = (
-  project: string,
-  zone: string,
-  clusterId: string,
-  nodePoolId: string,
-) =>
+const getByRef = (project: string, zone: string, clusterId: string, nodePoolId: string) =>
   container
     .getProjectsZonesClustersNodePools({
       projectId: project,
@@ -576,12 +536,7 @@ const getByRef = (
 
 const getByName = (name: string) => {
   const parsed = parseName(name);
-  return getByRef(
-    parsed.project,
-    normalizeZone(parsed.zone),
-    parsed.clusterId,
-    parsed.nodePoolId,
-  );
+  return getByRef(parsed.project, normalizeZone(parsed.zone), parsed.clusterId, parsed.nodePoolId);
 };
 
 const operationIdOf = (operation: container.Operation) => {
@@ -596,102 +551,38 @@ const operationIdOf = (operation: container.Operation) => {
   return lastSegment(raw);
 };
 
-const operationErrorText = (operation: container.Operation) =>
-  operation.error?.message ??
-  operation.statusMessage ??
-  operation.detail ??
-  "operation failed";
-
-const isAlreadyExists = (operation: container.Operation) => {
-  if (operation.error?.code === 6) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("already exists") || text.includes("alreadyexist");
-};
-
-const isNotFoundOperation = (operation: container.Operation) => {
-  if (operation.error?.code === 5) return true;
-  const text = operationErrorText(operation).toLowerCase();
-  return text.includes("not found") || text.includes("notfound");
-};
-
+/**
+ * Wait for a zonal GKE node-pool operation (create/delete takes several
+ * minutes). ALREADY_EXISTS (code 6) counts as success (create race); with
+ * `notFoundOk`, so does NOT_FOUND (code 5, delete race) and an operation
+ * that is already gone.
+ */
 const waitForOperation = (
   project: string,
   zone: string,
   operation: container.Operation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const operationId = operationIdOf(operation);
-    if (operationId.length === 0) {
-      return yield* new ClustersNodePoolOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const failIfErrored = (current: container.Operation) => {
-      const ignore =
-        isAlreadyExists(current) ||
-        (options?.notFoundOk === true && isNotFoundOperation(current));
-      return current.error && !ignore
-        ? Effect.fail(
-            new ClustersNodePoolOperationFailed({
-              operation: operationId,
-              message: operationErrorText(current),
-            }),
-          )
-        : Effect.succeed(current);
-    };
-
-    if (operation.status === "DONE") {
-      return yield* failIfErrored(operation);
-    }
-
-    const getOperation = container.getProjectsZonesOperations({
-      projectId: project,
-      zone,
-      operationId,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name: operationId,
-                status: "DONE",
-              } satisfies container.Operation),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.status === "DONE",
-        () => new ClustersNodePoolOperationPending({ operation: operationId }),
-      ),
-      Effect.flatMap(failIfErrored),
-      Effect.retry({
-        while: (error) =>
-          error._tag === "GCP.Container.ClustersNodePoolOperationPending",
-        // Node pool create/delete takes several minutes.
-        times: 60,
-        schedule: Schedule.spaced("10 seconds"),
+  waitForGcpOperation(
+    { ...operation, name: operationIdOf(operation) },
+    (operationId) =>
+      container.getProjectsZonesOperations({
+        projectId: project,
+        zone,
+        operationId,
       }),
-    );
-  });
+    { budget: "20 minutes", interval: "10 seconds" },
+  ).pipe(
+    Effect.catchIf(
+      (error) =>
+        (error._tag === "GCP.OperationFailed" &&
+          (error.code === 6 || (options?.notFoundOk === true && error.code === 5))) ||
+        (options?.notFoundOk === true && error._tag === "NotFound"),
+      () => Effect.succeed(operation),
+    ),
+  );
 
-const waitUntilExists = (
-  project: string,
-  zone: string,
-  clusterId: string,
-  nodePoolId: string,
-) => {
+const waitUntilExists = (project: string, zone: string, clusterId: string, nodePoolId: string) => {
   const name = resourceName(project, zone, clusterId, nodePoolId);
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.filterOrFail(
@@ -699,20 +590,14 @@ const waitUntilExists = (
       () => new ClustersNodePoolNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Container.ClustersNodePoolNotResolved",
+      while: (error) => error._tag === "GCP.Container.ClustersNodePoolNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 };
 
-const waitUntilReady = (
-  project: string,
-  zone: string,
-  clusterId: string,
-  nodePoolId: string,
-) => {
+const waitUntilReady = (project: string, zone: string, clusterId: string, nodePoolId: string) => {
   const name = resourceName(project, zone, clusterId, nodePoolId);
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.filterOrFail(
@@ -727,9 +612,7 @@ const waitUntilReady = (
       (pool) =>
         new ClustersNodePoolOperationFailed({
           operation: name,
-          message:
-            pool.statusMessage ??
-            `node pool is in ${pool.status ?? "STATUS_UNSPECIFIED"}`,
+          message: pool.statusMessage ?? `node pool is in ${pool.status ?? "STATUS_UNSPECIFIED"}`,
         }),
     ),
     Effect.filterOrFail(
@@ -754,22 +637,14 @@ const waitUntilReady = (
   );
 };
 
-const waitUntilGone = (
-  project: string,
-  zone: string,
-  clusterId: string,
-  nodePoolId: string,
-) => {
+const waitUntilGone = (project: string, zone: string, clusterId: string, nodePoolId: string) => {
   const name = resourceName(project, zone, clusterId, nodePoolId);
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined
-        ? Effect.void
-        : Effect.fail(new ClustersNodePoolStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new ClustersNodePoolStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Container.ClustersNodePoolStillExists",
+      while: (error) => error._tag === "GCP.Container.ClustersNodePoolStillExists",
       // Node pool create/delete takes several minutes.
       times: 60,
       schedule: Schedule.spaced("10 seconds"),
@@ -777,9 +652,7 @@ const waitUntilGone = (
   );
 };
 
-const retryConflict = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryConflict = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -792,6 +665,7 @@ const toCreatePool = (
   news: ClustersNodePoolProps,
   nodePoolId: string,
   desiredLabels: Record<string, string>,
+  workloadIdentity: boolean,
 ): container.NodePool => ({
   name: nodePoolId,
   initialNodeCount: news.nodeCount ?? DEFAULT_NODE_COUNT,
@@ -810,29 +684,24 @@ const toCreatePool = (
     serviceAccount: news.serviceAccount,
     localSsdCount: news.localSsdCount,
     bootDiskKmsKey: news.bootDiskKmsKey,
-    workloadMetadataConfig: { mode: "GKE_METADATA" },
+    // GKE rejects GKE_METADATA on clusters without Workload Identity.
+    workloadMetadataConfig: workloadIdentity ? { mode: "GKE_METADATA" } : undefined,
   },
   autoscaling: news.autoscaling,
   management: news.management,
   version: news.version,
   locations: news.nodeLocations,
   maxPodsConstraint:
-    news.maxPodsPerNode !== undefined
-      ? { maxPodsPerNode: String(news.maxPodsPerNode) }
-      : undefined,
+    news.maxPodsPerNode !== undefined ? { maxPodsPerNode: String(news.maxPodsPerNode) } : undefined,
   upgradeSettings: news.upgradeSettings,
 });
 
-const poolLabels = (pool: container.NodePool) =>
-  tagRecord(pool.config?.resourceLabels);
+const poolLabels = (pool: container.NodePool) => tagRecord(pool.config?.resourceLabels);
 
 const systemLabels = (labels: Record<string, string>) =>
-  Object.fromEntries(
-    Object.entries(labels).filter(([key]) => key.startsWith("goog-")),
-  );
+  Object.fromEntries(Object.entries(labels).filter(([key]) => key.startsWith("goog-")));
 
-const shortName = (value: string | undefined, fallback: string) =>
-  lastSegment(value ?? fallback);
+const shortName = (value: string | undefined, fallback: string) => lastSegment(value ?? fallback);
 
 const desiredManagement = (
   news: ClustersNodePoolManagement,
@@ -862,15 +731,7 @@ const identityOf = (
 
 export const ClustersNodePoolProvider = () =>
   Provider.succeed(ClustersNodePool, {
-    stables: [
-      "name",
-      "nodePoolId",
-      "clusterId",
-      "clusterName",
-      "project",
-      "zone",
-      "selfLink",
-    ],
+    stables: ["name", "nodePoolId", "clusterId", "clusterName", "project", "zone", "selfLink"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -880,9 +741,7 @@ export const ClustersNodePoolProvider = () =>
 
       const previousId = olds?.nodePoolId ?? output?.nodePoolId;
       const nextId = news.nodePoolId ?? previousId;
-      const previousCluster = lastSegment(
-        olds?.cluster ?? output?.clusterId ?? "",
-      );
+      const previousCluster = lastSegment(olds?.cluster ?? output?.clusterId ?? "");
       const nextCluster = lastSegment(
         parseClusterRef(news.cluster, "", news.zone ?? output?.zone).clusterId,
       );
@@ -892,8 +751,7 @@ export const ClustersNodePoolProvider = () =>
       );
       const previousSpot = olds?.spot === true || output?.spot === true;
       const nextSpot = news.spot === true;
-      const previousPreemptible =
-        olds?.preemptible === true || output?.preemptible === true;
+      const previousPreemptible = olds?.preemptible === true || output?.preemptible === true;
       const nextPreemptible = news.preemptible === true;
       const previousSa = olds?.serviceAccount ?? "";
       const nextSa = news.serviceAccount ?? previousSa;
@@ -907,23 +765,16 @@ export const ClustersNodePoolProvider = () =>
       const nextScopes = news.oauthScopes ?? previousScopes;
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousCluster.length > 0 &&
-          nextCluster.length > 0 &&
-          previousCluster !== nextCluster) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousCluster.length > 0 && nextCluster.length > 0 && previousCluster !== nextCluster) ||
         previousZone !== nextZone ||
         previousSpot !== nextSpot ||
         previousPreemptible !== nextPreemptible ||
         previousSa !== nextSa ||
         previousKms !== nextKms ||
         previousSsds !== nextSsds ||
-        (previousPods !== undefined &&
-          nextPods !== undefined &&
-          previousPods !== nextPods) ||
-        (news.oauthScopes !== undefined &&
-          !sameStrings(previousScopes, nextScopes));
+        (previousPods !== undefined && nextPods !== undefined && previousPods !== nextPods) ||
+        (news.oauthScopes !== undefined && !sameStrings(previousScopes, nextScopes));
 
       if (!replace) return undefined;
       return {
@@ -939,14 +790,18 @@ export const ClustersNodePoolProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const nodePoolId = yield* toId(id, olds?.nodePoolId, output?.nodePoolId);
-      const ref = parseClusterRef(
-        olds?.cluster ?? output?.clusterName ?? output?.clusterId ?? "",
-        env.project,
-        olds?.zone ?? output?.zone,
-      );
-      const name =
-        output?.name ??
-        resourceName(ref.project, ref.zone, ref.clusterId, nodePoolId);
+      const clusterRef =
+        (typeof olds?.cluster === "string" ? olds.cluster : undefined) ??
+        output?.clusterName ??
+        output?.clusterId ??
+        "";
+      // A pool whose cluster never resolved (e.g. the cluster create failed)
+      // was never created and cannot be looked up.
+      if (output?.name === undefined && clusterRef.trim().length === 0) {
+        return undefined;
+      }
+      const ref = parseClusterRef(clusterRef, env.project, olds?.zone ?? output?.zone);
+      const name = output?.name ?? resourceName(ref.project, ref.zone, ref.clusterId, nodePoolId);
       const identity = identityOf(name, { ...ref, nodePoolId });
       const existing = yield* getByRef(
         identity.project,
@@ -955,15 +810,8 @@ export const ClustersNodePoolProvider = () =>
         identity.nodePoolId,
       );
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        identity.project,
-        identity.zone,
-        identity.clusterId,
-      );
-      return (yield* hasAlchemyLabels(id, poolLabels(existing)))
-        ? attrs
-        : Unowned(attrs);
+      const attrs = toAttrs(existing, identity.project, identity.zone, identity.clusterId);
+      return (yield* hasAlchemyLabels(id, poolLabels(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -976,11 +824,6 @@ export const ClustersNodePoolProvider = () =>
           })
           .pipe(
             Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                clusters: [],
-              } satisfies container.ListClustersResponse),
-            ),
-            Effect.catchTag("Forbidden", () =>
               Effect.succeed({
                 clusters: [],
               } satisfies container.ListClustersResponse),
@@ -999,9 +842,7 @@ export const ClustersNodePoolProvider = () =>
               ),
           );
           const project = parsed.project || env.project;
-          const zone = normalizeZone(
-            cluster.zone ?? cluster.location ?? parsed.zone,
-          );
+          const zone = normalizeZone(cluster.zone ?? cluster.location ?? parsed.zone);
           const clusterId = cluster.name || parsed.clusterId;
           const nested = cluster.nodePools;
           const pools =
@@ -1015,12 +856,7 @@ export const ClustersNodePoolProvider = () =>
                   })
                   .pipe(
                     Effect.map((response) => response.nodePools ?? []),
-                    Effect.catchTag("NotFound", () =>
-                      Effect.succeed([] as container.NodePool[]),
-                    ),
-                    Effect.catchTag("Forbidden", () =>
-                      Effect.succeed([] as container.NodePool[]),
-                    ),
+                    Effect.catchTag("NotFound", () => Effect.succeed([] as container.NodePool[])),
                   );
           for (const pool of pools) {
             if (
@@ -1043,18 +879,9 @@ export const ClustersNodePoolProvider = () =>
             "GCP.Container.ClustersNodePool requires `cluster` (cluster id or full resource name).",
         });
       }
-      const ref = parseClusterRef(
-        news.cluster,
-        env.project,
-        news.zone ?? output?.zone,
-      );
+      const ref = parseClusterRef(news.cluster, env.project, news.zone ?? output?.zone);
       const nodePoolId = yield* toId(id, news.nodePoolId, output?.nodePoolId);
-      const name = resourceName(
-        ref.project,
-        ref.zone,
-        ref.clusterId,
-        nodePoolId,
-      );
+      const name = resourceName(ref.project, ref.zone, ref.clusterId, nodePoolId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -1067,6 +894,14 @@ export const ClustersNodePoolProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
+        const cluster = yield* container
+          .getProjectsZonesClusters({
+            projectId: ref.project,
+            zone: ref.zone,
+            clusterId: ref.clusterId,
+          })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        const workloadIdentity = (cluster?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
             .createProjectsZonesClustersNodePools({
@@ -1074,7 +909,7 @@ export const ClustersNodePoolProvider = () =>
               zone: ref.zone,
               clusterId: ref.clusterId,
               body: {
-                nodePool: toCreatePool(news, nodePoolId, desiredLabels),
+                nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
               },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
@@ -1082,12 +917,7 @@ export const ClustersNodePoolProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(ref.project, ref.zone, created);
         }
-        current = yield* waitUntilExists(
-          ref.project,
-          ref.zone,
-          ref.clusterId,
-          nodePoolId,
-        );
+        current = yield* waitUntilExists(ref.project, ref.zone, ref.clusterId, nodePoolId);
       }
 
       if (current === undefined) {
@@ -1097,62 +927,40 @@ export const ClustersNodePoolProvider = () =>
       let live = current;
       const status = live.status ?? "STATUS_UNSPECIFIED";
       if (status !== "RUNNING" && status !== "RUNNING_WITH_ERROR") {
-        live = yield* waitUntilReady(
-          ref.project,
-          ref.zone,
-          ref.clusterId,
-          nodePoolId,
-        );
+        live = yield* waitUntilReady(ref.project, ref.zone, ref.clusterId, nodePoolId);
       }
 
       const apply = (operation: container.Operation) =>
         Effect.gen(function* () {
           yield* waitForOperation(ref.project, ref.zone, operation);
-          return yield* waitUntilReady(
-            ref.project,
-            ref.zone,
-            ref.clusterId,
-            nodePoolId,
-          );
+          return yield* waitUntilReady(ref.project, ref.zone, ref.clusterId, nodePoolId);
         });
 
       const observedLabels = poolLabels(live);
       const nextLabels = { ...systemLabels(observedLabels), ...desiredLabels };
       const { upsert, removed } = diffLabels(observedLabels, nextLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const observedMachine = shortName(
-        live.config?.machineType,
-        DEFAULT_MACHINE_TYPE,
-      );
-      const machineChanged =
-        observedMachine.toLowerCase() !== machineType.toLowerCase();
+      const observedMachine = shortName(live.config?.machineType, DEFAULT_MACHINE_TYPE);
+      const machineChanged = observedMachine.toLowerCase() !== machineType.toLowerCase();
       const observedDiskSize = live.config?.diskSizeGb ?? DEFAULT_DISK_SIZE_GB;
       const diskSizeChanged = observedDiskSize !== diskSizeGb;
-      const observedDiskType = shortName(
-        live.config?.diskType,
-        DEFAULT_DISK_TYPE,
-      ).toLowerCase();
+      const observedDiskType = shortName(live.config?.diskType, DEFAULT_DISK_TYPE).toLowerCase();
       const diskTypeChanged = observedDiskType !== diskType.toLowerCase();
       const imageChanged =
-        news.imageType !== undefined &&
-        (live.config?.imageType ?? "") !== news.imageType;
-      const versionChanged =
-        news.version !== undefined && (live.version ?? "") !== news.version;
+        news.imageType !== undefined && (live.config?.imageType ?? "") !== news.imageType;
+      const versionChanged = news.version !== undefined && (live.version ?? "") !== news.version;
       const nodeLabelsChanged =
         news.nodeLabels !== undefined &&
         !sameStringMap(stringMap(live.config?.labels), news.nodeLabels);
       const tagsChanged =
-        news.tags !== undefined &&
-        !sameStrings(live.config?.tags ?? [], news.tags);
+        news.tags !== undefined && !sameStrings(live.config?.tags ?? [], news.tags);
       const taintsChanged =
-        news.taints !== undefined &&
-        !sameTaints(live.config?.taints, news.taints);
+        news.taints !== undefined && !sameTaints(live.config?.taints, news.taints);
       const upgradeChanged =
         news.upgradeSettings !== undefined &&
         upgradeKey(live.upgradeSettings) !== upgradeKey(news.upgradeSettings);
       const locationsChanged =
-        news.nodeLocations !== undefined &&
-        !sameStrings(live.locations ?? [], news.nodeLocations);
+        news.nodeLocations !== undefined && !sameStrings(live.locations ?? [], news.nodeLocations);
 
       const configChanged =
         labelsChanged ||
@@ -1232,10 +1040,7 @@ export const ClustersNodePoolProvider = () =>
       }
 
       if (news.management !== undefined) {
-        const nextManagement = desiredManagement(
-          news.management,
-          live.management,
-        );
+        const nextManagement = desiredManagement(news.management, live.management);
         if (managementKey(live.management) !== managementKey(nextManagement)) {
           const managed = yield* retryConflict(
             container.setManagementProjectsZonesClustersNodePools({
@@ -1251,12 +1056,8 @@ export const ClustersNodePoolProvider = () =>
       }
 
       const autoscalingOn =
-        news.autoscaling?.enabled === true ||
-        live.autoscaling?.enabled === true;
-      if (
-        !autoscalingOn &&
-        (live.initialNodeCount ?? DEFAULT_NODE_COUNT) !== nodeCount
-      ) {
+        news.autoscaling?.enabled === true || live.autoscaling?.enabled === true;
+      if (!autoscalingOn && (live.initialNodeCount ?? 0) !== nodeCount) {
         const resized = yield* retryConflict(
           container.setSizeProjectsZonesClustersNodePools({
             projectId: ref.project,

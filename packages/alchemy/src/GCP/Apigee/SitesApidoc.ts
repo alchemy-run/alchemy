@@ -9,15 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  createInternalLabels,
-  encodeOwnership,
-  hasAlchemyLabels,
-  hasOwnershipMarker,
-  orgIdOf,
-  orgParent,
-  parseOwnership,
-} from "./ownership.ts";
+import { orgIdOf, orgParent } from "./ownership.ts";
 
 const MAX_TITLE_LENGTH = 255;
 
@@ -50,10 +42,8 @@ export type SitesApidocProps = {
    */
   title?: string;
   /**
-   * Catalog item description (max 10,000 characters). API docs have no
-   * labels field, so Alchemy ownership (`alchemy-stack` /
-   * `alchemy-stage` / `alchemy-id`) is stored in a `[alchemy …]` prefix
-   * for `list` / nuke.
+   * Catalog item description shown on the portal (max 10,000
+   * characters).
    */
   description?: string;
   /**
@@ -98,7 +88,7 @@ export type SitesApidoc = Resource<
     apiProductName: string;
     /** User-facing title. */
     title: string;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Catalog item description. */
     description: string | undefined;
     /** Whether the catalog item is published. */
     published: boolean;
@@ -121,8 +111,11 @@ export type SitesApidoc = Resource<
  * An Apigee integrated-portal catalog item (`apidoc`). Catalog items
  * present API documentation and link a portal to a backing API product.
  *
- * API docs have no labels field, so Alchemy stamps ownership into
- * `description` for `list` / nuke. `siteId`, `organization`, and
+ * API docs have no labels field and every text field is shown to portal
+ * users, so Alchemy finds its item by API product: `read` reports an item
+ * as owned only when it carries the generated title (an explicit `title`
+ * is reported as unowned — adopt it with `--adopt`), and nuke cannot
+ * discover items. `siteId`, `organization`, and
  * `apiProductName` are identity — changing any of them replaces the item.
  * Title, description, publish flags, image, and categories update in
  * place.
@@ -144,7 +137,6 @@ export type SitesApidoc = Resource<
  * const doc = yield* GCP.Apigee.SitesApidoc("Checkout", {
  *   siteId: portal.siteId,
  *   apiProductName: product.name,
- *   apiDocId: existing.apiDocId,
  *   title: "Checkout API",
  *   description: "place orders",
  *   published: true,
@@ -157,14 +149,11 @@ export type SitesApidoc = Resource<
  */
 export const SitesApidoc = Resource<SitesApidoc>("GCP.Apigee.SitesApidoc");
 
-export class SitesApidocNotResolved extends Data.TaggedError(
-  "GCP.Apigee.SitesApidocNotResolved",
-)<{
+export class SitesApidocNotResolved extends Data.TaggedError("GCP.Apigee.SitesApidocNotResolved")<{
   name: string;
 }> {}
 
-const siteParent = (org: string, siteId: string) =>
-  `${orgParent(org)}/sites/${siteId}`;
+const siteParent = (org: string, siteId: string) => `${orgParent(org)}/sites/${siteId}`;
 
 const resourceName = (org: string, siteId: string, apiDocId: string) =>
   `${siteParent(org, siteId)}/apidocs/${apiDocId}`;
@@ -190,16 +179,10 @@ const categoryIdsOf = (ids: ReadonlyArray<string> | undefined) =>
 const sameIds = (
   left: ReadonlyArray<string> | undefined,
   right: ReadonlyArray<string> | undefined,
-) =>
-  JSON.stringify(categoryIdsOf(left)) === JSON.stringify(categoryIdsOf(right));
+) => JSON.stringify(categoryIdsOf(left)) === JSON.stringify(categoryIdsOf(right));
 
-const toAttrs = (
-  doc: apigee.GoogleCloudApigeeV1ApiDoc,
-  org: string,
-  siteId: string,
-) => {
+const toAttrs = (doc: apigee.GoogleCloudApigeeV1ApiDoc, org: string, siteId: string) => {
   const apiDocId = doc.id ?? "";
-  const parsed = parseOwnership(doc.description);
   return {
     name: apiDocId ? resourceName(org, siteId, apiDocId) : "",
     apiDocId,
@@ -207,7 +190,7 @@ const toAttrs = (
     siteId: doc.siteId ?? siteId,
     apiProductName: doc.apiProductName ?? "",
     title: doc.title ?? "",
-    description: parsed.text,
+    description: doc.description,
     published: doc.published === true,
     anonAllowed: doc.anonAllowed === true,
     requireCallbackUrl: doc.requireCallbackUrl === true,
@@ -220,7 +203,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee.getOrganizationsSitesApidocs({ name }).pipe(
     Effect.map((response) => unwrap(response)),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
   );
 
 const listBySite = (org: string, siteId: string) =>
@@ -233,25 +216,18 @@ const listBySite = (org: string, siteId: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.data ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([])),
     );
 
-const findOwned = (org: string, siteId: string, id: string) =>
-  Effect.gen(function* () {
-    const docs = yield* listBySite(org, siteId);
-    for (const doc of docs) {
-      const { labels } = parseOwnership(doc.description);
-      if (yield* hasAlchemyLabels(id, labels)) {
-        return doc;
-      }
-    }
-    return undefined;
-  });
+const findByProduct = (org: string, siteId: string, apiProductName: string) =>
+  listBySite(org, siteId).pipe(
+    Effect.map((docs) => docs.find((doc) => doc.apiProductName === apiProductName)),
+  );
 
 const toBody = (
   news: SitesApidocProps,
   title: string,
-  description: string,
+  description: string | undefined,
 ): apigee.GoogleCloudApigeeV1ApiDoc => ({
   apiProductName: news.apiProductName,
   title,
@@ -270,8 +246,7 @@ export const SitesApidocProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousSite = olds?.siteId ?? output?.siteId;
-      const siteChanged =
-        previousSite !== undefined && news.siteId !== previousSite;
+      const siteChanged = previousSite !== undefined && news.siteId !== previousSite;
       const previousOrg = olds?.organization ?? output?.organization;
       const orgChanged =
         previousOrg !== undefined &&
@@ -279,13 +254,10 @@ export const SitesApidocProvider = () =>
         orgIdOf(news.organization, previousOrg) !== previousOrg;
       const previousProduct = olds?.apiProductName ?? output?.apiProductName;
       const productChanged =
-        previousProduct !== undefined &&
-        news.apiProductName !== previousProduct;
+        previousProduct !== undefined && news.apiProductName !== previousProduct;
       const previousId = olds?.apiDocId ?? output?.apiDocId;
       const idChanged =
-        previousId !== undefined &&
-        news.apiDocId !== undefined &&
-        news.apiDocId !== previousId;
+        previousId !== undefined && news.apiDocId !== undefined && news.apiDocId !== previousId;
       if (siteChanged || orgChanged || productChanged || idChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -294,55 +266,38 @@ export const SitesApidocProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        olds?.organization ?? output?.organization,
-        env.project,
-      );
+      const org = orgIdOf(olds?.organization ?? output?.organization, env.project);
       const siteId = olds?.siteId ?? output?.siteId;
       if (siteId === undefined) return undefined;
       const apiDocId = olds?.apiDocId ?? output?.apiDocId;
+      const apiProductName = olds?.apiProductName ?? output?.apiProductName;
       const name =
-        output?.name ??
-        (apiDocId !== undefined
-          ? resourceName(org, siteId, apiDocId)
-          : undefined);
+        output?.name ?? (apiDocId !== undefined ? resourceName(org, siteId, apiDocId) : undefined);
       const existing =
         name !== undefined
           ? yield* getByName(name)
-          : yield* findOwned(org, siteId, id);
+          : apiProductName !== undefined
+            ? yield* findByProduct(org, siteId, apiProductName)
+            : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, org, siteId);
-      const { labels } = parseOwnership(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      const generated = yield* toTitle(id, undefined);
+      return attrs.title === generated ? attrs : Unowned(attrs);
     }),
-
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const org = env.project;
-        const docs = yield* listBySite(org, "-");
-        return docs
-          .filter((doc) => hasOwnershipMarker(doc.description))
-          .map((doc) => toAttrs(doc, org, doc.siteId ?? "-"));
-      }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        news.organization ?? output?.organization,
-        env.project,
-      );
+      const org = orgIdOf(news.organization ?? output?.organization, env.project);
       const siteId = news.siteId;
-      const ownership = yield* createInternalLabels(id);
       const title = yield* toTitle(id, news.title, output?.title);
-      const desiredDescription = encodeOwnership(ownership, news.description);
+      const desiredDescription = news.description;
 
       let current =
         output?.name !== undefined
           ? yield* getByName(output.name)
           : news.apiDocId !== undefined
             ? yield* getByName(resourceName(org, siteId, news.apiDocId))
-            : yield* findOwned(org, siteId, id);
+            : yield* findByProduct(org, siteId, news.apiProductName);
 
       if (current === undefined) {
         const created = yield* apigee
@@ -352,7 +307,7 @@ export const SitesApidocProvider = () =>
           })
           .pipe(
             Effect.map((response) => unwrap(response)),
-            Effect.catchTag("Conflict", () => findOwned(org, siteId, id)),
+            Effect.catchTag("Conflict", () => findByProduct(org, siteId, news.apiProductName)),
           );
         current = created ?? undefined;
       }
@@ -368,7 +323,7 @@ export const SitesApidocProvider = () =>
       const desiredCallback = news.requireCallbackUrl === true;
       const changed =
         (current.title ?? "") !== title ||
-        (current.description ?? "") !== desiredDescription ||
+        (current.description ?? "") !== (desiredDescription ?? "") ||
         (current.published === true) !== desiredPublished ||
         (current.anonAllowed === true) !== desiredAnon ||
         (current.requireCallbackUrl === true) !== desiredCallback ||
@@ -389,6 +344,6 @@ export const SitesApidocProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSitesApidocs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

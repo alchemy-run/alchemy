@@ -13,10 +13,7 @@ const GENERATION_TAG_PREFIX = `${OWNERSHIP_TAG_PREFIX}generation:`;
  * @internal exported for unit testing
  */
 export const hashOwnershipTag = (stack: string, stage: string, fqn: string) =>
-  Effect.map(
-    sha256(`${stack}\0${stage}\0${fqn}`),
-    (digest) => OWNERSHIP_TAG_PREFIX + digest,
-  );
+  Effect.map(sha256(`${stack}\0${stage}\0${fqn}`), (digest) => OWNERSHIP_TAG_PREFIX + digest);
 
 export const ownershipTagFor = Effect.fn(function* (fqn: string) {
   const stack = yield* Stack;
@@ -28,11 +25,9 @@ export const ownershipTagFor = Effect.fn(function* (fqn: string) {
  * Names one generation. A replacement and the resource it replaces share
  * the ownership tag, so only this tag tells them apart.
  */
-export const generationTagFor = (instanceId: string) =>
-  GENERATION_TAG_PREFIX + instanceId;
+export const generationTagFor = (instanceId: string) => GENERATION_TAG_PREFIX + instanceId;
 
-export const isAlchemyTag = (tag: string) =>
-  tag.startsWith(OWNERSHIP_TAG_PREFIX);
+export const isAlchemyTag = (tag: string) => tag.startsWith(OWNERSHIP_TAG_PREFIX);
 
 export const withoutAlchemyTags = (tags: ReadonlyArray<string>) =>
   tags.filter((tag) => !isAlchemyTag(tag));

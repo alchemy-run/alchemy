@@ -18,6 +18,7 @@ import {
   tableNameOf,
   toPhysicalId,
   waitForOperation,
+  collectPages,
 } from "./operations.ts";
 
 export type FamilySubsets = {
@@ -135,10 +136,9 @@ export type InstancesTablesAuthorizedView = Resource<
  * @resource
  * @category Bigtable
  */
-export const InstancesTablesAuthorizedView =
-  Resource<InstancesTablesAuthorizedView>(
-    "GCP.Bigtable.InstancesTablesAuthorizedView",
-  );
+export const InstancesTablesAuthorizedView = Resource<InstancesTablesAuthorizedView>(
+  "GCP.Bigtable.InstancesTablesAuthorizedView",
+);
 
 export class AuthorizedViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.AuthorizedViewNotResolved",
@@ -152,27 +152,18 @@ export class AuthorizedViewStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const toId = (
-  id: string,
-  authorizedViewId: string | undefined,
-  existing?: string,
-) =>
+const toId = (id: string, authorizedViewId: string | undefined, existing?: string) =>
   toPhysicalId(id, authorizedViewId, existing, MAX_AUTHORIZED_VIEW_ID_LENGTH);
 
 const familyOf = (
-  family:
-    | FamilySubsets
-    | bigtable.GoogleBigtableAdminV2AuthorizedViewFamilySubsets,
+  family: FamilySubsets | bigtable.GoogleBigtableAdminV2AuthorizedViewFamilySubsets,
 ): FamilySubsets => ({
   qualifiers: family.qualifiers,
   qualifierPrefixes: family.qualifierPrefixes,
 });
 
 const subsetOf = (
-  view:
-    | SubsetView
-    | bigtable.GoogleBigtableAdminV2AuthorizedViewSubsetView
-    | undefined,
+  view: SubsetView | bigtable.GoogleBigtableAdminV2AuthorizedViewSubsetView | undefined,
 ): SubsetView | undefined => {
   if (view === undefined) return undefined;
   const familySubsets: Record<string, FamilySubsets> = {};
@@ -182,8 +173,7 @@ const subsetOf = (
   }
   return {
     rowPrefixes: view.rowPrefixes,
-    familySubsets:
-      Object.keys(familySubsets).length > 0 ? familySubsets : undefined,
+    familySubsets: Object.keys(familySubsets).length > 0 ? familySubsets : undefined,
   };
 };
 
@@ -223,18 +213,12 @@ const toAttrs = (view: bigtable.AuthorizedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesAuthorizedViews({ name, view: "FULL" })
-    .pipe(
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view
-        ? Effect.succeed(view)
-        : Effect.fail(new AuthorizedViewNotResolved({ name })),
+      view ? Effect.succeed(view) : Effect.fail(new AuthorizedViewNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.AuthorizedViewNotResolved",
@@ -246,9 +230,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined
-        ? Effect.void
-        : Effect.fail(new AuthorizedViewStillExists({ name })),
+      view === undefined ? Effect.void : Effect.fail(new AuthorizedViewStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.AuthorizedViewStillExists",
@@ -257,34 +239,20 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const unprotect = (
-  name: string,
-  etag: string | undefined,
-  ignoreWarnings: boolean,
-) =>
+const unprotect = (name: string, etag: string | undefined, ignoreWarnings: boolean) =>
   Effect.gen(function* () {
-    const patched = yield* bigtable.patchProjectsInstancesTablesAuthorizedViews(
-      {
-        name,
-        updateMask: "deletion_protection",
-        ignoreWarnings,
-        body: { deletionProtection: false, etag },
-      },
-    );
+    const patched = yield* bigtable.patchProjectsInstancesTablesAuthorizedViews({
+      name,
+      updateMask: "deletion_protection",
+      ignoreWarnings,
+      body: { deletionProtection: false, etag },
+    });
     yield* waitForOperation(patched);
   });
 
 export const InstancesTablesAuthorizedViewProvider = () =>
   Provider.succeed(InstancesTablesAuthorizedView, {
-    stables: [
-      "name",
-      "authorizedViewId",
-      "table",
-      "tableId",
-      "instance",
-      "instanceId",
-      "project",
-    ],
+    stables: ["name", "authorizedViewId", "table", "tableId", "instance", "instanceId", "project"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -294,14 +262,10 @@ export const InstancesTablesAuthorizedViewProvider = () =>
         olds?.instance ?? output?.instance ?? output?.instanceId ?? "",
       );
       const nextInstance = instanceIdOf(news.instance);
-      const previousTable = tableIdOf(
-        olds?.table ?? output?.table ?? output?.tableId ?? "",
-      );
+      const previousTable = tableIdOf(olds?.table ?? output?.table ?? output?.tableId ?? "");
       const nextTable = tableIdOf(news.table);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         (previousTable.length > 0 && previousTable !== nextTable)
       ) {
@@ -312,11 +276,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const authorizedViewId = yield* toId(
-        id,
-        olds?.authorizedViewId,
-        output?.authorizedViewId,
-      );
+      const authorizedViewId = yield* toId(id, olds?.authorizedViewId, output?.authorizedViewId);
       const instanceRef = olds?.instance ?? output?.instance;
       const tableRef = olds?.table ?? output?.table;
       const name =
@@ -341,17 +301,15 @@ export const InstancesTablesAuthorizedViewProvider = () =>
         const pages = yield* Effect.forEach(
           tables,
           (table) =>
-            bigtable
-              .listProjectsInstancesTablesAuthorizedViews({
+            collectPages(
+              bigtable.listProjectsInstancesTablesAuthorizedViews.pages({
                 parent: table.name,
                 pageSize: 1000,
-              })
-              .pipe(
-                Effect.map((page) => page.authorizedViews ?? []),
-                Effect.catchTag(["NotFound", "Forbidden"], () =>
-                  Effect.succeed([] as bigtable.AuthorizedView[]),
-                ),
-              ),
+              }),
+              (page) => page.authorizedViews,
+            ).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed([] as bigtable.AuthorizedView[])),
+            ),
           { concurrency: 4 },
         );
         return pages.flat().map((view) => toAttrs(view, env.project));
@@ -359,11 +317,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const authorizedViewId = yield* toId(
-        id,
-        news.authorizedViewId,
-        output?.authorizedViewId,
-      );
+      const authorizedViewId = yield* toId(id, news.authorizedViewId, output?.authorizedViewId);
       const parent = tableNameOf(env.project, news.instance, news.table);
       const name = `${parent}/authorizedViews/${authorizedViewId}`;
       const desiredProtection = news.deletionProtection === true;
@@ -391,10 +345,8 @@ export const InstancesTablesAuthorizedViewProvider = () =>
 
       const observedSubset = subsetOf(current.subsetView);
       const subsetChanged =
-        news.subsetView !== undefined &&
-        subsetKey(observedSubset) !== subsetKey(desiredSubset);
-      const protectionChanged =
-        (current.deletionProtection === true) !== desiredProtection;
+        news.subsetView !== undefined && subsetKey(observedSubset) !== subsetKey(desiredSubset);
+      const protectionChanged = (current.deletionProtection === true) !== desiredProtection;
 
       if (subsetChanged || protectionChanged) {
         const mask = [
@@ -441,7 +393,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void),
+          Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

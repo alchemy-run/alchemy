@@ -10,8 +10,7 @@ declare const __FIXTURE_MARKER__: string;
  */
 export default function Home() {
   const env =
-    (typeof process !== "undefined" && process.env?.SOLIDSTART_ENV_MARKER) ||
-    "env-not-set";
+    (typeof process !== "undefined" && process.env?.SOLIDSTART_ENV_MARKER) || "env-not-set";
   // Single interpolated strings: Solid's SSR compiler inserts `<!--$-->`
   // hydration markers between adjacent children, which would split `config:`
   // from its value in the rendered HTML the tests grep.

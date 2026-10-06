@@ -153,9 +153,7 @@ export type FirewallAttributes = Firewall["Attributes"];
  */
 export const Firewall = Resource<Firewall>("DigitalOcean.Firewall");
 
-export class FirewallWaitTimedOut extends Data.TaggedError(
-  "FirewallWaitTimedOut",
-)<{
+export class FirewallWaitTimedOut extends Data.TaggedError("FirewallWaitTimedOut")<{
   readonly firewallId: string;
   readonly waitingFor: string;
   readonly lastStatus: FirewallStatus | undefined;
@@ -165,9 +163,7 @@ export class FirewallWaitTimedOut extends Data.TaggedError(
   }
 }
 
-export class FirewallApplyFailed extends Data.TaggedError(
-  "FirewallApplyFailed",
-)<{
+export class FirewallApplyFailed extends Data.TaggedError("FirewallApplyFailed")<{
   readonly firewallId: string;
 }> {
   override get message() {
@@ -175,9 +171,7 @@ export class FirewallApplyFailed extends Data.TaggedError(
   }
 }
 
-export class FirewallStillExists extends Data.TaggedError(
-  "FirewallStillExists",
-)<{
+export class FirewallStillExists extends Data.TaggedError("FirewallStillExists")<{
   readonly firewallId: string;
 }> {
   override get message() {
@@ -252,9 +246,7 @@ const inboundRulesOf = (firewall: ApiFirewall): FirewallInboundRule[] =>
   (firewall.inbound_rules ?? []).map((rule) => fromApiRule(rule, rule.sources));
 
 const outboundRulesOf = (firewall: ApiFirewall): FirewallOutboundRule[] =>
-  (firewall.outbound_rules ?? []).map((rule) =>
-    fromApiRule(rule, rule.destinations),
-  );
+  (firewall.outbound_rules ?? []).map((rule) => fromApiRule(rule, rule.destinations));
 
 const toApiRule = (rule: FirewallRule) => ({
   protocol: rule.protocol,
@@ -275,10 +267,7 @@ interface DesiredFirewall {
   readonly outboundRules: ReadonlyArray<FirewallOutboundRule>;
 }
 
-const desiredFirewall = (
-  name: string,
-  props: FirewallProps,
-): DesiredFirewall => ({
+const desiredFirewall = (name: string, props: FirewallProps): DesiredFirewall => ({
   name,
   dropletIds: unique(props.dropletIds),
   tags: unique(props.tags),
@@ -308,8 +297,7 @@ const matches = (desired: DesiredFirewall) => (firewall: ApiFirewall) =>
   sameRules(outboundRulesOf(firewall), desired.outboundRules);
 
 const hasPropagated = (firewall: ApiFirewall) =>
-  firewall.status === "succeeded" &&
-  (firewall.pending_changes ?? []).length === 0;
+  firewall.status === "succeeded" && (firewall.pending_changes ?? []).length === 0;
 
 const hasFailed = (firewall: ApiFirewall) => firewall.status === "failed";
 
@@ -324,8 +312,7 @@ const toAttrs = (firewall: ApiFirewall): FirewallAttributes => ({
   createdAt: firewall.created_at,
 });
 
-const physicalName = (id: string) =>
-  createPhysicalName({ id, maxLength: NAME_MAX_LENGTH });
+const physicalName = (id: string) => createPhysicalName({ id, maxLength: NAME_MAX_LENGTH });
 
 export const FirewallProvider = () =>
   Provider.effect(
@@ -339,20 +326,13 @@ export const FirewallProvider = () =>
 
       const observeById = (firewallId: string) =>
         noneIfNotFound(
-          get({ firewall_id: firewallId }).pipe(
-            Effect.map((response) => response.firewall),
-          ),
+          get({ firewall_id: firewallId }).pipe(Effect.map((response) => response.firewall)),
         );
 
-      const listAll = collectPages(
-        list,
-        (response) => response.firewalls ?? [],
-      );
+      const listAll = collectPages(list, (response) => response.firewalls ?? []);
 
       const observeByName = (name: string) =>
-        listAll.pipe(
-          Effect.map(Arr.findFirst((firewall) => firewall.name === name)),
-        );
+        listAll.pipe(Effect.map(Arr.findFirst((firewall) => firewall.name === name)));
 
       // The stored id is a cache. A generated name contains the instance
       // id, so it finds the firewall without the id. A user-supplied name
@@ -379,15 +359,12 @@ export const FirewallProvider = () =>
         pollUntil(observeById(firewallId), {
           ...FIREWALL_POLL,
           until: (observed): observed is Option.Some<ApiFirewall> =>
-            Option.isSome(observed) &&
-            (hasFailed(observed.value) || wait.until(observed.value)),
+            Option.isSome(observed) && (hasFailed(observed.value) || wait.until(observed.value)),
           onTimeout: (last) =>
             new FirewallWaitTimedOut({
               firewallId,
               waitingFor: wait.waitingFor,
-              lastStatus: Option.getOrUndefined(
-                Option.map(last, (firewall) => firewall.status),
-              ),
+              lastStatus: Option.getOrUndefined(Option.map(last, (firewall) => firewall.status)),
             }),
         }).pipe(
           Effect.map((observed) => observed.value),
@@ -405,20 +382,14 @@ export const FirewallProvider = () =>
         });
 
       const createFirewall = (desired: DesiredFirewall) =>
-        create(toApiBody(desired)).pipe(
-          Effect.map((response) => response.firewall),
-        );
+        create(toApiBody(desired)).pipe(Effect.map((response) => response.firewall));
 
-      const syncFirewall = Effect.fn(function* (
-        firewall: ApiFirewall,
-        desired: DesiredFirewall,
-      ) {
+      const syncFirewall = Effect.fn(function* (firewall: ApiFirewall, desired: DesiredFirewall) {
         if (!matches(desired)(firewall)) {
           yield* update({ firewall_id: firewall.id, ...toApiBody(desired) });
         }
         return yield* waitForFirewall(firewall.id, {
-          until: (observed) =>
-            hasPropagated(observed) && matches(desired)(observed),
+          until: (observed) => hasPropagated(observed) && matches(desired)(observed),
           waitingFor: "its rules on every droplet",
         });
       });
@@ -447,10 +418,7 @@ export const FirewallProvider = () =>
           const generatedName = news.name === undefined ? name : undefined;
           const desired = desiredFirewall(name, news);
 
-          const observed = yield* observeOwned(
-            output?.firewallId,
-            generatedName,
-          );
+          const observed = yield* observeOwned(output?.firewallId, generatedName);
           const firewall = yield* Option.match(observed, {
             onNone: () => createFirewall(desired),
             onSome: Effect.succeed,
@@ -458,9 +426,7 @@ export const FirewallProvider = () =>
           return toAttrs(yield* syncFirewall(firewall, desired));
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* ignoreNotFound(
-            deleteFirewall({ firewall_id: output.firewallId }),
-          );
+          yield* ignoreNotFound(deleteFirewall({ firewall_id: output.firewallId }));
           yield* waitUntilGone(output.firewallId);
         }),
       };

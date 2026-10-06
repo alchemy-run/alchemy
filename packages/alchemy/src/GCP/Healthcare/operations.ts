@@ -1,111 +1,41 @@
 import * as healthcare from "@distilled.cloud/gcp/healthcare_v1";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
-export class HealthcareOperationFailed extends Data.TaggedError(
-  "GCP.Healthcare.OperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class HealthcareOperationPending extends Data.TaggedError(
-  "GCP.Healthcare.OperationPending",
-)<{
-  operation: string;
-}> {}
-
-const alreadyExists = (error: healthcare.Status | undefined) =>
-  error?.code === 6 ||
-  (error?.message ?? "").toUpperCase().includes("ALREADY_EXISTS");
-
-const isNotFoundStatus = (error: healthcare.Status | undefined) =>
-  error?.code === 5 ||
-  (error?.message ?? "").toLowerCase().includes("not found");
-
-const isIgnorable = (
-  error: healthcare.Status | undefined,
-  options?: { notFoundOk?: boolean },
-) =>
-  alreadyExists(error) ||
-  (options?.notFoundOk === true && isNotFoundStatus(error));
-
-/**
- * Poll `getProjectsLocationsDatasetsOperations` until `done`. Dataset
- * create is a long-running operation; store CRUD is synchronous.
- */
+/** Wait for an operation through the shared GCP waiter. */
 export const waitForOperation = (
   operation: healthcare.Operation,
-  options?: {
-    notFoundOk?: boolean;
-    interval?: `${number} seconds`;
-    times?: number;
-  },
+  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error && !isIgnorable(operation.error, options)) {
-        return yield* new HealthcareOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      if (options?.notFoundOk === true) {
-        return operation;
-      }
-      return yield* new HealthcareOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = healthcare.getProjectsLocationsDatasetsOperations({
-      name,
-    });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed<healthcare.Operation>({
-                name,
-                done: true,
-              }),
-            ),
-          )
-        : getOperation.pipe(
-            Effect.retry({
-              while: (error) => error._tag === "NotFound",
-              times: 5,
-              schedule: Schedule.exponential("250 millis"),
-            }),
-          );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new HealthcareOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const error = current.error;
-        if (error && !isIgnorable(error, options)) {
-          return Effect.fail(
-            new HealthcareOperationFailed({
-              operation: name,
-              message: error.message ?? "operation failed",
-            }),
-          );
-        }
-        return Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Healthcare.OperationPending",
-        times: options?.times ?? 10,
-        schedule: Schedule.spaced(options?.interval ?? "3 seconds"),
-      }),
-    );
-  });
+  waitForGcpOperation(
+    operation,
+    (name) =>
+      healthcare
+        .getProjectsLocationsDatasetsOperations({ name })
+        .pipe(
+          Effect.catchTag("NotFound", (error) =>
+            options?.notFoundOk === true
+              ? Effect.succeed<healthcare.Operation>({ name, done: true })
+              : Effect.fail(error),
+          ),
+        ),
+    { budget: "20 minutes" },
+  ).pipe(
+    // ALREADY_EXISTS (6): a concurrent create won the race. NOT_FOUND (5)
+    // is success for a delete.
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GCP.OperationFailed" &&
+        ((options?.alreadyExistsOk !== false && error.code === 6) ||
+          (options?.notFoundOk === true && error.code === 5)),
+      () => Effect.void,
+    ),
+    // Re-read the finished operation for its typed response and metadata.
+    Effect.flatMap(() =>
+      operation.name === undefined || operation.name.length === 0
+        ? Effect.succeed(operation)
+        : healthcare
+            .getProjectsLocationsDatasetsOperations({ name: operation.name })
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(operation))),
+    ),
+  );

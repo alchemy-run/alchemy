@@ -141,7 +141,6 @@ export type FolderSavedQuery = Resource<
  * **Example:** Change the filter
  * ```typescript
  * const query = yield* GCP.Logging.FolderSavedQuery("Errors", {
- *   savedQueryId: existing.savedQueryId,
  *   displayName: "warnings and errors",
  *   visibility: "SHARED",
  *   loggingQuery: { filter: "severity>=WARNING" },
@@ -152,9 +151,7 @@ export type FolderSavedQuery = Resource<
  * @resource
  * @category Logging
  */
-export const FolderSavedQuery = Resource<FolderSavedQuery>(
-  "GCP.Logging.FolderSavedQuery",
-);
+export const FolderSavedQuery = Resource<FolderSavedQuery>("GCP.Logging.FolderSavedQuery");
 
 export class FolderSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderSavedQueryNotResolved",
@@ -168,11 +165,7 @@ const resourceName = (parent: string, location: string, savedQueryId: string) =>
 const folderIdOf = (parent: string) =>
   parent.startsWith("folders/") ? lastSegment(parent) : undefined;
 
-const toAttrs = (
-  query: logging.SavedQuery,
-  parent: string,
-  location: string,
-) => {
+const toAttrs = (query: logging.SavedQuery, parent: string, location: string) => {
   const parsed = parseLoggingName(query.name ?? "");
   const savedQueryId = parsed.savedQueryId ?? lastSegment(query.name ?? "");
   const resolvedParent = parsed.parent || parent;
@@ -181,9 +174,7 @@ const toAttrs = (
   return {
     name:
       query.name ??
-      (savedQueryId
-        ? resourceName(resolvedParent, resolvedLocation, savedQueryId)
-        : ""),
+      (savedQueryId ? resourceName(resolvedParent, resolvedLocation, savedQueryId) : ""),
     savedQueryId,
     parent: resolvedParent,
     folderId: folderIdOf(resolvedParent),
@@ -191,9 +182,7 @@ const toAttrs = (
     displayName: query.displayName ?? "",
     visibility: query.visibility ?? "PRIVATE",
     description: description.description,
-    loggingQuery: query.loggingQuery
-      ? { filter: query.loggingQuery.filter }
-      : undefined,
+    loggingQuery: query.loggingQuery ? { filter: query.loggingQuery.filter } : undefined,
     opsAnalyticsQuery: query.opsAnalyticsQuery
       ? { sqlQueryText: query.opsAnalyticsQuery.sqlQueryText }
       : undefined,
@@ -207,10 +196,7 @@ const getByName = (name: string) =>
     .getFoldersLocationsSavedQueries({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const toBody = (
-  news: FolderSavedQueryProps,
-  description: string,
-): logging.SavedQuery => ({
+const toBody = (news: FolderSavedQueryProps, description: string): logging.SavedQuery => ({
   displayName: news.displayName,
   visibility: news.visibility ?? "PRIVATE",
   description,
@@ -220,14 +206,7 @@ const toBody = (
 
 export const FolderSavedQueryProvider = () =>
   Provider.succeed(FolderSavedQuery, {
-    stables: [
-      "name",
-      "savedQueryId",
-      "parent",
-      "folderId",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "savedQueryId", "parent", "folderId", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -242,25 +221,16 @@ export const FolderSavedQueryProvider = () =>
         news.location !== undefined &&
         news.location !== previousLocation;
       const previousFolder = olds?.folderId ?? output?.folderId;
-      const folderChanged =
-        news.folderId !== undefined && news.folderId !== previousFolder;
+      const folderChanged = news.folderId !== undefined && news.folderId !== previousFolder;
       if (!idChanged && !locationChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = scopeParent(
-        env.project,
-        olds?.folderId ?? output?.folderId,
-      );
+      const parent = scopeParent(env.project, olds?.folderId ?? output?.folderId);
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        olds?.savedQueryId,
-        output?.savedQueryId,
-        "q",
-      );
+      const savedQueryId = yield* toPhysicalId(id, olds?.savedQueryId, output?.savedQueryId, "q");
       const name = output?.name ?? resourceName(parent, location, savedQueryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -278,15 +248,12 @@ export const FolderSavedQueryProvider = () =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.savedQueries ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.savedQueries ?? [])),
             Stream.filter((query) => hasOwnershipMarker(query.description)),
             Stream.map((query) =>
               toAttrs(
                 query,
-                parseLoggingName(query.name ?? "").parent ||
-                  `projects/${env.project}`,
+                parseLoggingName(query.name ?? "").parent || `projects/${env.project}`,
                 parseLoggingName(query.name ?? "").location ?? DEFAULT_LOCATION,
               ),
             ),
@@ -297,17 +264,9 @@ export const FolderSavedQueryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = scopeParent(
-        env.project,
-        news.folderId ?? output?.folderId,
-      );
+      const parent = scopeParent(env.project, news.folderId ?? output?.folderId);
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const savedQueryId = yield* toPhysicalId(
-        id,
-        news.savedQueryId,
-        output?.savedQueryId,
-        "q",
-      );
+      const savedQueryId = yield* toPhysicalId(id, news.savedQueryId, output?.savedQueryId, "q");
       const name = resourceName(parent, location, savedQueryId);
       const ownership = yield* createOwnership(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -330,16 +289,10 @@ export const FolderSavedQueryProvider = () =>
         return yield* new FolderSavedQueryNotResolved({ name });
       }
 
-      const displayNameChanged =
-        (current.displayName ?? "") !== news.displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const visibilityChanged =
-        (current.visibility ?? "PRIVATE") !== desiredVisibility;
-      const loggingChanged = !jsonEqual(
-        current.loggingQuery ?? null,
-        news.loggingQuery ?? null,
-      );
+      const displayNameChanged = (current.displayName ?? "") !== news.displayName;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const visibilityChanged = (current.visibility ?? "PRIVATE") !== desiredVisibility;
+      const loggingChanged = !jsonEqual(current.loggingQuery ?? null, news.loggingQuery ?? null);
       const analyticsChanged = !jsonEqual(
         current.opsAnalyticsQuery?.sqlQueryText ?? null,
         news.opsAnalyticsQuery?.sqlQueryText ?? null,

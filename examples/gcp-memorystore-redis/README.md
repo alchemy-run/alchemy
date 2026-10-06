@@ -29,7 +29,7 @@ window starts over.
 
 - `GCP.Redis.Instance` `Counters` — BASIC tier (one node, no replica),
   1 GiB, Redis AUTH on, on the project's `default` network, in
-  `us-central1`.
+  the stack's region.
 - `GCP.Function` `Api` — public Cloud Run service
   (`invokerIamDisabled: true`) with Direct VPC egress onto the `default`
   network and subnet (`template.vpcAccess`, `PRIVATE_RANGES_ONLY`).
@@ -57,8 +57,10 @@ the narrower clients.
 
 ## Deploy
 
+Credentials come from your alchemy profile: run `alchemy profile` once and pick GCP (*Service account JSON* for a key file, or *Stored* for an access token or key kept in `~/.alchemy/credentials`, plus a default region), then deploy with `--profile <name>`.
+
 ```sh
-pnpm deploy
+pnpm deploy --profile <name>
 ```
 
 Creating the instance takes about four minutes; the service deploys
@@ -72,21 +74,20 @@ curl "$URL/count/user-42"
 ## Test
 
 ```sh
-pnpm test
+ALCHEMY_PROFILE=<name> bun test
 ```
 
 Deploys the stack, checks the instance out of band (READY, BASIC, 1 GiB,
 AUTH on, private IP), hits a key until it is rate limited — asserting the
 count, the window TTL, and the `429` — then destroys the stack and checks
-that the instance and the service are gone. Needs GCP credentials
-(`GOOGLE_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS`) and Docker (the
+that the instance and the service are gone. Needs Docker (the
 service image is built locally). Expect around 15 minutes, most of it
 Memorystore create and delete.
 
 ## Destroy
 
 ```sh
-pnpm destroy
+pnpm destroy --profile <name>
 ```
 
 Deletes the service, its image repository and service account, and the

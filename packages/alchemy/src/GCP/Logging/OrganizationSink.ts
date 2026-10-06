@@ -9,7 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type { SinkBigQueryOptions, SinkExclusion } from "./Sink.ts";
 import {
   encodeDescription,
   hasOwnershipMarker,
@@ -20,6 +19,7 @@ import {
   toPhysicalId,
   tryResolveOrganization,
 } from "./internal.ts";
+import type { SinkBigQueryOptions, SinkExclusion } from "./Sink.ts";
 
 export type OrganizationSinkProps = {
   /**
@@ -176,9 +176,8 @@ export type OrganizationSink = Resource<
  * **Example:** Change the filter and add an exclusion
  * ```typescript
  * const sink = yield* GCP.Logging.OrganizationSink("Errors", {
- *   sinkId: existing.sinkId,
- *   organization: existing.organization,
- *   destination: existing.destination,
+ *   destination:
+ *     "logging.googleapis.com/organizations/123456789/locations/global/buckets/_Default",
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  *   exclusions: [
@@ -193,9 +192,7 @@ export type OrganizationSink = Resource<
  * @resource
  * @category Logging
  */
-export const OrganizationSink = Resource<OrganizationSink>(
-  "GCP.Logging.OrganizationSink",
-);
+export const OrganizationSink = Resource<OrganizationSink>("GCP.Logging.OrganizationSink");
 
 export class OrganizationSinkNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationSinkNotResolved",
@@ -203,8 +200,7 @@ export class OrganizationSinkNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (organization: string, sinkId: string) =>
-  `${organization}/sinks/${sinkId}`;
+const resourceName = (organization: string, sinkId: string) => `${organization}/sinks/${sinkId}`;
 
 const sinkIdOf = (sink: logging.LogSink) => {
   const raw = sink.name ?? sink.resourceName ?? "";
@@ -240,17 +236,12 @@ const toExclusionsBody = (
   }));
 };
 
-const toAttrs = (
-  sink: logging.LogSink,
-  organization: string,
-  project: string,
-) => {
+const toAttrs = (sink: logging.LogSink, organization: string, project: string) => {
   const sinkId = sinkIdOf(sink);
   const parsed = parseDescription(sink.description);
   const bq = sink.bigqueryOptions;
   return {
-    name:
-      sink.resourceName ?? (sinkId ? resourceName(organization, sinkId) : ""),
+    name: sink.resourceName ?? (sinkId ? resourceName(organization, sinkId) : ""),
     sinkId,
     organization,
     organizationId: organizationIdOf(organization),
@@ -295,22 +286,13 @@ const toCreateBody = (
 
 export const OrganizationSinkProvider = () =>
   Provider.succeed(OrganizationSink, {
-    stables: [
-      "name",
-      "sinkId",
-      "organization",
-      "organizationId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "sinkId", "organization", "organizationId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.sinkId ?? output?.sinkId;
       const idChanged =
-        previous !== undefined &&
-        news.sinkId !== undefined &&
-        news.sinkId !== previous;
+        previous !== undefined && news.sinkId !== undefined && news.sinkId !== previous;
       const previousOrg = olds?.organization ?? output?.organization;
       const orgChanged =
         previousOrg !== undefined &&
@@ -351,18 +333,13 @@ export const OrganizationSinkProvider = () =>
             Stream.map((sink) => toAttrs(sink, organization, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const sinkId = yield* toPhysicalId(id, news.sinkId, output?.sinkId, "s");
       const name = resourceName(organization, sinkId);
       const ownership = yield* createInternalLabels(id);
@@ -392,18 +369,12 @@ export const OrganizationSinkProvider = () =>
       const desiredBq = news.bigqueryOptions?.usePartitionedTables === true;
       const observedBq = current.bigqueryOptions?.usePartitionedTables === true;
 
-      const destinationChanged =
-        (current.destination ?? "") !== news.destination;
+      const destinationChanged = (current.destination ?? "") !== news.destination;
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const disabledChanged = (current.disabled === true) !== desiredDisabled;
-      const exclusionsChanged = !sameExclusions(
-        current.exclusions,
-        news.exclusions,
-      );
-      const bqChanged =
-        news.bigqueryOptions !== undefined && desiredBq !== observedBq;
+      const exclusionsChanged = !sameExclusions(current.exclusions, news.exclusions);
+      const bqChanged = news.bigqueryOptions !== undefined && desiredBq !== observedBq;
       const includeChildrenChanged =
         news.includeChildren !== undefined &&
         (current.includeChildren === true) !== desiredIncludeChildren;

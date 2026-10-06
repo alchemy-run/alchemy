@@ -11,7 +11,6 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { waitForOperation } from "./operations.ts";
 import {
   hasAlchemyLabelMap,
   normalizeLocation,
@@ -19,6 +18,7 @@ import {
   toPhysicalRfc1035,
   userLabels,
 } from "./helpers.ts";
+import { waitForOperation } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 63;
 
@@ -80,13 +80,9 @@ export type EvaluationItem = Resource<
     /** GCS object URI, if set. */
     gcsUri: string | undefined;
     /** Inlined evaluation request, if set. */
-    evaluationRequest:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationRequest
-      | undefined;
+    evaluationRequest: aiplatform.GoogleCloudAiplatformV1EvaluationRequest | undefined;
     /** Evaluation result (RESULT items). */
-    evaluationResponse:
-      | aiplatform.GoogleCloudAiplatformV1EvaluationResult
-      | undefined;
+    evaluationResponse: aiplatform.GoogleCloudAiplatformV1EvaluationResult | undefined;
     /** Caller metadata. */
     metadata: unknown;
     /** User labels (Alchemy ownership labels stripped). */
@@ -121,9 +117,7 @@ export type EvaluationItem = Resource<
  * @resource
  * @category AIPlatform
  */
-export const EvaluationItem = Resource<EvaluationItem>(
-  "GCP.AIPlatform.EvaluationItem",
-);
+export const EvaluationItem = Resource<EvaluationItem>("GCP.AIPlatform.EvaluationItem");
 
 export class EvaluationItemNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationItemNotResolved",
@@ -140,10 +134,7 @@ export class EvaluationItemStillExists extends Data.TaggedError(
 const resourceName = (project: string, location: string, itemId: string) =>
   `projects/${project}/locations/${location}/evaluationItems/${itemId}`;
 
-const toAttrs = (
-  item: aiplatform.GoogleCloudAiplatformV1EvaluationItem,
-  project: string,
-) => {
+const toAttrs = (item: aiplatform.GoogleCloudAiplatformV1EvaluationItem, project: string) => {
   const name = item.name ?? "";
   const parsed = parseResourceName(name, "evaluationItems");
   return {
@@ -180,7 +171,6 @@ const listOwned = (project: string, location = "-") =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findOwned = (id: string, project: string, location?: string) =>
@@ -197,13 +187,10 @@ const findOwned = (id: string, project: string, location?: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((item) =>
-      item === undefined
-        ? Effect.void
-        : Effect.fail(new EvaluationItemStillExists({ name })),
+      item === undefined ? Effect.void : Effect.fail(new EvaluationItemStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.EvaluationItemStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.EvaluationItemStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -225,23 +212,14 @@ export const EvaluationItemProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.evaluationItemId ?? output?.evaluationItemId;
       const nextId = news.evaluationItemId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const previousType =
-        olds?.evaluationItemType ?? output?.evaluationItemType ?? "";
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
+      const previousType = olds?.evaluationItemType ?? output?.evaluationItemType ?? "";
       const nextType = news.evaluationItemType ?? previousType;
       const previousDisplay = olds?.displayName ?? output?.displayName ?? "";
       const nextDisplay = news.displayName ?? previousDisplay;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousType !== nextType ||
         (news.displayName !== undefined && nextDisplay !== previousDisplay);
@@ -251,22 +229,14 @@ export const EvaluationItemProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const itemId = olds?.evaluationItemId ?? output?.evaluationItemId;
       const name =
-        output?.name ??
-        (itemId ? resourceName(env.project, location, itemId) : undefined);
-      const existing = name
-        ? yield* getByName(name)
-        : yield* findOwned(id, env.project, location);
+        output?.name ?? (itemId ? resourceName(env.project, location, itemId) : undefined);
+      const existing = name ? yield* getByName(name) : yield* findOwned(id, env.project, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -278,25 +248,18 @@ export const EvaluationItemProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const itemId = news.evaluationItemId ?? output?.evaluationItemId;
       const name =
-        output?.name ??
-        (itemId ? resourceName(env.project, location, itemId) : undefined);
+        output?.name ?? (itemId ? resourceName(env.project, location, itemId) : undefined);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const displayName =
-        news.displayName ??
-        (yield* toPhysicalRfc1035(id, undefined, undefined, MAX_NAME_LENGTH));
+        news.displayName ?? (yield* toPhysicalRfc1035(id, undefined, undefined, MAX_NAME_LENGTH));
 
-      let current = name
-        ? yield* getByName(name)
-        : yield* findOwned(id, env.project, location);
+      let current = name ? yield* getByName(name) : yield* findOwned(id, env.project, location);
 
       if (current === undefined) {
         current = yield* aiplatform
@@ -311,11 +274,7 @@ export const EvaluationItemProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, env.project, location),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }
 
       if (current === undefined) {

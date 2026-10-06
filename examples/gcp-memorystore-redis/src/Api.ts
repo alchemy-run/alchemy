@@ -40,7 +40,6 @@ export default class Api extends GCP.Function<Api>()(
   "Api",
   {
     main: import.meta.url,
-    location: "us-central1",
     invokerIamDisabled: true,
     template: {
       vpcAccess: {
@@ -110,10 +109,7 @@ export default class Api extends GCP.Function<Api>()(
         }
 
         if (key === undefined || rest.length > 0 || !KEY_PATTERN.test(key)) {
-          return yield* HttpServerResponse.json(
-            { error: "not found" },
-            { status: 404 },
-          );
+          return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
         }
 
         if (request.method === "POST" && route === "hit") {
@@ -121,9 +117,7 @@ export default class Api extends GCP.Function<Api>()(
           const result = body(key, count, ttl);
           return yield* HttpServerResponse.json(result, {
             status: result.limited ? 429 : 200,
-            headers: result.limited
-              ? { "retry-after": String(Math.max(ttl, 1)) }
-              : {},
+            headers: result.limited ? { "retry-after": String(Math.max(ttl, 1)) } : {},
           });
         }
 
@@ -132,10 +126,7 @@ export default class Api extends GCP.Function<Api>()(
           return yield* HttpServerResponse.json(body(key, count, ttl));
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "not found" }, { status: 404 });
       }),
     };
   }).pipe(Effect.provide(GCP.Redis.ReadWriteRedisHttp)),

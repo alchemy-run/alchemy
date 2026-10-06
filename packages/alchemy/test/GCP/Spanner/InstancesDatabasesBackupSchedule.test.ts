@@ -1,20 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle = !process.env.FAST;
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   spanner.getProjectsInstancesDatabasesBackupSchedules({ name }).pipe(
@@ -46,7 +41,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:spanner", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a spanner backup schedule",
   (stack) =>
     Effect.gen(function* () {
@@ -63,15 +58,12 @@ test.provider.skipIf(!runLifecycle)(
           const database = yield* GCP.Spanner.Database("AppDb", {
             instance: instance.instanceId,
           });
-          const schedule = yield* GCP.Spanner.InstancesDatabasesBackupSchedule(
-            "Nightly",
-            {
-              instance: instance.instanceId,
-              database: database.databaseId,
-              spec: { cron: "0 2 * * *" },
-              retentionDuration: "604800s",
-            },
-          );
+          const schedule = yield* GCP.Spanner.InstancesDatabasesBackupSchedule("Nightly", {
+            instance: instance.instanceId,
+            database: database.databaseId,
+            spec: { cron: "0 2 * * *" },
+            retentionDuration: "604800s",
+          });
           return { instance, database, schedule };
         }),
       );
@@ -84,10 +76,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.schedule.retentionDuration).toEqual("604800s");
       expect(created.schedule.incremental).toEqual(false);
 
-      const fetched =
-        yield* spanner.getProjectsInstancesDatabasesBackupSchedules({
-          name: created.schedule.name,
-        });
+      const fetched = yield* spanner.getProjectsInstancesDatabasesBackupSchedules({
+        name: created.schedule.name,
+      });
       expect(fetched.name).toEqual(created.schedule.name);
       expect(fetched.spec?.cronSpec?.text).toEqual("0 2 * * *");
       expect(fetched.retentionDuration).toEqual("604800s");
@@ -105,16 +96,13 @@ test.provider.skipIf(!runLifecycle)(
             instance: instance.instanceId,
             databaseId: created.database.databaseId,
           });
-          const schedule = yield* GCP.Spanner.InstancesDatabasesBackupSchedule(
-            "Nightly",
-            {
-              instance: instance.instanceId,
-              database: database.databaseId,
-              backupScheduleId: created.schedule.backupScheduleId,
-              spec: { cron: "0 14 * * *" },
-              retentionDuration: "1209600s",
-            },
-          );
+          const schedule = yield* GCP.Spanner.InstancesDatabasesBackupSchedule("Nightly", {
+            instance: instance.instanceId,
+            database: database.databaseId,
+            backupScheduleId: created.schedule.backupScheduleId,
+            spec: { cron: "0 14 * * *" },
+            retentionDuration: "1209600s",
+          });
           return { instance, database, schedule };
         }),
       );
@@ -123,10 +111,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.schedule.cron).toEqual("0 14 * * *");
       expect(updated.schedule.retentionDuration).toEqual("1209600s");
 
-      const refetched =
-        yield* spanner.getProjectsInstancesDatabasesBackupSchedules({
-          name: created.schedule.name,
-        });
+      const refetched = yield* spanner.getProjectsInstancesDatabasesBackupSchedules({
+        name: created.schedule.name,
+      });
       expect(refetched.spec?.cronSpec?.text).toEqual("0 14 * * *");
       expect(refetched.retentionDuration).toEqual("1209600s");
 

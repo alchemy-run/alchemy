@@ -137,9 +137,9 @@ export type MattersHold = Resource<
  * ### Updating a Hold
  * **Example:** Narrow the mail query
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const hold = yield* GCP.Vault.MattersHold("Mail", {
- *   matterId: existing.matterId,
- *   holdId: existing.holdId,
+ *   matterId: matter.matterId,
  *   corpus: "MAIL",
  *   accounts: [{ email: "user@example.com" }],
  *   query: { mailQuery: { terms: "subject:contract 2026" } },
@@ -151,16 +151,12 @@ export type MattersHold = Resource<
  */
 export const MattersHold = Resource<MattersHold>("GCP.Vault.MattersHold");
 
-export class MattersHoldNotResolved extends Data.TaggedError(
-  "GCP.Vault.MattersHoldNotResolved",
-)<{
+export class MattersHoldNotResolved extends Data.TaggedError("GCP.Vault.MattersHoldNotResolved")<{
   matterId: string;
   holdId: string;
 }> {}
 
-const accountsOf = (
-  accounts: vault.HeldAccountList | undefined,
-): HeldAccount[] | undefined => {
+const accountsOf = (accounts: vault.HeldAccountList | undefined): HeldAccount[] | undefined => {
   if (accounts === undefined) return undefined;
   return accounts.map((account) => ({
     email: account.email,
@@ -168,9 +164,7 @@ const accountsOf = (
   }));
 };
 
-const orgUnitOf = (
-  orgUnit: vault.HeldOrgUnit | undefined,
-): HeldOrgUnit | undefined => {
+const orgUnitOf = (orgUnit: vault.HeldOrgUnit | undefined): HeldOrgUnit | undefined => {
   if (orgUnit === undefined) return undefined;
   return { orgUnitId: orgUnit.orgUnitId };
 };
@@ -198,11 +192,7 @@ export const MattersHoldProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousId = olds?.holdId ?? output?.holdId;
-      if (
-        previousId !== undefined &&
-        news.holdId !== undefined &&
-        news.holdId !== previousId
-      ) {
+      if (previousId !== undefined && news.holdId !== undefined && news.holdId !== previousId) {
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousCorpus = olds?.corpus ?? output?.corpus;
@@ -210,11 +200,7 @@ export const MattersHoldProvider = () =>
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousName = olds?.name ?? output?.name;
-      if (
-        news.name !== undefined &&
-        previousName !== undefined &&
-        news.name !== previousName
-      ) {
+      if (news.name !== undefined && previousName !== undefined && news.name !== previousName) {
         return { action: "replace" as const, deleteFirst: true };
       }
       const previousOrg = olds?.orgUnit ?? output?.orgUnit;
@@ -259,11 +245,7 @@ export const MattersHoldProvider = () =>
         }
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        parentId || (existing.holdId ?? ""),
-        env.project,
-      );
+      const attrs = toAttrs(existing, parentId || (existing.holdId ?? ""), env.project);
       const resolvedMatter = parentId.length > 0 ? parentId : attrs.matterId;
       return (yield* ownedByAlchemy(id, existing.name))
         ? { ...attrs, matterId: resolvedMatter }
@@ -281,9 +263,7 @@ export const MattersHoldProvider = () =>
               Effect.map((holds) =>
                 holds
                   .filter((hold) => hasOwnershipMarker(hold.name))
-                  .map((hold) =>
-                    toAttrs(hold, matter.matterId ?? "", env.project),
-                  ),
+                  .map((hold) => toAttrs(hold, matter.matterId ?? "", env.project)),
               ),
             ),
           { concurrency: 4 },
@@ -295,17 +275,8 @@ export const MattersHoldProvider = () =>
       const env = yield* GcpEnvironment.current;
       const matterId = news.matterId;
       const ownership = yield* ownershipLabels(id);
-      const displayName = yield* toGeneratedName(
-        id,
-        news.name,
-        output?.name,
-        40,
-      );
-      const name = encodeOwnershipLine(
-        ownership,
-        displayName,
-        MAX_HOLD_NAME_LENGTH,
-      );
+      const displayName = yield* toGeneratedName(id, news.name, output?.name, 40);
+      const name = encodeOwnershipLine(ownership, displayName, MAX_HOLD_NAME_LENGTH);
       const accounts = desiredAccounts(news.accounts);
       const desired: vault.Hold = {
         name,
@@ -315,10 +286,7 @@ export const MattersHoldProvider = () =>
         query: news.query,
       };
 
-      let current = yield* getHold(
-        matterId,
-        news.holdId ?? output?.holdId ?? "",
-      );
+      let current = yield* getHold(matterId, news.holdId ?? output?.holdId ?? "");
       if (current === undefined) {
         current = yield* findHoldByName(matterId, name);
       }
@@ -333,9 +301,7 @@ export const MattersHoldProvider = () =>
             matterId,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findHoldByName(matterId, name)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findHoldByName(matterId, name)));
         current = created ?? undefined;
       }
 
@@ -347,14 +313,11 @@ export const MattersHoldProvider = () =>
       }
 
       const holdId = current.holdId ?? news.holdId ?? output?.holdId ?? "";
-      const queryChanged =
-        news.query !== undefined && !jsonEqual(current.query, news.query);
+      const queryChanged = news.query !== undefined && !jsonEqual(current.query, news.query);
       const accountsChanged =
-        news.accounts !== undefined &&
-        !sameAccounts(current.accounts, news.accounts);
+        news.accounts !== undefined && !sameAccounts(current.accounts, news.accounts);
       const orgUnitChanged =
-        news.orgUnit !== undefined &&
-        !sameOrgUnit(current.orgUnit, news.orgUnit);
+        news.orgUnit !== undefined && !sameOrgUnit(current.orgUnit, news.orgUnit);
 
       if (queryChanged || accountsChanged || orgUnitChanged) {
         current = yield* vault.updateMattersHolds({

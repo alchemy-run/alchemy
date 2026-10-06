@@ -2,11 +2,7 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
-import {
-  type ListTableResult,
-  QueryNotComplete,
-  type ReadTableClient,
-} from "./ReadTable.ts";
+import { type ListTableResult, QueryNotComplete, type ReadTableClient } from "./ReadTable.ts";
 import { decodeRows, encodeRow, queryParameter } from "./Rows.ts";
 import type { Table } from "./Table.ts";
 import { InsertRowsFailed, type WriteTableClient } from "./WriteTable.ts";
@@ -76,10 +72,7 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
   const makeRead = (table: Effect.Effect<TableRef>): ReadTableClient => ({
     list: (
       options,
-    ): Effect.Effect<
-      ListTableResult,
-      bigquery.GetTablesError | bigquery.ListTabledataError
-    > =>
+    ): Effect.Effect<ListTableResult, bigquery.GetTablesError | bigquery.ListTabledataError> =>
       Effect.gen(function* () {
         const ref = yield* table;
         const key = {
@@ -104,9 +97,7 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
       params,
     ): Effect.Effect<
       Record<string, unknown>[],
-      | bigquery.QueryJobsError
-      | bigquery.GetQueryResultsJobsError
-      | QueryNotComplete
+      bigquery.QueryJobsError | bigquery.GetQueryResultsJobsError | QueryNotComplete
     > =>
       Effect.gen(function* () {
         const ref = yield* table;
@@ -159,8 +150,7 @@ export const makeBigQueryTableHelpers = Effect.gen(function* () {
             ? Effect.succeed(first)
             : results(undefined).pipe(
                 Effect.repeat({
-                  until: (r: bigquery.GetQueryResultsResponse) =>
-                    r.jobComplete === true,
+                  until: (r: bigquery.GetQueryResultsResponse) => r.jobComplete === true,
                   times: QUERY_POLLS,
                 }),
               );

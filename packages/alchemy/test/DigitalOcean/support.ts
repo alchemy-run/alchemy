@@ -1,11 +1,11 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
 import { CredentialsStoreLive } from "@/Auth/Credentials";
 import { ProfileStoreLive } from "@/Auth/Profile";
 import * as DigitalOcean from "@/DigitalOcean";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -32,14 +32,10 @@ const credentials = DigitalOcean.fromAuthProvider().pipe(
  * Out-of-band verification context: raw distilled calls, independent of
  * the provider layer under test.
  */
-export const outOfBand = Effect.provide(
-  Layer.mergeAll(credentials, FetchHttpClient.layer),
-);
+export const outOfBand = Effect.provide(Layer.mergeAll(credentials, FetchHttpClient.layer));
 
 /** True when an out-of-band read answers that the resource does not exist. */
-export const isGone = <A, E, R>(
-  read: Effect.Effect<A, E | { readonly _tag: "NotFound" }, R>,
-) =>
+export const isGone = <A, E, R>(read: Effect.Effect<A, E | { readonly _tag: "NotFound" }, R>) =>
   read.pipe(
     Effect.as(false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),

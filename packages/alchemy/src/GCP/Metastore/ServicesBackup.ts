@@ -110,12 +110,9 @@ export type ServicesBackup = Resource<
  * @resource
  * @category Metastore
  */
-export const ServicesBackup = Resource<ServicesBackup>(
-  "GCP.Metastore.ServicesBackup",
-);
+export const ServicesBackup = Resource<ServicesBackup>("GCP.Metastore.ServicesBackup");
 
-const resourceName = (service: string, backupId: string) =>
-  `${service}/backups/${backupId}`;
+const resourceName = (service: string, backupId: string) => `${service}/backups/${backupId}`;
 
 const toAttrs = (item: metastore.Backup, project: string, region: string) => {
   const name = item.name ?? "";
@@ -143,7 +140,7 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
-  listAtNested(project, region, "services/-", (parent) =>
+  listAtNested(project, "services/-", (parent) =>
     listOwnedPages(
       metastore.listProjectsLocationsServicesBackups.pages({
         parent,
@@ -156,14 +153,7 @@ const listOwned = (project: string, region: string) =>
 
 export const ServicesBackupProvider = () =>
   Provider.succeed(ServicesBackup, {
-    stables: [
-      "name",
-      "backupId",
-      "service",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "backupId", "service", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -171,10 +161,7 @@ export const ServicesBackupProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.backupId ?? output?.backupId,
         nextId: news.backupId ?? olds?.backupId ?? output?.backupId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -186,16 +173,8 @@ export const ServicesBackupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const backupId = yield* toPhysicalId(
-        id,
-        olds?.backupId,
-        output?.backupId,
-        "backup",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const backupId = yield* toPhysicalId(id, olds?.backupId, output?.backupId, "backup");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const service = expandParent(
         olds?.service ?? output?.service ?? "",
         env.project,
@@ -206,9 +185,7 @@ export const ServicesBackupProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -220,22 +197,9 @@ export const ServicesBackupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const backupId = yield* toPhysicalId(
-        id,
-        news.backupId,
-        output?.backupId,
-        "backup",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const service = expandParent(
-        news.service,
-        env.project,
-        location,
-        "services",
-      );
+      const backupId = yield* toPhysicalId(id, news.backupId, output?.backupId, "backup");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const service = expandParent(news.service, env.project, location, "services");
       const name = resourceName(service, backupId);
       const desiredLabels = yield* createInternalLabels(id);
       const description = encodeOwnership(desiredLabels, news.description);
@@ -251,14 +215,15 @@ export const ServicesBackupProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
-        current = yield* waitUntilReady(
-          getByName(name),
-          name,
-          (item) => item.state,
-        );
+        current = yield* waitUntilReady(getByName(name), name, (item) => item.state);
       }
 
       if (current === undefined) {
@@ -280,7 +245,12 @@ export const ServicesBackupProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

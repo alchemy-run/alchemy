@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,8 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_TYPE = "CLOUD_ARMOR";
 const DEFAULT_RULE_PRIORITY = 2147483647;
@@ -27,16 +28,11 @@ const MAX_NAME_LENGTH = 63;
 export type SecurityPolicyType = compute.SecurityPolicyTypeEnum | (string & {});
 export type SecurityPolicyRule = compute.SecurityPolicyRule;
 export type SecurityPolicyRuleMatcher = compute.SecurityPolicyRuleMatcher;
-export type SecurityPolicyAdvancedOptionsConfig =
-  compute.SecurityPolicyAdvancedOptionsConfig;
-export type SecurityPolicyAdaptiveProtectionConfig =
-  compute.SecurityPolicyAdaptiveProtectionConfig;
-export type SecurityPolicyRecaptchaOptionsConfig =
-  compute.SecurityPolicyRecaptchaOptionsConfig;
-export type SecurityPolicyDdosProtectionConfig =
-  compute.SecurityPolicyDdosProtectionConfig;
-export type SecurityPolicyUserDefinedField =
-  compute.SecurityPolicyUserDefinedField;
+export type SecurityPolicyAdvancedOptionsConfig = compute.SecurityPolicyAdvancedOptionsConfig;
+export type SecurityPolicyAdaptiveProtectionConfig = compute.SecurityPolicyAdaptiveProtectionConfig;
+export type SecurityPolicyRecaptchaOptionsConfig = compute.SecurityPolicyRecaptchaOptionsConfig;
+export type SecurityPolicyDdosProtectionConfig = compute.SecurityPolicyDdosProtectionConfig;
+export type SecurityPolicyUserDefinedField = compute.SecurityPolicyUserDefinedField;
 
 export type SecurityPolicyProps = {
   /**
@@ -115,9 +111,7 @@ export type SecurityPolicy = Resource<
     /** Advanced WAF options, if configured. */
     advancedOptionsConfig: SecurityPolicyAdvancedOptionsConfig | undefined;
     /** Adaptive Protection config, if configured. */
-    adaptiveProtectionConfig:
-      | SecurityPolicyAdaptiveProtectionConfig
-      | undefined;
+    adaptiveProtectionConfig: SecurityPolicyAdaptiveProtectionConfig | undefined;
     /** reCAPTCHA options, if configured. */
     recaptchaOptionsConfig: SecurityPolicyRecaptchaOptionsConfig | undefined;
     /** DDoS protection config, if configured. */
@@ -196,9 +190,7 @@ export type SecurityPolicy = Resource<
  * @resource
  * @category Compute
  */
-export const SecurityPolicy = Resource<SecurityPolicy>(
-  "GCP.Compute.SecurityPolicy",
-);
+export const SecurityPolicy = Resource<SecurityPolicy>("GCP.Compute.SecurityPolicy");
 
 export class SecurityPolicyNotResolved extends Data.TaggedError(
   "GCP.Compute.SecurityPolicyNotResolved",
@@ -206,25 +198,11 @@ export class SecurityPolicyNotResolved extends Data.TaggedError(
   securityPolicyName: string;
 }> {}
 
-export class SecurityPolicyOperationFailed extends Data.TaggedError(
-  "GCP.Compute.SecurityPolicyOperationFailed",
-)<{
-  securityPolicyName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class SecurityPolicyStillExists extends Data.TaggedError(
   "GCP.Compute.SecurityPolicyStillExists",
 )<{
   securityPolicyName: string;
 }> {}
-
-const lastSegment = (value: string | undefined): string => {
-  if (value === undefined || value.length === 0) return "";
-  const parts = value.split("/");
-  return parts[parts.length - 1] || value;
-};
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -253,15 +231,13 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -290,9 +266,7 @@ const canonMatch = (match: SecurityPolicyRuleMatcher | undefined) => {
   if (match === undefined) return undefined;
   return {
     versionedExpr: match.versionedExpr,
-    config: match.config
-      ? { srcIpRanges: sorted(match.config.srcIpRanges) }
-      : undefined,
+    config: match.config ? { srcIpRanges: sorted(match.config.srcIpRanges) } : undefined,
     expr: match.expr,
     exprOptions: match.exprOptions,
   };
@@ -358,13 +332,8 @@ const desiredRules = (
     byPriority.set(rule.priority, rule);
   }
   if (!byPriority.has(DEFAULT_RULE_PRIORITY)) {
-    const observedDefault = observed.find(
-      (rule) => rule.priority === DEFAULT_RULE_PRIORITY,
-    );
-    byPriority.set(
-      DEFAULT_RULE_PRIORITY,
-      observedDefault ?? defaultAllowRule(),
-    );
+    const observedDefault = observed.find((rule) => rule.priority === DEFAULT_RULE_PRIORITY);
+    byPriority.set(DEFAULT_RULE_PRIORITY, observedDefault ?? defaultAllowRule());
   }
   return [...byPriority.values()].sort(
     (left, right) => (left.priority ?? 0) - (right.priority ?? 0),
@@ -391,108 +360,10 @@ const toAttrs = (policy: compute.SecurityPolicy, project: string) => ({
   kind: policy.kind,
 });
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationCodes = (operation: compute.Operation) =>
-  (operation.error?.errors ?? []).map((item) =>
-    (item.code ?? "").toUpperCase(),
-  );
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const isAlreadyExists = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationText(operation);
-  return (
-    codes.includes("ALREADY_EXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    text.includes("already exists")
-  );
-};
-
-const isNotFoundOperation = (operation: compute.Operation) => {
-  const codes = operationCodes(operation);
-  const text = operationText(operation);
-  return (
-    operation.httpErrorStatusCode === 404 ||
-    codes.includes("RESOURCE_NOT_FOUND") ||
-    codes.includes("NOT_FOUND") ||
-    text.includes("not found")
-  );
-};
-
-const failIfErrored = (
-  securityPolicyName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  if (options?.ignoreAlreadyExists === true && isAlreadyExists(operation)) {
-    return Effect.void;
-  }
-  if (options?.ignoreNotFound === true && isNotFoundOperation(operation)) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new SecurityPolicyOperationFailed({
-        securityPolicyName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
 const getByName = (project: string, securityPolicy: string) =>
   compute
     .getSecurityPolicies({ project, securityPolicy })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const waitForOperation = (
-  project: string,
-  operation: compute.Operation,
-  securityPolicyName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitGlobalOperations({
-        project,
-        operation: operationName,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new SecurityPolicyOperationFailed({
-        securityPolicyName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(securityPolicyName, current, options);
-    return current;
-  });
 
 const awaitResource = (project: string, securityPolicyName: string) =>
   getByName(project, securityPolicyName).pipe(
@@ -531,7 +402,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(project, operation, securityPolicyName, options),
+      waitGlobalOperation(project, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -634,13 +507,10 @@ export const SecurityPolicyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      const previousName =
-        olds?.securityPolicyName ?? output?.securityPolicyName;
+      const previousName = olds?.securityPolicyName ?? output?.securityPolicyName;
       const nextName = news.securityPolicyName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
 
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? output?.type);
@@ -665,9 +535,7 @@ export const SecurityPolicyProvider = () =>
       const existing = yield* getByName(env.project, securityPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -682,9 +550,7 @@ export const SecurityPolicyProvider = () =>
           })
           .pipe(
             Stream.filter((policy) =>
-              Object.keys(policy.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(policy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((policy) => toAttrs(policy, env.project)),
             Stream.runCollect,
@@ -714,8 +580,8 @@ export const SecurityPolicyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(env.project, operation, securityPolicyName, {
-                ignoreAlreadyExists: true,
+              waitGlobalOperation(env.project, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
@@ -745,20 +611,14 @@ export const SecurityPolicyProvider = () =>
       }
       if (
         news.adaptiveProtectionConfig !== undefined &&
-        !subsetEqual(
-          current.adaptiveProtectionConfig,
-          news.adaptiveProtectionConfig,
-        )
+        !subsetEqual(current.adaptiveProtectionConfig, news.adaptiveProtectionConfig)
       ) {
         patch.adaptiveProtectionConfig = news.adaptiveProtectionConfig;
         needsPatch = true;
       }
       if (
         news.recaptchaOptionsConfig !== undefined &&
-        !subsetEqual(
-          current.recaptchaOptionsConfig,
-          news.recaptchaOptionsConfig,
-        )
+        !subsetEqual(current.recaptchaOptionsConfig, news.recaptchaOptionsConfig)
       ) {
         patch.recaptchaOptionsConfig = news.recaptchaOptionsConfig;
         needsPatch = true;
@@ -788,20 +648,13 @@ export const SecurityPolicyProvider = () =>
             body: patch,
           }),
         );
-        current =
-          (yield* getByName(env.project, securityPolicyName)) ?? current;
+        current = (yield* getByName(env.project, securityPolicyName)) ?? current;
       }
 
       const nextRules = desiredRules(news, current.rules ?? []);
       if (nextRules !== undefined) {
-        yield* syncRules(
-          env.project,
-          securityPolicyName,
-          current.rules ?? [],
-          nextRules,
-        );
-        current =
-          (yield* getByName(env.project, securityPolicyName)) ?? current;
+        yield* syncRules(env.project, securityPolicyName, current.rules ?? [], nextRules);
+        current = (yield* getByName(env.project, securityPolicyName)) ?? current;
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -819,8 +672,7 @@ export const SecurityPolicyProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, securityPolicyName)) ?? current;
+        current = (yield* getByName(env.project, securityPolicyName)) ?? current;
       }
 
       if (current === undefined) {
@@ -840,8 +692,8 @@ export const SecurityPolicyProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(project, operation, output.securityPolicyName, {
-              ignoreNotFound: true,
+            waitGlobalOperation(project, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),

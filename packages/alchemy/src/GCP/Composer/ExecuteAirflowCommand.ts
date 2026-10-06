@@ -17,6 +17,11 @@ export interface ExecuteAirflowCommandRequest extends Omit<
  * {@link ExecuteAirflowCommandHttp}. Poll with
  * `environments.pollAirflowCommand` using the returned `executionId`.
  *
+ * Grants `roles/composer.editor` on the project because it is the
+ * narrowest predefined role with
+ * `composer.environments.executeAirflowCommand`, and Composer
+ * environments have no per-resource IAM policy.
+ *
  * ### Running Airflow CLI
  * **Example:** List DAGs
  * ```typescript

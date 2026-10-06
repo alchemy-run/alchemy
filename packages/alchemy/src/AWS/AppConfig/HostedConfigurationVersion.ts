@@ -90,11 +90,7 @@ export const HostedConfigurationVersionProvider = () =>
             ConfigurationProfileId: configurationProfileId,
             VersionNumber: versionNumber,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -110,10 +106,8 @@ export const HostedConfigurationVersionProvider = () =>
               olds.configurationProfileId !== news.configurationProfileId ||
               olds.content !== news.content ||
               olds.contentType !== news.contentType ||
-              (olds.description ?? undefined) !==
-                (news.description ?? undefined) ||
-              (olds.versionLabel ?? undefined) !==
-                (news.versionLabel ?? undefined))
+              (olds.description ?? undefined) !== (news.description ?? undefined) ||
+              (olds.versionLabel ?? undefined) !== (news.versionLabel ?? undefined))
           ) {
             return { action: "replace" } as const;
           }
@@ -184,9 +178,7 @@ export const HostedConfigurationVersionProvider = () =>
               ConfigurationProfileId: output.configurationProfileId,
               VersionNumber: output.versionNumber,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Hosted configuration versions are keyed under their parent profile.

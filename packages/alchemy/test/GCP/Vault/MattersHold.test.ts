@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vault from "@distilled.cloud/gcp/vault_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, runAccountLifecycle, vaultAccount } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -12,7 +12,6 @@ const waitUntilGone = (matterId: string, holdId: string) =>
   vault.getMattersHolds({ matterId, holdId }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,7 +31,7 @@ test.provider(
           holdId: "alchemy-missing-hold",
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -55,7 +54,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("VaultScopeInsufficient");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -124,10 +123,7 @@ test.provider.skipIf(!runAccountLifecycle)(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.hold.matterId,
-        created.hold.holdId,
-      );
+      const gone = yield* waitUntilGone(created.hold.matterId, created.hold.holdId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:vault", "live"], timeout: 90_000 },

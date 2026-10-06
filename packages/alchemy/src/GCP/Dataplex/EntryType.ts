@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DataplexNotResolved,
@@ -168,8 +163,9 @@ export type EntryType = Resource<
  * ### Updating an Entry Type
  * **Example:** Description and aliases
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const type = yield* GCP.Dataplex.EntryType("Table", {
- *   entryTypeId: existing.entryTypeId,
+ *   entryTypeId: "app-table",
  *   description: "table v2",
  *   typeAliases: ["TABLE", "DATASET"],
  * });
@@ -183,10 +179,7 @@ export const EntryType = Resource<EntryType>("GCP.Dataplex.EntryType");
 const resourceName = (project: string, location: string, entryTypeId: string) =>
   `projects/${project}/locations/${location}/entryTypes/${entryTypeId}`;
 
-const toAttrs = (
-  type: dataplex.GoogleCloudDataplexV1EntryType,
-  project: string,
-) => {
+const toAttrs = (type: dataplex.GoogleCloudDataplexV1EntryType, project: string) => {
   const name = type.name ?? "";
   const parsed = parseName(name, "entryTypes");
   return {
@@ -224,41 +217,24 @@ const listTypes = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.entryTypes,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect);
 };
 
 export const EntryTypeProvider = () =>
   Provider.succeed(EntryType, {
-    stables: [
-      "name",
-      "entryTypeId",
-      "project",
-      "location",
-      "alternateUsePermission",
-      "createTime",
-    ],
+    stables: ["name", "entryTypeId", "project", "location", "alternateUsePermission", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousAuth =
-        olds?.authorization?.alternateUsePermission ??
-        output?.alternateUsePermission ??
-        "";
-      const nextAuth =
-        news.authorization?.alternateUsePermission ?? previousAuth;
+        olds?.authorization?.alternateUsePermission ?? output?.alternateUsePermission ?? "";
+      const nextAuth = news.authorization?.alternateUsePermission ?? previousAuth;
       return replaceOnIdentity({
         previousId: olds?.entryTypeId ?? output?.entryTypeId,
         nextId: news.entryTypeId ?? olds?.entryTypeId ?? output?.entryTypeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -275,18 +251,12 @@ export const EntryTypeProvider = () =>
         output?.entryTypeId,
         "entrytype",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, entryTypeId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, entryTypeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -304,10 +274,7 @@ export const EntryTypeProvider = () =>
         output?.entryTypeId,
         "entrytype",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, entryTypeId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -351,18 +318,14 @@ export const EntryTypeProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const aliasesChanged =
         desiredAliases !== undefined &&
         fingerprint(desiredAliases) !== fingerprint(current.typeAliases);
       const platformChanged =
-        news.platform !== undefined &&
-        (current.platform ?? "") !== news.platform;
-      const systemChanged =
-        news.system !== undefined && (current.system ?? "") !== news.system;
+        news.platform !== undefined && (current.platform ?? "") !== news.platform;
+      const systemChanged = news.system !== undefined && (current.system ?? "") !== news.system;
       const aspectsChanged =
         desiredAspects !== undefined &&
         fingerprint(desiredAspects) !== fingerprint(current.requiredAspects);
@@ -404,10 +367,7 @@ export const EntryTypeProvider = () =>
           }),
         );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);
@@ -420,8 +380,7 @@ export const EntryTypeProvider = () =>
         })
         .pipe(
           Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "TooManyRequests",
+            while: (error) => error._tag === "Conflict" || error._tag === "TooManyRequests",
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),

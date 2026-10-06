@@ -93,10 +93,9 @@ export type EnvironmentsKeyvaluemapsEntry = Resource<
  * @resource
  * @category Apigee
  */
-export const EnvironmentsKeyvaluemapsEntry =
-  Resource<EnvironmentsKeyvaluemapsEntry>(
-    "GCP.Apigee.EnvironmentsKeyvaluemapsEntry",
-  );
+export const EnvironmentsKeyvaluemapsEntry = Resource<EnvironmentsKeyvaluemapsEntry>(
+  "GCP.Apigee.EnvironmentsKeyvaluemapsEntry",
+);
 
 export class EnvironmentsKeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeyvaluemapsEntryNotResolved",
@@ -104,8 +103,7 @@ export class EnvironmentsKeyvaluemapsEntryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const mapIdOf = (value: string) =>
-  segmentAfter(value, "keyvaluemaps") ?? lastSegment(value);
+const mapIdOf = (value: string) => segmentAfter(value, "keyvaluemaps") ?? lastSegment(value);
 
 const resourceName = (
   organizationId: string,
@@ -115,11 +113,7 @@ const resourceName = (
 ) =>
   `${environmentNameOf(organizationId, environmentId)}/keyvaluemaps/${keyvaluemapId}/entries/${entryId}`;
 
-const mapName = (
-  organizationId: string,
-  environmentId: string,
-  keyvaluemapId: string,
-) =>
+const mapName = (organizationId: string, environmentId: string, keyvaluemapId: string) =>
   `${environmentNameOf(organizationId, environmentId)}/keyvaluemaps/${keyvaluemapId}`;
 
 const toAttrs = (
@@ -134,12 +128,7 @@ const toAttrs = (
   return {
     name: raw.includes("/")
       ? raw
-      : resourceName(
-          organizationId,
-          environmentId,
-          keyvaluemapId,
-          entryId || raw,
-        ),
+      : resourceName(organizationId, environmentId, keyvaluemapId, entryId || raw),
     entryId: entryId || raw,
     keyvaluemapId,
     organizationId: parsed.organizationId || organizationId,
@@ -149,19 +138,11 @@ const toAttrs = (
 };
 
 const getByName = (name: string) =>
-  missingToUndefined(
-    apigee.getOrganizationsEnvironmentsKeyvaluemapsEntries({ name }),
-  );
+  missingToUndefined(apigee.getOrganizationsEnvironmentsKeyvaluemapsEntries({ name }));
 
 export const EnvironmentsKeyvaluemapsEntryProvider = () =>
   Provider.succeed(EnvironmentsKeyvaluemapsEntry, {
-    stables: [
-      "name",
-      "entryId",
-      "keyvaluemapId",
-      "organizationId",
-      "environmentId",
-    ],
+    stables: ["name", "entryId", "keyvaluemapId", "organizationId", "environmentId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -170,17 +151,13 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
       const previousOrg = olds?.organization ?? output?.organizationId;
       const previousEnv = olds?.environment ?? output?.environmentId;
       const idChanged =
-        previousId !== undefined &&
-        news.entryId !== undefined &&
-        news.entryId !== previousId;
+        previousId !== undefined && news.entryId !== undefined && news.entryId !== previousId;
       const mapChanged =
-        previousMap !== undefined &&
-        mapIdOf(news.keyvaluemap) !== mapIdOf(previousMap);
+        previousMap !== undefined && mapIdOf(news.keyvaluemap) !== mapIdOf(previousMap);
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
-        organizationIdOf(news.organization, "") !==
-          organizationIdOf(previousOrg, "");
+        organizationIdOf(news.organization, "") !== organizationIdOf(previousOrg, "");
       const envChanged =
         previousEnv !== undefined &&
         environmentIdOf(news.environment) !== environmentIdOf(previousEnv);
@@ -196,25 +173,19 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
         olds?.organization ?? output?.organizationId,
         project,
       );
-      const environmentId = environmentIdOf(
-        olds?.environment ?? output?.environmentId ?? "",
-      );
-      const keyvaluemapId = mapIdOf(
-        olds?.keyvaluemap ?? output?.keyvaluemapId ?? "",
-      );
+      const environmentId = environmentIdOf(olds?.environment ?? output?.environmentId ?? "");
+      const keyvaluemapId = mapIdOf(olds?.keyvaluemap ?? output?.keyvaluemapId ?? "");
       const entryId = yield* toResourceId(id, olds?.entryId, output?.entryId, {
         maxLength: MAX_NAME_LENGTH,
       });
       const name =
-        output?.name ??
-        resourceName(organizationId, environmentId, keyvaluemapId, entryId);
+        output?.name ?? resourceName(organizationId, environmentId, keyvaluemapId, entryId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, organizationId, environmentId, keyvaluemapId);
     }),
 
-    list: () =>
-      Effect.succeed([] as EnvironmentsKeyvaluemapsEntry["Attributes"][]),
+    list: () => Effect.succeed([] as EnvironmentsKeyvaluemapsEntry["Attributes"][]),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { project } = yield* GcpEnvironment.current;
@@ -225,12 +196,7 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
         maxLength: MAX_NAME_LENGTH,
       });
       const parent = mapName(organizationId, environmentId, keyvaluemapId);
-      const name = resourceName(
-        organizationId,
-        environmentId,
-        keyvaluemapId,
-        entryId,
-      );
+      const name = resourceName(organizationId, environmentId, keyvaluemapId, entryId);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -249,11 +215,10 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
       }
 
       if (!sameText(current.value, news.value)) {
-        current =
-          yield* apigee.updateOrganizationsEnvironmentsKeyvaluemapsEntries({
-            name,
-            body: { name: entryId, value: news.value },
-          });
+        current = yield* apigee.updateOrganizationsEnvironmentsKeyvaluemapsEntries({
+          name,
+          body: { name: entryId, value: news.value },
+        });
       }
 
       return toAttrs(current, organizationId, environmentId, keyvaluemapId);
@@ -264,6 +229,6 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
         .deleteOrganizationsEnvironmentsKeyvaluemapsEntries({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

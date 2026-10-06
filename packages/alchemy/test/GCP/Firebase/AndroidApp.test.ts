@@ -1,27 +1,26 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_FIREBASE && !process.env.FAST;
+// Android apps need a Firebase project; adding Firebase to a GCP project is
+// permanent, and the testing project has none (createAndroidApps: NotFound
+// "Firebase project N not found."). Set GCP_TEST_FIREBASE_PROJECT=1 on a
+// Firebase project.
+const runLifecycle = !!process.env.GCP_TEST_FIREBASE_PROJECT;
 
 const waitUntilGone = (name: string) =>
   firebase.getProjectsAndroidApps({ name }).pipe(
-    Effect.map((app) =>
-      app.state === "DELETED" ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.map((app) => (app.state === "DELETED" ? ("gone" as const) : ("found" as const))),
+    Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -41,7 +40,7 @@ test.provider(
           name: `projects/${project}/androidApps/1:1:android:missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("AndroidAppNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -64,7 +63,7 @@ test.provider.skipIf(runLifecycle)(
           },
         }),
       );
-      expect(["Forbidden", "NotFound", "BadRequest"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

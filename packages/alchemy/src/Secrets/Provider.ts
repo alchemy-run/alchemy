@@ -1,9 +1,9 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as HttpClient from "effect/http/HttpClient";
 import type * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
-import type * as HttpClient from "effect/http/HttpClient";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import type { AuthProviders } from "../Auth/AuthProvider.ts";

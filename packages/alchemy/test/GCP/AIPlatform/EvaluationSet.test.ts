@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsEvaluationSets({ name }).pipe(
@@ -39,26 +32,17 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsEvaluationSets({
-          name: `${parent}/evaluationSets/alchemy-missing`,
+          name: `${parent}/evaluationSets/1234567890123456789`,
         }),
       );
-      expect(["NotFound", "Forbidden", "BadRequest"]).toContain(error._tag);
-      if (String(error._tag) === "BadRequest") {
-        yield* stack.destroy();
-        return;
-      }
-
-      const page = yield* aiplatform
-        .listProjectsLocationsEvaluationSets({
-          parent,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag(["Forbidden"], () =>
-            Effect.succeed({ evaluationSets: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.evaluationSets ?? [])).toEqual(true);
+      expect(error._tag).toEqual("NotFound");
+      const page = yield* aiplatform.listProjectsLocationsEvaluationSets({
+        parent,
+        pageSize: 10,
+      });
+      expect((page.evaluationSets ?? []).map((item) => item.name)).not.toContain(
+        `${parent}/evaluationSets/1234567890123456789`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -68,7 +52,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a vertex evaluation set",
   (stack) =>
     Effect.gen(function* () {
@@ -111,18 +95,25 @@ test.provider.skipIf(!runLifecycle)(
             evaluationRequest: { prompt: { text: "What is 2+2?" } },
             labels: { env: "test" },
           });
+          const second = yield* GCP.AIPlatform.EvaluationItem("Followup", {
+            location: "us-central1",
+            displayName: "alchemy-eval-set-item-2",
+            evaluationItemType: "REQUEST",
+            evaluationRequest: { prompt: { text: "What is 3+3?" } },
+            labels: { env: "test" },
+          });
           const set = yield* GCP.AIPlatform.EvaluationSet("Prompts", {
             evaluationSetId: created.set.evaluationSetId,
             location: "us-central1",
-            displayName: "alchemy-eval-set-v2",
-            evaluationItems: [item.name],
+            displayName: "alchemy-eval-set",
+            evaluationItems: [item.name, second.name],
           });
-          return { item, set };
+          return { item, second, set };
         }),
       );
 
       expect(updated.set.name).toEqual(created.set.name);
-      expect(updated.set.displayName).toEqual("alchemy-eval-set-v2");
+      expect(updated.set.evaluationItems).toContain(updated.second.name);
 
       yield* stack.destroy();
 

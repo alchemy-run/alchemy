@@ -17,6 +17,7 @@ export default Alchemy.Stack(
     return {
       url: api.uri,
       indexerUrl: indexer.uri,
+      location: api.location,
       bucketName: bucket.bucketName,
       databaseName: database.name,
     };

@@ -23,7 +23,7 @@ import {
   normalizeLocation,
   ownedByAlchemy,
   parseOwnership,
-  projectOf,
+  withProjectId,
   replaceOnIdentity,
   sameText,
   toResourceId,
@@ -119,11 +119,13 @@ export type SfdcInstancesSfdcChannel = Resource<
  * ```
  *
  * ### Updating an SFDC Channel
+ * Re-declare the same logical id with changed props; the engine keeps the
+ * physical resource and updates it in place.
+ *
  * **Example:** Rename the alias
  * ```typescript
  * const channel = yield* GCP.Integrations.SfdcInstancesSfdcChannel("Events", {
  *   sfdcInstance: instance.name,
- *   sfdcChannelId: existing.sfdcChannelId,
  *   displayName: "account-events-v2",
  *   channelTopic: "/event/AlchemyTest__e",
  * });
@@ -151,7 +153,7 @@ const toAttrs = (
   region: string,
   instanceHint?: string,
 ) => {
-  const name = channel.name ?? "";
+  const name = withProjectId(channel.name ?? "", project);
   const parsed = parseResourceName(name, "sfdcChannels", region);
   return {
     name,
@@ -160,7 +162,7 @@ const toAttrs = (
       ? parsed.sfdcInstance
       : (instanceHint ?? parsed.parent),
     location: locationOf(name, region),
-    project: projectOf(name) || project,
+    project,
     displayName: channel.displayName,
     description: parseOwnership(channel.description).text,
     channelTopic: channel.channelTopic,
@@ -181,14 +183,7 @@ const getByName = (name: string) =>
 
 export const SfdcInstancesSfdcChannelProvider = () =>
   Provider.succeed(SfdcInstancesSfdcChannel, {
-    stables: [
-      "name",
-      "sfdcChannelId",
-      "sfdcInstance",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "sfdcChannelId", "sfdcInstance", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -213,29 +208,16 @@ export const SfdcInstancesSfdcChannelProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const sfdcInstance = olds?.sfdcInstance
         ? expandSfdcInstance(olds.sfdcInstance, env.project, location)
         : output?.sfdcInstance;
-      const sfdcChannelId = yield* toResourceId(
-        id,
-        olds?.sfdcChannelId,
-        output?.sfdcChannelId,
-      );
+      const sfdcChannelId = yield* toResourceId(id, olds?.sfdcChannelId, output?.sfdcChannelId);
       const name =
         output?.name ??
-        (sfdcInstance !== undefined
-          ? resourceName(sfdcInstance, sfdcChannelId)
-          : "");
+        (sfdcInstance !== undefined ? resourceName(sfdcInstance, sfdcChannelId) : "");
       let existing = yield* getByName(name);
-      if (
-        existing === undefined &&
-        sfdcInstance !== undefined &&
-        output?.name === undefined
-      ) {
+      if (existing === undefined && sfdcInstance !== undefined && output?.name === undefined) {
         const ownership = yield* createInternalLabels(id);
         existing = yield* findSfdcChannelByDescription(
           sfdcInstance,
@@ -244,9 +226,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, sfdcInstance);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -260,20 +240,9 @@ export const SfdcInstancesSfdcChannelProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const sfdcInstance = expandSfdcInstance(
-        news.sfdcInstance,
-        env.project,
-        location,
-      );
-      const sfdcChannelId = yield* toResourceId(
-        id,
-        news.sfdcChannelId,
-        output?.sfdcChannelId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const sfdcInstance = expandSfdcInstance(news.sfdcInstance, env.project, location);
+      const sfdcChannelId = yield* toResourceId(id, news.sfdcChannelId, output?.sfdcChannelId);
       const name = output?.name ?? resourceName(sfdcInstance, sfdcChannelId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -286,10 +255,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
 
       let current = yield* getByName(output?.name ?? name);
       if (current === undefined) {
-        current = yield* findSfdcChannelByDescription(
-          sfdcInstance,
-          description,
-        );
+        current = yield* findSfdcChannelByDescription(sfdcInstance, description);
       }
 
       if (current === undefined) {
@@ -310,22 +276,21 @@ export const SfdcInstancesSfdcChannelProvider = () =>
         return yield* new SfdcInstancesSfdcChannelNotResolved({ name });
       }
 
-      const currentName = current.name ?? name;
+      const currentName = withProjectId(current.name ?? name, env.project);
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = (current.description ?? "") !== description;
       const topicChanged = !sameText(current.channelTopic, news.channelTopic);
 
       if (displayChanged || descriptionChanged || topicChanged) {
-        current =
-          yield* integrations.patchProjectsLocationsSfdcInstancesSfdcChannels({
-            name: currentName,
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              topicChanged ? "channelTopic" : undefined,
-            ),
-            body: { ...body, name: currentName },
-          });
+        current = yield* integrations.patchProjectsLocationsSfdcInstancesSfdcChannels({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            topicChanged ? "channelTopic" : undefined,
+          ),
+          body: { ...body, name: currentName },
+        });
       }
 
       return toAttrs(current, env.project, env.region, sfdcInstance);

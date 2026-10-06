@@ -191,9 +191,7 @@ export type MetricDescriptor = Resource<
  * @resource
  * @category Monitoring
  */
-export const MetricDescriptor = Resource<MetricDescriptor>(
-  "GCP.Monitoring.MetricDescriptor",
-);
+export const MetricDescriptor = Resource<MetricDescriptor>("GCP.Monitoring.MetricDescriptor");
 
 export class MetricDescriptorNotResolved extends Data.TaggedError(
   "GCP.Monitoring.MetricDescriptorNotResolved",
@@ -216,9 +214,7 @@ const resourceName = (project: string, type: string) =>
   `projects/${project}/metricDescriptors/${type}`;
 
 const qualifyType = (type: string) =>
-  type.includes(".googleapis.com/")
-    ? type
-    : `${CUSTOM_PREFIX}${type.replace(/^\/+/, "")}`;
+  type.includes(".googleapis.com/") ? type : `${CUSTOM_PREFIX}${type.replace(/^\/+/, "")}`;
 
 const toType = (id: string, type: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -235,9 +231,7 @@ const toType = (id: string, type: string | undefined, existing?: string) =>
     return qualifyType(named);
   });
 
-const toLabels = (
-  labels: monitoring.LabelDescriptorList | undefined,
-): MetricLabelDescriptor[] =>
+const toLabels = (labels: monitoring.LabelDescriptorList | undefined): MetricLabelDescriptor[] =>
   (labels ?? []).flatMap((label) =>
     label.key
       ? [
@@ -323,28 +317,24 @@ const getByName = (name: string) =>
     .getProjectsMetricDescriptors({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitUntilSynced = (
-  name: string,
-  desired: { displayName?: string; description: string },
-) =>
+const waitUntilSynced = (name: string, desired: { displayName?: string; description: string }) =>
   getByName(name).pipe(
     Effect.flatMap((value) => {
       if (value === undefined) {
         return Effect.fail(new MetricDescriptorNotResolved({ name }));
       }
       const displayOk =
-        desired.displayName === undefined ||
-        (value.displayName ?? "") === desired.displayName;
+        desired.displayName === undefined || (value.displayName ?? "") === desired.displayName;
       const descriptionOk = (value.description ?? "") === desired.description;
       return displayOk && descriptionOk
         ? Effect.succeed(value)
         : Effect.fail(new MetricDescriptorNotResolved({ name }));
     }),
+    // Descriptor writes take up to a minute to become readable.
     Effect.retry({
-      times: 10,
-      schedule: Schedule.spaced("500 millis"),
-      while: (error) =>
-        error._tag === "GCP.Monitoring.MetricDescriptorNotResolved",
+      times: 30,
+      schedule: Schedule.spaced("2 seconds"),
+      while: (error) => error._tag === "GCP.Monitoring.MetricDescriptorNotResolved",
     }),
   );
 
@@ -356,14 +346,10 @@ const listCustom = (project: string) =>
       filter: `metric.type = starts_with("${CUSTOM_PREFIX}")`,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.metricDescriptors ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.metricDescriptors ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as monitoring.MetricDescriptor[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as monitoring.MetricDescriptor[])),
     );
 
 const listOwned = (project: string) =>
@@ -378,9 +364,7 @@ const findOwned = (project: string, id: string) =>
   Effect.gen(function* () {
     const descriptors = yield* listCustom(project);
     for (const descriptor of descriptors) {
-      if (
-        yield* hasAlchemyLabels(id, parseMarker(descriptor.description).labels)
-      ) {
+      if (yield* hasAlchemyLabels(id, parseMarker(descriptor.description).labels)) {
         return descriptor;
       }
     }
@@ -408,23 +392,15 @@ export const MetricDescriptorProvider = () =>
         previousType !== undefined &&
         qualifyType(news.type) !== previousType;
 
-      const previousKind = (
-        olds?.metricKind ?? output?.metricKind
-      )?.toUpperCase();
+      const previousKind = (olds?.metricKind ?? output?.metricKind)?.toUpperCase();
       const nextKind = news.metricKind?.toUpperCase();
       const kindChanged =
-        nextKind !== undefined &&
-        previousKind !== undefined &&
-        nextKind !== previousKind;
+        nextKind !== undefined && previousKind !== undefined && nextKind !== previousKind;
 
-      const previousValue = (
-        olds?.valueType ?? output?.valueType
-      )?.toUpperCase();
+      const previousValue = (olds?.valueType ?? output?.valueType)?.toUpperCase();
       const nextValue = news.valueType?.toUpperCase();
       const valueChanged =
-        nextValue !== undefined &&
-        previousValue !== undefined &&
-        nextValue !== previousValue;
+        nextValue !== undefined && previousValue !== undefined && nextValue !== previousValue;
 
       const removed = labelsRemoved(output?.labels ?? [], news.labels);
 
@@ -442,10 +418,7 @@ export const MetricDescriptorProvider = () =>
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseMarker(existing.description).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseMarker(existing.description).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -462,9 +435,7 @@ export const MetricDescriptorProvider = () =>
       const name = resourceName(env.project, type);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
-      const desiredKind = (
-        news.metricKind ?? DEFAULT_METRIC_KIND
-      ).toUpperCase();
+      const desiredKind = (news.metricKind ?? DEFAULT_METRIC_KIND).toUpperCase();
       const desiredValue = (news.valueType ?? DEFAULT_VALUE_TYPE).toUpperCase();
       const desiredUnit = news.unit ?? DEFAULT_UNIT;
 
@@ -493,8 +464,7 @@ export const MetricDescriptorProvider = () =>
         (current.unit ?? DEFAULT_UNIT) !== desiredUnit ||
         (current.metricKind ?? "").toUpperCase() !== desiredKind ||
         (current.valueType ?? "").toUpperCase() !== desiredValue ||
-        (news.launchStage !== undefined &&
-          (current.launchStage ?? "") !== news.launchStage) ||
+        (news.launchStage !== undefined && (current.launchStage ?? "") !== news.launchStage) ||
         (news.metadata !== undefined &&
           !jsonEqual(toMetadata(current.metadata) ?? null, news.metadata)) ||
         (news.labels !== undefined &&

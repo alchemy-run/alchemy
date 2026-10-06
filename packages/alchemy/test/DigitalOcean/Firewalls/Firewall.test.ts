@@ -1,15 +1,11 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as DigitalOcean from "@/DigitalOcean";
-import {
-  Firewall,
-  sameRules,
-  type FirewallInboundRule,
-} from "@/DigitalOcean/Firewalls/Firewall";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { getFirewall } from "@distilled.cloud/digitalocean";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as DigitalOcean from "@/DigitalOcean";
+import { Firewall, sameRules, type FirewallInboundRule } from "@/DigitalOcean/Firewalls/Firewall";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { isGone, logLevel, outOfBand, skipLive } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -28,17 +24,8 @@ const WEB_RULES: FirewallInboundRule[] = [
   { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
 ];
 
-const UNIT_TAGS = [
-  "unit",
-  "provider:digitalocean",
-  "provider:digitalocean:firewall",
-  "local",
-];
-const LIVE_TAGS = [
-  "provider:digitalocean",
-  "provider:digitalocean:firewall",
-  "live",
-];
+const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:firewall", "local"];
+const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:firewall", "live"];
 const LIVE_TIMEOUT = 180_000;
 
 describe("sameRules", { tags: UNIT_TAGS }, () => {
@@ -126,8 +113,7 @@ describe("sameRules", { tags: UNIT_TAGS }, () => {
   });
 });
 
-const isFirewallGone = (firewallId: string) =>
-  isGone(getFirewall({ firewall_id: firewallId }));
+const isFirewallGone = (firewallId: string) => isGone(getFirewall({ firewall_id: firewallId }));
 
 test.provider.skipIf(skipLive)(
   "firewall lifecycle: create, widen rules in place, destroy",
@@ -146,9 +132,11 @@ test.provider.skipIf(skipLive)(
       expect(created.name).toEqual(FIREWALL_NAME);
       expect(created.status).toEqual("succeeded");
       expect(created.inboundRules).toHaveLength(1);
-      expect(created.outboundRules.map((rule) => rule.protocol).sort()).toEqual(
-        ["icmp", "tcp", "udp"],
-      );
+      expect(created.outboundRules.map((rule) => rule.protocol).sort()).toEqual([
+        "icmp",
+        "tcp",
+        "udp",
+      ]);
 
       const remote = yield* getFirewall({
         firewall_id: created.firewallId,
@@ -166,17 +154,12 @@ test.provider.skipIf(skipLive)(
       );
       expect(widened.firewallId).toEqual(created.firewallId);
       expect(widened.inboundRules).toHaveLength(3);
-      expect(widened.inboundRules.map((rule) => rule.ports).sort()).toEqual([
-        "22",
-        "443",
-        "80",
-      ]);
+      expect(widened.inboundRules.map((rule) => rule.ports).sort()).toEqual(["22", "443", "80"]);
 
       const provider = yield* Provider.findProvider(Firewall);
       const all = yield* provider.list();
       expect(
-        all.find((firewall) => firewall.firewallId === created.firewallId)
-          ?.inboundRules,
+        all.find((firewall) => firewall.firewallId === created.firewallId)?.inboundRules,
       ).toHaveLength(3);
 
       yield* stack.destroy();

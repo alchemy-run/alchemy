@@ -9,20 +9,16 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  createOwnership,
-  encodeDescription,
   fingerprint,
-  hasOwnershipMarker,
   lastSegment,
   listChildResources,
   listEntities,
   listLakes,
   listZones,
-  ownedLabels,
-  parseDescription,
   parseResourceName,
   replaceIfChanged,
   toPhysicalSnake,
+  hasAlchemyLabelMap,
 } from "./shared.ts";
 
 export type EntitySchemaField = {
@@ -42,9 +38,7 @@ export type EntityPartitionField = {
   /** Partition field name. Immutable. */
   name: string;
   /** Partition field type. Immutable. */
-  type:
-    | dataplex.GoogleCloudDataplexV1SchemaPartitionFieldTypeEnum
-    | (string & {});
+  type: dataplex.GoogleCloudDataplexV1SchemaPartitionFieldTypeEnum | (string & {});
 };
 
 export type EntitySchema = {
@@ -58,22 +52,37 @@ export type EntitySchema = {
   /** Partition keys. Immutable once set. */
   partitionFields?: EntityPartitionField[];
   /** Partition path style (`HIVE_COMPATIBLE`). */
-  partitionStyle?:
-    | dataplex.GoogleCloudDataplexV1SchemaPartitionStyleEnum
-    | (string & {});
+  partitionStyle?: dataplex.GoogleCloudDataplexV1SchemaPartitionStyleEnum | (string & {});
 };
 
 export type EntityStorageFormat = {
   /** File format (`PARQUET`, `CSV`, `JSON`, …). */
-  format?:
-    | dataplex.GoogleCloudDataplexV1StorageFormatFormatEnum
-    | (string & {});
+  format?: dataplex.GoogleCloudDataplexV1StorageFormatFormatEnum | (string & {});
   /** Compression (`GZIP`, `BZIP2`). */
   compressionFormat?:
     | dataplex.GoogleCloudDataplexV1StorageFormatCompressionFormatEnum
     | (string & {});
-  /** MIME type. */
+  /**
+   * MIME type. Derived from `format` for PARQUET, AVRO, ORC, CSV, and JSON
+   * when omitted.
+   */
   mimeType?: string;
+};
+
+// Dataplex requires `format.mimeType`; derive it from the file format when
+// the caller only names the format.
+const MIME_TYPES: Record<string, string> = {
+  PARQUET: "application/x-parquet",
+  AVRO: "application/x-avro",
+  ORC: "application/x-orc",
+  CSV: "text/csv",
+  JSON: "application/json",
+};
+
+const withMimeType = (format: EntityStorageFormat | undefined): EntityStorageFormat | undefined => {
+  if (format === undefined || format.mimeType !== undefined) return format;
+  const mimeType = MIME_TYPES[(format.format ?? "").toUpperCase()];
+  return mimeType === undefined ? format : { ...format, mimeType };
 };
 
 export type LakesEntityProps = {
@@ -94,9 +103,7 @@ export type LakesEntityProps = {
    */
   displayName?: string;
   /**
-   * Description (at most 1024 characters). Entities have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
-   * stripped from attributes.
+   * Description (at most 1024 characters).
    */
   description?: string;
   /**
@@ -149,7 +156,7 @@ export type LakesEntity = Resource<
     location: string;
     /** User-friendly display name. */
     displayName: string | undefined;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Entity description. */
     description: string | undefined;
     /** Entity type (`TABLE` or `FILESET`). */
     type: string | undefined;
@@ -179,8 +186,9 @@ export type LakesEntity = Resource<
 /**
  * A Dataplex metadata entity — a table or fileset registered in a zone.
  *
- * Entities have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Changing `zone`, `entityId`, `type`,
+ * Entities have no labels field: `read` reports an entity it finds
+ * without prior state as unowned (adopt it with `--adopt`), and `list`
+ * returns the entities of Alchemy-labeled lakes. Changing `zone`, `entityId`, `type`,
  * `asset`, `dataPath`, or `system` replaces the entity. Display name,
  * description, format, and schema update in place.
  *
@@ -215,27 +223,20 @@ export class LakesEntityNotResolved extends Data.TaggedError(
 const DEFAULT_TYPE = "TABLE";
 const DEFAULT_SYSTEM = "CLOUD_STORAGE";
 
-const resourceNameOf = (zone: string, entityId: string) =>
-  `${zone}/entities/${entityId}`;
+const resourceNameOf = (zone: string, entityId: string) => `${zone}/entities/${entityId}`;
 
 const assetIdOf = (asset: string) => lastSegment(asset);
 
-const schemaBody = (
-  schema: EntitySchema | undefined,
-): dataplex.GoogleCloudDataplexV1Schema => ({
+const schemaBody = (schema: EntitySchema | undefined): dataplex.GoogleCloudDataplexV1Schema => ({
   userManaged: schema?.userManaged !== false,
   fields: schema?.fields,
   partitionFields: schema?.partitionFields,
   partitionStyle: schema?.partitionStyle,
 });
 
-const toAttrs = (
-  entity: dataplex.GoogleCloudDataplexV1Entity,
-  project: string,
-) => {
+const toAttrs = (entity: dataplex.GoogleCloudDataplexV1Entity, project: string) => {
   const name = entity.name ?? "";
   const parsed = parseResourceName(name, "entities");
-  const { description } = parseDescription(entity.description);
   return {
     name,
     entityId: entity.id ?? parsed.id,
@@ -243,7 +244,7 @@ const toAttrs = (
     project: parsed.project || project,
     location: parsed.location,
     displayName: entity.displayName,
-    description,
+    description: entity.description,
     type: entity.type,
     asset: entity.asset,
     dataPath: entity.dataPath,
@@ -264,19 +265,17 @@ const getByName = (name: string) =>
 
 const listOwnedEntities = (project: string, region: string) =>
   Effect.gen(function* () {
-    const lakes = yield* listLakes(project, region);
+    const lakes = (yield* listLakes(project, region)).filter((lake) =>
+      hasAlchemyLabelMap(lake.labels),
+    );
     const zones = yield* listChildResources(lakes, listZones);
     const named = zones.filter((zone) => (zone.name ?? "").length > 0);
-    const tables = yield* Effect.forEach(
-      named,
-      (zone) => listEntities(zone.name!, "TABLES"),
-      { concurrency: 4 },
-    );
-    const filesets = yield* Effect.forEach(
-      named,
-      (zone) => listEntities(zone.name!, "FILESETS"),
-      { concurrency: 4 },
-    );
+    const tables = yield* Effect.forEach(named, (zone) => listEntities(zone.name!, "TABLES"), {
+      concurrency: 4,
+    });
+    const filesets = yield* Effect.forEach(named, (zone) => listEntities(zone.name!, "FILESETS"), {
+      concurrency: 4,
+    });
     return [...tables.flat(), ...filesets.flat()];
   });
 
@@ -301,21 +300,13 @@ export const LakesEntityProvider = () =>
       const nextId = news.entityId ?? previousId;
       const previousZone = olds?.zone ?? output?.zone;
       const nextZone = news.zone ?? previousZone;
-      const previousType = (
-        olds?.type ??
-        output?.type ??
-        DEFAULT_TYPE
-      ).toUpperCase();
+      const previousType = (olds?.type ?? output?.type ?? DEFAULT_TYPE).toUpperCase();
       const nextType = (news.type ?? previousType).toUpperCase();
       const previousAsset = assetIdOf(olds?.asset ?? output?.asset ?? "");
       const nextAsset = assetIdOf(news.asset);
       const previousPath = olds?.dataPath ?? output?.dataPath ?? "";
       const nextPath = news.dataPath;
-      const previousSystem = (
-        olds?.system ??
-        output?.system ??
-        DEFAULT_SYSTEM
-      ).toUpperCase();
+      const previousSystem = (olds?.system ?? output?.system ?? DEFAULT_SYSTEM).toUpperCase();
       const nextSystem = (news.system ?? previousSystem).toUpperCase();
       if (
         replaceIfChanged(previousId, nextId) ||
@@ -328,9 +319,7 @@ export const LakesEntityProvider = () =>
         return {
           action: "replace" as const,
           deleteFirst:
-            previousZone === nextZone &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousZone === nextZone && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -339,33 +328,24 @@ export const LakesEntityProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = olds?.zone ?? output?.zone ?? "";
-      const entityId = yield* toPhysicalSnake(
-        id,
-        olds?.entityId,
-        output?.entityId,
-      );
+      const entityId = yield* toPhysicalSnake(id, olds?.entityId, output?.entityId);
       const name = output?.name ?? resourceNameOf(zone, entityId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const { labels } = parseDescription(existing.description);
-      return (yield* ownedLabels(id, labels)) ? attrs : Unowned(attrs);
+      // No labels field: without prior state the entity may not be ours.
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const entities = yield* listOwnedEntities(env.project, env.region);
-        const owned = entities.filter((entity) =>
-          hasOwnershipMarker(entity.description),
-        );
         const resolved = yield* Effect.forEach(
-          owned,
+          entities,
           (entity) =>
             entity.name
-              ? getByName(entity.name).pipe(
-                  Effect.map((full) => full ?? entity),
-                )
+              ? getByName(entity.name).pipe(Effect.map((full) => full ?? entity))
               : Effect.succeed(entity),
           { concurrency: 4 },
         );
@@ -375,19 +355,14 @@ export const LakesEntityProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const zone = news.zone;
-      const entityId = yield* toPhysicalSnake(
-        id,
-        news.entityId,
-        output?.entityId,
-      );
+      const entityId = yield* toPhysicalSnake(id, news.entityId, output?.entityId);
       const name = output?.name ?? resourceNameOf(zone, entityId);
-      const ownership = yield* createOwnership(id);
-      const description = encodeDescription(ownership, news.description);
+      const description = news.description;
       const type = (news.type ?? DEFAULT_TYPE).toUpperCase();
       const system = (news.system ?? DEFAULT_SYSTEM).toUpperCase();
       const asset = assetIdOf(news.asset);
       const schema = schemaBody(news.schema);
-      const format = news.format;
+      const format = withMimeType(news.format);
 
       let current = yield* getByName(name);
 
@@ -416,12 +391,9 @@ export const LakesEntityProvider = () =>
         return yield* new LakesEntityNotResolved({ name });
       }
 
-      const observedDescription = current.description ?? "";
-      const descriptionChanged = observedDescription !== description;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
-      const patternChanged =
-        (current.dataPathPattern ?? "") !== (news.dataPathPattern ?? "");
+      const descriptionChanged = (current.description ?? "") !== (description ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
+      const patternChanged = (current.dataPathPattern ?? "") !== (news.dataPathPattern ?? "");
       const formatChanged = fingerprint(current.format) !== fingerprint(format);
       const schemaChanged = fingerprint(current.schema) !== fingerprint(schema);
 
@@ -454,20 +426,23 @@ export const LakesEntityProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const existing = yield* getByName(output.name);
-      if (existing === undefined) return;
-      yield* dataplex
-        .deleteProjectsLocationsLakesZonesEntities({
-          name: output.name,
-          etag: existing.etag,
-        })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 5,
-            schedule: Schedule.spaced("1 second"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      // Delete requires the current etag, which moves while partitions are
+      // removed and discovery runs, so re-read it on every attempt.
+      yield* getByName(output.name).pipe(
+        Effect.flatMap((existing) =>
+          existing === undefined
+            ? Effect.void
+            : dataplex.deleteProjectsLocationsLakesZonesEntities({
+                name: output.name,
+                etag: existing.etag,
+              }),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 10,
+          schedule: Schedule.spaced("3 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

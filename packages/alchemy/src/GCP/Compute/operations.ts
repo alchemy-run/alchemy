@@ -1,95 +1,113 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { waitForOperation } from "../Operation.ts";
 
 /**
- * GCP `wait*Operations` is a long-poll that can sit on a single HTTP
- * request for ~2 minutes and is not reliably interruptible. Concurrent
- * compute tests then pin the connection pool and the rest of the suite
- * starves. Poll `get*Operations` instead, with a hard iteration cap.
+ * Compute operations settle in seconds; the slowest (managed instance
+ * groups, interconnect attachments, VPN gateways, large disks/images)
+ * take a few minutes.
  */
-export class ComputeOperationPending extends Data.TaggedError(
-  "GCP.Compute.OperationPending",
-)<{
-  operation: string;
-  status: string | undefined;
-}> {}
+const BUDGET = "15 minutes";
+const INTERVAL = "2 seconds";
 
-const poll = <E extends { readonly _tag: string }, R>(
-  name: string,
-  get: Effect.Effect<compute.Operation, E, R>,
-  times: number,
-) =>
-  get.pipe(
-    Effect.filterOrFail(
-      (operation) => operation.status === "DONE",
-      (operation) =>
-        new ComputeOperationPending({
-          operation: name,
-          status: operation.status,
-        }),
-    ),
-    Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.OperationPending" ||
-        error._tag === "NotFound",
-      schedule: Schedule.spaced("2 seconds"),
-      times,
-    }),
+export interface WaitComputeOptions {
+  /**
+   * Compute error codes (`error.errors[].code`) that mean the desired state
+   * already holds — e.g. `RESOURCE_ALREADY_EXISTS` on an insert or
+   * `RESOURCE_NOT_FOUND` on a delete. The settled operation is returned
+   * instead of failing with `GCP.OperationFailed`.
+   */
+  readonly ignore?: ReadonlyArray<string>;
+}
+
+/** The Compute error codes an operation finished with. */
+export const operationErrorCodes = (operation: compute.Operation) =>
+  (operation.error?.errors ?? []).flatMap((error) =>
+    error.code === undefined ? [] : [error.code],
   );
 
-export const waitGlobalOperations = (
-  input: { project: string; operation: string },
-  options?: { times?: number },
+const settle = <E extends { readonly _tag: string }, R>(
+  operation: compute.Operation,
+  get: (name: string) => Effect.Effect<compute.Operation, E, R>,
+  options: WaitComputeOptions | undefined,
 ) =>
-  poll(
-    input.operation,
-    compute.getGlobalOperations({
-      project: input.project,
-      operation: input.operation,
-    }),
-    options?.times ?? 24,
+  Effect.suspend(() => {
+    let last = operation;
+    const ignore = options?.ignore ?? [];
+    return waitForOperation(
+      operation,
+      (name) =>
+        get(name).pipe(
+          // A freshly started operation can 404 for a moment.
+          Effect.retry({
+            while: (error) => error._tag === "NotFound",
+            times: 5,
+            schedule: Schedule.exponential("250 millis"),
+          }),
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              last = current;
+            }),
+          ),
+        ),
+      { budget: BUDGET, interval: INTERVAL },
+    ).pipe(
+      Effect.map(() => last),
+      Effect.catchIf(
+        (error) =>
+          error._tag === "GCP.OperationFailed" &&
+          operationErrorCodes(last).some((code) => ignore.includes(code)),
+        () => Effect.succeed(last),
+      ),
+    );
+  });
+
+/** Wait for a zonal Compute operation. Fails with `GCP.OperationFailed` if it errored. */
+export const waitZoneOperation = (
+  project: string,
+  zone: string,
+  operation: compute.Operation,
+  options?: WaitComputeOptions,
+) =>
+  settle(
+    operation,
+    (name) => compute.getZoneOperations({ project, zone, operation: name }),
+    options,
   );
 
-export const waitZoneOperations = (
-  input: { project: string; zone: string; operation: string },
-  options?: { times?: number },
+/** Wait for a regional Compute operation. Fails with `GCP.OperationFailed` if it errored. */
+export const waitRegionOperation = (
+  project: string,
+  region: string,
+  operation: compute.Operation,
+  options?: WaitComputeOptions,
 ) =>
-  poll(
-    input.operation,
-    compute.getZoneOperations({
-      project: input.project,
-      zone: input.zone,
-      operation: input.operation,
-    }),
-    options?.times ?? 24,
+  settle(
+    operation,
+    (name) => compute.getRegionOperations({ project, region, operation: name }),
+    options,
   );
 
-export const waitRegionOperations = (
-  input: { project: string; region: string; operation: string },
-  options?: { times?: number },
+/** Wait for a global Compute operation. Fails with `GCP.OperationFailed` if it errored. */
+export const waitGlobalOperation = (
+  project: string,
+  operation: compute.Operation,
+  options?: WaitComputeOptions,
 ) =>
-  poll(
-    input.operation,
-    compute.getRegionOperations({
-      project: input.project,
-      region: input.region,
-      operation: input.operation,
-    }),
-    options?.times ?? 24,
-  );
+  settle(operation, (name) => compute.getGlobalOperations({ project, operation: name }), options);
 
-/** Hierarchical firewall policies (and other org-scoped compute APIs). */
-export const waitGlobalOrganizationOperations = (
-  input: { operation: string; parentId?: string },
-  options?: { times?: number },
+/**
+ * Wait for an organization-scoped Compute operation (hierarchical firewall
+ * and security policies). Fails with `GCP.OperationFailed` if it errored.
+ */
+export const waitOrganizationOperation = (
+  operation: compute.Operation,
+  parentId: string | undefined,
+  options?: WaitComputeOptions,
 ) =>
-  poll(
-    input.operation,
-    compute.getGlobalOrganizationOperations({
-      operation: input.operation,
-      parentId: input.parentId,
-    }),
-    options?.times ?? 24,
+  settle(
+    operation,
+    (name) => compute.getGlobalOrganizationOperations({ operation: name, parentId }),
+    options,
   );

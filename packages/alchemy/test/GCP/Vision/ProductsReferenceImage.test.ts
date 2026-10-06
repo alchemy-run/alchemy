@@ -1,13 +1,13 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as vision from "@distilled.cloud/gcp/vision_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -24,7 +24,6 @@ const waitUntilGone = (name: string) =>
   vision.getProjectsLocationsProductsReferenceImages({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -34,27 +33,21 @@ const waitUntilGone = (name: string) =>
 
 const uploadObject = (bucketName: string, object: string, bytes: Uint8Array) =>
   Effect.gen(function* () {
-    const creds = yield* yield* Credentials;
+    const credentials = yield* Credentials;
+    const creds = yield* credentials;
     const client = yield* HttpClient.HttpClient;
     const url =
       `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName)}/o` +
       `?uploadType=media&name=${encodeURIComponent(object)}`;
     const response = yield* client.execute(
       HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeader(
-          "Authorization",
-          `Bearer ${Redacted.value(creds.accessToken)}`,
-        ),
+        HttpClientRequest.setHeader("Authorization", `Bearer ${Redacted.value(creds.accessToken)}`),
         HttpClientRequest.bodyUint8Array(bytes, "image/png"),
       ),
     );
     if (response.status < 200 || response.status >= 300) {
-      const text = yield* response.text.pipe(
-        Effect.catch(() => Effect.succeed("")),
-      );
-      return yield* Effect.fail(
-        new Error(`object upload failed: ${response.status} ${text}`),
-      );
+      const text = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")));
+      return yield* Effect.fail(new Error(`object upload failed: ${response.status} ${text}`));
     }
   });
 
@@ -70,10 +63,7 @@ test.provider(
           name: `projects/${project}/locations/${location}/products/alchemy-missing/referenceImages/alchemy-missing`,
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
-      if (error._tag === "Forbidden") {
-        expect(error.message).toContain("Cloud Vision API has not been used");
-      }
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -128,11 +118,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.image.uri).toEqual(uri);
       expect(created.image.referenceImageId.length).toBeGreaterThan(0);
 
-      const fetched = yield* vision.getProjectsLocationsProductsReferenceImages(
-        {
-          name: created.image.name,
-        },
-      );
+      const fetched = yield* vision.getProjectsLocationsProductsReferenceImages({
+        name: created.image.name,
+      });
       expect(fetched.name).toEqual(created.image.name);
       expect(fetched.uri).toEqual(uri);
 

@@ -12,7 +12,6 @@ export const Jobs = GCP.PubSub.Topic("Jobs", {});
  * when a job finishes; the API reads it to answer status polls.
  */
 export const Results = GCP.Firestore.Database("Results", {
-  location: "us-central1",
   type: "FIRESTORE_NATIVE",
 });
 

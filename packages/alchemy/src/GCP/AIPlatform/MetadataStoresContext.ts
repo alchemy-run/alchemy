@@ -27,6 +27,8 @@ import {
 } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
 
+const DEFAULT_SCHEMA_TITLE = "system.Experiment";
+
 export type MetadataStoresContextProps = {
   /**
    * Parent MetadataStore resource name
@@ -52,7 +54,9 @@ export type MetadataStoresContextProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Schema title registered in the MetadataStore.
+   * Schema title registered in the MetadataStore. Vertex AI rejects
+   * entries without one.
+   * @default "system.Experiment"
    */
   schemaTitle?: string;
   /**
@@ -143,10 +147,7 @@ const parentOf = (name: string) => {
 const resourceName = (metadataStore: string, contextId: string) =>
   `${metadataStore}/contexts/${contextId}`;
 
-const toAttrs = (
-  context: aiplatform.GoogleCloudAiplatformV1Context,
-  project: string,
-) => {
+const toAttrs = (context: aiplatform.GoogleCloudAiplatformV1Context, project: string) => {
   const name = context.name ?? "";
   return {
     name,
@@ -171,30 +172,22 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listContexts = (parent: string) =>
-  aiplatform.listProjectsLocationsMetadataStoresContexts
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.contexts ?? []),
-      ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Context[]),
-      ),
-    );
+  aiplatform.listProjectsLocationsMetadataStoresContexts.pages({ parent, pageSize: 100 }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.contexts ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Context[]),
+    ),
+  );
 
 const listStores = (parent: string) =>
-  aiplatform.listProjectsLocationsMetadataStores
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.metadataStores ?? []),
-      ),
-      Effect.catchTag(["NotFound", "Forbidden"], () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
-      ),
-    );
+  aiplatform.listProjectsLocationsMetadataStores.pages({ parent, pageSize: 100 }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.metadataStores ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
+    ),
+  );
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
@@ -204,8 +197,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.MetadataStoresContextStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.MetadataStoresContextStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -213,14 +205,7 @@ const waitUntilGone = (name: string) =>
 
 export const MetadataStoresContextProvider = () =>
   Provider.succeed(MetadataStoresContext, {
-    stables: [
-      "name",
-      "contextId",
-      "metadataStore",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "contextId", "metadataStore", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -232,16 +217,12 @@ export const MetadataStoresContextProvider = () =>
         (previousParent !== undefined &&
           nextParent !== undefined &&
           nextParent !== previousParent) ||
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId)
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousParent === nextParent &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousParent === nextParent && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -249,24 +230,15 @@ export const MetadataStoresContextProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const contextId = yield* toResourceId(
-        id,
-        olds?.contextId,
-        output?.contextId,
-      );
+      const contextId = yield* toResourceId(id, olds?.contextId, output?.contextId);
       const metadataStore = olds?.metadataStore ?? output?.metadataStore;
       const name =
-        output?.name ??
-        (metadataStore !== undefined
-          ? resourceName(metadataStore, contextId)
-          : "");
+        output?.name ?? (metadataStore !== undefined ? resourceName(metadataStore, contextId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -274,8 +246,7 @@ export const MetadataStoresContextProvider = () =>
         const env = yield* GcpEnvironment.current;
         const stores = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listStores(`projects/${env.project}/locations/${location}`),
+          (location) => listStores(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         const contexts = yield* Effect.forEach(
@@ -291,18 +262,10 @@ export const MetadataStoresContextProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const contextId = yield* toResourceId(
-        id,
-        news.contextId,
-        output?.contextId,
-      );
+      const contextId = yield* toResourceId(id, news.contextId, output?.contextId);
       const metadataStore = news.metadataStore;
       const name = resourceName(metadataStore, contextId);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -319,7 +282,7 @@ export const MetadataStoresContextProvider = () =>
               displayName,
               description: news.description,
               labels: desiredLabels,
-              schemaTitle: news.schemaTitle,
+              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
               schemaVersion: news.schemaVersion,
               metadata: news.metadata,
             },
@@ -332,17 +295,14 @@ export const MetadataStoresContextProvider = () =>
         return yield* new MetadataStoresContextNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const displayChanged = (current.displayName ?? "") !== displayName;
       const labelsChanged = labelsDiffer(current.labels, desiredLabels);
       const schemaTitleChanged =
-        (current.schemaTitle ?? "") !== (news.schemaTitle ?? "");
-      const schemaVersionChanged =
-        (current.schemaVersion ?? "") !== (news.schemaVersion ?? "");
+        (current.schemaTitle ?? "") !== (news.schemaTitle ?? DEFAULT_SCHEMA_TITLE);
+      const schemaVersionChanged = (current.schemaVersion ?? "") !== (news.schemaVersion ?? "");
       const metadataChanged =
-        news.metadata !== undefined &&
-        stableJson(current.metadata) !== stableJson(news.metadata);
+        news.metadata !== undefined && stableJson(current.metadata) !== stableJson(news.metadata);
 
       if (
         descriptionChanged ||
@@ -352,30 +312,29 @@ export const MetadataStoresContextProvider = () =>
         schemaVersionChanged ||
         metadataChanged
       ) {
-        current =
-          yield* aiplatform.patchProjectsLocationsMetadataStoresContexts({
+        current = yield* aiplatform.patchProjectsLocationsMetadataStoresContexts({
+          name,
+          updateMask: [
+            descriptionChanged ? "description" : undefined,
+            displayChanged ? "display_name" : undefined,
+            labelsChanged ? "labels" : undefined,
+            schemaTitleChanged ? "schema_title" : undefined,
+            schemaVersionChanged ? "schema_version" : undefined,
+            metadataChanged ? "metadata" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              descriptionChanged ? "description" : undefined,
-              displayChanged ? "display_name" : undefined,
-              labelsChanged ? "labels" : undefined,
-              schemaTitleChanged ? "schema_title" : undefined,
-              schemaVersionChanged ? "schema_version" : undefined,
-              metadataChanged ? "metadata" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              schemaTitle: news.schemaTitle,
-              schemaVersion: news.schemaVersion,
-              metadata: news.metadata,
-              etag: current.etag,
-            },
-          });
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
+            schemaVersion: news.schemaVersion,
+            metadata: news.metadata,
+            etag: current.etag,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

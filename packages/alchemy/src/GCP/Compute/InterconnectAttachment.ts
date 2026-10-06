@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,15 +18,15 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_TYPE = "PARTNER";
 const DEFAULT_ENCRYPTION = "NONE";
 const DEFAULT_STACK = "IPV4_ONLY";
 const MAX_NAME_LENGTH = 63;
 
-export type InterconnectAttachmentType =
-  | compute.InterconnectAttachmentTypeEnum
-  | (string & {});
+export type InterconnectAttachmentType = compute.InterconnectAttachmentTypeEnum | (string & {});
 export type InterconnectAttachmentBandwidth =
   | compute.InterconnectAttachmentBandwidthEnum
   | (string & {});
@@ -40,10 +39,8 @@ export type InterconnectAttachmentStackType =
 export type InterconnectAttachmentEdgeAvailabilityDomain =
   | compute.InterconnectAttachmentEdgeAvailabilityDomainEnum
   | (string & {});
-export type InterconnectAttachmentPartnerMetadata =
-  compute.InterconnectAttachmentPartnerMetadata;
-export type InterconnectAttachmentL2Forwarding =
-  compute.InterconnectAttachmentL2Forwarding;
+export type InterconnectAttachmentPartnerMetadata = compute.InterconnectAttachmentPartnerMetadata;
+export type InterconnectAttachmentL2Forwarding = compute.InterconnectAttachmentL2Forwarding;
 
 export type InterconnectAttachmentProps = {
   /**
@@ -261,14 +258,6 @@ export class InterconnectAttachmentNotResolved extends Data.TaggedError(
   region: string;
 }> {}
 
-export class InterconnectAttachmentOperationFailed extends Data.TaggedError(
-  "GCP.Compute.InterconnectAttachmentOperationFailed",
-)<{
-  interconnectAttachmentName: string;
-  operation: string;
-  message: string;
-}> {}
-
 export class InterconnectAttachmentStillExists extends Data.TaggedError(
   "GCP.Compute.InterconnectAttachmentStillExists",
 )<{
@@ -310,14 +299,11 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_TYPE).toUpperCase();
 
-const encryptionOf = (value: string | undefined) =>
-  (value ?? DEFAULT_ENCRYPTION).toUpperCase();
+const encryptionOf = (value: string | undefined) => (value ?? DEFAULT_ENCRYPTION).toUpperCase();
 
-const stackOf = (value: string | undefined) =>
-  (value ?? DEFAULT_STACK).toUpperCase();
+const stackOf = (value: string | undefined) => (value ?? DEFAULT_STACK).toUpperCase();
 
 const routerUrl = (project: string, region: string, value: string) => {
   if (value.includes("/")) return value;
@@ -369,58 +355,7 @@ const toAttrs = (
   kind: attachment.kind,
 });
 
-const operationMessage = (operation: compute.Operation) =>
-  (operation.error?.errors ?? [])
-    .map((error) => error.message ?? error.code ?? "")
-    .filter((part) => part.length > 0)
-    .join("; ") ||
-  operation.httpErrorMessage ||
-  operation.statusMessage ||
-  "Compute operation failed";
-
-const operationText = (operation: compute.Operation) =>
-  operationMessage(operation).toLowerCase();
-
-const failIfErrored = (
-  interconnectAttachmentName: string,
-  operation: compute.Operation,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) => {
-  const text = operationText(operation);
-  if (
-    options?.ignoreAlreadyExists === true &&
-    (text.includes("already exists") || text.includes("already_exists"))
-  ) {
-    return Effect.void;
-  }
-  if (
-    options?.ignoreNotFound === true &&
-    (text.includes("not found") || text.includes("not_found"))
-  ) {
-    return Effect.void;
-  }
-  const errors = operation.error?.errors ?? [];
-  if (
-    errors.length > 0 ||
-    (operation.httpErrorStatusCode !== undefined &&
-      operation.httpErrorStatusCode >= 400)
-  ) {
-    return Effect.fail(
-      new InterconnectAttachmentOperationFailed({
-        interconnectAttachmentName,
-        operation: operation.name ?? "",
-        message: operationMessage(operation),
-      }),
-    );
-  }
-  return Effect.void;
-};
-
-const getByName = (
-  project: string,
-  region: string,
-  interconnectAttachment: string,
-) =>
+const getByName = (project: string, region: string, interconnectAttachment: string) =>
   compute
     .getInterconnectAttachments({
       project,
@@ -429,44 +364,7 @@ const getByName = (
     })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitForOperation = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-  interconnectAttachmentName: string,
-  options?: { ignoreAlreadyExists?: boolean; ignoreNotFound?: boolean },
-) =>
-  Effect.gen(function* () {
-    const operationName = lastSegment(operation.name);
-    let current = operation;
-    if (current.status !== "DONE" && operationName.length > 0) {
-      current = yield* waitRegionOperations(
-        { project, region, operation: operationName },
-        { times: 20 },
-      ).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      return yield* new InterconnectAttachmentOperationFailed({
-        interconnectAttachmentName,
-        operation: operation.name ?? "",
-        message: `Timed out waiting for operation (status=${current.status})`,
-      });
-    }
-    yield* failIfErrored(interconnectAttachmentName, current, options);
-    return current;
-  });
-
-const awaitResource = (
-  project: string,
-  region: string,
-  interconnectAttachmentName: string,
-) =>
+const awaitResource = (project: string, region: string, interconnectAttachmentName: string) =>
   getByName(project, region, interconnectAttachmentName).pipe(
     Effect.flatMap((attachment) =>
       attachment !== undefined
@@ -479,18 +377,13 @@ const awaitResource = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectAttachmentNotResolved",
+      while: (error) => error._tag === "GCP.Compute.InterconnectAttachmentNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
   );
 
-const waitUntilGone = (
-  project: string,
-  region: string,
-  interconnectAttachmentName: string,
-) =>
+const waitUntilGone = (project: string, region: string, interconnectAttachmentName: string) =>
   getByName(project, region, interconnectAttachmentName).pipe(
     Effect.flatMap((attachment) =>
       attachment === undefined
@@ -502,15 +395,11 @@ const waitUntilGone = (
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.InterconnectAttachmentStillExists",
+      while: (error) => error._tag === "GCP.Compute.InterconnectAttachmentStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.InterconnectAttachmentStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.InterconnectAttachmentStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -522,13 +411,9 @@ const runOp = <E extends { readonly _tag: string }, R>(
 ) =>
   start.pipe(
     Effect.flatMap((operation) =>
-      waitForOperation(
-        project,
-        region,
-        operation,
-        interconnectAttachmentName,
-        options,
-      ),
+      waitRegionOperation(project, region, operation, {
+        ignore: ignoredCodes(options),
+      }),
     ),
     Effect.retry({
       while: (error) => error._tag === "Conflict",
@@ -554,35 +439,23 @@ export const InterconnectAttachmentProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousName =
-        olds?.interconnectAttachmentName ?? output?.interconnectAttachmentName;
+      const previousName = olds?.interconnectAttachmentName ?? output?.interconnectAttachmentName;
       const nextName = news.interconnectAttachmentName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const previousRouter = lastSegment(olds?.router ?? output?.router);
       const nextRouter = lastSegment(news.router);
       const previousType = typeOf(olds?.type ?? output?.type);
       const nextType = typeOf(news.type ?? previousType);
-      const previousIx = lastSegment(
-        olds?.interconnect ?? output?.interconnect,
-      );
+      const previousIx = lastSegment(olds?.interconnect ?? output?.interconnect);
       const nextIx = lastSegment(news.interconnect ?? previousIx);
       const previousEnc = encryptionOf(olds?.encryption ?? output?.encryption);
       const nextEnc = encryptionOf(news.encryption ?? previousEnc);
       const previousVlan = olds?.vlanTag8021q ?? output?.vlanTag8021q;
       const nextVlan = news.vlanTag8021q ?? previousVlan;
-      const previousDomain =
-        olds?.edgeAvailabilityDomain ?? output?.edgeAvailabilityDomain;
+      const previousDomain = olds?.edgeAvailabilityDomain ?? output?.edgeAvailabilityDomain;
       const nextDomain = news.edgeAvailabilityDomain ?? previousDomain;
 
       const immutableChanged =
@@ -609,20 +482,11 @@ export const InterconnectAttachmentProvider = () =>
         olds?.interconnectAttachmentName,
         output?.interconnectAttachmentName,
       );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const existing = yield* getByName(
-        env.project,
-        region,
-        interconnectAttachmentName,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const existing = yield* getByName(env.project, region, interconnectAttachmentName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -640,9 +504,7 @@ export const InterconnectAttachmentProvider = () =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.interconnectAttachments ?? [])
               .filter((item) =>
-                Object.keys(item.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -667,11 +529,7 @@ export const InterconnectAttachmentProvider = () =>
       const stackType = stackOf(news.stackType);
       const adminEnabled = news.adminEnabled !== false;
 
-      let current = yield* getByName(
-        env.project,
-        region,
-        interconnectAttachmentName,
-      );
+      let current = yield* getByName(env.project, region, interconnectAttachmentName);
 
       if (current === undefined) {
         yield* compute
@@ -702,33 +560,22 @@ export const InterconnectAttachmentProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) =>
-              waitForOperation(
-                env.project,
-                region,
-                operation,
-                interconnectAttachmentName,
-                { ignoreAlreadyExists: true },
-              ),
+              waitRegionOperation(env.project, region, operation, {
+                ignore: ["RESOURCE_ALREADY_EXISTS"],
+              }),
             ),
             Effect.catchTag("Conflict", () => Effect.void),
           );
-        current = yield* awaitResource(
-          env.project,
-          region,
-          interconnectAttachmentName,
-        );
+        current = yield* awaitResource(env.project, region, interconnectAttachmentName);
       }
 
-      const observedMtu =
-        current.mtu !== undefined ? Number(current.mtu) : undefined;
+      const observedMtu = current.mtu !== undefined ? Number(current.mtu) : undefined;
       const needsPatch =
         (current.description ?? "") !== (news.description ?? "") ||
         (current.adminEnabled !== false) !== adminEnabled ||
-        (news.bandwidth !== undefined &&
-          (current.bandwidth ?? "") !== news.bandwidth) ||
+        (news.bandwidth !== undefined && (current.bandwidth ?? "") !== news.bandwidth) ||
         (news.mtu !== undefined && observedMtu !== news.mtu) ||
-        (news.stackType !== undefined &&
-          stackOf(current.stackType) !== stackType) ||
+        (news.stackType !== undefined && stackOf(current.stackType) !== stackType) ||
         (news.partnerMetadata !== undefined &&
           JSON.stringify(current.partnerMetadata ?? null) !==
             JSON.stringify(news.partnerMetadata ?? null));
@@ -752,9 +599,7 @@ export const InterconnectAttachmentProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, region, interconnectAttachmentName)) ??
-          current;
+        current = (yield* getByName(env.project, region, interconnectAttachmentName)) ?? current;
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -762,11 +607,7 @@ export const InterconnectAttachmentProvider = () =>
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
           const latest =
-            (yield* getByName(
-              env.project,
-              region,
-              interconnectAttachmentName,
-            )) ?? current;
+            (yield* getByName(env.project, region, interconnectAttachmentName)) ?? current;
           if (latest === undefined) {
             return yield* new InterconnectAttachmentNotResolved({
               interconnectAttachmentName,
@@ -794,9 +635,7 @@ export const InterconnectAttachmentProvider = () =>
             schedule: Schedule.spaced("1 second"),
           }),
         );
-        current =
-          (yield* getByName(env.project, region, interconnectAttachmentName)) ??
-          current;
+        current = (yield* getByName(env.project, region, interconnectAttachmentName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -815,13 +654,9 @@ export const InterconnectAttachmentProvider = () =>
         })
         .pipe(
           Effect.flatMap((operation) =>
-            waitForOperation(
-              project,
-              region,
-              operation,
-              output.interconnectAttachmentName,
-              { ignoreNotFound: true },
-            ),
+            waitRegionOperation(project, region, operation, {
+              ignore: ["RESOURCE_NOT_FOUND"],
+            }),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

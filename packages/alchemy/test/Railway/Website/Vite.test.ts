@@ -1,40 +1,30 @@
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi } from "@distilled.cloud/railway";
-import * as Railway from "@/Railway";
-import { suitePartition } from "../suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
 import * as pathe from "pathe";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { suitePartition } from "../suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../Cloudflare/Website/vite-spa-fixture",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../Cloudflare/Website/vite-spa-fixture");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = ["index.html", "package.json", "src"];
 
-const readService = Query.fn((id: string) => ({
-  deletedAt: RailwayApi.service({ id }).deletedAt,
-}));
+const readService = Query.fn((id: string) => ({ deletedAt: RailwayApi.service({ id }).deletedAt }));
 
 const waitUntilGone = (serviceId: string) =>
   readService(serviceId).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
     Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -62,9 +52,7 @@ test.provider(
             project,
             environment,
             rootDir,
-            memo: {
-              include: ["index.html", "src/**", "package.json"],
-            },
+            memo: { include: ["index.html", "src/**", "package.json"] },
           });
           return { site };
         }),
@@ -81,26 +69,17 @@ test.provider(
         timeout: "90 seconds",
         label: "vite spa index",
       });
-      yield* expectUrlContains(
-        `${url!}/missing-client-route`,
-        "Vite SPA fixture",
-        {
-          timeout: "15 seconds",
-          label: "vite spa fallback",
-        },
-      );
+      yield* expectUrlContains(`${url!}/missing-client-route`, "Vite SPA fixture", {
+        timeout: "15 seconds",
+        label: "vite spa fallback",
+      });
 
       const client = yield* HttpClient.HttpClient;
       const health = yield* client.get(`${url!}/health`).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`health returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`health returned ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 6,
-        }),
+        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }),
       );
       expect(health).toContain("ok");
 

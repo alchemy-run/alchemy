@@ -1,22 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const runLifecycle =
-  !process.env.FAST &&
-  !!(process.env.GCP_TEST_AIPLATFORM || process.env.GCP_TEST_VERTEX);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
@@ -38,15 +31,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getReasoningEnginesSandboxEnvironments({
-          name: `projects/${project}/locations/us-central1/reasoningEngines/alchemy-missing-engine/sandboxEnvironments/alchemy-missing-sandbox`,
+          name: `projects/${project}/locations/us-central1/reasoningEngines/1234567890123456789/sandboxEnvironments/1234567890123456789`,
         }),
       );
-      expect([
-        "NotFound",
-        "Forbidden",
-        "BadRequest",
-        "SandboxEnvironmentsNotEnabled",
-      ]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -56,53 +44,34 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider.skipIf(!!process.env.FAST)(
   "create and delete a sandbox environment",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
-              location: "us-central1",
-              displayName: "alchemy-sandbox-engine",
-              labels: { env: "test" },
-              spec: { agentFramework: "custom" },
-            });
-            const sandbox =
-              yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironment("Code", {
-                reasoningEngine: engine.name,
-                displayName: "code",
-                ttl: "600s",
-                spec: {
-                  codeExecutionEnvironment: {
-                    codeLanguage: "LANGUAGE_PYTHON",
-                    machineConfig: "MACHINE_CONFIG_VCPU4_RAM4GIB",
-                  },
-                },
-              });
-            return { engine, sandbox };
-          }),
-        )
-        .pipe(
-          Effect.catchTag("SandboxEnvironmentsNotEnabled", (error) => {
-            expect(error.message ?? "").toMatch(
-              /not implemented|not supported|not enabled/i,
-            );
-            return Effect.succeed(undefined);
-          }),
-          Effect.catchTag(
-            "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentNotResolved",
-            () => Effect.succeed(undefined),
-          ),
-        );
-
-      if (created === undefined) {
-        yield* stack.destroy();
-        return;
-      }
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const engine = yield* GCP.AIPlatform.ReasoningEngine("Agent", {
+            location: "us-central1",
+            displayName: "alchemy-sandbox-engine",
+            labels: { env: "test" },
+            spec: { agentFramework: "custom" },
+          });
+          const sandbox = yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironment("Code", {
+            reasoningEngine: engine.name,
+            displayName: "code",
+            ttl: "600s",
+            spec: {
+              codeExecutionEnvironment: {
+                codeLanguage: "LANGUAGE_PYTHON",
+                machineConfig: "MACHINE_CONFIG_VCPU4_RAM4GIB",
+              },
+            },
+          });
+          return { engine, sandbox };
+        }),
+      );
 
       expect(created.sandbox.name).toContain("/sandboxEnvironments/");
       expect(created.sandbox.displayName).toEqual("code");

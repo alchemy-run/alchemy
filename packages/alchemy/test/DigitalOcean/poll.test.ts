@@ -1,7 +1,7 @@
-import { pollUntil } from "@/DigitalOcean/poll";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { pollUntil } from "@/DigitalOcean/poll";
 
 class TimedOut extends Data.TaggedError("TimedOut")<{
   readonly last: number;
@@ -22,28 +22,24 @@ const pollUntilReaches = (target: number) => {
   );
 };
 
-describe(
-  "pollUntil",
-  { tags: ["unit", "provider:digitalocean", "local"] },
-  () => {
-    it.live("returns the first observation when it already holds", () =>
-      Effect.gen(function* () {
-        expect(yield* pollUntilReaches(1)).toEqual(1);
-      }),
-    );
+describe("pollUntil", { tags: ["unit", "provider:digitalocean", "local"] }, () => {
+  it.live("returns the first observation when it already holds", () =>
+    Effect.gen(function* () {
+      expect(yield* pollUntilReaches(1)).toEqual(1);
+    }),
+  );
 
-    it.live("observes again until the condition holds", () =>
-      Effect.gen(function* () {
-        expect(yield* pollUntilReaches(3)).toEqual(3);
-      }),
-    );
+  it.live("observes again until the condition holds", () =>
+    Effect.gen(function* () {
+      expect(yield* pollUntilReaches(3)).toEqual(3);
+    }),
+  );
 
-    it.live("fails with the last observation when the budget runs out", () =>
-      Effect.gen(function* () {
-        const timeout = yield* Effect.flip(pollUntilReaches(10));
-        expect(timeout).toBeInstanceOf(TimedOut);
-        expect(timeout.last).toEqual(BUDGET.times + 1);
-      }),
-    );
-  },
-);
+  it.live("fails with the last observation when the budget runs out", () =>
+    Effect.gen(function* () {
+      const timeout = yield* Effect.flip(pollUntilReaches(10));
+      expect(timeout).toBeInstanceOf(TimedOut);
+      expect(timeout.last).toEqual(BUDGET.times + 1);
+    }),
+  );
+});

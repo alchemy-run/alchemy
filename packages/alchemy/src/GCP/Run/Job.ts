@@ -3,17 +3,13 @@ import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  Platform,
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -22,18 +18,10 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
-import type { Scope } from "effect/Scope";
 import { tagRecord } from "../../Tags.ts";
-import {
-  destroyHostImageRepository,
-  makeImageSource,
-} from "../ArtifactRegistry/ImageSource.ts";
+import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  retryActAs,
-  type AppliedIamGrant,
-  type GcpHostBinding,
-} from "../Host.ts";
+import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -49,6 +37,10 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import {
+  type LongRunningOperation,
+  waitForOperation as waitForLongRunningOperation,
+} from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 49;
@@ -291,11 +283,7 @@ export type JobServices = Credentials | GcpEnvironment | ServerHost;
 export type JobShape =
   | void
   | (Exclude<Main<JobServices>, void> & {
-      run?: Effect.Effect<
-        void,
-        never,
-        JobServices | PlatformServices | RuntimeContext | Scope
-      >;
+      run?: Effect.Effect<void, never, JobServices | PlatformServices | RuntimeContext | Scope>;
     });
 
 /**
@@ -355,12 +343,14 @@ export type JobShape =
  * @resource
  * @category Run
  */
-export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
-  Platform("GCP.Run.Job", {
+export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Platform(
+  "GCP.Run.Job",
+  {
     createRuntimeContext: createContainerRuntimeContext("GCP.Run.Job") as (
       id: string,
     ) => JobRuntimeContext,
-  });
+  },
+);
 
 export class JobNotResolved extends Data.TaggedError("GCP.Run.JobNotResolved")<{
   name: string;
@@ -377,19 +367,6 @@ export class JobReconciling extends Data.TaggedError("GCP.Run.JobReconciling")<{
   state: string;
 }> {}
 
-export class JobOperationFailed extends Data.TaggedError(
-  "GCP.Run.JobOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class JobOperationPending extends Data.TaggedError(
-  "GCP.Run.JobOperationPending",
-)<{
-  operation: string;
-}> {}
-
 export class JobStillExists extends Data.TaggedError("GCP.Run.JobStillExists")<{
   name: string;
 }> {}
@@ -400,10 +377,8 @@ const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (
-  location: string | undefined,
-  defaultLocation: string,
-) => lastSegment(location ?? defaultLocation).toLowerCase();
+const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
+  lastSegment(location ?? defaultLocation).toLowerCase();
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -425,14 +400,10 @@ const parseName = (name: string, defaultLocation: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    jobId:
-      jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    jobId: jobsAt >= 0 && parts[jobsAt + 1] ? parts[jobsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -459,8 +430,7 @@ const toId = (id: string, jobId: string | undefined, existing?: string) =>
 
 const HOST_TYPE = "GCP.Run.Job";
 
-const bootstrapFor = (news: JobProps) =>
-  makeGcpBootstrap("CloudRunJob", news.handler ?? "default");
+const bootstrapFor = (news: JobProps) => makeGcpBootstrap("CloudRunJob", news.handler ?? "default");
 
 const toAttrs = (
   job: cloudrun.GoogleCloudRunV2Job,
@@ -579,9 +549,7 @@ const comparableContainers = (containers: JobContainer[] | undefined) =>
     args: container.args ?? [],
     env: comparableEnv(container.env),
     workingDir: container.workingDir ?? "",
-    limits: container.resources?.limits
-      ? tagRecord(container.resources.limits)
-      : {},
+    limits: container.resources?.limits ? tagRecord(container.resources.limits) : {},
   }));
 
 const comparableObservedContainers = (
@@ -597,9 +565,7 @@ const comparableObservedContainers = (
       args: container.args ?? [],
       env: comparableEnv(container.env),
       workingDir: container.workingDir ?? "",
-      limits: user?.resources?.limits
-        ? tagRecord(container.resources?.limits)
-        : {},
+      limits: user?.resources?.limits ? tagRecord(container.resources?.limits) : {},
     };
   });
 
@@ -612,17 +578,14 @@ const desiredTemplate = (
   return {
     taskCount: news.taskCount ?? exec?.taskCount,
     parallelism: news.parallelism ?? exec?.parallelism,
-    labels: news.executionLabels
-      ? toLabels(news.executionLabels)
-      : exec?.labels,
+    labels: news.executionLabels ? toLabels(news.executionLabels) : exec?.labels,
     annotations: news.executionAnnotations ?? exec?.annotations,
     template: {
       containers: toApiContainers(news.containers),
       timeout: news.timeout ?? task?.timeout,
       maxRetries: news.maxRetries ?? task?.maxRetries,
       serviceAccount: news.serviceAccount ?? task?.serviceAccount,
-      executionEnvironment:
-        news.executionEnvironment ?? task?.executionEnvironment,
+      executionEnvironment: news.executionEnvironment ?? task?.executionEnvironment,
       encryptionKey: news.encryptionKey ?? task?.encryptionKey,
       vpcAccess: news.vpcAccess ?? task?.vpcAccess,
       volumes: task?.volumes,
@@ -632,81 +595,39 @@ const desiredTemplate = (
   };
 };
 
-const isNotFoundStatus = (error: cloudrun.GoogleRpcStatus | undefined) => {
-  if (error === undefined) return false;
-  if (error.code === 5) return true;
-  return (error.message ?? "").toLowerCase().includes("not found");
-};
-
+/** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
   operation: cloudrun.GoogleLongrunningOperation,
   options?: { notFoundOk?: boolean },
 ) =>
-  Effect.gen(function* () {
-    const name = operation.name;
-    if (operation.done === true) {
-      if (operation.error) {
-        if (options?.notFoundOk === true && isNotFoundStatus(operation.error)) {
-          return operation;
-        }
-        return yield* new JobOperationFailed({
-          operation: name ?? "",
-          message: operation.error.message ?? "operation failed",
-        });
-      }
-      return operation;
-    }
-    if (name === undefined || name.length === 0) {
-      return yield* new JobOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const getOperation = cloudrun.getProjectsLocationsOperations({ name });
-    const resolved =
-      options?.notFoundOk === true
-        ? getOperation.pipe(
+  waitForLongRunningOperation(
+    operation,
+    (name) => {
+      const get = cloudrun.getProjectsLocationsOperations({ name });
+      return options?.notFoundOk === true
+        ? get.pipe(
             Effect.catchTag("NotFound", () =>
-              Effect.succeed({
-                name,
-                done: true,
-              } satisfies cloudrun.GoogleLongrunningOperation),
+              Effect.succeed<LongRunningOperation>({ name, done: true }),
             ),
           )
-        : getOperation.pipe(
+        : get.pipe(
+            // A just-returned operation can briefly 404 on read.
             Effect.retry({
               while: (error) => error._tag === "NotFound",
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
           );
-
-    return yield* resolved.pipe(
-      Effect.filterOrFail(
-        (current) => current.done === true,
-        () => new JobOperationPending({ operation: name }),
-      ),
-      Effect.flatMap((current) => {
-        const status = current.error;
-        const ignoreNotFound =
-          options?.notFoundOk === true && isNotFoundStatus(status);
-        return status && !ignoreNotFound
-          ? Effect.fail(
-              new JobOperationFailed({
-                operation: name,
-                message: status.message ?? "operation failed",
-              }),
-            )
-          : Effect.succeed(current);
-      }),
-      Effect.retry({
-        while: (error) => error._tag === "GCP.Run.JobOperationPending",
-        times: 10,
-        schedule: Schedule.spaced("3 seconds"),
-      }),
-    );
-  });
+    },
+    { budget: "10 minutes" },
+  ).pipe(
+    // google.rpc.Code NOT_FOUND: the resource was already gone.
+    Effect.catchTag("GCP.OperationFailed", (error) =>
+      options?.notFoundOk === true && error.code === 5
+        ? Effect.succeed<LongRunningOperation>(operation)
+        : Effect.fail(error),
+    ),
+  );
 
 const isPendingJob = (job: cloudrun.GoogleCloudRunV2Job) => {
   const state = job.terminalCondition?.state ?? "";
@@ -745,8 +666,7 @@ const waitUntilReady = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.Run.JobReconciling" ||
-        error._tag === "GCP.Run.JobNotResolved",
+        error._tag === "GCP.Run.JobReconciling" || error._tag === "GCP.Run.JobNotResolved",
       times: 10,
       schedule: Schedule.spaced("4 seconds"),
     }),
@@ -755,9 +675,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((job) =>
-      job === undefined
-        ? Effect.void
-        : Effect.fail(new JobStillExists({ name })),
+      job === undefined ? Effect.void : Effect.fail(new JobStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.JobStillExists",
@@ -776,19 +694,10 @@ export const JobProvider = () =>
 
       const previousId = olds?.jobId ?? output?.jobId;
       const nextId = news.jobId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
 
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
       const locationChanged = previousLocation !== nextLocation;
       if (idChanged || locationChanged) {
         return { action: "replace" as const, deleteFirst: false };
@@ -812,10 +721,7 @@ export const JobProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, jobId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleteTime !== undefined) {
@@ -825,9 +731,7 @@ export const JobProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
       });
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -843,9 +747,7 @@ export const JobProvider = () =>
             Stream.filter(
               (job) =>
                 job.deleteTime === undefined &&
-                Object.keys(job.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(job.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((job) => toAttrs(job, env.project, env.region)),
             Stream.runCollect,
@@ -856,10 +758,7 @@ export const JobProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, news.jobId, output?.jobId);
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, jobId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -894,7 +793,7 @@ export const JobProvider = () =>
             bootstrap: bootstrapFor(news),
             session,
           })
-          .pipe(Effect.tapError(() => identity.cleanup));
+          .pipe(Effect.onError(() => identity.cleanup));
         codeHash = image.codeHash;
         const container = news.containers?.[0];
         containers = [
@@ -938,9 +837,7 @@ export const JobProvider = () =>
             body: {
               labels: desiredLabels,
               annotations:
-                Object.keys(desiredAnnotations).length > 0
-                  ? desiredAnnotations
-                  : undefined,
+                Object.keys(desiredAnnotations).length > 0 ? desiredAnnotations : undefined,
               launchStage: news.launchStage,
               binaryAuthorization: news.binaryAuthorization,
               template: desiredTemplate(effectiveNews, undefined),
@@ -949,7 +846,7 @@ export const JobProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
-            Effect.tapError(() => identity.cleanup),
+            Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -966,8 +863,7 @@ export const JobProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const annotationsChanged =
         news.annotations !== undefined &&
-        stable(desiredAnnotations) !==
-          stable(userAnnotations(current.annotations));
+        stable(desiredAnnotations) !== stable(userAnnotations(current.annotations));
       const containersChanged =
         stable(comparableContainers(effectiveNews.containers)) !==
         stable(
@@ -978,42 +874,33 @@ export const JobProvider = () =>
         );
       const timeoutChanged =
         news.timeout !== undefined &&
-        normalizeDuration(news.timeout) !==
-          normalizeDuration(current.template?.template?.timeout);
+        normalizeDuration(news.timeout) !== normalizeDuration(current.template?.template?.timeout);
       const maxRetriesChanged =
         news.maxRetries !== undefined &&
         (current.template?.template?.maxRetries ?? 3) !== news.maxRetries;
       const taskCountChanged =
-        news.taskCount !== undefined &&
-        (current.template?.taskCount ?? 1) !== news.taskCount;
+        news.taskCount !== undefined && (current.template?.taskCount ?? 1) !== news.taskCount;
       const parallelismChanged =
-        news.parallelism !== undefined &&
-        (current.template?.parallelism ?? 0) !== news.parallelism;
+        news.parallelism !== undefined && (current.template?.parallelism ?? 0) !== news.parallelism;
       const serviceAccountChanged =
         (current.template?.template?.serviceAccount ?? "") !== serviceAccount;
       const executionEnvironmentChanged =
         news.executionEnvironment !== undefined &&
-        (current.template?.template?.executionEnvironment ?? "") !==
-          news.executionEnvironment;
+        (current.template?.template?.executionEnvironment ?? "") !== news.executionEnvironment;
       const encryptionKeyChanged =
         news.encryptionKey !== undefined &&
-        (current.template?.template?.encryptionKey ?? "") !==
-          news.encryptionKey;
+        (current.template?.template?.encryptionKey ?? "") !== news.encryptionKey;
       const vpcChanged =
         news.vpcAccess !== undefined &&
-        stable(news.vpcAccess) !==
-          stable(current.template?.template?.vpcAccess);
+        stable(news.vpcAccess) !== stable(current.template?.template?.vpcAccess);
       const launchStageChanged =
-        news.launchStage !== undefined &&
-        (current.launchStage ?? "GA") !== news.launchStage;
+        news.launchStage !== undefined && (current.launchStage ?? "GA") !== news.launchStage;
       const binaryAuthorizationChanged =
         news.binaryAuthorization !== undefined &&
-        stable(news.binaryAuthorization) !==
-          stable(current.binaryAuthorization);
+        stable(news.binaryAuthorization) !== stable(current.binaryAuthorization);
       const executionLabelsChanged =
         news.executionLabels !== undefined &&
-        stable(toLabels(news.executionLabels)) !==
-          stable(tagRecord(current.template?.labels));
+        stable(toLabels(news.executionLabels)) !== stable(tagRecord(current.template?.labels));
       const executionAnnotationsChanged =
         news.executionAnnotations !== undefined &&
         stable(tagRecord(news.executionAnnotations)) !==
@@ -1041,13 +928,9 @@ export const JobProvider = () =>
           body: {
             name,
             labels: desiredLabels,
-            annotations:
-              news.annotations !== undefined
-                ? desiredAnnotations
-                : current.annotations,
+            annotations: news.annotations !== undefined ? desiredAnnotations : current.annotations,
             launchStage: news.launchStage ?? current.launchStage,
-            binaryAuthorization:
-              news.binaryAuthorization ?? current.binaryAuthorization,
+            binaryAuthorization: news.binaryAuthorization ?? current.binaryAuthorization,
             template: desiredTemplate(effectiveNews, current),
           },
         });
@@ -1074,11 +957,7 @@ export const JobProvider = () =>
       }
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
-      yield* destroyHostImageRepository(
-        id,
-        output,
-        rfc1035(`${output.jobId}-src`),
-      );
+      yield* destroyHostImageRepository(id, output, rfc1035(`${output.jobId}-src`));
       yield* releaseHostIdentity(output);
     }),
   });

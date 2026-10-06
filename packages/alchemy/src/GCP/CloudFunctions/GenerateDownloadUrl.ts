@@ -14,7 +14,10 @@ export interface GenerateDownloadUrlRequest extends Omit<
  *
  * Bind this operation to a {@link Function} in a Function/Action init phase.
  * Provide {@link GenerateDownloadUrlHttp}. The returned URL is valid for a
- * limited time (about 30 minutes).
+ * limited time (about 30 minutes). Grants `roles/cloudfunctions.developer`
+ * (the narrowest predefined role with `functions.sourceCodeGet`) on the
+ * project under an IAM Condition naming only the bound function (2nd gen
+ * functions accept only invoker roles on their own IAM policy).
  *
  * ### Downloading Source
  * **Example:** Generate a signed download URL

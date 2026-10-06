@@ -1,32 +1,26 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Alchemy";
 import RuleTargetWorker from "./fixtures/rule-target-worker.ts";
 import { emailRoutingScoped } from "./scope.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -82,20 +76,12 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           const { rule, workerName } = yield* stack.deploy(
             Effect.gen(function* () {
-              const routing = yield* Cloudflare.Email.Routing("Routing", {
-                zone: zoneName,
-              });
+              const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
               const worker = yield* RuleTargetWorker;
               const rule = yield* Cloudflare.Email.Rule("WorkerRule", {
                 zone: { zoneId: routing.zoneId },
                 name: "alchemy worker-target test",
-                matchers: [
-                  {
-                    type: "literal",
-                    field: "to",
-                    value: `worker-target@${zoneName}`,
-                  },
-                ],
+                matchers: [{ type: "literal", field: "to", value: `worker-target@${zoneName}` }],
                 actions: [{ type: "worker", value: [worker.workerName] }],
               });
               return { rule, workerName: worker.workerName };
@@ -104,20 +90,16 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           expect(rule.ruleId).not.toEqual("");
           expect(rule.zoneId).toEqual(zoneId);
-          expect(rule.actions).toEqual([
-            { type: "worker", value: [workerName] },
-          ]);
+          expect(rule.actions).toEqual([{ type: "worker", value: [workerName] }]);
 
           // Verify out-of-band that Cloudflare really stored the worker action.
-          const live = yield* emailRouting
-            .getRule({ zoneId, ruleIdentifier: rule.ruleId })
-            .pipe(
-              Effect.retry({
-                while: (e) => e._tag === "Forbidden",
-                schedule: Schedule.exponential("500 millis"),
-                times: 8,
-              }),
-            );
+          const live = yield* emailRouting.getRule({ zoneId, ruleIdentifier: rule.ruleId }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: Schedule.exponential("500 millis"),
+              times: 8,
+            }),
+          );
           expect(live.actions?.[0]?.type).toEqual("worker");
           expect(live.actions?.[0]?.value).toEqual([workerName]);
 
@@ -139,9 +121,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           const { catchAll, workerName } = yield* stack.deploy(
             Effect.gen(function* () {
-              const routing = yield* Cloudflare.Email.Routing("Routing", {
-                zone: zoneName,
-              });
+              const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
               const worker = yield* RuleTargetWorker;
               const catchAll = yield* Cloudflare.Email.CatchAll("CatchAll", {
                 zone: { zoneId: routing.zoneId },
@@ -153,9 +133,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           );
 
           expect(catchAll.zoneId).toEqual(zoneId);
-          expect(catchAll.actions).toEqual([
-            { type: "worker", value: [workerName] },
-          ]);
+          expect(catchAll.actions).toEqual([{ type: "worker", value: [workerName] }]);
 
           yield* stack.destroy();
         }).pipe(logLevel),

@@ -5,22 +5,12 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
-  MAX_DESCRIPTION_LENGTH,
   ResourceNotResolved,
-  encodeOwnershipLine,
   expandParent,
-  findOwnedByDescription,
-  hasOwnershipMarker,
-  listGlossaryEntriesAt,
-  listProjectGlossaryEntries,
-  locationParent,
   normalizeLocation,
-  ownedByAlchemy,
-  parseOwnership,
   parseResourceName,
   replaceOnIdentity,
   resourceNameOf,
@@ -81,9 +71,7 @@ export type GlossariesGlossaryEntryProps = {
    */
   glossaryEntryId?: string;
   /**
-   * Human-readable description. Glossary entries have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and
-   * stripped from attributes.
+   * Human-readable description.
    */
   description?: string;
   /**
@@ -111,7 +99,7 @@ export type GlossariesGlossaryEntry = Resource<
     project: string;
     /** Location id. */
     location: string;
-    /** User description with the Alchemy ownership prefix stripped. */
+    /** Description. */
     description: string | undefined;
     /** Unidirectional term pair, if set. */
     termsPair: GlossaryTermsPairProps | undefined;
@@ -125,10 +113,11 @@ export type GlossariesGlossaryEntry = Resource<
 /**
  * A single Cloud Translation glossary entry under a parent glossary.
  *
- * Entries are nested under a glossary and have no labels field. Alchemy
- * stamps ownership into `description` for `list` / nuke. Term pair /
- * term set and description update in place via patch. Parent glossary
- * and entry id are identity — changing them replaces the entry.
+ * Without labels, ownership rests on the deterministic id: `read` reports a
+ * resource it finds without prior state as unowned (adopt it with `--adopt`).
+ * Entries are nested under a glossary and have no labels field. Term pair /
+ * term set and description update in place via patch. Parent glossary and
+ * entry id are identity — changing them replaces the entry.
  *
  * ### Creating an Entry
  * **Example:** Unidirectional term pair
@@ -157,9 +146,9 @@ export type GlossariesGlossaryEntry = Resource<
  * ### Updating an Entry
  * **Example:** Change the target term
  * ```typescript
+ * // Same logical id as before; only the changed props differ.
  * const entry = yield* GCP.Translate.GlossariesGlossaryEntry("Hello", {
  *   parent: glossary.name,
- *   glossaryEntryId: existing.glossaryEntryId,
  *   termsPair: {
  *     sourceTerm: { languageCode: "en", text: "hello" },
  *     targetTerm: { languageCode: "es", text: "buenas" },
@@ -174,9 +163,7 @@ export const GlossariesGlossaryEntry = Resource<GlossariesGlossaryEntry>(
   "GCP.Translate.GlossariesGlossaryEntry",
 );
 
-const toTerm = (
-  term: translate.GlossaryTerm | undefined,
-): GlossaryTermProps | undefined => {
+const toTerm = (term: translate.GlossaryTerm | undefined): GlossaryTermProps | undefined => {
   if (term === undefined) return undefined;
   return {
     text: term.text,
@@ -209,14 +196,13 @@ const toTermsSet = (
 const toAttrs = (entry: translate.GlossaryEntry, project: string) => {
   const name = entry.name ?? "";
   const parsed = parseResourceName(name, "glossaryEntries");
-  const ownership = parseOwnership(entry.description);
   return {
     name,
     glossaryEntryId: parsed.id,
     parent: parsed.parent,
     project: parsed.project || project,
     location: parsed.location,
-    description: ownership.text,
+    description: entry.description,
     termsPair: toTermsPair(entry.termsPair),
     termsSet: toTermsSet(entry.termsSet),
   };
@@ -228,28 +214,6 @@ const getByName = (name: string) =>
     : translate
         .getProjectsLocationsGlossariesGlossaryEntries({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-const findOwned = (
-  id: string,
-  project: string,
-  parent: string,
-  hinted?: string,
-) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getByName(hinted);
-      if (existing !== undefined) return existing;
-    }
-    const local = yield* findOwnedByDescription(
-      id,
-      yield* listGlossaryEntriesAt(parent),
-    );
-    if (local !== undefined) return local;
-    return yield* findOwnedByDescription(
-      id,
-      yield* listProjectGlossaryEntries(project),
-    );
-  });
 
 const glossaryParentOf = (project: string, location: string, parent: string) =>
   expandParent(parent, project, location, "glossaries");
@@ -272,42 +236,24 @@ export const GlossariesGlossaryEntryProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const parent = glossaryParentOf(
-        env.project,
-        location,
-        olds?.parent ?? output?.parent ?? "",
-      );
+      const parent = glossaryParentOf(env.project, location, olds?.parent ?? output?.parent ?? "");
       const glossaryEntryId = olds?.glossaryEntryId ?? output?.glossaryEntryId;
       const name =
         output?.name ??
-        (glossaryEntryId
-          ? resourceNameOf(parent, "glossaryEntries", glossaryEntryId)
-          : "");
-      const existing = yield* findOwned(id, env.project, parent, name);
+        (glossaryEntryId ? resourceNameOf(parent, "glossaryEntries", glossaryEntryId) : "");
+      // Server-assigned id: only a recorded entry can be observed.
+      const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined ? attrs : Unowned(attrs);
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const env = yield* GcpEnvironment.current;
-        const entries = yield* listProjectGlossaryEntries(env.project);
-        return entries
-          .filter((entry) => hasOwnershipMarker(entry.description))
-          .map((entry) => toAttrs(entry, env.project));
-      }),
-
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = glossaryParentOf(env.project, location, news.parent);
       if (
         parent.length === 0 ||
@@ -322,12 +268,7 @@ export const GlossariesGlossaryEntryProvider = () =>
       const name = glossaryEntryId
         ? resourceNameOf(parent, "glossaryEntries", glossaryEntryId)
         : (output?.name ?? "");
-      const ownership = yield* createInternalLabels(id);
-      const description = encodeOwnershipLine(
-        ownership,
-        news.description ?? output?.description,
-        MAX_DESCRIPTION_LENGTH,
-      );
+      const description = news.description;
       const hinted = output?.name ?? name;
       const body: translate.GlossaryEntry = {
         ...(name.length > 0 ? { name } : {}),
@@ -336,7 +277,7 @@ export const GlossariesGlossaryEntryProvider = () =>
         termsSet: news.termsSet,
       };
 
-      let current = yield* findOwned(id, env.project, parent, hinted);
+      let current = yield* getByName(hinted);
 
       if (current === undefined) {
         const created = yield* retryTransient(
@@ -344,11 +285,7 @@ export const GlossariesGlossaryEntryProvider = () =>
             parent,
             body,
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () =>
-            findOwned(id, env.project, parent, name),
-          ),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
 

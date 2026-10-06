@@ -6,9 +6,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Table } from "./Table.ts";
 
 /** Per-row errors from a `tabledata.insertAll` request. */
-export class InsertRowsFailed extends Data.TaggedError(
-  "GCP.BigQuery.InsertRowsFailed",
-)<{
+export class InsertRowsFailed extends Data.TaggedError("GCP.BigQuery.InsertRowsFailed")<{
   insertErrors: ReadonlyArray<{
     /** Index of the rejected row in the request. */
     index: number | undefined;
@@ -35,11 +33,7 @@ export interface WriteTableClient {
   insert(
     rows: ReadonlyArray<Record<string, unknown>>,
     options?: InsertRowsOptions,
-  ): Effect.Effect<
-    void,
-    bigquery.InsertAllTabledataError | InsertRowsFailed,
-    RuntimeContext
-  >;
+  ): Effect.Effect<void, bigquery.InsertAllTabledataError | InsertRowsFailed, RuntimeContext>;
 }
 
 /**
@@ -66,6 +60,4 @@ export interface WriteTable extends Binding.Service<
   (table: Table) => Effect.Effect<WriteTableClient>
 > {}
 
-export const WriteTable = Binding.Service<WriteTable>(
-  "GCP.BigQuery.WriteTable",
-);
+export const WriteTable = Binding.Service<WriteTable>("GCP.BigQuery.WriteTable");

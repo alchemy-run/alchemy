@@ -64,9 +64,7 @@ export const TopicPullEventSource = Layer.effect(
     return Effect.fn(function* <Req = never>(
       topic: Topic,
       props: TopicEventSourceProps,
-      process: (
-        messages: Stream.Stream<TopicMessage>,
-      ) => Effect.Effect<void, never, Req>,
+      process: (messages: Stream.Stream<TopicMessage>) => Effect.Effect<void, never, Req>,
     ) {
       const host = yield* Binding.Host;
       const hostId = host?.LogicalId ?? "Host";

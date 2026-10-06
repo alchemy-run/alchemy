@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -192,11 +187,11 @@ export type WorkstationClustersWorkstationConfigsWorkstation = Resource<
  * ### Updating a Workstation
  * **Example:** Display name and env
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const workstation =
  *   yield* GCP.Workstations.WorkstationClustersWorkstationConfigsWorkstation(
  *     "Mine",
  *     {
- *       workstationId: existing.workstationId,
  *       workstationConfig: config.name,
  *       displayName: "alice-dev v2",
  *       env: { EDITOR: "vim" },
@@ -227,27 +222,18 @@ const expandConfig = (
   cluster: string | undefined,
 ) => {
   if (value.includes("/")) return value.replace(/\/+$/, "");
-  const clusterName = expandParent(
-    cluster ?? "",
-    project,
-    location,
-    "workstationClusters",
-  );
+  const clusterName = expandParent(cluster ?? "", project, location, "workstationClusters");
   return `${clusterName}/workstationConfigs/${value}`;
 };
 
 const toPersistent = (
-  value:
-    | workstations.WorkstationPersistentDirectory
-    | WorkstationPersistentDirectory,
+  value: workstations.WorkstationPersistentDirectory | WorkstationPersistentDirectory,
 ): WorkstationPersistentDirectory => ({
   mountPath: value.mountPath,
   sizeGb: value.sizeGb,
 });
 
-const toRuntimeHost = (
-  value: workstations.RuntimeHost | undefined,
-): RuntimeHost | undefined =>
+const toRuntimeHost = (value: workstations.RuntimeHost | undefined): RuntimeHost | undefined =>
   value === undefined
     ? undefined
     : {
@@ -260,11 +246,7 @@ const toRuntimeHost = (
           : undefined,
       };
 
-const toAttrs = (
-  item: workstations.Workstation,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: workstations.Workstation, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "workstations", region);
   const workstationConfig = parsed.parent;
@@ -301,21 +283,15 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listOwned = (project: string, region: string) =>
-  listAtNested(
-    project,
-    region,
-    "workstationClusters/-/workstationConfigs/-",
-    (parent) =>
-      listLabeledPages(
-        workstations.listProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations.pages(
-          {
-            parent,
-            pageSize: 1000,
-          },
-        ),
-        (page) => page.workstations,
-        (item) => item.labels,
-      ),
+  listAtNested(project, region, "workstationClusters/-/workstationConfigs/-", (parent) =>
+    listLabeledPages(
+      workstations.listProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations.pages({
+        parent,
+        pageSize: 1000,
+      }),
+      (page) => page.workstations,
+      (item) => item.labels,
+    ),
   );
 
 export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
@@ -334,16 +310,11 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousSource =
-        olds?.sourceWorkstation ?? output?.sourceWorkstation;
+      const previousSource = olds?.sourceWorkstation ?? output?.sourceWorkstation;
       return replaceOnIdentity({
         previousId: olds?.workstationId ?? output?.workstationId,
-        nextId:
-          news.workstationId ?? olds?.workstationId ?? output?.workstationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.workstationId ?? olds?.workstationId ?? output?.workstationId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -359,18 +330,18 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const parent = olds?.workstationConfig ?? output?.workstationConfig;
+      // A workstation cannot exist before its config's name resolved.
+      if (output?.name === undefined && !parent) return undefined;
       const workstationId = yield* toPhysicalId(
         id,
         olds?.workstationId,
         output?.workstationId,
         "station",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const config = expandConfig(
-        olds?.workstationConfig ?? output?.workstationConfig ?? "",
+        parent ?? "",
         env.project,
         location,
         olds?.workstationCluster ?? output?.workstationCluster,
@@ -379,9 +350,7 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -399,10 +368,7 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
         output?.workstationId,
         "station",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const config = expandConfig(
         news.workstationConfig,
         env.project,
@@ -421,23 +387,26 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
 
       if (current === undefined) {
         const created = yield* workstations
-          .createProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations(
-            {
-              parent: config,
-              workstationId,
-              body: {
-                displayName: news.displayName,
-                labels: desiredLabels,
-                annotations: desiredAnnotations,
-                env: desiredEnv,
-                persistentDirectories: news.persistentDirectories,
-                sourceWorkstation: news.sourceWorkstation,
-              },
+          .createProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations({
+            parent: config,
+            workstationId,
+            body: {
+              displayName: news.displayName,
+              labels: desiredLabels,
+              annotations: desiredAnnotations,
+              env: desiredEnv,
+              persistentDirectories: news.persistentDirectories,
+              sourceWorkstation: news.sourceWorkstation,
             },
-          )
+          })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -451,10 +420,9 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.displayName, news.displayName) && "displayName",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
-        fingerprint(stringMap(current.env)) !== fingerprint(desiredEnv) &&
-          "env",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
+        fingerprint(stringMap(current.env)) !== fingerprint(desiredEnv) && "env",
         news.persistentDirectories !== undefined &&
           fingerprint(current.persistentDirectories?.map(toPersistent)) !==
             fingerprint(news.persistentDirectories.map(toPersistent)) &&
@@ -463,20 +431,18 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* workstations
-          .patchProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations(
-            {
-              name: current.name ?? name,
-              updateMask: mask,
-              body: {
-                etag: current.etag,
-                labels: desiredLabels,
-                displayName: news.displayName,
-                annotations: desiredAnnotations,
-                env: desiredEnv,
-                persistentDirectories: news.persistentDirectories,
-              },
+          .patchProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations({
+            name: current.name ?? name,
+            updateMask: mask,
+            body: {
+              etag: current.etag,
+              labels: desiredLabels,
+              displayName: news.displayName,
+              annotations: desiredAnnotations,
+              env: desiredEnv,
+              persistentDirectories: news.persistentDirectories,
             },
-          )
+          })
           .pipe(
             Effect.retry({
               while: (error) => error._tag === "Conflict",
@@ -485,10 +451,7 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
             }),
           );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -496,9 +459,9 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* workstations
-        .deleteProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations(
-          { name: output.name },
-        )
+        .deleteProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations({
+          name: output.name,
+        })
         .pipe(
           Effect.retry({
             while: (error) => error._tag === "Conflict",
@@ -508,7 +471,12 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

@@ -116,12 +116,16 @@ export type DatasetsHl7V2StoresMessage = Resource<
  * ```
  *
  * ### Updating a Message
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Relabel an existing message
  * ```typescript
  * const message = yield* GCP.Healthcare.DatasetsHl7V2StoresMessage("Adt", {
- *   parent: existing.parent,
- *   messageId: existing.messageId,
- *   data: existing.data,
+ *   parent: store.name,
+ *   data: [
+ *     "MSH|^~\\&|APP|FACILITY|DEST|DESTFAC|20240101120000||ADT^A01|MSG00001|P|2.5",
+ *     "PID|1||PAT001^^^MR||DOE^JOHN",
+ *   ].join("\r"),
  *   labels: { env: "prod" },
  * });
  * ```
@@ -144,8 +148,7 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const resourceNameOf = (parent: string, messageId: string) =>
-  `${parent}/messages/${messageId}`;
+const resourceNameOf = (parent: string, messageId: string) => `${parent}/messages/${messageId}`;
 
 const locationOf = (name: string, fallback: string) => {
   const parts = name.split("/");
@@ -159,12 +162,7 @@ const projectOf = (name: string, fallback: string) => {
   return index >= 0 ? (parts[index + 1] ?? fallback) : fallback;
 };
 
-const toAttrs = (
-  message: healthcare.Message,
-  project: string,
-  data: string,
-  region: string,
-) => {
+const toAttrs = (message: healthcare.Message, project: string, data: string, region: string) => {
   const name = message.name ?? "";
   return {
     name,
@@ -210,11 +208,9 @@ const listOwnedMessages = (project: string, region: string) =>
   Effect.gen(function* () {
     const datasets = yield* listRegionDatasets(project, region);
     const named = datasets.filter((dataset) => (dataset.name ?? "").length > 0);
-    const stores = yield* Effect.forEach(
-      named,
-      (dataset) => listHl7V2Stores(dataset.name!),
-      { concurrency: 4 },
-    );
+    const stores = yield* Effect.forEach(named, (dataset) => listHl7V2Stores(dataset.name!), {
+      concurrency: 4,
+    });
     const storeNames = stores
       .flat()
       .map((store) => store.name)
@@ -227,14 +223,7 @@ const listOwnedMessages = (project: string, region: string) =>
 
 export const DatasetsHl7V2StoresMessageProvider = () =>
   Provider.succeed(DatasetsHl7V2StoresMessage, {
-    stables: [
-      "name",
-      "messageId",
-      "parent",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "messageId", "parent", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -263,9 +252,7 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       const messageId = olds?.messageId ?? output?.messageId;
       const name =
         output?.name ??
-        (messageId !== undefined && parent.length > 0
-          ? resourceNameOf(parent, messageId)
-          : "");
+        (messageId !== undefined && parent.length > 0 ? resourceNameOf(parent, messageId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined) {
         existing = yield* findOwned(parent, id);
@@ -273,9 +260,7 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       if (existing === undefined) return undefined;
       const data = yield* decodeHl7(existing.data);
       const attrs = toAttrs(existing, env.project, data, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -300,9 +285,7 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       const encoded = yield* encodeHl7(news.data);
       const name =
         output?.name ??
-        (news.messageId !== undefined
-          ? resourceNameOf(parent, news.messageId)
-          : "");
+        (news.messageId !== undefined ? resourceNameOf(parent, news.messageId) : "");
 
       let current = yield* getByName(name);
       if (current === undefined) {
@@ -348,9 +331,7 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
         );
       }
 
-      const data = sameText(current.data, encoded)
-        ? news.data
-        : yield* decodeHl7(current.data);
+      const data = sameText(current.data, encoded) ? news.data : yield* decodeHl7(current.data);
       return toAttrs(current, env.project, data, env.region);
     }),
 

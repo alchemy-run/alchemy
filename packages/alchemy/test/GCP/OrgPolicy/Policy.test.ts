@@ -1,20 +1,21 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as orgpolicy from "@distilled.cloud/gcp/orgpolicy_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !!process.env.GCP_TEST_ORGPOLICY && !process.env.FAST;
+// Project org policies need orgpolicy.policies.create, which only an org-level
+// Organization Policy Administrator grant provides; the testing credentials get
+// Forbidden "Permission 'orgpolicy.policies.create' denied on resource ...".
+// Set GOOGLE_ORGANIZATION_ID when the credentials administer the org.
+const runLifecycle = !!process.env.GOOGLE_ORGANIZATION_ID;
 
 const CONSTRAINT_A = "compute.disableSerialPortAccess";
 const CONSTRAINT_B = "compute.disableSerialPortLogging";
@@ -48,7 +49,9 @@ test.provider(
         parent: `projects/${project}`,
         pageSize: 10,
       });
-      expect(Array.isArray(page.policies ?? [])).toEqual(true);
+      expect((page.policies ?? []).map((policy) => policy.name)).not.toContain(
+        `projects/${project}/policies/compute.alchemyTestDoesNotExist`,
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),

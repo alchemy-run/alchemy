@@ -1,9 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  waitGlobalOperations,
-  waitRegionOperations,
-  waitZoneOperations,
-} from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -23,6 +18,12 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  type WaitComputeOptions,
+  waitGlobalOperation,
+  waitRegionOperation,
+  waitZoneOperation,
+} from "./operations.ts";
 
 export type SnapshotProps = {
   /**
@@ -153,36 +154,21 @@ export type Snapshot = Resource<
  */
 export const Snapshot = Resource<Snapshot>("GCP.Compute.Snapshot");
 
-export class SnapshotNotResolved extends Data.TaggedError(
-  "GCP.Compute.SnapshotNotResolved",
-)<{
+export class SnapshotNotResolved extends Data.TaggedError("GCP.Compute.SnapshotNotResolved")<{
   snapshotName: string;
 }> {}
 
-export class SnapshotOperationFailed extends Data.TaggedError(
-  "GCP.Compute.SnapshotOperationFailed",
-)<{
-  operation: string;
-  message: string;
-}> {}
-
-export class SnapshotNotReady extends Data.TaggedError(
-  "GCP.Compute.SnapshotNotReady",
-)<{
+export class SnapshotNotReady extends Data.TaggedError("GCP.Compute.SnapshotNotReady")<{
   snapshotName: string;
   status: string;
 }> {}
 
-export class SnapshotFailed extends Data.TaggedError(
-  "GCP.Compute.SnapshotFailed",
-)<{
+export class SnapshotFailed extends Data.TaggedError("GCP.Compute.SnapshotFailed")<{
   snapshotName: string;
   status: string;
 }> {}
 
-export class SnapshotStillExists extends Data.TaggedError(
-  "GCP.Compute.SnapshotStillExists",
-)<{
+export class SnapshotStillExists extends Data.TaggedError("GCP.Compute.SnapshotStillExists")<{
   snapshotName: string;
   status: string;
 }> {}
@@ -256,101 +242,6 @@ const getByName = (project: string, snapshot: string) =>
     .getSnapshots({ project, snapshot })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const operationMessage = (operation: compute.Operation): string => {
-  const errors = operation.error?.errors ?? [];
-  return (
-    errors.map((item) => item.message ?? item.code ?? "unknown").join("; ") ||
-    operation.httpErrorMessage ||
-    operation.statusMessage ||
-    "operation failed"
-  );
-};
-
-const operationCodes = (operation: compute.Operation): string[] =>
-  (operation.error?.errors ?? [])
-    .map((item) => item.code)
-    .filter((code): code is string => code !== undefined);
-
-const isAlreadyExists = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_ALREADY_EXISTS" || code === "ALREADY_EXISTS",
-  );
-
-const isNotFound = (operation: compute.Operation): boolean =>
-  operationCodes(operation).some(
-    (code) => code === "RESOURCE_NOT_FOUND" || code === "NOT_FOUND",
-  ) || /not found/i.test(operationMessage(operation));
-
-const waitSnapshotOperation = (
-  project: string,
-  operation: compute.Operation,
-  options?: { times?: number },
-) =>
-  Effect.gen(function* () {
-    if (operation.status === "DONE") {
-      if (isAlreadyExists(operation) || isNotFound(operation)) {
-        return operation;
-      }
-      if (
-        (operation.error?.errors?.length ?? 0) > 0 ||
-        (operation.httpErrorStatusCode !== undefined &&
-          operation.httpErrorStatusCode >= 400)
-      ) {
-        return yield* new SnapshotOperationFailed({
-          operation: operation.name ?? "",
-          message: operationMessage(operation),
-        });
-      }
-      return operation;
-    }
-
-    const operationName = lastSegment(operation.name);
-    if (operationName === undefined) {
-      return yield* new SnapshotOperationFailed({
-        operation: "",
-        message: "operation is missing a name",
-      });
-    }
-
-    const zone =
-      lastSegment(operation.zone) ??
-      operation.selfLink?.match(/\/zones\/([^/]+)\//)?.[1];
-    const region =
-      lastSegment(operation.region) ??
-      operation.selfLink?.match(/\/regions\/([^/]+)\//)?.[1];
-    const times = options?.times ?? 12;
-    const current =
-      zone !== undefined
-        ? yield* waitZoneOperations(
-            { project, zone, operation: operationName },
-            { times },
-          )
-        : region !== undefined
-          ? yield* waitRegionOperations(
-              { project, region, operation: operationName },
-              { times },
-            )
-          : yield* waitGlobalOperations(
-              { project, operation: operationName },
-              { times },
-            );
-
-    if (isAlreadyExists(current) || isNotFound(current)) {
-      return current;
-    }
-    if (
-      (current.error?.errors?.length ?? 0) > 0 ||
-      (current.httpErrorStatusCode !== undefined &&
-        current.httpErrorStatusCode >= 400)
-    ) {
-      return yield* new SnapshotOperationFailed({
-        operation: operationName,
-        message: operationMessage(current),
-      });
-    }
-    return current;
-  });
-
 const waitSnapshotReady = (project: string, snapshotName: string) =>
   getByName(project, snapshotName).pipe(
     Effect.flatMap((snapshot) =>
@@ -369,7 +260,7 @@ const waitSnapshotReady = (project: string, snapshotName: string) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.SnapshotNotReady",
-      times: 10,
+      times: 72,
       schedule: Schedule.spaced("5 seconds"),
     }),
   );
@@ -393,6 +284,20 @@ const waitSnapshotGone = (project: string, snapshotName: string) =>
     }),
   );
 
+const waitSnapshotOperation = (
+  project: string,
+  operation: compute.Operation,
+  options?: WaitComputeOptions,
+) => {
+  const zone = lastSegment(operation.zone);
+  const region = lastSegment(operation.region);
+  return zone !== undefined
+    ? waitZoneOperation(project, zone, operation, options)
+    : region !== undefined
+      ? waitRegionOperation(project, region, operation, options)
+      : waitGlobalOperation(project, operation, options);
+};
+
 export const SnapshotProvider = () =>
   Provider.succeed(Snapshot, {
     stables: [
@@ -414,37 +319,26 @@ export const SnapshotProvider = () =>
 
       const previousName = olds?.snapshotName ?? output?.snapshotName;
       const nextName = news.snapshotName ?? previousName;
-      const previousSource = canonicalizeSource(
-        olds?.sourceDisk ?? output?.sourceDisk,
-      );
+      const previousSource = canonicalizeSource(olds?.sourceDisk ?? output?.sourceDisk);
       const nextSource = canonicalizeSource(news.sourceDisk);
       const previousInstant = canonicalizeSource(
         olds?.sourceInstantSnapshot ?? output?.sourceInstantSnapshot,
       );
       const nextInstant = canonicalizeSource(news.sourceInstantSnapshot);
-      const previousType =
-        olds?.snapshotType ?? output?.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
+      const previousType = olds?.snapshotType ?? output?.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
       const nextType = news.snapshotType ?? DEFAULT_SNAPSHOT_TYPE;
-      const previousDescription =
-        olds?.description ?? output?.description ?? "";
+      const previousDescription = olds?.description ?? output?.description ?? "";
       const nextDescription = news.description ?? "";
       const previousChain = olds?.chainName ?? output?.chainName ?? "";
       const nextChain = news.chainName ?? "";
       const locationsSpecified = news.storageLocations !== undefined;
       const locationsChanged =
         locationsSpecified &&
-        !sameLocations(
-          news.storageLocations,
-          olds?.storageLocations ?? output?.storageLocations,
-        );
+        !sameLocations(news.storageLocations, olds?.storageLocations ?? output?.storageLocations);
 
       const replace =
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
-        (nextSource.length > 0 &&
-          previousSource.length > 0 &&
-          previousSource !== nextSource) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
+        (nextSource.length > 0 && previousSource.length > 0 && previousSource !== nextSource) ||
         previousInstant !== nextInstant ||
         previousType !== nextType ||
         previousDescription !== nextDescription ||
@@ -455,25 +349,17 @@ export const SnapshotProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          previousName !== undefined &&
-          nextName !== undefined &&
-          previousName === nextName,
+          previousName !== undefined && nextName !== undefined && previousName === nextName,
       };
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const snapshotName = yield* toName(
-        id,
-        olds?.snapshotName,
-        output?.snapshotName,
-      );
+      const snapshotName = yield* toName(id, olds?.snapshotName, output?.snapshotName);
       const existing = yield* getByName(env.project, snapshotName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -487,9 +373,7 @@ export const SnapshotProvider = () =>
           })
           .pipe(
             Stream.filter((snapshot) =>
-              Object.keys(snapshot.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(snapshot.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((snapshot) => toAttrs(snapshot, env.project)),
             Stream.runCollect,
@@ -499,11 +383,7 @@ export const SnapshotProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const snapshotName = yield* toName(
-        id,
-        news.snapshotName,
-        output?.snapshotName,
-      );
+      const snapshotName = yield* toName(id, news.snapshotName, output?.snapshotName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -534,10 +414,8 @@ export const SnapshotProvider = () =>
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (inserted !== undefined) {
           yield* waitSnapshotOperation(env.project, inserted, {
-            times: 20,
-          }).pipe(
-            Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-          );
+            ignore: ["RESOURCE_ALREADY_EXISTS"],
+          });
         }
         current = yield* waitSnapshotReady(env.project, snapshotName);
       }
@@ -591,15 +469,9 @@ export const SnapshotProvider = () =>
           }),
         );
       if (deleted !== undefined) {
-        yield* waitSnapshotOperation(output.project, deleted).pipe(
-          Effect.catchIf(
-            (error) =>
-              error instanceof SnapshotOperationFailed &&
-              /not found/i.test(error.message),
-            () => Effect.void,
-          ),
-          Effect.catchTag("GCP.Compute.OperationPending", () => Effect.void),
-        );
+        yield* waitSnapshotOperation(output.project, deleted, {
+          ignore: ["RESOURCE_NOT_FOUND"],
+        });
       }
       yield* waitSnapshotGone(output.project, output.snapshotName);
     }),

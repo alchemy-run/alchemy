@@ -2,7 +2,9 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -116,20 +118,17 @@ export type Topic = Resource<
  */
 export const Topic = Resource<Topic>("GCP.PubSub.Topic");
 
-export class TopicStillExists extends Data.TaggedError(
-  "GCP.PubSub.TopicStillExists",
-)<{ name: string }> {}
+export class TopicStillExists extends Data.TaggedError("GCP.PubSub.TopicStillExists")<{
+  name: string;
+}> {}
 
-export class TopicNotResolved extends Data.TaggedError(
-  "GCP.PubSub.TopicNotResolved",
-)<{
+export class TopicNotResolved extends Data.TaggedError("GCP.PubSub.TopicNotResolved")<{
   name: string;
 }> {}
 
 const topicIdOf = (name: string) => name.split("/").pop() ?? name;
 
-const resourceName = (project: string, topicId: string) =>
-  `projects/${project}/topics/${topicId}`;
+const resourceName = (project: string, topicId: string) => `projects/${project}/topics/${topicId}`;
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -138,9 +137,7 @@ const userLabels = (
 const toId = (id: string, topicId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
-      topicId ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
+      topicId ?? existing ?? (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
     );
   });
 
@@ -190,6 +187,16 @@ export const TopicProvider = () =>
   Provider.succeed(Topic, {
     stables: ["name", "topicId", "project"],
 
+    // topicId is the physical identity: a new id is a new topic, and the
+    // old one must be deleted (not left behind by an in-place "update").
+    diff: Effect.fn(function* ({ id, news, olds, output }) {
+      if (!isResolved(news)) return undefined;
+      const previous = output?.topicId ?? olds?.topicId;
+      if (previous === undefined) return undefined;
+      const next = yield* toId(id, news.topicId, output?.topicId);
+      return next !== previous ? { action: "replace" as const, deleteFirst: false } : undefined;
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const topicId = yield* toId(id, olds?.topicId, output?.topicId);
@@ -197,25 +204,26 @@ export const TopicProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const page = yield* pubsub.listProjectsTopics({
-          project: `projects/${env.project}`,
-          pageSize: 1000,
-        });
-        return (page.topics ?? [])
-          .filter((topic) =>
-            Object.keys(topic.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
+        return yield* pubsub.listProjectsTopics
+          .pages({
+            project: `projects/${env.project}`,
+            pageSize: 1000,
+          })
+          .pipe(
+            Stream.flatMap((page) => Stream.fromIterable(page.topics ?? [])),
+            Stream.filter((topic) =>
+              Object.keys(topic.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
-          )
-          .map((topic) => toAttrs(topic, env.project));
+            Stream.map((topic) => toAttrs(topic, env.project)),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -253,8 +261,7 @@ export const TopicProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const kmsChanged = (current.kmsKeyName ?? "") !== (news.kmsKeyName ?? "");
       const retentionChanged =
-        (current.messageRetentionDuration ?? "") !==
-        (news.messageRetentionDuration ?? "");
+        (current.messageRetentionDuration ?? "") !== (news.messageRetentionDuration ?? "");
 
       if (labelsChanged || kmsChanged || retentionChanged) {
         current = yield* pubsub.patchProjectsTopics({

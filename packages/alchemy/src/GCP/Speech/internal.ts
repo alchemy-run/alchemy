@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys } from "../Labels.ts";
 
 /** Speech-to-Text v1 Adaptation is served from the global endpoint. */
 export const DEFAULT_LOCATION = "global";
@@ -17,52 +13,9 @@ export const LIST_LOCATIONS = ["global"] as const;
 export const MAX_ID_LENGTH = 63;
 export const MAX_ITEM_LENGTH = 100;
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.Speech.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.Speech.ResourceNotResolved")<{
   name: string;
 }> {}
-
-const sanitizePart = (value: string) => {
-  const cleaned = value.replace(/[^a-zA-Z0-9-]/g, "-").replace(/-+/g, "-");
-  const trimmed = cleaned.replace(/^-+|-+$/g, "").toLowerCase();
-  return trimmed.length > 0 ? trimmed : "x";
-};
-
-const markerOf = (stack: string, stage: string, id: string) =>
-  `alc ${stack} ${stage} ${id}`;
-
-const fitMarker = (labels: Record<string, string>, maxLength: number) => {
-  let stack = sanitizePart(labels[alchemyLabelKeys.stack] ?? "x");
-  let stage = sanitizePart(labels[alchemyLabelKeys.stage] ?? "x");
-  let id = sanitizePart(labels[alchemyLabelKeys.id] ?? "x");
-  let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
-    if (id.length >= stack.length && id.length >= stage.length) {
-      id = id.slice(0, -1);
-    } else if (stage.length >= stack.length) {
-      stage = stage.slice(0, -1);
-    } else {
-      stack = stack.slice(0, -1);
-    }
-    marker = markerOf(stack, stage, id);
-  }
-  return marker.slice(0, maxLength);
-};
-
-/**
- * Speech-to-Text v1 CustomClass / PhraseSet have no labels field (and
- * `displayName` / `annotations` are unused). Ownership is stored as a
- * reserved class item / phrase (`alc {stack} {stage} {id}`) using only
- * letters, numbers, spaces, and hyphens so the Adaptation API accepts it.
- */
-export const encodeOwnershipMarker = (
-  labels: Record<string, string>,
-  maxLength = MAX_ITEM_LENGTH,
-) => fitMarker(labels, maxLength);
 
 export const parseOwnershipMarker = (
   text: string | undefined,
@@ -90,36 +43,6 @@ export const hasOwnershipMarker = (text: string | undefined) => {
   return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
 };
 
-const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
-
-export const ownedByAlchemy = (id: string, text: string | undefined) =>
-  Effect.gen(function* () {
-    const expected = yield* createInternalLabels(id);
-    const { labels } = parseOwnershipMarker(text);
-    if (!hasOwnershipMarker(text)) return false;
-    const exact = yield* hasAlchemyLabels(id, labels);
-    if (exact) return true;
-    return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
-    );
-  });
-
-export const ownershipLabels = (id: string) => createInternalLabels(id);
-
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -138,16 +61,10 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -165,10 +82,8 @@ export const resourceNameOf = (
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameNumber = (
-  left: number | undefined,
-  right: number | undefined,
-) => (left ?? 0) === (right ?? 0);
+export const sameNumber = (left: number | undefined, right: number | undefined) =>
+  (left ?? 0) === (right ?? 0);
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -191,11 +106,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const sameJson = (left: unknown, right: unknown) =>
-  fingerprint(left) === fingerprint(right);
+export const sameJson = (left: unknown, right: unknown) => fingerprint(left) === fingerprint(right);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -207,13 +120,9 @@ export const replaceOnIdentity = (input: {
   nextLocation?: string;
 }) => {
   const previousLocation =
-    input.previousLocation !== undefined
-      ? normalizeLocation(input.previousLocation)
-      : undefined;
+    input.previousLocation !== undefined ? normalizeLocation(input.previousLocation) : undefined;
   const nextLocation =
-    input.nextLocation !== undefined
-      ? normalizeLocation(input.nextLocation)
-      : undefined;
+    input.nextLocation !== undefined ? normalizeLocation(input.nextLocation) : undefined;
   const replace =
     (input.previousId !== undefined &&
       input.nextId !== undefined &&
@@ -271,13 +180,11 @@ export type Phrase = {
   boost?: number;
 };
 
-export const markerFromItems = (
-  items: readonly { value?: string }[] | null | undefined,
-) => (items ?? []).find((item) => isOwnershipMarker(item.value))?.value;
+export const markerFromItems = (items: readonly { value?: string }[] | null | undefined) =>
+  (items ?? []).find((item) => isOwnershipMarker(item.value))?.value;
 
-export const markerFromPhrases = (
-  phrases: readonly { value?: string }[] | null | undefined,
-) => (phrases ?? []).find((phrase) => isOwnershipMarker(phrase.value))?.value;
+export const markerFromPhrases = (phrases: readonly { value?: string }[] | null | undefined) =>
+  (phrases ?? []).find((phrase) => isOwnershipMarker(phrase.value))?.value;
 
 export const stripOwnershipItems = (
   items: readonly { value?: string }[] | null | undefined,
@@ -298,25 +205,9 @@ export const stripOwnershipPhrases = (
     }))
     .filter((phrase) => phrase.value.length > 0);
 
-export const withOwnershipItems = (
-  items: readonly ClassItem[] | undefined,
-  labels: Record<string, string>,
-): speech.ClassItemList => [
-  { value: encodeOwnershipMarker(labels) },
-  ...stripOwnershipItems(items),
-];
-
-export const withOwnershipPhrases = (
-  phrases: readonly Phrase[] | undefined,
-  labels: Record<string, string>,
-): speech.PhraseList => [
-  { value: encodeOwnershipMarker(labels) },
-  ...stripOwnershipPhrases(phrases),
-];
-
 export const sameItems = (
-  left: readonly ClassItem[] | undefined,
-  right: readonly ClassItem[] | undefined,
+  left: readonly { value?: string }[] | undefined,
+  right: readonly { value?: string }[] | undefined,
 ) =>
   sameJson(
     stripOwnershipItems(left)
@@ -328,8 +219,8 @@ export const sameItems = (
   );
 
 export const samePhrases = (
-  left: readonly Phrase[] | undefined,
-  right: readonly Phrase[] | undefined,
+  left: readonly { value?: string; boost?: number }[] | undefined,
+  right: readonly { value?: string; boost?: number }[] | undefined,
 ) =>
   sameJson(
     stripOwnershipPhrases(left)
@@ -348,14 +239,10 @@ export const samePhrases = (
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
-export class DeleteNotConfirmed extends Data.TaggedError(
-  "GCP.Speech.DeleteNotConfirmed",
-)<{}> {}
+export class DeleteNotConfirmed extends Data.TaggedError("GCP.Speech.DeleteNotConfirmed")<{}> {}
 
 /** Poll until the resource is gone; fails if it is still readable after ~60s. */
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>) =>
   get.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
@@ -380,18 +267,16 @@ const collectPages = <Page, Item, E, R>(
 export const getCustomClass = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : speech.getProjectsLocationsCustomClasses({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+    : speech
+        .getProjectsLocationsCustomClasses({ name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const getPhraseSet = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : speech.getProjectsLocationsPhraseSets({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-      );
+    : speech
+        .getProjectsLocationsPhraseSets({ name })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 export const listCustomClassesAt = (parent: string) =>
   parent.length === 0
@@ -402,10 +287,7 @@ export const listCustomClassesAt = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.customClasses,
-      ).pipe(
-        Effect.catchTag("NotFound", () => emptyList<speech.CustomClass>()),
-        Effect.catchTag("Forbidden", () => emptyList<speech.CustomClass>()),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<speech.CustomClass>()));
 
 export const listPhraseSetsAt = (parent: string) =>
   parent.length === 0
@@ -416,21 +298,16 @@ export const listPhraseSetsAt = (parent: string) =>
           pageSize: 100,
         }),
         (page) => page.phraseSets,
-      ).pipe(
-        Effect.catchTag("NotFound", () => emptyList<speech.PhraseSet>()),
-        Effect.catchTag("Forbidden", () => emptyList<speech.PhraseSet>()),
-      );
+      ).pipe(Effect.catchTag("NotFound", () => emptyList<speech.PhraseSet>()));
 
 const listLocationParents = (project: string) =>
   LIST_LOCATIONS.map((location) => locationParent(project, location));
 
 export const listProjectCustomClasses = (project: string) =>
   Effect.gen(function* () {
-    const groups = yield* Effect.forEach(
-      listLocationParents(project),
-      listCustomClassesAt,
-      { concurrency: 2 },
-    );
+    const groups = yield* Effect.forEach(listLocationParents(project), listCustomClassesAt, {
+      concurrency: 2,
+    });
     const seen = new Set<string>();
     const classes: speech.CustomClass[] = [];
     for (const customClass of groups.flat()) {
@@ -444,11 +321,9 @@ export const listProjectCustomClasses = (project: string) =>
 
 export const listProjectPhraseSets = (project: string) =>
   Effect.gen(function* () {
-    const groups = yield* Effect.forEach(
-      listLocationParents(project),
-      listPhraseSetsAt,
-      { concurrency: 2 },
-    );
+    const groups = yield* Effect.forEach(listLocationParents(project), listPhraseSetsAt, {
+      concurrency: 2,
+    });
     const seen = new Set<string>();
     const phraseSets: speech.PhraseSet[] = [];
     for (const phraseSet of groups.flat()) {
@@ -460,78 +335,31 @@ export const listProjectPhraseSets = (project: string) =>
     return phraseSets;
   });
 
+/**
+ * Classes and phrase sets have no labels. Only ones stamped with a legacy
+ * `alc …` ownership item by earlier Alchemy versions are discoverable here;
+ * current ones are tracked through state alone.
+ */
 export const listOwnedCustomClasses = (project: string) =>
   listProjectCustomClasses(project).pipe(
     Effect.map((classes) =>
-      classes.filter((customClass) =>
-        hasOwnershipMarker(markerFromItems(customClass.items)),
-      ),
+      classes.filter((customClass) => hasOwnershipMarker(markerFromItems(customClass.items))),
     ),
   );
 
 export const listOwnedPhraseSets = (project: string) =>
   listProjectPhraseSets(project).pipe(
     Effect.map((phraseSets) =>
-      phraseSets.filter((phraseSet) =>
-        hasOwnershipMarker(markerFromPhrases(phraseSet.phrases)),
-      ),
+      phraseSets.filter((phraseSet) => hasOwnershipMarker(markerFromPhrases(phraseSet.phrases))),
     ),
   );
 
-export const findOwnedCustomClass = (
-  id: string,
-  project: string,
-  hinted?: string,
-) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getCustomClass(hinted);
-      if (
-        existing !== undefined &&
-        (yield* ownedByAlchemy(id, markerFromItems(existing.items)))
-      ) {
-        return existing;
-      }
-    }
-    for (const customClass of yield* listProjectCustomClasses(project)) {
-      if (yield* ownedByAlchemy(id, markerFromItems(customClass.items))) {
-        return customClass;
-      }
-    }
-    return undefined as speech.CustomClass | undefined;
-  });
-
-export const findOwnedPhraseSet = (
-  id: string,
-  project: string,
-  hinted?: string,
-) =>
-  Effect.gen(function* () {
-    if (hinted !== undefined && hinted.length > 0) {
-      const existing = yield* getPhraseSet(hinted);
-      if (
-        existing !== undefined &&
-        (yield* ownedByAlchemy(id, markerFromPhrases(existing.phrases)))
-      ) {
-        return existing;
-      }
-    }
-    for (const phraseSet of yield* listProjectPhraseSets(project)) {
-      if (yield* ownedByAlchemy(id, markerFromPhrases(phraseSet.phrases))) {
-        return phraseSet;
-      }
-    }
-    return undefined as speech.PhraseSet | undefined;
-  });
-
 export const deleteCustomClass = (name: string) =>
-  speech.deleteProjectsLocationsCustomClasses({ name }).pipe(
-    Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catchTag("Forbidden", () => Effect.void),
-  );
+  speech
+    .deleteProjectsLocationsCustomClasses({ name })
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 export const deletePhraseSet = (name: string) =>
-  speech.deleteProjectsLocationsPhraseSets({ name }).pipe(
-    Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catchTag("Forbidden", () => Effect.void),
-  );
+  speech
+    .deleteProjectsLocationsPhraseSets({ name })
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));

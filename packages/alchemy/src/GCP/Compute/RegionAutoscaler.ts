@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperations } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_COOL_DOWN_SEC = 60;
 const DEFAULT_MIN_REPLICAS = 0;
@@ -61,10 +61,7 @@ export type RegionAutoscalerAutoscalingPolicy = {
   /** Throttle abrupt scale-in. */
   scaleInControl?: compute.AutoscalingPolicyScaleInControl;
   /** Named scaling schedules (up to 128). */
-  scalingSchedules?: Record<
-    string,
-    compute.AutoscalingPolicyScalingSchedule | undefined
-  >;
+  scalingSchedules?: Record<string, compute.AutoscalingPolicyScalingSchedule | undefined>;
 };
 
 export type RegionAutoscalerProps = {
@@ -198,24 +195,13 @@ export type RegionAutoscaler = Resource<
  * @resource
  * @category Compute
  */
-export const RegionAutoscaler = Resource<RegionAutoscaler>(
-  "GCP.Compute.RegionAutoscaler",
-);
+export const RegionAutoscaler = Resource<RegionAutoscaler>("GCP.Compute.RegionAutoscaler");
 
 export class RegionAutoscalerNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionAutoscalerNotResolved",
 )<{
   autoscalerName: string;
   region: string;
-}> {}
-
-export class RegionAutoscalerOperationFailed extends Data.TaggedError(
-  "GCP.Compute.RegionAutoscalerOperationFailed",
-)<{
-  operation: string;
-  region: string;
-  message: string;
-  codes: readonly string[];
 }> {}
 
 export class RegionAutoscalerStillExists extends Data.TaggedError(
@@ -265,10 +251,7 @@ const toTargetUrl = (project: string, region: string, target: string) =>
     ? target
     : `projects/${project}/regions/${region}/instanceGroupManagers/${target}`;
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const packed = Object.entries(labels)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key}=${value}`)
@@ -304,9 +287,7 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -336,9 +317,7 @@ const hasSignal = (policy: RegionAutoscalerAutoscalingPolicy) =>
   policy.loadBalancingUtilization !== undefined ||
   (policy.customMetricUtilizations?.length ?? 0) > 0;
 
-const desiredPolicy = (
-  policy: RegionAutoscalerAutoscalingPolicy,
-): compute.AutoscalingPolicy => ({
+const desiredPolicy = (policy: RegionAutoscalerAutoscalingPolicy): compute.AutoscalingPolicy => ({
   maxNumReplicas: policy.maxNumReplicas,
   minNumReplicas: policy.minNumReplicas ?? DEFAULT_MIN_REPLICAS,
   coolDownPeriodSec: policy.coolDownPeriodSec ?? DEFAULT_COOL_DOWN_SEC,
@@ -390,15 +369,13 @@ const canonPolicy = (policy: compute.AutoscalingPolicy | undefined) => {
     loadBalancingUtilization: policy.loadBalancingUtilization
       ? { utilizationTarget: policy.loadBalancingUtilization.utilizationTarget }
       : undefined,
-    customMetricUtilizations: (policy.customMetricUtilizations ?? []).map(
-      (metric) => ({
-        metric: metric.metric,
-        filter: metric.filter,
-        utilizationTarget: metric.utilizationTarget,
-        utilizationTargetType: metric.utilizationTargetType,
-        singleInstanceAssignment: metric.singleInstanceAssignment,
-      }),
-    ),
+    customMetricUtilizations: (policy.customMetricUtilizations ?? []).map((metric) => ({
+      metric: metric.metric,
+      filter: metric.filter,
+      utilizationTarget: metric.utilizationTarget,
+      utilizationTargetType: metric.utilizationTargetType,
+      singleInstanceAssignment: metric.singleInstanceAssignment,
+    })),
     scaleInControl: policy.scaleInControl
       ? {
           maxScaledInReplicas: policy.scaleInControl.maxScaledInReplicas
@@ -417,126 +394,26 @@ const canonPolicy = (policy: compute.AutoscalingPolicy | undefined) => {
 const samePolicy = (
   observed: compute.AutoscalingPolicy | undefined,
   desired: compute.AutoscalingPolicy,
-) =>
-  JSON.stringify(canonPolicy(observed)) ===
-  JSON.stringify(canonPolicy(desired));
-
-const alreadyExists = (operation: compute.Operation) => {
-  const codes = (operation.error?.errors ?? []).map((error) =>
-    (error.code ?? "").toUpperCase(),
-  );
-  const message = (operation.error?.errors ?? [])
-    .map((error) => error.message ?? "")
-    .join("; ")
-    .toLowerCase();
-  return (
-    codes.includes("ALREADYEXISTS") ||
-    codes.includes("RESOURCE_ALREADY_EXISTS") ||
-    codes.includes("ALREADY_EXISTS") ||
-    message.includes("already exists") ||
-    operation.httpErrorStatusCode === 409
-  );
-};
-
-const isGoneCode = (code: string | undefined) => {
-  const normalized = (code ?? "").toUpperCase();
-  return (
-    normalized === "NOTFOUND" ||
-    normalized === "RESOURCE_NOT_FOUND" ||
-    normalized === "RESOURCE_NOT_FOUND_BY_NAME"
-  );
-};
+) => JSON.stringify(canonPolicy(observed)) === JSON.stringify(canonPolicy(desired));
 
 const getByName = (project: string, region: string, autoscaler: string) =>
   compute
     .getRegionAutoscalers({ project, region, autoscaler })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const waitRegional = (
-  project: string,
-  region: string,
-  operation: compute.Operation,
-) =>
-  Effect.gen(function* () {
-    const name = lastSegment(operation.name ?? operation.id);
-    if (name.length === 0) {
-      return yield* new RegionAutoscalerOperationFailed({
-        operation: "",
-        region,
-        message: "Compute operation returned no name",
-        codes: [],
-      });
-    }
-    let current = operation;
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: name,
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "NotFound",
-          times: 5,
-          schedule: Schedule.exponential("250 millis"),
-        }),
-      );
-    }
-    if (current.status !== "DONE") {
-      current = yield* waitRegionOperations({
-        project,
-        region,
-        operation: name,
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.exponential("500 millis"),
-          until: (next) => next.status === "DONE",
-          times: 8,
-        }),
-      );
-    }
-    const errors = current.error?.errors ?? [];
-    if (alreadyExists(current)) {
-      return current;
-    }
-    if (
-      errors.length > 0 ||
-      current.status !== "DONE" ||
-      current.httpErrorStatusCode
-    ) {
-      return yield* new RegionAutoscalerOperationFailed({
-        operation: name,
-        region,
-        message:
-          errors
-            .map((error) => error.message ?? "")
-            .filter(Boolean)
-            .join("; ") ||
-          current.httpErrorMessage ||
-          "Compute operation failed",
-        codes: errors.map((error) => error.code ?? ""),
-      });
-    }
-    return current;
-  });
-
 const waitPresent = (project: string, region: string, autoscalerName: string) =>
   getByName(project, region, autoscalerName).pipe(
     Effect.flatMap((autoscaler) =>
       autoscaler === undefined
-        ? Effect.fail(
-            new RegionAutoscalerNotResolved({ autoscalerName, region }),
-          )
+        ? Effect.fail(new RegionAutoscalerNotResolved({ autoscalerName, region }))
         : Effect.succeed(autoscaler),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionAutoscalerNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionAutoscalerNotResolved",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionAutoscalerNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.RegionAutoscalerNotResolved", () => Effect.succeed(undefined)),
   );
 
 const waitGone = (project: string, region: string, autoscalerName: string) =>
@@ -544,13 +421,10 @@ const waitGone = (project: string, region: string, autoscalerName: string) =>
     Effect.flatMap((autoscaler) =>
       autoscaler === undefined
         ? Effect.void
-        : Effect.fail(
-            new RegionAutoscalerStillExists({ autoscalerName, region }),
-          ),
+        : Effect.fail(new RegionAutoscalerStillExists({ autoscalerName, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionAutoscalerStillExists",
+      while: (error) => error._tag === "GCP.Compute.RegionAutoscalerStillExists",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -572,18 +446,10 @@ export const RegionAutoscalerProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.autoscalerName ?? output?.autoscalerName;
       const nextName = news.autoscalerName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const regionChanged = previousRegion !== nextRegion;
       if (!nameChanged && !regionChanged) {
         return undefined;
@@ -597,15 +463,8 @@ export const RegionAutoscalerProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const autoscalerName = yield* toName(
-        id,
-        olds?.autoscalerName,
-        output?.autoscalerName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const autoscalerName = yield* toName(id, olds?.autoscalerName, output?.autoscalerName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, autoscalerName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -622,7 +481,7 @@ export const RegionAutoscalerProvider = () =>
             maxResults: 500,
             returnPartialSuccess: true,
           })
-          .pipe(Stream.take(8), Stream.runCollect);
+          .pipe(Stream.runCollect);
         return Array.from(pages).flatMap((page) =>
           Object.values(page.items ?? {}).flatMap((scoped) =>
             (scoped?.autoscalers ?? [])
@@ -638,11 +497,7 @@ export const RegionAutoscalerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const autoscalerName = yield* toName(
-        id,
-        news.autoscalerName,
-        output?.autoscalerName,
-      );
+      const autoscalerName = yield* toName(id, news.autoscalerName, output?.autoscalerName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const target = toTargetUrl(env.project, region, news.target);
       const desiredLabels = {
@@ -671,9 +526,9 @@ export const RegionAutoscalerProvider = () =>
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
-                : waitRegional(env.project, region, operation).pipe(
-                    Effect.asVoid,
-                  ),
+                : waitRegionOperation(env.project, region, operation, {
+                    ignore: ["RESOURCE_ALREADY_EXISTS"],
+                  }).pipe(Effect.asVoid),
             ),
           );
         current = yield* waitPresent(env.project, region, autoscalerName);
@@ -689,8 +544,7 @@ export const RegionAutoscalerProvider = () =>
       const descriptionChanged = (current.description ?? "") !== description;
       const policyChanged = !samePolicy(current.autoscalingPolicy, policy);
       const targetChanged =
-        lastSegment(current.target) !== lastSegment(target) &&
-        (current.target ?? "") !== target;
+        lastSegment(current.target) !== lastSegment(target) && (current.target ?? "") !== target;
 
       if (descriptionChanged || policyChanged || targetChanged) {
         yield* compute
@@ -706,17 +560,14 @@ export const RegionAutoscalerProvider = () =>
             },
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitRegional(env.project, region, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 5,
               schedule: Schedule.exponential("250 millis"),
             }),
           );
-        current =
-          (yield* getByName(env.project, region, autoscalerName)) ?? current;
+        current = (yield* getByName(env.project, region, autoscalerName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -734,15 +585,9 @@ export const RegionAutoscalerProvider = () =>
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void
-              : waitRegional(output.project, output.region, operation).pipe(
-                  Effect.asVoid,
-                ),
-          ),
-          Effect.catchIf(
-            (error) =>
-              error._tag === "GCP.Compute.RegionAutoscalerOperationFailed" &&
-              error.codes.some(isGoneCode),
-            () => Effect.void,
+              : waitRegionOperation(output.project, output.region, operation, {
+                  ignore: ["RESOURCE_NOT_FOUND"],
+                }).pipe(Effect.asVoid),
           ),
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({

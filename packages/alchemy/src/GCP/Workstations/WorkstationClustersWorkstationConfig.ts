@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -234,9 +229,7 @@ export type GceRegionalPersistentDisk = {
    * Whether to delete the disk when the workstation is deleted.
    * @default "DELETE"
    */
-  reclaimPolicy?:
-    | workstations.GceRegionalPersistentDiskReclaimPolicyEnum
-    | (string & {});
+  reclaimPolicy?: workstations.GceRegionalPersistentDiskReclaimPolicyEnum | (string & {});
   /** Snapshot used as the disk source. */
   sourceSnapshot?: string;
   /**
@@ -479,10 +472,10 @@ export type WorkstationClustersWorkstationConfig = Resource<
  * ### Updating a Configuration
  * **Example:** Display name and idle timeout
  * ```typescript
+ * // Same logical id, changed props: the engine updates it in place.
  * const config = yield* GCP.Workstations.WorkstationClustersWorkstationConfig(
  *   "Code",
  *   {
- *     workstationConfigId: existing.workstationConfigId,
  *     workstationCluster: cluster.name,
  *     displayName: "code v2",
  *     idleTimeout: "3600s",
@@ -493,10 +486,9 @@ export type WorkstationClustersWorkstationConfig = Resource<
  * @resource
  * @category Workstations
  */
-export const WorkstationClustersWorkstationConfig =
-  Resource<WorkstationClustersWorkstationConfig>(
-    "GCP.Workstations.WorkstationClustersWorkstationConfig",
-  );
+export const WorkstationClustersWorkstationConfig = Resource<WorkstationClustersWorkstationConfig>(
+  "GCP.Workstations.WorkstationClustersWorkstationConfig",
+);
 
 const resourceName = (cluster: string, workstationConfigId: string) =>
   `${cluster}/workstationConfigs/${workstationConfigId}`;
@@ -539,12 +531,31 @@ const toGceInstance = (
         boostConfigs: value.boostConfigs,
       };
 
-const toHost = (
-  value: workstations.Host | Host | undefined,
-): Host | undefined =>
-  value === undefined
-    ? undefined
-    : { gceInstance: toGceInstance(value.gceInstance) };
+const toHost = (value: workstations.Host | Host | undefined): Host | undefined =>
+  value === undefined ? undefined : { gceInstance: toGceInstance(value.gceInstance) };
+
+// Reads omit proto3 defaults (`poolSize: 0`, `false`) and add server defaults
+// the user never set (scopes, disk size), so compare only the fields the user
+// declared, treating an omitted default as equal to its zero value.
+const isZero = (value: unknown) =>
+  value === undefined ||
+  value === null ||
+  value === 0 ||
+  value === false ||
+  value === "" ||
+  (Array.isArray(value) && value.length === 0) ||
+  (typeof value === "object" && Object.keys(value as object).length === 0);
+
+const hostMatches = (observed: workstations.Host | undefined, desired: Host): boolean => {
+  const want = toGceInstance(desired.gceInstance);
+  if (want === undefined) return true;
+  const have = toGceInstance(observed?.gceInstance) ?? {};
+  return Object.entries(want).every(([key, value]) => {
+    if (value === undefined) return true;
+    const current = have[key as keyof GceInstance];
+    return isZero(value) ? isZero(current) : fingerprint(current) === fingerprint(value);
+  });
+};
 
 const toPersistent = (
   value: workstations.PersistentDirectory | PersistentDirectory,
@@ -561,11 +572,7 @@ const toEphemeral = (
   gcePd: value.gcePd,
 });
 
-const toAttrs = (
-  item: workstations.WorkstationConfig,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: workstations.WorkstationConfig, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "workstationConfigs", region);
   return {
@@ -590,8 +597,7 @@ const toAttrs = (
     enableAuditAgent: item.enableAuditAgent === true,
     disableTcpConnections: item.disableTcpConnections === true,
     allowedPorts: item.allowedPorts,
-    grantWorkstationAdminRoleOnCreate:
-      item.grantWorkstationAdminRoleOnCreate === true,
+    grantWorkstationAdminRoleOnCreate: item.grantWorkstationAdminRoleOnCreate === true,
     reconciling: item.reconciling === true,
     degraded: item.degraded === true,
     uid: item.uid,
@@ -608,12 +614,10 @@ const getByName = (name: string) =>
 const listOwned = (project: string, region: string) =>
   listAtNested(project, region, "workstationClusters/-", (parent) =>
     listLabeledPages(
-      workstations.listProjectsLocationsWorkstationClustersWorkstationConfigs.pages(
-        {
-          parent,
-          pageSize: 1000,
-        },
-      ),
+      workstations.listProjectsLocationsWorkstationClustersWorkstationConfigs.pages({
+        parent,
+        pageSize: 1000,
+      }),
       (page) => page.workstationConfigs,
       (item) => item.labels,
     ),
@@ -642,13 +646,8 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.workstationConfigId ?? output?.workstationConfigId,
         nextId:
-          news.workstationConfigId ??
-          olds?.workstationConfigId ??
-          output?.workstationConfigId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.workstationConfigId ?? olds?.workstationConfigId ?? output?.workstationConfigId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -667,29 +666,22 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
+      const parent = olds?.workstationCluster ?? output?.workstationCluster;
+      // A config cannot exist before its cluster's name resolved.
+      if (output?.name === undefined && !parent) return undefined;
       const workstationConfigId = yield* toPhysicalId(
         id,
         olds?.workstationConfigId,
         output?.workstationConfigId,
         "config",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const cluster = expandParent(
-        olds?.workstationCluster ?? output?.workstationCluster ?? "",
-        env.project,
-        location,
-        "workstationClusters",
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const cluster = expandParent(parent ?? "", env.project, location, "workstationClusters");
       const name = output?.name ?? resourceName(cluster, workstationConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -707,10 +699,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
         output?.workstationConfigId,
         "config",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const cluster = expandParent(
         news.workstationCluster,
         env.project,
@@ -748,13 +737,17 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
               enableAuditAgent: news.enableAuditAgent,
               disableTcpConnections: news.disableTcpConnections,
               allowedPorts: news.allowedPorts,
-              grantWorkstationAdminRoleOnCreate:
-                news.grantWorkstationAdminRoleOnCreate,
+              grantWorkstationAdminRoleOnCreate: news.grantWorkstationAdminRoleOnCreate,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
-          yield* waitForOperation(created);
+          // ALREADY_EXISTS (6): a concurrent create won the race.
+          yield* waitForOperation(created).pipe(
+            Effect.catchTag("GCP.OperationFailed", (error) =>
+              error.code === 6 ? Effect.void : Effect.fail(error),
+            ),
+          );
         }
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -768,19 +761,15 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.displayName, news.displayName) && "displayName",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         news.container !== undefined &&
           fingerprint(toContainer(current.container)) !==
             fingerprint(toContainer(news.container)) &&
           "container",
-        news.host !== undefined &&
-          fingerprint(toHost(current.host)) !==
-            fingerprint(toHost(news.host)) &&
-          "host",
+        news.host !== undefined && !hostMatches(current.host, news.host) && "host",
         news.readinessChecks !== undefined &&
-          fingerprint(current.readinessChecks) !==
-            fingerprint(news.readinessChecks) &&
+          fingerprint(current.readinessChecks) !== fingerprint(news.readinessChecks) &&
           "readinessChecks",
         news.idleTimeout !== undefined &&
           !sameText(current.idleTimeout, news.idleTimeout) &&
@@ -797,23 +786,16 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
             fingerprint(news.ephemeralDirectories.map(toEphemeral)) &&
           "ephemeralDirectories",
         news.maxUsableWorkstations !== undefined &&
-          !sameNumber(
-            current.maxUsableWorkstations,
-            news.maxUsableWorkstations,
-          ) &&
+          !sameNumber(current.maxUsableWorkstations, news.maxUsableWorkstations) &&
           "maxUsableWorkstations",
         news.enableAuditAgent !== undefined &&
           !sameBool(current.enableAuditAgent, news.enableAuditAgent) &&
           "enableAuditAgent",
         news.disableTcpConnections !== undefined &&
-          !sameBool(
-            current.disableTcpConnections,
-            news.disableTcpConnections,
-          ) &&
+          !sameBool(current.disableTcpConnections, news.disableTcpConnections) &&
           "disableTcpConnections",
         news.allowedPorts !== undefined &&
-          fingerprint(current.allowedPorts) !==
-            fingerprint(news.allowedPorts) &&
+          fingerprint(current.allowedPorts) !== fingerprint(news.allowedPorts) &&
           "allowedPorts",
         news.grantWorkstationAdminRoleOnCreate !== undefined &&
           !sameBool(
@@ -844,8 +826,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
               enableAuditAgent: news.enableAuditAgent,
               disableTcpConnections: news.disableTcpConnections,
               allowedPorts: news.allowedPorts,
-              grantWorkstationAdminRoleOnCreate:
-                news.grantWorkstationAdminRoleOnCreate,
+              grantWorkstationAdminRoleOnCreate: news.grantWorkstationAdminRoleOnCreate,
             },
           })
           .pipe(
@@ -856,10 +837,7 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
             }),
           );
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
@@ -880,7 +858,12 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        // NOT_FOUND (5): already gone.
+        yield* waitForOperation(operation).pipe(
+          Effect.catchTag("GCP.OperationFailed", (error) =>
+            error.code === 5 ? Effect.void : Effect.fail(error),
+          ),
+        );
       }
       yield* waitUntilGone(getByName(output.name), output.name);
     }),

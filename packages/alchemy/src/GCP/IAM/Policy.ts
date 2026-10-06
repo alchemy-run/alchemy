@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  stripInternalLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, stripInternalLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   attachmentPointOf,
@@ -24,6 +19,7 @@ import {
   policyName,
   ResourceNotResolved,
   toPolicyId,
+  waitForDeleteOperation,
   waitForOperation,
 } from "./internal.ts";
 
@@ -163,9 +159,7 @@ export type Policy = Resource<
  */
 export const Policy = Resource<Policy>("GCP.IAM.Policy");
 
-export class PolicyNotResolved extends Data.TaggedError(
-  "GCP.IAM.PolicyNotResolved",
-)<{
+export class PolicyNotResolved extends Data.TaggedError("GCP.IAM.PolicyNotResolved")<{
   name: string;
 }> {}
 
@@ -173,9 +167,7 @@ const DEFAULT_RULE: PolicyRule = {
   description: "alchemy ownership probe",
   denyRule: {
     deniedPermissions: ["iam.googleapis.com/roles.list"],
-    deniedPrincipals: [
-      "principal://goog/subject/alchemy-deny-probe@example.invalid",
-    ],
+    deniedPrincipals: ["principal://goog/subject/alchemy-deny-probe@example.invalid"],
   },
 };
 
@@ -226,9 +218,7 @@ const listAt = (parent: string) =>
     Stream.flatMap((page) => Stream.fromIterable(page.policies ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as iam.GoogleIamV2Policy[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as iam.GoogleIamV2Policy[])),
   );
 
 export const PolicyProvider = () =>
@@ -242,11 +232,8 @@ export const PolicyProvider = () =>
       if (
         (previousPoint !== undefined &&
           news.attachmentPoint !== undefined &&
-          attachmentPointOf("x", news.attachmentPoint) !==
-            attachmentPointOf("x", previousPoint)) ||
-        (previousId !== undefined &&
-          news.policyId !== undefined &&
-          news.policyId !== previousId)
+          attachmentPointOf("x", news.attachmentPoint) !== attachmentPointOf("x", previousPoint)) ||
+        (previousId !== undefined && news.policyId !== undefined && news.policyId !== previousId)
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
@@ -264,9 +251,7 @@ export const PolicyProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* ownedByAlchemy(id, existing.annotations))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.annotations)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -276,15 +261,13 @@ export const PolicyProvider = () =>
         const policies = yield* listAt(parent);
         const named = yield* Effect.forEach(
           policies,
-          (policy) =>
-            policy.name ? getByName(policy.name) : Effect.succeed(undefined),
+          (policy) => (policy.name ? getByName(policy.name) : Effect.succeed(undefined)),
           { concurrency: 4 },
         );
         return named
           .filter(
             (policy): policy is iam.GoogleIamV2Policy =>
-              policy !== undefined &&
-              hasOwnershipAnnotations(policy.annotations),
+              policy !== undefined && hasOwnershipAnnotations(policy.annotations),
           )
           .map(toAttrs);
       }),
@@ -345,8 +328,7 @@ export const PolicyProvider = () =>
       const { upsert, removed } = diffLabels(observed, desiredAnnotations);
       const annotationsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged =
-        news.displayName !== undefined &&
-        (current.displayName ?? "") !== news.displayName;
+        news.displayName !== undefined && (current.displayName ?? "") !== news.displayName;
       const rulesChanged = jsonOf(current.rules?.map(ruleOf)) !== jsonOf(rules);
 
       if (annotationsChanged || displayChanged || rulesChanged) {
@@ -372,9 +354,7 @@ export const PolicyProvider = () =>
         .deletePolicies({ name: output.name, etag: output.etag })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (operation) {
-        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
-          Effect.catchTag("GCP.IAM.OperationFailed", () => Effect.void),
-        );
+        yield* waitForDeleteOperation(operation);
       }
     }),
   });

@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   logging.getFoldersLocationsBucketsViews({ name }).pipe(
@@ -46,9 +43,7 @@ test.provider(
 
       expect(created.view.viewId).toEqual(expect.any(String));
       expect(created.view.bucketName).toEqual(created.bucket.name);
-      expect(created.view.name).toEqual(
-        `${created.bucket.name}/views/${created.view.viewId}`,
-      );
+      expect(created.view.name).toEqual(`${created.bucket.name}/views/${created.view.viewId}`);
       expect(created.view.filter).toEqual('LOG_ID("stdout")');
       expect(created.view.description).toEqual("stdout only");
 

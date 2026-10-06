@@ -7,13 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  sameJson,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
   commentsHaveOwnership,
   createInternalLabels,
@@ -187,9 +181,7 @@ export type Report = Resource<
  */
 export const Report = Resource<Report>("GCP.Apigee.Report");
 
-export class ReportNotResolved extends Data.TaggedError(
-  "GCP.Apigee.ReportNotResolved",
-)<{
+export class ReportNotResolved extends Data.TaggedError("GCP.Apigee.ReportNotResolved")<{
   name: string;
 }> {}
 
@@ -211,25 +203,17 @@ const metricsOf = (
       name: metric.name,
       function: metric.function,
     }));
-  return mapped.length > 0
-    ? mapped
-    : [{ name: "message_count", function: "sum" }];
+  return mapped.length > 0 ? mapped : [{ name: "message_count", function: "sum" }];
 };
 
-const toAttrs = (
-  report: apigee.GoogleCloudApigeeV1CustomReport,
-  organization: string,
-) => {
+const toAttrs = (report: apigee.GoogleCloudApigeeV1CustomReport, organization: string) => {
   const reportId = reportIdOf(report);
-  const name = report.name?.includes("/")
-    ? report.name
-    : resourceName(organization, reportId);
+  const name = report.name?.includes("/") ? report.name : resourceName(organization, reportId);
   const parsed = parseComments(report.comments);
   return {
     name,
     reportId,
-    organization:
-      report.organization ?? organizationFromName(name) ?? organization,
+    organization: report.organization ?? organizationFromName(name) ?? organization,
     displayName: report.displayName,
     metrics: metricsOf(report.metrics),
     dimensions: [...(report.dimensions ?? [])],
@@ -253,7 +237,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsReports({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const toBody = (
   news: ReportProps,
@@ -286,9 +270,7 @@ export const ReportProvider = () =>
       const previousId = olds?.reportId ?? output?.reportId;
       const previousOrg = olds?.organization ?? output?.organization;
       if (
-        (previousId !== undefined &&
-          news.reportId !== undefined &&
-          news.reportId !== previousId) ||
+        (previousId !== undefined && news.reportId !== undefined && news.reportId !== previousId) ||
         (previousOrg !== undefined &&
           news.organization !== undefined &&
           news.organization !== previousOrg)
@@ -300,14 +282,8 @@ export const ReportProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
-      const reportId = yield* toResourceId(
-        id,
-        olds?.reportId,
-        output?.reportId,
-        MAX_NAME_LENGTH,
-      );
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const reportId = yield* toResourceId(id, olds?.reportId, output?.reportId, MAX_NAME_LENGTH);
       const name = output?.name ?? resourceName(organization, reportId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -325,7 +301,7 @@ export const ReportProvider = () =>
             expand: true,
           })
           .pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed({
                 qualifier: [] as apigee.GoogleCloudApigeeV1CustomReport[],
               }),
@@ -338,14 +314,8 @@ export const ReportProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
-      const reportId = yield* toResourceId(
-        id,
-        news.reportId,
-        output?.reportId,
-        MAX_NAME_LENGTH,
-      );
+      const organization = news.organization ?? output?.organization ?? env.project;
+      const reportId = yield* toResourceId(id, news.reportId, output?.reportId, MAX_NAME_LENGTH);
       const name = resourceName(organization, reportId);
       const ownership = yield* createInternalLabels(id);
       const desiredComments = encodeComments(ownership, news.comments);
@@ -393,6 +363,6 @@ export const ReportProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsReports({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

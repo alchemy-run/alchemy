@@ -1,21 +1,23 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_TRANSPORT;
+// Transports are Cross-Cloud Interconnect to a partner cloud: they need an
+// allowlisted remote profile and a real peer account (the probe asserts the
+// NotFound for a missing profile). Set GCP_TEST_TRANSPORT=1 on an entitled
+// project.
+const runLifecycle = !!process.env.GCP_TEST_TRANSPORT;
 
 const location = "us-east4";
 const remoteProfile = "aws-us-east-1";
@@ -27,7 +29,6 @@ const waitUntilGone = (name: string) =>
   networkconnectivity.getProjectsLocationsTransports({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-    Effect.catchTag("Forbidden", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -62,22 +63,15 @@ test.provider(
           name: transportName(project, "alchemy-tp-missing"),
         }),
       );
-      expect(["NotFound", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
-      const page = yield* networkconnectivity
-        .listProjectsLocationsTransports({
-          parent: `projects/${project}/locations/${location}`,
-          pageSize: 10,
-        })
-        .pipe(
-          Effect.catchTag("Forbidden", () =>
-            Effect.succeed({ transports: [] as const }),
-          ),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed({ transports: [] as const }),
-          ),
-        );
-      expect(Array.isArray(page.transports ?? [])).toEqual(true);
+      const page = yield* networkconnectivity.listProjectsLocationsTransports({
+        parent: `projects/${project}/locations/${location}`,
+        pageSize: 10,
+      });
+      expect((page.transports ?? []).map((transport) => transport.name)).not.toContain(
+        transportName(project, "alchemy-tp-missing"),
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -94,11 +88,7 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const result = yield* probeCreate(
-        project,
-        "alchemy-tp-probe",
-        "aws-profile-missing",
-      );
+      const result = yield* probeCreate(project, "alchemy-tp-probe", "aws-profile-missing");
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
         expect(result.failure._tag).toBe("NotFound");
@@ -144,9 +134,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.transport.name).toContain(`/locations/${location}/`);
       expect(created.transport.transportId).toEqual(expect.any(String));
       expect(created.transport.location).toEqual(location);
-      expect(created.transport.networkName).toEqual(
-        created.network.networkName,
-      );
+      expect(created.transport.networkName).toEqual(created.network.networkName);
       expect(created.transport.remoteProfileId).toEqual(remoteProfile);
       expect(created.transport.bandwidth).toEqual("BPS_1G");
       expect(created.transport.description).toEqual("transport a");
@@ -156,19 +144,15 @@ test.provider.skipIf(!runLifecycle)(
         created.transport.state,
       );
 
-      const fetched = yield* networkconnectivity.getProjectsLocationsTransports(
-        {
-          name: created.transport.name,
-        },
-      );
+      const fetched = yield* networkconnectivity.getProjectsLocationsTransports({
+        name: created.transport.name,
+      });
       expect(fetched.name).toEqual(created.transport.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("transport a");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -192,19 +176,16 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.transport.name).toEqual(created.transport.name);
-      expect(updated.transport.transportId).toEqual(
-        created.transport.transportId,
-      );
+      expect(updated.transport.transportId).toEqual(created.transport.transportId);
       expect(updated.transport.description).toEqual("transport b");
       expect(updated.transport.labels).toMatchObject({
         env: "prod",
         role: "cci",
       });
 
-      const refetched =
-        yield* networkconnectivity.getProjectsLocationsTransports({
-          name: created.transport.name,
-        });
+      const refetched = yield* networkconnectivity.getProjectsLocationsTransports({
+        name: created.transport.name,
+      });
       expect(refetched.description).toEqual("transport b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("cci");
@@ -213,7 +194,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.transport.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
     timeout: 120_000,

@@ -35,6 +35,7 @@ import {
   sameText,
   toResourceId,
   updateMaskOf,
+  retryQuota,
 } from "./internal.ts";
 
 export type IntentTrainingPhrasePart = {
@@ -175,11 +176,12 @@ export type AgentsIntent = Resource<
  * ```
  *
  * ### Updating an Intent
+ * Change props on the same logical id; the engine keeps the physical id.
+ *
  * **Example:** Add a training phrase
  * ```typescript
  * const intent = yield* GCP.Dialogflow.AgentsIntent("Hello", {
- *   agent: existing.agent,
- *   intentId: existing.intentId,
+ *   agent: agentName,
  *   displayName: "hello",
  *   trainingPhrases: [
  *     { parts: [{ text: "hello" }], repeatCount: 1 },
@@ -192,9 +194,7 @@ export type AgentsIntent = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsIntent = Resource<AgentsIntent>(
-  "GCP.Dialogflow.AgentsIntent",
-);
+export const AgentsIntent = Resource<AgentsIntent>("GCP.Dialogflow.AgentsIntent");
 
 export class AgentsIntentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsIntentNotResolved",
@@ -202,17 +202,14 @@ export class AgentsIntentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (agent: string, intentId: string) =>
-  `${agent}/intents/${intentId}`;
+const resourceName = (agent: string, intentId: string) => `${agent}/intents/${intentId}`;
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
 const phrasesOf = (
-  phrases:
-    | dialogflow.GoogleCloudDialogflowCxV3IntentTrainingPhraseList
-    | undefined,
+  phrases: dialogflow.GoogleCloudDialogflowCxV3IntentTrainingPhraseList | undefined,
 ): IntentTrainingPhrase[] | undefined => {
   if (phrases === undefined) return undefined;
   return phrases.map((phrase) => ({
@@ -225,9 +222,7 @@ const phrasesOf = (
 };
 
 const parametersOf = (
-  parameters:
-    | dialogflow.GoogleCloudDialogflowCxV3IntentParameterList
-    | undefined,
+  parameters: dialogflow.GoogleCloudDialogflowCxV3IntentParameterList | undefined,
 ): IntentParameter[] | undefined => {
   if (parameters === undefined) return undefined;
   return parameters.map((parameter) => ({
@@ -285,7 +280,6 @@ const listAt = (parent: string, project: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
     );
 
 const findByDisplayName = (parent: string, displayName: string) =>
@@ -295,11 +289,8 @@ const findByDisplayName = (parent: string, displayName: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.intents ?? [])),
       Stream.filter((intent) => intent.displayName === displayName),
       Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
+      Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
     );
 
 export const AgentsIntentProvider = () =>
@@ -313,11 +304,7 @@ export const AgentsIntentProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.intentId ?? output?.intentId;
-      if (
-        previousId !== undefined &&
-        news.intentId !== undefined &&
-        news.intentId !== previousId
-      ) {
+      if (previousId !== undefined && news.intentId !== undefined && news.intentId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -326,17 +313,9 @@ export const AgentsIntentProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const agent = olds?.agent
-        ? expandAgent(olds.agent, env.project, location)
-        : output?.agent;
-      const intentId = yield* toResourceId(
-        id,
-        olds?.intentId,
-        output?.intentId,
-      );
-      const name =
-        output?.name ??
-        (agent !== undefined ? resourceName(agent, intentId) : "");
+      const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
+      const intentId = yield* toResourceId(id, olds?.intentId, output?.intentId);
+      const name = output?.name ?? (agent !== undefined ? resourceName(agent, intentId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && agent !== undefined) {
         const ownership = yield* createInternalLabels(id);
@@ -357,19 +336,15 @@ export const AgentsIntentProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const agents = yield* namedAgents(env.project);
-        const pages = yield* Effect.forEach(
-          agents,
-          (agent) => listAt(agent.name, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(agents, (agent) => listAt(agent.name, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const agent = expandAgent(news.agent, env.project, location);
       const intentId = yield* toResourceId(id, news.intentId, output?.intentId);
       const name = output?.name ?? resourceName(agent, intentId);
@@ -404,11 +379,7 @@ export const AgentsIntentProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(agent, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
 
@@ -422,11 +393,9 @@ export const AgentsIntentProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const phrasesChanged =
-        fingerprint(phrasesOf(current.trainingPhrases)) !==
-        fingerprint(news.trainingPhrases);
+        fingerprint(phrasesOf(current.trainingPhrases)) !== fingerprint(news.trainingPhrases);
       const parametersChanged =
-        fingerprint(parametersOf(current.parameters)) !==
-        fingerprint(news.parameters);
+        fingerprint(parametersOf(current.parameters)) !== fingerprint(news.parameters);
       const priorityChanged = (current.priority ?? 0) !== (news.priority ?? 0);
       const fallbackChanged = (current.isFallback === true) !== isFallback;
       const descriptionChanged = (current.description ?? "") !== description;
@@ -460,11 +429,11 @@ export const AgentsIntentProvider = () =>
       }
 
       return toAttrs(current, env.project, agent);
-    }),
+    }, retryQuota),
 
     delete: Effect.fn(function* ({ output }) {
       yield* dialogflow
         .deleteProjectsLocationsAgentsIntents({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+    }, retryQuota),
   });

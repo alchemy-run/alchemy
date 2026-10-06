@@ -193,22 +193,16 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.Bigtable.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.Bigtable.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.Bigtable.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.Bigtable.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.Bigtable.InstanceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.Bigtable.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.Bigtable.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -227,13 +221,7 @@ const userLabels = (
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
 const toId = (id: string, instanceId: string | undefined, existing?: string) =>
-  toPhysicalId(
-    id,
-    instanceId,
-    existing,
-    MAX_INSTANCE_ID_LENGTH,
-    MIN_INSTANCE_ID_LENGTH,
-  );
+  toPhysicalId(id, instanceId, existing, MAX_INSTANCE_ID_LENGTH, MIN_INSTANCE_ID_LENGTH);
 
 const defaultClusters = (): Record<string, InstanceClusterSpec> => ({
   [DEFAULT_CLUSTER_ID]: {
@@ -243,19 +231,14 @@ const defaultClusters = (): Record<string, InstanceClusterSpec> => ({
   },
 });
 
-const toClusterBody = (
-  project: string,
-  spec: InstanceClusterSpec,
-): bigtable.Cluster => {
+const toClusterBody = (project: string, spec: InstanceClusterSpec): bigtable.Cluster => {
   const location = clusterLocation(project, spec.location ?? DEFAULT_ZONE);
   const storage = (spec.defaultStorageType ?? DEFAULT_STORAGE).toUpperCase();
   const body: bigtable.Cluster = {
     location,
     defaultStorageType: storage,
     nodeScalingFactor: spec.nodeScalingFactor,
-    encryptionConfig: spec.kmsKeyName
-      ? { kmsKeyName: spec.kmsKeyName }
-      : undefined,
+    encryptionConfig: spec.kmsKeyName ? { kmsKeyName: spec.kmsKeyName } : undefined,
   };
   if (spec.autoscalingLimits !== undefined) {
     body.clusterConfig = {
@@ -289,9 +272,7 @@ const toAttrs = (instance: bigtable.Instance, project: string) => {
 const waitUntilExists = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.InstanceNotResolved",
@@ -326,9 +307,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getInstanceByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.InstanceStillExists",
@@ -345,11 +324,7 @@ export const InstanceProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.instanceId ?? output?.instanceId;
       const nextId = news.instanceId ?? previousId;
-      if (
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId
-      ) {
+      if (previousId !== undefined && nextId !== undefined && previousId !== nextId) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -362,9 +337,7 @@ export const InstanceProvider = () =>
       const existing = yield* getInstanceByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -380,7 +353,8 @@ export const InstanceProvider = () =>
       const name = instanceName(env.project, instanceId);
       const type = normalizeType(news.type ?? output?.type);
       const edition = normalizeEdition(news.edition ?? output?.edition);
-      const displayName = news.displayName ?? instanceId;
+      // Bigtable display names must be 4-30 characters.
+      const displayName = news.displayName ?? instanceId.slice(0, 30);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -429,8 +403,7 @@ export const InstanceProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const typeChanged = normalizeType(current.type) !== type;
       const editionChanged =
-        normalizeEdition(current.edition) !== edition &&
-        news.edition !== undefined;
+        normalizeEdition(current.edition) !== edition && news.edition !== undefined;
 
       if (labelsChanged || displayChanged || typeChanged || editionChanged) {
         const mask = [
@@ -459,7 +432,7 @@ export const InstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* bigtable
         .deleteProjectsInstances({ name: output.name })
-        .pipe(Effect.catchTag(["NotFound", "Forbidden"], () => Effect.void));
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
       yield* waitUntilGone(output.name);
     }),
   });

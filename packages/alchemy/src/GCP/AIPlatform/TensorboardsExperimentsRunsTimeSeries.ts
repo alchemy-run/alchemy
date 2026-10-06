@@ -1,12 +1,14 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
@@ -21,13 +23,8 @@ import {
   parseOwnership,
   toResourceId,
 } from "./ownership.ts";
-import { createInternalLabels } from "../Labels.ts";
 
-export type TimeSeriesValueType =
-  | "SCALAR"
-  | "TENSOR"
-  | "BLOB_SEQUENCE"
-  | (string & {});
+export type TimeSeriesValueType = "SCALAR" | "TENSOR" | "BLOB_SEQUENCE" | (string & {});
 
 export type TensorboardsExperimentsRunsTimeSeriesProps = {
   /**
@@ -37,8 +34,8 @@ export type TensorboardsExperimentsRunsTimeSeriesProps = {
    */
   parent: string;
   /**
-   * Time series id (the `{time_series}` segment). If omitted, a unique id
-   * is generated. Immutable.
+   * Time series id (the `{time_series}` segment, `[a-z0-9]{0,128}`). If
+   * omitted, Vertex AI assigns one. Immutable.
    */
   timeSeriesId?: string;
   /**
@@ -131,8 +128,7 @@ export const TensorboardsExperimentsRunsTimeSeries =
   );
 
 /** Alias matching the factory catalog identifier. */
-export const TensorboardsExperimentsRunsTimeSery =
-  TensorboardsExperimentsRunsTimeSeries;
+export const TensorboardsExperimentsRunsTimeSery = TensorboardsExperimentsRunsTimeSeries;
 
 export class TensorboardsExperimentsRunsTimeSeriesNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardsExperimentsRunsTimeSeriesNotResolved",
@@ -141,6 +137,15 @@ export class TensorboardsExperimentsRunsTimeSeriesNotResolved extends Data.Tagge
 }> {}
 
 const DEFAULT_VALUE_TYPE = "SCALAR";
+
+// Time series ids allow only `[a-z0-9]`, unlike the dashed ids
+// `toResourceId` generates.
+const toTimeSeriesId = (id: string, requested: string | undefined, existing: string | undefined) =>
+  requested !== undefined || existing !== undefined
+    ? toResourceId(id, requested, existing)
+    : toResourceId(id, undefined, undefined).pipe(
+        Effect.map((generated) => generated.replace(/[^a-z0-9]/g, "")),
+      );
 
 const resourceName = (parent: string, timeSeriesId: string) =>
   `${parent}/timeSeries/${timeSeriesId}`;
@@ -187,50 +192,49 @@ const listTensorboards = (project: string, location: string) =>
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
     );
 
 const listExperiments = (parent: string) =>
-  aiplatform.listProjectsLocationsTensorboardsExperiments
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.tensorboardExperiments ?? []),
-      ),
-      Stream.map((experiment) => experiment.name ?? ""),
-      Stream.filter((name) => name.length > 0),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
-    );
+  aiplatform.listProjectsLocationsTensorboardsExperiments.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboardExperiments ?? [])),
+    Stream.map((experiment) => experiment.name ?? ""),
+    Stream.filter((name) => name.length > 0),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const listRuns = (parent: string) =>
-  aiplatform.listProjectsLocationsTensorboardsExperimentsRuns
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.tensorboardRuns ?? [])),
-      Stream.map((run) => run.name ?? ""),
-      Stream.filter((name) => name.length > 0),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
-    );
+  aiplatform.listProjectsLocationsTensorboardsExperimentsRuns.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tensorboardRuns ?? [])),
+    Stream.map((run) => run.name ?? ""),
+    Stream.filter((name) => name.length > 0),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const listAtParent = (parent: string, project: string) =>
   aiplatform.listProjectsLocationsTensorboardsExperimentsRunsTimeSeries
     .pages({ parent, pageSize: 100 })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.tensorboardTimeSeries ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.tensorboardTimeSeries ?? [])),
       Stream.filter((series) => hasOwnershipMarker(series.description)),
       Stream.map((series) => toAttrs(series, project)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("NotFound", () => Effect.succeed([])),
-      Effect.catchTag("Forbidden", () => Effect.succeed([])),
+    );
+
+const findOwned = (parent: string, id: string) =>
+  aiplatform.listProjectsLocationsTensorboardsExperimentsRunsTimeSeries
+    .pages({ parent, pageSize: 100 })
+    .pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.tensorboardTimeSeries ?? [])),
+      Stream.filterEffect((series) => ownedByAlchemy(id, series.description)),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
 
 export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
@@ -270,30 +274,24 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const timeSeriesId = yield* toResourceId(
-        id,
-        olds?.timeSeriesId,
-        output?.timeSeriesId,
-      );
-      const name =
-        output?.name ??
-        (olds?.parent !== undefined
-          ? resourceName(olds.parent, timeSeriesId)
-          : "");
-      const existing = yield* getByName(name);
+      // Vertex AI rejects GETs for ids it did not assign ("Invalid
+      // TensorboardTimeSeries resource name"), so recover by listing.
+      const existing =
+        output?.name !== undefined
+          ? yield* getByName(output.name)
+          : typeof olds?.parent === "string"
+            ? yield* findOwned(olds.parent, id)
+            : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const boards = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listTensorboards(env.project, location),
+        const boards = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listTensorboards(env.project, location),
         )).flat();
         const experiments = (yield* Effect.forEach(boards, listExperiments, {
           concurrency: 4,
@@ -301,34 +299,30 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
         const runs = (yield* Effect.forEach(experiments, listRuns, {
           concurrency: 4,
         })).flat();
-        const pages = yield* Effect.forEach(
-          runs,
-          (parent) => listAtParent(parent, env.project),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(runs, (parent) => listAtParent(parent, env.project), {
+          concurrency: 4,
+        });
         return pages.flat();
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const timeSeriesId = yield* toResourceId(
-        id,
-        news.timeSeriesId,
-        output?.timeSeriesId,
-      );
+      const timeSeriesId = yield* toTimeSeriesId(id, news.timeSeriesId, output?.timeSeriesId);
       const name = resourceName(news.parent, timeSeriesId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? timeSeriesId;
       const valueType = news.valueType ?? DEFAULT_VALUE_TYPE;
 
-      let current = yield* getByName(output?.name ?? name);
+      let current =
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(news.parent, id));
 
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsTensorboardsExperimentsRunsTimeSeries({
             parent: news.parent,
-            tensorboardTimeSeriesId: timeSeriesId,
+            tensorboardTimeSeriesId: news.timeSeriesId,
             body: {
               displayName,
               description: desiredDescription,
@@ -337,7 +331,7 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
               pluginData: news.pluginData,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => getByName(name)));
+          .pipe(Effect.catchTag("Conflict", () => findOwned(news.parent, id)));
         current = created ?? undefined;
       }
 
@@ -348,31 +342,26 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const pluginDataChanged =
-        (current.pluginData ?? "") !== (news.pluginData ?? "");
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const pluginDataChanged = (current.pluginData ?? "") !== (news.pluginData ?? "");
 
       if (displayChanged || descriptionChanged || pluginDataChanged) {
-        current =
-          yield* aiplatform.patchProjectsLocationsTensorboardsExperimentsRunsTimeSeries(
-            {
-              name,
-              updateMask: [
-                displayChanged ? "displayName" : undefined,
-                descriptionChanged ? "description" : undefined,
-                pluginDataChanged ? "pluginData" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: {
-                name,
-                displayName,
-                description: desiredDescription,
-                pluginData: news.pluginData,
-              },
-            },
-          );
+        current = yield* aiplatform.patchProjectsLocationsTensorboardsExperimentsRunsTimeSeries({
+          name,
+          updateMask: [
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            pluginDataChanged ? "pluginData" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
+            name,
+            displayName,
+            description: desiredDescription,
+            pluginData: news.pluginData,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

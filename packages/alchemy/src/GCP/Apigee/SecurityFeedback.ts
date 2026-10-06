@@ -8,13 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  organizationFromName,
-  sameJson,
-  toResourceId,
-} from "./names.ts";
+import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
   createInternalLabels,
   encodeOwnership,
@@ -30,9 +24,7 @@ export type SecurityFeedbackContext = {
   /**
    * Attribute the feedback constrains.
    */
-  attribute:
-    | apigee.GoogleCloudApigeeV1SecurityFeedbackFeedbackContextAttributeEnum
-    | (string & {});
+  attribute: apigee.GoogleCloudApigeeV1SecurityFeedbackFeedbackContextAttributeEnum | (string & {});
   /**
    * Values of that attribute.
    */
@@ -60,9 +52,7 @@ export type SecurityFeedbackProps = {
    * Feedback type.
    * @default "EXCLUDED_DETECTION"
    */
-  feedbackType?:
-    | apigee.GoogleCloudApigeeV1SecurityFeedbackFeedbackTypeEnum
-    | (string & {});
+  feedbackType?: apigee.GoogleCloudApigeeV1SecurityFeedbackFeedbackTypeEnum | (string & {});
   /**
    * Reason for the feedback.
    */
@@ -131,9 +121,7 @@ export type SecurityFeedback = Resource<
  * @resource
  * @category Apigee
  */
-export const SecurityFeedback = Resource<SecurityFeedback>(
-  "GCP.Apigee.SecurityFeedback",
-);
+export const SecurityFeedback = Resource<SecurityFeedback>("GCP.Apigee.SecurityFeedback");
 
 export class SecurityFeedbackNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityFeedbackNotResolved",
@@ -169,10 +157,7 @@ const contextsOf = (
       values: [...(context.values ?? [])],
     }));
 
-const toAttrs = (
-  feedback: apigee.GoogleCloudApigeeV1SecurityFeedback,
-  organization: string,
-) => {
+const toAttrs = (feedback: apigee.GoogleCloudApigeeV1SecurityFeedback, organization: string) => {
   const securityFeedbackId = feedbackIdOf(feedback);
   const name = feedback.name?.includes("/")
     ? feedback.name
@@ -195,7 +180,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityFeedback({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 const toBody = (
   news: SecurityFeedbackProps,
@@ -231,16 +216,14 @@ export const SecurityFeedbackProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        organizationFromName(output?.name) ?? olds?.organization ?? env.project;
+      const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityFeedbackId = yield* toResourceId(
         id,
         olds?.securityFeedbackId,
         output?.securityFeedbackId,
         MAX_NAME_LENGTH,
       );
-      const name =
-        output?.name ?? resourceName(organization, securityFeedbackId);
+      const name = output?.name ?? resourceName(organization, securityFeedbackId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
@@ -257,14 +240,12 @@ export const SecurityFeedbackProvider = () =>
             pageSize: 100,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.securityFeedback ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.securityFeedback ?? [])),
             Stream.filter((feedback) => hasOwnershipMarker(feedback.comment)),
             Stream.map((feedback) => toAttrs(feedback, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
+            Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
               Effect.succeed([] as SecurityFeedback["Attributes"][]),
             ),
           );
@@ -272,8 +253,7 @@ export const SecurityFeedbackProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization =
-        news.organization ?? output?.organization ?? env.project;
+      const organization = news.organization ?? output?.organization ?? env.project;
       const securityFeedbackId = yield* toResourceId(
         id,
         news.securityFeedbackId,
@@ -302,8 +282,7 @@ export const SecurityFeedbackProvider = () =>
         return yield* new SecurityFeedbackNotResolved({ name });
       }
 
-      const displayChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const typeChanged = (current.feedbackType ?? "") !== desiredType;
       const reasonChanged = (current.reason ?? "") !== (news.reason ?? "");
       const commentChanged = (current.comment ?? "") !== desiredComment;
@@ -334,6 +313,6 @@ export const SecurityFeedbackProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSecurityFeedback({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });
