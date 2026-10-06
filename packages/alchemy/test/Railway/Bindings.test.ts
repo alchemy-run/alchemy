@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -96,7 +97,10 @@ const withBucketS3 = <A, E, R>(
     Effect.provide(
       Layer.mergeAll(
         fromCredentials(
-          { accessKeyId: creds.accessKeyId, secretAccessKey: creds.secretAccessKey },
+          {
+            accessKeyId: Redacted.make(creds.accessKeyId),
+            secretAccessKey: Redacted.make(creds.secretAccessKey),
+          },
           creds.region as RegionName,
         ),
         AwsEndpoint.of(creds.endpoint),

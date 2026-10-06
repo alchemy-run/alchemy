@@ -16,6 +16,19 @@ type TypeId = typeof TypeId;
 export type AiBotsProtection = "block" | "disabled" | "only_on_ad_pages";
 
 /**
+ * Policy for one class of AI crawler (search or agent). `disabled`
+ * allows the class; `block` blocks it; `only_on_ad_pages` blocks it only
+ * on pages that show ads.
+ */
+export type AiCrawlerPolicy = "disabled" | "block" | "only_on_ad_pages";
+
+/**
+ * Policy for AI model-training crawlers. `disallow` adds a robots.txt
+ * disallow without blocking at the edge.
+ */
+export type AiTrainingPolicy = AiCrawlerPolicy | "disallow";
+
+/**
  * Robots Access Control License variant.
  */
 export type CfRobotsVariant = "off" | "policy_only";
@@ -42,6 +55,7 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  * - **Enterprise with Bot Management add-on** — `autoUpdateModel`,
  *   `bmCookieEnabled`, `suppressSessionScore`
  *
+ * `aiSearch`, `aiUser`, `aiTraining`, `botPreferenceSyncEnabled`,
  * `aiBotsProtection`, `crawlerProtection`, `contentBotsProtection`,
  * `cfRobotsVariant`, `enableJs`, and `isRobotsTxtManaged` are shared
  * across plans (though some accounts reject writes to a subset of them).
@@ -51,8 +65,28 @@ export type SbfmVerifiedBotsAction = "allow" | "block";
  */
 export interface Settings {
   /**
+   * Policy for AI search crawlers.
+   */
+  aiSearch?: AiCrawlerPolicy;
+  /**
+   * Policy for AI assistant and agent crawlers.
+   */
+  aiUser?: AiCrawlerPolicy;
+  /**
+   * Policy for AI model-training crawlers.
+   */
+  aiTraining?: AiTrainingPolicy;
+  /**
+   * Let Cloudflare serve robots.txt content derived from the zone's
+   * `aiSearch`, `aiUser` and `aiTraining` preferences.
+   */
+  botPreferenceSyncEnabled?: boolean;
+  /**
    * Action for AI scrapers and crawlers ("block AI bots"). Note
    * `only_on_ad_pages` is not available for Enterprise zones.
+   *
+   * Cloudflare deprecated this setting in favour of the per-class
+   * `aiSearch`, `aiUser`, and `aiTraining` policies.
    */
   aiBotsProtection?: AiBotsProtection;
   /**
@@ -76,6 +110,9 @@ export interface Settings {
   /**
    * Serve a Cloudflare-managed robots.txt. If the origin already serves
    * one, the managed file is prepended to it.
+   *
+   * Cloudflare deprecated this setting in favour of
+   * `botPreferenceSyncEnabled`.
    */
   isRobotsTxtManaged?: boolean;
   /**
@@ -201,6 +238,16 @@ export type BotManagement = Resource<TypeId, Props, Attributes, never, Providers
  * });
  * ```
  *
+ * **Example:** Allow AI search and agent crawlers, disallow training
+ * ```typescript
+ * yield* Cloudflare.BotManagement.BotManagement("Bots", {
+ *   zoneId: zone.zoneId,
+ *   aiSearch: "disabled",
+ *   aiUser: "disabled",
+ *   aiTraining: "disallow",
+ * });
+ * ```
+ *
  * ### Bot Fight Mode (Free plans)
  * **Example:** Enable Bot Fight Mode
  * ```typescript
@@ -231,6 +278,10 @@ export const isBotManagement = (value: unknown): value is BotManagement =>
  * user props into the only-send-what-is-set PUT body.
  */
 const SETTINGS_KEYS = [
+  "aiSearch",
+  "aiUser",
+  "aiTraining",
+  "botPreferenceSyncEnabled",
   "aiBotsProtection",
   "crawlerProtection",
   "contentBotsProtection",
@@ -356,6 +407,10 @@ export const BotManagementProvider = () =>
  * narrowing on the plan.
  */
 interface ObservedBotManagement {
+  readonly aiSearch?: string | null;
+  readonly aiUser?: string | null;
+  readonly aiTraining?: string | null;
+  readonly botPreferenceSyncEnabled?: boolean | null;
   readonly aiBotsProtection?: string | null;
   readonly crawlerProtection?: string | null;
   readonly contentBotsProtection?: string | null;

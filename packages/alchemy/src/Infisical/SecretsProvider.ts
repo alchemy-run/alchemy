@@ -131,7 +131,7 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
     Retry.none,
     Effect.provide(
       fromApiKey({
-        apiKey: Redacted.value(credentials.token),
+        apiKey: credentials.token,
         apiBaseUrl: credentials.apiBaseUrl,
       }),
     ),

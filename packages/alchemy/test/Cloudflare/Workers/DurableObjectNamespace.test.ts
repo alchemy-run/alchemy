@@ -71,6 +71,35 @@ test(
   },
 );
 
+test(
+  "jurisdiction() addresses objects inside that jurisdiction",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+    const name = "jurisdiction-probe";
+
+    const res = yield* client.get(`${url}/jurisdiction?name=${name}`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as { global: string; eu: string; euAgain: string };
+
+    // A jurisdiction-restricted id is a different object from the global one
+    // with the same name, and is stable across lookups.
+    expect(body.eu).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.eu).not.toBe(body.global);
+    expect(body.euAgain).toBe(body.eu);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
 class DurableObjectLocationNotReady extends Data.TaggedError("DurableObjectLocationNotReady")<{
   readonly message: string;
 }> {}

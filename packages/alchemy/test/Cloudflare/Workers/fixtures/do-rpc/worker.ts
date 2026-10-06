@@ -65,6 +65,24 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           return yield* HttpServerResponse.json({ id, colo, locationHintRead });
         }
 
+        // The same name addresses a different object inside a jurisdiction,
+        // so the two ids differ when `jurisdiction()` is honoured.
+        if (request.method === "GET" && url.pathname === "/jurisdiction") {
+          const name = url.searchParams.get("name") ?? "default";
+          const global = yield* objects.getByName(name).identity().pipe(Effect.orDie);
+          const eu = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          const euAgain = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ global, eu, euAgain });
+        }
+
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the
         // Stream returned by the DO's `tick` RPC method straight onto the
         // HTTP response.

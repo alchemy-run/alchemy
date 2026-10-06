@@ -10,6 +10,7 @@ import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Drift from "@/Drift.ts";
 import * as Test from "@/Test/Alchemy";
 import { expectUrlAbsent, expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -363,6 +364,80 @@ test.provider(
         const live = yield* findRoute(zoneId, T3_PATTERN);
         expect(live?.script).toEqual(owner.workerName);
       }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)));
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "provider:cloudflare:zone", "live"],
+    timeout: 300_000,
+  },
+);
+
+// --- drift ignores the order Cloudflare lists unchanged routes in (#1825) -
+
+const T4_PATTERNS = ["a", "b", "c", "d"].map(
+  (segment) => `${zoneName}/${routeSuffix}/t4/${segment}/*`,
+);
+
+test.provider(
+  "drift reports unchanged routes as unchanged whatever order Cloudflare lists them in",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRoutes(zoneId, ...T4_PATTERNS);
+
+      const deployRoutes = (patterns: readonly string[]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("RouteOrderWorker", {
+              main,
+              workersDev: false,
+              routes: patterns.map((pattern) => ({ pattern, zoneName })),
+            });
+          }),
+        );
+
+      const listedOrder = (workerName: string) =>
+        workers.listRoutes.items({ zoneId }).pipe(
+          Stream.filter((r) => r.script === workerName && T4_PATTERNS.includes(r.pattern)),
+          Stream.map((r) => r.pattern),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+
+      let workerName: string | undefined;
+
+      yield* Effect.gen(function* () {
+        const worker = yield* deployRoutes(T4_PATTERNS);
+        workerName = worker.workerName;
+
+        // Redeploy the same routes declared in the reverse of Cloudflare's
+        // listing order, so state's order and the listing order differ.
+        const listed = yield* listedOrder(worker.workerName);
+        expect([...listed].sort()).toEqual([...T4_PATTERNS].sort());
+        const reordered = yield* deployRoutes([...listed].reverse());
+        expect(reordered.routes.map((r) => r.pattern)).toEqual([...listed].reverse());
+        expect(yield* listedOrder(worker.workerName)).toEqual(listed);
+
+        const detected = yield* Drift.detect({
+          name: stack.name,
+          stage: stack.stage,
+        }).pipe(Effect.provide(stack.state));
+        expect(detected.resources.RouteOrderWorker).toMatchObject({
+          action: "unchanged",
+          resourceType: "Cloudflare.Worker",
+        });
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* stack.destroy().pipe(Effect.ignore);
+            if (workerName) {
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
+            }
+          }),
+        ),
+      );
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "provider:cloudflare:zone", "live"],

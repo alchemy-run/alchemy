@@ -64,7 +64,10 @@ const env = Layer.mergeAll(
   Layer.succeed(AlchemyContext, { dotAlchemy: "/tmp/.alchemy-test", dev: false, adopt: false }),
   // The remaining layers only satisfy the provider layers' type-level
   // requirements (reconcile/read need clients); diff never touches them.
-  Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
+  Layer.succeed(
+    Credentials,
+    Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
+  ),
   Layer.sync(ArtifactStore, createArtifactStore),
   Layer.succeed(
     LocalRuntimeState,
