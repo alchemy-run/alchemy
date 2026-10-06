@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 // The gates are decided at deploy time and passed to the deployed host
@@ -48,8 +48,7 @@ export const Train = GCP.AIPlatform.TrainingPipeline("Train", {
         machineSpec: { machineType: "n1-standard-4" },
         replicaCount: "1",
         containerSpec: {
-          imageUri:
-            "us-docker.pkg.dev/vertex-ai/training/tf-cpu.2-12.py310:latest",
+          imageUri: "us-docker.pkg.dev/vertex-ai/training/tf-cpu.2-12.py310:latest",
           // Runs long enough for the host to cancel it.
           command: ["sleep", "1800"],
         },
@@ -84,24 +83,20 @@ export const Resumed = sandbox("Resumed", "resumed");
 /** Sandbox template the host reads. */
 export const Browser = Effect.gen(function* () {
   const engine = yield* Agent;
-  return yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplate(
-    "Browser",
-    {
-      reasoningEngine: engine.name,
-      displayName: "browser",
-      defaultContainerEnvironment: {
-        defaultContainerCategory: "DEFAULT_CONTAINER_CATEGORY_COMPUTER_USE",
-      },
+  return yield* GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplate("Browser", {
+    reasoningEngine: engine.name,
+    displayName: "browser",
+    defaultContainerEnvironment: {
+      defaultContainerCategory: "DEFAULT_CONTAINER_CATEGORY_COMPUTER_USE",
     },
-  );
+  });
 });
 
 /** Sandbox probes, declared only when their resources are deployed. */
 const sandboxProbes = Effect.gen(function* () {
   if (!runSandboxes) return {};
   const getSandbox = yield* GCP.AIPlatform.GetSandboxEnvironment(Code);
-  const getTemplate =
-    yield* GCP.AIPlatform.GetSandboxEnvironmentTemplate(Browser);
+  const getTemplate = yield* GCP.AIPlatform.GetSandboxEnvironmentTemplate(Browser);
   const probes = {
     getSandboxEnvironment: getSandbox(),
     getSandboxEnvironmentTemplate: getTemplate(),
@@ -152,16 +147,13 @@ export default class AIPlatformBindingsHost extends GCP.Function<AIPlatformBindi
         generateContent: Effect.gen(function* () {
           const text = yield* gemini.text("Reply with exactly: pong");
           const response = yield* regional.generate({
-            contents: [
-              { role: "user", parts: [{ text: "Reply with exactly: ping" }] },
-            ],
+            contents: [{ role: "user", parts: [{ text: "Reply with exactly: ping" }] }],
           });
           return {
             text,
             regional:
-              response.candidates?.[0]?.content?.parts
-                ?.map((part) => part.text ?? "")
-                .join("") ?? "",
+              response.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ??
+              "",
             modelVersion: response.modelVersion,
           };
         }),

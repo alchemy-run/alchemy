@@ -30,8 +30,7 @@ import {
   ResourceNotResolved,
 } from "./internal.ts";
 
-export type PropertyDefinition =
-  cw.GoogleCloudContentwarehouseV1PropertyDefinition;
+export type PropertyDefinition = cw.GoogleCloudContentwarehouseV1PropertyDefinition;
 
 export type DocumentSchemaProps = {
   /**
@@ -123,20 +122,12 @@ export type DocumentSchema = Resource<
  * @resource
  * @category ContentWarehouse
  */
-export const DocumentSchema = Resource<DocumentSchema>(
-  "GCP.ContentWarehouse.DocumentSchema",
-);
+export const DocumentSchema = Resource<DocumentSchema>("GCP.ContentWarehouse.DocumentSchema");
 
-const resourceName = (
-  project: string,
-  location: string,
-  documentSchemaId: string,
-) => `${locationParent(project, location)}/documentSchemas/${documentSchemaId}`;
+const resourceName = (project: string, location: string, documentSchemaId: string) =>
+  `${locationParent(project, location)}/documentSchemas/${documentSchemaId}`;
 
-const toAttrs = (
-  item: cw.GoogleCloudContentwarehouseV1DocumentSchema,
-  project: string,
-) => {
+const toAttrs = (item: cw.GoogleCloudContentwarehouseV1DocumentSchema, project: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "documentSchemas");
   return {
@@ -169,28 +160,19 @@ const listAt = (parent: string) =>
     (page) => page.documentSchemas,
   ).pipe(ignoreList([] as cw.GoogleCloudContentwarehouseV1DocumentSchema[]));
 
-const findOwned = (
-  id: string,
-  items: readonly cw.GoogleCloudContentwarehouseV1DocumentSchema[],
-) =>
+const findOwned = (id: string, items: readonly cw.GoogleCloudContentwarehouseV1DocumentSchema[]) =>
   Effect.gen(function* () {
     for (const item of items) {
       if (yield* ownedByAlchemy(id, item.description)) return item;
     }
-    return undefined as
-      | cw.GoogleCloudContentwarehouseV1DocumentSchema
-      | undefined;
+    return undefined as cw.GoogleCloudContentwarehouseV1DocumentSchema | undefined;
   });
 
 const listOwned = (project: string) =>
-  Effect.forEach(
-    LIST_LOCATIONS,
-    (location) => listAt(locationParent(project, location)),
-    { concurrency: 2 },
-  ).pipe(
-    Effect.map((groups) =>
-      groups.flat().filter((item) => hasOwnershipMarker(item.description)),
-    ),
+  Effect.forEach(LIST_LOCATIONS, (location) => listAt(locationParent(project, location)), {
+    concurrency: 2,
+  }).pipe(
+    Effect.map((groups) => groups.flat().filter((item) => hasOwnershipMarker(item.description))),
   );
 
 export const DocumentSchemaProvider = () =>
@@ -214,13 +196,10 @@ export const DocumentSchemaProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const documentSchemaId =
-        olds?.documentSchemaId ?? output?.documentSchemaId;
+      const documentSchemaId = olds?.documentSchemaId ?? output?.documentSchemaId;
       const name =
         output?.name ??
-        (documentSchemaId
-          ? resourceName(env.project, location, documentSchemaId)
-          : "");
+        (documentSchemaId ? resourceName(env.project, location, documentSchemaId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined) {
         const listed = yield* listAt(locationParent(env.project, location));
@@ -228,9 +207,7 @@ export const DocumentSchemaProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -254,16 +231,11 @@ export const DocumentSchemaProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? documentSchemaId;
-      const propertyDefinitions = news.propertyDefinitions ?? [
-        defaultTextProperty(),
-      ];
+      const propertyDefinitions = news.propertyDefinitions ?? [defaultTextProperty()];
       const documentIsFolder = news.documentIsFolder === true;
 
-      const findInParent = listAt(parent).pipe(
-        Effect.flatMap((items) => findOwned(id, items)),
-      );
-      let current =
-        (yield* getByName(output?.name ?? "")) ?? (yield* findInParent);
+      const findInParent = listAt(parent).pipe(Effect.flatMap((items) => findOwned(id, items)));
+      let current = (yield* getByName(output?.name ?? "")) ?? (yield* findInParent);
 
       if (current === undefined) {
         const created = yield* cw
@@ -288,17 +260,12 @@ export const DocumentSchemaProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name:
-            output?.name ??
-            resourceName(env.project, location, documentSchemaId),
+          name: output?.name ?? resourceName(env.project, location, documentSchemaId),
         });
       }
 
       const currentName = current.name ?? "";
-      const appended = appendProperties(
-        current.propertyDefinitions,
-        propertyDefinitions,
-      );
+      const appended = appendProperties(current.propertyDefinitions, propertyDefinitions);
       const descriptionChanged = !sameText(current.description, description);
       const displayChanged = !sameText(current.displayName, displayName);
       if (descriptionChanged || displayChanged || appended.appended) {

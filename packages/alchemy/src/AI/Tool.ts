@@ -10,10 +10,7 @@ export type ToolParameters<Refs> = {
   >["schema"]["Type"];
 };
 
-export interface Tool<
-  Name extends string = string,
-  Refs extends any[] = any[],
-> {
+export interface Tool<Name extends string = string, Refs extends any[] = any[]> {
   "~alchemy/Kind": "Tool";
   "~alchemy/Name": Name;
   refs: Refs;
@@ -24,22 +21,14 @@ export interface Tool<
   impl: (props: this["params"]) => Effect.Effect<any, any, any>;
   new (): Tool<Name, Refs>;
   <Err = never, Req = never>(
-    impl: Effect.Effect<
-      (props: this["params"]) => Effect.Effect<any>,
-      Err,
-      Req
-    >,
+    impl: Effect.Effect<(props: this["params"]) => Effect.Effect<any>, Err, Req>,
   ): ToolImpl<this, Err, Req>;
   <Err = never, Req = never>(
     impl: (props: this["params"]) => Effect.Effect<any, Err, Req>,
   ): ToolImpl<this, Err, Req>;
 }
 
-export interface ToolImpl<
-  T extends Tool<any, any> = any,
-  Err = any,
-  Req = any,
-> {
+export interface ToolImpl<T extends Tool<any, any> = any, Err = any, Req = any> {
   "~alchemy/Kind": "ToolImpl";
   tool: T;
   impl: (props: T["params"]) => Effect.Effect<any, Err, Req>;
@@ -50,10 +39,7 @@ export const Tool: {
   <Name extends string>(
     name: Name,
   ): {
-    <Refs extends any[]>(
-      template: TemplateStringsArray,
-      ...refs: Refs
-    ): Tool<Name, Refs>;
+    <Refs extends any[]>(template: TemplateStringsArray, ...refs: Refs): Tool<Name, Refs>;
   };
   <Self>(): {
     <Name extends string>(
@@ -65,13 +51,9 @@ export const Tool: {
       ): Tool<Name, Refs> &
         Context.Service<
           Self,
-          | ((
-              input: ToolParameters<Refs[number]>,
-            ) => Effect.Effect<any, never, RuntimeContext>)
+          | ((input: ToolParameters<Refs[number]>) => Effect.Effect<any, never, RuntimeContext>)
           | Effect.Effect<
-              (
-                input: ToolParameters<Refs[number]>,
-              ) => Effect.Effect<any, never, RuntimeContext>,
+              (input: ToolParameters<Refs[number]>) => Effect.Effect<any, never, RuntimeContext>,
               never,
               RuntimeContext
             >
@@ -80,19 +62,15 @@ export const Tool: {
   };
 } = ((name?: string) =>
   name
-    ? (template: TemplateStringsArray, ...refs: any[]) =>
-        makeTool(name, template, refs)
+    ? (template: TemplateStringsArray, ...refs: any[]) => makeTool(name, template, refs)
     : (name: string) =>
         (template: TemplateStringsArray, ...refs: any[]) =>
           makeTool(name, template, refs)) as any;
 
 const makeTool = (name: string, template: TemplateStringsArray, refs: any[]) =>
-  Object.assign(
-    function (impl: (props: any) => Effect.Effect<any, any, any>) {},
-    {
-      "~alchemy/Kind": "Tool",
-      "~alchemy/Name": name,
-      refs,
-      template,
-    },
-  ) as any;
+  Object.assign(function (_impl: (props: any) => Effect.Effect<any, any, any>) {}, {
+    "~alchemy/Kind": "Tool",
+    "~alchemy/Name": name,
+    refs,
+    template,
+  }) as any;

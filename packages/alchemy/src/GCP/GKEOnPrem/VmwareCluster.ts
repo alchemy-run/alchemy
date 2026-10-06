@@ -296,21 +296,12 @@ export type VmwareCluster = Resource<
  * @resource
  * @category GKEOnPrem
  */
-export const VmwareCluster = Resource<VmwareCluster>(
-  "GCP.GKEOnPrem.VmwareCluster",
-);
+export const VmwareCluster = Resource<VmwareCluster>("GCP.GKEOnPrem.VmwareCluster");
 
-const resourceName = (
-  project: string,
-  location: string,
-  vmwareClusterId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${vmwareClusterId}`;
+const resourceName = (project: string, location: string, vmwareClusterId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${vmwareClusterId}`;
 
-const toAttrs = (
-  item: gkeonprem.VmwareCluster,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkeonprem.VmwareCluster, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
@@ -368,14 +359,11 @@ const listOwned = (project: string, region: string) =>
         pageSize: 1000,
         view: "FULL",
       }),
-      (page): readonly gkeonprem.VmwareCluster[] | undefined =>
-        page.vmwareClusters,
+      (page): readonly gkeonprem.VmwareCluster[] | undefined => page.vmwareClusters,
     ),
   ).pipe(
     Effect.map((items) =>
-      items.filter((item: gkeonprem.VmwareCluster) =>
-        isOwned(item.annotations, item.description),
-      ),
+      items.filter((item: gkeonprem.VmwareCluster) => isOwned(item.annotations, item.description)),
     ),
   );
 
@@ -408,30 +396,19 @@ const toBody = (
 
 export const VmwareClusterProvider = () =>
   Provider.succeed(VmwareCluster, {
-    stables: [
-      "name",
-      "vmwareClusterId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "vmwareClusterId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousMembership =
-        olds?.adminClusterMembership ?? output?.adminClusterMembership;
+      const previousMembership = olds?.adminClusterMembership ?? output?.adminClusterMembership;
       const nextMembership = news.adminClusterMembership;
       return replaceOnIdentity({
         previousId: olds?.vmwareClusterId ?? output?.vmwareClusterId,
         nextId: news.vmwareClusterId
           ? rfc1035(news.vmwareClusterId, "vmwarecluster", VMWARE_NAME_LENGTH)
           : (olds?.vmwareClusterId ?? output?.vmwareClusterId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -453,12 +430,8 @@ export const VmwareClusterProvider = () =>
         "vmwarecluster",
         VMWARE_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, vmwareClusterId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, vmwareClusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -473,9 +446,7 @@ export const VmwareClusterProvider = () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item: gkeonprem.VmwareCluster) =>
-          toAttrs(item, env.project, env.region),
-        );
+        return items.map((item: gkeonprem.VmwareCluster) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -487,22 +458,12 @@ export const VmwareClusterProvider = () =>
         "vmwarecluster",
         VMWARE_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, vmwareClusterId);
       const ownership = yield* createInternalLabels(id);
-      const annotations = desiredAnnotations(
-        ownership,
-        news.labels,
-        news.annotations,
-      );
+      const annotations = desiredAnnotations(ownership, news.labels, news.annotations);
       const description = encodeOwnership(ownership, news.description);
-      const membership = membershipName(
-        news.adminClusterMembership,
-        env.project,
-      );
+      const membership = membershipName(news.adminClusterMembership, env.project);
       const body = toBody(news, annotations, description, membership);
 
       let current = yield* getByName(output?.name ?? name);
@@ -527,24 +488,19 @@ export const VmwareClusterProvider = () =>
 
       const mask = fieldMask([
         differs(current.annotations, annotations) && "annotations",
-        !sameText(parseOwnership(current.description).text, news.description) &&
-          "description",
+        !sameText(parseOwnership(current.description).text, news.description) && "description",
         differs(current.onPremVersion, news.onPremVersion) && "onPremVersion",
-        differs(current.controlPlaneNode, news.controlPlaneNode) &&
-          "controlPlaneNode",
+        differs(current.controlPlaneNode, news.controlPlaneNode) && "controlPlaneNode",
         differs(current.networkConfig, news.networkConfig) && "networkConfig",
         differs(current.loadBalancer, news.loadBalancer) && "loadBalancer",
         differs(current.storage, news.storage) && "storage",
         differs(current.vcenter, news.vcenter) && "vcenter",
         differs(current.dataplaneV2, news.dataplaneV2) && "dataplaneV2",
-        differs(current.antiAffinityGroups, news.antiAffinityGroups) &&
-          "antiAffinityGroups",
+        differs(current.antiAffinityGroups, news.antiAffinityGroups) && "antiAffinityGroups",
         differs(current.authorization, news.authorization) && "authorization",
-        differs(current.autoRepairConfig, news.autoRepairConfig) &&
-          "autoRepairConfig",
+        differs(current.autoRepairConfig, news.autoRepairConfig) && "autoRepairConfig",
         differs(current.upgradePolicy, news.upgradePolicy) && "upgradePolicy",
-        differs(current.binaryAuthorization, news.binaryAuthorization) &&
-          "binaryAuthorization",
+        differs(current.binaryAuthorization, news.binaryAuthorization) && "binaryAuthorization",
         news.enableControlPlaneV2 !== undefined &&
           news.enableControlPlaneV2 !== current.enableControlPlaneV2 &&
           "enableControlPlaneV2",
@@ -560,21 +516,16 @@ export const VmwareClusterProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation = yield* gkeonprem.patchProjectsLocationsVmwareClusters(
-          {
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              ...body,
-              etag: current.etag,
-            },
+        const operation = yield* gkeonprem.patchProjectsLocationsVmwareClusters({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            ...body,
+            etag: current.etag,
           },
-        );
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {

@@ -1,9 +1,6 @@
 import * as serverless from "@distilled.cloud/aws/redshift-serverless";
 import * as Layer from "effect/Layer";
-import {
-  makeServerlessNamespaceHttpBinding,
-  serverlessArnPrefix,
-} from "./BindingHttp.ts";
+import { makeServerlessNamespaceHttpBinding, serverlessArnPrefix } from "./BindingHttp.ts";
 import { RestoreFromRecoveryPoint } from "./RestoreFromRecoveryPoint.ts";
 
 export const RestoreFromRecoveryPointHttp = Layer.effect(

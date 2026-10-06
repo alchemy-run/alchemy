@@ -171,20 +171,15 @@ const DEFAULT_ACTIONS: ExampleAction[] = [
   { agentUtterance: { text: "Hi, how can I help?" } },
 ];
 
-const resourceName = (playbook: string, exampleId: string) =>
-  `${playbook}/examples/${exampleId}`;
+const resourceName = (playbook: string, exampleId: string) => `${playbook}/examples/${exampleId}`;
 
 const actionsOf = (
   actions: dialogflow.GoogleCloudDialogflowCxV3ActionList | undefined,
 ): ExampleAction[] | undefined => {
   if (actions === undefined) return undefined;
   return actions.map((action) => ({
-    userUtterance: action.userUtterance
-      ? { text: action.userUtterance.text }
-      : undefined,
-    agentUtterance: action.agentUtterance
-      ? { text: action.agentUtterance.text }
-      : undefined,
+    userUtterance: action.userUtterance ? { text: action.userUtterance.text } : undefined,
+    agentUtterance: action.agentUtterance ? { text: action.agentUtterance.text } : undefined,
     toolUse: action.toolUse
       ? {
           tool: action.toolUse.tool,
@@ -240,54 +235,38 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooksExamples
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.examples ?? [])),
-      Stream.filter(
-        (example) =>
-          hasOwnershipMarker(example.displayName) ||
-          hasOwnershipMarker(example.description),
-      ),
-      Stream.map((example) => toAttrs(example, project, parent)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooksExamples.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.examples ?? [])),
+    Stream.filter(
+      (example) =>
+        hasOwnershipMarker(example.displayName) || hasOwnershipMarker(example.description),
+    ),
+    Stream.map((example) => toAttrs(example, project, parent)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const listPlaybooks = (agent: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooks
-    .pages({ parent: agent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooks.pages({ parent: agent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.playbooks ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findByDisplayName = (parent: string, displayName: string) =>
-  dialogflow.listProjectsLocationsAgentsPlaybooksExamples
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.examples ?? [])),
-      Stream.filter((example) => example.displayName === displayName),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  dialogflow.listProjectsLocationsAgentsPlaybooksExamples.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.examples ?? [])),
+    Stream.filter((example) => example.displayName === displayName),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const AgentsPlaybooksExampleProvider = () =>
   Provider.succeed(AgentsPlaybooksExample, {
-    stables: [
-      "name",
-      "exampleId",
-      "playbook",
-      "location",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "exampleId", "playbook", "location", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -309,14 +288,9 @@ export const AgentsPlaybooksExampleProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const playbook = olds?.playbook ?? output?.playbook;
-      const exampleId = yield* toResourceId(
-        id,
-        olds?.exampleId,
-        output?.exampleId,
-      );
+      const exampleId = yield* toResourceId(id, olds?.exampleId, output?.exampleId);
       const name =
-        output?.name ??
-        (playbook !== undefined ? resourceName(playbook, exampleId) : "");
+        output?.name ?? (playbook !== undefined ? resourceName(playbook, exampleId) : "");
       let existing = yield* getByName(name);
       if (existing === undefined && playbook !== undefined) {
         const ownership = yield* internalLabels(id);
@@ -344,9 +318,7 @@ export const AgentsPlaybooksExampleProvider = () =>
               const examples = yield* Effect.forEach(
                 playbooks,
                 (playbook) =>
-                  playbook.name
-                    ? listAt(playbook.name, env.project)
-                    : Effect.succeed([]),
+                  playbook.name ? listAt(playbook.name, env.project) : Effect.succeed([]),
                 { concurrency: 4 },
               );
               return examples.flat();
@@ -359,11 +331,7 @@ export const AgentsPlaybooksExampleProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const playbook = news.playbook;
-      const exampleId = yield* toResourceId(
-        id,
-        news.exampleId,
-        output?.exampleId,
-      );
+      const exampleId = yield* toResourceId(id, news.exampleId, output?.exampleId);
       const name = output?.name ?? resourceName(playbook, exampleId);
       const ownership = yield* internalLabels(id);
       const displayName = encodeOwnershipLine(ownership, news.displayName);
@@ -391,11 +359,7 @@ export const AgentsPlaybooksExampleProvider = () =>
             parent: playbook,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(playbook, displayName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findByDisplayName(playbook, displayName)));
         current = created ?? undefined;
       }
 
@@ -406,19 +370,12 @@ export const AgentsPlaybooksExampleProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = (current.displayName ?? "") !== displayName;
       const descriptionChanged = (current.description ?? "") !== description;
-      const stateChanged =
-        (current.conversationState ?? DEFAULT_STATE) !== conversationState;
-      const actionsChanged =
-        fingerprint(actionsOf(current.actions)) !== fingerprint(actions);
-      const languageChanged = !sameText(
-        current.languageCode,
-        news.languageCode,
-      );
-      const inputChanged =
-        fingerprint(current.playbookInput) !== fingerprint(news.playbookInput);
+      const stateChanged = (current.conversationState ?? DEFAULT_STATE) !== conversationState;
+      const actionsChanged = fingerprint(actionsOf(current.actions)) !== fingerprint(actions);
+      const languageChanged = !sameText(current.languageCode, news.languageCode);
+      const inputChanged = fingerprint(current.playbookInput) !== fingerprint(news.playbookInput);
       const outputChanged =
-        fingerprint(current.playbookOutput) !==
-        fingerprint(news.playbookOutput);
+        fingerprint(current.playbookOutput) !== fingerprint(news.playbookOutput);
 
       if (
         displayChanged ||
@@ -429,13 +386,12 @@ export const AgentsPlaybooksExampleProvider = () =>
         inputChanged ||
         outputChanged
       ) {
-        current =
-          yield* dialogflow.patchProjectsLocationsAgentsPlaybooksExamples({
-            // Repeated fields named in an update mask (`actions`) are
-            // silently ignored; the body is complete, so replace it whole.
-            name: currentName,
-            body: { ...body, name: currentName },
-          });
+        current = yield* dialogflow.patchProjectsLocationsAgentsPlaybooksExamples({
+          // Repeated fields named in an update mask (`actions`) are
+          // silently ignored; the body is complete, so replace it whole.
+          name: currentName,
+          body: { ...body, name: currentName },
+        });
       }
 
       return toAttrs(current, env.project, playbook);

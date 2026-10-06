@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 export const location = "us-central1";
@@ -170,38 +170,23 @@ export default class OracleBindingsHost extends GCP.Function<OracleBindingsHost>
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const db = yield* AppDb;
-    const getNetwork = yield* GCP.OracleDatabase.GetOdbNetwork(
-      yield* OracleNet,
-    );
-    const getSubnet = yield* GCP.OracleDatabase.GetOdbNetworksOdbSubnet(
-      yield* Client,
-    );
+    const getNetwork = yield* GCP.OracleDatabase.GetOdbNetwork(yield* OracleNet);
+    const getSubnet = yield* GCP.OracleDatabase.GetOdbNetworksOdbSubnet(yield* Client);
     const getDb = yield* GCP.OracleDatabase.GetAutonomousDatabase(db);
     const generateWallet = yield* GCP.OracleDatabase.GenerateWallet(db);
     const start = yield* GCP.OracleDatabase.StartAutonomousDatabase(db);
     const stop = yield* GCP.OracleDatabase.StopAutonomousDatabase(db);
     const restart = yield* GCP.OracleDatabase.RestartAutonomousDatabase(db);
-    const getInfra = yield* GCP.OracleDatabase.GetCloudExadataInfrastructure(
-      yield* Exa,
-    );
-    const getVmCluster = yield* GCP.OracleDatabase.GetCloudVmCluster(
-      yield* Vms,
-    );
+    const getInfra = yield* GCP.OracleDatabase.GetCloudExadataInfrastructure(yield* Exa);
+    const getVmCluster = yield* GCP.OracleDatabase.GetCloudVmCluster(yield* Vms);
     const getDbSystem = yield* GCP.OracleDatabase.GetDbSystem(yield* BaseDb);
-    const getVault = yield* GCP.OracleDatabase.GetExascaleDbStorageVault(
-      yield* Vault,
-    );
+    const getVault = yield* GCP.OracleDatabase.GetExascaleDbStorageVault(yield* Vault);
     const getExadb = yield* GCP.OracleDatabase.GetExadbVmCluster(yield* ExaVm);
-    const getConnection = yield* GCP.OracleDatabase.GetGoldengateConnection(
-      yield* Src,
+    const getConnection = yield* GCP.OracleDatabase.GetGoldengateConnection(yield* Src);
+    const getDeployment = yield* GCP.OracleDatabase.GetGoldengateDeployment(yield* Replicat);
+    const getAssignment = yield* GCP.OracleDatabase.GetGoldengateConnectionAssignment(
+      yield* Assign,
     );
-    const getDeployment = yield* GCP.OracleDatabase.GetGoldengateDeployment(
-      yield* Replicat,
-    );
-    const getAssignment =
-      yield* GCP.OracleDatabase.GetGoldengateConnectionAssignment(
-        yield* Assign,
-      );
 
     return {
       fetch: serveProbes({

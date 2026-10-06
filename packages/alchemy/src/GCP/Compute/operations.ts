@@ -95,11 +95,7 @@ export const waitGlobalOperation = (
   operation: compute.Operation,
   options?: WaitComputeOptions,
 ) =>
-  settle(
-    operation,
-    (name) => compute.getGlobalOperations({ project, operation: name }),
-    options,
-  );
+  settle(operation, (name) => compute.getGlobalOperations({ project, operation: name }), options);
 
 /**
  * Wait for an organization-scoped Compute operation (hierarchical firewall
@@ -112,7 +108,6 @@ export const waitOrganizationOperation = (
 ) =>
   settle(
     operation,
-    (name) =>
-      compute.getGlobalOrganizationOperations({ operation: name, parentId }),
+    (name) => compute.getGlobalOrganizationOperations({ operation: name, parentId }),
     options,
   );

@@ -94,9 +94,7 @@ export interface PolicyAttachment extends Resource<
  *
  * @resource
  */
-export const PolicyAttachment = Resource<PolicyAttachment>(
-  "AWS.Organizations.PolicyAttachment",
-);
+export const PolicyAttachment = Resource<PolicyAttachment>("AWS.Organizations.PolicyAttachment");
 
 export const PolicyAttachmentProvider = () =>
   Provider.effect(
@@ -106,10 +104,7 @@ export const PolicyAttachmentProvider = () =>
         stables: ["policyId", "targetId"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            olds?.policyId !== news.policyId ||
-            olds?.targetId !== news.targetId
-          ) {
+          if (olds?.policyId !== news.policyId || olds?.targetId !== news.targetId) {
             return { action: "replace" } as const;
           }
         }),
@@ -142,8 +137,7 @@ export const PolicyAttachmentProvider = () =>
                 Effect.gen(function* () {
                   const policies = yield* retryOrganizations(
                     collectPages(
-                      (NextToken) =>
-                        organizations.listPolicies({ Filter, NextToken }),
+                      (NextToken) => organizations.listPolicies({ Filter, NextToken }),
                       (page) => page.Policies,
                     ),
                   );
@@ -162,8 +156,7 @@ export const PolicyAttachmentProvider = () =>
             return perType.flat();
           }).pipe(
             Effect.catchTags({
-              AccessDeniedException: () =>
-                Effect.succeed([] as PolicyAttachment["Attributes"][]),
+              AccessDeniedException: () => Effect.succeed([] as PolicyAttachment["Attributes"][]),
               AWSOrganizationsNotInUseException: () =>
                 Effect.succeed([] as PolicyAttachment["Attributes"][]),
             }),
@@ -184,12 +177,7 @@ export const PolicyAttachmentProvider = () =>
                   PolicyId: news.policyId,
                   TargetId: news.targetId,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "DuplicatePolicyAttachmentException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("DuplicatePolicyAttachmentException", () => Effect.void)),
             );
             state = yield* readAttachment(news);
             if (!state) {
@@ -246,8 +234,7 @@ const POLICY_TYPES = [
 const listAttachmentsForPolicy = (policyId: string) =>
   retryOrganizations(
     collectPages(
-      (NextToken) =>
-        organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
+      (NextToken) => organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
       (page) => page.Targets,
     ),
   ).pipe(
@@ -277,14 +264,10 @@ const listAttachmentsForPolicy = (policyId: string) =>
     ),
   );
 
-const readAttachment = Effect.fn(function* ({
-  policyId,
-  targetId,
-}: PolicyAttachmentProps) {
+const readAttachment = Effect.fn(function* ({ policyId, targetId }: PolicyAttachmentProps) {
   const targets = yield* retryOrganizations(
     collectPages(
-      (NextToken) =>
-        organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
+      (NextToken) => organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
       (page) => page.Targets,
     ),
   );

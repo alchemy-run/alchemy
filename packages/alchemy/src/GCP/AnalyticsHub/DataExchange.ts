@@ -33,9 +33,7 @@ import {
 } from "./internal.ts";
 
 export type SharingEnvironmentConfig = analyticshub.SharingEnvironmentConfig;
-export type DataExchangeDiscoveryType =
-  | analyticshub.DataExchangeDiscoveryTypeEnum
-  | (string & {});
+export type DataExchangeDiscoveryType = analyticshub.DataExchangeDiscoveryTypeEnum | (string & {});
 
 export type DataExchangeProps = {
   /**
@@ -174,15 +172,10 @@ export type DataExchange = Resource<
  * @resource
  * @category AnalyticsHub
  */
-export const DataExchange = Resource<DataExchange>(
-  "GCP.AnalyticsHub.DataExchange",
-);
+export const DataExchange = Resource<DataExchange>("GCP.AnalyticsHub.DataExchange");
 
-const resourceName = (
-  project: string,
-  location: string,
-  dataExchangeId: string,
-) => `${locationParent(project, location)}/dataExchanges/${dataExchangeId}`;
+const resourceName = (project: string, location: string, dataExchangeId: string) =>
+  `${locationParent(project, location)}/dataExchanges/${dataExchangeId}`;
 
 const toAttrs = (exchange: analyticshub.DataExchange, project: string) => {
   const name = exchange.name ?? "";
@@ -198,8 +191,7 @@ const toAttrs = (exchange: analyticshub.DataExchange, project: string) => {
     documentation: exchange.documentation,
     primaryContact: exchange.primaryContact,
     icon: exchange.icon,
-    logLinkedDatasetQueryUserEmail:
-      exchange.logLinkedDatasetQueryUserEmail === true,
+    logLinkedDatasetQueryUserEmail: exchange.logLinkedDatasetQueryUserEmail === true,
     discoveryType: exchange.discoveryType,
     sharingEnvironmentConfig: exchange.sharingEnvironmentConfig,
     listingCount: exchange.listingCount,
@@ -228,39 +220,24 @@ export const DataExchangeProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.dataExchangeId ?? output?.dataExchangeId,
         nextId: news.dataExchangeId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
-        extra:
-          news.sharingEnvironmentConfig !== undefined &&
-          nextKind !== previousKind,
+        extra: news.sharingEnvironmentConfig !== undefined && nextKind !== previousKind,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const dataExchangeId = yield* toPhysicalId(
-        id,
-        olds?.dataExchangeId,
-        output?.dataExchangeId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dataExchangeId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const dataExchangeId = yield* toPhysicalId(id, olds?.dataExchangeId, output?.dataExchangeId);
+      const name = output?.name ?? resourceName(env.project, location, dataExchangeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedById(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedById(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -274,18 +251,10 @@ export const DataExchangeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const dataExchangeId = yield* toPhysicalId(
-        id,
-        news.dataExchangeId,
-        output?.dataExchangeId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, dataExchangeId);
+      const dataExchangeId = yield* toPhysicalId(id, news.dataExchangeId, output?.dataExchangeId);
+      const name = output?.name ?? resourceName(env.project, location, dataExchangeId);
       const ownership = yield* ownershipLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
       const displayName = displayNameOf(news.displayName, dataExchangeId);
@@ -320,28 +289,15 @@ export const DataExchangeProvider = () =>
 
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
-      const documentationChanged = !sameText(
-        current.documentation,
-        news.documentation,
-      );
-      const contactChanged = !sameText(
-        current.primaryContact,
-        news.primaryContact,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
+      const documentationChanged = !sameText(current.documentation, news.documentation);
+      const contactChanged = !sameText(current.primaryContact, news.primaryContact);
       const iconChanged = !sameText(current.icon, news.icon);
       const emailChanged =
         news.logLinkedDatasetQueryUserEmail !== undefined &&
-        !sameBool(
-          current.logLinkedDatasetQueryUserEmail,
-          news.logLinkedDatasetQueryUserEmail,
-        );
+        !sameBool(current.logLinkedDatasetQueryUserEmail, news.logLinkedDatasetQueryUserEmail);
       const discoveryChanged =
-        news.discoveryType !== undefined &&
-        !sameText(current.discoveryType, news.discoveryType);
+        news.discoveryType !== undefined && !sameText(current.discoveryType, news.discoveryType);
       const sharingChanged =
         news.sharingEnvironmentConfig !== undefined &&
         sharingKind(current.sharingEnvironmentConfig) !==

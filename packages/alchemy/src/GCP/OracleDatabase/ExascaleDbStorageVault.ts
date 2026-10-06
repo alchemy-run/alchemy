@@ -150,9 +150,7 @@ const mergedProperties = (
   description: news.description ?? news.properties?.description,
   exascaleDbStorageDetails: {
     ...(news.properties?.exascaleDbStorageDetails ?? {}),
-    totalSizeGbs:
-      news.totalSizeGbs ??
-      news.properties?.exascaleDbStorageDetails?.totalSizeGbs,
+    totalSizeGbs: news.totalSizeGbs ?? news.properties?.exascaleDbStorageDetails?.totalSizeGbs,
   },
 });
 
@@ -168,8 +166,7 @@ const toCreateBody = (
   if (props.exascaleDbStorageDetails !== undefined) {
     properties.exascaleDbStorageDetails = props.exascaleDbStorageDetails;
   }
-  if (props.description !== undefined)
-    properties.description = props.description;
+  if (props.description !== undefined) properties.description = props.description;
   const body: oracle.ExascaleDbStorageVault = {
     labels: desiredLabels,
     properties,
@@ -197,8 +194,7 @@ const toAttrs = (vault: oracle.ExascaleDbStorageVault, project: string) => {
     entitlementId: vault.entitlementId,
     state: vault.properties?.state,
     totalSizeGbs: vault.properties?.exascaleDbStorageDetails?.totalSizeGbs,
-    availableSizeGbs:
-      vault.properties?.exascaleDbStorageDetails?.availableSizeGbs,
+    availableSizeGbs: vault.properties?.exascaleDbStorageDetails?.availableSizeGbs,
     description: vault.properties?.description,
     ocid: vault.properties?.ocid,
     createTime: vault.createTime,
@@ -218,11 +214,7 @@ const listVaults = (project: string, region: string) => {
         pageSize: 1000,
       }),
       (page) => page.exascaleDbStorageVaults,
-    ).pipe(
-      Effect.map((items) =>
-        items.filter((item) => hasAlchemyLabelMap(item.labels)),
-      ),
-    );
+    ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
   return listAtLocation(project, region, collect).pipe(
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
@@ -230,33 +222,22 @@ const listVaults = (project: string, region: string) => {
 
 export const ExascaleDbStorageVaultProvider = () =>
   Provider.succeed(ExascaleDbStorageVault, {
-    stables: [
-      "name",
-      "exascaleDbStorageVaultId",
-      "project",
-      "location",
-      "createTime",
-      "ocid",
-    ],
+    stables: ["name", "exascaleDbStorageVaultId", "project", "location", "createTime", "ocid"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousInfra =
-        olds?.exadataInfrastructure ?? output?.exadataInfrastructure ?? "";
+      const previousInfra = olds?.exadataInfrastructure ?? output?.exadataInfrastructure ?? "";
       const nextInfra = news.exadataInfrastructure ?? previousInfra;
       const previousZone = olds?.gcpOracleZone ?? output?.gcpOracleZone ?? "";
       const nextZone = news.gcpOracleZone ?? previousZone;
       return replaceOnIdentity({
-        previousId:
-          olds?.exascaleDbStorageVaultId ?? output?.exascaleDbStorageVaultId,
+        previousId: olds?.exascaleDbStorageVaultId ?? output?.exascaleDbStorageVaultId,
         nextId:
           news.exascaleDbStorageVaultId ??
           olds?.exascaleDbStorageVaultId ??
           output?.exascaleDbStorageVaultId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -272,23 +253,13 @@ export const ExascaleDbStorageVaultProvider = () =>
         output?.exascaleDbStorageVaultId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const name =
-        output?.name ??
-        resourceNameOf(
-          env.project,
-          location,
-          COLLECTION,
-          exascaleDbStorageVaultId,
-        );
+        output?.name ?? resourceNameOf(env.project, location, COLLECTION, exascaleDbStorageVaultId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -306,15 +277,8 @@ export const ExascaleDbStorageVaultProvider = () =>
         output?.exascaleDbStorageVaultId,
         FALLBACK_ID,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const name = resourceNameOf(
-        env.project,
-        location,
-        COLLECTION,
-        exascaleDbStorageVaultId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, exascaleDbStorageVaultId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

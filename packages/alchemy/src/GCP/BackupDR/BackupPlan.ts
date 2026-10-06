@@ -69,9 +69,7 @@ export type StandardSchedule = {
   /**
    * Days of week. Required for `WEEKLY`.
    */
-  daysOfWeek?: Array<
-    backupdr.StandardScheduleDaysOfWeekItemEnum | (string & {})
-  >;
+  daysOfWeek?: Array<backupdr.StandardScheduleDaysOfWeekItemEnum | (string & {})>;
   /**
    * IANA time zone used to interpret the schedule (`UTC`, `America/New_York`).
    */
@@ -215,9 +213,7 @@ export type BackupPlan = Resource<
     /** Disk-specific options. */
     diskBackupPlanProperties: DiskBackupPlanProperties | undefined;
     /** Compute instance-specific options. */
-    computeInstanceBackupPlanProperties:
-      | ComputeInstanceBackupPlanProperties
-      | undefined;
+    computeInstanceBackupPlanProperties: ComputeInstanceBackupPlanProperties | undefined;
     /** Human-readable description. */
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
@@ -284,11 +280,8 @@ export type BackupPlan = Resource<
  */
 export const BackupPlan = Resource<BackupPlan>("GCP.BackupDR.BackupPlan");
 
-const resourceName = (
-  project: string,
-  location: string,
-  backupPlanId: string,
-) => `projects/${project}/locations/${location}/backupPlans/${backupPlanId}`;
+const resourceName = (project: string, location: string, backupPlanId: string) =>
+  `projects/${project}/locations/${location}/backupPlans/${backupPlanId}`;
 
 const toRule = (rule: backupdr.BackupRule | BackupRule): BackupRule => ({
   ruleId: rule.ruleId,
@@ -296,15 +289,10 @@ const toRule = (rule: backupdr.BackupRule | BackupRule): BackupRule => ({
   standardSchedule: rule.standardSchedule,
 });
 
-const toRules = (
-  rules: readonly (backupdr.BackupRule | BackupRule)[] | undefined,
-): BackupRule[] => (rules ?? []).map(toRule);
+const toRules = (rules: readonly (backupdr.BackupRule | BackupRule)[] | undefined): BackupRule[] =>
+  (rules ?? []).map(toRule);
 
-const toAttrs = (
-  item: backupdr.BackupPlan,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: backupdr.BackupPlan, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "backupPlans", region);
   return {
@@ -320,8 +308,7 @@ const toAttrs = (
     logRetentionDays: item.logRetentionDays,
     maxCustomOnDemandRetentionDays: item.maxCustomOnDemandRetentionDays,
     diskBackupPlanProperties: item.diskBackupPlanProperties,
-    computeInstanceBackupPlanProperties:
-      item.computeInstanceBackupPlanProperties,
+    computeInstanceBackupPlanProperties: item.computeInstanceBackupPlanProperties,
     description: item.description,
     labels: userLabels(item.labels),
     state: item.state,
@@ -361,10 +348,7 @@ export const BackupPlanProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.backupPlanId ?? output?.backupPlanId,
         nextId: news.backupPlanId ?? olds?.backupPlanId ?? output?.backupPlanId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -378,8 +362,7 @@ export const BackupPlanProvider = () =>
             previousVault !== news.backupVault &&
             !previousVault.endsWith(`/${news.backupVault}`)) ||
           // Backup plan labels are immutable ("labels can not be updated").
-          (olds !== undefined &&
-            fingerprint(olds.labels ?? {}) !== fingerprint(news.labels ?? {})),
+          (olds !== undefined && fingerprint(olds.labels ?? {}) !== fingerprint(news.labels ?? {})),
       });
     }),
 
@@ -391,18 +374,12 @@ export const BackupPlanProvider = () =>
         output?.backupPlanId,
         "backupplan",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backupPlanId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backupPlanId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -420,16 +397,9 @@ export const BackupPlanProvider = () =>
         output?.backupPlanId,
         "backupplan",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backupPlanId);
-      const backupVault = backupVaultOf(
-        news.backupVault,
-        env.project,
-        location,
-      );
+      const backupVault = backupVaultOf(news.backupVault, env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -447,11 +417,9 @@ export const BackupPlanProvider = () =>
               resourceType: news.resourceType,
               backupRules: news.backupRules,
               logRetentionDays: news.logRetentionDays,
-              maxCustomOnDemandRetentionDays:
-                news.maxCustomOnDemandRetentionDays,
+              maxCustomOnDemandRetentionDays: news.maxCustomOnDemandRetentionDays,
               diskBackupPlanProperties: news.diskBackupPlanProperties,
-              computeInstanceBackupPlanProperties:
-                news.computeInstanceBackupPlanProperties,
+              computeInstanceBackupPlanProperties: news.computeInstanceBackupPlanProperties,
               description: news.description,
               labels: desiredLabels,
             },
@@ -480,14 +448,13 @@ export const BackupPlanProvider = () =>
 
       const mask = fieldMask([
         !sameText(current.description, news.description) && "description",
-        fingerprint(toRules(current.backupRules)) !==
-          fingerprint(toRules(news.backupRules)) && "backupRules",
+        fingerprint(toRules(current.backupRules)) !== fingerprint(toRules(news.backupRules)) &&
+          "backupRules",
         news.logRetentionDays !== undefined &&
           !sameText(current.logRetentionDays, news.logRetentionDays) &&
           "logRetentionDays",
         news.maxCustomOnDemandRetentionDays !== undefined &&
-          current.maxCustomOnDemandRetentionDays !==
-            news.maxCustomOnDemandRetentionDays &&
+          current.maxCustomOnDemandRetentionDays !== news.maxCustomOnDemandRetentionDays &&
           "maxCustomOnDemandRetentionDays",
         news.diskBackupPlanProperties !== undefined &&
           fingerprint(current.diskBackupPlanProperties) !==
@@ -510,8 +477,7 @@ export const BackupPlanProvider = () =>
             logRetentionDays: news.logRetentionDays,
             maxCustomOnDemandRetentionDays: news.maxCustomOnDemandRetentionDays,
             diskBackupPlanProperties: news.diskBackupPlanProperties,
-            computeInstanceBackupPlanProperties:
-              news.computeInstanceBackupPlanProperties,
+            computeInstanceBackupPlanProperties: news.computeInstanceBackupPlanProperties,
           },
         });
         yield* waitForOperation(operation);

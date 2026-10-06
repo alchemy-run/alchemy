@@ -47,7 +47,6 @@ export interface UpdateInstanceCustomHealthStatus extends Binding.Service<
     >
   >
 > {}
-export const UpdateInstanceCustomHealthStatus =
-  Binding.Service<UpdateInstanceCustomHealthStatus>(
-    "AWS.CloudMap.UpdateInstanceCustomHealthStatus",
-  );
+export const UpdateInstanceCustomHealthStatus = Binding.Service<UpdateInstanceCustomHealthStatus>(
+  "AWS.CloudMap.UpdateInstanceCustomHealthStatus",
+);

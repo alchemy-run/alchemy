@@ -6,13 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  resolveOrgId,
-  sameJson,
-  toPhysicalId,
-} from "./operations.ts";
+import { lastSegment, orgParent, resolveOrgId, sameJson, toPhysicalId } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -47,9 +41,7 @@ export type ApiproductsRateplanProps = {
   /**
    * Billing frequency (`WEEKLY` or `MONTHLY`).
    */
-  billingPeriod?:
-    | apigee.GoogleCloudApigeeV1RatePlanBillingPeriodEnum
-    | (string & {});
+  billingPeriod?: apigee.GoogleCloudApigeeV1RatePlanBillingPeriodEnum | (string & {});
   /**
    * ISO 4217 currency code used for billing.
    */
@@ -68,9 +60,7 @@ export type ApiproductsRateplanProps = {
   /**
    * Revenue share model.
    */
-  revenueShareType?:
-    | apigee.GoogleCloudApigeeV1RatePlanRevenueShareTypeEnum
-    | (string & {});
+  revenueShareType?: apigee.GoogleCloudApigeeV1RatePlanRevenueShareTypeEnum | (string & {});
   /**
    * Time the plan becomes active, milliseconds since epoch.
    */
@@ -162,9 +152,7 @@ export type ApiproductsRateplan = Resource<
  * @resource
  * @category Apigee
  */
-export const ApiproductsRateplan = Resource<ApiproductsRateplan>(
-  "GCP.Apigee.ApiproductsRateplan",
-);
+export const ApiproductsRateplan = Resource<ApiproductsRateplan>("GCP.Apigee.ApiproductsRateplan");
 
 export class ApiproductsRateplanNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApiproductsRateplanNotResolved",
@@ -209,22 +197,11 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApiproductsRateplans({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const ApiproductsRateplanProvider = () =>
   Provider.succeed(ApiproductsRateplan, {
-    stables: [
-      "name",
-      "rateplanId",
-      "apiproductId",
-      "organizationId",
-      "project",
-      "createdAt",
-    ],
+    stables: ["name", "rateplanId", "apiproductId", "organizationId", "project", "createdAt"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -247,9 +224,7 @@ export const ApiproductsRateplanProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const name = output?.name;
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
@@ -260,9 +235,7 @@ export const ApiproductsRateplanProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const parent = productParent(organizationId, news.apiproduct);
       const generated = yield* toPhysicalId(
         id,
@@ -286,8 +259,7 @@ export const ApiproductsRateplanProvider = () =>
         fixedFeeFrequency: news.fixedFeeFrequency,
       };
 
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
 
       if (current === undefined) {
         const created = yield* apigee
@@ -311,17 +283,13 @@ export const ApiproductsRateplanProvider = () =>
         (current.billingPeriod ?? "") !== (news.billingPeriod ?? "") ||
         (current.currencyCode ?? "") !== (news.currencyCode ?? "") ||
         (current.state ?? "") !== (body.state ?? "") ||
-        (current.consumptionPricingType ?? "") !==
-          (news.consumptionPricingType ?? "") ||
+        (current.consumptionPricingType ?? "") !== (news.consumptionPricingType ?? "") ||
         (current.revenueShareType ?? "") !== (news.revenueShareType ?? "") ||
         (current.startTime ?? "") !== (news.startTime ?? "") ||
         (current.endTime ?? "") !== (news.endTime ?? "") ||
         (current.fixedFeeFrequency ?? 0) !== (news.fixedFeeFrequency ?? 0) ||
         !sameJson(current.setupFee ?? {}, news.setupFee ?? {}) ||
-        !sameJson(
-          current.fixedRecurringFee ?? {},
-          news.fixedRecurringFee ?? {},
-        );
+        !sameJson(current.fixedRecurringFee ?? {}, news.fixedRecurringFee ?? {});
 
       if (needsUpdate) {
         current = yield* apigee.updateOrganizationsApiproductsRateplans({
@@ -336,11 +304,6 @@ export const ApiproductsRateplanProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApiproductsRateplans({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -125,9 +120,7 @@ export type DatasetsDicomStore = Resource<
  * @resource
  * @category Healthcare
  */
-export const DatasetsDicomStore = Resource<DatasetsDicomStore>(
-  "GCP.Healthcare.DatasetsDicomStore",
-);
+export const DatasetsDicomStore = Resource<DatasetsDicomStore>("GCP.Healthcare.DatasetsDicomStore");
 
 export class DatasetsDicomStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsDicomStoreNotResolved",
@@ -141,11 +134,7 @@ const datasetOf = (dataset: string, project: string, location: string) =>
 const resourceName = (dataset: string, dicomStoreId: string) =>
   `${dataset}/dicomStores/${dicomStoreId}`;
 
-const toAttrs = (
-  store: healthcare.DicomStore,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (store: healthcare.DicomStore, project: string, region: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "dicomStores", region);
   return {
@@ -188,44 +177,30 @@ export const DatasetsDicomStoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const dicomStoreId = yield* toPhysicalId(
-        id,
-        olds?.dicomStoreId,
-        output?.dicomStoreId,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const dicomStoreId = yield* toPhysicalId(id, olds?.dicomStoreId, output?.dicomStoreId);
       const dataset =
         olds?.dataset !== undefined
           ? datasetOf(olds.dataset, env.project, location)
           : (output?.dataset ?? "");
-      const name =
-        output?.name ??
-        (dataset.length > 0 ? resourceName(dataset, dicomStoreId) : "");
+      const name = output?.name ?? (dataset.length > 0 ? resourceName(dataset, dicomStoreId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const stores = yield* forEachDataset(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              healthcare.listProjectsLocationsDatasetsDicomStores.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.dicomStores,
-            ),
+        const stores = yield* forEachDataset(env.project, env.region, (parent) =>
+          collectPages(
+            healthcare.listProjectsLocationsDatasetsDicomStores.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.dicomStores,
+          ),
         );
         return stores
           .filter((store) => hasAlchemyLabelMap(store.labels))
@@ -234,16 +209,9 @@ export const DatasetsDicomStoreProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const dataset = datasetOf(news.dataset, env.project, location);
-      const dicomStoreId = yield* toPhysicalId(
-        id,
-        news.dicomStoreId,
-        output?.dicomStoreId,
-      );
+      const dicomStoreId = yield* toPhysicalId(id, news.dicomStoreId, output?.dicomStoreId);
       const name = output?.name ?? resourceName(dataset, dicomStoreId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -275,14 +243,8 @@ export const DatasetsDicomStoreProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const notificationsChanged = !sameJson(
-        current.notificationConfigs,
-        news.notificationConfigs,
-      );
-      const legacyChanged = !sameJson(
-        current.notificationConfig,
-        news.notificationConfig,
-      );
+      const notificationsChanged = !sameJson(current.notificationConfigs, news.notificationConfigs);
+      const legacyChanged = !sameJson(current.notificationConfig, news.notificationConfig);
 
       if (labelsChanged || notificationsChanged || legacyChanged) {
         current = yield* retryTransient(

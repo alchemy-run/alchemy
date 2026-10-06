@@ -26,10 +26,8 @@ export const rfc1035 = (name: string, fallback: string): string => {
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback = DEFAULT_LOCATION,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback = DEFAULT_LOCATION) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parseResourceName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -37,25 +35,15 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
-export const resourceName = (
-  project: string,
-  location: string,
-  collection: string,
-  id: string,
-) => `projects/${project}/locations/${location}/${collection}/${id}`;
+export const resourceName = (project: string, location: string, collection: string, id: string) =>
+  `projects/${project}/locations/${location}/${collection}/${id}`;
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;

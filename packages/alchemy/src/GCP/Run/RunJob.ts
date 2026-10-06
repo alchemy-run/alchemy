@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Job } from "./Job.ts";
 
-export interface RunJobRequest extends Omit<
-  cloudrun.RunProjectsLocationsJobsRequest,
-  "name"
-> {}
+export interface RunJobRequest extends Omit<cloudrun.RunProjectsLocationsJobsRequest, "name"> {}
 
 /**
  * Runtime binding for Cloud Run `jobs.run`.

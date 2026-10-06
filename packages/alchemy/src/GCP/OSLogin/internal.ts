@@ -39,10 +39,8 @@ export const keyIdentity = (key: string | undefined) => {
   return `${parsed.type} ${parsed.blob}`.trim();
 };
 
-export const sameKeyMaterial = (
-  left: string | undefined,
-  right: string | undefined,
-) => keyIdentity(left) === keyIdentity(right);
+export const sameKeyMaterial = (left: string | undefined, right: string | undefined) =>
+  keyIdentity(left) === keyIdentity(right);
 
 export const normalizeUser = (user: string | undefined) => {
   const raw = (user ?? DEFAULT_USER).trim();
@@ -50,10 +48,8 @@ export const normalizeUser = (user: string | undefined) => {
   return id.length > 0 ? id : DEFAULT_USER;
 };
 
-export const toUserId = (
-  requested: string | undefined,
-  existing: string | undefined,
-) => normalizeUser(requested ?? existing ?? DEFAULT_USER);
+export const toUserId = (requested: string | undefined, existing: string | undefined) =>
+  normalizeUser(requested ?? existing ?? DEFAULT_USER);
 
 export const toUserParent = (user: string) => {
   const id = normalizeUser(user);
@@ -66,10 +62,7 @@ export const userOf = (name: string | undefined, fallback = DEFAULT_USER) => {
   return match?.[1] ?? fallback;
 };
 
-export const fingerprintOf = (
-  name: string | undefined,
-  fingerprint?: string,
-) => {
+export const fingerprintOf = (name: string | undefined, fingerprint?: string) => {
   if (fingerprint && fingerprint.length > 0) return fingerprint;
   if (!name) return "";
   const parts = name.split("/sshPublicKeys/");
@@ -86,8 +79,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -106,9 +98,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
     ),
   );
 
-export const retryConflict = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+export const retryConflict = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Conflict",
@@ -140,7 +130,5 @@ export const listSshPublicKeys = (user: string, project?: string) =>
 /** Find a key of `user` by its exact public key text. */
 export const findKeyByText = (user: string, key: string, project?: string) =>
   listSshPublicKeys(user, project).pipe(
-    Effect.map((items) =>
-      items.find((item) => sameText(item.key?.trim(), key.trim())),
-    ),
+    Effect.map((items) => items.find((item) => sameText(item.key?.trim(), key.trim()))),
   );

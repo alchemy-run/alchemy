@@ -43,10 +43,7 @@ export interface PutOptedOutNumber extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutOptedOutNumberRequest,
-    ) => Effect.Effect<
-      smsvoice.PutOptedOutNumberResult,
-      smsvoice.PutOptedOutNumberError
-    >
+    ) => Effect.Effect<smsvoice.PutOptedOutNumberResult, smsvoice.PutOptedOutNumberError>
   >
 > {}
 export const PutOptedOutNumber = Binding.Service<PutOptedOutNumber>(

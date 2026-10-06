@@ -4,8 +4,8 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { GcpEnvironment } from "../Environment.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { GcpEnvironment } from "../Environment.ts";
 
 export const MAX_DISPLAY_NAME_LENGTH = 60;
 
@@ -40,13 +40,8 @@ export const parseBudgetName = (
   const budgetsAt = parts.indexOf("budgets");
   return {
     billingAccountId:
-      accountsAt >= 0 && parts[accountsAt + 1]
-        ? parts[accountsAt + 1]!
-        : fallbackAccount,
-    budgetId:
-      budgetsAt >= 0 && parts[budgetsAt + 1]
-        ? parts[budgetsAt + 1]!
-        : lastSegment(name),
+      accountsAt >= 0 && parts[accountsAt + 1] ? parts[accountsAt + 1]! : fallbackAccount,
+    budgetId: budgetsAt >= 0 && parts[budgetsAt + 1] ? parts[budgetsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -61,9 +56,7 @@ export const generatedDisplayName = (id: string) =>
 export const lookupProjectBillingAccountId = (project: string) =>
   cloudbilling.getBillingInfoProjects({ name: `projects/${project}` }).pipe(
     Effect.map((info) =>
-      info.billingAccountName
-        ? billingAccountIdOf(info.billingAccountName)
-        : undefined,
+      info.billingAccountName ? billingAccountIdOf(info.billingAccountName) : undefined,
     ),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -134,9 +127,7 @@ export const filterChanged = (
 };
 
 export const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 export const projectScope = (project: string) =>
   project.startsWith("projects/") ? project : `projects/${project}`;
@@ -147,9 +138,7 @@ export const getBudget = (name: string) =>
     : billingbudgets.getBillingAccountsBudgets({ name }).pipe(
         // Missing budgets return 403 "The caller does not have permission"
         // rather than 404 (typed as BudgetNotFound).
-        Effect.catchTag(["NotFound", "BudgetNotFound"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["NotFound", "BudgetNotFound"], () => Effect.succeed(undefined)),
       );
 
 export const listBudgets = (parent: string, scope?: string) =>
@@ -167,9 +156,7 @@ export const listBudgets = (parent: string, scope?: string) =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
           Effect.catchTag("NotFound", () =>
-            Effect.succeed(
-              [] as billingbudgets.GoogleCloudBillingBudgetsV1Budget[],
-            ),
+            Effect.succeed([] as billingbudgets.GoogleCloudBillingBudgetsV1Budget[]),
           ),
         );
 

@@ -37,11 +37,7 @@ export interface RegisterCollector extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RegisterCollectorRequest,
-    ) => Effect.Effect<
-      rma.Operation,
-      rma.RegisterProjectsLocationsCollectorsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<rma.Operation, rma.RegisterProjectsLocationsCollectorsError, RuntimeContext>
   >
 > {}
 

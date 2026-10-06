@@ -163,10 +163,7 @@ const resourceName = (project: string, location: string, processorId: string) =>
 
 const typeOf = (value: string | undefined) => value ?? DEFAULT_PROCESSOR_TYPE;
 
-const toAttrs = (
-  processor: documentai.GoogleCloudDocumentaiV1Processor,
-  project: string,
-) => {
+const toAttrs = (processor: documentai.GoogleCloudDocumentaiV1Processor, project: string) => {
   const name = processor.name ?? "";
   const parsed = parseResourceName(name, "processors");
   const ownership = parseOwnership(processor.displayName);
@@ -193,26 +190,15 @@ const getByName = (name: string) =>
         .getProjectsLocationsProcessors({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const findOwned = (
-  id: string,
-  project: string,
-  parent: string,
-  hinted?: string,
-) =>
+const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
       if (existing !== undefined) return existing;
     }
-    const local = yield* findOwnedByDisplayName(
-      id,
-      yield* listProcessorsAt(parent),
-    );
+    const local = yield* findOwnedByDisplayName(id, yield* listProcessorsAt(parent));
     if (local !== undefined) return local;
-    return yield* findOwnedByDisplayName(
-      id,
-      yield* listProjectProcessors(project),
-    );
+    return yield* findOwnedByDisplayName(id, yield* listProjectProcessors(project));
   });
 
 const waitUntilReady = (name: string) =>
@@ -231,8 +217,7 @@ const waitUntilReady = (name: string) =>
         }),
     ),
     Effect.filterOrFail(
-      (processor) =>
-        processor.state === "ENABLED" || processor.state === "DISABLED",
+      (processor) => processor.state === "ENABLED" || processor.state === "DISABLED",
       (processor) =>
         new ProcessorPending({
           name,
@@ -240,9 +225,7 @@ const waitUntilReady = (name: string) =>
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ProcessorPending ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ProcessorPending || error instanceof ResourceNotResolved,
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -272,9 +255,7 @@ const waitUntilState = (name: string, desired: "ENABLED" | "DISABLED") =>
         }),
     ),
     Effect.retry({
-      while: (error) =>
-        error instanceof ProcessorPending ||
-        error instanceof ResourceNotResolved,
+      while: (error) => error instanceof ProcessorPending || error instanceof ResourceNotResolved,
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -282,22 +263,14 @@ const waitUntilState = (name: string, desired: "ENABLED" | "DISABLED") =>
 
 export const ProcessorProvider = () =>
   Provider.succeed(Processor, {
-    stables: [
-      "name",
-      "processorId",
-      "project",
-      "location",
-      "type",
-      "createTime",
-    ],
+    stables: ["name", "processorId", "project", "location", "type", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousType = olds?.type ?? output?.type;
       const nextType = typeOf(news.type);
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName;
-      const previousSchema =
-        olds?.activeSchemaVersion ?? output?.activeSchemaVersion;
+      const previousSchema = olds?.activeSchemaVersion ?? output?.activeSchemaVersion;
       const previousDisplay = olds?.displayName ?? output?.displayName;
       const extra =
         (previousType !== undefined && previousType !== nextType) ||
@@ -320,15 +293,12 @@ export const ProcessorProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const processorId = olds?.processorId ?? output?.processorId;
       const name =
-        output?.name ??
-        (processorId ? resourceName(env.project, location, processorId) : "");
+        output?.name ?? (processorId ? resourceName(env.project, location, processorId) : "");
       const parent = locationParent(env.project, location);
       const existing = yield* findOwned(id, env.project, parent, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -342,16 +312,10 @@ export const ProcessorProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
-      const fallbackName = yield* toPhysicalId(
-        id,
-        undefined,
-        output?.displayName,
-      );
+      const fallbackName = yield* toPhysicalId(id, undefined, output?.displayName);
       const displayName = encodeOwnershipLine(
         ownership,
         news.displayName ?? output?.displayName ?? fallbackName,
@@ -360,9 +324,7 @@ export const ProcessorProvider = () =>
       const type = typeOf(news.type);
       const hinted =
         output?.name ??
-        (news.processorId
-          ? resourceName(env.project, location, news.processorId)
-          : "");
+        (news.processorId ? resourceName(env.project, location, news.processorId) : "");
 
       let current = yield* findOwned(id, env.project, parent, hinted);
 
@@ -382,9 +344,7 @@ export const ProcessorProvider = () =>
           Effect.catchTag("Conflict", (error) =>
             findOwned(id, env.project, parent, hinted).pipe(
               Effect.flatMap((found) =>
-                found !== undefined
-                  ? Effect.succeed(found)
-                  : Effect.fail(error),
+                found !== undefined ? Effect.succeed(found) : Effect.fail(error),
               ),
             ),
           ),

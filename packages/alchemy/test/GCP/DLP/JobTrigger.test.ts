@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const inspectJob = (description: string) => ({
   inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
@@ -69,9 +66,7 @@ test.provider(
       );
 
       expect(created.triggerId).toEqual(expect.any(String));
-      expect(created.name).toEqual(
-        `projects/${project}/jobTriggers/${created.triggerId}`,
-      );
+      expect(created.name).toEqual(`projects/${project}/jobTriggers/${created.triggerId}`);
       expect(created.status).toEqual("PAUSED");
       expect(created.displayName).toEqual("nightly hybrid");
       expect(created.description).toEqual("paused inspect");

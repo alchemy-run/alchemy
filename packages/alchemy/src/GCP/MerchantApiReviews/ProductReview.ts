@@ -48,9 +48,7 @@ export type ProductReviewAttributesProps = {
   /** Advantages from the reviewer. */
   pros?: string[];
   /** How the review was collected. */
-  collectionMethod?:
-    | reviews.ProductReviewAttributesCollectionMethodEnum
-    | (string & {});
+  collectionMethod?: reviews.ProductReviewAttributesCollectionMethodEnum | (string & {});
   /** Whether the review is marked as spam. */
   isSpam?: boolean;
   /** Reviewer's overall rating of the product. */
@@ -226,9 +224,7 @@ export type ProductReview = Resource<
  * @resource
  * @category MerchantApiReviews
  */
-export const ProductReview = Resource<ProductReview>(
-  "GCP.MerchantApiReviews.ProductReview",
-);
+export const ProductReview = Resource<ProductReview>("GCP.MerchantApiReviews.ProductReview");
 
 export class ProductReviewNotResolved extends Data.TaggedError(
   "GCP.MerchantApiReviews.ProductReviewNotResolved",
@@ -236,9 +232,7 @@ export class ProductReviewNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const hasProductIdentifier = (
-  attrs: ProductReviewAttributesProps | undefined,
-) =>
+const hasProductIdentifier = (attrs: ProductReviewAttributesProps | undefined) =>
   (attrs?.gtins?.length ?? 0) > 0 ||
   (attrs?.skus?.length ?? 0) > 0 ||
   (attrs?.mpns?.length ?? 0) > 0 ||
@@ -283,13 +277,8 @@ const attributesOf = (
   };
 };
 
-const toAttrs = (
-  review: reviews.ProductReview,
-  account: string,
-  dataSource?: string,
-) => {
-  const productReviewId =
-    review.productReviewId ?? (review.name ? lastSegment(review.name) : "");
+const toAttrs = (review: reviews.ProductReview, account: string, dataSource?: string) => {
+  const productReviewId = review.productReviewId ?? (review.name ? lastSegment(review.name) : "");
   return {
     name: review.name ?? productReviewNameOf(account, productReviewId),
     account: accountIdOf(account),
@@ -317,9 +306,7 @@ const desiredAttributes = (input: {
   collectionMethod: input.attrs?.collectionMethod,
   isSpam: input.attrs?.isSpam,
   rating: input.attrs?.rating,
-  skus: hasProductIdentifier(input.attrs)
-    ? input.attrs?.skus
-    : [input.productReviewId],
+  skus: hasProductIdentifier(input.attrs) ? input.attrs?.skus : [input.productReviewId],
   reviewerImageLinks: input.attrs?.reviewerImageLinks,
   publisherFavicon: input.attrs?.publisherFavicon,
   publisherName: input.attrs?.publisherName,
@@ -352,15 +339,9 @@ const desiredBody = (input: {
   customAttributes: input.customAttributes,
 });
 
-const reviewNeedsSync = (
-  current: reviews.ProductReview,
-  desired: reviews.ProductReview,
-) =>
+const reviewNeedsSync = (current: reviews.ProductReview, desired: reviews.ProductReview) =>
   !jsonEqual(current.productReviewId, desired.productReviewId) ||
-  !jsonEqual(
-    current.productReviewAttributes,
-    desired.productReviewAttributes,
-  ) ||
+  !jsonEqual(current.productReviewAttributes, desired.productReviewAttributes) ||
   !jsonEqual(
     normalizeCustomAttributes(current.customAttributes),
     normalizeCustomAttributes(desired.customAttributes),
@@ -397,18 +378,13 @@ export const ProductReviewProvider = () =>
         olds?.productReviewId,
         output?.productReviewId,
       );
-      const name =
-        output?.name ?? productReviewNameOf(account, productReviewId);
+      const name = output?.name ?? productReviewNameOf(account, productReviewId);
       let existing = yield* getProductReview(name);
       if (existing === undefined && account) {
         existing = yield* findOwnedProductReview(id, account, productReviewId);
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        account,
-        olds?.dataSource ?? output?.dataSource,
-      );
+      const attrs = toAttrs(existing, account, olds?.dataSource ?? output?.dataSource);
       return (yield* ownedByAlchemy(id, {
         customAttributes: existing.customAttributes,
         content: existing.productReviewAttributes?.content,
@@ -420,11 +396,9 @@ export const ProductReviewProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const accounts = yield* configuredAccountIds();
-        const pages = yield* Effect.forEach(
-          accounts,
-          (account) => listProductReviewsAt(account),
-          { concurrency: 4 },
-        );
+        const pages = yield* Effect.forEach(accounts, (account) => listProductReviewsAt(account), {
+          concurrency: 4,
+        });
         const attrs = [];
         for (let i = 0; i < pages.length; i++) {
           const account = accounts[i]!;
@@ -451,18 +425,14 @@ export const ProductReviewProvider = () =>
         output?.productReviewId,
       );
       const dataSource = dataSourceNameOf(account, news.dataSource);
-      const name =
-        output?.name ?? productReviewNameOf(account, productReviewId);
+      const name = output?.name ?? productReviewNameOf(account, productReviewId);
       const ownership = yield* createInternalLabels(id);
       const attributes = desiredAttributes({
         productReviewId,
         ownership,
         attrs: news.productReviewAttributes,
       });
-      const customAttributes = stampCustomAttributes(
-        ownership,
-        news.customAttributes,
-      );
+      const customAttributes = stampCustomAttributes(ownership, news.customAttributes);
       const desired = desiredBody({
         productReviewId,
         attributes,

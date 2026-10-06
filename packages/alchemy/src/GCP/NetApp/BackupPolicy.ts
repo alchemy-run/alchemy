@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -156,18 +151,10 @@ export type BackupPolicy = Resource<
  */
 export const BackupPolicy = Resource<BackupPolicy>("GCP.NetApp.BackupPolicy");
 
-const resourceName = (
-  project: string,
-  location: string,
-  backupPolicyId: string,
-) =>
+const resourceName = (project: string, location: string, backupPolicyId: string) =>
   `projects/${project}/locations/${location}/backupPolicies/${backupPolicyId}`;
 
-const toAttrs = (
-  policy: netapp.BackupPolicy,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (policy: netapp.BackupPolicy, project: string, region: string) => {
   const name = policy.name ?? "";
   const parsed = parseName(name, "backupPolicies", region);
   return {
@@ -194,17 +181,13 @@ const getByName = (name: string) =>
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
-    netapp.listProjectsLocationsBackupPolicies
-      .pages({ parent, pageSize: 1000 })
-      .pipe(
-        Stream.flatMap((page) =>
-          Stream.fromIterable(page.backupPolicies ?? []),
-        ),
-        Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("NotFound", () => Effect.succeed([])),
-      ),
+    netapp.listProjectsLocationsBackupPolicies.pages({ parent, pageSize: 1000 }).pipe(
+      Stream.flatMap((page) => Stream.fromIterable(page.backupPolicies ?? [])),
+      Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
+    ),
   );
 
 export const BackupPolicyProvider = () =>
@@ -216,12 +199,8 @@ export const BackupPolicyProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.backupPolicyId ?? output?.backupPolicyId,
-        nextId:
-          news.backupPolicyId ?? olds?.backupPolicyId ?? output?.backupPolicyId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.backupPolicyId ?? olds?.backupPolicyId ?? output?.backupPolicyId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -237,18 +216,12 @@ export const BackupPolicyProvider = () =>
         output?.backupPolicyId,
         "backuppolicy",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backupPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backupPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -266,10 +239,7 @@ export const BackupPolicyProvider = () =>
         output?.backupPolicyId,
         "backuppolicy",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backupPolicyId);
       const dailyBackupLimit = news.dailyBackupLimit ?? DEFAULT_DAILY;
       const weeklyBackupLimit = news.weeklyBackupLimit ?? DEFAULT_WEEKLY;
@@ -316,14 +286,10 @@ export const BackupPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const dailyChanged =
-        (current.dailyBackupLimit ?? DEFAULT_DAILY) !== dailyBackupLimit;
-      const weeklyChanged =
-        (current.weeklyBackupLimit ?? DEFAULT_WEEKLY) !== weeklyBackupLimit;
-      const monthlyChanged =
-        (current.monthlyBackupLimit ?? DEFAULT_MONTHLY) !== monthlyBackupLimit;
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const dailyChanged = (current.dailyBackupLimit ?? DEFAULT_DAILY) !== dailyBackupLimit;
+      const weeklyChanged = (current.weeklyBackupLimit ?? DEFAULT_WEEKLY) !== weeklyBackupLimit;
+      const monthlyChanged = (current.monthlyBackupLimit ?? DEFAULT_MONTHLY) !== monthlyBackupLimit;
       const enabledChanged = (current.enabled ?? true) !== enabled;
       const mask = fieldMask([
         labelsChanged && "labels",

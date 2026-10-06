@@ -13,9 +13,7 @@ import { resourceNameFromOperation as resourceNameFromOperationImpl } from "./op
 export const MAX_ID_LENGTH = 63;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 /** Locations `list` scans: the pre-`GCP.Region` default plus the stack region. */
-export const listLocations = (region: string): string[] => [
-  ...new Set(["us-central1", region]),
-];
+export const listLocations = (region: string): string[] => [...new Set(["us-central1", region])];
 
 export const createInternalLabels = createInternalLabelsImpl;
 export const toLabels = toLabelsImpl;
@@ -27,10 +25,8 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
@@ -54,16 +50,11 @@ export const parseName = (name: string, collection: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const enginesAt = parts.lastIndexOf("reasoningEngines");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    reasoningEngineId:
-      enginesAt >= 0 && parts[enginesAt + 1] ? parts[enginesAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    reasoningEngineId: enginesAt >= 0 && parts[enginesAt + 1] ? parts[enginesAt + 1]! : "",
     resourceId:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -104,16 +95,14 @@ export const toDisplayName = (
   });
 
 export const compact = <T extends Record<string, unknown>>(value: T): T =>
-  Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 
 export const stableJson = (value: unknown): string =>
   JSON.stringify(value ?? null, (_key, item) => {
     if (item && typeof item === "object" && !Array.isArray(item)) {
       return Object.fromEntries(
-        Object.entries(item as Record<string, unknown>).sort(
-          ([left], [right]) => left.localeCompare(right),
+        Object.entries(item as Record<string, unknown>).sort(([left], [right]) =>
+          left.localeCompare(right),
         ),
       );
     }
@@ -124,15 +113,12 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyPrefix = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyPrefix = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const alchemyIdFilter = (labels: Record<string, string>) => {
   const id = labels[alchemyLabelKeys.id];
-  return id !== undefined && id.length > 0
-    ? `labels.${alchemyLabelKeys.id}="${id}"`
-    : undefined;
+  return id !== undefined && id.length > 0 ? `labels.${alchemyLabelKeys.id}="${id}"` : undefined;
 };
 
 export const labelsDiffer = (
@@ -244,6 +230,4 @@ export const parseDescription = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseDisplayName(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(text).labels).some((key) => key.startsWith("alchemy-"));

@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { IssuingCard } from "./IssuingCard.ts";
 
-export interface RetrieveIssuingCardRequest extends Omit<
-  GetIssuingCardRequest,
-  "card"
-> {}
+export interface RetrieveIssuingCardRequest extends Omit<GetIssuingCardRequest, "card"> {}
 
 /**
  * Retrieve a bound Stripe Issuing Card over HTTP.

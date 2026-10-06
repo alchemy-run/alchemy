@@ -37,19 +37,11 @@ export interface ReadSubscriptionClient {
   /** Pull up to `maxMessages` messages; an empty array when none arrived. */
   pull(
     options?: PullSubscriptionOptions,
-  ): Effect.Effect<
-    PulledMessage[],
-    pubsub.PullProjectsSubscriptionsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<PulledMessage[], pubsub.PullProjectsSubscriptionsError, RuntimeContext>;
   /** Acknowledge messages by ack id. An empty list is a no-op. */
   acknowledge(
     ackIds: ReadonlyArray<string>,
-  ): Effect.Effect<
-    void,
-    pubsub.AcknowledgeProjectsSubscriptionsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<void, pubsub.AcknowledgeProjectsSubscriptionsError, RuntimeContext>;
   /**
    * Extend (or, with `0`, release for redelivery) the ack deadline of
    * messages. An empty list is a no-op.
@@ -57,11 +49,7 @@ export interface ReadSubscriptionClient {
   modifyAckDeadline(
     ackIds: ReadonlyArray<string>,
     seconds: number,
-  ): Effect.Effect<
-    void,
-    pubsub.ModifyAckDeadlineProjectsSubscriptionsError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<void, pubsub.ModifyAckDeadlineProjectsSubscriptionsError, RuntimeContext>;
 }
 
 /**
@@ -95,6 +83,4 @@ export interface ReadSubscription extends Binding.Service<
   (subscription: Subscription) => Effect.Effect<ReadSubscriptionClient>
 > {}
 
-export const ReadSubscription = Binding.Service<ReadSubscription>(
-  "GCP.PubSub.ReadSubscription",
-);
+export const ReadSubscription = Binding.Service<ReadSubscription>("GCP.PubSub.ReadSubscription");

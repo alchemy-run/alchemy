@@ -42,11 +42,7 @@ export type ApiHubInstanceConfig = {
    * Encryption type. Immutable — changing it replaces the instance.
    * @default "GMEK"
    */
-  encryptionType?:
-    | "ENCRYPTION_TYPE_UNSPECIFIED"
-    | "GMEK"
-    | "CMEK"
-    | (string & {});
+  encryptionType?: "ENCRYPTION_TYPE_UNSPECIFIED" | "GMEK" | "CMEK" | (string & {});
   /** Vertex AI location used for the data store. */
   vertexLocation?: string;
   /** When true, MCP data is not synced to Agent Registry. */
@@ -150,15 +146,10 @@ export type ApiHubInstance = Resource<
  * @resource
  * @category ApiHub
  */
-export const ApiHubInstance = Resource<ApiHubInstance>(
-  "GCP.ApiHub.ApiHubInstance",
-);
+export const ApiHubInstance = Resource<ApiHubInstance>("GCP.ApiHub.ApiHubInstance");
 
-const resourceName = (
-  project: string,
-  location: string,
-  apiHubInstanceId: string,
-) => `${locationParent(project, location)}/apiHubInstances/${apiHubInstanceId}`;
+const resourceName = (project: string, location: string, apiHubInstanceId: string) =>
+  `${locationParent(project, location)}/apiHubInstances/${apiHubInstanceId}`;
 
 const toAttrs = (
   instance: apihub.GoogleCloudApihubV1ApiHubInstance,
@@ -181,8 +172,7 @@ const toAttrs = (
     cmekKeyName: instance.config?.cmekKeyName,
     encryptionType: instance.config?.encryptionType,
     vertexLocation: instance.config?.vertexLocation,
-    agentRegistrySyncDisabled:
-      instance.config?.agentRegistrySyncConfig?.disabled === true,
+    agentRegistrySyncDisabled: instance.config?.agentRegistrySyncConfig?.disabled === true,
     createTime: instance.createTime,
     updateTime: instance.updateTime,
   };
@@ -201,9 +191,7 @@ const lookupAt = (parent: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-const configOf = (
-  news: ApiHubInstanceProps,
-): apihub.GoogleCloudApihubV1Config => ({
+const configOf = (news: ApiHubInstanceProps): apihub.GoogleCloudApihubV1Config => ({
   disableSearch: news.config?.disableSearch,
   cmekKeyName: news.config?.cmekKeyName,
   encryptionType: news.config?.encryptionType,
@@ -223,14 +211,8 @@ export const ApiHubInstanceProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.apiHubInstanceId ?? output?.apiHubInstanceId,
-        nextId:
-          news.apiHubInstanceId ??
-          olds?.apiHubInstanceId ??
-          output?.apiHubInstanceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.apiHubInstanceId ?? olds?.apiHubInstanceId ?? output?.apiHubInstanceId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -245,18 +227,14 @@ export const ApiHubInstanceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const apiHubInstanceId = yield* toPhysicalId(
         id,
         olds?.apiHubInstanceId,
         output?.apiHubInstanceId,
         MAX_INSTANCE_ID_LENGTH,
       );
-      const name =
-        output?.name ?? resourceName(env.project, location, apiHubInstanceId);
+      const name = output?.name ?? resourceName(env.project, location, apiHubInstanceId);
       let existing = yield* getByName(name);
       if (existing === undefined) {
         existing = yield* lookupAt(locationParent(env.project, location));
@@ -275,14 +253,9 @@ export const ApiHubInstanceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const existing = yield* lookupAt(
-          locationParent(env.project, env.region),
-        );
+        const existing = yield* lookupAt(locationParent(env.project, env.region));
         if (existing === undefined) return [];
-        if (
-          !hasAlchemyLabelMap(existing.labels) &&
-          !hasOwnershipMarker(existing.description)
-        ) {
+        if (!hasAlchemyLabelMap(existing.labels) && !hasOwnershipMarker(existing.description)) {
           return [];
         }
         return [toAttrs(existing, env.project, env.region)];
@@ -290,10 +263,7 @@ export const ApiHubInstanceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const apiHubInstanceId = yield* toPhysicalId(
         id,
@@ -330,9 +300,7 @@ export const ApiHubInstanceProvider = () =>
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
-        current =
-          (yield* lookupAt(parent)) ??
-          (yield* waitUntilExists(getByName(name), name));
+        current = (yield* lookupAt(parent)) ?? (yield* waitUntilExists(getByName(name), name));
       }
 
       if (current === undefined) {
@@ -341,12 +309,8 @@ export const ApiHubInstanceProvider = () =>
 
       const currentName = current.name ?? name;
       const disableChanged =
-        (current.config?.disableSearch === true) !==
-        (news.config?.disableSearch === true);
-      const vertexChanged = !sameText(
-        current.config?.vertexLocation,
-        news.config?.vertexLocation,
-      );
+        (current.config?.disableSearch === true) !== (news.config?.disableSearch === true);
+      const vertexChanged = !sameText(current.config?.vertexLocation, news.config?.vertexLocation);
       const syncChanged =
         (current.config?.agentRegistrySyncConfig?.disabled === true) !==
         (news.config?.agentRegistrySyncDisabled === true);

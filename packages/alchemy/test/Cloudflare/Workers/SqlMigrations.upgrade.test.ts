@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import UpgradeWorker from "./fixtures/sql-migrations-upgrade/worker.ts";
 
 type State = { id: string; count: number; rows: { value: string }[] };
@@ -20,9 +20,7 @@ for (const dev of [true, false]) {
       const { test } = Test.make({
         providers: Cloudflare.providers(),
         dev,
-        stage: dev
-          ? "sql-migrations-upgrade-local"
-          : "sql-migrations-upgrade-live",
+        stage: dev ? "sql-migrations-upgrade-local" : "sql-migrations-upgrade-live",
       });
       test.provider(
         "SQL-only changes update existing objects without replay or replacement",
@@ -50,9 +48,7 @@ for (const dev of [true, false]) {
                   };
                 }),
               )
-              .pipe(
-                Effect.provideService(ConfigProvider.ConfigProvider, config),
-              );
+              .pipe(Effect.provideService(ConfigProvider.ConfigProvider, config));
             const first = yield* deploy;
             const client = yield* HttpClient.HttpClient;
             const read = (url: string) =>
@@ -61,9 +57,7 @@ for (const dev of [true, false]) {
                   Effect.gen(function* () {
                     if (response.status !== 200)
                       return yield* Effect.fail(
-                        new Error(
-                          `GET ${url}: ${response.status}: ${yield* response.text}`,
-                        ),
+                        new Error(`GET ${url}: ${response.status}: ${yield* response.text}`),
                       );
                     return yield* response.json;
                   }),
@@ -77,17 +71,12 @@ for (const dev of [true, false]) {
                   (state) => state.count === count,
                   () => new Error("Migration version not ready"),
                 ),
-                Effect.retry({
-                  schedule: Schedule.spaced("3 seconds"),
-                  times: 10,
-                }),
+                Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
                 Effect.timeout("45 seconds"),
               );
             const original = yield* ready(first.url, 1);
             expect(original.rows).toEqual([{ value: "seed" }]);
-            yield* client
-              .post(first.url)
-              .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+            yield* client.post(first.url).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
             yield* fs.writeFileString(
               path.join(dir, "0002_append.sql"),
               "INSERT INTO items VALUES ('must-rollback'); INSERT INTO missing_table VALUES (1);",
@@ -95,9 +84,7 @@ for (const dev of [true, false]) {
             const broken = yield* deploy;
             const failed = yield* client.get(broken.url).pipe(
               Effect.flatMap((response) =>
-                response.text.pipe(
-                  Effect.map((body) => ({ status: response.status, body })),
-                ),
+                response.text.pipe(Effect.map((body) => ({ status: response.status, body }))),
               ),
               Effect.timeout("5 seconds"),
               Effect.repeat({

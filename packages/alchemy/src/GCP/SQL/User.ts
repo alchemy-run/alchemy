@@ -33,18 +33,13 @@ const SYSTEM_USERS = new Set([
   "mysql.infoschema",
 ]);
 
-const AUTO_USER_TYPES = new Set([
-  "CLOUD_IAM_GROUP_USER",
-  "CLOUD_IAM_GROUP_SERVICE_ACCOUNT",
-]);
+const AUTO_USER_TYPES = new Set(["CLOUD_IAM_GROUP_USER", "CLOUD_IAM_GROUP_SERVICE_ACCOUNT"]);
 
 export type UserDeletionPolicy = "DELETE" | "ABANDON";
 
 export type UserType = sqladmin.UserTypeEnum | (string & {});
 
-export type DualPasswordType =
-  | sqladmin.UserDualPasswordTypeEnum
-  | (string & {});
+export type DualPasswordType = sqladmin.UserDualPasswordTypeEnum | (string & {});
 
 export type SqlServerUserDetails = {
   /**
@@ -165,9 +160,7 @@ export type User = Resource<
     /** Granted database roles. */
     databaseRoles: string[] | undefined;
     /** Password policy currently on the user. */
-    passwordPolicy:
-      | (UserPasswordPolicy & { status?: UserPasswordPolicyStatus })
-      | undefined;
+    passwordPolicy: (UserPasswordPolicy & { status?: UserPasswordPolicyStatus }) | undefined;
     /** Dual password status. */
     dualPasswordType: string | undefined;
     /** SQL Server details, if this is a SQL Server login. */
@@ -230,17 +223,13 @@ export type User = Resource<
  */
 export const User = Resource<User>("GCP.SQL.User");
 
-export class UserNotResolved extends Data.TaggedError(
-  "GCP.SQL.UserNotResolved",
-)<{
+export class UserNotResolved extends Data.TaggedError("GCP.SQL.UserNotResolved")<{
   instance: string;
   userName: string;
   host: string | undefined;
 }> {}
 
-export class UserStillExists extends Data.TaggedError(
-  "GCP.SQL.UserStillExists",
-)<{
+export class UserStillExists extends Data.TaggedError("GCP.SQL.UserStillExists")<{
   instance: string;
   userName: string;
   host: string | undefined;
@@ -263,9 +252,7 @@ const isIamType = (type: string | undefined) => {
   return value.startsWith("CLOUD_IAM") || value === "ENTRAID_USER";
 };
 
-const hasAlchemyInstanceLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyInstanceLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const isManagedUser = (user: sqladmin.User) => {
@@ -289,11 +276,7 @@ const toSqlIdentifier = (name: string) => {
   return next.length > 0 ? next : "dbuser";
 };
 
-const toUserName = (
-  id: string,
-  userName: string | undefined,
-  existing?: string,
-) =>
+const toUserName = (id: string, userName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (userName !== undefined) return userName;
     if (existing !== undefined) return existing;
@@ -311,10 +294,7 @@ const rolesKey = (roles: string[] | undefined) =>
   JSON.stringify([...(roles ?? [])].map((role) => role.toLowerCase()).sort());
 
 const policyKey = (
-  policy:
-    | UserPasswordPolicy
-    | sqladmin.UserPasswordValidationPolicy
-    | undefined,
+  policy: UserPasswordPolicy | sqladmin.UserPasswordValidationPolicy | undefined,
 ) =>
   JSON.stringify({
     allowedFailedAttempts: policy?.allowedFailedAttempts ?? null,
@@ -326,19 +306,14 @@ const policyKey = (
 const sqlServerKey = (details: SqlServerUserDetails | undefined) =>
   JSON.stringify({
     disabled: details?.disabled === true,
-    serverRoles: [...(details?.serverRoles ?? [])]
-      .map((role) => role.toLowerCase())
-      .sort(),
+    serverRoles: [...(details?.serverRoles ?? [])].map((role) => role.toLowerCase()).sort(),
   });
 
 const dualPasswordOf = (value: string | undefined) =>
   (value ?? "DUAL_PASSWORD_TYPE_UNSPECIFIED").toUpperCase();
 
 const toPasswordPolicy = (
-  policy:
-    | UserPasswordPolicy
-    | sqladmin.UserPasswordValidationPolicy
-    | undefined,
+  policy: UserPasswordPolicy | sqladmin.UserPasswordValidationPolicy | undefined,
 ): sqladmin.UserPasswordValidationPolicy | undefined => {
   if (policy === undefined) return undefined;
   return {
@@ -364,20 +339,11 @@ const toAttrs = (live: sqladmin.User, project: string, instance: string) => ({
   etag: live.etag,
 });
 
-const matchesUser = (
-  live: sqladmin.User,
-  userName: string,
-  host: string | undefined,
-) =>
+const matchesUser = (live: sqladmin.User, userName: string, host: string | undefined) =>
   (live.name ?? "") === userName &&
   (host === undefined || normalizeHost(live.host) === normalizeHost(host));
 
-const getByName = (
-  project: string,
-  instance: string,
-  userName: string,
-  host: string | undefined,
-) =>
+const getByName = (project: string, instance: string, userName: string, host: string | undefined) =>
   sqladmin
     .getUsers({
       project,
@@ -394,9 +360,7 @@ const getByName = (
         }
         return sqladmin.listUsers({ project, instance }).pipe(
           Effect.map((page) =>
-            (page.items ?? []).find((item) =>
-              matchesUser(item, userName, host),
-            ),
+            (page.items ?? []).find((item) => matchesUser(item, userName, host)),
           ),
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           recoverIfInstanceMissing(project, instance, () => undefined),
@@ -422,9 +386,7 @@ const waitUntilExists = (
 ) =>
   getByName(project, instance, userName, host).pipe(
     Effect.flatMap((user) =>
-      user
-        ? Effect.succeed(user)
-        : Effect.fail(new UserNotResolved({ instance, userName, host })),
+      user ? Effect.succeed(user) : Effect.fail(new UserNotResolved({ instance, userName, host })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.UserNotResolved",
@@ -465,9 +427,7 @@ const toBody = (
 ): sqladmin.User => {
   const type = news.type ?? current?.type;
   const includePassword =
-    options?.includePassword !== false &&
-    news.password !== undefined &&
-    !isIamType(type);
+    options?.includePassword !== false && news.password !== undefined && !isIamType(type);
   return {
     name: userName,
     instance,
@@ -475,18 +435,13 @@ const toBody = (
     host: news.host ?? current?.host,
     type,
     password:
-      includePassword && news.password !== undefined
-        ? passwordValue(news.password)
-        : undefined,
+      includePassword && news.password !== undefined ? passwordValue(news.password) : undefined,
     // Echoing the observed roles back is rejected ("Invalid request to
     // update database roles"); send roles only when they are declared.
     databaseRoles: news.databaseRoles,
-    passwordPolicy: toPasswordPolicy(
-      news.passwordPolicy ?? current?.passwordPolicy,
-    ),
+    passwordPolicy: toPasswordPolicy(news.passwordPolicy ?? current?.passwordPolicy),
     dualPasswordType: news.dualPasswordType ?? current?.dualPasswordType,
-    sqlserverUserDetails:
-      news.sqlserverUserDetails ?? current?.sqlserverUserDetails,
+    sqlserverUserDetails: news.sqlserverUserDetails ?? current?.sqlserverUserDetails,
     iamEmail: news.iamEmail ?? current?.iamEmail,
   };
 };
@@ -520,9 +475,7 @@ export const UserProvider = () =>
         previousInstance !== undefined &&
         instanceIdOf(previousInstance) !== instanceIdOf(nextInstance);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
       const hostChanged =
         previousHost !== undefined &&
         nextHost !== undefined &&
@@ -562,14 +515,10 @@ export const UserProvider = () =>
             filter: "instanceType:CLOUD_SQL_INSTANCE",
           })
           .pipe(
-            Stream.filter((instance) =>
-              hasAlchemyInstanceLabels(instance.settings?.userLabels),
-            ),
+            Stream.filter((instance) => hasAlchemyInstanceLabels(instance.settings?.userLabels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as sqladmin.DatabaseInstance[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as sqladmin.DatabaseInstance[])),
           );
         const pages = yield* Effect.forEach(
           instances,
@@ -590,9 +539,7 @@ export const UserProvider = () =>
                     .map((user) => toAttrs(user, env.project, instanceName)),
                 ),
                 // The instance may be deleted mid-listing.
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as User["Attributes"][]),
-                ),
+                Effect.catchTag("NotFound", () => Effect.succeed([] as User["Attributes"][])),
                 recoverIfInstanceMissing(
                   env.project,
                   instanceName,
@@ -626,22 +573,10 @@ export const UserProvider = () =>
               waitForOperation(env.project, operation).pipe(Effect.as(true)),
             ),
             Effect.catchTag("Conflict", (error) =>
-              recoverIfPresent(
-                env.project,
-                instance,
-                userName,
-                host,
-                error,
-              ).pipe(Effect.as(false)),
+              recoverIfPresent(env.project, instance, userName, host, error).pipe(Effect.as(false)),
             ),
             Effect.catchTag("BadRequest", (error) =>
-              recoverIfPresent(
-                env.project,
-                instance,
-                userName,
-                host,
-                error,
-              ).pipe(Effect.as(false)),
+              recoverIfPresent(env.project, instance, userName, host, error).pipe(Effect.as(false)),
             ),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
@@ -667,15 +602,12 @@ export const UserProvider = () =>
         policyKey(current.passwordPolicy) !== policyKey(news.passwordPolicy);
       const dualPasswordChanged =
         news.dualPasswordType !== undefined &&
-        dualPasswordOf(current.dualPasswordType) !==
-          dualPasswordOf(news.dualPasswordType);
+        dualPasswordOf(current.dualPasswordType) !== dualPasswordOf(news.dualPasswordType);
       const sqlServerChanged =
         news.sqlserverUserDetails !== undefined &&
-        sqlServerKey(current.sqlserverUserDetails) !==
-          sqlServerKey(news.sqlserverUserDetails);
+        sqlServerKey(current.sqlserverUserDetails) !== sqlServerKey(news.sqlserverUserDetails);
       const iamEmailChanged =
-        news.iamEmail !== undefined &&
-        (current.iamEmail ?? "") !== news.iamEmail;
+        news.iamEmail !== undefined && (current.iamEmail ?? "") !== news.iamEmail;
 
       if (
         passwordChanged ||
@@ -716,9 +648,7 @@ export const UserProvider = () =>
           ...(normalizeHost(host) ? { host: normalizeHost(host) } : {}),
         })
         .pipe(
-          Effect.flatMap((operation) =>
-            waitForOperation(project, operation, { notFoundOk: true }),
-          ),
+          Effect.flatMap((operation) => waitForOperation(project, operation, { notFoundOk: true })),
           Effect.catchTag("NotFound", () => Effect.void),
           recoverIfInstanceMissing(project, instance, () => undefined),
           Effect.retry({

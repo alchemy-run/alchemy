@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as GCP from "@/GCP";
 
 /**
  * Private Effect-native Cloud Run Service (invoker IAM enforced).

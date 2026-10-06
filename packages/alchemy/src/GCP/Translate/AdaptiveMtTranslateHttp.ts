@@ -1,10 +1,7 @@
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Layer from "effect/Layer";
 import { AdaptiveMtTranslate } from "./AdaptiveMtTranslate.ts";
-import {
-  locationParentOf,
-  makeAdaptiveMtTranslateBinding,
-} from "./BindingHttp.ts";
+import { locationParentOf, makeAdaptiveMtTranslateBinding } from "./BindingHttp.ts";
 
 /**
  * HTTP implementation of {@link AdaptiveMtTranslate}.

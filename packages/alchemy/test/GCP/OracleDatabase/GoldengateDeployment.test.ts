@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Oracle Database@Google Cloud is not enabled in the test project
 // (ServiceDisabled) and needs an Oracle Cloud subscription. Set
@@ -69,31 +66,25 @@ test.provider.skipIf(!runLifecycle)(
             network: "default",
             labels: { env: "test" },
           });
-          const subnet = yield* GCP.OracleDatabase.OdbNetworksOdbSubnet(
-            "Client",
-            {
-              odbNetwork: net.name,
-              location,
-              cidrRange: "10.250.0.0/27",
-              purpose: "CLIENT_SUBNET",
+          const subnet = yield* GCP.OracleDatabase.OdbNetworksOdbSubnet("Client", {
+            odbNetwork: net.name,
+            location,
+            cidrRange: "10.250.0.0/27",
+            purpose: "CLIENT_SUBNET",
+          });
+          const gg = yield* GCP.OracleDatabase.GoldengateDeployment("Replicat", {
+            location,
+            odbNetwork: net.name,
+            odbSubnet: subnet.name,
+            displayName: "alchemy-gg",
+            deploymentType: "DATABASE_ORACLE",
+            oggData: {
+              adminUsername: "oggadmin",
+              deployment: "oggdeploy",
+              adminPassword: "AlchemyTest1!",
             },
-          );
-          const gg = yield* GCP.OracleDatabase.GoldengateDeployment(
-            "Replicat",
-            {
-              location,
-              odbNetwork: net.name,
-              odbSubnet: subnet.name,
-              displayName: "alchemy-gg",
-              deploymentType: "DATABASE_ORACLE",
-              oggData: {
-                adminUsername: "oggadmin",
-                deployment: "oggdeploy",
-                adminPassword: "AlchemyTest1!",
-              },
-              labels: { env: "test" },
-            },
-          );
+            labels: { env: "test" },
+          });
           return { net, subnet, gg };
         }),
       );
@@ -120,41 +111,33 @@ test.provider.skipIf(!runLifecycle)(
             network: "default",
             labels: { env: "prod" },
           });
-          const subnet = yield* GCP.OracleDatabase.OdbNetworksOdbSubnet(
-            "Client",
-            {
-              odbNetwork: net.name,
-              odbSubnetId: created.subnet.odbSubnetId,
-              location,
-              cidrRange: "10.250.0.0/27",
-              purpose: "CLIENT_SUBNET",
+          const subnet = yield* GCP.OracleDatabase.OdbNetworksOdbSubnet("Client", {
+            odbNetwork: net.name,
+            odbSubnetId: created.subnet.odbSubnetId,
+            location,
+            cidrRange: "10.250.0.0/27",
+            purpose: "CLIENT_SUBNET",
+          });
+          const gg = yield* GCP.OracleDatabase.GoldengateDeployment("Replicat", {
+            goldengateDeploymentId: created.gg.goldengateDeploymentId,
+            location,
+            odbNetwork: net.name,
+            odbSubnet: subnet.name,
+            displayName: "alchemy-gg",
+            deploymentType: "DATABASE_ORACLE",
+            oggData: {
+              adminUsername: "oggadmin",
+              deployment: "oggdeploy",
+              adminPassword: "AlchemyTest1!",
             },
-          );
-          const gg = yield* GCP.OracleDatabase.GoldengateDeployment(
-            "Replicat",
-            {
-              goldengateDeploymentId: created.gg.goldengateDeploymentId,
-              location,
-              odbNetwork: net.name,
-              odbSubnet: subnet.name,
-              displayName: "alchemy-gg",
-              deploymentType: "DATABASE_ORACLE",
-              oggData: {
-                adminUsername: "oggadmin",
-                deployment: "oggdeploy",
-                adminPassword: "AlchemyTest1!",
-              },
-              labels: { env: "prod", role: "gg" },
-            },
-          );
+            labels: { env: "prod", role: "gg" },
+          });
           return { net, subnet, gg };
         }),
       );
 
       expect(updated.gg.name).toEqual(created.gg.name);
-      expect(updated.gg.goldengateDeploymentId).toEqual(
-        created.gg.goldengateDeploymentId,
-      );
+      expect(updated.gg.goldengateDeploymentId).toEqual(created.gg.goldengateDeploymentId);
 
       yield* stack.destroy();
 

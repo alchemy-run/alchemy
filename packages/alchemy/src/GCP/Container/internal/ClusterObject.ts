@@ -6,13 +6,13 @@
  * the public path for raw manifests is `Kubernetes.Manifest`.
  */
 import * as Effect from "effect/Effect";
-import type { Cluster } from "../Cluster.ts";
 import {
   kubernetesObjectKey,
   toKubernetesObjectRef,
   type KubernetesObjectDefinition,
   type KubernetesObjectMetadata,
 } from "../../../Kubernetes/internal/objects.ts";
+import type { Cluster } from "../Cluster.ts";
 
 export interface ClusterObjectProps {
   /** Target GKE cluster that will own this Kubernetes object. */
@@ -42,10 +42,7 @@ export interface ClusterObjectRef {
 export const kubernetesBindingSid = (object: KubernetesObjectDefinition) =>
   `Kubernetes.Object(${kubernetesObjectKey(toKubernetesObjectRef(object))})`;
 
-export const ClusterObject = Effect.fn(function* (
-  id: string,
-  props: ClusterObjectProps,
-) {
+export const ClusterObject = Effect.fn(function* (id: string, props: ClusterObjectProps) {
   const object = {
     apiVersion: props.apiVersion,
     kind: props.kind,

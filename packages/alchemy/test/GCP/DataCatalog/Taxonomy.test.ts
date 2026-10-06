@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datacatalog from "@distilled.cloud/gcp/datacatalog_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -64,9 +64,7 @@ test.provider(
       expect(created.location).toEqual(location);
       expect(created.displayName).toEqual(expect.any(String));
       expect(created.description).toEqual("taxonomy a");
-      expect(created.activatedPolicyTypes).toContain(
-        "FINE_GRAINED_ACCESS_CONTROL",
-      );
+      expect(created.activatedPolicyTypes).toContain("FINE_GRAINED_ACCESS_CONTROL");
 
       const fetched = yield* datacatalog.getProjectsLocationsTaxonomies({
         name: created.name,

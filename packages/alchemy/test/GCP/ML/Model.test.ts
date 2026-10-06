@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as ml from "@distilled.cloud/gcp/ml_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject, region, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -81,9 +81,7 @@ test.provider.skipIf(!runLifecycle)(
         }),
       );
 
-      expect(created.name.startsWith(`projects/${project}/models/`)).toEqual(
-        true,
-      );
+      expect(created.name.startsWith(`projects/${project}/models/`)).toEqual(true);
       expect(created.modelId.length).toBeGreaterThan(0);
       expect(created.description).toEqual("image classifier");
       expect(created.labels).toMatchObject({ env: "test" });
@@ -94,11 +92,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.description).toContain("[alchemy ");
       expect(fetched.description).toContain("image classifier");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

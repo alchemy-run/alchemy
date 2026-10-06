@@ -31,10 +31,7 @@ export interface CreateKxChangeset extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.CreateKxChangesetRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.CreateKxChangesetResponse,
-      SVC.CreateKxChangesetError
-    >
+    ) => Effect.Effect<SVC.CreateKxChangesetResponse, SVC.CreateKxChangesetError>
   >
 > {}
 export const CreateKxChangeset = Binding.Service<CreateKxChangeset>(

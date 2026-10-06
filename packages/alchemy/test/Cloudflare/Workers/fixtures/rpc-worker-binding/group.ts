@@ -1,6 +1,6 @@
-import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as Schema from "effect/Schema";
 
 /**
  * RPCs exposed by the target {@link RpcWorker} — the canonical

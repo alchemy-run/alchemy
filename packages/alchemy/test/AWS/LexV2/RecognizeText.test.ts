@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import LexTestFunctionLive, { LexTestFunction } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -30,9 +30,7 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
     const response = yield* HttpClient.execute(request);
     const body = yield* response.text;
     if (response.status >= 500) {
-      return yield* Effect.fail(
-        new TransientUpstream({ status: response.status, body }),
-      );
+      return yield* Effect.fail(new TransientUpstream({ status: response.status, body }));
     }
     if (response.status !== 200) {
       // Terminal — fail fast with the typed tag in the message.
@@ -42,10 +40,7 @@ const call = (request: HttpClientRequest.HttpClientRequest) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -59,13 +54,7 @@ const recognize = (text: string, sessionId: string) =>
 describe(
   "LexV2 Bindings",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "provider:aws:lexv2",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:lexv2", "live"],
   },
   () => {
     beforeAll(
@@ -89,15 +78,10 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(15),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
           }),
         );
       }),
@@ -123,10 +107,7 @@ describe(
         "routes an unmatched utterance to the fallback intent",
         () =>
           Effect.gen(function* () {
-            const body = yield* recognize(
-              "purple monkey dishwasher",
-              "alchemy-e2e-fallback",
-            );
+            const body = yield* recognize("purple monkey dishwasher", "alchemy-e2e-fallback");
             expect(body.intent).toBe("FallbackIntent");
           }),
         { timeout: 120_000 },
@@ -141,9 +122,7 @@ describe(
             const body = yield* recognize("order a pizza", "alchemy-e2e-order");
             expect(body.intent).toBe("OrderPizza");
             expect(body.state).toBe("Fulfilled");
-            expect(body.messages).toContain(
-              "Order placed for alchemy-e2e-order!",
-            );
+            expect(body.messages).toContain("Order placed for alchemy-e2e-order!");
           }),
         { timeout: 120_000 },
       );
@@ -169,24 +148,18 @@ describe(
 
             // GetSession reads them back.
             const got = yield* call(
-              HttpClientRequest.get(
-                `${baseUrl}/session?sessionId=${sessionId}`,
-              ),
+              HttpClientRequest.get(`${baseUrl}/session?sessionId=${sessionId}`),
             );
             expect(got.attributes).toMatchObject({ favorite: "pepperoni" });
 
             // DeleteSession ends the conversation ...
             const deleted = yield* call(
-              HttpClientRequest.delete(
-                `${baseUrl}/session?sessionId=${sessionId}`,
-              ),
+              HttpClientRequest.delete(`${baseUrl}/session?sessionId=${sessionId}`),
             );
             expect(deleted.sessionId).toBe(sessionId);
 
             // ... so a fresh GetSession reports the typed not-found tag.
-            const response = yield* HttpClient.get(
-              `${baseUrl}/session?sessionId=${sessionId}`,
-            );
+            const response = yield* HttpClient.get(`${baseUrl}/session?sessionId=${sessionId}`);
             const body = (yield* response.json) as { error?: string };
             expect(body.error).toBe("ResourceNotFoundException");
           }),

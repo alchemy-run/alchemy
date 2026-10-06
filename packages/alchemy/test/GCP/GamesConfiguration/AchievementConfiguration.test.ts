@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as gamesConfiguration from "@distilled.cloud/gcp/gamesConfiguration_v1configuration";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  applicationId,
-  logLevel,
-  missingTag,
-  probeApplicationId,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { applicationId, logLevel, missingTag, probeApplicationId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -90,14 +85,11 @@ test.provider.skipIf(!applicationId)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.GamesConfiguration.AchievementConfiguration(
-            "FirstWin",
-            {
-              applicationId: applicationId!,
-              name: "First Win",
-              description: "Win your first match",
-            },
-          );
+          return yield* GCP.GamesConfiguration.AchievementConfiguration("FirstWin", {
+            applicationId: applicationId!,
+            name: "First Win",
+            description: "Win your first match",
+          });
         }),
       );
 
@@ -110,21 +102,16 @@ test.provider.skipIf(!applicationId)(
         achievementId: created.achievementId,
       });
       expect(fetched.id).toEqual(created.achievementId);
-      expect(fetched.draft?.description?.translations?.[0]?.value).toEqual(
-        "Win your first match",
-      );
+      expect(fetched.draft?.description?.translations?.[0]?.value).toEqual("Win your first match");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.GamesConfiguration.AchievementConfiguration(
-            "FirstWin",
-            {
-              applicationId: created.applicationId,
-              achievementId: created.achievementId,
-              name: "First Win",
-              description: "Win a match",
-            },
-          );
+          return yield* GCP.GamesConfiguration.AchievementConfiguration("FirstWin", {
+            applicationId: created.applicationId,
+            achievementId: created.achievementId,
+            name: "First Win",
+            description: "Win a match",
+          });
         }),
       );
 

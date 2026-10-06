@@ -89,14 +89,12 @@ const argBytes = (arg: Arg): Uint8Array => {
 export const encodeSimpleString = (value: string): Uint8Array =>
   concat([bytesOf(`+${value}`), CRLF]);
 
-export const encodeError = (value: string): Uint8Array =>
-  concat([bytesOf(`-${value}`), CRLF]);
+export const encodeError = (value: string): Uint8Array => concat([bytesOf(`-${value}`), CRLF]);
 
 export const encodeInteger = (value: number | bigint): Uint8Array =>
   concat([bytesOf(`:${value}`), CRLF]);
 
-export const encodeBoolean = (value: boolean): Uint8Array =>
-  bytesOf(value ? "#t\r\n" : "#f\r\n");
+export const encodeBoolean = (value: boolean): Uint8Array => bytesOf(value ? "#t\r\n" : "#f\r\n");
 
 export const encodeDouble = (value: number): Uint8Array => {
   if (Number.isNaN(value)) return bytesOf(",nan\r\n");
@@ -105,8 +103,7 @@ export const encodeDouble = (value: number): Uint8Array => {
   return concat([bytesOf(`,${value}`), CRLF]);
 };
 
-export const encodeBigNumber = (value: bigint): Uint8Array =>
-  concat([bytesOf(`(${value}`), CRLF]);
+export const encodeBigNumber = (value: bigint): Uint8Array => concat([bytesOf(`(${value}`), CRLF]);
 
 export const encodeNull = (): Uint8Array => bytesOf("$-1\r\n");
 
@@ -121,10 +118,7 @@ export const encodeArray = (items: readonly Uint8Array[]): Uint8Array =>
   concat([bytesOf(`*${items.length}\r\n`), ...items]);
 
 /** Encode a client command as a RESP array of bulk strings. */
-export const encodeCommand = (
-  command: string,
-  args: readonly Arg[] = [],
-): Uint8Array => {
+export const encodeCommand = (command: string, args: readonly Arg[] = []): Uint8Array => {
   const parts = [bytesOf(command), ...args.map(argBytes)];
   const chunks: Uint8Array[] = [bytesOf(`*${parts.length}\r\n`)];
   for (const part of parts) {
@@ -138,10 +132,7 @@ export const encodeReply = (value: Reply): Uint8Array => {
   if (typeof value === "string") return encodeBulk(value);
   if (typeof value === "boolean") return encodeBoolean(value);
   if (typeof value === "bigint") {
-    if (
-      value >= BigInt(Number.MIN_SAFE_INTEGER) &&
-      value <= BigInt(Number.MAX_SAFE_INTEGER)
-    ) {
+    if (value >= BigInt(Number.MIN_SAFE_INTEGER) && value <= BigInt(Number.MAX_SAFE_INTEGER)) {
       return encodeInteger(Number(value));
     }
     return encodeBigNumber(value);
@@ -188,10 +179,7 @@ const ok = (
   offset: number,
 ): Outcome => ({ ok: true, frame, offset });
 
-const parseLine = (
-  buf: Uint8Array,
-  offset: number,
-): Line | undefined | ProtocolError => {
+const parseLine = (buf: Uint8Array, offset: number): Line | undefined | ProtocolError => {
   for (let i = offset; i < buf.length; i++) {
     if (buf[i] === LF) {
       if (i === offset || buf[i - 1] !== CR) {
@@ -262,9 +250,7 @@ const parseErrorLine = (text: string): ReplyError => {
   return new ReplyError({ code, message: text });
 };
 
-const asElement = (
-  frame: Exclude<ParseResult, { _tag: "Incomplete" | "Protocol" }>,
-): Reply => {
+const asElement = (frame: Exclude<ParseResult, { _tag: "Incomplete" | "Protocol" }>): Reply => {
   if (frame._tag === "Error") return frame.error;
   if (frame._tag === "Push") return frame.value;
   return frame.value;
@@ -276,10 +262,7 @@ const parseBulkBody = (buf: Uint8Array, offset: number, n: number): Outcome => {
   if (buf[offset + n] !== CR || buf[offset + n + 1] !== LF) {
     return fail("missing CRLF after bulk string");
   }
-  return ok(
-    { _tag: "Reply", value: decoder.decode(buf.subarray(offset, offset + n)) },
-    end,
-  );
+  return ok({ _tag: "Reply", value: decoder.decode(buf.subarray(offset, offset + n)) }, end);
 };
 
 const parseStreamedString = (buf: Uint8Array, offset: number): Outcome => {
@@ -295,10 +278,7 @@ const parseStreamedString = (buf: Uint8Array, offset: number): Outcome => {
     if (count.kind === "error") return { ok: false, error: count.error };
     if (count.kind !== "n") return fail("invalid streamed string chunk length");
     if (count.n === 0) {
-      return ok(
-        { _tag: "Reply", value: decoder.decode(concat(chunks)) },
-        count.next,
-      );
+      return ok({ _tag: "Reply", value: decoder.decode(concat(chunks)) }, count.next);
     }
     const body = parseBulkBody(buf, count.next, count.n);
     if (!body.ok) return body;
@@ -335,19 +315,14 @@ const parseBlobError = (buf: Uint8Array, offset: number): Outcome => {
   if (body.frame._tag !== "Reply" || typeof body.frame.value !== "string") {
     return fail("invalid blob error");
   }
-  return ok(
-    { _tag: "Error", error: parseErrorLine(body.frame.value) },
-    body.offset,
-  );
+  return ok({ _tag: "Error", error: parseErrorLine(body.frame.value) }, body.offset);
 };
 
 const parseElements = (
   buf: Uint8Array,
   offset: number,
   n: number,
-):
-  | { readonly ok: true; readonly values: Reply[]; readonly offset: number }
-  | Outcome => {
+): { readonly ok: true; readonly values: Reply[]; readonly offset: number } | Outcome => {
   if (n > MAX_AGGREGATE) {
     return fail(`aggregate length ${n} exceeds ${MAX_AGGREGATE}`);
   }
@@ -365,9 +340,7 @@ const parseElements = (
 const parseStreamedAggregate = (
   buf: Uint8Array,
   offset: number,
-):
-  | { readonly ok: true; readonly values: Reply[]; readonly offset: number }
-  | Outcome => {
+): { readonly ok: true; readonly values: Reply[]; readonly offset: number } | Outcome => {
   const values: Reply[] = [];
   let cursor = offset;
   while (true) {
@@ -427,10 +400,7 @@ const parseAggregate = (
     return ok({ _tag: "Push", value: parsed.values }, parsed.offset);
   }
   if (kind === "map") {
-    return ok(
-      { _tag: "Reply", value: pairsToReply(parsed.values) },
-      parsed.offset,
-    );
+    return ok({ _tag: "Reply", value: pairsToReply(parsed.values) }, parsed.offset);
   }
   return ok({ _tag: "Reply", value: parsed.values }, parsed.offset);
 };
@@ -475,14 +445,9 @@ function parseFrame(buf: Uint8Array, offset: number): Outcome {
       if (line === undefined) return INCOMPLETE;
       if (line instanceof ProtocolError) return { ok: false, error: line };
       try {
-        return ok(
-          { _tag: "Reply", value: parseIntegerValue(line.text) },
-          line.next,
-        );
+        return ok({ _tag: "Reply", value: parseIntegerValue(line.text) }, line.next);
       } catch (error) {
-        return error instanceof ProtocolError
-          ? { ok: false, error }
-          : fail(String(error));
+        return error instanceof ProtocolError ? { ok: false, error } : fail(String(error));
       }
     }
     case DOLLAR:
@@ -500,10 +465,8 @@ function parseFrame(buf: Uint8Array, offset: number): Outcome {
       const line = parseLine(buf, next);
       if (line === undefined) return INCOMPLETE;
       if (line instanceof ProtocolError) return { ok: false, error: line };
-      if (line.text === "t")
-        return ok({ _tag: "Reply", value: true }, line.next);
-      if (line.text === "f")
-        return ok({ _tag: "Reply", value: false }, line.next);
+      if (line.text === "t") return ok({ _tag: "Reply", value: true }, line.next);
+      if (line.text === "f") return ok({ _tag: "Reply", value: false }, line.next);
       return fail(`invalid boolean ${JSON.stringify(line.text)}`);
     }
     case COMMA: {
@@ -514,8 +477,7 @@ function parseFrame(buf: Uint8Array, offset: number): Outcome {
       if (text === "nan" || text === "-nan") {
         return ok({ _tag: "Reply", value: Number.NaN }, line.next);
       }
-      if (text === "inf")
-        return ok({ _tag: "Reply", value: Infinity }, line.next);
+      if (text === "inf") return ok({ _tag: "Reply", value: Infinity }, line.next);
       if (text === "-inf") {
         return ok({ _tag: "Reply", value: -Infinity }, line.next);
       }

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -98,13 +97,7 @@ export type Attributes = {
   type: Type | undefined;
 };
 
-export type MtlsCertificate = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * An account-level Cloudflare mTLS certificate.
@@ -187,8 +180,7 @@ export const MtlsCertificateProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.name ?? (yield* createCertificateName(id, olds.name));
+      const oldName = output?.name ?? (yield* createCertificateName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -216,9 +208,7 @@ export const MtlsCertificateProvider = () =>
           })
           .pipe(
             Effect.map((cert) => toAttributes(cert, acct)),
-            Effect.catchTag("CertificateNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
           );
       }
       // Cold read — recover by listing and matching on the deterministic
@@ -240,11 +230,7 @@ export const MtlsCertificateProvider = () =>
               // Cloudflare-managed certificates (e.g. the gateway/access
               // managed CAs) reject deletion with `Unauthorized`; only
               // enumerate user-uploaded `custom` certificates for teardown.
-              .filter(
-                (cert) =>
-                  cert.type !== "gateway_managed" &&
-                  cert.type !== "access_managed",
-              )
+              .filter((cert) => cert.type !== "gateway_managed" && cert.type !== "access_managed")
               .map((cert) => toAttributes(cert, accountId)),
           ),
         ),
@@ -252,8 +238,7 @@ export const MtlsCertificateProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name =
-        output?.name ?? (yield* createCertificateName(id, news.name));
+      const name = output?.name ?? (yield* createCertificateName(id, news.name));
 
       // Observe — the certificate id is the stable identifier; fall through
       // a CertificateNotFound to the list+name match so we recover from
@@ -264,11 +249,7 @@ export const MtlsCertificateProvider = () =>
               accountId,
               mtlsCertificateId: output.mtlsCertificateId,
             })
-            .pipe(
-              Effect.catchTag("CertificateNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            )
+            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)))
         : yield* findByName(accountId, name);
 
       // Ensure — upload if missing. Cloudflare rejects uploading a
@@ -287,10 +268,7 @@ export const MtlsCertificateProvider = () =>
           .pipe(
             Effect.catchTag("CertificateAlreadyExists", (originalError) =>
               Effect.gen(function* () {
-                const match = yield* findByContent(
-                  accountId,
-                  news.certificates,
-                );
+                const match = yield* findByContent(accountId, news.certificates);
                 if (!match) return yield* Effect.fail(originalError);
                 return match;
               }),
@@ -307,10 +285,7 @@ export const MtlsCertificateProvider = () =>
           mtlsCertificateId: output.mtlsCertificateId,
         })
         .pipe(
-          Effect.catchTag(
-            ["CertificateNotFound", "CertificateAlreadyDeleted"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
         );
     }),
   });
@@ -329,19 +304,11 @@ const findByName = (accountId: string, name: string) =>
 const findByContent = (accountId: string, certificates: string) =>
   Effect.gen(function* () {
     const list = yield* mtls.listMtlsCertificates({ accountId });
-    return list.result.find(
-      (c) => c.certificates?.trim() === certificates.trim(),
-    );
+    return list.result.find((c) => c.certificates?.trim() === certificates.trim());
   });
 
-const unwrap = (
-  value: Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 type CertificateShape = {
   id?: string | null;
@@ -355,11 +322,7 @@ type CertificateShape = {
   type?: Type | null;
 };
 
-const toAttributes = (
-  cert: CertificateShape,
-  accountId: string,
-  news?: Props,
-): Attributes => ({
+const toAttributes = (cert: CertificateShape, accountId: string, news?: Props): Attributes => ({
   mtlsCertificateId: cert.id!,
   accountId,
   name: cert.name ?? undefined,

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const datasetId = "alchemy-cci-label-ds";
 const conversationId = "alchemy-cci-ds-label-conv";
@@ -45,10 +42,7 @@ const waitUntilDatasetGone = (name: string) =>
     }),
   );
 
-const ensureDataset = ({
-  locationParent,
-  datasetName,
-}: ReturnType<typeof namesOf>) =>
+const ensureDataset = ({ locationParent, datasetName }: ReturnType<typeof namesOf>) =>
   cci.getProjectsLocationsDatasets({ name: datasetName }).pipe(
     Effect.catchTag("NotFound", () =>
       cci.createProjectsLocationsDatasets({
@@ -63,30 +57,22 @@ const ensureDataset = ({
     ),
   );
 
-const ensureConversation = ({
-  datasetName,
-  conversationName,
-}: ReturnType<typeof namesOf>) =>
-  cci
-    .getProjectsLocationsDatasetsConversations({ name: conversationName })
-    .pipe(
-      Effect.catchTag("NotFound", () =>
-        cci.createProjectsLocationsConversations({
-          parent: datasetName,
-          conversationId,
-          body: {
-            medium: "CHAT",
-            languageCode: "en-US",
-            labels: { "alchemy-test": "cci" },
-          },
-        }),
-      ),
-    );
+const ensureConversation = ({ datasetName, conversationName }: ReturnType<typeof namesOf>) =>
+  cci.getProjectsLocationsDatasetsConversations({ name: conversationName }).pipe(
+    Effect.catchTag("NotFound", () =>
+      cci.createProjectsLocationsConversations({
+        parent: datasetName,
+        conversationId,
+        body: {
+          medium: "CHAT",
+          languageCode: "en-US",
+          labels: { "alchemy-test": "cci" },
+        },
+      }),
+    ),
+  );
 
-const deleteParents = ({
-  datasetName,
-  conversationName,
-}: ReturnType<typeof namesOf>) =>
+const deleteParents = ({ datasetName, conversationName }: ReturnType<typeof namesOf>) =>
   Effect.gen(function* () {
     yield* cci
       .deleteProjectsLocationsDatasetsConversations({
@@ -143,36 +129,29 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_CCI_DATASETS)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabel(
-            "Topic",
-            {
-              parent: conversation.name ?? conversationName,
-              label: "billing",
-            },
-          );
+          return yield* GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabel("Topic", {
+            parent: conversation.name ?? conversationName,
+            label: "billing",
+          });
         }),
       );
 
       expect(created.name).toContain("/feedbackLabels/");
       expect(created.label).toEqual("billing");
 
-      const fetched =
-        yield* cci.getProjectsLocationsDatasetsConversationsFeedbackLabels({
-          name: created.name,
-        });
+      const fetched = yield* cci.getProjectsLocationsDatasetsConversationsFeedbackLabels({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.label).toContain("alchemy-id=");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabel(
-            "Topic",
-            {
-              parent: conversation.name ?? conversationName,
-              feedbackLabelId: created.feedbackLabelId,
-              label: "invoices",
-            },
-          );
+          return yield* GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabel("Topic", {
+            parent: conversation.name ?? conversationName,
+            feedbackLabelId: created.feedbackLabelId,
+            label: "invoices",
+          });
         }),
       );
       expect(updated.name).toEqual(created.name);

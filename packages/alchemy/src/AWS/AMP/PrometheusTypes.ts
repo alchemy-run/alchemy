@@ -7,9 +7,7 @@ import * as Data from "effect/Data";
  * Raised when the HTTP request fails, the response is not a 2xx, the body is
  * not valid JSON, or the Prometheus envelope reports `status: "error"`.
  */
-export class PrometheusApiError extends Data.TaggedError(
-  "AWS.AMP.PrometheusApiError",
-)<{
+export class PrometheusApiError extends Data.TaggedError("AWS.AMP.PrometheusApiError")<{
   /** HTTP method of the failed request. */
   readonly method: string;
   /** Path relative to the workspace's `prometheusEndpoint`. */

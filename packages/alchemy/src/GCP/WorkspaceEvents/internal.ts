@@ -70,10 +70,8 @@ export const lastSegment = (value: string) => {
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBoolean = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? false) === (right ?? false);
+export const sameBoolean = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? false) === (right ?? false);
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -133,27 +131,20 @@ export const wesubLabels = (id: string) =>
   Effect.gen(function* () {
     const internal = yield* createInternalLabels(id);
     const labels: Record<string, string> = {
-      [WESUB_LABEL_KEYS.stack]:
-        internal[alchemyLabelKeys.stack] ?? sanitizeLabelValue("x"),
-      [WESUB_LABEL_KEYS.stage]:
-        internal[alchemyLabelKeys.stage] ?? sanitizeLabelValue("x"),
-      [WESUB_LABEL_KEYS.id]:
-        internal[alchemyLabelKeys.id] ?? sanitizeLabelValue("x"),
+      [WESUB_LABEL_KEYS.stack]: internal[alchemyLabelKeys.stack] ?? sanitizeLabelValue("x"),
+      [WESUB_LABEL_KEYS.stage]: internal[alchemyLabelKeys.stage] ?? sanitizeLabelValue("x"),
+      [WESUB_LABEL_KEYS.id]: internal[alchemyLabelKeys.id] ?? sanitizeLabelValue("x"),
     };
     return labels;
   });
 
-export const hasWesubLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+export const hasWesubLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some(
     (key) => key.startsWith("alchemy-wesub-") || key.startsWith("alchemy-"),
   );
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByWesubLabels = (
   id: string,
@@ -169,32 +160,19 @@ export const ownedByWesubLabels = (
       observed[WESUB_LABEL_KEYS.id] === expected[WESUB_LABEL_KEYS.id];
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[WESUB_LABEL_KEYS.stack] ?? "",
-        observed[WESUB_LABEL_KEYS.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[WESUB_LABEL_KEYS.stage] ?? "",
-        observed[WESUB_LABEL_KEYS.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[WESUB_LABEL_KEYS.id] ?? "",
-        observed[WESUB_LABEL_KEYS.id] ?? "",
-      )
+      prefixMatch(expected[WESUB_LABEL_KEYS.stack] ?? "", observed[WESUB_LABEL_KEYS.stack] ?? "") &&
+      prefixMatch(expected[WESUB_LABEL_KEYS.stage] ?? "", observed[WESUB_LABEL_KEYS.stage] ?? "") &&
+      prefixMatch(expected[WESUB_LABEL_KEYS.id] ?? "", observed[WESUB_LABEL_KEYS.id] ?? "")
     );
   });
 
 export const toSubscriptionName = (value: string) => {
   if (value.length === 0) return value;
-  return value.startsWith(SUBSCRIPTION_PREFIX)
-    ? value
-    : `${SUBSCRIPTION_PREFIX}${value}`;
+  return value.startsWith(SUBSCRIPTION_PREFIX) ? value : `${SUBSCRIPTION_PREFIX}${value}`;
 };
 
 export const subscriptionIdOf = (name: string) =>
-  name.startsWith(SUBSCRIPTION_PREFIX)
-    ? name.slice(SUBSCRIPTION_PREFIX.length)
-    : lastSegment(name);
+  name.startsWith(SUBSCRIPTION_PREFIX) ? name.slice(SUBSCRIPTION_PREFIX.length) : lastSegment(name);
 
 export const toTaskName = (value: string) => {
   if (value.length === 0) return value;
@@ -202,9 +180,7 @@ export const toTaskName = (value: string) => {
 };
 
 export const taskIdOf = (name: string) =>
-  name.startsWith(TASK_PREFIX)
-    ? name.slice(TASK_PREFIX.length)
-    : lastSegment(name);
+  name.startsWith(TASK_PREFIX) ? name.slice(TASK_PREFIX.length) : lastSegment(name);
 
 export const toConfigName = (task: string, configId: string) =>
   `${toTaskName(task)}/${CONFIG_COLLECTION}/${configId}`;
@@ -227,10 +203,7 @@ export const expandTopic = (value: string, project: string) => {
   return `projects/${project}/topics/${lastSegment(trimmed)}`;
 };
 
-export const listFilter = (
-  eventTypes: readonly string[],
-  targetResource?: string,
-) => {
+export const listFilter = (eventTypes: readonly string[], targetResource?: string) => {
   const events = eventTypes.map((type) => `event_types:"${type}"`).join(" OR ");
   if (targetResource !== undefined && targetResource.length > 0) {
     return `(${events}) AND target_resource="${targetResource}"`;
@@ -243,8 +216,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
@@ -254,8 +226,7 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 ) =>
   effect.pipe(
     Effect.catchIf(
-      (error): error is E & { readonly _tag: "NotFound" } =>
-        error._tag === "NotFound",
+      (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
       () => Effect.void,
     ),
   );
@@ -297,9 +268,7 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
     if (current === undefined) return undefined;
     const observed = tagRecord(current.labels);
     const desired = { ...observed, ...labels };
-    const changed = Object.entries(desired).some(
-      ([key, value]) => observed[key] !== value,
-    );
+    const changed = Object.entries(desired).some(([key, value]) => observed[key] !== value);
     if (!changed) return current;
     return yield* pubsub
       .patchProjectsTopics({
@@ -309,17 +278,10 @@ export const ensureTopic = (name: string, labels: Record<string, string>) =>
           updateMask: "labels",
         },
       })
-      .pipe(
-        Effect.catchTag(["NotFound", "Conflict"], () =>
-          Effect.succeed(current),
-        ),
-      );
+      .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(current)));
   });
 
-export const stringField = (
-  value: unknown,
-  key: string,
-): string | undefined => {
+export const stringField = (value: unknown, key: string): string | undefined => {
   if (value === null || value === undefined || typeof value !== "object") {
     return undefined;
   }
@@ -328,19 +290,16 @@ export const stringField = (
 };
 
 export const operationResourceName = (operation: we.Operation) =>
-  stringField(operation.response, "name") ??
-  stringField(operation.metadata, "name");
+  stringField(operation.response, "name") ?? stringField(operation.metadata, "name");
 
 /**
  * Wait for a Workspace Events long-running operation (subscription create/update/delete).
  */
 export const waitForOperation = (operation: we.Operation) =>
   Effect.gen(function* () {
-    yield* waitForGcpOperation(
-      operation,
-      (name) => we.getOperations({ name }),
-      { budget: "10 minutes" },
-    );
+    yield* waitForGcpOperation(operation, (name) => we.getOperations({ name }), {
+      budget: "10 minutes",
+    });
     // Return the finished operation so callers can read its `response`.
     if (operation.done === true || !operation.name) return operation;
     return yield* we.getOperations({ name: operation.name });
@@ -396,9 +355,7 @@ export const listSubscriptions = (filter: string) =>
       pageSize: 100,
     }),
     (page) => page.subscriptions,
-  ).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as we.Subscription[])),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as we.Subscription[])));
 
 export const listOwnedSubscriptions = () =>
   Effect.gen(function* () {
@@ -435,9 +392,7 @@ export const findSubscription = (
     const existing = yield* getSubscription(name);
     if (existing !== undefined) return existing;
     if (eventTypes.length === 0) return undefined;
-    const listed = yield* listSubscriptions(
-      listFilter(eventTypes, targetResource),
-    );
+    const listed = yield* listSubscriptions(listFilter(eventTypes, targetResource));
     return listed[0];
   });
 
@@ -449,8 +404,4 @@ export const listConfigs = (parent: string, tenant?: string) =>
       pageSize: 100,
     }),
     (page) => page.configs,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as we.TaskPushNotificationConfig[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as we.TaskPushNotificationConfig[])));

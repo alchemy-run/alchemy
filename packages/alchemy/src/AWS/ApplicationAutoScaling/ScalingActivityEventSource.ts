@@ -1,10 +1,7 @@
 import type * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import {
-  consumeBusEvents,
-  type EventRecord,
-} from "../EventBridge/EventSource.ts";
+import { consumeBusEvents, type EventRecord } from "../EventBridge/EventSource.ts";
 import type { ScalableTarget } from "./ScalableTarget.ts";
 
 /**

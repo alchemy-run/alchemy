@@ -1,21 +1,17 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const parentOf = (project: string) =>
-  `projects/${project}/locations/us-central1`;
+const parentOf = (project: string) => `projects/${project}/locations/us-central1`;
 
 // Workload Manager API is entitlement-gated on the default testing project
 // (`ServiceDisabled`: "Workload Manager API has not been used in project
@@ -44,9 +40,7 @@ const firstRuleName = Effect.gen(function* () {
       evaluationType: "SAP",
       pageSize: 20,
     })
-    .pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed({ rules: [] as const })),
-    );
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed({ rules: [] as const })));
   const named = (page.rules ?? []).find(
     (rule) => typeof rule.name === "string" && rule.name.length > 0,
   );

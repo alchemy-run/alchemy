@@ -82,9 +82,7 @@ export type CustomersCustomerRepricingConfig = Resource<
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
     /** Repricing configuration. */
-    repricingConfig:
-      | cloudchannel.GoogleCloudChannelV1RepricingConfig
-      | undefined;
+    repricingConfig: cloudchannel.GoogleCloudChannelV1RepricingConfig | undefined;
   },
   never,
   Providers
@@ -131,10 +129,9 @@ export type CustomersCustomerRepricingConfig = Resource<
  * @resource
  * @category CloudChannel
  */
-export const CustomersCustomerRepricingConfig =
-  Resource<CustomersCustomerRepricingConfig>(
-    "GCP.CloudChannel.CustomersCustomerRepricingConfig",
-  );
+export const CustomersCustomerRepricingConfig = Resource<CustomersCustomerRepricingConfig>(
+  "GCP.CloudChannel.CustomersCustomerRepricingConfig",
+);
 
 export class CustomersCustomerRepricingConfigNotResolved extends Data.TaggedError(
   "GCP.CloudChannel.CustomersCustomerRepricingConfigNotResolved",
@@ -161,8 +158,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousMonth = normalizeDate(
-        olds?.effectiveInvoiceMonth ??
-          output?.repricingConfig?.effectiveInvoiceMonth,
+        olds?.effectiveInvoiceMonth ?? output?.repricingConfig?.effectiveInvoiceMonth,
       );
       const nextMonth = normalizeDate(news.effectiveInvoiceMonth);
       return replaceOnIdentity({
@@ -187,8 +183,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
       const existing = yield* findCustomerRepricing(
         parent,
         output?.name ?? name,
-        olds?.effectiveInvoiceMonth ??
-          output?.repricingConfig?.effectiveInvoiceMonth,
+        olds?.effectiveInvoiceMonth ?? output?.repricingConfig?.effectiveInvoiceMonth,
       );
       if (existing === undefined) return undefined;
       const attrs = toCustomerRepricingAttrs(existing);
@@ -198,10 +193,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const parent = normalizeName(news.parent);
-      const month = yield* monthOf(
-        news,
-        output?.repricingConfig?.effectiveInvoiceMonth,
-      );
+      const month = yield* monthOf(news, output?.repricingConfig?.effectiveInvoiceMonth);
       const repricingConfig = desiredRepricingConfig({
         effectiveInvoiceMonth: month,
         rebillingBasis: news.rebillingBasis,
@@ -220,11 +212,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
         "customerRepricingConfigs",
       );
 
-      let current = yield* findCustomerRepricing(
-        parent,
-        output?.name ?? name,
-        month,
-      );
+      let current = yield* findCustomerRepricing(parent, output?.name ?? name, month);
 
       if (current === undefined) {
         const created = yield* cloudchannel
@@ -232,11 +220,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
             parent,
             body: { repricingConfig },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findCustomerRepricing(parent, name, month),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findCustomerRepricing(parent, name, month)));
         current = created ?? undefined;
       }
 
@@ -253,24 +237,16 @@ export const CustomersCustomerRepricingConfigProvider = () =>
           normalizeDate(observed?.effectiveInvoiceMonth),
           normalizeDate(repricingConfig.effectiveInvoiceMonth),
         ) ||
-        (observed?.rebillingBasis ?? "") !==
-          (repricingConfig.rebillingBasis ?? "") ||
+        (observed?.rebillingBasis ?? "") !== (repricingConfig.rebillingBasis ?? "") ||
         !jsonEqual(observed?.adjustment, repricingConfig.adjustment) ||
-        !jsonEqual(
-          observed?.entitlementGranularity,
-          repricingConfig.entitlementGranularity,
-        ) ||
-        !jsonEqual(
-          observed?.conditionalOverrides,
-          repricingConfig.conditionalOverrides,
-        );
+        !jsonEqual(observed?.entitlementGranularity, repricingConfig.entitlementGranularity) ||
+        !jsonEqual(observed?.conditionalOverrides, repricingConfig.conditionalOverrides);
 
       if (changed && currentName.length > 0) {
-        current =
-          yield* cloudchannel.patchAccountsCustomersCustomerRepricingConfigs({
-            name: currentName,
-            body: { name: currentName, repricingConfig },
-          });
+        current = yield* cloudchannel.patchAccountsCustomersCustomerRepricingConfigs({
+          name: currentName,
+          body: { name: currentName, repricingConfig },
+        });
       }
 
       return toCustomerRepricingAttrs(current);

@@ -28,12 +28,7 @@ export interface AcceptInvitation extends Binding.Service<
   () => Effect.Effect<
     (
       request: detective.AcceptInvitationRequest,
-    ) => Effect.Effect<
-      detective.AcceptInvitationResponse,
-      detective.AcceptInvitationError
-    >
+    ) => Effect.Effect<detective.AcceptInvitationResponse, detective.AcceptInvitationError>
   >
 > {}
-export const AcceptInvitation = Binding.Service<AcceptInvitation>(
-  "AWS.Detective.AcceptInvitation",
-);
+export const AcceptInvitation = Binding.Service<AcceptInvitation>("AWS.Detective.AcceptInvitation");

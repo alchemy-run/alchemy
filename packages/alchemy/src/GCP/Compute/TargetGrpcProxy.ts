@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -9,12 +8,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 export type TargetGrpcProxyProps = {
   /**
@@ -115,9 +111,7 @@ export type TargetGrpcProxy = Resource<
  * @resource
  * @category Compute
  */
-export const TargetGrpcProxy = Resource<TargetGrpcProxy>(
-  "GCP.Compute.TargetGrpcProxy",
-);
+export const TargetGrpcProxy = Resource<TargetGrpcProxy>("GCP.Compute.TargetGrpcProxy");
 
 export class TargetGrpcProxyNotResolved extends Data.TaggedError(
   "GCP.Compute.TargetGrpcProxyNotResolved",
@@ -225,8 +219,7 @@ export const TargetGrpcProxyProvider = () =>
       ) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousProxyless =
-        olds?.validateForProxyless ?? output?.validateForProxyless ?? false;
+      const previousProxyless = olds?.validateForProxyless ?? output?.validateForProxyless ?? false;
       const nextProxyless = news.validateForProxyless ?? false;
       if (previousProxyless !== nextProxyless) {
         return { action: "replace" as const, deleteFirst: true };
@@ -256,9 +249,7 @@ export const TargetGrpcProxyProvider = () =>
           .pipe(
             Stream.filter((proxy) => {
               const { labels } = parseDescription(proxy.description);
-              return Object.keys(labels).some((key) =>
-                key.startsWith("alchemy-"),
-              );
+              return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
             }),
             Stream.map((proxy) => toAttrs(proxy, env.project)),
             Stream.runCollect,
@@ -295,9 +286,7 @@ export const TargetGrpcProxyProvider = () =>
             body,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
+            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
         current = yield* getByName(env.project, targetGrpcProxyName);
@@ -307,12 +296,9 @@ export const TargetGrpcProxyProvider = () =>
         return yield* new TargetGrpcProxyNotResolved({ targetGrpcProxyName });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
-      const urlMapChanged =
-        resourceTail(current.urlMap) !== resourceTail(desiredUrlMap);
-      const proxylessChanged =
-        (current.validateForProxyless === true) !== desiredProxyless;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
+      const urlMapChanged = resourceTail(current.urlMap) !== resourceTail(desiredUrlMap);
+      const proxylessChanged = (current.validateForProxyless === true) !== desiredProxyless;
 
       if (descriptionChanged || urlMapChanged || proxylessChanged) {
         const body: compute.TargetGrpcProxy = {
@@ -331,11 +317,7 @@ export const TargetGrpcProxyProvider = () =>
             targetGrpcProxy: targetGrpcProxyName,
             body,
           })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation),
-            ),
-          );
+          .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetGrpcProxyName);
         if (current === undefined) {
           return yield* new TargetGrpcProxyNotResolved({

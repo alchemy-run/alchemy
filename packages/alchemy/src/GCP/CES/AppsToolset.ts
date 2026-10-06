@@ -147,14 +147,11 @@ export type AppsToolset = Resource<
  */
 export const AppsToolset = Resource<AppsToolset>("GCP.CES.AppsToolset");
 
-export class AppsToolsetNotResolved extends Data.TaggedError(
-  "GCP.CES.AppsToolsetNotResolved",
-)<{
+export class AppsToolsetNotResolved extends Data.TaggedError("GCP.CES.AppsToolsetNotResolved")<{
   name: string;
 }> {}
 
-const resourceName = (app: string, toolsetId: string) =>
-  `${app}/toolsets/${toolsetId}`;
+const resourceName = (app: string, toolsetId: string) => `${app}/toolsets/${toolsetId}`;
 
 const openApiOf = (news: AppsToolsetProps): ces.OpenApiToolset | undefined => {
   if (news.mcpToolset || news.connectorToolset) return news.openApiToolset;
@@ -165,12 +162,7 @@ const openApiOf = (news: AppsToolsetProps): ces.OpenApiToolset | undefined => {
   );
 };
 
-const toAttrs = (
-  toolset: ces.Toolset,
-  project: string,
-  region: string,
-  appHint?: string,
-) => {
+const toAttrs = (toolset: ces.Toolset, project: string, region: string, appHint?: string) => {
   const name = toolset.name ?? "";
   const parsed = parseResourceName(name, "toolsets", region);
   return {
@@ -204,9 +196,7 @@ const listAt = (parent: string, project: string, region: string) =>
     ces.listProjectsLocationsAppsToolsets.pages({ parent, pageSize: 100 }),
     (page) => page.toolsets,
   ).pipe(
-    Effect.map((toolsets) =>
-      toolsets.map((toolset) => toAttrs(toolset, project, region, parent)),
-    ),
+    Effect.map((toolsets) => toolsets.map((toolset) => toAttrs(toolset, project, region, parent))),
   );
 
 export const AppsToolsetProvider = () =>
@@ -228,26 +218,14 @@ export const AppsToolsetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const app = olds?.app
-        ? expandApp(olds.app, env.project, location)
-        : output?.app;
-      const toolsetId = yield* toPhysicalId(
-        id,
-        olds?.toolsetId,
-        output?.toolsetId,
-      );
-      const name =
-        output?.name ?? (app !== undefined ? resourceName(app, toolsetId) : "");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const app = olds?.app ? expandApp(olds.app, env.project, location) : output?.app;
+      const toolsetId = yield* toPhysicalId(id, olds?.toolsetId, output?.toolsetId);
+      const name = output?.name ?? (app !== undefined ? resourceName(app, toolsetId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region, app);
-      return output !== undefined || olds?.toolsetId === undefined
-        ? attrs
-        : Unowned(attrs);
+      return output !== undefined || olds?.toolsetId === undefined ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -262,16 +240,9 @@ export const AppsToolsetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const app = expandApp(news.app, env.project, location);
-      const toolsetId = yield* toPhysicalId(
-        id,
-        news.toolsetId,
-        output?.toolsetId,
-      );
+      const toolsetId = yield* toPhysicalId(id, news.toolsetId, output?.toolsetId);
       const name = output?.name ?? resourceName(app, toolsetId);
       const description = news.description;
       const displayName = news.displayName ?? toolsetId;
@@ -310,14 +281,8 @@ export const AppsToolsetProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const executionChanged = !sameText(
-        current.executionType,
-        news.executionType,
-      );
-      const fakeChanged = !sameJson(
-        current.toolFakeConfig,
-        news.toolFakeConfig,
-      );
+      const executionChanged = !sameText(current.executionType, news.executionType);
+      const fakeChanged = !sameJson(current.toolFakeConfig, news.toolFakeConfig);
       const variantChanged =
         kind === "openApiToolset"
           ? !sameJson(current.openApiToolset, openApiToolset)

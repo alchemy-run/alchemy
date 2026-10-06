@@ -22,9 +22,7 @@ describe("entrypoints", () => {
     expect(DefaultRouterEntrypoint).toBe(RouterInnerEntrypoint);
   });
 
-  it("routes directly through the inner entrypoint at the runtime boundary", async ({
-    expect,
-  }) => {
+  it("routes directly through the inner entrypoint at the runtime boundary", async ({ expect }) => {
     // Alchemy's generated Cloudflare.Env is empty, while the test runtime
     // injects these router bindings dynamically.
     const testRuntimeEnv = runtimeEnv as typeof runtimeEnv & Partial<Env>;
@@ -40,9 +38,7 @@ describe("entrypoints", () => {
       },
     } as Env["ASSET_WORKER"];
 
-    const response = await (exports as { default: Fetcher }).default.fetch(
-      "https://example.com",
-    );
+    const response = await (exports as { default: Fetcher }).default.fetch("https://example.com");
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("asset worker");
@@ -61,9 +57,7 @@ describe("entrypoints", () => {
       },
     });
 
-    const response = await new RouterOuterEntrypoint(ctx, {} as Env).fetch(
-      request,
-    );
+    const response = await new RouterOuterEntrypoint(ctx, {} as Env).fetch(request);
 
     expect(createInnerEntrypoint).toHaveBeenCalledOnce();
     expect(createInnerEntrypoint).toHaveBeenCalledWith({ props: {} });
@@ -87,9 +81,7 @@ describe("inner entrypoint unit tests", () => {
       },
     } as Env;
 
-    await expect(
-      async () => await fetchFromInnerEntrypoint(request, env, ctx),
-    ).rejects.toThrow(
+    await expect(async () => await fetchFromInnerEntrypoint(request, env, ctx)).rejects.toThrow(
       "Fetch for user worker without having a user worker binding",
     );
   });
@@ -124,9 +116,7 @@ describe("inner entrypoint unit tests", () => {
     expect(await response.text()).toEqual("hello from user worker");
   });
 
-  it("returns fetch from asset worker when matching existing asset path", async ({
-    expect,
-  }) => {
+  it("returns fetch from asset worker when matching existing asset path", async ({ expect }) => {
     const request = new Request("https://example.com");
     const ctx = createExecutionContext();
 
@@ -413,8 +403,7 @@ describe("inner entrypoint unit tests", () => {
 
       it.for([
         {
-          description:
-            "allows /_next/image requests with remote URLs when fetched as image",
+          description: "allows /_next/image requests with remote URLs when fetched as image",
           url: `https://example.com${subpath}_next/image?url=https://example.com/image.jpg`,
           headers: { "sec-fetch-dest": "image" } as HeadersInit,
           userWorkerResponse: {
@@ -500,10 +489,7 @@ describe("inner entrypoint unit tests", () => {
         },
       ])(
         "$description",
-        async (
-          { url, headers, userWorkerResponse, expectedStatus, expectedBody },
-          { expect },
-        ) => {
+        async ({ url, headers, userWorkerResponse, expectedStatus, expectedBody }, { expect }) => {
           const request = new Request(url, { headers });
           const ctx = createExecutionContext();
 
@@ -536,9 +522,7 @@ describe("inner entrypoint unit tests", () => {
     it("blocks protocol relative URLs with a different hostname when not fetched as an image", async ({
       expect,
     }) => {
-      const request = new Request(
-        "https://example.com/_image?href=//evil.com/ssrf",
-      );
+      const request = new Request("https://example.com/_image?href=//evil.com/ssrf");
       const env = {
         CONFIG: {
           has_user_worker: true,
@@ -586,10 +570,7 @@ describe("inner entrypoint unit tests", () => {
       },
     ])(
       "$description",
-      async (
-        { url, headers, userWorkerResponse, expectedStatus, expectedBody },
-        { expect },
-      ) => {
+      async ({ url, headers, userWorkerResponse, expectedStatus, expectedBody }, { expect }) => {
         const request = new Request(url, { headers });
         const env = {
           CONFIG: {
@@ -619,8 +600,7 @@ describe("inner entrypoint unit tests", () => {
       {
         description: String.raw`/cdn-cgi\image bypass`,
         rawUrl: String.raw`https://example.com/cdn-cgi\image/q=75/https://evil.com/ssrf`,
-        expectedLocation:
-          "https://example.com/cdn-cgi/image/q=75/https://evil.com/ssrf",
+        expectedLocation: "https://example.com/cdn-cgi/image/q=75/https://evil.com/ssrf",
       },
       {
         description: String.raw`/cdn-cgi\_next_cache bypass`,
@@ -755,8 +735,7 @@ describe("inner entrypoint unit tests", () => {
 
     const nonInterferenceCases = [
       {
-        description:
-          "does not interfere with legitimate /cdn-cgi/ forward-slash requests",
+        description: "does not interfere with legitimate /cdn-cgi/ forward-slash requests",
         url: "https://example.com/cdn-cgi/image/q=75/https://other.com/image.jpg",
         userWorkerResponse: {
           body: "image data",
@@ -767,8 +746,7 @@ describe("inner entrypoint unit tests", () => {
         expectedBody: "image data",
       },
       {
-        description:
-          "does not interfere with escaped backslashes /cdn-cgi%5C requests",
+        description: "does not interfere with escaped backslashes /cdn-cgi%5C requests",
         url: "https://example.com/cdn-cgi%5Cimage/q=75/https://other.com/image.jpg",
         userWorkerResponse: {
           body: "image data",
@@ -779,8 +757,7 @@ describe("inner entrypoint unit tests", () => {
         expectedBody: "image data",
       },
       {
-        description:
-          "does not interfere with escaped forward slashes /cdn-cgi%2F requests",
+        description: "does not interfere with escaped forward slashes /cdn-cgi%2F requests",
         url: "https://example.com/cdn-cgi%2Fimage/q=75/https://other.com/image.jpg",
         userWorkerResponse: {
           body: "image data",
@@ -816,10 +793,7 @@ describe("inner entrypoint unit tests", () => {
 
     it.for(nonInterferenceCases)(
       "$description when invoke_user_worker_ahead_of_assets is true",
-      async (
-        { url, userWorkerResponse, expectedStatus, expectedBody },
-        { expect },
-      ) => {
+      async ({ url, userWorkerResponse, expectedStatus, expectedBody }, { expect }) => {
         const request = new Request(url);
         const env = {
           CONFIG: {
@@ -851,10 +825,7 @@ describe("inner entrypoint unit tests", () => {
 
     it.for(nonInterferenceCases)(
       "$description when invoke_user_worker_ahead_of_assets is false and no asset matches",
-      async (
-        { url, userWorkerResponse, expectedStatus, expectedBody },
-        { expect },
-      ) => {
+      async ({ url, userWorkerResponse, expectedStatus, expectedBody }, { expect }) => {
         const request = new Request(url);
         const env = {
           CONFIG: {
@@ -876,9 +847,7 @@ describe("inner entrypoint unit tests", () => {
           },
           ASSET_WORKER: {
             async fetch(_request: Request): Promise<Response> {
-              return new Response(
-                "should not reach asset worker as asset does not exist",
-              );
+              return new Response("should not reach asset worker as asset does not exist");
             },
             async unstable_canFetch(_request: Request): Promise<boolean> {
               return false;
@@ -957,9 +926,7 @@ describe("inner entrypoint unit tests", () => {
       expect(await response.text()).toEqual("hello from asset worker");
     });
 
-    it("returns error page instead of user worker when no asset found", async ({
-      expect,
-    }) => {
+    it("returns error page instead of user worker when no asset found", async ({ expect }) => {
       const request = new Request("https://example.com/asset");
       const ctx = createExecutionContext();
 
@@ -1024,9 +991,7 @@ describe("inner entrypoint unit tests", () => {
       expect(text).toContain("This website has been temporarily rate limited");
     });
 
-    it("returns error page instead of user worker for user_worker rules", async ({
-      expect,
-    }) => {
+    it("returns error page instead of user worker for user_worker rules", async ({ expect }) => {
       const request = new Request("https://example.com/api/asset");
       const ctx = createExecutionContext();
 
@@ -1060,9 +1025,7 @@ describe("inner entrypoint unit tests", () => {
       expect(text).toContain("This website has been temporarily rate limited");
     });
 
-    it("returns fetch from asset worker for asset_worker rules", async ({
-      expect,
-    }) => {
+    it("returns fetch from asset worker for asset_worker rules", async ({ expect }) => {
       const request = new Request("https://example.com/api/asset");
       const ctx = createExecutionContext();
 

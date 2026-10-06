@@ -191,9 +191,7 @@ const listOwned = (project: string, region: string) =>
             Stream.filter((item) => hasOwnershipMarker(item.description)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as mc.Source[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as mc.Source[])),
           ),
       ),
     );
@@ -210,10 +208,7 @@ export const SourceProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.sourceId ?? output?.sourceId,
         nextId: news.sourceId ?? olds?.sourceId ?? output?.sourceId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -224,24 +219,13 @@ export const SourceProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const sourceId = yield* toPhysicalId(
-        id,
-        olds?.sourceId,
-        output?.sourceId,
-        "source",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, sourceId);
+      const sourceId = yield* toPhysicalId(id, olds?.sourceId, output?.sourceId, "source");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, sourceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -253,16 +237,8 @@ export const SourceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const sourceId = yield* toPhysicalId(
-        id,
-        news.sourceId,
-        output?.sourceId,
-        "source",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const sourceId = yield* toPhysicalId(id, news.sourceId, output?.sourceId, "source");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, sourceId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -296,8 +272,7 @@ export const SourceProvider = () =>
 
       const descriptionChanged = (current.description ?? "") !== description;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const priorityChanged =
-        fingerprint(current.priority) !== fingerprint(news.priority);
+      const priorityChanged = fingerprint(current.priority) !== fingerprint(news.priority);
       const mask = fieldMask([
         descriptionChanged && "description",
         displayNameChanged && "displayName",
@@ -316,26 +291,21 @@ export const SourceProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* mc
-        .deleteProjectsLocationsSources({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 10,
-            schedule: Schedule.spaced("3 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* mc.deleteProjectsLocationsSources({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 10,
+          schedule: Schedule.spaced("3 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }
@@ -343,10 +313,7 @@ export const SourceProvider = () =>
     }),
   });
 
-export const sourceNameOf = (
-  value: string,
-  project: string,
-  location: string,
-) => expandParent(value, project, location, "sources");
+export const sourceNameOf = (value: string, project: string, location: string) =>
+  expandParent(value, project, location, "sources");
 
 export const sourceIdOf = (name: string) => lastSegment(name);

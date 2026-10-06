@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   datapipelines.getProjectsLocationsPipelines({ name }).pipe(
@@ -47,9 +44,7 @@ test.provider(
         pageSize: 10,
       });
       expect(
-        (page.pipelines ?? []).map((pipeline) =>
-          pipeline.name?.split("/").pop(),
-        ),
+        (page.pipelines ?? []).map((pipeline) => pipeline.name?.split("/").pop()),
       ).not.toContain("alchemy-missing-pipeline");
 
       yield* stack.destroy();
@@ -111,9 +106,7 @@ test.provider(
       });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.displayName).toEqual("word-count");
-      expect(fetched.pipelineSources?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetched.pipelineSources?.["alchemy-id"]).toEqual(expect.any(String));
       expect(fetched.type).toEqual("PIPELINE_TYPE_BATCH");
 
       const updated = yield* stack.deploy(
@@ -158,9 +151,7 @@ test.provider(
       });
       expect(fetchedUpdate.displayName).toEqual("word-count-v2");
       expect(fetchedUpdate.scheduleInfo?.schedule).toEqual("0 0 1 2 *");
-      expect(fetchedUpdate.pipelineSources?.["alchemy-id"]).toEqual(
-        expect.any(String),
-      );
+      expect(fetchedUpdate.pipelineSources?.["alchemy-id"]).toEqual(expect.any(String));
 
       yield* stack.destroy();
 

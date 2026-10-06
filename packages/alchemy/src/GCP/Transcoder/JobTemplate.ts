@@ -173,11 +173,7 @@ export const JobTemplate = Resource<JobTemplate>("GCP.Transcoder.JobTemplate");
 
 export { JobTemplateNotResolved, JobTemplateStillExists };
 
-const toAttrs = (
-  template: transcoder.JobTemplate,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (template: transcoder.JobTemplate, project: string, region: string) => {
   const name = template.name ?? "";
   const parsed = parseName(name, region);
   return {
@@ -200,23 +196,15 @@ export const JobTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.jobTemplateId ?? output?.jobTemplateId;
       const nextId = news.jobTemplateId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        previousId !== nextId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const idChanged = previousId !== undefined && nextId !== undefined && previousId !== nextId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const locationChanged = previousLocation !== nextLocation;
-      const configChanged =
-        olds !== undefined && configKey(news.config) !== configKey(olds.config);
-      const labelsChanged =
-        olds !== undefined && labelsKey(news.labels) !== labelsKey(olds.labels);
+      const configChanged = olds !== undefined && configKey(news.config) !== configKey(olds.config);
+      const labelsChanged = olds !== undefined && labelsKey(news.labels) !== labelsKey(olds.labels);
       if (!idChanged && !locationChanged && !configChanged && !labelsChanged) {
         return undefined;
       }
@@ -228,23 +216,13 @@ export const JobTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const jobTemplateId = yield* toJobTemplateId(
-        id,
-        olds?.jobTemplateId,
-        output?.jobTemplateId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, jobTemplateId);
+      const jobTemplateId = yield* toJobTemplateId(id, olds?.jobTemplateId, output?.jobTemplateId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, jobTemplateId);
       const existing = yield* getJobTemplate(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -256,15 +234,8 @@ export const JobTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const jobTemplateId = yield* toJobTemplateId(
-        id,
-        news.jobTemplateId,
-        output?.jobTemplateId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const jobTemplateId = yield* toJobTemplateId(id, news.jobTemplateId, output?.jobTemplateId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const name = resourceName(env.project, location, jobTemplateId);
       const desiredLabels = yield* desiredLabelsOf(id, news.labels);

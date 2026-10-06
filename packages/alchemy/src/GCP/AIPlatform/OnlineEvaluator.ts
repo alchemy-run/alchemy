@@ -131,9 +131,7 @@ export type OnlineEvaluator = Resource<
  * @resource
  * @category AIPlatform
  */
-export const OnlineEvaluator = Resource<OnlineEvaluator>(
-  "GCP.AIPlatform.OnlineEvaluator",
-);
+export const OnlineEvaluator = Resource<OnlineEvaluator>("GCP.AIPlatform.OnlineEvaluator");
 
 export class OnlineEvaluatorNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.OnlineEvaluatorNotResolved",
@@ -150,10 +148,7 @@ const defaultConfig = (
   maxEvaluatedSamplesPerRun: config?.maxEvaluatedSamplesPerRun,
 });
 
-const toAttrs = (
-  evaluator: aiplatform.GoogleCloudAiplatformV1OnlineEvaluator,
-  project: string,
-) => {
+const toAttrs = (evaluator: aiplatform.GoogleCloudAiplatformV1OnlineEvaluator, project: string) => {
   const name = evaluator.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   const display = parseDisplayName(evaluator.displayName);
@@ -178,9 +173,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (
-        evaluator,
-      ): evaluator is aiplatform.GoogleCloudAiplatformV1OnlineEvaluator =>
+      (evaluator): evaluator is aiplatform.GoogleCloudAiplatformV1OnlineEvaluator =>
         evaluator !== undefined,
       () => new AiPlatformNotResolved({ name }),
     ),
@@ -225,32 +218,16 @@ const findOwned = (parent: string, id: string) =>
 
 export const OnlineEvaluatorProvider = () =>
   Provider.succeed(OnlineEvaluator, {
-    stables: [
-      "name",
-      "onlineEvaluatorId",
-      "project",
-      "location",
-      "agentResource",
-      "createTime",
-    ],
+    stables: ["name", "onlineEvaluatorId", "project", "location", "agentResource", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const agentChanged =
-        news.agentResource !==
-        (olds?.agentResource ?? output?.agentResource ?? news.agentResource);
-      const replace =
-        previousLocation !== nextLocation ||
-        (olds !== undefined && agentChanged);
+        news.agentResource !== (olds?.agentResource ?? output?.agentResource ?? news.agentResource);
+      const replace = previousLocation !== nextLocation || (olds !== undefined && agentChanged);
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -260,20 +237,14 @@ export const OnlineEvaluatorProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : yield* findOwned(parent, id);
+        output?.name !== undefined ? yield* getByName(output.name) : yield* findOwned(parent, id);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDisplayName(existing.displayName);
-      return (yield* hasAlchemyLabels(id, parsed.labels)) ||
-        (yield* ownedById(id, parsed.labels))
+      return (yield* hasAlchemyLabels(id, parsed.labels)) || (yield* ownedById(id, parsed.labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -281,53 +252,43 @@ export const OnlineEvaluatorProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const pages = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) =>
-            collectPages(
-              aiplatform.listProjectsLocationsOnlineEvaluators.pages({
-                parent: locationParent(env.project, location),
-                pageSize: 100,
-              }),
-            ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
+        const pages = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          collectPages(
+            aiplatform.listProjectsLocationsOnlineEvaluators.pages({
+              parent: locationParent(env.project, location),
+              pageSize: 100,
+            }),
+          ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([]))),
         )).flat();
         return pages.flatMap((page) =>
           (page.onlineEvaluators ?? [])
-            .filter((evaluator) =>
-              hasDisplayNameOwnership(evaluator.displayName),
-            )
+            .filter((evaluator) => hasDisplayNameOwnership(evaluator.displayName))
             .map((evaluator) => toAttrs(evaluator, env.project)),
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const internal = yield* createInternalLabels(id);
       const displayName = encodeDisplayName(internal, news.displayName);
       const config = defaultConfig(news.config);
 
       let current =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : yield* findOwned(parent, id);
+        output?.name !== undefined ? yield* getByName(output.name) : yield* findOwned(parent, id);
 
       if (current === undefined) {
-        const created =
-          yield* aiplatform.createProjectsLocationsOnlineEvaluators({
-            parent,
-            body: {
-              displayName,
-              agentResource: news.agentResource,
-              metricSources: news.metricSources,
-              config,
-              cloudObservability: news.cloudObservability,
-            },
-          });
+        const created = yield* aiplatform.createProjectsLocationsOnlineEvaluators({
+          parent,
+          body: {
+            displayName,
+            agentResource: news.agentResource,
+            metricSources: news.metricSources,
+            config,
+            cloudObservability: news.cloudObservability,
+          },
+        });
         yield* waitForOperation(created, { alreadyExistsOk: true });
         const createdName = resourceNameFromOperation(created);
         current =
@@ -344,13 +305,9 @@ export const OnlineEvaluatorProvider = () =>
 
       const observedName = current.name;
       const observedDisplay = parseDisplayName(current.displayName);
-      const displayChanged =
-        (observedDisplay.displayName ?? "") !== (news.displayName ?? "");
+      const displayChanged = (observedDisplay.displayName ?? "") !== (news.displayName ?? "");
       const configChanged = !jsonEqual(current.config, config);
-      const metricsChanged = !jsonEqual(
-        current.metricSources,
-        news.metricSources,
-      );
+      const metricsChanged = !jsonEqual(current.metricSources, news.metricSources);
 
       if (displayChanged || configChanged || metricsChanged) {
         const updateMask = [
@@ -358,17 +315,16 @@ export const OnlineEvaluatorProvider = () =>
           configChanged ? "config" : undefined,
           metricsChanged ? "metric_sources" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const patched =
-          yield* aiplatform.patchProjectsLocationsOnlineEvaluators({
+        const patched = yield* aiplatform.patchProjectsLocationsOnlineEvaluators({
+          name: observedName,
+          updateMask: updateMask.join(","),
+          body: {
             name: observedName,
-            updateMask: updateMask.join(","),
-            body: {
-              name: observedName,
-              displayName,
-              config,
-              metricSources: news.metricSources,
-            },
-          });
+            displayName,
+            config,
+            metricSources: news.metricSources,
+          },
+        });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);
       }

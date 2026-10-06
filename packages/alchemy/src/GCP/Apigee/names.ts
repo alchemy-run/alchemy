@@ -1,5 +1,5 @@
-import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Effect from "effect/Effect";
+import { createPhysicalName } from "../../PhysicalName.ts";
 
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
@@ -13,8 +13,7 @@ export const organizationOf = (
   project: string,
 ) => explicit ?? existing ?? project;
 
-export const orgParent = (organization: string) =>
-  `organizations/${organization}`;
+export const orgParent = (organization: string) => `organizations/${organization}`;
 
 export const organizationFromName = (name: string | undefined) => {
   if (name === undefined) return undefined;
@@ -52,6 +51,4 @@ export const sameJson = (left: unknown, right: unknown) =>
 export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());

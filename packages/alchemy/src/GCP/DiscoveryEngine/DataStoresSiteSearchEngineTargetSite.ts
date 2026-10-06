@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  expandDataStore,
-  matchesUriPattern,
-  parseResourceName,
-} from "./internal.ts";
+import { expandDataStore, matchesUriPattern, parseResourceName } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
 
 export type DataStoresSiteSearchEngineTargetSiteProps = {
@@ -112,10 +108,9 @@ export type DataStoresSiteSearchEngineTargetSite = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const DataStoresSiteSearchEngineTargetSite =
-  Resource<DataStoresSiteSearchEngineTargetSite>(
-    "GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSite",
-  );
+export const DataStoresSiteSearchEngineTargetSite = Resource<DataStoresSiteSearchEngineTargetSite>(
+  "GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSite",
+);
 
 export class DataStoresSiteSearchEngineTargetSiteNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSiteNotResolved",
@@ -138,8 +133,7 @@ const toAttrs = (
     dataStore: parsed.dataStore,
     project: parsed.project || project,
     location: parsed.location,
-    providedUriPattern:
-      site.providedUriPattern ?? pattern ?? site.generatedUriPattern,
+    providedUriPattern: site.providedUriPattern ?? pattern ?? site.generatedUriPattern,
     generatedUriPattern: site.generatedUriPattern,
     rootDomainUri: site.rootDomainUri,
     exactMatch: site.exactMatch === true,
@@ -166,11 +160,7 @@ const listAtParent = (parent: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
-const findByPattern = (
-  uri: string,
-  parent: string | undefined,
-  hinted?: string,
-) =>
+const findByPattern = (uri: string, parent: string | undefined, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
@@ -204,8 +194,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (previousExact !== nextExact) {
         return { action: "replace" as const, deleteFirst: true };
       }
-      const previousUri =
-        olds?.providedUriPattern ?? output?.providedUriPattern;
+      const previousUri = olds?.providedUriPattern ?? output?.providedUriPattern;
       if (
         previousUri !== undefined &&
         news.providedUriPattern !== undefined &&
@@ -224,21 +213,13 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.dataStore
-        ? expandDataStore(
-            olds.dataStore,
-            env.project,
-            output?.location ?? "global",
-          )
+        ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
         : undefined;
       const uri = olds?.providedUriPattern ?? output?.providedUriPattern;
       const existing =
         uri === undefined
           ? undefined
-          : yield* findByPattern(
-              uri,
-              parent ? siteSearchEngine(parent) : undefined,
-              output?.name,
-            );
+          : yield* findByPattern(uri, parent ? siteSearchEngine(parent) : undefined, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, uri);
       // No labels field: without prior state it may not be ours.
@@ -247,21 +228,13 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
       const engine = siteSearchEngine(parent);
       const providedUriPattern = news.providedUriPattern;
       const exactMatch = news.exactMatch === true;
       const type = news.type ?? "INCLUDE";
 
-      let current = yield* findByPattern(
-        providedUriPattern,
-        engine,
-        output?.name,
-      );
+      let current = yield* findByPattern(providedUriPattern, engine, output?.name);
 
       if (current === undefined) {
         const created = yield* discoveryengine
@@ -286,22 +259,19 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
         });
       }
 
-      const typeChanged =
-        news.type !== undefined && (current.type ?? "INCLUDE") !== type;
+      const typeChanged = news.type !== undefined && (current.type ?? "INCLUDE") !== type;
 
       if (typeChanged) {
         const patched =
-          yield* discoveryengine.patchProjectsLocationsDataStoresSiteSearchEngineTargetSites(
-            {
-              name: current.name ?? "",
-              body: {
-                name: current.name,
-                providedUriPattern,
-                exactMatch,
-                type,
-              },
+          yield* discoveryengine.patchProjectsLocationsDataStoresSiteSearchEngineTargetSites({
+            name: current.name ?? "",
+            body: {
+              name: current.name,
+              providedUriPattern,
+              exactMatch,
+              type,
             },
-          );
+          });
         yield* waitForOperation(patched);
         current = (yield* getByName(current.name ?? "")) ?? current;
       }

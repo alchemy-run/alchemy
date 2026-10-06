@@ -33,7 +33,6 @@ export interface ListManagedDataIdentifiers extends Binding.Service<
     >
   >
 > {}
-export const ListManagedDataIdentifiers =
-  Binding.Service<ListManagedDataIdentifiers>(
-    "AWS.Macie2.ListManagedDataIdentifiers",
-  );
+export const ListManagedDataIdentifiers = Binding.Service<ListManagedDataIdentifiers>(
+  "AWS.Macie2.ListManagedDataIdentifiers",
+);

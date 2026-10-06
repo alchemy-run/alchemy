@@ -1,10 +1,10 @@
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { Dataset } from "./Dataset.ts";
-import { Query, type QueryRequest } from "./Query.ts";
 import { bindGcpHost } from "../Host.ts";
 import { grantFor } from "../HttpBinding.ts";
+import type { Dataset } from "./Dataset.ts";
+import { Query, type QueryRequest } from "./Query.ts";
 
 /**
  * HTTP implementation of {@link Query}.
@@ -24,10 +24,7 @@ export const QueryHttp = Layer.effect(
           // bigquery.jobs.create is only grantable on the project.
           { role: "roles/bigquery.jobUser" },
           // Read access on this dataset only (its access list).
-          grantFor(
-            { role: "roles/bigquery.dataViewer", on: "bigquery.dataset" },
-            dataset.name,
-          ),
+          grantFor({ role: "roles/bigquery.dataViewer", on: "bigquery.dataset" }, dataset.name),
         ],
       });
       const project = yield* dataset.project;

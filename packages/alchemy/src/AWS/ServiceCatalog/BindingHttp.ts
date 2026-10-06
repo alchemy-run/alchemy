@@ -57,16 +57,12 @@ export const makeServiceCatalogHttpBinding = <I, A, E, R>(options: {
               Resource: ["*"],
             },
           ];
-          yield* host.bind`Allow(${host}, AWS.ServiceCatalog.${options.capability}())`(
-            {
-              policyStatements,
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ServiceCatalog.${options.capability}())`({
+            policyStatements,
+          });
         }
       }
-      return Effect.fn(`AWS.ServiceCatalog.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.ServiceCatalog.${options.capability}`)(function* (request?: I) {
         return yield* op((request ?? {}) as I);
       });
     });

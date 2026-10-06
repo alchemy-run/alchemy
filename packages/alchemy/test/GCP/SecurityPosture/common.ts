@@ -18,9 +18,7 @@ export const organization =
     ? organizationId
     : `organizations/${organizationId}`;
 export const runLifecycle =
-  !process.env.FAST &&
-  process.env.GCP_TEST_SECURITY_POSTURE === "1" &&
-  organization.length > 0;
+  !process.env.FAST && process.env.GCP_TEST_SECURITY_POSTURE === "1" && organization.length > 0;
 
 export const waitUntilPostureGone = (name: string) =>
   securityposture.getOrganizationsLocationsPostures({ name }).pipe(

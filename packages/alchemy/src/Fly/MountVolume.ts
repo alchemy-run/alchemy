@@ -80,9 +80,7 @@ export interface MountedDisk {
   name: string;
 }
 
-const isBindHost = (
-  value: unknown,
-): value is Resource<string, any, any, ServiceBinding> =>
+const isBindHost = (value: unknown): value is Resource<string, any, any, ServiceBinding> =>
   typeof value === "object" &&
   value !== null &&
   ((value as { Type?: string }).Type === "Fly.Service" ||

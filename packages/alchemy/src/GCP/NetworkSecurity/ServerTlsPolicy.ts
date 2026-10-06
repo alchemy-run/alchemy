@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -204,9 +199,7 @@ export type ServerTlsPolicy = Resource<
  * @resource
  * @category NetworkSecurity
  */
-export const ServerTlsPolicy = Resource<ServerTlsPolicy>(
-  "GCP.NetworkSecurity.ServerTlsPolicy",
-);
+export const ServerTlsPolicy = Resource<ServerTlsPolicy>("GCP.NetworkSecurity.ServerTlsPolicy");
 
 export class ServerTlsPolicyNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.ServerTlsPolicyNotResolved",
@@ -227,9 +220,7 @@ const toCertificateProvider = (
     | undefined,
 ): ServerTlsCertificateProvider | undefined => {
   if (value === undefined) return undefined;
-  const grpcEndpoint = value.grpcEndpoint
-    ? { targetUri: value.grpcEndpoint.targetUri }
-    : undefined;
+  const grpcEndpoint = value.grpcEndpoint ? { targetUri: value.grpcEndpoint.targetUri } : undefined;
   const certificateProviderInstance = value.certificateProviderInstance
     ? {
         pluginInstance: value.certificateProviderInstance.pluginInstance,
@@ -248,9 +239,7 @@ const toMtlsPolicy = (
   return {
     clientValidationCa: (value.clientValidationCa ?? [])
       .map((entry) => toCertificateProvider(entry))
-      .filter(
-        (entry): entry is ServerTlsCertificateProvider => entry !== undefined,
-      ),
+      .filter((entry): entry is ServerTlsCertificateProvider => entry !== undefined),
     clientValidationTrustConfig: value.clientValidationTrustConfig,
     clientValidationMode: value.clientValidationMode,
   };
@@ -282,13 +271,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy
-        ? Effect.succeed(policy)
-        : Effect.fail(new ServerTlsPolicyNotResolved({ name })),
+      policy ? Effect.succeed(policy) : Effect.fail(new ServerTlsPolicyNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.ServerTlsPolicyNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.ServerTlsPolicyNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -297,13 +283,10 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy === undefined
-        ? Effect.void
-        : Effect.fail(new ServerTlsPolicyStillExists({ name })),
+      policy === undefined ? Effect.void : Effect.fail(new ServerTlsPolicyStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.ServerTlsPolicyStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.ServerTlsPolicyStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -317,13 +300,9 @@ const listOwned = (project: string) =>
       returnPartialSuccess: true,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.serverTlsPolicies ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.serverTlsPolicies ?? [])),
       Stream.filter((policy) =>
-        Object.keys(policy.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(policy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((policy) => toAttrs(policy, project)),
       Stream.runCollect,
@@ -350,16 +329,10 @@ export const ServerTlsPolicyProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.serverTlsPolicyId ?? output?.serverTlsPolicyId;
       const nextId = news.serverTlsPolicyId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -371,24 +344,20 @@ export const ServerTlsPolicyProvider = () =>
           "") !== "";
       if (!alb) return undefined;
       const descriptionChanged =
-        (news.description ?? "") !==
-        (olds?.description ?? output?.description ?? "");
+        (news.description ?? "") !== (olds?.description ?? output?.description ?? "");
       const labelsChanged = !sameJson(
         toLabels(news.labels ?? {}),
         toLabels(olds?.labels ?? output?.labels ?? {}),
       );
       const allowOpenChanged =
-        (news.allowOpen === true) !==
-        (olds?.allowOpen === true || output?.allowOpen === true);
+        (news.allowOpen === true) !== (olds?.allowOpen === true || output?.allowOpen === true);
       const mtlsChanged = !sameJson(
         toMtlsPolicy(news.mtlsPolicy),
         toMtlsPolicy(olds?.mtlsPolicy ?? output?.mtlsPolicy),
       );
       const certificateChanged = !sameJson(
         toCertificateProvider(news.serverCertificate),
-        toCertificateProvider(
-          olds?.serverCertificate ?? output?.serverCertificate,
-        ),
+        toCertificateProvider(olds?.serverCertificate ?? output?.serverCertificate),
       );
       if (
         descriptionChanged ||
@@ -412,14 +381,11 @@ export const ServerTlsPolicyProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, serverTlsPolicyId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, serverTlsPolicyId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -437,12 +403,7 @@ export const ServerTlsPolicyProvider = () =>
         "servertls",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        serverTlsPolicyId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, serverTlsPolicyId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -481,17 +442,13 @@ export const ServerTlsPolicyProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const allowOpenChanged = (current.allowOpen === true) !== allowOpen;
       const certificateChanged = !sameJson(
         toCertificateProvider(current.serverCertificate),
         desiredCertificate,
       );
-      const mtlsChanged = !sameJson(
-        toMtlsPolicy(current.mtlsPolicy),
-        desiredMtls,
-      );
+      const mtlsChanged = !sameJson(toMtlsPolicy(current.mtlsPolicy), desiredMtls);
 
       if (
         labelsChanged ||
@@ -507,19 +464,18 @@ export const ServerTlsPolicyProvider = () =>
           certificateChanged ? "serverCertificate" : undefined,
           mtlsChanged ? "mtlsPolicy" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsServerTlsPolicies({
+        const operation = yield* networksecurity.patchProjectsLocationsServerTlsPolicies({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              allowOpen,
-              serverCertificate: desiredCertificate,
-              mtlsPolicy: desiredMtls,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            allowOpen,
+            serverCertificate: desiredCertificate,
+            mtlsPolicy: desiredMtls,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);
       }

@@ -231,9 +231,7 @@ const toAttrs = (
   const parsed = parseVersionName(version.name ?? "");
   const versionId = version.id ?? parsed.versionsId ?? "";
   return {
-    name:
-      version.name ??
-      `apps/${appsId}/services/${serviceId}/versions/${versionId}`,
+    name: version.name ?? `apps/${appsId}/services/${serviceId}/versions/${versionId}`,
     versionId,
     serviceId: parsed.servicesId ?? serviceId,
     appsId: parsed.appsId ?? appsId,
@@ -302,28 +300,16 @@ const desiredBody = (
 
 export const AppsServicesVersionProvider = () =>
   Provider.succeed(AppsServicesVersion, {
-    stables: [
-      "name",
-      "versionId",
-      "serviceId",
-      "appsId",
-      "project",
-      "createTime",
-    ],
+    stables: ["name", "versionId", "serviceId", "appsId", "project", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousApp = olds?.appsId ?? output?.appsId;
       const nextApp = news.appsId ?? previousApp;
-      if (
-        previousApp !== undefined &&
-        nextApp !== undefined &&
-        nextApp !== previousApp
-      ) {
+      if (previousApp !== undefined && nextApp !== undefined && nextApp !== previousApp) {
         return { action: "replace" as const, deleteFirst: false };
       }
-      const previousService =
-        olds?.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE;
+      const previousService = olds?.serviceId ?? output?.serviceId ?? DEFAULT_SERVICE;
       const nextService = news.serviceId ?? previousService;
       if (nextService !== previousService) {
         return { action: "replace" as const, deleteFirst: false };
@@ -345,11 +331,7 @@ export const AppsServicesVersionProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousEnv = olds?.env ?? output?.env;
-      if (
-        previousEnv !== undefined &&
-        news.env !== undefined &&
-        news.env !== previousEnv
-      ) {
+      if (previousEnv !== undefined && news.env !== undefined && news.env !== previousEnv) {
         return { action: "replace" as const, deleteFirst: false };
       }
       if (
@@ -374,16 +356,11 @@ export const AppsServicesVersionProvider = () =>
       );
       let existing = yield* getById(appsId, serviceId, versionId);
       if (existing === undefined) {
-        existing = yield* findOwnedVersion(
-          id,
-          yield* listVersions(appsId, serviceId),
-        );
+        existing = yield* findOwnedVersion(id, yield* listVersions(appsId, serviceId));
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, appsId, serviceId, env.project);
-      return (yield* ownedByAlchemy(id, versionOwnershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, versionOwnershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -393,14 +370,11 @@ export const AppsServicesVersionProvider = () =>
         const collected: ReturnType<typeof toAttrs>[] = [];
         for (const service of services) {
           const parsed = parseVersionName(service.name ?? "");
-          const serviceId =
-            service.id ?? parsed.servicesId ?? lastServiceId(service.name);
+          const serviceId = service.id ?? parsed.servicesId ?? lastServiceId(service.name);
           const versions = yield* listVersions(env.project, serviceId);
           for (const version of versions) {
             if (hasOwnershipMarker(versionOwnershipText(version))) {
-              collected.push(
-                toAttrs(version, env.project, serviceId, env.project),
-              );
+              collected.push(toAttrs(version, env.project, serviceId, env.project));
             }
           }
         }
@@ -423,10 +397,7 @@ export const AppsServicesVersionProvider = () =>
 
       let current = yield* getById(appsId, serviceId, versionId);
       if (current === undefined) {
-        current = yield* findOwnedVersion(
-          id,
-          yield* listVersions(appsId, serviceId),
-        );
+        current = yield* findOwnedVersion(id, yield* listVersions(appsId, serviceId));
       }
 
       if (current === undefined) {
@@ -437,9 +408,7 @@ export const AppsServicesVersionProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<appengine.Operation>({ done: true }),
-            ),
+            Effect.catchTag("Conflict", () => Effect.succeed<appengine.Operation>({ done: true })),
           );
         if (operation.done !== true || operation.name !== undefined) {
           yield* waitForOperation(operation, { appsId });
@@ -455,20 +424,16 @@ export const AppsServicesVersionProvider = () =>
 
       const observedId = current.id ?? versionId;
       const servingChanged =
-        news.servingStatus !== undefined &&
-        !sameText(current.servingStatus, news.servingStatus);
+        news.servingStatus !== undefined && !sameText(current.servingStatus, news.servingStatus);
       const classChanged =
-        news.instanceClass !== undefined &&
-        !sameText(current.instanceClass, news.instanceClass);
+        news.instanceClass !== undefined && !sameText(current.instanceClass, news.instanceClass);
       const automaticChanged =
         news.automaticScaling !== undefined &&
         !jsonEqual(current.automaticScaling, news.automaticScaling);
       const basicChanged =
-        news.basicScaling !== undefined &&
-        !jsonEqual(current.basicScaling, news.basicScaling);
+        news.basicScaling !== undefined && !jsonEqual(current.basicScaling, news.basicScaling);
       const manualChanged =
-        news.manualScaling !== undefined &&
-        !jsonEqual(current.manualScaling, news.manualScaling);
+        news.manualScaling !== undefined && !jsonEqual(current.manualScaling, news.manualScaling);
       const updateMask = updateMaskOf(
         servingChanged ? "servingStatus" : undefined,
         classChanged ? "instanceClass" : undefined,

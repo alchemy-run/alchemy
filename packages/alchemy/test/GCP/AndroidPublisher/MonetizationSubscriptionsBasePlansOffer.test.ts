@@ -1,25 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as androidpublisher from "@distilled.cloud/gcp/androidpublisher_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  logLevel,
-  packageName,
-  probePackageName,
-  missingTag,
-  runLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { logLevel, packageName, probePackageName, missingTag, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const waitUntilGone = (
-  appId: string,
-  productId: string,
-  basePlanId: string,
-  offerId: string,
-) =>
+const waitUntilGone = (appId: string, productId: string, basePlanId: string, offerId: string) =>
   androidpublisher
     .getMonetizationSubscriptionsBasePlansOffers({
       packageName: appId,
@@ -86,9 +75,7 @@ test.provider.skipIf(runLifecycle)(
                 regionalConfigs: [{ regionCode: "US", free: {} }],
               },
             ],
-            regionalConfigs: [
-              { regionCode: "US", newSubscriberAvailability: true },
-            ],
+            regionalConfigs: [{ regionCode: "US", newSubscriberAvailability: true }],
           },
         }),
       );
@@ -110,33 +97,31 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const subscription =
-            yield* GCP.AndroidPublisher.MonetizationSubscription("Premium", {
-              packageName: packageName!,
-              listings: [{ languageCode: "en-US", title: "Premium" }],
-              basePlans: [
-                {
-                  basePlanId: "monthly",
-                  autoRenewingBasePlanType: { billingPeriodDuration: "P1M" },
-                  regionalConfigs: [
-                    {
-                      regionCode: "US",
-                      newSubscriberAvailability: true,
-                      price: { currencyCode: "USD", units: "5" },
-                    },
-                  ],
-                },
-              ],
-            });
-          const offer =
-            yield* GCP.AndroidPublisher.MonetizationSubscriptionsBasePlansOffer(
-              "Intro",
+          const subscription = yield* GCP.AndroidPublisher.MonetizationSubscription("Premium", {
+            packageName: packageName!,
+            listings: [{ languageCode: "en-US", title: "Premium" }],
+            basePlans: [
               {
-                packageName: packageName!,
-                productId: subscription.productId,
                 basePlanId: "monthly",
+                autoRenewingBasePlanType: { billingPeriodDuration: "P1M" },
+                regionalConfigs: [
+                  {
+                    regionCode: "US",
+                    newSubscriberAvailability: true,
+                    price: { currencyCode: "USD", units: "5" },
+                  },
+                ],
               },
-            );
+            ],
+          });
+          const offer = yield* GCP.AndroidPublisher.MonetizationSubscriptionsBasePlansOffer(
+            "Intro",
+            {
+              packageName: packageName!,
+              productId: subscription.productId,
+              basePlanId: "monthly",
+            },
+          );
           return { subscription, offer };
         }),
       );
@@ -144,57 +129,50 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.offer.offerId.length).toBeGreaterThan(0);
       expect(created.offer.productId).toEqual(created.subscription.productId);
 
-      const fetched =
-        yield* androidpublisher.getMonetizationSubscriptionsBasePlansOffers({
-          packageName: created.offer.packageName,
-          productId: created.offer.productId,
-          basePlanId: created.offer.basePlanId,
-          offerId: created.offer.offerId,
-        });
+      const fetched = yield* androidpublisher.getMonetizationSubscriptionsBasePlansOffers({
+        packageName: created.offer.packageName,
+        productId: created.offer.productId,
+        basePlanId: created.offer.basePlanId,
+        offerId: created.offer.offerId,
+      });
       expect(fetched.offerId).toEqual(created.offer.offerId);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const subscription =
-            yield* GCP.AndroidPublisher.MonetizationSubscription("Premium", {
-              packageName: created.subscription.packageName,
-              productId: created.subscription.productId,
-              listings: [{ languageCode: "en-US", title: "Premium" }],
-              basePlans: [
-                {
-                  basePlanId: "monthly",
-                  autoRenewingBasePlanType: { billingPeriodDuration: "P1M" },
-                  regionalConfigs: [
-                    {
-                      regionCode: "US",
-                      newSubscriberAvailability: true,
-                      price: { currencyCode: "USD", units: "5" },
-                    },
-                  ],
-                },
-              ],
-            });
-          const offer =
-            yield* GCP.AndroidPublisher.MonetizationSubscriptionsBasePlansOffer(
-              "Intro",
+          const subscription = yield* GCP.AndroidPublisher.MonetizationSubscription("Premium", {
+            packageName: created.subscription.packageName,
+            productId: created.subscription.productId,
+            listings: [{ languageCode: "en-US", title: "Premium" }],
+            basePlans: [
               {
-                packageName: created.offer.packageName,
-                productId: created.offer.productId,
-                basePlanId: created.offer.basePlanId,
-                offerId: created.offer.offerId,
+                basePlanId: "monthly",
+                autoRenewingBasePlanType: { billingPeriodDuration: "P1M" },
                 regionalConfigs: [
-                  { regionCode: "US", newSubscriberAvailability: false },
+                  {
+                    regionCode: "US",
+                    newSubscriberAvailability: true,
+                    price: { currencyCode: "USD", units: "5" },
+                  },
                 ],
               },
-            );
+            ],
+          });
+          const offer = yield* GCP.AndroidPublisher.MonetizationSubscriptionsBasePlansOffer(
+            "Intro",
+            {
+              packageName: created.offer.packageName,
+              productId: created.offer.productId,
+              basePlanId: created.offer.basePlanId,
+              offerId: created.offer.offerId,
+              regionalConfigs: [{ regionCode: "US", newSubscriberAvailability: false }],
+            },
+          );
           return { subscription, offer };
         }),
       );
 
       expect(updated.offer.offerId).toEqual(created.offer.offerId);
-      expect(
-        updated.offer.regionalConfigs?.[0]?.newSubscriberAvailability,
-      ).toEqual(false);
+      expect(updated.offer.regionalConfigs?.[0]?.newSubscriberAvailability).toEqual(false);
 
       yield* stack.destroy();
 

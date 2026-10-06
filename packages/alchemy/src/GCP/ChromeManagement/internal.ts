@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 /** Optional deploy-time setting from the ConfigProvider (env by default). */
 const optionalSetting = (key: string) =>
@@ -37,8 +33,7 @@ export const parentOf = (name: string) => {
   return parts.slice(0, -2).join("/");
 };
 
-export const normalizeName = (value: string) =>
-  value.replace(/\/+$/, "").trim();
+export const normalizeName = (value: string) => value.replace(/\/+$/, "").trim();
 
 export const toCustomerName = (value: string) => {
   const trimmed = normalizeName(value);
@@ -56,22 +51,12 @@ export const toCustomerName = (value: string) => {
   return `${CUSTOMER_PREFIX}${lastSegment(trimmed)}`;
 };
 
-export const toConnectorConfigName = (
-  parent: string,
-  connectorConfigId?: string,
-) => {
-  if (
-    connectorConfigId !== undefined &&
-    connectorConfigId.includes("/connectorConfigs/")
-  ) {
+export const toConnectorConfigName = (parent: string, connectorConfigId?: string) => {
+  if (connectorConfigId !== undefined && connectorConfigId.includes("/connectorConfigs/")) {
     return normalizeName(connectorConfigId);
   }
   const customer = toCustomerName(parent);
-  if (
-    connectorConfigId !== undefined &&
-    connectorConfigId.length > 0 &&
-    customer.length > 0
-  ) {
+  if (connectorConfigId !== undefined && connectorConfigId.length > 0 && customer.length > 0) {
     return `${customer}/connectorConfigs/${lastSegment(connectorConfigId)}`;
   }
   return "";
@@ -130,18 +115,14 @@ const stripInputOnly = (value: unknown): unknown => {
 };
 
 export const visibleDetails = (
-  details:
-    | chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails
-    | undefined,
+  details: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails | undefined,
 ) =>
   stripInputOnly(details) as
     | chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails
     | undefined;
 
 const secretSlice = (
-  details:
-    | chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails
-    | undefined,
+  details: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails | undefined,
 ) => {
   if (!details) return undefined;
   return {
@@ -155,19 +136,12 @@ const secretSlice = (
 };
 
 export const detailsNeedSync = (
-  observed:
-    | chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails
-    | undefined,
-  desired:
-    | chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails
-    | undefined,
-  previous:
-    | chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails
-    | undefined,
+  observed: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails | undefined,
+  desired: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails | undefined,
+  previous: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails | undefined,
 ) =>
   !jsonEqual(visibleDetails(observed), visibleDetails(desired)) ||
-  (previous !== undefined &&
-    !jsonEqual(secretSlice(desired), secretSlice(previous)));
+  (previous !== undefined && !jsonEqual(secretSlice(desired), secretSlice(previous)));
 
 const markerOf = (stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
@@ -177,10 +151,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -201,10 +172,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -232,14 +200,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -249,18 +213,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -286,11 +241,7 @@ export const toDisplayName = (
     });
   });
 
-export const toConnectorConfigId = (
-  id: string,
-  requested: string | undefined,
-  existing?: string,
-) =>
+export const toConnectorConfigId = (id: string, requested: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (requested !== undefined && requested.length > 0) {
       return lastSegment(requested);
@@ -375,10 +326,7 @@ export const findOwnedConnectorConfig = (id: string, parent?: string) =>
     return undefined;
   });
 
-export const findConnectorConfigByName = (
-  displayName: string,
-  parent: string,
-) =>
+export const findConnectorConfigByName = (displayName: string, parent: string) =>
   Effect.gen(function* () {
     const rows = yield* listConnectorConfigsAt(parent);
     return rows.find((row) => row.displayName === displayName);
@@ -387,10 +335,8 @@ export const findConnectorConfigByName = (
 export const listOwnedConnectorConfigs = () =>
   Effect.gen(function* () {
     const parents = yield* configuredCustomers();
-    const pages = yield* Effect.forEach(
-      parents,
-      (parent) => listConnectorConfigsAt(parent),
-      { concurrency: 4 },
-    );
+    const pages = yield* Effect.forEach(parents, (parent) => listConnectorConfigsAt(parent), {
+      concurrency: 4,
+    });
     return pages.flat().filter((row) => hasOwnershipMarker(row.displayName));
   });

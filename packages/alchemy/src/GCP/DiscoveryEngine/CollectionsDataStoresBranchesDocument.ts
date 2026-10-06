@@ -136,9 +136,7 @@ export class CollectionsDataStoresBranchesDocumentNotResolved extends Data.Tagge
 }> {}
 
 const contentOf = (
-  content:
-    | discoveryengine.GoogleCloudDiscoveryengineV1DocumentContent
-    | undefined,
+  content: discoveryengine.GoogleCloudDiscoveryengineV1DocumentContent | undefined,
 ): DocumentContent | undefined =>
   content === undefined
     ? undefined
@@ -171,11 +169,8 @@ const toAttrs = (
   };
 };
 
-const resourceName = (
-  dataStore: string,
-  branchId: string,
-  documentId: string,
-) => `${branchParent(dataStore, branchId)}/documents/${documentId}`;
+const resourceName = (dataStore: string, branchId: string, documentId: string) =>
+  `${branchParent(dataStore, branchId)}/documents/${documentId}`;
 
 const getByName = (name: string) =>
   name.length === 0
@@ -186,20 +181,12 @@ const getByName = (name: string) =>
 
 export const CollectionsDataStoresBranchesDocumentProvider = () =>
   Provider.succeed(CollectionsDataStoresBranchesDocument, {
-    stables: [
-      "name",
-      "documentId",
-      "dataStore",
-      "branchId",
-      "project",
-      "location",
-    ],
+    stables: ["name", "documentId", "dataStore", "branchId", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousParent = olds?.dataStore ?? output?.dataStore;
-      const previousBranch =
-        olds?.branchId ?? output?.branchId ?? DEFAULT_BRANCH;
+      const previousBranch = olds?.branchId ?? output?.branchId ?? DEFAULT_BRANCH;
       const nextBranch = news.branchId ?? previousBranch;
       const previousId = olds?.documentId ?? output?.documentId;
       if (
@@ -234,9 +221,7 @@ export const CollectionsDataStoresBranchesDocumentProvider = () =>
       );
       const name =
         output?.name ??
-        (dataStore !== undefined
-          ? resourceName(dataStore, branchId, documentId)
-          : undefined);
+        (dataStore !== undefined ? resourceName(dataStore, branchId, documentId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -285,38 +270,25 @@ export const CollectionsDataStoresBranchesDocumentProvider = () =>
       }
 
       const resource = current.name ?? name;
-      const jsonChanged =
-        jsonData !== undefined && (current.jsonData ?? "") !== jsonData;
+      const jsonChanged = jsonData !== undefined && (current.jsonData ?? "") !== jsonData;
       const structChanged = !sameJson(current.structData, news.structData);
-      const contentChanged = !sameJson(
-        contentOf(current.content),
-        news.content,
-      );
-      const parentChanged =
-        (current.parentDocumentId ?? "") !== (news.parentDocumentId ?? "");
+      const contentChanged = !sameJson(contentOf(current.content), news.content);
+      const parentChanged = (current.parentDocumentId ?? "") !== (news.parentDocumentId ?? "");
       const schemaChanged = (current.schemaId ?? "") !== (news.schemaId ?? "");
 
-      if (
-        jsonChanged ||
-        structChanged ||
-        contentChanged ||
-        parentChanged ||
-        schemaChanged
-      ) {
+      if (jsonChanged || structChanged || contentChanged || parentChanged || schemaChanged) {
         current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresBranchesDocuments(
-            {
+          yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresBranchesDocuments({
+            name: resource,
+            body: {
               name: resource,
-              body: {
-                name: resource,
-                jsonData,
-                structData: news.structData,
-                content: news.content,
-                parentDocumentId: news.parentDocumentId,
-                schemaId: news.schemaId,
-              },
+              jsonData,
+              structData: news.structData,
+              content: news.content,
+              parentDocumentId: news.parentDocumentId,
+              schemaId: news.schemaId,
             },
-          );
+          });
       }
 
       return toAttrs(current, env.project);

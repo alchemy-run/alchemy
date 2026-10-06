@@ -1,8 +1,5 @@
 import * as Hetzner from "@distilled.cloud/hetzner";
-import type {
-  ZonePrimary,
-  ZoneSecondary,
-} from "@distilled.cloud/hetzner/zones";
+import type { ZonePrimary, ZoneSecondary } from "@distilled.cloud/hetzner/zones";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -17,7 +14,6 @@ import { tagRecord } from "../Tags.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { waitForZoneAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   hasAlchemyLabels,
@@ -105,13 +101,7 @@ export interface ZoneAttributes {
   delegationStatus: ZoneDelegationStatus | undefined;
 }
 
-export type Zone = Resource<
-  "Hetzner.Zone",
-  ZoneProps,
-  ZoneAttributes,
-  never,
-  Providers
->;
+export type Zone = Resource<"Hetzner.Zone", ZoneProps, ZoneAttributes, never, Providers>;
 
 /**
  * A Hetzner Cloud DNS zone — an apex domain hosted on Hetzner's
@@ -149,8 +139,7 @@ type CloudZone = ZonePrimary | ZoneSecondary;
 
 const DEFAULT_MODE: ZoneMode = "primary";
 
-const normalizeName = (name: string): string =>
-  name.toLowerCase().replace(/\.$/, "");
+const normalizeName = (name: string): string => name.toLowerCase().replace(/\.$/, "");
 
 const generateZoneName = (id: string) =>
   createPhysicalName({ id, lowercase: true, maxLength: 63 }).pipe(
@@ -172,14 +161,8 @@ const resolveZoneName = (
     return yield* generateZoneName(id);
   });
 
-const desiredLabels = Effect.fn(function* (
-  id: string,
-  user: Record<string, string> | undefined,
-) {
-  return {
-    ...toLabels(user),
-    ...(yield* createInternalLabels(id)),
-  };
+const desiredLabels = Effect.fn(function* (id: string, user: Record<string, string> | undefined) {
+  return { ...toLabels(user), ...(yield* createInternalLabels(id)) };
 });
 
 const toAttrs = (zone: CloudZone): ZoneAttributes => ({
@@ -204,25 +187,15 @@ const getZoneBy = (idOrName: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
-class ZoneStillExists extends Data.TaggedError("ZoneStillExists")<{
-  idOrName: string;
-}> {}
+class ZoneStillExists extends Data.TaggedError("ZoneStillExists")<{ idOrName: string }> {}
 
 const backoff = Schedule.min([
   Schedule.exponential(Duration.millis(500), 1.5),
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-const retryLocked = <A, E extends { readonly _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
-  effect.pipe(
-    Effect.retry({
-      while: (e) => e._tag === "Locked",
-      times: 8,
-      schedule: backoff,
-    }),
-  );
+const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.retry({ while: (e) => e._tag === "Locked", times: 8, schedule: backoff }));
 
 export const ZoneProvider = () =>
   Provider.succeed(Zone, {
@@ -245,11 +218,7 @@ export const ZoneProvider = () =>
       const desiredProtection = news.deleteProtection ?? false;
       const labelsChanged = !recordsEqual(news.labels ?? {}, output.labels);
       const ttlChanged = news.ttl !== undefined && news.ttl !== output.ttl;
-      if (
-        ttlChanged ||
-        labelsChanged ||
-        desiredProtection !== output.deleteProtection
-      ) {
+      if (ttlChanged || labelsChanged || desiredProtection !== output.deleteProtection) {
         return { action: "update" } as const;
       }
       return undefined;
@@ -270,30 +239,22 @@ export const ZoneProvider = () =>
         const selector = labelSelector(expected);
         if (selector.length > 0) {
           zone = yield* Hetzner.zones.listZones
-            .items({
-              label_selector: selector,
-              per_page: 50,
-            })
+            .items({ label_selector: selector, per_page: 50 })
             .pipe(
               Stream.take(1),
               Stream.runHead,
-              Effect.map((option) =>
-                option._tag === "Some" ? option.value : undefined,
-              ),
+              Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
             );
         }
       }
       if (zone === undefined) return undefined;
       const attrs = toAttrs(zone);
-      return (yield* hasAlchemyLabels(id, tagRecord(zone.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(zone.labels))) ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* resolveZoneName(id, news, output);
       const mode = news.mode ?? output?.mode ?? DEFAULT_MODE;
-      const idOrName =
-        output?.zoneId !== undefined ? String(output.zoneId) : name;
+      const idOrName = output?.zoneId !== undefined ? String(output.zoneId) : name;
 
       // 1. Observe
       let current = yield* getZoneBy(idOrName);
@@ -316,9 +277,7 @@ export const ZoneProvider = () =>
               Effect.catchTag("Conflict", () =>
                 Hetzner.zones
                   .getZone({ id_or_name: name })
-                  .pipe(
-                    Effect.map(({ zone }) => ({ zone, action: undefined })),
-                  ),
+                  .pipe(Effect.map(({ zone }) => ({ zone, action: undefined }))),
               ),
             ),
         );
@@ -326,9 +285,7 @@ export const ZoneProvider = () =>
           yield* waitForZoneAction(created.action);
         }
         current =
-          created.action === undefined
-            ? created.zone
-            : ((yield* getZoneBy(name)) ?? created.zone);
+          created.action === undefined ? created.zone : ((yield* getZoneBy(name)) ?? created.zone);
       }
 
       const zoneRef = String(current.id);
@@ -338,25 +295,15 @@ export const ZoneProvider = () =>
       const observedLabels = tagRecord(current.labels);
       if (!recordsEqual(observedLabels, labels)) {
         const updated = yield* retryLocked(
-          Hetzner.zones.updateZone({
-            id_or_name: zoneRef,
-            labels,
-          }),
+          Hetzner.zones.updateZone({ id_or_name: zoneRef, labels }),
         );
         current = updated.zone;
       }
 
       // Sync — default TTL (primary zones only; secondary ignores it)
-      if (
-        news.ttl !== undefined &&
-        news.ttl !== current.ttl &&
-        current.mode === "primary"
-      ) {
+      if (news.ttl !== undefined && news.ttl !== current.ttl && current.mode === "primary") {
         const { action } = yield* retryLocked(
-          Hetzner.zoneActions.changeZoneTtl({
-            id_or_name: zoneRef,
-            ttl: news.ttl,
-          }),
+          Hetzner.zoneActions.changeZoneTtl({ id_or_name: zoneRef, ttl: news.ttl }),
         );
         yield* waitForZoneAction(action);
         current = (yield* getZoneBy(zoneRef)) ?? current;
@@ -384,10 +331,7 @@ export const ZoneProvider = () =>
 
       if (current.protection.delete) {
         const { action } = yield* retryLocked(
-          Hetzner.zoneActions.changeZoneProtection({
-            id_or_name: idOrName,
-            delete: false,
-          }),
+          Hetzner.zoneActions.changeZoneProtection({ id_or_name: idOrName, delete: false }),
         );
         yield* waitForZoneAction(action);
       }
@@ -405,11 +349,7 @@ export const ZoneProvider = () =>
         Effect.flatMap((zone) =>
           zone === undefined ? Effect.void : new ZoneStillExists({ idOrName }),
         ),
-        Effect.retry({
-          while: (e) => e._tag === "ZoneStillExists",
-          times: 8,
-          schedule: backoff,
-        }),
+        Effect.retry({ while: (e) => e._tag === "ZoneStillExists", times: 8, schedule: backoff }),
         Effect.catchTag("ZoneStillExists", () => Effect.void),
       );
     }),

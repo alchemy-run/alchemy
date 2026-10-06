@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   AuthProviderNotResolved,
@@ -37,12 +32,7 @@ import {
   type TwoLeggedOAuthParams,
 } from "./internal.ts";
 
-export type {
-  ApiKeyParams,
-  AuthProviderTypeParams,
-  ThreeLeggedOAuthParams,
-  TwoLeggedOAuthParams,
-};
+export type { ApiKeyParams, AuthProviderTypeParams, ThreeLeggedOAuthParams, TwoLeggedOAuthParams };
 
 export type AuthProviderProps = {
   /**
@@ -184,17 +174,11 @@ export type AuthProvider = Resource<
  * @resource
  * @category AgentIdentity
  */
-export const AuthProvider = Resource<AuthProvider>(
-  "GCP.AgentIdentity.AuthProvider",
-);
+export const AuthProvider = Resource<AuthProvider>("GCP.AgentIdentity.AuthProvider");
 
 export { AuthProviderNotResolved };
 
-const toAttrs = (
-  item: agentidentity.AuthProvider,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: agentidentity.AuthProvider, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, region);
   const state = item.state;
@@ -247,12 +231,8 @@ export const AuthProviderProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.authProviderId ?? output?.authProviderId,
-        nextId:
-          news.authProviderId ?? olds?.authProviderId ?? output?.authProviderId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.authProviderId ?? olds?.authProviderId ?? output?.authProviderId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -262,25 +242,15 @@ export const AuthProviderProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const authProviderId = yield* toPhysicalId(
-        id,
-        olds?.authProviderId,
-        output?.authProviderId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, authProviderId);
+      const authProviderId = yield* toPhysicalId(id, olds?.authProviderId, output?.authProviderId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, authProviderId);
       const existing = yield* getByName(name);
       if (existing === undefined || existing.deleted === true) {
         return undefined;
       }
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -292,15 +262,8 @@ export const AuthProviderProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const authProviderId = yield* toPhysicalId(
-        id,
-        news.authProviderId,
-        output?.authProviderId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const authProviderId = yield* toPhysicalId(id, news.authProviderId, output?.authProviderId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, authProviderId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -331,20 +294,14 @@ export const AuthProviderProvider = () =>
             body: {
               labels: desiredLabels,
               description,
-              allowedScopes:
-                allowedScopes.length > 0 ? allowedScopes : undefined,
-              blockedScopes:
-                blockedScopes.length > 0 ? blockedScopes : undefined,
+              allowedScopes: allowedScopes.length > 0 ? allowedScopes : undefined,
+              blockedScopes: blockedScopes.length > 0 ? blockedScopes : undefined,
               workloadIds:
-                workloadIds !== undefined && workloadIds.length > 0
-                  ? workloadIds
-                  : undefined,
+                workloadIds !== undefined && workloadIds.length > 0 ? workloadIds : undefined,
               authProviderTypeParams: typeParams,
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getByName(output?.name ?? name)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(output?.name ?? name)));
         current = created ?? undefined;
       }
 
@@ -364,25 +321,14 @@ export const AuthProviderProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const descriptionChanged = !sameText(current.description, description);
-      const allowedChanged = !sameStringList(
-        current.allowedScopes,
-        allowedScopes,
-      );
-      const blockedChanged = !sameStringList(
-        current.blockedScopes,
-        blockedScopes,
-      );
-      const observedTypeParams = publicTypeParams(
-        toTypeParams(current.authProviderTypeParams),
-      );
+      const allowedChanged = !sameStringList(current.allowedScopes, allowedScopes);
+      const blockedChanged = !sameStringList(current.blockedScopes, blockedScopes);
+      const observedTypeParams = publicTypeParams(toTypeParams(current.authProviderTypeParams));
       const desiredTypeParams = publicTypeParams(news.authProviderTypeParams);
       const typeParamsChanged =
         (observedTypeParams !== undefined &&
           fingerprint(observedTypeParams) !== fingerprint(desiredTypeParams)) ||
-        hasSecretUpdate(
-          news.authProviderTypeParams,
-          olds?.authProviderTypeParams,
-        );
+        hasSecretUpdate(news.authProviderTypeParams, olds?.authProviderTypeParams);
       const workloadChanged =
         workloadIds !== undefined &&
         olds !== undefined &&

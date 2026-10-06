@@ -39,6 +39,4 @@ export interface GetDeployment extends Binding.Service<
     ) => Effect.Effect<appconfig.Deployment, appconfig.GetDeploymentError>
   >
 > {}
-export const GetDeployment = Binding.Service<GetDeployment>(
-  "AWS.AppConfig.GetDeployment",
-);
+export const GetDeployment = Binding.Service<GetDeployment>("AWS.AppConfig.GetDeployment");

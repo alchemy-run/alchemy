@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -156,12 +151,9 @@ export type VolumesQuotaRule = Resource<
  * @resource
  * @category NetApp
  */
-export const VolumesQuotaRule = Resource<VolumesQuotaRule>(
-  "GCP.NetApp.VolumesQuotaRule",
-);
+export const VolumesQuotaRule = Resource<VolumesQuotaRule>("GCP.NetApp.VolumesQuotaRule");
 
-const resourceName = (volume: string, quotaRuleId: string) =>
-  `${volume}/quotaRules/${quotaRuleId}`;
+const resourceName = (volume: string, quotaRuleId: string) => `${volume}/quotaRules/${quotaRuleId}`;
 
 const toAttrs = (item: netapp.QuotaRule, project: string, region: string) => {
   const name = item.name ?? "";
@@ -202,14 +194,7 @@ const listOwned = (project: string) =>
 
 export const VolumesQuotaRuleProvider = () =>
   Provider.succeed(VolumesQuotaRule, {
-    stables: [
-      "name",
-      "quotaRuleId",
-      "volume",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "quotaRuleId", "volume", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -220,10 +205,7 @@ export const VolumesQuotaRuleProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.quotaRuleId ?? output?.quotaRuleId,
         nextId: news.quotaRuleId ?? olds?.quotaRuleId ?? output?.quotaRuleId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -244,26 +226,16 @@ export const VolumesQuotaRuleProvider = () =>
         output?.quotaRuleId,
         "quotarule",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parent = olds?.volume ?? output?.volume;
       // A row whose parent never resolved (failed create) has nothing to read.
       if (output?.name === undefined && !parent) return undefined;
-      const volume = expandParent(
-        parent ?? "",
-        env.project,
-        location,
-        "volumes",
-      );
+      const volume = expandParent(parent ?? "", env.project, location, "volumes");
       const name = output?.name ?? resourceName(volume, quotaRuleId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -281,16 +253,8 @@ export const VolumesQuotaRuleProvider = () =>
         output?.quotaRuleId,
         "quotarule",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const volume = expandParent(
-        news.volume,
-        env.project,
-        location,
-        "volumes",
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const volume = expandParent(news.volume, env.project, location, "volumes");
       const name = resourceName(volume, quotaRuleId);
       const type = news.type ?? DEFAULT_TYPE;
       const diskLimitMib = news.diskLimitMib ?? DEFAULT_DISK_LIMIT_MIB;
@@ -336,25 +300,21 @@ export const VolumesQuotaRuleProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        (current.description ?? "") !== (news.description ?? "") &&
-          "description",
-        (current.diskLimitMib ?? DEFAULT_DISK_LIMIT_MIB) !== diskLimitMib &&
-          "diskLimitMib",
+        (current.description ?? "") !== (news.description ?? "") && "description",
+        (current.diskLimitMib ?? DEFAULT_DISK_LIMIT_MIB) !== diskLimitMib && "diskLimitMib",
       ]);
 
       if (mask.length > 0) {
-        const operation = yield* netapp.patchProjectsLocationsVolumesQuotaRules(
-          {
+        const operation = yield* netapp.patchProjectsLocationsVolumesQuotaRules({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
             name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              diskLimitMib,
-            },
+            labels: desiredLabels,
+            description: news.description,
+            diskLimitMib,
           },
-        );
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

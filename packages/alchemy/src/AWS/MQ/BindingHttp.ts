@@ -60,27 +60,25 @@ export const makeMqBrokerHttpBinding = <Req extends object, Out, Err>(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MQ.${config.capability}(${broker}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...config.iamActions],
-                  Resource: [Output.interpolate`${broker.brokerArn}`],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.MQ.${config.capability}(${broker}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...config.iamActions],
+                Resource: [Output.interpolate`${broker.brokerArn}`],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.MQ.${config.capability}(${broker.LogicalId})`)(
-        function* (request?: Req) {
-          return yield* op({
-            ...(request ?? ({} as Req)),
-            BrokerId: yield* BrokerId,
-          });
-        },
-      );
+      return Effect.fn(`AWS.MQ.${config.capability}(${broker.LogicalId})`)(function* (
+        request?: Req,
+      ) {
+        return yield* op({
+          ...(request ?? ({} as Req)),
+          BrokerId: yield* BrokerId,
+        });
+      });
     });
   });
 
@@ -98,11 +96,7 @@ export interface MqAccountHttpBindingConfig<Req extends object, Out, Err> {
   /**
    * The distilled MQ operation implementing the capability.
    */
-  operation: Effect.Effect<
-    (input: Req) => Effect.Effect<Out, Err>,
-    never,
-    MqRequirements
-  >;
+  operation: Effect.Effect<(input: Req) => Effect.Effect<Out, Err>, never, MqRequirements>;
 }
 
 /**
@@ -130,9 +124,7 @@ export const makeMqAccountHttpBinding = <Req extends object, Out, Err>(
           });
         }
       }
-      return Effect.fn(`AWS.MQ.${config.capability}`)(function* (
-        request?: Req,
-      ) {
+      return Effect.fn(`AWS.MQ.${config.capability}`)(function* (request?: Req) {
         return yield* op(request ?? ({} as Req));
       });
     });

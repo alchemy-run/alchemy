@@ -1,17 +1,12 @@
-import * as Neon from "@/Neon";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import {
-  backendAuth,
-  backendBranch,
-  backendDataApi,
-  backendGateway,
-} from "./backend-resources.ts";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Neon from "@/Neon";
+import { backendAuth, backendBranch, backendDataApi, backendGateway } from "./backend-resources.ts";
 
 const bindings = Layer.mergeAll(
   Neon.ConnectAuthHttp,
@@ -46,9 +41,7 @@ export default class BackendEffect extends Neon.Function<BackendEffect>()(
             )
             .pipe(
               Effect.as(false),
-              Effect.catchTag("DataApiRequestError", () =>
-                Effect.succeed(true),
-              ),
+              Effect.catchTag("DataApiRequestError", () => Effect.succeed(true)),
             );
           return yield* HttpServerResponse.json({ rejected });
         }

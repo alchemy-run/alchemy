@@ -46,17 +46,9 @@ export type TemplateCategory =
   | "UTILITY"
   | "OTHERS";
 
-export type TemplateVisibility =
-  | "VISIBILITY_UNSPECIFIED"
-  | "PRIVATE"
-  | "SHARED"
-  | "PUBLIC";
+export type TemplateVisibility = "VISIBILITY_UNSPECIFIED" | "PRIVATE" | "SHARED" | "PUBLIC";
 
-export type TemplateComponentType =
-  | "TYPE_UNSPECIFIED"
-  | "TRIGGER"
-  | "TASK"
-  | "CONNECTOR";
+export type TemplateComponentType = "TYPE_UNSPECIFIED" | "TRIGGER" | "TASK" | "CONNECTOR";
 
 export type TemplateComponent = {
   /** Component type. */
@@ -65,8 +57,7 @@ export type TemplateComponent = {
   name?: string;
 };
 
-export type TemplateBundle =
-  integrations.GoogleCloudIntegrationsV1alphaTemplateBundle;
+export type TemplateBundle = integrations.GoogleCloudIntegrationsV1alphaTemplateBundle;
 
 export type TemplateProps = {
   /**
@@ -243,9 +234,7 @@ export const defaultTemplateBundle = (): TemplateBundle => ({
  */
 export const Template = Resource<Template>("GCP.Integrations.Template");
 
-export class TemplateNotResolved extends Data.TaggedError(
-  "GCP.Integrations.TemplateNotResolved",
-)<{
+export class TemplateNotResolved extends Data.TaggedError("GCP.Integrations.TemplateNotResolved")<{
   name: string;
 }> {}
 
@@ -297,9 +286,7 @@ export const TemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const idChanged =
-        previousId !== undefined &&
-        news.templateId !== undefined &&
-        news.templateId !== previousId;
+        previousId !== undefined && news.templateId !== undefined && news.templateId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -311,42 +298,26 @@ export const TemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const templateId = yield* toResourceId(
-        id,
-        olds?.templateId,
-        output?.templateId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const templateId = yield* toResourceId(id, olds?.templateId, output?.templateId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
         const ownership = yield* createInternalLabels(id);
         existing = yield* findTemplateByDescription(
           locationParent(env.project, location),
-          encodeOwnership(
-            ownership,
-            olds?.description,
-            MAX_TEMPLATE_DESCRIPTION_LENGTH,
-          ),
+          encodeOwnership(ownership, olds?.description, MAX_TEMPLATE_DESCRIPTION_LENGTH),
         );
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listTemplates(
-          locationParent(env.project, env.region),
-        );
+        const items = yield* listTemplates(locationParent(env.project, env.region));
         return items
           .filter((template) => hasOwnershipMarker(template.description))
           .map((template) => toAttrs(template, env.project, env.region));
@@ -354,18 +325,10 @@ export const TemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
-      const templateId = yield* toResourceId(
-        id,
-        news.templateId,
-        output?.templateId,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, templateId);
+      const templateId = yield* toResourceId(id, news.templateId, output?.templateId);
+      const name = output?.name ?? resourceName(env.project, location, templateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(
         ownership,
@@ -404,11 +367,7 @@ export const TemplateProvider = () =>
             parent,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findTemplateByDescription(parent, description),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findTemplateByDescription(parent, description)));
         current = created ?? undefined;
       }
 
@@ -421,17 +380,13 @@ export const TemplateProvider = () =>
       const descriptionChanged = (current.description ?? "") !== description;
       const usageChanged = !sameText(current.usageInfo, news.usageInfo);
       const docChanged = !sameText(current.docLink, news.docLink);
-      const bundleChanged =
-        fingerprint(current.templateBundle) !== fingerprint(templateBundle);
-      const componentsChanged =
-        fingerprint(current.components) !== fingerprint(components);
+      const bundleChanged = fingerprint(current.templateBundle) !== fingerprint(templateBundle);
+      const componentsChanged = fingerprint(current.components) !== fingerprint(components);
       const tagsChanged = fingerprint(current.tags) !== fingerprint(tags);
-      const categoriesChanged =
-        fingerprint(current.categories) !== fingerprint(categories);
+      const categoriesChanged = fingerprint(current.categories) !== fingerprint(categories);
       const authorChanged = !sameText(current.author, news.author);
       const visibilityChanged = !sameText(current.visibility, visibility);
-      const sharedChanged =
-        fingerprint(current.sharedWith) !== fingerprint(sharedWith);
+      const sharedChanged = fingerprint(current.sharedWith) !== fingerprint(sharedWith);
 
       if (
         displayChanged ||

@@ -1,8 +1,5 @@
 import * as Layer from "effect/Layer";
-import {
-  makeFirestoreDatabaseBinding,
-  writeDatabaseIam,
-} from "./DatabaseHttp.ts";
+import { makeFirestoreDatabaseBinding, writeDatabaseIam } from "./DatabaseHttp.ts";
 import { WriteDatabase } from "./WriteDatabase.ts";
 
 /**

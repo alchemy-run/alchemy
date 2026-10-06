@@ -49,10 +49,7 @@ export interface StartTagSyncTask extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartTagSyncTaskRequest,
-    ) => Effect.Effect<
-      resourcegroups.StartTagSyncTaskOutput,
-      resourcegroups.StartTagSyncTaskError
-    >
+    ) => Effect.Effect<resourcegroups.StartTagSyncTaskOutput, resourcegroups.StartTagSyncTaskError>
   >
 > {}
 export const StartTagSyncTask = Binding.Service<StartTagSyncTask>(

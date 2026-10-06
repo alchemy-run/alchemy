@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const customConfigV1 = {
   predicate: { expression: 'resource.name == "alchemy-nonexistent"' },
@@ -102,15 +99,12 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.moduleId).toEqual(expect.any(String));
       expect(created.folder).toEqual(folder);
-      expect(created.name).toContain(
-        `${folder}/securityHealthAnalyticsSettings/customModules/`,
-      );
+      expect(created.name).toContain(`${folder}/securityHealthAnalyticsSettings/customModules/`);
       expect(created.customConfig?.description).toEqual("unused detector");
 
-      const fetched =
-        yield* scc.getFoldersSecurityHealthAnalyticsSettingsCustomModules({
-          name: created.name,
-        });
+      const fetched = yield* scc.getFoldersSecurityHealthAnalyticsSettingsCustomModules({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.customConfig?.description).toContain("alchemy-id=");
 
@@ -128,9 +122,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.customConfig?.description).toEqual(
-        "updated unused detector",
-      );
+      expect(updated.customConfig?.description).toEqual("updated unused detector");
       expect(updated.customConfig?.severity).toEqual("MEDIUM");
 
       yield* stack.destroy();

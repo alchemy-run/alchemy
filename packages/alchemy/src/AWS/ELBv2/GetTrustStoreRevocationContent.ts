@@ -50,7 +50,6 @@ export interface GetTrustStoreRevocationContent extends Binding.Service<
   >
 > {}
 
-export const GetTrustStoreRevocationContent =
-  Binding.Service<GetTrustStoreRevocationContent>(
-    "AWS.ELBv2.GetTrustStoreRevocationContent",
-  );
+export const GetTrustStoreRevocationContent = Binding.Service<GetTrustStoreRevocationContent>(
+  "AWS.ELBv2.GetTrustStoreRevocationContent",
+);

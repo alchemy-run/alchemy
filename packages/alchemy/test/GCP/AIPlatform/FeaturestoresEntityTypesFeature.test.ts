@@ -1,34 +1,29 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a Featurestore, whose online serving takes ~6 minutes to provision.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
-  aiplatform
-    .getProjectsLocationsFeaturestoresEntityTypesFeatures({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  aiplatform.getProjectsLocationsFeaturestoresEntityTypesFeatures({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsFeaturestoresEntityTypesFeatures on a missing feature fails with a typed tag",
@@ -70,15 +65,12 @@ test.provider.skipIf(!runLifecycle)(
             description: "end users",
             labels: { env: "test" },
           });
-          const feature = yield* GCP.AIPlatform.FeaturestoresEntityTypesFeature(
-            "Age",
-            {
-              entityType: entity.name,
-              valueType: "INT64",
-              description: "customer age",
-              labels: { env: "test" },
-            },
-          );
+          const feature = yield* GCP.AIPlatform.FeaturestoresEntityTypesFeature("Age", {
+            entityType: entity.name,
+            valueType: "INT64",
+            description: "customer age",
+            labels: { env: "test" },
+          });
           return { store, entity, feature };
         }),
       );
@@ -89,10 +81,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.feature.description).toEqual("customer age");
       expect(created.feature.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* aiplatform.getProjectsLocationsFeaturestoresEntityTypesFeatures({
-          name: created.feature.name,
-        });
+      const fetched = yield* aiplatform.getProjectsLocationsFeaturestoresEntityTypesFeatures({
+        name: created.feature.name,
+      });
       expect(fetched.name).toEqual(created.feature.name);
 
       const updated = yield* stack.deploy(
@@ -109,16 +100,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "end users",
             labels: { env: "test" },
           });
-          const feature = yield* GCP.AIPlatform.FeaturestoresEntityTypesFeature(
-            "Age",
-            {
-              entityType: entity.name,
-              featureId: created.feature.featureId,
-              valueType: "INT64",
-              description: "customer age v2",
-              labels: { env: "prod" },
-            },
-          );
+          const feature = yield* GCP.AIPlatform.FeaturestoresEntityTypesFeature("Age", {
+            entityType: entity.name,
+            featureId: created.feature.featureId,
+            valueType: "INT64",
+            description: "customer age v2",
+            labels: { env: "prod" },
+          });
           return { store, entity, feature };
         }),
       );

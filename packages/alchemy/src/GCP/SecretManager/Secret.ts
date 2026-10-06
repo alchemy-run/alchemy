@@ -9,8 +9,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
-import { DeleteNotConfirmed } from "../Errors.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { DeleteNotConfirmed } from "../Errors.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -207,9 +207,7 @@ export type Secret = Resource<
  */
 export const Secret = Resource<Secret>("GCP.SecretManager.Secret");
 
-export class SecretNotResolved extends Data.TaggedError(
-  "GCP.SecretManager.SecretNotResolved",
-)<{
+export class SecretNotResolved extends Data.TaggedError("GCP.SecretManager.SecretNotResolved")<{
   name: string;
 }> {}
 
@@ -235,27 +233,18 @@ const userAliases = (
 const toId = (id: string, secretId: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
-      secretId ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
+      secretId ?? existing ?? (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
     );
   });
 
 const toTopics = (topics: secretmanager.TopicList | null | undefined) =>
   (topics ?? [])
-    .filter(
-      (topic): topic is { name: string } => typeof topic.name === "string",
-    )
+    .filter((topic): topic is { name: string } => typeof topic.name === "string")
     .map((topic) => ({ name: topic.name }));
 
-const toRotation = (
-  rotation: secretmanager.Rotation | undefined,
-): Rotation | undefined => {
+const toRotation = (rotation: secretmanager.Rotation | undefined): Rotation | undefined => {
   if (rotation === undefined) return undefined;
-  if (
-    rotation.nextRotationTime === undefined &&
-    rotation.rotationPeriod === undefined
-  ) {
+  if (rotation.nextRotationTime === undefined && rotation.rotationPeriod === undefined) {
     return undefined;
   }
   return {
@@ -285,11 +274,9 @@ const toReplication = (
   if (replication.automatic !== undefined) {
     return {
       automatic: {
-        customerManagedEncryption: replication.automatic
-          .customerManagedEncryption
+        customerManagedEncryption: replication.automatic.customerManagedEncryption
           ? {
-              kmsKeyName:
-                replication.automatic.customerManagedEncryption.kmsKeyName,
+              kmsKeyName: replication.automatic.customerManagedEncryption.kmsKeyName,
             }
           : undefined,
       },
@@ -298,13 +285,10 @@ const toReplication = (
   return undefined;
 };
 
-const desiredReplication = (
-  replication: Replication | undefined,
-): Replication => replication ?? DEFAULT_REPLICATION;
+const desiredReplication = (replication: Replication | undefined): Replication =>
+  replication ?? DEFAULT_REPLICATION;
 
-const replicationFingerprint = (
-  replication: Replication | undefined,
-): string => {
+const replicationFingerprint = (replication: Replication | undefined): string => {
   const value = desiredReplication(replication);
   if (value.userManaged !== undefined) {
     const replicas = [...(value.userManaged.replicas ?? [])]
@@ -322,17 +306,12 @@ const replicationFingerprint = (
   });
 };
 
-const recordsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const recordsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
@@ -342,10 +321,7 @@ const topicsEqual = (left: SecretTopic[], right: SecretTopic[]) => {
   return a.length === b.length && a.every((name, index) => name === b[index]);
 };
 
-const rotationEqual = (
-  left: Rotation | undefined,
-  right: Rotation | undefined,
-) =>
+const rotationEqual = (left: Rotation | undefined, right: Rotation | undefined) =>
   (left?.nextRotationTime ?? "") === (right?.nextRotationTime ?? "") &&
   (left?.rotationPeriod ?? "") === (right?.rotationPeriod ?? "");
 
@@ -381,16 +357,11 @@ const waitUntilMissing = (name: string) =>
       times: 30,
     }),
     Effect.flatMap((secret): Effect.Effect<void, DeleteNotConfirmed> =>
-      secret === undefined
-        ? Effect.void
-        : Effect.fail(new DeleteNotConfirmed({ resource: name })),
+      secret === undefined ? Effect.void : Effect.fail(new DeleteNotConfirmed({ resource: name })),
     ),
   );
 
-const toCreateBody = (
-  news: SecretProps,
-  labels: Record<string, string>,
-): secretmanager.Secret => ({
+const toCreateBody = (news: SecretProps, labels: Record<string, string>): secretmanager.Secret => ({
   replication: desiredReplication(news.replication),
   labels,
   annotations: news.annotations,
@@ -411,9 +382,7 @@ export const SecretProvider = () =>
       const previousId = olds?.secretId ?? output?.secretId;
       const nextId = news.secretId ?? previousId;
       const idChanged =
-        previousId !== undefined &&
-        news.secretId !== undefined &&
-        previousId !== news.secretId;
+        previousId !== undefined && news.secretId !== undefined && previousId !== news.secretId;
       const replicationChanged =
         replicationFingerprint(olds?.replication ?? output?.replication) !==
         replicationFingerprint(news.replication);
@@ -422,10 +391,7 @@ export const SecretProvider = () =>
       return {
         action: "replace" as const,
         deleteFirst:
-          replicationChanged &&
-          !idChanged &&
-          previousId !== undefined &&
-          nextId === previousId,
+          replicationChanged && !idChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -436,9 +402,7 @@ export const SecretProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -454,9 +418,7 @@ export const SecretProvider = () =>
         return Array.from(pages).flatMap((page) =>
           (page.secrets ?? [])
             .filter((secret) =>
-              Object.keys(secret.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(secret.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             )
             .map((secret) => toAttrs(secret, env.project)),
         );
@@ -483,8 +445,7 @@ export const SecretProvider = () =>
       // policy (replacement or adoption), delete and recreate.
       if (
         current !== undefined &&
-        replicationFingerprint(toReplication(current.replication)) !==
-          desiredReplicationFp
+        replicationFingerprint(toReplication(current.replication)) !== desiredReplicationFp
       ) {
         yield* secretmanager
           .deleteProjectsSecrets({ name: current.name ?? name })
@@ -517,10 +478,7 @@ export const SecretProvider = () =>
         return yield* new SecretNotResolved({ name });
       }
 
-      if (
-        replicationFingerprint(toReplication(current.replication)) !==
-        desiredReplicationFp
-      ) {
+      if (replicationFingerprint(toReplication(current.replication)) !== desiredReplicationFp) {
         return yield* new SecretNotResolved({ name });
       }
 
@@ -531,23 +489,12 @@ export const SecretProvider = () =>
         userAnnotations(current.annotations),
         desiredAnnotations,
       );
-      const aliasesChanged = !recordsEqual(
-        userAliases(current.versionAliases),
-        desiredAliases,
-      );
-      const topicsChanged = !topicsEqual(
-        toTopics(current.topics),
-        desiredTopics,
-      );
-      const rotationChanged = !rotationEqual(
-        toRotation(current.rotation),
-        desiredRotation,
-      );
-      const destroyTtlChanged =
-        (current.versionDestroyTtl ?? "") !== (desiredDestroyTtl ?? "");
+      const aliasesChanged = !recordsEqual(userAliases(current.versionAliases), desiredAliases);
+      const topicsChanged = !topicsEqual(toTopics(current.topics), desiredTopics);
+      const rotationChanged = !rotationEqual(toRotation(current.rotation), desiredRotation);
+      const destroyTtlChanged = (current.versionDestroyTtl ?? "") !== (desiredDestroyTtl ?? "");
       const expireTimeChanged =
-        news.expireTime !== undefined &&
-        (current.expireTime ?? "") !== news.expireTime;
+        news.expireTime !== undefined && (current.expireTime ?? "") !== news.expireTime;
       // `ttl` is input-only and recomputes expireTime from now. Apply it only
       // when the observed secret has no expiration, otherwise every reconcile
       // would reset the clock.

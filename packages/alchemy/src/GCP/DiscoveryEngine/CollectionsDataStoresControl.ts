@@ -144,10 +144,9 @@ export type CollectionsDataStoresControl = Resource<
  * @resource
  * @category DiscoveryEngine
  */
-export const CollectionsDataStoresControl =
-  Resource<CollectionsDataStoresControl>(
-    "GCP.DiscoveryEngine.CollectionsDataStoresControl",
-  );
+export const CollectionsDataStoresControl = Resource<CollectionsDataStoresControl>(
+  "GCP.DiscoveryEngine.CollectionsDataStoresControl",
+);
 
 export class CollectionsDataStoresControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresControlNotResolved",
@@ -155,10 +154,7 @@ export class CollectionsDataStoresControlNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  control: discoveryengine.GoogleCloudDiscoveryengineV1Control,
-  project: string,
-) => {
+const toAttrs = (control: discoveryengine.GoogleCloudDiscoveryengineV1Control, project: string) => {
   const name = control.name ?? "";
   const parsed = parseResourceName(name, "controls");
   return {
@@ -177,8 +173,7 @@ const toAttrs = (
   };
 };
 
-const resourceName = (dataStore: string, controlId: string) =>
-  `${dataStore}/controls/${controlId}`;
+const resourceName = (dataStore: string, controlId: string) => `${dataStore}/controls/${controlId}`;
 
 const toBody = (
   news: CollectionsDataStoresControlProps,
@@ -188,12 +183,8 @@ const toBody = (
   solutionType: news.solutionType ?? "SOLUTION_TYPE_SEARCH",
   useCases: news.useCases ?? ["SEARCH_USE_CASE_SEARCH"],
   synonymsAction:
-    news.synonyms && news.synonyms.length > 0
-      ? { synonyms: news.synonyms }
-      : undefined,
-  redirectAction: news.redirectUri
-    ? { redirectUri: news.redirectUri }
-    : undefined,
+    news.synonyms && news.synonyms.length > 0 ? { synonyms: news.synonyms } : undefined,
+  redirectAction: news.redirectUri ? { redirectUri: news.redirectUri } : undefined,
   filterAction: news.filter
     ? {
         filter: news.filter,
@@ -212,14 +203,7 @@ const getByName = (name: string) =>
 
 export const CollectionsDataStoresControlProvider = () =>
   Provider.succeed(CollectionsDataStoresControl, {
-    stables: [
-      "name",
-      "controlId",
-      "dataStore",
-      "project",
-      "location",
-      "solutionType",
-    ],
+    stables: ["name", "controlId", "dataStore", "project", "location", "solutionType"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -232,9 +216,7 @@ export const CollectionsDataStoresControlProvider = () =>
         (previousId !== undefined &&
           news.controlId !== undefined &&
           news.controlId !== previousId) ||
-        (previousType !== undefined &&
-          nextType !== undefined &&
-          previousType !== nextType)
+        (previousType !== undefined && nextType !== undefined && previousType !== nextType)
       ) {
         return {
           action: "replace" as const,
@@ -250,15 +232,9 @@ export const CollectionsDataStoresControlProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.dataStore ?? output?.dataStore;
-      const childId = yield* toPhysical(
-        id,
-        olds?.controlId,
-        output?.controlId,
-        controlIdOf,
-      );
+      const childId = yield* toPhysical(id, olds?.controlId, output?.controlId, controlIdOf);
       const name =
-        output?.name ??
-        (parent !== undefined ? resourceName(parent, childId) : undefined);
+        output?.name ?? (parent !== undefined ? resourceName(parent, childId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -269,12 +245,7 @@ export const CollectionsDataStoresControlProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const controlId = yield* toPhysical(
-        id,
-        news.controlId,
-        output?.controlId,
-        controlIdOf,
-      );
+      const controlId = yield* toPhysical(id, news.controlId, output?.controlId, controlIdOf);
       const name = resourceName(news.dataStore, controlId);
       const displayName = news.displayName ?? controlId;
       const body = toBody(news, displayName);
@@ -305,20 +276,17 @@ export const CollectionsDataStoresControlProvider = () =>
       );
 
       if (displayNameChanged || conditionsChanged || useCasesChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresControls(
-            {
-              name: resource,
-              updateMask: [
-                displayNameChanged ? "display_name" : undefined,
-                conditionsChanged ? "conditions" : undefined,
-                useCasesChanged ? "use_cases" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: { ...body, name: resource },
-            },
-          );
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresControls({
+          name: resource,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            conditionsChanged ? "conditions" : undefined,
+            useCasesChanged ? "use_cases" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: { ...body, name: resource },
+        });
       }
 
       return toAttrs(current, env.project);

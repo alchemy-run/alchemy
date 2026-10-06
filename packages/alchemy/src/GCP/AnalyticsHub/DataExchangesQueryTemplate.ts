@@ -30,9 +30,7 @@ import {
 } from "./internal.ts";
 
 export type QueryTemplateRoutine = analyticshub.Routine;
-export type QueryTemplateState =
-  | analyticshub.QueryTemplateStateEnum
-  | (string & {});
+export type QueryTemplateState = analyticshub.QueryTemplateStateEnum | (string & {});
 
 export type DataExchangesQueryTemplateProps = {
   /**
@@ -162,11 +160,8 @@ export const DataExchangesQueryTemplate = Resource<DataExchangesQueryTemplate>(
   "GCP.AnalyticsHub.DataExchangesQueryTemplate",
 );
 
-const parentExchange = (
-  dataExchange: string,
-  project: string,
-  location: string,
-) => expandParent(dataExchange, project, location, "dataExchanges");
+const parentExchange = (dataExchange: string, project: string, location: string) =>
+  expandParent(dataExchange, project, location, "dataExchanges");
 
 const resourceName = (dataExchange: string, queryTemplateId: string) =>
   `${dataExchange}/queryTemplates/${queryTemplateId}`;
@@ -178,8 +173,7 @@ const desiredRoutine = (
   if (routine === undefined) return undefined;
   const body = routine.definitionBody ?? "";
   const definitionBody =
-    body.startsWith(`${queryTemplateId}(`) ||
-    body.startsWith(`${queryTemplateId} `)
+    body.startsWith(`${queryTemplateId}(`) || body.startsWith(`${queryTemplateId} `)
       ? body
       : `${queryTemplateId}() AS (${body})`;
   return { ...routine, definitionBody };
@@ -241,10 +235,7 @@ export const DataExchangesQueryTemplateProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.queryTemplateId ?? output?.queryTemplateId,
         nextId: news.queryTemplateId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.dataExchange ?? output?.dataExchange,
         nextParent: parentExchange(news.dataExchange, env.project, location),
@@ -252,18 +243,13 @@ export const DataExchangesQueryTemplateProvider = () =>
           (previousDisplay !== undefined &&
             nextDisplay !== undefined &&
             previousDisplay !== nextDisplay) ||
-          (previousDocs !== undefined &&
-            nextDocs !== undefined &&
-            previousDocs !== nextDocs),
+          (previousDocs !== undefined && nextDocs !== undefined && previousDocs !== nextDocs),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const queryTemplateId = yield* toPhysicalId(
         id,
         olds?.queryTemplateId,
@@ -274,27 +260,18 @@ export const DataExchangesQueryTemplateProvider = () =>
           ? parentExchange(olds.dataExchange, env.project, location)
           : (output?.dataExchange ?? "");
       const name =
-        output?.name ??
-        (dataExchange ? resourceName(dataExchange, queryTemplateId) : "");
+        output?.name ?? (dataExchange ? resourceName(dataExchange, queryTemplateId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedById(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedById(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const exchanges = yield* listExchangesInProject(
-          env.project,
-          env.region,
-        );
-        const templates = yield* listChildResources(
-          namedOf(exchanges),
-          listQueryTemplates,
-        );
+        const exchanges = yield* listExchangesInProject(env.project, env.region);
+        const templates = yield* listChildResources(namedOf(exchanges), listQueryTemplates);
         return templates
           .filter((item) => hasOwnershipMarker(item.description))
           .map((item) => toAttrs(item, env.project));
@@ -302,15 +279,8 @@ export const DataExchangesQueryTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const dataExchange = parentExchange(
-        news.dataExchange,
-        env.project,
-        location,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const dataExchange = parentExchange(news.dataExchange, env.project, location);
       const queryTemplateId = yield* toPhysicalId(
         id,
         news.queryTemplateId,
@@ -356,27 +326,17 @@ export const DataExchangesQueryTemplateProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
       const contactChanged =
-        news.primaryContact !== undefined &&
-        !sameText(current.primaryContact, news.primaryContact);
+        news.primaryContact !== undefined && !sameText(current.primaryContact, news.primaryContact);
       const proposerChanged =
-        news.proposer !== undefined &&
-        !sameText(current.proposer, news.proposer);
+        news.proposer !== undefined && !sameText(current.proposer, news.proposer);
       const routineChanged =
         routine !== undefined &&
         (!sameText(current.routine?.routineType, routine.routineType) ||
           !sameText(current.routine?.definitionBody, routine.definitionBody));
 
-      if (
-        descriptionChanged ||
-        contactChanged ||
-        proposerChanged ||
-        routineChanged
-      ) {
+      if (descriptionChanged || contactChanged || proposerChanged || routineChanged) {
         current = yield* retryTransient(
           analyticshub.patchProjectsLocationsDataExchangesQueryTemplates({
             name: currentName,

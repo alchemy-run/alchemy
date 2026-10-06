@@ -8,18 +8,8 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  parseDescription,
-} from "./ownership.ts";
-import {
-  lastSegment,
-  orgParent,
-  resolveOrgId,
-  sameJson,
-  toPhysicalId,
-} from "./operations.ts";
+import { lastSegment, orgParent, resolveOrgId, sameJson, toPhysicalId } from "./operations.ts";
+import { encodeDescription, hasOwnershipMarker, parseDescription } from "./ownership.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -132,9 +122,7 @@ export type AnalyticsDatastore = Resource<
  * @resource
  * @category Apigee
  */
-export const AnalyticsDatastore = Resource<AnalyticsDatastore>(
-  "GCP.Apigee.AnalyticsDatastore",
-);
+export const AnalyticsDatastore = Resource<AnalyticsDatastore>("GCP.Apigee.AnalyticsDatastore");
 
 export class AnalyticsDatastoreNotResolved extends Data.TaggedError(
   "GCP.Apigee.AnalyticsDatastoreNotResolved",
@@ -148,9 +136,7 @@ const resourceName = (organizationId: string, datastoreId: string) =>
 const normalizeName = (value: string | undefined, organizationId: string) => {
   if (value === undefined || value.length === 0) return undefined;
   const trimmed = value.replace(/^\/+/, "");
-  return trimmed.includes("/")
-    ? trimmed
-    : resourceName(organizationId, trimmed);
+  return trimmed.includes("/") ? trimmed : resourceName(organizationId, trimmed);
 };
 
 const toAttrs = (
@@ -187,11 +173,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAnalyticsDatastores({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const AnalyticsDatastoreProvider = () =>
   Provider.succeed(AnalyticsDatastore, {
@@ -210,9 +192,7 @@ export const AnalyticsDatastoreProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const name = output?.name;
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
@@ -243,9 +223,7 @@ export const AnalyticsDatastoreProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
       const ownership = yield* createInternalLabels(id);
       const generated = yield* toPhysicalId(
         id,
@@ -263,8 +241,7 @@ export const AnalyticsDatastoreProvider = () =>
         tablePrefix: news.datastoreConfig?.tablePrefix,
       };
 
-      let current =
-        output?.name !== undefined ? yield* getByName(output.name) : undefined;
+      let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
 
       if (current === undefined) {
         const created = yield* apigee
@@ -313,11 +290,6 @@ export const AnalyticsDatastoreProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsAnalyticsDatastores({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

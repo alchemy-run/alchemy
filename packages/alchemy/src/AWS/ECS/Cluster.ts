@@ -13,8 +13,7 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;
-export type ClusterArn =
-  `arn:aws:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn = `arn:aws:ecs:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**
@@ -106,10 +105,7 @@ export const ClusterProvider = () =>
           value,
         }));
 
-      const toClusterName = (
-        id: string,
-        props: { clusterName?: string } = {},
-      ) =>
+      const toClusterName = (id: string, props: { clusterName?: string } = {}) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
@@ -123,15 +119,11 @@ export const ClusterProvider = () =>
         capacityProviders?: string[];
         defaultCapacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
       }) {
-        if (
-          capacityProviders !== undefined ||
-          defaultCapacityProviderStrategy !== undefined
-        ) {
+        if (capacityProviders !== undefined || defaultCapacityProviderStrategy !== undefined) {
           yield* ecs.putClusterCapacityProviders({
             cluster,
             capacityProviders: capacityProviders ?? [],
-            defaultCapacityProviderStrategy:
-              defaultCapacityProviderStrategy ?? [],
+            defaultCapacityProviderStrategy: defaultCapacityProviderStrategy ?? [],
           });
         }
       });
@@ -140,16 +132,12 @@ export const ClusterProvider = () =>
         stables: ["clusterArn", "clusterName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toClusterName(id, olds ?? {})) !==
-            (yield* toClusterName(id, news ?? {}))
-          ) {
+          if ((yield* toClusterName(id, olds ?? {})) !== (yield* toClusterName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const clusterName =
-            output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
+          const clusterName = output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
           const described = yield* ecs.describeClusters({
             clusters: [output?.clusterArn ?? clusterName],
             include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
@@ -169,8 +157,7 @@ export const ClusterProvider = () =>
             settings: cluster.settings ?? [],
             configuration: cluster.configuration,
             capacityProviders: cluster.capacityProviders ?? [],
-            defaultCapacityProviderStrategy:
-              cluster.defaultCapacityProviderStrategy ?? [],
+            defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
             serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
               ? { namespace: cluster.serviceConnectDefaults.namespace }
               : undefined,
@@ -183,9 +170,7 @@ export const ClusterProvider = () =>
             // listClusters exhaustively.
             const arns = yield* ecs.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.clusterArns ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusterArns ?? [])),
             );
             if (arns.length === 0) {
               return [];
@@ -229,10 +214,8 @@ export const ClusterProvider = () =>
                   settings: cluster.settings ?? [],
                   configuration: cluster.configuration,
                   capacityProviders: cluster.capacityProviders ?? [],
-                  defaultCapacityProviderStrategy:
-                    cluster.defaultCapacityProviderStrategy ?? [],
-                  serviceConnectDefaults: cluster.serviceConnectDefaults
-                    ?.namespace
+                  defaultCapacityProviderStrategy: cluster.defaultCapacityProviderStrategy ?? [],
+                  serviceConnectDefaults: cluster.serviceConnectDefaults?.namespace
                     ? { namespace: cluster.serviceConnectDefaults.namespace }
                     : undefined,
                   tags,
@@ -317,8 +300,7 @@ export const ClusterProvider = () =>
           yield* applyCapacityProviders({
             cluster: clusterArn,
             capacityProviders: news.capacityProviders,
-            defaultCapacityProviderStrategy:
-              news.defaultCapacityProviderStrategy,
+            defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy,
           });
 
           // Sync tags — diff observed cloud tags against desired.
@@ -352,8 +334,7 @@ export const ClusterProvider = () =>
             settings: news.settings ?? [],
             configuration: news.configuration,
             capacityProviders: news.capacityProviders ?? [],
-            defaultCapacityProviderStrategy:
-              news.defaultCapacityProviderStrategy ?? [],
+            defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy ?? [],
             serviceConnectDefaults: news.serviceConnectDefaults,
             tags: desiredTags,
           };
@@ -376,20 +357,15 @@ export const ClusterProvider = () =>
           // 1. Delete services (force skips the scale-to-zero dance).
           const serviceArns = yield* ecs.listServices.pages({ cluster }).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.serviceArns ?? []),
-            ),
-            Effect.catchTag("ClusterNotFoundException", () =>
-              Effect.succeed([] as string[]),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.serviceArns ?? [])),
+            Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([] as string[])),
           );
           yield* Effect.forEach(
             serviceArns,
             (service) =>
               ecs.deleteService({ cluster, service, force: true }).pipe(
-                Effect.catchTag(
-                  ["ServiceNotFoundException", "ClusterNotFoundException"],
-                  () => Effect.succeed(undefined),
+                Effect.catchTag(["ServiceNotFoundException", "ClusterNotFoundException"], () =>
+                  Effect.succeed(undefined),
                 ),
                 Effect.asVoid,
               ),
@@ -399,39 +375,27 @@ export const ClusterProvider = () =>
           // 2. Stop any remaining standalone tasks.
           const taskArns = yield* ecs.listTasks.pages({ cluster }).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.taskArns ?? []),
-            ),
-            Effect.catchTag("ClusterNotFoundException", () =>
-              Effect.succeed([] as string[]),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.taskArns ?? [])),
+            Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([] as string[])),
           );
           yield* Effect.forEach(
             taskArns,
             (task) =>
               ecs.stopTask({ cluster, task, reason: "alchemy delete" }).pipe(
-                Effect.catchTag("ClusterNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
                 Effect.asVoid,
               ),
             { discard: true },
           );
 
           // 3. Deregister container instances (EC2 launch type).
-          const instanceArns = yield* ecs.listContainerInstances
-            .pages({ cluster })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.containerInstanceArns ?? [],
-                ),
-              ),
-              Effect.catchTag("ClusterNotFoundException", () =>
-                Effect.succeed([] as string[]),
-              ),
-            );
+          const instanceArns = yield* ecs.listContainerInstances.pages({ cluster }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.containerInstanceArns ?? []),
+            ),
+            Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([] as string[])),
+          );
           yield* Effect.forEach(
             instanceArns,
             (containerInstance) =>
@@ -442,9 +406,7 @@ export const ClusterProvider = () =>
                   force: true,
                 })
                 .pipe(
-                  Effect.catchTag("ClusterNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
                   Effect.asVoid,
                 ),
             { discard: true },
@@ -453,10 +415,7 @@ export const ClusterProvider = () =>
           // 4. Remove custom capacity-provider associations. A cluster with
           //    an associated provider cannot be deleted even after its
           //    services, tasks, and container instances have drained.
-          if (
-            (observedCluster?.capacityProviders ?? output.capacityProviders)
-              .length > 0
-          ) {
+          if ((observedCluster?.capacityProviders ?? output.capacityProviders).length > 0) {
             yield* ecs
               .putClusterCapacityProviders({
                 cluster,
@@ -466,12 +425,8 @@ export const ClusterProvider = () =>
               .pipe(
                 Effect.retry({
                   while: (e) =>
-                    e._tag === "UpdateInProgressException" ||
-                    e._tag === "ResourceInUseException",
-                  schedule: Schedule.max([
-                    Schedule.fixed("3 seconds"),
-                    Schedule.recurs(10),
-                  ]),
+                    e._tag === "UpdateInProgressException" || e._tag === "ResourceInUseException",
+                  schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
                 }),
                 Effect.catchTag("ClusterNotFoundException", () => Effect.void),
               );
@@ -491,10 +446,7 @@ export const ClusterProvider = () =>
                   e._tag === "ClusterContainsContainerInstancesException" ||
                   e._tag === "ClusterContainsCapacityProviderException" ||
                   e._tag === "UpdateInProgressException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(15)]),
               }),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
             );
@@ -519,10 +471,7 @@ export const ClusterProvider = () =>
             }),
             Effect.retry({
               while: (error) => error instanceof ClusterStillActive,
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(15),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
             }),
           );
         }),

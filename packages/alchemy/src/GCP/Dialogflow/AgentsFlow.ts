@@ -155,10 +155,7 @@ const nluOf = (
   };
 };
 
-const toAttrs = (
-  flow: dialogflow.GoogleCloudDialogflowCxV3Flow,
-  project: string,
-) => {
+const toAttrs = (flow: dialogflow.GoogleCloudDialogflowCxV3Flow, project: string) => {
   const name = flow.name ?? "";
   const parsed = parseResourceName(name, "flows");
   return {
@@ -204,16 +201,12 @@ export const AgentsFlowProvider = () =>
       const previousId = olds?.flowId ?? output?.flowId;
       if (
         (previousAgent !== undefined && news.agent !== previousAgent) ||
-        (previousId !== undefined &&
-          news.flowId !== undefined &&
-          news.flowId !== previousId)
+        (previousId !== undefined && news.flowId !== undefined && news.flowId !== previousId)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousAgent === news.agent &&
-            previousId !== undefined &&
-            news.flowId === previousId,
+            previousAgent === news.agent && previousId !== undefined && news.flowId === previousId,
         };
       }
       return undefined;
@@ -230,9 +223,7 @@ export const AgentsFlowProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -248,12 +239,8 @@ export const AgentsFlowProvider = () =>
                     flows
                       .filter(
                         (flow) =>
-                          parseOwnership(flow.description).labels[
-                            "alchemy-id"
-                          ] !== undefined ||
-                          parseOwnership(flow.displayName).labels[
-                            "alchemy-id"
-                          ] !== undefined,
+                          parseOwnership(flow.description).labels["alchemy-id"] !== undefined ||
+                          parseOwnership(flow.displayName).labels["alchemy-id"] !== undefined,
                       )
                       .map((flow) => toAttrs(flow, env.project)),
                   ),
@@ -288,11 +275,7 @@ export const AgentsFlowProvider = () =>
             languageCode: news.languageCode,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, agent, output?.name),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, agent, output?.name)));
         current = created ?? undefined;
       }
 
@@ -305,10 +288,7 @@ export const AgentsFlowProvider = () =>
       const currentName = current.name ?? output?.name ?? "";
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const nluChanged = !sameJson(
-        nluOf(current.nluSettings),
-        news.nluSettings,
-      );
+      const nluChanged = !sameJson(nluOf(current.nluSettings), news.nluSettings);
       const lockedChanged = (current.locked === true) !== locked;
 
       if (displayChanged || descriptionChanged || nluChanged || lockedChanged) {

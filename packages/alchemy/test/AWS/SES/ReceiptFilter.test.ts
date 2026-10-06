@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ReceiptFilter } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as ses from "@distilled.cloud/aws/ses";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ReceiptFilter } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,16 +17,12 @@ const findFilter = (name: string) =>
   ses
     .listReceiptFilters({})
     .pipe(
-      Effect.map((response) =>
-        (response.Filters ?? []).find((filter) => filter.Name === name),
-      ),
+      Effect.map((response) => (response.Filters ?? []).find((filter) => filter.Name === name)),
     );
 
 const assertFilterDeleted = (name: string) =>
   findFilter(name).pipe(
-    Effect.flatMap((found) =>
-      found ? Effect.fail(new FilterStillExists({ name })) : Effect.void,
-    ),
+    Effect.flatMap((found) => (found ? Effect.fail(new FilterStillExists({ name })) : Effect.void)),
     Effect.retry({
       while: (e) => e._tag === "FilterStillExists",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
