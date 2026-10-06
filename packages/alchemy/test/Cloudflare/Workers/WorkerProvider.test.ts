@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { relativeWorkerMain } from "@/Cloudflare/Workers/Worker.ts";
 import {
+  bindingsToPreviewEnv,
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
@@ -507,6 +508,67 @@ describe(
         expect(relativeWorkerMain("file:///my%20repo/src/worker.ts", "/my repo")).toEqual(
           "src/worker.ts",
         );
+      });
+    });
+
+    describe("bindingsToPreviewEnv", () => {
+      test("passes a json binding's payload through verbatim", () => {
+        const payload = {
+          teamIds: { FIN: "team-fin" },
+          stateIds: { "FIN/Triage": "state-1", "In Review": "state-2" },
+          nested: [{ camelKey: { UPPER: true } }],
+        };
+        expect(bindingsToPreviewEnv([{ type: "json", name: "LINEAR", json: payload }])).toEqual({
+          LINEAR: { type: "json", json: payload },
+        });
+      });
+
+      test("passes service props and secret_key JWKs through verbatim", () => {
+        const props = { tenantId: "t-1", Flags: { betaUI: true } };
+        const keyJwk = { kty: "oct", keyOps: ["sign"], K: "secret" };
+        expect(
+          bindingsToPreviewEnv([
+            { type: "service", name: "API", service: "api", props },
+            {
+              type: "secret_key",
+              name: "SIGNING_KEY",
+              algorithm: { name: "HMAC", hash: "SHA-256" },
+              format: "jwk",
+              usages: ["sign"],
+              keyJwk,
+            },
+          ]),
+        ).toEqual({
+          API: { type: "service", service: "api", props },
+          SIGNING_KEY: {
+            type: "secret_key",
+            algorithm: { name: "HMAC", hash: "SHA-256" },
+            format: "jwk",
+            usages: ["sign"],
+            key_jwk: keyJwk,
+          },
+        });
+      });
+
+      test("snake_cases a binding descriptor's own fields", () => {
+        expect(
+          bindingsToPreviewEnv([
+            { type: "kv_namespace", name: "CACHE", namespaceId: "ns-1" },
+            {
+              type: "durable_object_namespace",
+              name: "ROOM",
+              className: "Room",
+              scriptName: "host",
+            },
+          ]),
+        ).toEqual({
+          CACHE: { type: "kv_namespace", namespace_id: "ns-1" },
+          ROOM: {
+            type: "durable_object_namespace",
+            class_name: "Room",
+            script_name: "host",
+          },
+        });
       });
     });
   },
