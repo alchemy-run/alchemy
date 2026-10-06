@@ -163,14 +163,12 @@ const observedPredecessor = (
  * An IAM role can exist before SES is able to assume it, so create and
  * update retry that specific rejection while the role propagates.
  */
-const retryRolePropagation = <A, E extends { _tag: string; message?: string }, R>(
-  effect: Effect.Effect<A, E, R>,
+const retryRolePropagation = <A, R>(
+  effect: Effect.Effect<A, ses.CreateReceiptRuleError | ses.UpdateReceiptRuleError, R>,
 ) =>
   effect.pipe(
     Effect.retry({
-      while: (e: E): boolean =>
-        e._tag === "InvalidParameterValue" &&
-        (e.message?.includes("Could not assume the provided IAM Role") ?? false),
+      while: (e) => e._tag === "ReceiptRuleRoleNotAssumable",
       schedule: Schedule.spaced("5 seconds"),
       times: 12,
     }),
