@@ -1,6 +1,8 @@
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
@@ -204,6 +206,22 @@ const secretProgram = (props: { recoveryWindowInDays?: number }) =>
   });
 const emptyProgram = Effect.succeed(undefined);
 
+/** The `_tag`s of every failure and defect in a deploy's exit. */
+const failureTags = (exit: Exit.Exit<unknown, unknown>): string[] =>
+  Exit.isFailure(exit)
+    ? exit.cause.reasons
+        .map((reason) =>
+          Cause.isFailReason(reason)
+            ? reason.error
+            : Cause.isDieReason(reason)
+              ? reason.defect
+              : undefined,
+        )
+        .map((value) =>
+          typeof value === "object" && value !== null && "_tag" in value ? String(value._tag) : "",
+        )
+    : [];
+
 describe("Secret recovery window", { tags: ["unit", "local"] }, () => {
   test(
     "force-deletes immediately when no recovery window is set",
@@ -241,6 +259,45 @@ describe("Secret recovery window", { tags: ["unit", "local"] }, () => {
       expect(fake.calls.some((call) => call.operation === "RestoreSecret")).toBe(true);
       expect(fake.secrets.get("app/db")?.deletedDate).toBeUndefined();
       expect(fake.calls.filter((call) => call.operation === "CreateSecret")).toHaveLength(1);
+    }),
+  );
+
+  test(
+    "refuses a recovery window outside 7 to 30 days",
+    Effect.gen(function* () {
+      for (const recoveryWindowInDays of [6, 31, 7.5]) {
+        const { fake, deploy } = makeHarness();
+        const exit = yield* Effect.exit(deploy(secretProgram({ recoveryWindowInDays })));
+        expect(failureTags(exit)).toContain("SecretRecoveryWindowOutOfRange");
+        expect(fake.calls.some((call) => call.operation === "CreateSecret")).toBe(false);
+      }
+      // Control: both ends of the range are accepted.
+      for (const recoveryWindowInDays of [7, 30]) {
+        const { fake, deploy } = makeHarness();
+        yield* deploy(secretProgram({ recoveryWindowInDays }));
+        expect(fake.secrets.get("app/db")?.deletedDate).toBeUndefined();
+      }
+    }),
+  );
+
+  test(
+    "does not restore a pending secret that another owner created",
+    Effect.gen(function* () {
+      const { fake, deploy } = makeHarness();
+      fake.secrets.set("app/db", {
+        arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:app/db-XyZaBc",
+        name: "app/db",
+        deletedDate: 1,
+        tags: [
+          { Key: "alchemy::stack", Value: "another-stack" },
+          { Key: "alchemy::stage", Value: STAGE },
+          { Key: "alchemy::id", Value: "Db" },
+        ],
+      });
+      const exit = yield* Effect.exit(deploy(secretProgram({ recoveryWindowInDays: 14 })));
+      expect(failureTags(exit)).toContain("OwnedBySomeoneElse");
+      expect(fake.calls.some((call) => call.operation === "RestoreSecret")).toBe(false);
+      expect(fake.secrets.get("app/db")?.deletedDate).toBe(1);
     }),
   );
 });

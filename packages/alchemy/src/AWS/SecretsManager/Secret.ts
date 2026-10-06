@@ -4,11 +4,12 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { OwnedBySomeoneElse } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -60,7 +61,7 @@ export interface SecretProps {
    */
   resourcePolicy?: PolicyDocument | string;
   /**
-   * Number of days (7 to 30) AWS keeps the secret recoverable after Alchemy
+   * Number of days (a whole number from 7 to 30) AWS keeps the secret recoverable after Alchemy
    * deletes it (`DeleteSecret`'s `RecoveryWindowInDays`).
    *
    * When omitted, deletion is immediate: the secret is deleted with
@@ -69,7 +70,9 @@ export interface SecretProps {
    * restored with `RestoreSecret`. While it is scheduled, AWS does not allow
    * another secret with the same name, so re-adding the same `Secret` restores
    * the pending secret and converges it to the desired props instead of
-   * creating a new one.
+   * creating a new one. Only a pending secret that carries this resource's
+   * Alchemy ownership tags is restored; any other one fails with
+   * `OwnedBySomeoneElse`.
    *
    * @default undefined (delete immediately, no recovery window)
    */
@@ -206,6 +209,30 @@ const isDeletionInProgress = (message: string | undefined): boolean => {
   );
 };
 
+/**
+ * Raised when `recoveryWindowInDays` is not a whole number from 7 to 30, the
+ * range `DeleteSecret` accepts.
+ */
+export class SecretRecoveryWindowOutOfRange extends Data.TaggedError(
+  "SecretRecoveryWindowOutOfRange",
+)<{
+  message: string;
+  recoveryWindowInDays: number;
+}> {}
+
+const validateRecoveryWindow = (recoveryWindowInDays: number | undefined) =>
+  recoveryWindowInDays === undefined ||
+  (Number.isInteger(recoveryWindowInDays) &&
+    recoveryWindowInDays >= 7 &&
+    recoveryWindowInDays <= 30)
+    ? Effect.void
+    : Effect.fail(
+        new SecretRecoveryWindowOutOfRange({
+          message: `recoveryWindowInDays must be a whole number from 7 to 30, got ${recoveryWindowInDays}.`,
+          recoveryWindowInDays,
+        }),
+      );
+
 class SecretNotVisible extends Data.TaggedError("SecretNotVisible")<{
   readonly secretId: string;
 }> {}
@@ -289,16 +316,26 @@ export const SecretProvider = () =>
       // window ends, so re-adding the same `Secret` must bring it back rather
       // than create a second one (`CreateSecret` would be refused). Only
       // applies when the caller opted into a recovery window; the default
-      // force-deletion path keeps its create-through-the-window retry.
-      const restoreIfPendingDeletion = (secretId: string) =>
-        secretsmanager.describeSecret({ SecretId: secretId }).pipe(
-          Effect.flatMap((described) =>
-            described.DeletedDate
-              ? secretsmanager.restoreSecret({ SecretId: secretId }).pipe(Effect.asVoid)
-              : Effect.void,
-          ),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-        );
+      // force-deletion path keeps its create-through-the-window retry. A
+      // pending secret without this resource's ownership tags belongs to
+      // someone else and is never restored.
+      const restoreIfPendingDeletion = Effect.fn(function* (id: string, secretId: string) {
+        const described = yield* secretsmanager
+          .describeSecret({ SecretId: secretId })
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        if (!described?.DeletedDate) {
+          return;
+        }
+        if (!(yield* hasAlchemyTags(id, toTagRecord(described.Tags)))) {
+          return yield* new OwnedBySomeoneElse({
+            message: `Secret '${secretId}' is scheduled for deletion and was not created by this resource, so it was not restored. Restore or delete it in Secrets Manager, or choose another name.`,
+            resourceType: Secret.Type,
+            logicalId: id,
+            physicalName: secretId,
+          });
+        }
+        yield* secretsmanager.restoreSecret({ SecretId: secretId });
+      });
 
       // Force deletion is asynchronous. `DeletedDate` means the operation was
       // accepted, not that the resource is absent, so deletion completion must
@@ -339,6 +376,7 @@ export const SecretProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          yield* validateRecoveryWindow(news.recoveryWindowInDays);
           const secretName = output?.secretName ?? (yield* toSecretName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -359,7 +397,7 @@ export const SecretProvider = () =>
           // deletion") — force deletions complete within seconds, so retry
           // through that window (bounded).
           if (!observed?.ARN && news.recoveryWindowInDays !== undefined) {
-            yield* restoreIfPendingDeletion(secretName);
+            yield* restoreIfPendingDeletion(id, secretName);
             observed = yield* readSecret(secretName);
           }
 
