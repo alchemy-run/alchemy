@@ -93,7 +93,6 @@ function withStorageTransaction<A, E, R>(
     return yield* Effect.scoped(
       Effect.gen(function* () {
         let cancelled = false;
-        let callbackFiber: Fiber.Fiber<A, E> | undefined;
         let native: Promise<A> | undefined;
         let failure: Exit.Failure<A, E> | undefined;
         let currentTransaction: ActiveStorageTransaction | undefined;
@@ -109,8 +108,11 @@ function withStorageTransaction<A, E, R>(
         yield* Effect.addFinalizer(
           Effect.fn(function* () {
             cancelled = true;
-            if (callbackFiber !== undefined) {
-              yield* Fiber.interrupt(callbackFiber);
+            // The synchronous scheduler can re-enter this finalizer before
+            // runForkWith returns. The callback publishes its owner first.
+            const owner = currentTransaction?.owner;
+            if (owner !== undefined) {
+              yield* Fiber.interrupt(owner);
             }
             const settlement = native;
             if (settlement !== undefined) {
@@ -166,7 +168,7 @@ function withStorageTransaction<A, E, R>(
               );
 
               return new Promise<A>((resolve, rejectCallback) => {
-                callbackFiber = Effect.runForkWith(callbackContext)(
+                const callbackFiber = Effect.runForkWith(callbackContext)(
                   Effect.withFiber((fiber) => {
                     transaction.owner = fiber;
                     return evaluate(transaction).pipe(

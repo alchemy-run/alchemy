@@ -11,7 +11,7 @@ import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { resolveBranchScope, type ResolvedBranchScope } from "./BranchScope.ts";
-import { Function, type FunctionAttributes } from "./Function.ts";
+import { branchScopeOf, Function, type FunctionAttributes } from "./Function.ts";
 import { buildFunctionArtifact } from "./FunctionArtifact.ts";
 import { functionEnvironment, functionSlug } from "./FunctionConfig.ts";
 import { LocalFunctionProvider } from "./LocalFunctionProvider.ts";
@@ -182,7 +182,7 @@ export const FunctionProviderLive = () =>
     }),
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return;
-      const scope = yield* resolveBranchScope(news);
+      const scope = yield* resolveBranchScope(branchScopeOf(news));
       if (
         output &&
         (scope.projectId !== output.projectId ||
@@ -197,11 +197,11 @@ export const FunctionProviderLive = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       if (
         !output &&
-        !(olds?.branch?.projectId && olds.branch.branchId) &&
-        !olds?.project?.projectId
+        !(olds && branchScopeOf(olds).branch?.projectId && branchScopeOf(olds).branch?.branchId) &&
+        !(olds && branchScopeOf(olds).project?.projectId)
       )
         return undefined;
-      const scope = output ?? (yield* resolveBranchScope(olds!));
+      const scope = output ?? (yield* resolveBranchScope(branchScopeOf(olds!)));
       const slug = output?.slug ?? (yield* functionSlug(id, olds?.slug));
       const found = yield* observeFunction(scope, slug);
       if (!found) return undefined;
@@ -216,7 +216,7 @@ export const FunctionProviderLive = () =>
       return output ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
-      const scope = yield* resolveBranchScope(news);
+      const scope = yield* resolveBranchScope(branchScopeOf(news));
       const slug = news.slug ?? output?.slug ?? (yield* functionSlug(id));
       yield* functionSlug(id, slug);
       const observed = yield* observeFunction(scope, slug);

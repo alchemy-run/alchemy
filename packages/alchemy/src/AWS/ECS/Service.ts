@@ -1609,6 +1609,10 @@ const transformServiceProps = (
     }).pipe(Namespace.push(id));
   });
 
+// Tasks in `host`/`bridge` mode have no ENI of their own.
+const usesAwsvpc = (props: ServiceProps) =>
+  !("networkMode" in props) || (props.networkMode ?? "awsvpc") === "awsvpc";
+
 const composeManagedIngress = (
   id: string,
   props: ServiceProps,
@@ -1998,7 +2002,7 @@ const composeManagedIngress = (
           vpcId: network.vpcId as string,
           port: spec.port as number,
           protocol: spec.protocol,
-          targetType: "ip",
+          targetType: usesAwsvpc(props) ? "ip" : "instance",
           healthCheckPath: isNetworkTg
             ? wantsHttpCheck
               ? (health?.path ?? "/")
@@ -3099,7 +3103,9 @@ export const ServiceProvider = () =>
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
         healthCheckGracePeriodSeconds: toWireSeconds(news.healthCheckGracePeriod),
-        networkConfiguration: networkConfigurationOf(network, securityGroups),
+        networkConfiguration: usesAwsvpc(news)
+          ? networkConfigurationOf(network, securityGroups)
+          : undefined,
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,
         placementStrategy: news.placementStrategy,

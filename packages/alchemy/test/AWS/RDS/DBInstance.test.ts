@@ -1709,6 +1709,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       const requests: Array<{
         action: string;
         blockPublicPolicy: boolean | undefined;
+        secretId: string | undefined;
       }> = [];
       const observedClient = client.pipe(
         HttpClient.tapRequest((request) =>
@@ -1722,6 +1723,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             requests.push({
               action: target.split(".").at(-1)!,
               blockPublicPolicy: body.BlockPublicPolicy,
+              secretId: body.SecretId,
             });
           }),
         ),
@@ -1796,8 +1798,19 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(created.masterUserSecretResourcePolicy).toBe(normalizePolicyDocument(initialPolicy));
       expect(yield* readPolicy).toBe(normalizePolicyDocument(initialPolicy));
       expect(requests.filter((request) => request.action === "PutResourcePolicy")).toEqual([
-        { action: "PutResourcePolicy", blockPublicPolicy: true },
+        { action: "PutResourcePolicy", blockPublicPolicy: true, secretId: secretArn },
       ]);
+      // ValidateResourcePolicy is authorized against the secret it names, so
+      // once the secret exists every validation must name it: an identity
+      // scoped to this secret's ARN is denied an untargeted (`*`) validation.
+      // Only the first create, before RDS returns a secret, runs untargeted.
+      const validatedSecretIds = (from: number) =>
+        requests
+          .slice(from)
+          .filter((request) => request.action === "ValidateResourcePolicy")
+          .map((request) => request.secretId);
+      expect(validatedSecretIds(0).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(0).every((secretId) => secretId === undefined)).toBe(true);
       const beforePlan = requests.length;
       expect(
         (yield* stack
@@ -1805,16 +1818,14 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
           .pipe(Effect.provideService(HttpClient.HttpClient, observedClient))).resources
           .SecretPolicyInstance,
       ).toMatchObject({ action: "noop" });
-      expect(
-        requests.slice(beforePlan).some((request) => request.action === "ValidateResourcePolicy"),
-      ).toBe(true);
+      expect(validatedSecretIds(beforePlan).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(beforePlan).every((secretId) => secretId === secretArn)).toBe(true);
 
       const beforeNoop = requests.length;
       const unchanged = yield* deploy(initialPolicy, "force-reconcile");
       expect(unchanged.dbInstanceArn).toBe(created.dbInstanceArn);
-      expect(
-        requests.slice(beforeNoop).some((request) => request.action === "ValidateResourcePolicy"),
-      ).toBe(true);
+      expect(validatedSecretIds(beforeNoop).length).toBeGreaterThan(0);
+      expect(validatedSecretIds(beforeNoop).every((secretId) => secretId === secretArn)).toBe(true);
       expect(
         requests
           .slice(beforeNoop)

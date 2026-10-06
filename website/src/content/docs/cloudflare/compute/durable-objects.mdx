@@ -465,6 +465,19 @@ hinted region, which may not be inside it. Under `alchemy dev` there is
 only one location to place anything in, so hints are accepted and
 ignored — placement is only observable once deployed.
 
+## Keep an instance inside a jurisdiction
+
+A `locationHint` is best-effort. When data must stay inside a region for
+compliance, address the object through `jurisdiction()` instead:
+
+```typescript
+const room = rooms.jurisdiction("eu").getByName(roomId);
+```
+
+Cloudflare creates and stores that object only inside the jurisdiction.
+The same name addresses a different object than it does without
+`jurisdiction()`, so pick one form per name and keep using it.
+
 ## Call scope vs isolate scope
 
 A Durable Object shares its isolate's layer build with the Worker
