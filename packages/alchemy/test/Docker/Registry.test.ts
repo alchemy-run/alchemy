@@ -111,7 +111,7 @@ describe(
       expect(
         publishedRepoDigest(
           "localhost:5055/app:latest",
-          { stdout: `latest: digest: ${digest} size: 123`, stderr: "" },
+          { stdout: `latest: digest: ${digest}`, stderr: "" },
           [`localhost:5055/app@${other}`],
         ),
       ).toBe(`localhost:5055/app@${digest}`);
