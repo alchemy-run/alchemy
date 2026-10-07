@@ -235,7 +235,7 @@ describe("framework factory", () => {
   });
 
   it("pins the server entry to waku's rsc index module", () => {
-    expect(WAKU_SERVER_ENTRY_MODULE).toBe(NodePath.join("server", "index.js"));
+    expect(WAKU_SERVER_ENTRY_MODULE).toBe("server/index.js");
   });
 });
 

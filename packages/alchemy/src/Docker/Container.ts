@@ -1,6 +1,9 @@
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -9,7 +12,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
-import { sha256Object } from "../Util/sha256.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -30,6 +33,16 @@ export interface ContainerProps {
   command?: string[];
   /** Container environment variables. Use Redacted for secrets. */
   environment?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Paths to Docker env files, forwarded in the declared order as repeated
+   * `--env-file` options. Explicit `environment` values are forwarded after
+   * these files and take precedence in Docker. Editing a file's contents
+   * replaces the container on the next deploy. Only a digest of the contents
+   * is kept, on the container's own label; neither contents nor digest are
+   * written to Alchemy state. Docker itself exposes the resolved values
+   * through `docker inspect`, so treat env files as secrets.
+   */
+  envFiles?: string[];
   /** Host/container port mappings. */
   ports?: Container.PortMapping[];
   /** Volume or bind mounts. */
@@ -48,6 +61,12 @@ export interface ContainerProps {
   stopTimeout?: Duration.Input;
   /** Networks to connect after create. */
   networks?: Container.NetworkMapping[];
+  /** Network namespace. Use `{ container: id }` to share another container's namespace. */
+  networkMode?: Container.NetworkMode;
+  /** Linux capabilities to add, for example `SYS_ADMIN`. */
+  capAdd?: string[];
+  /** Host devices to expose to the container. */
+  devices?: Container.DeviceMapping[];
   /**
    * Extra `/etc/hosts` entries, each `hostname:address`. Docker's
    * `host-gateway` alias resolves to the host machine, so
@@ -93,6 +112,15 @@ export declare namespace Container {
     /** Network aliases for the container. */
     aliases?: string[];
   }
+  type NetworkMode = string | { container: string };
+  interface DeviceMapping {
+    /** Host device path. */
+    hostPath: string;
+    /** Container device path. */
+    containerPath: string;
+    /** Cgroup permissions. @default "rwm" */
+    permissions?: string;
+  }
   interface Healthcheck {
     /** Command to run for health checks. */
     cmd: string[] | string;
@@ -128,6 +156,12 @@ export interface Container extends Resource<
      * Format: `"80/tcp" -> 8080`.
      */
     ports: Record<string, number>;
+    /** Configured network namespace, when reported by Docker. */
+    networkMode?: string;
+    /** Added Linux capabilities, when reported by Docker. */
+    capAdd?: string[];
+    /** Configured host devices, when reported by Docker. */
+    devices?: Container.DeviceMapping[];
   },
   never,
   Providers
@@ -164,6 +198,25 @@ export interface Container extends Resource<
  *   start: true,
  * });
  * ```
+ *
+ * ### Environment Files
+ * **Example:** Layered Docker env files
+ * ```typescript
+ * const app = yield* Docker.Container("app", {
+ *   image: "ghcr.io/acme/app:latest",
+ *   envFiles: ["./config/base.env", "./config/production.env"],
+ *   // Explicit values are passed after env files and take precedence.
+ *   environment: { LOG_LEVEL: "info" },
+ * });
+ * ```
+ *
+ * Editing an env file replaces the container on the next deploy, as does
+ * adopting a container that uses env files (once, so later edits are tracked).
+ * Alchemy reads
+ * the files at plan time but keeps only a digest of their contents, on the
+ * container's own label; neither the values nor the digest are written to
+ * Alchemy state. Docker exposes the resolved values through `docker inspect`,
+ * so treat env files as secrets.
  *
  * ### Networks and Volumes
  * **Example:** PostgreSQL with persistent storage
@@ -215,8 +268,27 @@ export interface Container extends Resource<
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   // Any `hostname:address` pair — host access is just the common case.
- *   extraHosts: ["payments.internal:10.1.2.3"],
+ *   extraHosts: ["service.example:192.0.2.10"],
  *   start: true,
+ * });
+ * ```
+ *
+ * ### Runtime Options
+ * **Example:** Share a donor container's network namespace
+ * ```typescript
+ * const donor = yield* Docker.Container("donor", { image: "redis:alpine" });
+ * const sidecar = yield* Docker.Container("sidecar", {
+ *   image: "busybox:latest",
+ *   networkMode: { container: donor.id },
+ * });
+ * ```
+ *
+ * **Example:** Add capabilities and devices
+ * ```typescript
+ * const worker = yield* Docker.Container("worker", {
+ *   image: "ubuntu:latest",
+ *   capAdd: ["SYS_ADMIN"],
+ *   devices: [{ hostPath: "/dev/fuse", containerPath: "/dev/fuse" }],
  * });
  * ```
  *
@@ -285,6 +357,37 @@ export const ContainerProvider = () =>
     Container,
     Effect.gen(function* () {
       const docker = yield* Docker;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      // Env files are read so editing one rolls the container, but only a
+      // digest of their bytes enters the config hash, which lives solely in
+      // the container's own label (where `docker inspect` already exposes
+      // the resolved values). Neither contents nor digest reach alchemy state.
+      const envFilesDigest = Effect.fn(function* (envFiles: ReadonlyArray<string> | undefined) {
+        if (!envFiles?.length) return undefined;
+        const digests = yield* Effect.forEach(envFiles, (file) =>
+          fs.readFile(path.resolve(file)).pipe(
+            Effect.flatMap(sha256),
+            Effect.map((digest) => `${file}\0${digest}`),
+          ),
+        );
+        return yield* sha256(digests.join("\n"));
+      });
+
+      // Without env files the hash input is unchanged from before they were
+      // supported, so existing containers keep their label and are not rolled.
+      const desiredConfigHash = Effect.fn(function* (
+        args: Parameters<Docker["Service"]["container"]["create"]>[0],
+        news: ContainerProps,
+      ) {
+        const envFiles = yield* envFilesDigest(news.envFiles);
+        return yield* sha256Object({
+          ...args,
+          imageId: normalizeImageId(news.image),
+          ...(envFiles === undefined ? {} : { envFiles }),
+        });
+      });
 
       const reconcileNetworks = Effect.fn(function* (
         live: Docker.Container,
@@ -383,14 +486,20 @@ export const ContainerProvider = () =>
           ) {
             return { action: "update" as const };
           }
+          // Same env file paths, possibly new contents: compare against the
+          // hash stamped on the running container.
+          if (news.envFiles?.length) {
+            const live = yield* inspect(newArgs.name, dockerContextName(news.context));
+            const applied = live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL];
+            if (applied !== undefined && applied !== (yield* desiredConfigHash(newArgs, news))) {
+              return { action: "update" as const };
+            }
+          }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const configHash = yield* sha256Object({
-            ...args,
-            imageId: normalizeImageId(news.image),
-          });
+          const configHash = yield* desiredConfigHash(args, news);
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
           const oldContext = olds ? dockerContextName(olds.context) : context;
@@ -420,7 +529,10 @@ export const ContainerProvider = () =>
             (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
               ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
                 normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
-                !matchesLegacyConfig(live, args, news.image)
+                !matchesLegacyConfig(live, args, news.image) ||
+                // Env file contents can't be compared without a label (e.g. an
+                // adopted container); recreate once so later edits are tracked.
+                (news.envFiles?.length ?? 0) > 0
               : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
           if (recreate) {
             yield* remove(live.Id, context);
@@ -495,11 +607,13 @@ const matchesLegacyConfig = (live: Docker.Container, desired: CreateArgs, image:
 
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
+    Effect.tap(() => validateContainerOptions(news)),
     Effect.map((name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
       name,
       image: normalizeImageRef(news.image),
       command: news.command,
       env: normalizeEnvironment(news.environment),
+      "env-file": news.envFiles?.length ? news.envFiles : undefined,
       volume: news.volumes?.map(
         (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
       ),
@@ -512,6 +626,9 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
       }),
       "add-host": news.extraHosts,
+      network: normalizeNetworkMode(news.networkMode),
+      "cap-add": normalizeCapabilities(news.capAdd),
+      device: normalizeDevices(news.devices),
       restart: news.restart ?? "no",
       label: news.labels,
       "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
@@ -548,7 +665,67 @@ const toContainerAttributes = (
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
   ports: toPortAttributes(info),
+  networkMode: info.HostConfig.NetworkMode,
+  capAdd: info.HostConfig.CapAdd ?? undefined,
+  devices: info.HostConfig.Devices?.map((device) => ({
+    hostPath: device.PathOnHost,
+    containerPath: device.PathInContainer,
+    permissions: device.CgroupPermissions,
+  })),
 });
+
+const normalizeNetworkMode = (mode: Container.NetworkMode | undefined): string | undefined =>
+  mode === undefined ? undefined : typeof mode === "string" ? mode : `container:${mode.container}`;
+
+const normalizeCapabilities = (capAdd: string[] | undefined): string[] | undefined => {
+  if (!capAdd?.length) return undefined;
+  return [...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean))].sort();
+};
+
+const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): string[] | undefined => {
+  if (!devices?.length) return undefined;
+  const normalized = devices.map(
+    (device) => `${device.hostPath}:${device.containerPath}:${device.permissions ?? "rwm"}`,
+  );
+  return [...new Set(normalized)].sort();
+};
+
+/**
+ * Raised before Docker is called when a container's options cannot be
+ * combined, e.g. sharing another container's network namespace while
+ * publishing ports.
+ */
+export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerOptions")<{
+  readonly message: string;
+}> {}
+
+const validateContainerOptions = (news: ContainerProps) => {
+  if (
+    isContainerNetworkMode(news.networkMode) &&
+    ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
+  ) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container networkMode.container cannot be combined with ports or networks",
+      }),
+    );
+  }
+  const targets = new Set<string>();
+  for (const device of news.devices ?? []) {
+    if (targets.has(device.containerPath)) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container devices contain conflicting target path ${device.containerPath}`,
+        }),
+      );
+    }
+    targets.add(device.containerPath);
+  }
+  return Effect.void;
+};
+
+const isContainerNetworkMode = (mode: Container.NetworkMode | undefined): boolean =>
+  typeof mode === "string" ? mode.startsWith("container:") : mode !== undefined;
 
 /** First binding that carries a real (non-zero) host port. */
 const boundHostPort = (

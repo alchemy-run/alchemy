@@ -23,6 +23,7 @@ import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterArch,
   toPostgresClusterSku,
   waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
@@ -413,6 +414,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           ? parent.kind === "postgresql"
             ? toPostgresClusterSku({
                 size: news.clusterSize,
+                arch: toPostgresClusterArch(parent.cluster_architecture),
                 region: parent.region.slug,
               })
             : news.clusterSize
