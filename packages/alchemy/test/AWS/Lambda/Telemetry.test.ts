@@ -26,6 +26,28 @@ const collectorWorker = () =>
     compatibility: { date: "2024-09-23" },
   });
 
+interface CollectedSpan {
+  name: string;
+  status?: { code?: number };
+  attributes?: { key: string; value: Record<string, unknown> }[];
+}
+
+// The `http.server` spans for one path, across every OTLP traces push the
+// collector recorded.
+const rootSpansFor = (collected: unknown, path: string): CollectedSpan[] =>
+  (collected as { items: { signal: string; payload: any }[] }).items
+    .filter((item) => item.signal === "traces")
+    .flatMap((item) => item.payload.resourceSpans ?? [])
+    .flatMap((resource: any) => resource.scopeSpans ?? [])
+    .flatMap((scope: any) => (scope.spans ?? []) as CollectedSpan[])
+    .filter(
+      (span) =>
+        span.name.startsWith("http.server") &&
+        span.attributes?.some(
+          (attribute) => attribute.key === "url.path" && attribute.value.stringValue === path,
+        ),
+    );
+
 describe(
   "AWS.Lambda Telemetry",
   {
@@ -105,9 +127,9 @@ describe(
 
           // A timing-out invocation: the fixture's timeout is 5 s and `/slow`
           // sleeps 60 s, so Lambda kills it and the Function URL answers with
-          // an error. 500 ms before that the deadline flush ended the root
+          // an error. 2 s before that the deadline flush ended the root
           // span with the timeout and drained the exporters, so the trace
-          // exists. Without it Lambda freezes the sandbox and nothing below
+          // exists. Without it Lambda kills the invocation and nothing below
           // ever reaches the collector.
           const client = yield* HttpClient.HttpClient;
           const slow = yield* client.get(`${fnUrl}/slow`);
@@ -121,6 +143,25 @@ describe(
           // the same flush.
           yield* expectUrlContains(collected, "lambda.slow-span");
           yield* expectUrlContains(collected, "lambda-slow-log");
+
+          // An invocation that finishes after the deadline flush but before
+          // the timeout: the response is untouched, and its root span is
+          // exported exactly once — by the flush, as timeout-imminent. The
+          // dispatcher flushes again before responding, so any second
+          // export has reached the collector by the time we see the 200.
+          const late = yield* client.get(`${fnUrl}/late`);
+          expect(late.status).toBe(200);
+          expect(yield* late.text).toContain("lambda-late-done");
+          const lateSpans = yield* client.get(collected).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.map((body) => rootSpansFor(body, "/late")),
+          );
+          expect(lateSpans).toHaveLength(1);
+          expect(lateSpans[0]?.status?.code).toBe(2);
+          expect(lateSpans[0]?.attributes).toContainEqual({
+            key: "aws.lambda.timeout.imminent",
+            value: { boolValue: true },
+          });
         }),
       { timeout: 600_000 },
     );

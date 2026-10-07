@@ -46,10 +46,9 @@ export const TIMEOUT_IMMINENT_ATTRIBUTE = "aws.lambda.timeout.imminent";
  *
  * This is never thrown and never fails the invocation. The handler keeps
  * running; the error is the span's exit status so the trace of an
- * invocation Lambda is about to freeze exports as an errored span instead
- * of vanishing. If the handler does finish inside the margin, its own
- * completion ends the span again with the real outcome (see
- * {@link withInvocationDeadline}).
+ * invocation Lambda is about to kill exports as an errored span instead
+ * of vanishing. If the handler does finish inside the margin, the span
+ * keeps this status (see {@link withInvocationDeadline}).
  */
 export class InvocationTimeoutError extends Data.TaggedError("AWS.Lambda.InvocationTimeoutError")<{
   readonly functionName: string;
@@ -60,7 +59,7 @@ export class InvocationTimeoutError extends Data.TaggedError("AWS.Lambda.Invocat
   readonly marginMs: number;
 }> {
   override get message() {
-    return `Lambda invocation ${this.requestId} of ${this.functionName} was still running after ${this.budgetMs}ms, ${this.marginMs}ms before its timeout; telemetry was flushed early in case Lambda freezes the sandbox`;
+    return `Lambda invocation ${this.requestId} of ${this.functionName} was still running after ${this.budgetMs}ms, ${this.marginMs}ms before its timeout; telemetry was flushed early in case Lambda kills the invocation`;
   }
 }
 
@@ -121,7 +120,7 @@ export const toTimeoutMarginMillis = (
  * Flush telemetry for an invocation that is still running `margin` before
  * Lambda's hard timeout — without touching the handler.
  *
- * A Lambda that hits its timeout is frozen mid-flight: the telemetry
+ * A Lambda that hits its timeout is killed mid-flight: the telemetry
  * exporter's buffer and the still-open root span die with it — precisely
  * the invocation you most want a trace for. The deadline is known up front
  * (`context.getRemainingTimeInMillis()`), and a sandbox only ever handles
@@ -136,10 +135,10 @@ export const toTimeoutMarginMillis = (
  * 3. drains every exporter through the OTLP {@link Flusher}.
  *
  * The handler is never interrupted and the invocation's outcome is never
- * changed. If Lambda freezes the sandbox, the trace already exists. If the
- * handler finishes inside the margin, its response goes out as normal and
- * the tracer ends the span a second time with the real exit — the earlier,
- * marked export is the accepted false positive. Spans still open at the
+ * changed. If Lambda kills the invocation, the trace already exists. The
+ * root span is exported exactly once: if the handler finishes inside the
+ * margin, its response goes out as normal but the span keeps the
+ * timeout-imminent status — it did nearly time out. Spans still open at the
  * flush (other than the root) are not exported; anything already ended,
  * and every log record, is.
  *
@@ -202,8 +201,13 @@ export const withInvocationDeadline = <A, E, R>(
       // local span) is skipped.
       const span = yield* Effect.option(Effect.currentSpan);
       if (Option.isSome(span) && span.value.status._tag === "Started") {
-        span.value.attribute(TIMEOUT_IMMINENT_ATTRIBUTE, true);
-        span.value.end(yield* Clock.currentTimeNanos, Exit.fail(error));
+        const root = span.value;
+        root.attribute(TIMEOUT_IMMINENT_ATTRIBUTE, true);
+        root.end(yield* Clock.currentTimeNanos, Exit.fail(error));
+        // This export is the span's final record. Tracers export on every
+        // `end`, so if the handler finishes inside the margin the tracer's
+        // own `end` would ship the span a second time; drop it.
+        root.end = () => {};
       }
       yield* Effect.logWarning(error.message).pipe(
         Effect.annotateLogs({

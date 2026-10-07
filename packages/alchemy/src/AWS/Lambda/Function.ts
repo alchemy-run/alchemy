@@ -274,7 +274,7 @@ export interface FunctionCommonProps extends PlatformProps {
   timeout?: Duration.Duration;
   /**
    * How long before {@link timeout} telemetry is flushed for an invocation
-   * that is still running. A Lambda that hits its timeout is frozen
+   * that is still running. A Lambda that hits its timeout is killed
    * mid-flight and its buffered spans and logs are lost; at
    * `timeout - timeoutMargin` the runtime ends the invocation's root span
    * with an `AWS.Lambda.InvocationTimeoutError`, logs a warning and drains
@@ -282,9 +282,8 @@ export interface FunctionCommonProps extends PlatformProps {
    *
    * The handler is never interrupted and the invocation's outcome is never
    * changed. If it does finish inside the margin, its response goes out
-   * as normal and the span is re-exported with the real outcome; the
-   * earlier export (marked `aws.lambda.timeout.imminent`) is the accepted
-   * false positive.
+   * as normal; the root span is still exported once, as the timeout error
+   * marked `aws.lambda.timeout.imminent`.
    *
    * Size it for one export round-trip to your telemetry backend. Set to
    * `Duration.zero` to disable.
@@ -1080,7 +1079,7 @@ export const Function: Platform<
                 // invocation's outcome.
                 //
                 // The scope is ALSO what a timeout would take with it: Lambda
-                // freezes the sandbox mid-flight and the buffered telemetry
+                // kills the invocation mid-flight and the buffered telemetry
                 // never flushes. `withInvocationDeadline` flushes it
                 // `timeoutMargin` before that happens — without touching the
                 // handler or the invocation's outcome.

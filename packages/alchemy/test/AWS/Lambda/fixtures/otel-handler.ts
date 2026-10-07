@@ -17,10 +17,15 @@ import * as Telemetry from "@/Telemetry.ts";
  * `GET /work` runs a child span and a log so the test can assert traces AND
  * logs arrive at the collector after the invocation scope flushes.
  *
- * `GET /slow` outlives the function's 5 s timeout. The invocation deadline
- * flush fires `timeoutMargin` before Lambda freezes the sandbox and ships
- * the trace — root span ended with `AWS.Lambda.InvocationTimeoutError`,
- * the already-ended child span, the log — that would otherwise be lost.
+ * The function times out after 5 s and flushes telemetry 2 s before that
+ * (`timeoutMargin`), about 3 s into an invocation.
+ *
+ * `GET /slow` outlives the timeout. The deadline flush ships the trace —
+ * root span ended with `AWS.Lambda.InvocationTimeoutError`, the
+ * already-ended child span, the log — before Lambda kills the process.
+ *
+ * `GET /late` finishes after the flush but before the timeout. It still
+ * responds normally, and its root span is exported once, by the flush.
  */
 export class OtelTestFunction extends Lambda.Function<Lambda.Function>()("OtelTelemetryFunction") {}
 
@@ -29,6 +34,7 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
     main: import.meta.url,
     functionUrl: true,
     timeout: Duration.seconds(5),
+    timeoutMargin: Duration.seconds(2),
   },
   Effect.gen(function* () {
     const doWork = Effect.fn("lambda.child-span")(function* () {
@@ -54,6 +60,10 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
         if (url.pathname === "/work") {
           const marker = yield* doWork();
           return yield* HttpServerResponse.json({ marker });
+        }
+        if (url.pathname === "/late") {
+          yield* Effect.sleep("3500 millis");
+          return yield* HttpServerResponse.json({ marker: "lambda-late-done" });
         }
         if (url.pathname === "/slow") {
           const marker = yield* doSlowWork;
