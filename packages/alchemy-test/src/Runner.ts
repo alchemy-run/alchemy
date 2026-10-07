@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { inspect } from "node:util";
 /**
@@ -263,10 +264,35 @@ export interface CollectedFile {
   readonly error?: string | undefined;
 }
 
+/**
+ * Prefix every test file's source with a call that re-enters its collector
+ * (`Registry.enterFile`). Bun >= 1.4 drops the AsyncLocalStorage context of
+ * `import()` before the module body evaluates (alchemy-run/alchemy#2056).
+ * The prefix shares line 1 with the original source, so stack-trace line
+ * numbers are unchanged. Installed once per process; a no-op outside Bun.
+ */
+const installCollectorPlugin = (): void => {
+  const installed = Symbol.for("alchemy-test/collectorPlugin");
+  if (typeof Bun === "undefined" || (globalThis as any)[installed]) return;
+  (globalThis as any)[installed] = true;
+  Bun.plugin({
+    name: "alchemy-test-collector",
+    setup(build) {
+      build.onLoad({ filter: /\.test\.tsx?$/ }, async (args) => ({
+        loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
+        contents:
+          `globalThis[Symbol.for(${JSON.stringify(Registry.enterFileKey)})]?.(import.meta.path);` +
+          (await Bun.file(args.path).text()),
+      }));
+    },
+  });
+};
+
 const collectFile = (absolute: string, relative: string): Effect.Effect<CollectedFile> =>
   Effect.promise(async (): Promise<CollectedFile> => {
     try {
-      const suite = await Registry.collect(relative, async () => {
+      // Keyed by realpath: the loader reports `import.meta.path` resolved.
+      const suite = await Registry.collect(relative, await realpath(absolute), async () => {
         await import(pathToFileURL(absolute).href);
         // Flush microtasks + one macrotask so registrations deferred with
         // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
@@ -754,6 +780,7 @@ export const run = Effect.fn(function* (input: RunOptions) {
   const absoluteFiles = yield* discover(input).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
+  installCollectorPlugin();
 
   // Import every file before running anything so `.only` applies across
   // the whole run. AsyncLocalStorage keeps registrations attached to their

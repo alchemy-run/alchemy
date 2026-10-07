@@ -10,6 +10,14 @@
  * registrations resolve to its own root no matter how many imports are in
  * flight.
  *
+ * Bun >= 1.4 no longer propagates the async context of `import()` into the
+ * imported module's evaluation (alchemy-run/alchemy#2056), so the runner
+ * also prefixes each collected file's source with a call to `enterFile`
+ * (see `installCollectorPlugin` in Runner.ts), which re-enters the file's
+ * collector from inside its own module body. Context entered there still
+ * flows into microtasks and top-level-await continuations, and stays
+ * isolated between parallel imports.
+ *
  * The storage lives on `globalThis` so that a duplicated module instance
  * (e.g. two resolutions of the package) still shares one registry.
  */
@@ -26,15 +34,44 @@ const key = Symbol.for("alchemy-test/registry");
 const storage: AsyncLocalStorage<FileContext> = ((globalThis as any)[key] ??=
   new AsyncLocalStorage<FileContext>());
 
+/** Collectors of in-flight collections, keyed by absolute file path. */
+const pending: Map<string, FileContext> = ((globalThis as any)[
+  Symbol.for("alchemy-test/pending")
+] ??= new Map<string, FileContext>());
+
 /**
  * Collect one file: run `f` (the file's dynamic import + microtask flush)
  * with a fresh root as the ambient collector, and return the root.
  */
-export const collect = async (file: string, f: () => Promise<void>): Promise<FileSuite> => {
+export const collect = async (
+  file: string,
+  absolute: string,
+  f: () => Promise<void>,
+): Promise<FileSuite> => {
   const root = makeFileSuite(file);
-  await storage.run({ current: root }, f);
+  const context: FileContext = { current: root };
+  pending.set(absolute, context);
+  try {
+    await storage.run(context, f);
+  } finally {
+    pending.delete(absolute);
+  }
   return root;
 };
+
+/**
+ * Re-enter the collector of the file at `absolute` for the rest of the
+ * caller's synchronous execution and its async continuations. Called from
+ * the top of each collected file's module body.
+ */
+export const enterFile = (absolute: string): void => {
+  const context = pending.get(absolute);
+  if (context !== undefined && storage.getStore() !== context) storage.enterWith(context);
+};
+
+/** Global through which injected file prefixes reach `enterFile`. */
+export const enterFileKey = "alchemy-test/enterFile";
+(globalThis as any)[Symbol.for(enterFileKey)] = enterFile;
 
 const currentContext = (): FileContext => {
   const context = storage.getStore();
