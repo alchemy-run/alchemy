@@ -120,7 +120,11 @@ describe("streamText <think> splitting", () => {
         // The splitter only holds back a possible `<think>` prefix; anything
         // else must be released immediately, not buffered until finalize.
         const chunks = ["Hello", " <", "b>", " world"];
-        for (const shape of [native, (content: string) => openai({ content })]) {
+        const shapes: ReadonlyArray<(t: string) => unknown> = [
+          native,
+          (content) => openai({ content }),
+        ];
+        for (const shape of shapes) {
           const out = yield* stream(chunks.map(shape));
           const deltas = out.parts.flatMap((p) => (p.type === "text-delta" ? [p.delta] : []));
           expect(deltas).toEqual(chunks);
