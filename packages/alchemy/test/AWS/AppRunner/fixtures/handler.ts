@@ -1,11 +1,12 @@
-import * as AppRunner from "@/AWS/AppRunner";
-import * as Lambda from "@/AWS/Lambda";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AppRunner from "@/AWS/AppRunner";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -31,8 +32,7 @@ export default AppRunnerTestFunction.make(
     const service = yield* AppRunner.Service("BindingsService", {
       serviceName: "alchemy-test-apprunner-bind",
       imageRepository: {
-        imageIdentifier:
-          "public.ecr.aws/aws-containers/hello-app-runner:latest",
+        imageIdentifier: "public.ecr.aws/aws-containers/hello-app-runner:latest",
         imageRepositoryType: "ECR_PUBLIC",
         port: "8000",
       },
@@ -43,8 +43,7 @@ export default AppRunnerTestFunction.make(
     const pauseService = yield* AppRunner.PauseService(service);
     const resumeService = yield* AppRunner.ResumeService(service);
     const startDeployment = yield* AppRunner.StartDeployment(service);
-    const describeCustomDomains =
-      yield* AppRunner.DescribeCustomDomains(service);
+    const describeCustomDomains = yield* AppRunner.DescribeCustomDomains(service);
 
     return {
       fetch: Effect.gen(function* () {
@@ -106,7 +105,17 @@ export default AppRunnerTestFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Render the failure into the response instead of dying: a binding
+        // that is rejected (an IAM grant that has not propagated yet, an
+        // InvalidStateException) otherwise reaches the test as an opaque
+        // Lambda 502, and the assertion blows up on a missing field rather
+        // than saying what App Runner actually refused.
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
+        ),
+        Effect.orDie,
+      ),
     };
   }).pipe(
     Effect.provide(

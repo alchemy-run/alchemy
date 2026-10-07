@@ -1,6 +1,6 @@
+import { expect } from "bun:test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -32,10 +32,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
         Schedule.recurs(20),
       ]),
     }),
@@ -44,7 +41,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Astro build, so give the hook more headroom
@@ -78,7 +74,7 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read via
     // `cloudflare:workers` in the page frontmatter — proves the Worker
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Astro on Cloudflare!");
     expect(html).toContain("server-rendered in a Cloudflare Worker");
   }),
   { timeout: 180_000 },
@@ -106,9 +102,7 @@ test(
     // ones as a <style> block — accept both, but the compiled rule for the
     // utility must be served either way. That rule only exists if the
     // @tailwindcss/vite plugin from the project's own astro.config.ts ran.
-    const link = html.match(
-      /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/,
-    );
+    const link = html.match(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/);
     if (link) {
       const href = link[1]!;
       const cssUrl = href.startsWith("http")

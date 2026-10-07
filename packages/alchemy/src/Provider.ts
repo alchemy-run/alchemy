@@ -3,24 +3,28 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
-import type { ScopedPlanStatusSession } from "./Cli/Cli.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
-import type { ProviderMode } from "./ProviderMode.ts";
+import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import type { ScopedPlanStatusSession } from "./Report.ts";
 import type {
   ResourceBinding,
   ResourceClass,
   ResourceClassLike,
   ResourceLike,
 } from "./Resource.ts";
+import type { State } from "./State/State.ts";
 
-export interface Provider<
-  R extends ResourceLike = ResourceLike,
-> extends Effect.Effect<ProviderService<R>, never, Provider<R>> {
+export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.Effect<
+  ProviderService<R>,
+  never,
+  Provider<R>
+> {
   asEffect: () => Effect.Effect<ProviderService<R>, never, Provider<R>>;
   [Symbol.iterator]: () => Effect.EffectIterator<Provider<R>>;
   of: <
@@ -60,16 +64,15 @@ export interface Provider<
   >;
 }
 
-type LifecycleServices = InstanceId | Artifacts;
+// Supplied by the engine to every lifecycle operation (the stack's `state`
+// layer is merged into the context lifecycle ops run under), so they are not
+// requirements of the provider layer itself.
+type LifecycleServices = InstanceId | Artifacts | State;
 
-export const Provider = <R extends ResourceLike>(
-  type: R["Type"],
-): Provider<R> =>
+export const Provider = <R extends ResourceLike>(type: R["Type"]): Provider<R> =>
   Context.Service<Provider<R>, ProviderService<R>>()(type) as any;
 
-type BindingData<Res extends ResourceLike> = [Res] extends [
-  { Binding: infer B },
-]
+type BindingData<Res extends ResourceLike> = [Res] extends [{ Binding: infer B }]
   ? ResourceBinding<B>[]
   : any[];
 
@@ -134,6 +137,31 @@ export interface ProviderService<
    */
   modes?: { readonly [M in ProviderMode]: Effect.Effect<ProviderService<Res>> };
   /**
+   * Data-plane override context for this provider's **local** mode: a layer
+   * of cloud environment services (endpoint, credentials, region,
+   * environment) that points data-plane API calls at the local emulator —
+   * the same override the local lifecycle variant runs under (e.g. AWS's
+   * `flociServices()`).
+   *
+   * Set by `ProviderLayer.dual` registrations that pass `dataPlane`.
+   * Consumed by `Binding.Service`'s client wrapper (via
+   * {@link resolveLocalDataPlane}) so deploy-time binding invocations —
+   * inside an `Action` body or a plan-time `execute` — target whatever
+   * data plane the bound resource actually lives on: a local-mode resource
+   * routes to the emulator while an `Alchemy.remote()` resource keeps
+   * hitting the real cloud. Pass a module-memoized layer reference.
+   */
+  localDataPlane?: () => Layer.Layer<any, any, never>;
+  /**
+   * Data-plane override context for this provider's **live** mode: the
+   * cloud environment captured at provider registration (credentials,
+   * region, endpoint). In an `alchemy dev` run the ambient environment IS
+   * the emulator, so an unwrapped live client would hit floci. Stamp this
+   * so `Alchemy.remote()` binding calls are provided the live chain
+   * closest, the inverse of {@link localDataPlane}.
+   */
+  liveDataPlane?: () => Layer.Layer<any, any, never>;
+  /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
@@ -195,7 +223,7 @@ export interface ProviderService<
   list(): Effect.Effect<Res["Attributes"][], any, ListReq>;
   /**
    * Returns a stream of log lines for a deployed resource.
-   * Used by `alchemy tail` to stream real-time logs.
+   * Used by `alchemy logs --tail` to stream real-time logs.
    */
   tail?(input: {
     id: string;
@@ -241,13 +269,6 @@ export interface ProviderService<
     // what is the ARN?
     output: Res["Attributes"] | undefined; // current state -> synced state
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
-  /**
-   * Projects unresolved desired props into a safe, resolved shape for a cold
-   * adoption read. Return `None` when any physical-identity input needed by
-   * {@link read} is still unresolved. Providers without this hook retain the
-   * default behavior of skipping cold reads until all desired props resolve.
-   */
-  resolveReadProps?(news: Input<Props<Res>>): Option.Option<Props<Res>>;
   /**
    * Properties that are always stable across any update.
    */
@@ -317,6 +338,7 @@ export interface ProviderService<
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
+  /** Idempotent; fail with {@link DeleteInProgress} when the cloud cannot finish the delete yet. */
   delete(input: {
     id: string;
     /**
@@ -412,7 +434,7 @@ export const effect = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   eff: Effect.Effect<
     ProviderServiceInput<
       R,
@@ -456,7 +478,7 @@ export const succeed = <
   LogsReq = never,
   ListReq = never,
 >(
-  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+  cls: ResourceClass<R> | Platform<R, any, any, any, any, any>,
   service: ProviderServiceInput<
     R,
     ReadReq,
@@ -471,10 +493,7 @@ export const succeed = <
 ): Layer.Layer<
   Provider<R>,
   never,
-  Exclude<
-    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq,
-    LifecycleServices
-  >
+  Exclude<ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq, LifecycleServices>
 > =>
   // @ts-expect-error
   Layer.succeed(Provider(cls.Type), {
@@ -492,9 +511,7 @@ export interface ProviderCollectionShape<Identifier extends string>
     ProviderCollectionLike {}
 
 export interface ProviderCollection<Self, Identifier extends string>
-  extends
-    Context.Service<Self, ProviderCollectionService>,
-    ProviderCollectionLike {
+  extends Context.Service<Self, ProviderCollectionService>, ProviderCollectionLike {
   readonly key: Identifier;
   new (_: never): ProviderCollectionShape<Identifier>;
 }
@@ -502,15 +519,11 @@ export interface ProviderCollection<Self, Identifier extends string>
 export const ProviderCollection =
   <Self>() =>
   <const ProviderId extends string>(id: ProviderId) =>
-    Context.Service<Self, ProviderCollectionService>()(
-      id,
-    ) as ProviderCollection<Self, ProviderId>;
+    Context.Service<Self, ProviderCollectionService>()(id) as ProviderCollection<Self, ProviderId>;
 
 export interface ProviderCollectionService {
   kind: "ProviderCollection";
-  get<Resource extends ResourceLike>(
-    service: string,
-  ): ProviderService<Resource> | undefined;
+  get<Resource extends ResourceLike>(service: string): ProviderService<Resource> | undefined;
   /**
    * Every provider in this collection keyed by its resource type
    * (e.g. `"Cloudflare.Worker"`). Used by account-wide operations such
@@ -521,13 +534,13 @@ export interface ProviderCollectionService {
 }
 
 export const collection = <
-  R extends ResourceClassLike<any> | Platform<any, any, any, any, any>,
+  R extends ResourceClassLike<any> | Platform<any, any, any, any, any, any>,
 >(
   resources: R[],
 ): Effect.Effect<
   ProviderCollectionService,
   never,
-  R extends ResourceClass<infer R> | Platform<infer R, any, any, any, any>
+  R extends ResourceClass<infer R> | Platform<infer R, any, any, any, any, any>
     ? Provider<R>
     : never
 > =>
@@ -538,9 +551,7 @@ export const collection = <
       yield* Effect.all(
         resources.map((resource) =>
           "Provider" in resource
-            ? resource.Provider.pipe(
-                Effect.map((provider) => [resource.Type, provider] as const),
-              )
+            ? resource.Provider.pipe(Effect.map((provider) => [resource.Type, provider] as const))
             : Effect.succeed([
                 (resource as { key: string }).key,
                 context.mapUnsafe.get((resource as { key: string }).key),
@@ -557,13 +568,10 @@ export const collection = <
     };
   }) as any;
 
-const isProviderCollectionService = (
-  value: unknown,
-): value is ProviderCollectionService => {
+export const isProviderCollectionService = (value: unknown): value is ProviderCollectionService => {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
+    Predicate.isObject(value) &&
+    Predicate.hasProperty(value, "kind") &&
     value.kind === "ProviderCollection"
   );
 };
@@ -574,13 +582,12 @@ const isProviderCollectionService = (
  * searching for a legacy alias, the tag key won't match, so lookup has to
  * recognize provider services by shape.
  */
-const isProviderService = (value: unknown): value is ProviderService =>
-  typeof value === "object" &&
-  value !== null &&
-  "reconcile" in value &&
-  typeof (value as ProviderService).reconcile === "function" &&
-  "delete" in value &&
-  typeof (value as ProviderService).delete === "function";
+export const isProviderService = (value: unknown): value is ProviderService =>
+  Predicate.isObject(value) &&
+  Predicate.hasProperty(value, "reconcile") &&
+  Predicate.isFunction(value.reconcile) &&
+  Predicate.hasProperty(value, "delete") &&
+  Predicate.isFunction(value.delete);
 
 /**
  * Resolve the concrete service for `mode` from a provider found in context.
@@ -598,9 +605,77 @@ export const providerForMode = <R extends ResourceLike>(
   service: ProviderService<R>,
   mode: ProviderMode | undefined,
 ): Effect.Effect<ProviderService<R>> =>
-  mode !== undefined && service.modes !== undefined
-    ? service.modes[mode]
-    : Effect.succeed(service);
+  mode !== undefined && service.modes !== undefined ? service.modes[mode] : Effect.succeed(service);
+
+/**
+ * Why a resource's deploy-time binding clients target the data plane they
+ * do — see {@link describeDataPlane}.
+ *
+ * - `local` — the resource runs on its provider's local emulator; `layer`
+ *   is the override to provide closest around every client call.
+ * - `live` — the resource targets the real cloud: either pinned there
+ *   (`Alchemy.remote()`) or the run is a plain deploy. `layer` is the
+ *   registration-captured live environment, provided closest around every
+ *   client call so a `remote()` resource still hits the real cloud when the
+ *   ambient environment is the emulator.
+ * - `undeclared` — the resource resolves to local mode, but its provider
+ *   is a dual registration without a {@link ProviderService.localDataPlane}
+ *   (a process-hosted local variant with no API to route to, or a missing
+ *   `dataPlane` on a hand-written `ProviderLayer.dual`). Clients fall back
+ *   to the real cloud — reported by name so the two are never confused.
+ * - `agnostic` — the provider is mode-agnostic (plain registration); its
+ *   resources live on the real cloud even in dev.
+ * - `unregistered` — no provider in context (bare runtime, unit tests).
+ */
+export type DataPlaneResolution =
+  | { readonly kind: "local"; readonly layer: Layer.Layer<any, any, never> }
+  | {
+      readonly kind: "live";
+      readonly layer?: Layer.Layer<any, any, never> | undefined;
+    }
+  | { readonly kind: "undeclared"; readonly providerType: string }
+  | { readonly kind: "agnostic" }
+  | { readonly kind: "unregistered" };
+
+/**
+ * Resolve where a resource's deploy-time binding clients should be routed:
+ * its registration-captured {@link ResourceLike.Mode} (`Alchemy.remote()`
+ * → `"live"`) or the run default (`alchemy dev` → `"local"`) — the same
+ * resolution `Plan.make` applies to lifecycle operations — combined with
+ * whether the provider registered a local data plane at all.
+ */
+export const describeDataPlane = (resource: {
+  readonly Type: string;
+  readonly Mode?: ProviderMode | undefined;
+}): Effect.Effect<DataPlaneResolution> =>
+  Effect.gen(function* () {
+    const found = yield* tryFindProviderRegistrationByType(resource.Type);
+    if (Option.isNone(found)) return { kind: "unregistered" as const };
+    const provider = found.value;
+    if (provider.modes === undefined) return { kind: "agnostic" as const };
+    const mode = resource.Mode ?? (yield* defaultProviderMode);
+    if (mode !== "local") {
+      const layer = provider.liveDataPlane?.();
+      return layer !== undefined ? { kind: "live" as const, layer } : { kind: "live" as const };
+    }
+    if (provider.localDataPlane === undefined) {
+      return { kind: "undeclared" as const, providerType: resource.Type };
+    }
+    return { kind: "local" as const, layer: provider.localDataPlane() };
+  });
+
+/**
+ * The data-plane override layer for a resource, or `undefined` when its
+ * clients target the real cloud for any reason (see
+ * {@link describeDataPlane} for which).
+ */
+export const resolveLocalDataPlane = (resource: {
+  readonly Type: string;
+  readonly Mode?: ProviderMode | undefined;
+}): Effect.Effect<Layer.Layer<any, any, never> | undefined> =>
+  describeDataPlane(resource).pipe(
+    Effect.map((plane) => (plane.kind === "local" ? plane.layer : undefined)),
+  );
 
 export const findProviderByType: {
   <R extends ResourceLike>(
@@ -618,6 +693,7 @@ export const findProviderByType: {
   )) as any;
 
 /**
+ * Resolve the concrete provider for the requested or current run mode.
  * Typed provider lookup by resource class (or {@link Platform}) value. Infers
  * `R` from the class so `provider.list()` / `provider.read(...)` return the
  * resource's `Attributes` shape — prefer this over {@link findProviderByType},
@@ -625,7 +701,7 @@ export const findProviderByType: {
  */
 export const findProvider: {
   <R extends ResourceLike>(
-    resource: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+    resource: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
     mode?: ProviderMode,
   ): Effect.Effect<ProviderService<R>>;
 } = (resource: { Type?: string; key?: string }, mode?: ProviderMode) =>
@@ -642,19 +718,14 @@ export const findProvider: {
  * this error; nothing is deployed or destroyed until the provider is
  * re-registered (or aliased), or the state row is cleared manually.
  */
-export class MissingProviderError extends Data.TaggedError(
-  "MissingProviderError",
-)<{
+export class MissingProviderError extends Data.TaggedError("MissingProviderError")<{
   message: string;
   resourceType: string;
   fqn: string;
 }> {}
 
 /** Build the fatal plan-time error for a zombie state row. */
-export const missingProviderError = (
-  resourceType: string,
-  fqn: string,
-): MissingProviderError =>
+export const missingProviderError = (resourceType: string, fqn: string): MissingProviderError =>
   new MissingProviderError({
     message:
       `No provider is registered for resource type '${resourceType}' ` +
@@ -667,22 +738,30 @@ export const missingProviderError = (
     fqn,
   });
 
-export const tryFindProviderByType: {
-  <R extends ResourceLike>(
-    resourceType: R["Type"],
-    mode?: ProviderMode,
-  ): Effect.Effect<Option.Option<ProviderService<R>>>;
-} = Effect.fn(function* <R extends ResourceLike>(
+/** A started delete the cloud cannot finish yet: a replacement's old generation is retried next apply, any other delete fails. */
+export class DeleteInProgress extends Data.TaggedError("DeleteInProgress")<{
+  message: string;
+}> {}
+
+/** Resolve a concrete provider, using the current run's mode when omitted. */
+export const tryFindProviderByType = <R extends ResourceLike>(
   resourceType: R["Type"],
   mode?: ProviderMode,
-) {
-  // When a mode is requested, resolve the found service to that mode's
-  // variant (building it lazily if needed) before returning.
+): Effect.Effect<Option.Option<ProviderService<R>>> =>
+  Effect.gen(function* () {
+    const found = yield* tryFindProviderRegistrationByType<R>(resourceType);
+    if (Option.isNone(found)) return found;
+    return Option.some(yield* providerForMode(found.value, mode ?? (yield* defaultProviderMode)));
+  });
+
+/** Inspect registration metadata without constructing either provider variant. */
+export const tryFindProviderRegistrationByType: {
+  <R extends ResourceLike>(
+    resourceType: R["Type"],
+  ): Effect.Effect<Option.Option<ProviderService<R>>>;
+} = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
   const found = yield* Effect.gen(function* () {
-    const Tag = Provider<R>(resourceType) as unknown as Context.Service<
-      Provider<R>,
-      any
-    >;
+    const Tag = Provider<R>(resourceType) as unknown as Context.Service<Provider<R>, any>;
     const direct = yield* Effect.serviceOption(Tag);
     if (Option.isSome(direct)) {
       return direct;
@@ -709,19 +788,11 @@ export const tryFindProviderByType: {
             return Option.some(provider);
           }
         }
-      } else if (
-        isProviderService(value) &&
-        value.aliases?.includes(resourceType)
-      ) {
+      } else if (isProviderService(value) && value.aliases?.includes(resourceType)) {
         return Option.some(value);
       }
     }
     return Option.none();
   });
-  if (Option.isNone(found)) {
-    return found;
-  }
-  return Option.some(
-    yield* providerForMode(found.value as ProviderService<R>, mode),
-  );
+  return found;
 }) as any;

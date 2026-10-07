@@ -1,19 +1,32 @@
+import * as NodeHttp from "node:http";
+import type * as NodeStream from "node:stream";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeHttp from "node:http";
-import * as NodeStream from "node:stream";
-import { getAddress } from "./internal/get-address.ts";
+import {
+  CONTAINER_LOOPBACK_ALIAS,
+  containerIdFromPath,
+  ensureLoopbackUnixSockets,
+  isContainerStartPath,
+  loopbackPortsFromEnv,
+  mergeSidecarLoopbackHostConfig,
+} from "./DockerLoopback.ts";
+import { makeDockerLoopbackForwarders } from "./internal/docker-loopback-forwarders.ts";
+import { listenOnLoopback } from "./internal/listen-on-loopback.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
+
+export { CONTAINER_LOOPBACK_ALIAS };
 
 export class Docker extends Context.Service<
   Docker,
@@ -28,24 +41,15 @@ export class Docker extends Context.Service<
       tag: string,
       env: Record<string, string>,
     ) => Effect.Effect<string, never, Scope.Scope>;
-    readonly build: (
-      tag: string,
-      image: ContainerImage.Build,
-    ) => Effect.Effect<void, SystemError>;
-    readonly pull: (
-      tag: string,
-      image: ContainerImage.Pull,
-    ) => Effect.Effect<void, SystemError>;
+    readonly build: (tag: string, image: ContainerImage.Build) => Effect.Effect<void, SystemError>;
+    readonly pull: (tag: string, image: ContainerImage.Pull) => Effect.Effect<void, SystemError>;
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
     readonly removeImageTag: (tag: string) => Effect.Effect<void>;
     readonly removeContainer: (tag: string) => Effect.Effect<void, SystemError>;
   }
 >()("cloudflare-runtime/Docker") {}
 
-export type ContainerImage =
-  | ContainerImage.Build
-  | ContainerImage.Pull
-  | ContainerImage.Ref;
+export type ContainerImage = ContainerImage.Build | ContainerImage.Pull | ContainerImage.Ref;
 
 export declare namespace ContainerImage {
   interface Base {
@@ -65,18 +69,12 @@ export declare namespace ContainerImage {
 }
 
 const DEFAULT_DOCKER_HOST =
-  process.platform === "win32"
-    ? "//./pipe/docker_engine"
-    : "unix:///var/run/docker.sock";
+  process.platform === "win32" ? "//./pipe/docker_engine" : "unix:///var/run/docker.sock";
 const DEV_CONTAINER_PREFIX = "alchemy-dev";
 
-const DockerHost = Config.string("DOCKER_HOST");
-const DockerBin = Config.string("DOCKER_BIN").pipe(
-  Config.orElse(() => Config.succeed("docker")),
-);
-const ContainerEgressInterceptorImage = Config.string(
-  "CONTAINER_EGRESS_INTERCEPTOR_IMAGE",
-).pipe(
+const DockerHost = Config.String("DOCKER_HOST");
+const DockerBin = Config.String("DOCKER_BIN").pipe(Config.orElse(() => Config.succeed("docker")));
+const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEPTOR_IMAGE").pipe(
   Config.orElse(() =>
     Config.succeed(
       "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8",
@@ -89,8 +87,90 @@ const ContainerEgressInterceptorImage = Config.string(
  * refs ("cannot overwrite digest"); the digest fully pins the image, so the
  * tag is dropped when both are present.
  */
-export const toPullRef = (imageUri: string) =>
-  imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
+export const toPullRef = (imageUri: string) => imageUri.replace(/:[^@/]+(?=@sha256:)/, "");
+
+/**
+ * Stderr signatures of a docker CLI that cannot run our build. Image builds
+ * use BuildKit flags (`--load`, `--provenance=false`), which a CLI without
+ * the buildx plugin rejects outright. Its stderr names the flag rather than
+ * the missing component, and several distros package the two separately
+ * (Arch/CachyOS `docker` vs `docker-buildx`, Debian `docker.io` vs
+ * `docker-buildx`), so this is a first-run trap rather than a broken setup.
+ */
+const BUILDKIT_MISSING_MARKERS = [
+  "unknown flag: --load",
+  "unknown flag: --provenance",
+  "'buildx' is not a docker command",
+  "buildx component is missing",
+];
+
+/** Names the missing buildx plugin when docker's own stderr only names the flag. */
+export const buildFailureHint = (stderr: string): string | undefined =>
+  BUILDKIT_MISSING_MARKERS.some((marker) => stderr.includes(marker))
+    ? "This docker CLI has no BuildKit (buildx) plugin, which building container images requires. Install it and retry — e.g. `pacman -S docker-buildx` (Arch/CachyOS), `apt install docker-buildx` (Debian/Ubuntu), or Docker Desktop, which bundles it."
+    : undefined;
+
+/**
+ * Matches a loopback host (`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`)
+ * where it denotes a connection target inside an env value: at the start of
+ * the value, after a `scheme://` (with optional userinfo), after `=` (DSN
+ * keyword form, `host=localhost`), or after whitespace/comma/semicolon
+ * delimiters — and followed by a port, path, delimiter, or the end.
+ */
+const LOOPBACK_HOST =
+  /(^|[\s,;=]|\/\/(?:[^/\s@]*@)?)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?=[:/?#]|[\s,;]|$)/g;
+
+/**
+ * Rewrite loopback hosts in a container env value to
+ * {@link CONTAINER_LOOPBACK_ALIAS} so the value keeps meaning "the developer's
+ * machine" from inside the container. Prisma's `prisma+postgres://` client
+ * only speaks plain HTTP when the host looks local (contains `localhost`).
+ * Applied at container create; production URLs are cloud hosts, so this
+ * only fires against local emulators.
+ *
+ * Native Linux: the alias is `/etc/hosts`-mapped to `127.0.0.1` in the
+ * sidecar netns, and a unix-socket tunnel reaches the host process — a
+ * SYN to Docker's bridge IP would hit UFW INPUT. Docker Desktop: mapped
+ * to `host-gateway`, which already forwards to host loopback.
+ */
+export const rewriteLoopbackHosts = (value: string) =>
+  value.replace(LOOPBACK_HOST, `$1${CONTAINER_LOOPBACK_ALIAS}`);
+
+/**
+ * Merge workerd's create-body `Env` with the deployment env alchemy injects,
+ * rewriting loopback hosts and **replacing by name**.
+ *
+ * Appending would leave the original `DATABASE_URL=…127.0.0.1…` in place and
+ * add a rewritten copy. glibc/`os.Getenv` (Go, C, Python, Node on Linux)
+ * return the first match, so the container would still dial `127.0.0.1`
+ * inside its own netns.
+ */
+export const mergeContainerCreateEnv = (
+  originalEnv: ReadonlyArray<string> | undefined,
+  imageEnv: Record<string, string> | undefined,
+): string[] => {
+  const order: string[] = [];
+  const values = new Map<string, string | undefined>();
+  const set = (name: string, value: string | undefined) => {
+    if (!values.has(name)) order.push(name);
+    values.set(name, value);
+  };
+  for (const entry of originalEnv ?? []) {
+    const eq = entry.indexOf("=");
+    if (eq === -1) {
+      set(entry, undefined);
+    } else {
+      set(entry.slice(0, eq), rewriteLoopbackHosts(entry.slice(eq + 1)));
+    }
+  }
+  for (const [name, value] of Object.entries(imageEnv ?? {})) {
+    set(name, rewriteLoopbackHosts(value));
+  }
+  return order.map((name) => {
+    const value = values.get(name);
+    return value === undefined ? name : `${name}=${value}`;
+  });
+};
 
 export const DockerLive = Layer.effect(
   Docker,
@@ -98,14 +178,19 @@ export const DockerLive = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const runFork = yield* FiberSet.makeRuntime();
 
     const bin = yield* DockerBin;
-    const containerEgressInterceptorImage =
-      yield* ContainerEgressInterceptorImage;
-    const registeredImages = new Map<
-      string,
-      { tag: string; env: Record<string, string> }
-    >();
+    const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
+    const registeredImages = new Map<string, { tag: string; env: Record<string, string> }>();
+
+    const registeredLoopbackPorts = () => {
+      const ports = new Set<number>();
+      for (const { env } of registeredImages.values()) {
+        for (const port of loopbackPortsFromEnv(env)) ports.add(port);
+      }
+      return [...ports];
+    };
 
     const getSocketPathFromContext = () =>
       ChildProcess.make(bin, ["context", "ls", "--format", "json"], {
@@ -129,9 +214,7 @@ export const DockerLive = Layer.effect(
             ),
             Stream.runCollect,
             Effect.flatMap((items) => {
-              const endpoint = items.find(
-                (item) => item.Current,
-              )?.DockerEndpoint;
+              const endpoint = items.find((item) => item.Current)?.DockerEndpoint;
               return endpoint
                 ? Effect.succeed(endpoint)
                 : Effect.fail(
@@ -146,55 +229,105 @@ export const DockerLive = Layer.effect(
         Effect.scoped,
       );
 
-    const makeDockerProxyServer = (socketPath: string) =>
-      NodeHttp.createServer(async (req, res) => {
-        const isContainerCreateRequest =
-          req.method === "POST" &&
-          req.url?.startsWith("/containers/create") &&
-          !req.url.endsWith("-proxy");
-        if (isContainerCreateRequest) {
-          const original = await extractJsonBody<{
-            Image: string;
-            Env: Array<string>;
-          }>(req);
-          const image = registeredImages.get(original.Image);
-          const transformed = JSON.stringify({
-            ...original,
-            Image: image?.tag ?? original.Image,
-            Env: [
-              ...(original.Env ?? []),
-              ...Object.entries(image?.env ?? {}).map(
-                ([name, value]) => `${name}=${value}`,
-              ),
-            ],
-          });
-          const proxy = sendProxyRequest({
-            socketPath,
-            path: req.url,
-            method: req.method,
-            headers: {
-              ...req.headers,
-              "content-length": Buffer.byteLength(transformed).toString(),
-            },
-            res,
-          });
-          proxy.end(transformed);
-        } else {
-          const proxy = sendProxyRequest({
-            socketPath,
-            path: req.url,
-            method: req.method,
-            headers: req.headers,
-            res,
-          });
-          req.pipe(proxy, { end: true });
-        }
-      });
+    const makeDockerProxyServer = (
+      socketPath: string,
+      forwarders: Effect.Success<ReturnType<typeof makeDockerLoopbackForwarders>>,
+    ) => {
+      const forward = (
+        req: NodeHttp.IncomingMessage,
+        res: NodeHttp.ServerResponse,
+        options: { body?: string; afterStart?: Effect.Effect<void, SystemError> } = {},
+      ) =>
+        Effect.gen(function* () {
+          const upstream = yield* sendDockerRequest(socketPath, req, options.body);
+          const status = upstream.statusCode ?? 500;
+          // Docker answers a repeated start with 304; attaching again repairs
+          // forwarding when an earlier start succeeded but its helper failed.
+          if (options.afterStart === undefined || (status >= 300 && status !== 304)) {
+            res.writeHead(status, upstream.headers);
+            upstream.pipe(res, { end: true });
+            return;
+          }
+          const body = yield* readBody(upstream);
+          yield* options.afterStart;
+          res.writeHead(status, upstream.headers);
+          res.end(status === 204 || status === 304 || body.length === 0 ? undefined : body);
+        });
 
-    const run = (
-      args: Array<string>,
-      stdin: ChildProcess.CommandInput = "ignore",
-    ) =>
+      const handle = (req: NodeHttp.IncomingMessage, res: NodeHttp.ServerResponse) =>
+        Effect.gen(function* () {
+          const isCreateRequest =
+            req.method === "POST" && req.url?.startsWith("/containers/create");
+          if (isCreateRequest && !req.url!.endsWith("-proxy")) {
+            const original = yield* readJson<{ Image: string; Env: Array<string> }>(req);
+            const image = registeredImages.get(original.Image);
+            return yield* forward(req, res, {
+              body: JSON.stringify({
+                ...original,
+                Image: image?.tag ?? original.Image,
+                Env: mergeContainerCreateEnv(original.Env, image?.env),
+              }),
+            });
+          }
+          if (isCreateRequest) {
+            // workerd creates two containers per instance: the user container
+            // and a `<name>-proxy` networking sidecar whose namespace the user
+            // container joins (`NetworkMode: container:<sidecar>`) — so the
+            // sidecar's /etc/hosts is what the user container resolves against.
+            // Docker Desktop maps the alias through host-gateway (reaches host
+            // 127.0.0.1). Native Linux maps it to 127.0.0.1 in this netns and
+            // bind-mounts unix sockets; a SYN to the bridge IP is host INPUT (UFW).
+            const original = yield* readJson<{
+              HostConfig?: {
+                ExtraHosts?: Array<string>;
+                Binds?: Array<string>;
+                Sysctls?: Record<string, string>;
+              };
+            }>(req);
+            const ports = registeredLoopbackPorts();
+            ensureLoopbackUnixSockets(ports);
+            return yield* forward(req, res, {
+              body: JSON.stringify({
+                ...original,
+                HostConfig: {
+                  ...mergeSidecarLoopbackHostConfig(original.HostConfig, ports),
+                  Sysctls: {
+                    ...original.HostConfig?.Sysctls,
+                    // Hosts such as Tailscale routers enable src_valid_mark.
+                    // The sidecar marks inbound TCP packets for transparent proxying;
+                    // including that mark in reverse-path validation drops their ACKs.
+                    // Override only the sidecar's network namespace, never the host.
+                    "net.ipv4.conf.all.src_valid_mark": "0",
+                  },
+                },
+              }),
+            });
+          }
+          const id = containerIdFromPath(req.url);
+          if (req.method === "POST" && isContainerStartPath(req.url) && id !== undefined) {
+            return yield* forward(req, res, {
+              afterStart: forwarders.attach(id, registeredLoopbackPorts()),
+            });
+          }
+          if (req.method === "DELETE" && id !== undefined) {
+            yield* forwarders.detach(id);
+          }
+          return yield* forward(req, res);
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.sync(() => {
+              if (res.headersSent) res.destroy();
+              else sendError(res, 502, Cause.pretty(cause));
+            }),
+          ),
+        );
+
+      return NodeHttp.createServer((req, res) => {
+        runFork(handle(req, res));
+      });
+    };
+
+    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
@@ -223,8 +356,32 @@ export const DockerLive = Layer.effect(
         Effect.scoped,
       );
 
-    const pull = ({ imageUri }: ContainerImage.Pull) =>
-      run(["pull", toPullRef(imageUri), "--platform", "linux/amd64"]).pipe(
+    /**
+     * `run` resolves with the command's exit code instead of failing on it
+     * (some callers, e.g. `inspect`, treat a non-zero exit as a legitimate
+     * "not present" answer). Every command whose failure actually matters
+     * therefore has to check the code itself: without this, a `docker build`
+     * that exits 1 is indistinguishable from a successful build, the image
+     * is never created, and the only symptom the user ever sees is workerd
+     * reporting `Container exited while waiting for port <port>` on a loop.
+     */
+    const ensureExitZero = <E>(
+      result: { exitCode: number; stdout: string; stderr: string },
+      onNonZero: (result: { exitCode: number; stdout: string; stderr: string }) => E,
+    ): Effect.Effect<void, E> =>
+      result.exitCode === 0 ? Effect.void : Effect.fail(onNonZero(result));
+
+    /**
+     * `platform` is omitted for the egress interceptor: it is a host-side
+     * sidecar, not a deployable image, so Docker must resolve the
+     * host-native variant. Forcing `linux/amd64` there runs it under
+     * emulation on arm64 hosts, where its transparent-proxy setup dies at
+     * startup with `Fatal error: setsockoptint: protocol not available`.
+     * Deployable user images pass `linux/amd64` explicitly, because that is
+     * the architecture Cloudflare's container runtime executes.
+     */
+    const pull = ({ imageUri, platform }: ContainerImage.Pull & { readonly platform?: string }) =>
+      run(["pull", toPullRef(imageUri), ...(platform ? ["--platform", platform] : [])]).pipe(
         Effect.mapError(
           (cause) =>
             new SystemError({
@@ -257,10 +414,7 @@ export const DockerLive = Layer.effect(
       );
 
     const inspect = (tag: string, format: string) =>
-      Effect.map(
-        run(["image", "inspect", tag, "--format", format]),
-        (result) => result.stdout,
-      );
+      Effect.map(run(["image", "inspect", tag, "--format", format]), (result) => result.stdout);
 
     const list = (ancestor: string) =>
       run([
@@ -288,11 +442,13 @@ export const DockerLive = Layer.effect(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
         Effect.orElseSucceed(() => DEFAULT_DOCKER_HOST),
-        Effect.flatMap((socketPath) => {
-          const server = makeDockerProxyServer(socketPath);
-          server.listen(0);
-          return getAddress(server);
-        }),
+        Effect.flatMap(
+          Effect.fnUntraced(function* (socketPath) {
+            const forwarders = yield* makeDockerLoopbackForwarders({ bin, socketPath });
+            const port = yield* listenOnLoopback(makeDockerProxyServer(socketPath, forwarders));
+            return `127.0.0.1:${port}`;
+          }),
+        ),
       ),
       // Skip the eager pull when the interceptor image is already present
       // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
@@ -309,9 +465,7 @@ export const DockerLive = Layer.effect(
       inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(
         Effect.orElseSucceed(() => undefined),
         Effect.flatMap((imageId) =>
-          imageId?.trim()
-            ? Effect.void
-            : pull({ imageUri: containerEgressInterceptorImage }),
+          imageId?.trim() ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
         ),
       ),
       (socketPath) => ({
@@ -321,16 +475,17 @@ export const DockerLive = Layer.effect(
         },
       }),
       { concurrent: true },
-    ).pipe(
-      Effect.forkDetach({ startImmediately: false, uninterruptible: true }),
-    );
+    ).pipe(Effect.forkScoped({ startImmediately: false }));
 
     return Docker.of({
       getWorkerdDockerConfiguration: Fiber.join(docker),
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(
-          Effect.sync(() => registeredImages.set(alias, { tag, env })),
+          Effect.sync(() => {
+            registeredImages.set(alias, { tag, env });
+            ensureLoopbackUnixSockets(loopbackPortsFromEnv(env));
+          }),
           () => Effect.sync(() => registeredImages.delete(alias)),
         ).pipe(Effect.as(alias));
       },
@@ -361,7 +516,6 @@ export const DockerLive = Layer.effect(
             ),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
-            Effect.asVoid,
             Effect.mapError(
               (cause) =>
                 new SystemError({
@@ -370,10 +524,22 @@ export const DockerLive = Layer.effect(
                   cause,
                 }),
             ),
+            Effect.flatMap((result) =>
+              ensureExitZero(
+                result,
+                ({ exitCode, stdout, stderr }) =>
+                  new SystemError({
+                    subtag: "DockerBuildFailed",
+                    message: `Failed to build image "${tag}".`,
+                    hint: buildFailureHint(stderr),
+                    detail: { bin, tag, exitCode, stdout, stderr },
+                  }),
+              ),
+            ),
           );
         }),
       pull: (tag, image) =>
-        pull(image).pipe(
+        pull({ ...image, platform: "linux/amd64" }).pipe(
           Effect.andThen(
             run(["tag", image.imageUri, tag]).pipe(
               Effect.mapError(
@@ -383,6 +549,24 @@ export const DockerLive = Layer.effect(
                     message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
                     cause,
                   }),
+              ),
+              Effect.flatMap((result) =>
+                ensureExitZero(
+                  result,
+                  ({ exitCode, stdout, stderr }) =>
+                    new SystemError({
+                      subtag: "DockerTagFailed",
+                      message: `Failed to tag image "${image.imageUri}" as "${tag}".`,
+                      detail: {
+                        bin,
+                        imageUri: image.imageUri,
+                        tag,
+                        exitCode,
+                        stdout,
+                        stderr,
+                      },
+                    }),
+                ),
               ),
             ),
           ),
@@ -424,10 +608,7 @@ export const DockerLive = Layer.effect(
               run([
                 "rm",
                 "--force",
-                ...containers.flatMap((container) => [
-                  container.id,
-                  `${container.name}-proxy`,
-                ]),
+                ...containers.flatMap((container) => [container.id, `${container.name}-proxy`]),
               ]),
             );
           }),
@@ -448,58 +629,66 @@ export const DockerLive = Layer.effect(
 const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;
 
-const sendProxyRequest = (input: {
-  socketPath: string;
-  path: string | undefined;
-  method: string | undefined;
-  headers: NodeHttp.OutgoingHttpHeaders;
-  res: NodeHttp.ServerResponse;
-}) => {
-  // `transfer-encoding` is a hop-by-hop header and must not be forwarded
-  // verbatim. workerd sends its `DELETE /containers/<name>-proxy?force=true`
-  // cleanup request with `transfer-encoding: chunked` and an empty body;
-  // Bun's `node:http` client hangs indefinitely on such a request to a
-  // unix socket (it never flushes the terminating zero-chunk), so the
-  // docker daemon never responds and workerd blocks forever before it can
-  // create the container. Strip the header and let the runtime derive the
-  // framing from the body we actually write. (Node tolerates it, Bun does
-  // not — and Alchemy dev runs the runtime under Bun.)
-  delete input.headers["transfer-encoding"];
-  const req = NodeHttp.request(
-    {
-      socketPath: input.socketPath.replace(/^unix:/, ""),
-      path: input.path,
-      method: input.method,
-      headers: input.headers,
-    },
-    (res) => {
-      delete res.headers["transfer-encoding"];
-      input.res.writeHead(res.statusCode || 500, res.headers);
-      res.pipe(input.res, { end: true });
-    },
-  );
-  req.on("error", (err) => {
-    input.res.writeHead(502, { "content-type": "text/plain" });
-    input.res.end(`Proxy error: ${(err && err.message) || err}`);
-  });
-  return req;
-};
+const dockerProxyError = (subtag: string, message: string) => (cause: unknown) =>
+  new SystemError({ subtag, message, cause });
 
-const extractJsonBody = <T>(req: NodeHttp.IncomingMessage) => {
-  const promise = Promise.withResolvers<T>();
-  const chunks: Array<Buffer> = [];
-  req.pipe(
-    new NodeStream.Writable({
-      write(chunk, _encoding, callback) {
-        chunks.push(chunk);
-        callback();
+/** Forward `req` to the Docker socket, replacing its body when one is given. */
+const sendDockerRequest = (
+  socketPath: string,
+  req: NodeHttp.IncomingMessage,
+  body: string | undefined,
+) =>
+  Effect.callback<NodeHttp.IncomingMessage, SystemError>((resume) => {
+    const headers: NodeHttp.OutgoingHttpHeaders = { ...req.headers };
+    // `transfer-encoding` is a hop-by-hop header and must not be forwarded
+    // verbatim. workerd sends its `DELETE /containers/<name>-proxy?force=true`
+    // cleanup request with `transfer-encoding: chunked` and an empty body;
+    // Bun's `node:http` client hangs indefinitely on such a request to a
+    // unix socket (it never flushes the terminating zero-chunk), so the
+    // docker daemon never responds and workerd blocks forever before it can
+    // create the container. Strip the header and let the runtime derive the
+    // framing from the body we actually write. (Node tolerates it, Bun does
+    // not — and Alchemy dev runs the runtime under Bun.)
+    delete headers["transfer-encoding"];
+    if (body !== undefined) headers["content-length"] = Buffer.byteLength(body).toString();
+    const upstream = NodeHttp.request(
+      {
+        socketPath: socketPath.replace(/^unix:/, ""),
+        path: req.url,
+        method: req.method,
+        headers,
       },
-      final(callback) {
-        promise.resolve(JSON.parse(Buffer.concat(chunks).toString()));
-        callback();
+      (res) => {
+        delete res.headers["transfer-encoding"];
+        resume(Effect.succeed(res));
       },
-    }),
-    { end: true },
+    );
+    upstream.on("error", (cause) =>
+      resume(Effect.fail(dockerProxyError("DockerProxyRequest", "Docker request failed.")(cause))),
+    );
+    if (body === undefined) req.pipe(upstream, { end: true });
+    else upstream.end(body);
+    return Effect.sync(() => upstream.destroy());
+  });
+
+const readBody = (stream: NodeStream.Readable) =>
+  Stream.fromAsyncIterable<Uint8Array, SystemError>(
+    stream,
+    dockerProxyError("DockerProxyBody", "Failed to read a Docker proxy body."),
+  ).pipe(
+    Stream.runCollect,
+    Effect.map((chunks) => Buffer.concat(chunks)),
   );
-  return promise.promise;
+
+const readJson = <T>(req: NodeHttp.IncomingMessage) =>
+  Effect.flatMap(readBody(req), (body) =>
+    Effect.try({
+      try: () => JSON.parse(body.toString()) as T,
+      catch: dockerProxyError("DockerProxyBody", "Docker request body is not valid JSON."),
+    }),
+  );
+
+const sendError = (res: NodeHttp.ServerResponse, status: number, message: string) => {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify({ message }));
 };

@@ -7,7 +7,7 @@ The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-fr
 ```ts
 const site = yield* Cloudflare.Website.SvelteKit("SvelteKitSite", {
   env: {
-    GREETING: "Hello from alchemy",
+    GREETING: "Hello from SvelteKit on Cloudflare!",
   },
 });
 ```

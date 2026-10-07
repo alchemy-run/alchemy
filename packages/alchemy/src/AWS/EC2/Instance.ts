@@ -7,26 +7,23 @@ import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import {
-  createAlchemyTagFilters,
-  createInternalTags,
-  diffTags,
-} from "../../Tags.ts";
+import { createAlchemyTagFilters, createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
+  type Ec2HostedProps,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
@@ -122,12 +119,10 @@ export interface InstanceProps extends PlatformProps {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for the hosted process entrypoint: rolldown
-   * `input`/`output` overrides plus pure-annotation options (`pure`).
-   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
-   * `@distilled.cloud/*` are annotated as pure by default so unused code
-   * from those packages is tree-shaken; list additional packages via
-   * `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for the hosted process entrypoint. Unused
+   * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
+   * marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
   /**
@@ -261,11 +256,7 @@ export interface Instance extends Resource<
   Providers
 > {}
 
-export type InstanceServices =
-  | ServerHost
-  | Credentials
-  | Region
-  | AWSEnvironment;
+export type InstanceServices = ServerHost | Credentials | Region | AWSEnvironment;
 
 export type InstanceShape = Main<InstanceServices>;
 
@@ -308,16 +299,13 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the hosted program doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -327,18 +315,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -348,14 +325,10 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *
  * @resource
  */
-export const Instance: Platform<
-  Instance,
-  InstanceServices,
-  InstanceShape,
-  InstanceRuntimeContext
-> = Platform("AWS.EC2.Instance", {
-  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
-});
+export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> =
+  Platform("AWS.EC2.Instance", {
+    createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
+  });
 
 export const InstanceProvider = () =>
   Provider.effect(
@@ -384,10 +357,7 @@ export const InstanceProvider = () =>
 
       const isPendingInstanceProfileError = (error: unknown) => {
         const tag = (error as { _tag?: string })?._tag;
-        if (
-          tag === "InvalidIAMInstanceProfile.NotFound" ||
-          tag === "InvalidParameterValue"
-        ) {
+        if (tag === "InvalidIAMInstanceProfile.NotFound" || tag === "InvalidParameterValue") {
           return true;
         }
         if (tag !== "UnknownAwsError") {
@@ -402,10 +372,7 @@ export const InstanceProvider = () =>
           };
         };
         const message =
-          unknown.message ??
-          unknown.errorData?.message ??
-          unknown.errorData?.Message ??
-          "";
+          unknown.message ?? unknown.errorData?.message ?? unknown.errorData?.Message ?? "";
         return (
           unknown.errorTag === "InvalidParameterValue" &&
           message.includes("iamInstanceProfile.name") &&
@@ -415,10 +382,7 @@ export const InstanceProvider = () =>
 
       const isPendingInstanceLookupError = (error: unknown) => {
         const tag = (error as { _tag?: string })?._tag;
-        return (
-          error instanceof InstanceNotFound ||
-          tag === "InvalidInstanceID.NotFound"
-        );
+        return error instanceof InstanceNotFound || tag === "InvalidInstanceID.NotFound";
       };
 
       const toTagRecord = (tags?: Array<{ Key?: string; Value?: string }>) =>
@@ -486,10 +450,7 @@ export const InstanceProvider = () =>
       // replacement's create phase runs under a freshly minted generation id
       // and can never re-adopt the old generation's live instance that the
       // cleanup phase is about to terminate.
-      const findInstanceByTags = Effect.fn(function* (
-        id: string,
-        generation: string,
-      ) {
+      const findInstanceByTags = Effect.fn(function* (id: string, generation: string) {
         const filters = [
           ...(yield* createAlchemyTagFilters(id)),
           { Name: "tag:alchemy::instance", Values: [generation] },
@@ -499,9 +460,7 @@ export const InstanceProvider = () =>
             Filters: filters,
           })
           .pipe(
-            Stream.flatMap((reservation) =>
-              Stream.fromArray(reservation.Instances ?? []),
-            ),
+            Stream.flatMap((reservation) => Stream.fromArray(reservation.Instances ?? [])),
             Stream.filter((instance) => {
               const state = instance.State?.Name;
               return (
@@ -555,12 +514,8 @@ export const InstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) =>
-              error instanceof InstanceStateMismatch ||
-              isPendingInstanceLookupError(error),
-            schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
-              Schedule.recurs(8),
-            ]),
+              error instanceof InstanceStateMismatch || isPendingInstanceLookupError(error),
+            schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
           }),
         );
       });
@@ -587,19 +542,15 @@ export const InstanceProvider = () =>
             while: (error) => error instanceof InstanceStillExists,
             // Termination (shutting-down -> terminated) can take a couple of
             // minutes; the prior ~64s budget timed out intermittently.
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(48),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(48)]),
           }),
           Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
           Effect.catchTag("InstanceNotFound", () => Effect.void),
         );
       });
 
-      const resolvedSecurityGroups = (
-        groups?: InstanceProps["securityGroupIds"],
-      ) => hosted.normalizeSecurityGroups(groups as string[] | undefined);
+      const resolvedSecurityGroups = (groups?: InstanceProps["securityGroupIds"]) =>
+        hosted.normalizeSecurityGroups(groups as string[] | undefined);
 
       const buildRunInstancesRequest = (
         news: InstanceProps,
@@ -640,21 +591,53 @@ export const InstanceProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.Reservations ?? []).flatMap(
-                    (reservation) => reservation.Instances ?? [],
-                  ),
+                  (page.Reservations ?? []).flatMap((reservation) => reservation.Instances ?? []),
                 ),
               ),
             );
             return yield* Effect.forEach(
-              instances.filter(
-                (instance) => instance.State?.Name !== "terminated",
-              ),
+              instances.filter((instance) => instance.State?.Name !== "terminated"),
               (instance) => toAttributes(instance),
             );
           }),
         diff: Effect.fn(function* ({ id, news, olds, output }) {
+          // The hosted bundle hash must participate in planning even while
+          // OTHER props are unresolved Outputs (an `imageId` AMI lookup, a
+          // subnet reference): a content-only edit changes no prop at all,
+          // so bailing on full resolution silently no-ops the update. The
+          // content inputs are plain — gate on THEM, not on the whole bag
+          // (the same isResolved-defeats-content-diff bug the MicroVM image
+          // diff had).
+          const raw = news as unknown as Record<string, unknown>;
+          const contentInputs = {
+            main: raw.main,
+            handler: raw.handler,
+            build: raw.build,
+            port: raw.port,
+            // `isExternal` chooses the bundler entry (raw file vs virtual
+            // `export default` wrapper). Omitting it here re-bundles an
+            // external program as an Effect entrypoint and fails the plan
+            // with MISSING_EXPORT when the source has no default export.
+            isExternal: raw.isExternal,
+          };
+          if (isResolved(contentInputs) && contentInputs.main !== undefined && output?.code?.hash) {
+            const { hash } = yield* hosted.bundleProgram(
+              id,
+              contentInputs as unknown as Ec2HostedProps,
+            );
+            if (hash !== output.code.hash) {
+              return {
+                action: "update",
+                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+              } as const;
+            }
+          }
           if (!isResolved(news)) return;
+          const reusesFixedPrivateIp =
+            news.privateIpAddress !== undefined &&
+            (output?.privateIpAddress ?? olds.privateIpAddress) === news.privateIpAddress &&
+            (news.subnetId === undefined || (output?.subnetId ?? olds.subnetId) === news.subnetId);
+
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
             hostModeChanged ||
@@ -667,7 +650,11 @@ export const InstanceProvider = () =>
             olds.privateIpAddress !== news.privateIpAddress ||
             olds.availabilityZone !== news.availabilityZone
           ) {
-            return { action: "replace" } as const;
+            // A primary private IP cannot belong to two instances in the
+            // same subnet. An omitted subnet may still resolve to that subnet.
+            return reusesFixedPrivateIp
+              ? ({ action: "replace", deleteFirst: true } as const)
+              : ({ action: "replace" } as const);
           }
 
           if (
@@ -678,10 +665,7 @@ export const InstanceProvider = () =>
             olds.port !== news.port ||
             !deepEqual(olds.env ?? {}, news.env ?? {}) ||
             !deepEqual(olds.build ?? {}, news.build ?? {}) ||
-            !deepEqual(
-              olds.roleManagedPolicyArns ?? [],
-              news.roleManagedPolicyArns ?? [],
-            ) ||
+            !deepEqual(olds.roleManagedPolicyArns ?? [], news.roleManagedPolicyArns ?? []) ||
             !deepEqual(
               resolvedSecurityGroups(olds.securityGroupIds),
               resolvedSecurityGroups(news.securityGroupIds),
@@ -694,30 +678,14 @@ export const InstanceProvider = () =>
             } as const;
           }
 
-          // The hosted bundle hash participates in planning: a change confined
-          // to the runtime program (or its imports) leaves every prop equal, so
-          // re-bundle and compare against the deployed hash. A mismatch plans
-          // an in-place update, whose reconcile re-uploads the bundle and
-          // reboots the instance.
-          if (news.main && output?.code?.hash) {
-            const { hash } = yield* hosted.bundleProgram(id, news);
-            if (hash !== output.code.hash) {
-              return {
-                action: "update",
-                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
-              } as const;
-            }
-          }
+          // Content-only changes were already handled by the resolved-subset
+          // bundle-hash check above.
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
               )
             : yield* findInstanceByTags(id, instanceId);
           return instance
@@ -761,12 +729,8 @@ export const InstanceProvider = () =>
           // record before deciding whether to launch a new one.
           let instance: ec2.Instance | undefined = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("InstanceNotFound", () => Effect.succeed(undefined)),
               )
             : yield* findInstanceByTags(id, generation);
 
@@ -781,21 +745,14 @@ export const InstanceProvider = () =>
           // doesn't accept it.
           if (instance === undefined) {
             const created = yield* ec2
-              .runInstances(
-                buildRunInstancesRequest(news, runtime, desiredTags),
-              )
+              .runInstances(buildRunInstancesRequest(news, runtime, desiredTags))
               .pipe(
                 Effect.retry({
                   while: isPendingInstanceProfileError,
-                  schedule: Schedule.max([
-                    Schedule.exponential("500 millis"),
-                    Schedule.recurs(8),
-                  ]),
+                  schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
                 }),
               );
-            const newInstanceId = created.Instances?.[0]?.InstanceId as
-              | InstanceId
-              | undefined;
+            const newInstanceId = created.Instances?.[0]?.InstanceId as InstanceId | undefined;
             if (!newInstanceId) {
               return yield* Effect.fail(
                 new Error(`RunInstances returned no instance ID for '${id}'`),
@@ -822,9 +779,7 @@ export const InstanceProvider = () =>
           const observedSecurityGroups = (instance.SecurityGroups ?? [])
             .map((g) => g.GroupId)
             .filter((g): g is string => Boolean(g));
-          const desiredSecurityGroups = resolvedSecurityGroups(
-            news.securityGroupIds,
-          );
+          const desiredSecurityGroups = resolvedSecurityGroups(news.securityGroupIds);
           if (
             desiredSecurityGroups &&
             desiredSecurityGroups.length > 0 &&
@@ -848,10 +803,7 @@ export const InstanceProvider = () =>
 
           // Sync instance type — observed type vs desired. Type changes need
           // the instance stopped, then we restart it if it was running.
-          if (
-            news.instanceType &&
-            String(instance.InstanceType ?? "") !== news.instanceType
-          ) {
+          if (news.instanceType && String(instance.InstanceType ?? "") !== news.instanceType) {
             const wasRunning = instance.State?.Name === "running";
             if (wasRunning) {
               yield* ec2.stopInstances({ InstanceIds: [instanceId] });
@@ -916,8 +868,7 @@ export const InstanceProvider = () =>
           const final = yield* describeInstance(instanceId);
           return {
             ...(yield* toAttributes(final)),
-            instanceProfileName:
-              runtime.instanceProfileName ?? output?.instanceProfileName,
+            instanceProfileName: runtime.instanceProfileName ?? output?.instanceProfileName,
             roleArn: runtime.roleArn ?? output?.roleArn,
             roleName: runtime.roleName ?? output?.roleName,
             policyName: runtime.policyName ?? output?.policyName,
@@ -932,9 +883,7 @@ export const InstanceProvider = () =>
             .terminateInstances({
               InstanceIds: [output.instanceId],
             })
-            .pipe(
-              Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("InvalidInstanceID.NotFound", () => Effect.void));
           yield* waitForDeleted({
             instanceId: output.instanceId,
             session,

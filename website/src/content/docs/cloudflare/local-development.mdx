@@ -110,7 +110,7 @@ dev:
 | Workers                  | workerd, with hot reload and a `http://localhost:<port>` URL                       |
 | Durable Objects          | run inside the local workerd, including SQLite storage                             |
 | KV Namespaces            | local simulator; Node-side capability clients hit the same store                   |
-| R2 Buckets               | local simulator                                                                    |
+| R2 Buckets               | local simulator; an S3-compatible endpoint serves [presigned URLs](/cloudflare/data/r2-presigned-urls) |
 | D1 Databases             | local simulator; `migrations` and `importFiles` apply on every reconcile           |
 | Queues + consumers       | local broker with batching, retry, and dead-letter semantics                       |
 | Hyperdrive               | connects directly to your database                                                 |
@@ -188,6 +188,27 @@ export default Cloudflare.Worker("Worker", {
 });
 ```
 
+## Test against the local stack
+
+The [test harness](/testing/test-harness) has the same dev mode —
+`Test.make({ dev: true })` (available on both the Bun and Vitest
+adapters, off by default) runs the suite's `deploy(Stack)` against
+the local simulators instead of the cloud, no separate
+`alchemy dev` terminal needed:
+
+```typescript
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
+```
+
+Workers, Durable Objects, Workflows, and the simulated bindings all
+run in workerd exactly as described above, and the stack's `url`
+points at `http://localhost:<port>`. See
+[Test harness → dev](/testing/test-harness#dev) and
+[Tutorial Part 4](/cloudflare/tutorial/part-4).
+
 ## Where next
 
 - [Local development](/environments/local-development) — the
@@ -197,5 +218,7 @@ export default Cloudflare.Worker("Worker", {
   framework dev servers under `alchemy dev`.
 - [Stages](/environments/stages) — how live-in-dev resources stay
   isolated per developer.
+- [Testing](/testing) — run the same test suite against the local
+  simulators with `Test.make({ dev: true })`.
 - [Local Providers](/infrastructure-as-code/local-provider) —
   build the local implementation of a resource.

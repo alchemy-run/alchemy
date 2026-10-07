@@ -1,16 +1,18 @@
-import * as AWS from "@/AWS";
-import { flociServices } from "@/AWS/Local/FlociServices.ts";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { assert, describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import { flociServices } from "@/AWS/Local/FlociServices.ts";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -21,16 +23,8 @@ import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 // built emulator: `ALCHEMY_FLOCI_IMAGE=floci:cf-edge pnpm test …`.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "staticsite-dev",
-);
-const viteFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "vite-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "staticsite-dev");
+const viteFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "vite-app");
 // Clone under the alchemy package so `vite` resolves from the workspace's
 // hoisted node_modules (the fixture has no node_modules of its own).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
@@ -50,16 +44,11 @@ const htmlPage = (marker: string) => `<!doctype html>
  * is served on, so a browser (and this test) can just GET it. Needing anything
  * else here would mean the dev URL is not really usable.
  */
-const fetchRouter = Effect.fn("fetchRouter")(function* (
-  routerUrl: string,
-  path: string,
-) {
+const fetchRouter = Effect.fn("fetchRouter")(function* (routerUrl: string, path: string) {
   const client = yield* HttpClient.HttpClient;
   return yield* client
     .get(`${routerUrl}${path}`)
-    .pipe(
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }),
-    );
+    .pipe(Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }));
 });
 
 /**
@@ -67,10 +56,7 @@ const fetchRouter = Effect.fn("fetchRouter")(function* (
  * server serves `site/<prefix>/index.html`, so the site behaves like a real
  * static host mounted under the Router's path prefix.
  */
-const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (
-  prefix: string,
-  marker: string,
-) {
+const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (prefix: string, marker: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const cwd = yield* cloneFixture(fixtureDir, {
@@ -79,10 +65,7 @@ const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (
     entries: ["serve.mjs", "site"],
   });
   yield* fs.makeDirectory(path.join(cwd, "site", prefix), { recursive: true });
-  yield* fs.writeFileString(
-    path.join(cwd, "site", prefix, "index.html"),
-    htmlPage(marker),
-  );
+  yield* fs.writeFileString(path.join(cwd, "site", prefix, "index.html"), htmlPage(marker));
   return cwd;
 });
 
@@ -123,23 +106,15 @@ const expectRouterBody = Effect.fn("expectRouterBody")(function* (
     const body = yield* response.text;
     const missing = (options.includes ?? []).filter((m) => !body.includes(m));
     const present = (options.excludes ?? []).filter((m) => body.includes(m));
-    if (
-      response.status !== status ||
-      missing.length > 0 ||
-      present.length > 0
-    ) {
+    if (response.status !== status || missing.length > 0 || present.length > 0) {
       return yield* Effect.fail(
         new RouterBodyMismatch({
           url,
           status: response.status,
           problem: [
-            response.status !== status
-              ? `expected status ${status}`
-              : undefined,
+            response.status !== status ? `expected status ${status}` : undefined,
             missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
-            present.length > 0
-              ? `unexpectedly present ${present.join(", ")}`
-              : undefined,
+            present.length > 0 ? `unexpectedly present ${present.join(", ")}` : undefined,
           ]
             .filter(Boolean)
             .join("; "),
@@ -149,13 +124,8 @@ const expectRouterBody = Effect.fn("expectRouterBody")(function* (
     }
     return body;
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.exponential("400 millis", 1.4),
-      times: 8,
-    }),
-    Effect.tapError((error) =>
-      Effect.logError(`expectRouterBody(${path}) failed`, error),
-    ),
+    Effect.retry({ schedule: Schedule.exponential("400 millis", 1.4), times: 8 }),
+    Effect.tapError((error) => Effect.logError(`expectRouterBody(${path}) failed`, error)),
   );
 });
 
@@ -165,10 +135,7 @@ const expectRouterBody = Effect.fn("expectRouterBody")(function* (
  *
  * Returns the paths of the two files the live-edit assertions rewrite.
  */
-const makeViteFixture = Effect.fn("makeViteFixture")(function* (
-  slug: string,
-  marker: string,
-) {
+const makeViteFixture = Effect.fn("makeViteFixture")(function* (slug: string, marker: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const cwd = yield* cloneFixture(viteFixtureDir, {
@@ -179,10 +146,7 @@ const makeViteFixture = Effect.fn("makeViteFixture")(function* (
   const indexPath = path.join(cwd, "index.html");
   const mainPath = path.join(cwd, "src", "main.ts");
   const index = yield* fs.readFileString(indexPath);
-  yield* fs.writeFileString(
-    indexPath,
-    index.replaceAll("VITE_AWS_PAGE_MARKER", `${marker}_PAGE`),
-  );
+  yield* fs.writeFileString(indexPath, index.replaceAll("VITE_AWS_PAGE_MARKER", `${marker}_PAGE`));
   const main = yield* fs.readFileString(mainPath);
   yield* fs.writeFileString(
     mainPath,
@@ -191,7 +155,60 @@ const makeViteFixture = Effect.fn("makeViteFixture")(function* (
   return { cwd, indexPath, mainPath };
 });
 
-describe("AWS.Website.Router local", () => {
+describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:website"] }, () => {
+  test.provider(
+    "inline URL and bucket routes serve their own origins",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const cwd = yield* makeSiteFixture("api", "router-inline-url");
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const origin = yield* AWS.Website.StaticSite("Origin", {
+              path: cwd,
+              dev: { command: "bun serve.mjs" },
+            });
+            const bucket = yield* AWS.S3.Bucket("Assets", {
+              forceDestroy: true,
+            });
+            const router = yield* AWS.Website.Router("InlineRouter", {
+              routes: {
+                // An Output url, as in the Router JSDoc (`api.functionUrl`).
+                "/api/*": { url: Output.interpolate`${origin.url}`, origin: { protocol: "http" } },
+                "/assets/*": { bucket },
+              },
+            });
+            return { routerUrl: router.url, bucketName: bucket.bucketName };
+          }),
+        );
+
+        yield* s3
+          .putObject({
+            Bucket: deployed.bucketName,
+            Key: "assets/marker.txt",
+            Body: "router-inline-bucket",
+            ContentType: "text/plain",
+          })
+          .pipe(Effect.provide(flociServices()));
+
+        const routerUrl = deployed.routerUrl;
+        assert(typeof routerUrl === "string");
+        expect(routerUrl).toMatch(/^http:\/\/localhost:\d+$/);
+        yield* expectRouterBody(routerUrl, "/api/", {
+          includes: ["router-inline-url"],
+          excludes: ["router-inline-bucket"],
+        });
+        yield* expectRouterBody(routerUrl, "/assets/marker.txt", {
+          includes: ["router-inline-bucket"],
+          excludes: ["router-inline-url"],
+        });
+
+        yield* stack.destroy();
+      }),
+    { tags: ["local"], timeout: 120_000 },
+  );
+
   /**
    * The whole point of the local Router: two sites, one Router, real HTTP
    * through the emulated CloudFront distribution, each path prefix reaching
@@ -271,9 +288,7 @@ describe("AWS.Website.Router local", () => {
         // `routeSite` sets x-forwarded-host to the viewer's Host before it
         // rewrites the origin — the site's dev server sees the hostname the
         // request arrived on, exactly as a deployed server origin would.
-        expect(echoed.headers["x-forwarded-host"]).toBe(
-          new URL(routerUrl).host,
-        );
+        expect(echoed.headers["x-forwarded-host"]).toBe(new URL(routerUrl).host);
 
         // ── Live edit: the dev server reads from disk per request, so the
         // next edge request serves the new content without re-applying ─────
@@ -288,7 +303,7 @@ describe("AWS.Website.Router local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 300_000 },
+    { tags: ["local"], timeout: 300_000 },
   );
 
   /**
@@ -326,19 +341,16 @@ describe("AWS.Website.Router local", () => {
             });
             const appSite = yield* AWS.Website.Vite("AppSite", {
               rootDir: app.cwd,
+              domain: { router, path: "/app" },
               // The Router forwards the FULL uri to the origin — it never
               // strips the mount prefix — so the dev server has to serve at
-              // the prefix. `base` is what makes Vite do that, for both the
-              // module URLs it writes into the HTML and the requests it then
-              // has to answer.
+              // the prefix. `vite.base` is what makes Vite do that, for both
+              // the module URLs it writes into the HTML and the requests it
+              // then has to answer. Passed as the deploy-time override bag
+              // (merged over the fixture's config file, which has none).
               vite: { base: "/app/" },
-              domain: { router, path: "/app" },
             });
-            return {
-              routerUrl: router.url,
-              rootUrl: rootSite.url,
-              appUrl: appSite.url,
-            };
+            return { routerUrl: router.url, rootUrl: rootSite.url, appUrl: appSite.url };
           }),
         );
 
@@ -374,16 +386,12 @@ describe("AWS.Website.Router local", () => {
           includes: ["ROUTER_VITE_APP_MODULE"],
           excludes: ["ROUTER_VITE_ROOT_MODULE"],
         });
-        yield* expectRouterBody(routerUrl, "/app/@vite/client", {
-          includes: ["export"],
-        });
+        yield* expectRouterBody(routerUrl, "/app/@vite/client", { includes: ["export"] });
         yield* expectRouterBody(routerUrl, "/src/main.ts", {
           includes: ["ROUTER_VITE_ROOT_MODULE"],
           excludes: ["ROUTER_VITE_APP_MODULE"],
         });
-        yield* expectRouterBody(routerUrl, "/@vite/client", {
-          includes: ["export"],
-        });
+        yield* expectRouterBody(routerUrl, "/@vite/client", { includes: ["export"] });
 
         // ── Longest-prefix routing: neither mount answers the other's ──────
         // The root site matches `/` and would happily serve `/app/...` if the
@@ -415,13 +423,14 @@ describe("AWS.Website.Router local", () => {
           "ROUTER_VITE_ROOT_PAGE_V2",
         );
         yield* fs.writeFileString(root.indexPath, editedIndex);
-        yield* expectRouterBody(routerUrl, "/?v=2", {
-          includes: ["ROUTER_VITE_ROOT_PAGE_V2"],
-        });
+        yield* expectRouterBody(routerUrl, "/?v=2", { includes: ["ROUTER_VITE_ROOT_PAGE_V2"] });
 
         yield* stack.destroy();
       }),
-    { timeout: 120_000 },
+    // 300s like the sibling cases: fixture clone + `bun install` + vite dev
+    // boot through the emulated edge stack up under whole-suite concurrency
+    // (the test itself runs in ~6s in isolation).
+    { tags: ["local"], timeout: 300_000 },
   );
 
   /**
@@ -439,20 +448,13 @@ describe("AWS.Website.Router local", () => {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const router = yield* AWS.Website.Router("SandboxRouter", {
-              edge: {
-                viewerRequest: {
-                  injection: `await fetch("https://example.com/");`,
-                },
-              },
+              edge: { viewerRequest: { injection: `await fetch("https://example.com/");` } },
             });
             return { routerUrl: router.url };
           }),
         );
 
-        const response = yield* fetchRouter(
-          deployed.routerUrl as string,
-          "/anything",
-        );
+        const response = yield* fetchRouter(deployed.routerUrl as string, "/anything");
         expect(response.status).toBe(502);
         const body = yield* response.text;
         expect(body).toContain("fetch is not defined");
@@ -460,7 +462,7 @@ describe("AWS.Website.Router local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 180_000 },
+    { tags: ["local"], timeout: 180_000 },
   );
 
   /**
@@ -495,10 +497,7 @@ describe("AWS.Website.Router local", () => {
 
         // What the edge produced, as observed by the origin itself.
         const echo = yield* fetchRouter(routerUrl, "/docs/__echo?q=1");
-        const echoed = (yield* echo.json) as {
-          path: string;
-          headers: Record<string, string>;
-        };
+        const echoed = (yield* echo.json) as { path: string; headers: Record<string, string> };
 
         // The same event, through the TestFunction API. The out-of-band SDK
         // calls are pinned to the emulator explicitly — the test process's
@@ -506,8 +505,7 @@ describe("AWS.Website.Router local", () => {
         const result = yield* Effect.gen(function* () {
           const functions = yield* cloudfront.listFunctions({});
           const summary = functions.FunctionList?.Items?.find(
-            (item) =>
-              item.FunctionConfig.Comment === "ParityRouter viewer request",
+            (item) => item.FunctionConfig.Comment === "ParityRouter viewer request",
           );
           expect(summary).toBeDefined();
           const described = yield* cloudfront.describeFunction({
@@ -553,7 +551,7 @@ describe("AWS.Website.Router local", () => {
 
         yield* stack.destroy();
       }),
-    { timeout: 300_000 },
+    { tags: ["provider:aws:cloudfront", "local"], timeout: 300_000 },
   );
 
   /**
@@ -585,10 +583,7 @@ describe("AWS.Website.Router local", () => {
         );
 
         /** Create, test, and delete a function against whichever endpoint is in scope. */
-        const runThere = Effect.fn("runThere")(function* (
-          suffix: string,
-          code: string,
-        ) {
+        const runThere = Effect.fn("runThere")(function* (suffix: string, code: string) {
           const created = yield* cloudfront.createFunction({
             Name: `${name}-${suffix}`,
             FunctionConfig: { Comment: "parity", Runtime: "cloudfront-js-2.0" },
@@ -601,20 +596,13 @@ describe("AWS.Website.Router local", () => {
             EventObject: event,
           });
           yield* cloudfront
-            .deleteFunction({
-              Name: `${name}-${suffix}`,
-              IfMatch: created.ETag!,
-            })
+            .deleteFunction({ Name: `${name}-${suffix}`, IfMatch: created.ETag! })
             .pipe(Effect.ignore);
           const raw = result.TestResult?.FunctionOutput;
           return {
             error: result.TestResult?.FunctionErrorMessage,
             output:
-              raw === undefined
-                ? undefined
-                : typeof raw === "string"
-                  ? raw
-                  : Redacted.value(raw),
+              raw === undefined ? undefined : typeof raw === "string" ? raw : Redacted.value(raw),
           };
         });
 
@@ -624,9 +612,7 @@ describe("AWS.Website.Router local", () => {
   event.request.uri = event.request.uri + "/index.html";
   return event.request;
 }`;
-        const local = yield* runThere("ok", wellBehaved).pipe(
-          Effect.provide(flociServices()),
-        );
+        const local = yield* runThere("ok", wellBehaved).pipe(Effect.provide(flociServices()));
         const real = yield* runThere("ok", wellBehaved);
         expect(local.error).toBeUndefined();
         expect(real.error).toBeUndefined();
@@ -644,6 +630,6 @@ describe("AWS.Website.Router local", () => {
         expect(localError.error).toBeDefined();
         expect(realError.error).toBeDefined();
       }),
-    { timeout: 180_000 },
+    { tags: ["provider:aws:cloudfront", "live"], timeout: 180_000 },
   );
 });

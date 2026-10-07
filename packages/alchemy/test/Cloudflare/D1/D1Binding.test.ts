@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 120_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -34,17 +31,13 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(45)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -75,9 +68,7 @@ const retryRows = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
 const exercise = (base: string) =>
   Effect.gen(function* () {
     // exec — CREATE TABLE. Don't assert exact count (0 on a re-run), only shape.
-    const initRes = yield* untilOk(
-      HttpClient.execute(HttpClientRequest.post(`${base}/init`)),
-    );
+    const initRes = yield* untilOk(HttpClient.execute(HttpClientRequest.post(`${base}/init`)));
     const initBody = (yield* initRes.json) as {
       count: number;
       duration: number;
@@ -86,9 +77,7 @@ const exercise = (base: string) =>
     expect(typeof initBody.duration).toBe("number");
 
     // batch — three inserts in one transactional call.
-    const seedRes = yield* untilOk(
-      HttpClient.execute(HttpClientRequest.post(`${base}/seed`)),
-    );
+    const seedRes = yield* untilOk(HttpClient.execute(HttpClientRequest.post(`${base}/seed`)));
     expect(yield* seedRes.json).toMatchObject({ batches: 3, success: true });
 
     // prepare.bind.run — single insert.
@@ -122,9 +111,7 @@ const exercise = (base: string) =>
         };
         return b.results.length === expected.length
           ? Effect.succeed(b)
-          : Effect.fail(
-              new RowsMismatch({ actual: JSON.stringify(b.results) }),
-            );
+          : Effect.fail(new RowsMismatch({ actual: JSON.stringify(b.results) }));
       }),
       retryRows,
     );
@@ -161,7 +148,7 @@ const exercise = (base: string) =>
  *   native `cf.D1Database` via `InferEnv`) and used from a plain async fetch.
  *
  * The stack lives in `fixtures/stack.ts` so it can also be inspected directly,
- * e.g. `alchemy tail --stage test ./test/Cloudflare/D1/fixtures/stack.ts`.
+ * e.g. `alchemy logs --tail --stage test --config ./test/Cloudflare/D1/fixtures/stack.ts`.
  */
 const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
@@ -175,7 +162,10 @@ test(
     const out = yield* stack;
     yield* exercise(out.effectWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // ── async-worker ── D1 declared on `env`, native `env.DB` used from async fetch.
@@ -185,5 +175,8 @@ test(
     const out = yield* stack;
     yield* exercise(out.asyncWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
 );

@@ -2,6 +2,6 @@
 // declared in alchemy.run.ts are read from `process.env`.
 export const load = () => {
   return {
-    greeting: process.env.GREETING ?? "Hello (no env)",
+    greeting: process.env.GREETING ?? "Hello!",
   };
 };

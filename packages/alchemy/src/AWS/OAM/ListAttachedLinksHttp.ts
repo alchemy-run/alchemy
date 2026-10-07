@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  ListAttachedLinks,
-  type ListAttachedLinksRequest,
-} from "./ListAttachedLinks.ts";
+import { ListAttachedLinks, type ListAttachedLinksRequest } from "./ListAttachedLinks.ts";
 import type { Sink } from "./Sink.ts";
 
 /**
@@ -36,14 +33,14 @@ export const ListAttachedLinksHttp = Layer.effect(
           });
         }
       }
-      return Effect.fn(`AWS.OAM.ListAttachedLinks(${sink.LogicalId})`)(
-        function* (request?: ListAttachedLinksRequest) {
-          return yield* listAttachedLinks({
-            ...request,
-            SinkIdentifier: yield* SinkIdentifier,
-          });
-        },
-      );
+      return Effect.fn(`AWS.OAM.ListAttachedLinks(${sink.LogicalId})`)(function* (
+        request?: ListAttachedLinksRequest,
+      ) {
+        return yield* listAttachedLinks({
+          ...request,
+          SinkIdentifier: yield* SinkIdentifier,
+        });
+      });
     });
   }),
 );

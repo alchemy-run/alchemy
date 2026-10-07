@@ -1,34 +1,27 @@
 import * as Drizzle from "alchemy/Drizzle";
 import * as Fly from "alchemy/Fly";
-import * as Effect from "effect/Effect";
 
 export const API_PORT = 3000;
 
-export const Site = Fly.App("Site", {
-  enableSubdomains: true,
-});
+/**
+ * Shared token for the fixture's `POST /migrate` route. Fly Managed
+ * Postgres is only reachable on the org's private network, so migrations
+ * are applied THROUGH the deployed Service (which is in-network) — the
+ * integ test reads the generated SQL locally and posts it here. A
+ * checked-in constant is fine for this throwaway demo database; real apps
+ * should use a deploy-time secret.
+ */
+export const MIGRATE_TOKEN = "fly-postgres-example-migrate";
 
 /**
- * Drizzle schema + Fly Managed Postgres. `migrations: schema` makes
- * `Drizzle.Schema` regenerate pending SQL, then `Fly.Postgres` applies
- * it on deploy.
+ * Drizzle schema generation. The generated SQL under `./migrations` is
+ * applied through the Api service's `/migrate` route (see api.ts) — MPG
+ * hostnames don't resolve outside the org's private network, so the
+ * in-network Service is the data plane for DDL too.
  */
 export const Schema = Drizzle.Schema("app-schema", {
   schema: "./src/schema.ts",
   out: "./migrations",
 });
 
-export const Db = Fly.Postgres(
-  "Db",
-  Effect.gen(function* () {
-    // Yield the schema so the cluster depends on it: Drizzle regenerates
-    // pending SQL first, then Fly.Postgres applies it.
-    const schema = yield* Schema;
-    return { region: "iad", migrations: schema };
-  }),
-);
-
-export const PublicIp = Fly.IpAssignment("Shared", {
-  app: Site,
-  type: "shared_v4",
-});
+export const Db = Fly.Postgres("Db", { region: "iad" });

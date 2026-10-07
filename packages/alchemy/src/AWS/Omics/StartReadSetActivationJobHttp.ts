@@ -1,8 +1,8 @@
 import * as omics from "@distilled.cloud/aws/omics";
 import * as Layer from "effect/Layer";
 import { makeOmicsResourceHttpBinding } from "./BindingHttp.ts";
-import { StartReadSetActivationJob } from "./StartReadSetActivationJob.ts";
 import type { SequenceStore } from "./SequenceStore.ts";
+import { StartReadSetActivationJob } from "./StartReadSetActivationJob.ts";
 
 export const StartReadSetActivationJobHttp = Layer.effect(
   StartReadSetActivationJob,

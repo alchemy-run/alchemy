@@ -1,10 +1,10 @@
+import * as textract from "@distilled.cloud/aws/textract";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Adapter } from "@/AWS/Textract/Adapter.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as textract from "@distilled.cloud/aws/textract";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,11 +14,7 @@ const adapterName = "alchemy-test-textract-adapter";
 const getAdapter = (adapterId: string) =>
   textract
     .getAdapter({ AdapterId: adapterId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "lifecycle: create adapter, update settings + tags, destroy",
@@ -83,5 +79,5 @@ test.provider(
       const after = yield* getAdapter(deployed.adapterId);
       expect(after).toBeUndefined();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:textract", "live"], timeout: 180_000 },
 );

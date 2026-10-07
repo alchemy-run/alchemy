@@ -1,8 +1,8 @@
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 const READ_CHUNK_BYTES = 64 * 1024;
 
@@ -26,13 +26,9 @@ export interface ArtifactFile extends VerifiedFile {
   readonly cleanup: Effect.Effect<void>;
 }
 
-const toError = (message: string, cause: unknown) =>
-  new Error(message, { cause });
+const toError = (message: string, cause: unknown) => new Error(message, { cause });
 
-const isSameIdentity = (
-  stat: BigIntStats,
-  identity: VerifiedFile["identity"],
-) =>
+const isSameIdentity = (stat: BigIntStats, identity: VerifiedFile["identity"]) =>
   stat.isFile() &&
   stat.dev.toString() === identity.dev &&
   stat.ino.toString() === identity.ino &&
@@ -66,23 +62,13 @@ const validateStat = (
   if (!allowEmpty && stat.size <= 0n) {
     throw new Error(`${description} must be non-empty.`);
   }
-  if (
-    stat.size > BigInt(maxBytes) ||
-    stat.size > BigInt(Number.MAX_SAFE_INTEGER)
-  ) {
-    throw new Error(
-      `${description} exceeds the ${maxBytes} byte upload safety limit.`,
-    );
+  if (stat.size > BigInt(maxBytes) || stat.size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`${description} exceeds the ${maxBytes} byte upload safety limit.`);
   }
 };
 
-async function* readVerifiedChunks(
-  artifact: VerifiedFile,
-): AsyncGenerator<Uint8Array> {
-  const handle = await open(
-    artifact.path,
-    constants.O_RDONLY | constants.O_NOFOLLOW,
-  );
+async function* readVerifiedChunks(artifact: VerifiedFile): AsyncGenerator<Uint8Array> {
+  const handle = await open(artifact.path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const before = await handle.stat({ bigint: true });
     if (!isSameIdentity(before, artifact.identity)) {
@@ -94,28 +80,16 @@ async function* readVerifiedChunks(
     let remaining = artifact.size;
     while (remaining > 0) {
       const buffer = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, remaining));
-      const { bytesRead } = await handle.read(
-        buffer,
-        0,
-        buffer.byteLength,
-        null,
-      );
+      const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, null);
       if (bytesRead === 0) {
-        throw new Error(
-          "Prisma deployment artifact was truncated while it was being read.",
-        );
+        throw new Error("Prisma deployment artifact was truncated while it was being read.");
       }
       remaining -= bytesRead;
       yield new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
     }
 
     const trailing = Buffer.allocUnsafe(1);
-    const { bytesRead: trailingBytes } = await handle.read(
-      trailing,
-      0,
-      trailing.byteLength,
-      null,
-    );
+    const { bytesRead: trailingBytes } = await handle.read(trailing, 0, trailing.byteLength, null);
     const after = await handle.stat({ bigint: true });
     if (trailingBytes !== 0 || !isSameIdentity(after, artifact.identity)) {
       throw new Error(
@@ -171,10 +145,7 @@ export const inspectVerifiedFile = (
 ) =>
   Effect.tryPromise({
     try: () => inspectVerifiedFilePromise(inputPath, maxBytes, options),
-    catch: (cause) =>
-      cause instanceof Error
-        ? cause
-        : toError("Failed to validate file.", cause),
+    catch: (cause) => (cause instanceof Error ? cause : toError("Failed to validate file.", cause)),
   });
 
 export const inspectArtifactFile = (
@@ -213,13 +184,10 @@ export const inspectArtifactFile = (
 
 export const artifactFileStream = (artifact: ArtifactFile) =>
   Stream.fromAsyncIterable(readVerifiedChunks(artifact), (cause) =>
-    cause instanceof Error
-      ? cause
-      : toError("Failed to stream Prisma deployment artifact.", cause),
+    cause instanceof Error ? cause : toError("Failed to stream Prisma deployment artifact.", cause),
   );
 
-export const verifiedFileChunks = (file: VerifiedFile) =>
-  readVerifiedChunks(file);
+export const verifiedFileChunks = (file: VerifiedFile) => readVerifiedChunks(file);
 
 export const readArtifactFile = (artifact: ArtifactFile) =>
   Effect.gen(function* () {
@@ -233,9 +201,7 @@ export const readArtifactFile = (artifact: ArtifactFile) =>
     );
     if (offset !== artifact.size) {
       return yield* Effect.fail(
-        new Error(
-          "Prisma deployment artifact length changed while it was being read.",
-        ),
+        new Error("Prisma deployment artifact length changed while it was being read."),
       );
     }
     return bytes;

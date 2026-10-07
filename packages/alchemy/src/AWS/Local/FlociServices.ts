@@ -89,17 +89,15 @@ export const flociServices = () => (flociServicesLayer ??= makeFlociServices());
  * flociDual(S3.Bucket, () => S3.BucketProvider()),
  * ```
  */
-export const flociDual = <
-  R extends ResourceLike,
-  L extends Layer.Layer<any, any, any>,
->(
-  cls:
-    | ResourceClassLike<R>
-    | Platform<R, any, any, any, any>
-    | { Type: R["Type"] },
-  live: () => L,
+export const flociDual = <R extends ResourceLike, ROut, E, RIn>(
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any> | { Type: R["Type"] },
+  live: () => Layer.Layer<ROut, E, RIn>,
 ) =>
   ProviderLayer.dual(cls, {
     live,
     local: () => provideProviderContext(live(), flociServices()),
+    // Registered as the resource's local data plane so deploy-time binding
+    // clients (Action bodies, plan-time `execute`) route their API calls to
+    // the emulator whenever the bound resource resolves to local mode.
+    dataPlane: flociServices,
   });

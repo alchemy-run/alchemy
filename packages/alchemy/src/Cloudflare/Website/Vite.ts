@@ -110,14 +110,13 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * ### Single-Page Applications
- * For SPAs (React, Vue, etc.), configure asset handling so all
- * routes fall back to `index.html`.
+ * For SPAs (React, Vue, etc.), configure asset handling so unmatched
+ * routes fall back to `index.html` and the client router takes over.
  *
  * **Example:** Vue SPA
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Vue", {
  *   assets: {
- *     htmlHandling: "auto-trailing-slash",
  *     notFoundHandling: "single-page-application",
  *   },
  * });
@@ -233,9 +232,10 @@ export const Vite: {
         | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -246,29 +246,37 @@ export const Vite: {
       | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<ViteProps<Bindings>>
+    | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Vite(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | InputProps<ViteProps<Bindings>>
+          | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+      ) => effectClass(Vite(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            main: undefined!,
-            vite: {
-              main: props?.main,
-              rootDir: props?.rootDir,
-              memo: props?.memo,
-              viteEnvironments: props?.viteEnvironments,
-            },
-          }),
-        ),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          main: undefined!,
+          vite: {
+            main: props?.main,
+            rootDir: props?.rootDir,
+            memo: props?.memo,
+            viteEnvironments: props?.viteEnvironments,
+          },
+        })),
       )) as any;

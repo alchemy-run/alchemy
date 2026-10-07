@@ -11,20 +11,14 @@ import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { toSeconds, toWireDays } from "../../Util/Duration.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
+import type { DistributiveOmit } from "../../Util/types.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
-import {
-  DURABLE_SDK_MODULE,
-  encodeDurableEnvelope,
-  makeDurableListener,
-} from "./DurableBridge.ts";
-import {
-  Function,
-  type FunctionProps,
-  type FunctionServices,
-  type HandlerContext,
-} from "./Function.ts";
+import { DURABLE_SDK_MODULE, encodeDurableEnvelope, makeDurableListener } from "./DurableBridge.ts";
+import { Function, type FunctionProps, type FunctionServices } from "./Function.ts";
+import type { HandlerContext } from "./InvocationDeadline.ts";
 
 type TypeId = "AWS.Lambda.DurableFunction";
 const TypeId = "AWS.Lambda.DurableFunction" as const;
@@ -47,7 +41,10 @@ export type DurableRunServices =
   | DurableStep
   | DurableExecutionContext
   | HandlerContext
-  | Scope;
+  | Scope
+  // Runtime-only binding clients (`Alchemy.RuntimeContext`); provided per
+  // invocation from the function's own runtime context.
+  | RuntimeContext;
 
 /**
  * A durable function implementation: a function from a typed `Input` payload
@@ -77,10 +74,8 @@ export type DurableFunctionInitServices =
  * durable-execution envelope — there is no HTTP surface), plus the
  * `DurableConfig` tuning knobs below.
  */
-export interface DurableFunctionProps extends Omit<
-  FunctionProps,
-  "functionUrl" | "durableConfig"
-> {
+/** The DurableConfig tuning knobs a DurableFunction adds to Function props. */
+export interface DurableFunctionTuning {
   /**
    * Maximum total duration of a durable execution, from start to terminal
    * state (minimum 60 seconds, maximum 1 year). Rounded up to whole seconds.
@@ -94,6 +89,28 @@ export interface DurableFunctionProps extends Omit<
    */
   retentionPeriod?: Duration.Input;
 }
+
+/**
+ * Props of a {@link DurableFunction}: any Function props that carry a
+ * `main` — the orchestrator body is an Effect that has to be bundled into
+ * an entrypoint — minus `functionUrl` (every invocation arrives as the
+ * durable envelope, so there is no HTTP surface), plus the DurableConfig
+ * knobs.
+ *
+ * Selected by SHAPE (`Extract<…, { main: string }>`), not by packaging, so
+ * any future main-bearing variant is durable-capable automatically; a
+ * prebuilt `image` function is excluded because it has no `main` for the
+ * `impl` Effect to live in.
+ *
+ * The Omit DISTRIBUTES over the union: a bare `Omit` computes the COMMON
+ * keys and merges the members, which would make `main` optional and let
+ * `image` through alongside it.
+ */
+export type DurableFunctionProps = DistributiveOmit<
+  Extract<FunctionProps, { main: string }>,
+  "functionUrl" | "durableConfig"
+> &
+  DurableFunctionTuning;
 
 /**
  * Options for starting a durable execution.
@@ -148,10 +165,7 @@ export interface DurableFunctionHandle<Input = unknown, Result = unknown> {
   /** Fetch the execution's status/result. */
   get(
     executionArn: string,
-  ): Effect.Effect<
-    Lambda.GetDurableExecutionResponse,
-    Lambda.GetDurableExecutionError
-  >;
+  ): Effect.Effect<Lambda.GetDurableExecutionResponse, Lambda.GetDurableExecutionError>;
   /** List executions of this function, optionally filtered by name/status. */
   list(options?: {
     name?: string;
@@ -164,10 +178,7 @@ export interface DurableFunctionHandle<Input = unknown, Result = unknown> {
   stop(
     executionArn: string,
     error?: Lambda.ErrorObject,
-  ): Effect.Effect<
-    Lambda.StopDurableExecutionResponse,
-    Lambda.StopDurableExecutionError
-  >;
+  ): Effect.Effect<Lambda.StopDurableExecutionResponse, Lambda.StopDurableExecutionError>;
   /** Complete a `Durable.waitForCallback` from the outside. */
   sendCallbackSuccess(
     callbackId: string,
@@ -187,10 +198,10 @@ export interface DurableFunctionHandle<Input = unknown, Result = unknown> {
  * {@link DurableFunctionHandle} plus references to the underlying
  * {@link Function} resource and its key attributes.
  */
-export interface DurableFunction<
-  Input = unknown,
-  Result = unknown,
-> extends DurableFunctionHandle<Input, Result> {
+export interface DurableFunction<Input = unknown, Result = unknown> extends DurableFunctionHandle<
+  Input,
+  Result
+> {
   /** The underlying Lambda {@link Function} resource owned by this wrapper. */
   function: Function;
   /** Physical name of the underlying Lambda function. */
@@ -215,50 +226,27 @@ export interface DurableFunctionClass {
       id: string,
       props:
         | InputProps<DurableFunctionProps>
-        | Effect.Effect<
-            InputProps<DurableFunctionProps>,
-            ConfigError,
-            PropsReq
-          >,
-      impl: Effect.Effect<
-        DurableFunctionImpl<Input, Result>,
-        ConfigError,
-        InitReq
-      >,
+        | Effect.Effect<InputProps<DurableFunctionProps>, ConfigError, PropsReq>,
+      impl: Effect.Effect<DurableFunctionImpl<Input, Result>, ConfigError, InitReq>,
     ): Effect.Effect<
       DurableFunction<Input, Result>,
       never,
-      | Function["Providers"]
-      | Exclude<PropsReq | InitReq, DurableFunctionInitServices>
+      Function["Providers"] | Exclude<PropsReq | InitReq, DurableFunctionInitServices>
     > & {
       new (_: never): DurableFunctionImpl<Input, Result>;
     };
     <const Id extends string>(
       id: Id,
     ): Effect.Effect<DurableFunction, never, Function["Providers"]> & {
-      make<
-        Input = unknown,
-        Result = unknown,
-        PropsReq = never,
-        InitReq = never,
-      >(
+      make<Input = unknown, Result = unknown, PropsReq = never, InitReq = never>(
         props:
           | InputProps<DurableFunctionProps>
-          | Effect.Effect<
-              InputProps<DurableFunctionProps>,
-              ConfigError,
-              PropsReq
-            >,
-        impl: Effect.Effect<
-          DurableFunctionImpl<Input, Result>,
-          ConfigError,
-          InitReq
-        >,
+          | Effect.Effect<InputProps<DurableFunctionProps>, ConfigError, PropsReq>,
+        impl: Effect.Effect<DurableFunctionImpl<Input, Result>, ConfigError, InitReq>,
       ): Layer.Layer<
         _Self,
         never,
-        | Function["Providers"]
-        | Exclude<PropsReq | InitReq, DurableFunctionInitServices>
+        Function["Providers"] | Exclude<PropsReq | InitReq, DurableFunctionInitServices>
       >;
       new (_: never): {};
     };
@@ -268,16 +256,11 @@ export interface DurableFunctionClass {
     props:
       | InputProps<DurableFunctionProps>
       | Effect.Effect<InputProps<DurableFunctionProps>, ConfigError, PropsReq>,
-    impl: Effect.Effect<
-      DurableFunctionImpl<Input, Result>,
-      ConfigError,
-      InitReq
-    >,
+    impl: Effect.Effect<DurableFunctionImpl<Input, Result>, ConfigError, InitReq>,
   ): Effect.Effect<
     DurableFunction<Input, Result>,
     never,
-    | Function["Providers"]
-    | Exclude<PropsReq | InitReq, DurableFunctionInitServices>
+    Function["Providers"] | Exclude<PropsReq | InitReq, DurableFunctionInitServices>
   >;
 }
 
@@ -296,21 +279,15 @@ const DurableHandleKey = Symbol.for("alchemy/AWS.Lambda.DurableFunction");
  * (the bridge dynamic-imports it at runtime) and ships it. Respects an
  * explicit user entry (e.g. a pinned version).
  */
-const withDurableSdkInstall = (
-  install: PackageInstall | undefined,
-): PackageInstall => {
+const withDurableSdkInstall = (install: PackageInstall | undefined): PackageInstall => {
   if (install === undefined) {
     return [DURABLE_SDK_MODULE];
   }
   if (Array.isArray(install)) {
-    return install.includes(DURABLE_SDK_MODULE)
-      ? install
-      : [...install, DURABLE_SDK_MODULE];
+    return install.includes(DURABLE_SDK_MODULE) ? install : [...install, DURABLE_SDK_MODULE];
   }
   const record = install as Readonly<Record<string, string>>;
-  return DURABLE_SDK_MODULE in record
-    ? record
-    : { ...record, [DURABLE_SDK_MODULE]: "*" };
+  return DURABLE_SDK_MODULE in record ? record : { ...record, [DURABLE_SDK_MODULE]: "*" };
 };
 
 /**
@@ -337,9 +314,7 @@ const mapDurableProps = (props: DurableFunctionProps): FunctionProps => {
       ...(executionTimeoutSeconds !== undefined
         ? { ExecutionTimeout: executionTimeoutSeconds }
         : {}),
-      ...(retentionPeriodDays !== undefined
-        ? { RetentionPeriodInDays: retentionPeriodDays }
-        : {}),
+      ...(retentionPeriodDays !== undefined ? { RetentionPeriodInDays: retentionPeriodDays } : {}),
     },
   };
 };
@@ -350,9 +325,7 @@ const mapDurablePropsInput = (props: unknown) =>
     : mapDurableProps(props as DurableFunctionProps);
 
 const resolveDurableHandle = (id: string) => (instance: unknown) => {
-  const handle = (instance as Record<symbol, unknown> | undefined)?.[
-    DurableHandleKey
-  ];
+  const handle = (instance as Record<symbol, unknown> | undefined)?.[DurableHandleKey];
   return handle !== undefined
     ? Effect.succeed(handle as DurableFunction<any, any>)
     : Effect.die(
@@ -385,15 +358,11 @@ const composeDurableImpl = (
     // callables need no cloud services of their own.
     const invoke = yield* Lambda.invoke;
     const getDurableExecution = yield* Lambda.getDurableExecution;
-    const listDurableExecutionsByFunction =
-      yield* Lambda.listDurableExecutionsByFunction;
+    const listDurableExecutionsByFunction = yield* Lambda.listDurableExecutionsByFunction;
     const stopDurableExecution = yield* Lambda.stopDurableExecution;
-    const sendCallbackSuccess =
-      yield* Lambda.sendDurableExecutionCallbackSuccess;
-    const sendCallbackFailure =
-      yield* Lambda.sendDurableExecutionCallbackFailure;
-    const sendCallbackHeartbeat =
-      yield* Lambda.sendDurableExecutionCallbackHeartbeat;
+    const sendCallbackSuccess = yield* Lambda.sendDurableExecutionCallbackSuccess;
+    const sendCallbackFailure = yield* Lambda.sendDurableExecutionCallbackFailure;
+    const sendCallbackHeartbeat = yield* Lambda.sendDurableExecutionCallbackHeartbeat;
 
     // Capture the function-name Output WITHOUT resolving it. This is a
     // self-reference — `host` is the very Function this wrapper's init is
@@ -414,23 +383,14 @@ const composeDurableImpl = (
           // drives from inside the handler.
           {
             Effect: "Allow",
-            Action: [
-              "lambda:CheckpointDurableExecution",
-              "lambda:GetDurableExecutionState",
-            ],
-            Resource: [
-              host.functionArn,
-              Output.interpolate`${host.functionArn}:*`,
-            ],
+            Action: ["lambda:CheckpointDurableExecution", "lambda:GetDurableExecutionState"],
+            Resource: [host.functionArn, Output.interpolate`${host.functionArn}:*`],
           },
           // Self-start (handle.start) and chained self-invokes.
           {
             Effect: "Allow",
             Action: ["lambda:InvokeFunction"],
-            Resource: [
-              host.functionArn,
-              Output.interpolate`${host.functionArn}:*`,
-            ],
+            Resource: [host.functionArn, Output.interpolate`${host.functionArn}:*`],
           },
           // Management-plane handle methods. Durable execution ARNs are
           // a distinct resource shape from the function ARN, so these
@@ -473,8 +433,7 @@ const composeDurableImpl = (
             statusCode: response.StatusCode,
           };
         }),
-      get: (executionArn) =>
-        getDurableExecution({ DurableExecutionArn: executionArn }),
+      get: (executionArn) => getDurableExecution({ DurableExecutionArn: executionArn }),
       list: (options) =>
         Effect.gen(function* () {
           const functionName = yield* yield* FunctionName;
@@ -506,14 +465,16 @@ const composeDurableImpl = (
     // Resolve the body function. Bindings resolved in the impl's init close
     // over their services; the returned closure's only leftover requirements
     // are DurableRunServices, provided per invocation by the bridge.
-    const fn = yield* (
-      impl as Effect.Effect<DurableFunctionImpl<any, any>>
-    ).pipe(Effect.provideService(DurableFunctionScope, handle));
+    const fn = yield* (impl as Effect.Effect<DurableFunctionImpl<any, any>>).pipe(
+      Effect.provideService(DurableFunctionScope, handle),
+    );
+    const runtime = yield* RuntimeContext;
 
     yield* host.listen(
       makeDurableListener({
         name,
-        run: (input) => fn(input) as Effect.Effect<unknown>,
+        run: (input) =>
+          fn(input).pipe(Effect.provideService(RuntimeContext, runtime)) as Effect.Effect<unknown>,
       }),
     );
 
@@ -654,62 +615,53 @@ const composeDurableImpl = (
  *
  * @resource
  */
-export const DurableFunction: DurableFunctionClass = taggedFunction(
-  DurableFunctionScope,
-  ((
-    ...args:
-      | []
-      | [id: string]
-      | [id: string, props: unknown, impl: Effect.Effect<any, any, any>]
-  ) => {
-    if (args.length === 0) {
-      // `DurableFunction<Self>()` — the binder for the class/tag forms.
-      return DurableFunction;
-    }
-    const [id, props, impl] = args;
-    if (impl === undefined) {
-      // Tag form: `class OrderFlow extends DurableFunction<OrderFlow>()("OrderFlow") {}`
-      // + `export default OrderFlow.make(props, impl)`.
-      const fnTag = (Function as any)()(id);
-      return Object.assign(
-        function (props: unknown, impl: Effect.Effect<any, any, any>) {
-          return Effect.flatMap(
-            fnTag(mapDurablePropsInput(props), composeDurableImpl(id, impl)),
-            resolveDurableHandle(id),
-          );
-        },
-        fnTag,
-        {
-          make: (props: unknown, impl: Effect.Effect<any, any, any>) =>
-            fnTag.make(
-              mapDurablePropsInput(props),
-              composeDurableImpl(id, impl),
-            ),
-        },
-        Effectable.Prototype({
-          label: `${TypeId}<${id}>`,
-          evaluate: () =>
-            Effect.flatMap(
-              Effect.serviceOption(fnTag.Self),
-              Option.match({
-                onNone: () => resolveDurableHandle(id)(undefined),
-                onSome: resolveDurableHandle(id),
-              }),
-            ),
-        }),
-      );
-    }
-    // Inline forms (eager effect / inline class): delegate to the Function
-    // platform with lowered props and the composed durable init.
-    return effectClass(
-      Effect.flatMap(
-        (Function as any)(
-          id,
-          mapDurablePropsInput(props),
-          composeDurableImpl(id, impl),
-        ) as Effect.Effect<unknown>,
-        resolveDurableHandle(id),
-      ),
+export const DurableFunction: DurableFunctionClass = taggedFunction(DurableFunctionScope, ((
+  ...args: [] | [id: string] | [id: string, props: unknown, impl: Effect.Effect<any, any, any>]
+) => {
+  if (args.length === 0) {
+    // `DurableFunction<Self>()` — the binder for the class/tag forms.
+    return DurableFunction;
+  }
+  const [id, props, impl] = args;
+  if (impl === undefined) {
+    // Tag form: `class OrderFlow extends DurableFunction<OrderFlow>()("OrderFlow") {}`
+    // + `export default OrderFlow.make(props, impl)`.
+    const fnTag = (Function as any)()(id);
+    return Object.assign(
+      function (props: unknown, impl: Effect.Effect<any, any, any>) {
+        return Effect.flatMap(
+          fnTag(mapDurablePropsInput(props), composeDurableImpl(id, impl)),
+          resolveDurableHandle(id),
+        );
+      },
+      fnTag,
+      {
+        make: (props: unknown, impl: Effect.Effect<any, any, any>) =>
+          fnTag.make(mapDurablePropsInput(props), composeDurableImpl(id, impl)),
+      },
+      Effectable.Prototype({
+        label: `${TypeId}<${id}>`,
+        evaluate: () =>
+          Effect.flatMap(
+            Effect.serviceOption(fnTag.Self),
+            Option.match({
+              onNone: () => resolveDurableHandle(id)(undefined),
+              onSome: resolveDurableHandle(id),
+            }),
+          ),
+      }),
     );
-  }) as any,
-);
+  }
+  // Inline forms (eager effect / inline class): delegate to the Function
+  // platform with lowered props and the composed durable init.
+  return effectClass(
+    Effect.flatMap(
+      (Function as any)(
+        id,
+        mapDurablePropsInput(props),
+        composeDurableImpl(id, impl),
+      ) as Effect.Effect<unknown>,
+      resolveDurableHandle(id),
+    ),
+  );
+}) as any);

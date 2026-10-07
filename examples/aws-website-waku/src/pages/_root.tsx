@@ -6,7 +6,7 @@ export default function Root({ children }: { children: ReactNode }) {
       <head>
         <title>Waku on AWS</title>
       </head>
-      <body>{children}</body>
+      <body className="bg-slate-50 p-8 text-slate-900">{children}</body>
     </html>
   );
 }

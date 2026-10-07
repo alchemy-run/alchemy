@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
@@ -15,11 +16,8 @@ import {
 } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
-import {
-  Docker,
-  dockerEngineContextName,
-  dockerPhysicalName,
-} from "./Docker.ts";
+import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
+import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
 
@@ -229,7 +227,12 @@ export declare namespace Service {
   }
 
   interface Healthcheck {
-    /** Command to run for health checks. */
+    /**
+     * Command to run for health checks. A string runs in the container's
+     * shell. An array follows Docker's healthcheck `Test` form:
+     * `["CMD-SHELL", "pg_isready -U app"]`, `["CMD", "pg_isready", "-U", "app"]`,
+     * or `["NONE"]` to disable the image's healthcheck.
+     */
     cmd: string[] | string;
     /** Time between checks, e.g. `"30s"`. */
     interval?: string;
@@ -417,16 +420,13 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -436,18 +436,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -517,17 +506,14 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * @resource
+ * @product Swarm
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Docker.Service", {
-  createRuntimeContext: createContainerRuntimeContext("Docker.Service") as (
-    id: string,
-  ) => ServiceRuntimeContext,
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Docker.Service", {
+    createRuntimeContext: createContainerRuntimeContext("Docker.Service") as (
+      id: string,
+    ) => ServiceRuntimeContext,
+  });
 
 /** True when the props declare a bundled `main` program. */
 const isBundledService = (props: ServiceProps): props is BundledServiceProps =>
@@ -586,11 +572,7 @@ export const ServiceProvider = () =>
       const inspect = (id: string, context?: string) =>
         docker.service.inspect(id, context).pipe(
           Effect.map((result) => normalizeServiceInspect(result)),
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.undefined,
-          ),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
         );
 
       /**
@@ -631,10 +613,7 @@ export const ServiceProvider = () =>
           ensureReplicatedMode(live);
           const attrs = toServiceAttributes(live, context, output?.code);
           if (output) return attrs;
-          const owned = yield* hasAlchemyTags(
-            id,
-            live.Spec.Labels ?? undefined,
-          );
+          const owned = yield* hasAlchemyTags(id, live.Spec.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
@@ -661,26 +640,11 @@ export const ServiceProvider = () =>
 
           return { action: "noop" as const };
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news,
-          olds,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output, session }) {
           const desired = yield* normalizeDesired(id, news, instanceId);
-          const resolved = yield* resolveImage(
-            id,
-            news,
-            desired.name,
-            desired.context,
-            session,
-          );
+          const resolved = yield* resolveImage(id, news, desired.name, desired.context, session);
           const image = resolved.imageRef;
-          const code = resolved.codeHash
-            ? { hash: resolved.codeHash }
-            : undefined;
+          const code = resolved.codeHash ? { hash: resolved.codeHash } : undefined;
           const environment = isBundledService(news)
             ? { ...alchemyEnv, ...desired.environment }
             : desired.environment;
@@ -689,8 +653,7 @@ export const ServiceProvider = () =>
             const oldDesired = yield* normalizeDesired(id, olds, instanceId);
             if (
               deepEqual(oldDesired, desired) &&
-              (resolved.codeHash === undefined ||
-                resolved.codeHash === output.code?.hash)
+              (resolved.codeHash === undefined || resolved.codeHash === output.code?.hash)
             ) {
               const current = yield* inspect(output.id, desired.context);
               if (current) {
@@ -723,26 +686,24 @@ export const ServiceProvider = () =>
                 "update-delay": desired.updateConfig?.delay,
                 "update-monitor": desired.updateConfig?.monitor,
                 "update-failure-action": desired.updateConfig?.failureAction,
-                "update-max-failure-ratio":
-                  desired.updateConfig?.maxFailureRatio,
+                "update-max-failure-ratio": desired.updateConfig?.maxFailureRatio,
                 "update-order": desired.updateConfig?.order,
                 "rollback-parallelism": desired.rollbackConfig?.parallelism,
                 "rollback-delay": desired.rollbackConfig?.delay,
                 "rollback-monitor": desired.rollbackConfig?.monitor,
-                "rollback-failure-action":
-                  desired.rollbackConfig?.failureAction,
-                "rollback-max-failure-ratio":
-                  desired.rollbackConfig?.maxFailureRatio,
+                "rollback-failure-action": desired.rollbackConfig?.failureAction,
+                "rollback-max-failure-ratio": desired.rollbackConfig?.maxFailureRatio,
                 "rollback-order": desired.rollbackConfig?.order,
                 "restart-condition": desired.restartPolicy?.condition,
                 "restart-delay": desired.restartPolicy?.delay,
                 "restart-max-attempts": desired.restartPolicy?.maxAttempts,
                 "restart-window": desired.restartPolicy?.window,
                 "health-cmd": desired.healthcheck
-                  ? Array.isArray(desired.healthcheck.cmd)
-                    ? desired.healthcheck.cmd.join(" ")
-                    : desired.healthcheck.cmd
+                  ? healthcheckCommand(desired.healthcheck.cmd)
                   : undefined,
+                "no-healthcheck":
+                  desired.healthcheck !== undefined &&
+                  isHealthcheckDisabled(desired.healthcheck.cmd),
                 "health-interval": desired.healthcheck?.interval,
                 "health-timeout": desired.healthcheck?.timeout,
                 "health-retries": desired.healthcheck?.retries,
@@ -785,10 +746,7 @@ export const ServiceProvider = () =>
             replicas: desired.replicas,
             "endpoint-mode": desired.endpointMode,
             network: desired.networks.map((n) =>
-              [
-                `name=${n.name}`,
-                ...(n.aliases ?? []).map((a) => `alias=${a}`),
-              ].join(","),
+              [`name=${n.name}`, ...(n.aliases ?? []).map((a) => `alias=${a}`)].join(","),
             ),
             constraint: desired.constraints,
             "replicas-max-per-node": desired.maxReplicasPerNode,
@@ -803,18 +761,17 @@ export const ServiceProvider = () =>
             "rollback-delay": desired.rollbackConfig?.delay,
             "rollback-monitor": desired.rollbackConfig?.monitor,
             "rollback-failure-action": desired.rollbackConfig?.failureAction,
-            "rollback-max-failure-ratio":
-              desired.rollbackConfig?.maxFailureRatio,
+            "rollback-max-failure-ratio": desired.rollbackConfig?.maxFailureRatio,
             "rollback-order": desired.rollbackConfig?.order,
             "restart-condition": desired.restartPolicy?.condition,
             "restart-delay": desired.restartPolicy?.delay,
             "restart-max-attempts": desired.restartPolicy?.maxAttempts,
             "restart-window": desired.restartPolicy?.window,
             "health-cmd": desired.healthcheck
-              ? Array.isArray(desired.healthcheck.cmd)
-                ? desired.healthcheck.cmd.join(" ")
-                : desired.healthcheck.cmd
+              ? healthcheckCommand(desired.healthcheck.cmd)
               : undefined,
+            "no-healthcheck":
+              desired.healthcheck !== undefined && isHealthcheckDisabled(desired.healthcheck.cmd),
             "health-interval": desired.healthcheck?.interval,
             "health-timeout": desired.healthcheck?.timeout,
             "health-retries": desired.healthcheck?.retries,
@@ -846,21 +803,11 @@ export const ServiceProvider = () =>
               `${output.id}=0`,
             ])
             .pipe(
+              Effect.flatMap(() => docker.service.remove(output.id, output.context)),
               Effect.flatMap(() =>
-                docker.service.remove(output.id, output.context),
+                waitForServiceContainersReleased(docker, output.id, output.context),
               ),
-              Effect.flatMap(() =>
-                waitForServiceContainersReleased(
-                  docker,
-                  output.id,
-                  output.context,
-                ),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
               // Best-effort: drop the content-addressed image built for a
               // bundled program so replaced/destroyed services don't strand
               // local image tags.
@@ -884,11 +831,7 @@ const servicePhysicalName = (
   instanceId: string,
 ) => dockerPhysicalName(id, props, instanceId, 63);
 
-const normalizeDesired = (
-  id: string,
-  props: ServiceProps,
-  instanceId: string,
-) =>
+const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =>
   servicePhysicalName(id, props, instanceId).pipe(
     Effect.map((name) => ({
       name,
@@ -896,9 +839,7 @@ const normalizeDesired = (
       // The bundled form's image identity is its content hash (compared
       // separately in diff) — the `image` prop is only the environment base
       // there, and it participates in the hash.
-      image: isBundledService(props)
-        ? undefined
-        : normalizeImageRef(props.image),
+      image: isBundledService(props) ? undefined : normalizeImageRef(props.image),
       command: props.command ?? [],
       args: props.args ?? [],
       environment: {
@@ -909,10 +850,7 @@ const normalizeDesired = (
       ports: normalizePorts(props.ports),
       endpointMode: props.endpointMode ?? "vip",
       replicas: normalizeReplicas(props.replicas),
-      constraints: [
-        ...(props.constraints ?? []),
-        ...(props.placement?.constraints ?? []),
-      ],
+      constraints: [...(props.constraints ?? []), ...(props.placement?.constraints ?? [])],
       maxReplicasPerNode: props.placement?.maxReplicasPerNode,
       preferences: props.placement?.preferences ?? [],
       updateConfig: props.updateConfig,
@@ -945,9 +883,7 @@ const normalizeEnvironment = (
  * Platform-injected env (`props.env`) after Output resolution: values are
  * usually marker-packed strings, but tolerate Redacted and structured values.
  */
-const normalizeBoundEnv = (
-  env: Record<string, any> | undefined,
-): Record<string, string> =>
+const normalizeBoundEnv = (env: Record<string, any> | undefined): Record<string, string> =>
   Object.fromEntries(
     Object.entries(env ?? {}).map(([key, value]) => [
       key,
@@ -959,9 +895,7 @@ const normalizeBoundEnv = (
     ]),
   );
 
-const normalizePorts = (
-  ports: Service.PortMapping[] | undefined,
-): Service.PortMapping[] =>
+const normalizePorts = (ports: Service.PortMapping[] | undefined): Service.PortMapping[] =>
   (ports ?? []).map((port) => ({
     external: port.external,
     internal: port.internal,
@@ -1070,18 +1004,13 @@ const normalizeServiceInspect = (value: unknown): ServiceInspect => {
 };
 
 const inspectOrDie = <T>(
-  inspect: (
-    nameOrId: string,
-    context?: string,
-  ) => Effect.Effect<T | undefined, any>,
+  inspect: (nameOrId: string, context?: string) => Effect.Effect<T | undefined, any>,
   nameOrId: string,
   context?: string,
 ) =>
   inspect(nameOrId, context).pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.die(`Expected ${nameOrId} to exist after create`),
+      value ? Effect.succeed(value) : Effect.die(`Expected ${nameOrId} to exist after create`),
     ),
   );
 
@@ -1089,24 +1018,18 @@ const waitForServiceContainersReleased = (
   docker: Docker["Service"],
   serviceId: string,
   context?: string,
-): Effect.Effect<void, any, any> => {
+): Effect.Effect<void, PlatformError> => {
   const maxAttempts = 10;
   const noContainers = Symbol.for("Docker.Service.NoContainers");
 
   const poll = listServiceContainerIds(docker, serviceId, context).pipe(
     Effect.flatMap((containerIds) =>
-      containerIds.length === 0
-        ? Effect.fail(noContainers)
-        : Effect.succeed(containerIds),
+      containerIds.length === 0 ? Effect.fail(noContainers) : Effect.succeed(containerIds),
     ),
   );
 
   return poll.pipe(
-    Effect.repeat(
-      Schedule.spaced("1 second").pipe(
-        Schedule.upTo({ times: maxAttempts - 1 }),
-      ),
-    ),
+    Effect.repeat(Schedule.spaced("1 second").pipe(Schedule.upTo({ times: maxAttempts - 1 }))),
     Effect.catchIf(
       (error): error is typeof noContainers => error === noContainers,
       () => Effect.void,
@@ -1138,7 +1061,7 @@ const listServiceContainerIds = (
   docker: Docker["Service"],
   serviceId: string,
   context?: string,
-): Effect.Effect<string[], any, any> =>
+): Effect.Effect<string[], PlatformError> =>
   docker
     .run([
       ...(context ? ["--context", context] : []),

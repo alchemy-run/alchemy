@@ -30,12 +30,7 @@ import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
  * (the notification-event and managed-notification read APIs — none of
  * which are scoped to a caller-owned resource).
  */
-export const makeNotificationsHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeNotificationsHttpBinding = <I extends object, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"ListNotificationEvents"`.
@@ -53,22 +48,18 @@ export const makeNotificationsHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Notifications.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Notifications.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.Notifications.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.Notifications.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
         // snapshot is only a fallback — the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
@@ -103,8 +94,7 @@ export const makeNotificationConfigurationHttpBinding = <
     const op = yield* pinNotificationsRegion(options.operation);
 
     return Effect.fn(function* (configuration: NotificationConfiguration) {
-      const configurationArn =
-        yield* configuration.notificationConfigurationArn;
+      const configurationArn = yield* configuration.notificationConfigurationArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -121,16 +111,16 @@ export const makeNotificationConfigurationHttpBinding = <
           );
         }
       }
-      return Effect.fn(
-        `AWS.Notifications.${options.capability}(${configuration.LogicalId})`,
-      )(function* (request?: Omit<I, "notificationConfigurationArn">) {
-        // Call-site region pin — see makeNotificationsHttpBinding above.
-        return yield* pinNotificationsRegion(
-          op({
-            ...request,
-            notificationConfigurationArn: yield* configurationArn,
-          } as I),
-        );
-      });
+      return Effect.fn(`AWS.Notifications.${options.capability}(${configuration.LogicalId})`)(
+        function* (request?: Omit<I, "notificationConfigurationArn">) {
+          // Call-site region pin — see makeNotificationsHttpBinding above.
+          return yield* pinNotificationsRegion(
+            op({
+              ...request,
+              notificationConfigurationArn: yield* configurationArn,
+            } as I),
+          );
+        },
+      );
     });
   });

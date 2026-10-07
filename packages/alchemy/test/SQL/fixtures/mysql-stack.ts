@@ -1,14 +1,14 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Planetscale from "@/Planetscale/index.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import SqlMySQLWorker from "./mysql-worker.ts";
 
 /**
  * PlanetScale MySQL origin + Hyperdrive + Worker for the `SQL.MySQL` client
  * suite. Kept in its own file so it can also be driven directly, e.g.
- * `alchemy tail --stage test ./test/SQL/fixtures/mysql-stack.ts`.
+ * `alchemy logs --tail --stage test --config ./test/SQL/fixtures/mysql-stack.ts`.
  */
 export default Alchemy.Stack(
   "SqlMySQLStack",

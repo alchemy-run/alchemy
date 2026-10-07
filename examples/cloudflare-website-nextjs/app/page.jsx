@@ -1,17 +1,22 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { Card } from "./components/Card";
 
 // Server-rendered in the Worker on every request.
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  title: "Next.js on Cloudflare",
+};
+
 export default function Home() {
   const { env } = getCloudflareContext();
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <h1 className="text-3xl font-bold">Next.js on Cloudflare Workers</h1>
-      <p className="mt-4 text-lg">{env.GREETING ?? "no greeting bound"}</p>
-      <p className="mt-2 text-sm text-gray-500">
-        Rendered at {new Date().toISOString()}
-      </p>
+    <main>
+      <h1 className="text-3xl font-bold">{env.GREETING ?? "Hello!"}</h1>
+      <Card
+        title="Styled with Tailwind CSS"
+        body="This card is a React component styled with Tailwind utilities."
+      />
     </main>
   );
 }

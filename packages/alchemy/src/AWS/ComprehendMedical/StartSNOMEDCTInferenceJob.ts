@@ -38,7 +38,6 @@ export interface StartSNOMEDCTInferenceJob extends Binding.Service<
     >
   >
 > {}
-export const StartSNOMEDCTInferenceJob =
-  Binding.Service<StartSNOMEDCTInferenceJob>(
-    "AWS.ComprehendMedical.StartSNOMEDCTInferenceJob",
-  );
+export const StartSNOMEDCTInferenceJob = Binding.Service<StartSNOMEDCTInferenceJob>(
+  "AWS.ComprehendMedical.StartSNOMEDCTInferenceJob",
+);

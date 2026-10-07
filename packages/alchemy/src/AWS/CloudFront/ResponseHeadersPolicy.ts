@@ -67,9 +67,7 @@ export interface ResponseHeadersPolicy extends Resource<
     /**
      * Current security headers configuration.
      */
-    securityHeadersConfig:
-      | cloudfront.ResponseHeadersPolicySecurityHeadersConfig
-      | undefined;
+    securityHeadersConfig: cloudfront.ResponseHeadersPolicySecurityHeadersConfig | undefined;
     /**
      * Current Server-Timing configuration.
      */
@@ -79,15 +77,11 @@ export interface ResponseHeadersPolicy extends Resource<
     /**
      * Current custom headers configuration.
      */
-    customHeadersConfig:
-      | cloudfront.ResponseHeadersPolicyCustomHeadersConfig
-      | undefined;
+    customHeadersConfig: cloudfront.ResponseHeadersPolicyCustomHeadersConfig | undefined;
     /**
      * Current remove-headers configuration.
      */
-    removeHeadersConfig:
-      | cloudfront.ResponseHeadersPolicyRemoveHeadersConfig
-      | undefined;
+    removeHeadersConfig: cloudfront.ResponseHeadersPolicyRemoveHeadersConfig | undefined;
   },
   never,
   Providers
@@ -140,11 +134,7 @@ export const ResponseHeadersPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getResponseHeadersPolicyConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchResponseHeadersPolicy", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.succeed(undefined)));
         if (!config?.ResponseHeadersPolicyConfig) return undefined;
         return {
           config: config.ResponseHeadersPolicyConfig,
@@ -157,16 +147,12 @@ export const ResponseHeadersPolicyProvider = () =>
           Type: "custom",
         });
         const summary = listed.ResponseHeadersPolicyList?.Items?.find(
-          (item) =>
-            item.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Name ===
-            name,
+          (item) => item.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Name === name,
         );
         if (!summary?.ResponseHeadersPolicy?.Id) return undefined;
         return yield* getById(summary.ResponseHeadersPolicy.Id).pipe(
           Effect.map((found) =>
-            found
-              ? { id: summary.ResponseHeadersPolicy.Id, ...found }
-              : undefined,
+            found ? { id: summary.ResponseHeadersPolicy.Id, ...found } : undefined,
           ),
         );
       });
@@ -204,10 +190,7 @@ export const ResponseHeadersPolicyProvider = () =>
         stables: ["responseHeadersPolicyId"],
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
@@ -215,11 +198,7 @@ export const ResponseHeadersPolicyProvider = () =>
           if (output?.responseHeadersPolicyId) {
             const found = yield* getById(output.responseHeadersPolicyId);
             if (found) {
-              return toAttrs(
-                output.responseHeadersPolicyId,
-                found.config,
-                found.etag,
-              );
+              return toAttrs(output.responseHeadersPolicyId, found.config, found.etag);
             }
           }
           const name = yield* createName(id, olds ?? {});
@@ -240,12 +219,10 @@ export const ResponseHeadersPolicyProvider = () =>
                   Type: "custom",
                   Marker: marker,
                 });
-              for (const summary of listed.ResponseHeadersPolicyList?.Items ??
-                []) {
+              for (const summary of listed.ResponseHeadersPolicyList?.Items ?? []) {
                 if (summary.Type !== "custom") continue;
                 const id = summary.ResponseHeadersPolicy?.Id;
-                const config =
-                  summary.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig;
+                const config = summary.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig;
                 if (!id || !config) continue;
                 const found = yield* getById(id);
                 items.push(toAttrs(id, found?.config ?? config, found?.etag));
@@ -262,9 +239,7 @@ export const ResponseHeadersPolicyProvider = () =>
           let observed = output?.responseHeadersPolicyId
             ? yield* getById(output.responseHeadersPolicyId).pipe(
                 Effect.map((found) =>
-                  found
-                    ? { id: output.responseHeadersPolicyId, ...found }
-                    : undefined,
+                  found ? { id: output.responseHeadersPolicyId, ...found } : undefined,
                 ),
               )
             : undefined;
@@ -321,10 +296,7 @@ export const ResponseHeadersPolicyProvider = () =>
           const updated = yield* cloudfront.updateResponseHeadersPolicy({
             Id: observed.id,
             IfMatch: observed.etag,
-            ResponseHeadersPolicyConfig: buildConfig(
-              observed.config.Name,
-              news,
-            ),
+            ResponseHeadersPolicyConfig: buildConfig(observed.config.Name, news),
           });
           if (!updated.ResponseHeadersPolicy?.Id) {
             return yield* Effect.fail(
@@ -346,9 +318,7 @@ export const ResponseHeadersPolicyProvider = () =>
               Id: output.responseHeadersPolicyId,
               IfMatch: current.etag,
             })
-            .pipe(
-              Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.void));
         }),
       };
     }),

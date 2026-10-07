@@ -27,10 +27,7 @@ export interface ListExperimentTemplates extends Binding.Service<
   () => Effect.Effect<
     (
       request?: fis.ListExperimentTemplatesRequest,
-    ) => Effect.Effect<
-      fis.ListExperimentTemplatesResponse,
-      fis.ListExperimentTemplatesError
-    >
+    ) => Effect.Effect<fis.ListExperimentTemplatesResponse, fis.ListExperimentTemplatesError>
   >
 > {}
 export const ListExperimentTemplates = Binding.Service<ListExperimentTemplates>(

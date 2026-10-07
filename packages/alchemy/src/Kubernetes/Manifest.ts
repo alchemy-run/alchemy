@@ -2,11 +2,7 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  toConnection,
-  type ClusterLike,
-  type Connection,
-} from "./Connection.ts";
+import { toConnection, type ClusterLike, type Connection } from "./Connection.ts";
 import {
   applyObject,
   connectCluster,
@@ -14,15 +10,8 @@ import {
   readObject,
   KubernetesApiError,
 } from "./internal/client.ts";
-import type {
-  KubernetesObjectDefinition,
-  KubernetesObjectRef,
-} from "./internal/objects.ts";
-import {
-  connectionIdentity,
-  connectionOfOutput,
-  tryConnectionOf,
-} from "./internal/workload.ts";
+import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./internal/objects.ts";
+import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -156,6 +145,7 @@ export interface Manifest extends Resource<
  * ```
  *
  * @resource
+ * @product Manifest
  */
 export const Manifest = Resource<Manifest>("Kubernetes.Manifest", {
   aliases: ["AWS.EKS.Manifest"],
@@ -197,14 +187,11 @@ export const ManifestProvider = () =>
           // immutable — changing any of it is a replacement.
           if (
             oldManifest &&
-            ((oldCluster !== undefined &&
-              newCluster !== undefined &&
-              oldCluster !== newCluster) ||
+            ((oldCluster !== undefined && newCluster !== undefined && oldCluster !== newCluster) ||
               oldManifest.apiVersion !== newManifest.apiVersion ||
               oldManifest.kind !== newManifest.kind ||
               oldManifest.metadata?.name !== newManifest.metadata?.name ||
-              oldManifest.metadata?.namespace !==
-                newManifest.metadata?.namespace)
+              oldManifest.metadata?.namespace !== newManifest.metadata?.namespace)
           ) {
             return { action: "replace" } as const;
           }
@@ -215,9 +202,7 @@ export const ManifestProvider = () =>
           if (!connection) return undefined;
           const transport = yield* connectCluster(connection).pipe(
             // Cluster gone — its objects went with it.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return undefined;
           const observed = yield* readObject({
@@ -225,8 +210,7 @@ export const ManifestProvider = () =>
             object: output.ref,
           }).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!observed) return undefined;
-          const uid = (observed as { metadata?: { uid?: string } }).metadata
-            ?.uid;
+          const uid = (observed as { metadata?: { uid?: string } }).metadata?.uid;
           return { ...output, uid };
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
@@ -249,9 +233,7 @@ export const ManifestProvider = () =>
             `Applied ${ref.apiVersion}/${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ""}${ref.name}`,
           );
 
-          const uid =
-            (applied as { metadata?: { uid?: string } })?.metadata?.uid ??
-            output?.uid;
+          const uid = (applied as { metadata?: { uid?: string } })?.metadata?.uid ?? output?.uid;
 
           return {
             connection,
@@ -268,9 +250,7 @@ export const ManifestProvider = () =>
           if (!connection) return;
           const transport = yield* connectCluster(connection).pipe(
             // Cluster already destroyed — nothing left to delete.
-            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
           );
           if (!transport) return;
           yield* deleteObject({ transport, object: output.ref }).pipe(
