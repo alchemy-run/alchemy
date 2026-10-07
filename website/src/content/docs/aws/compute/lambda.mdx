@@ -321,7 +321,7 @@ or set it to zero to turn the flush off:
 import * as AWS from "alchemy/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",

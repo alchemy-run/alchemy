@@ -6,8 +6,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import { Flusher } from "effect/observability/OtlpExporter";
 import * as Option from "effect/Option";
-import { Flusher } from "effect/unstable/observability/OtlpExporter";
 
 /**
  * The AWS Lambda invocation context — the `context` argument Lambda passes

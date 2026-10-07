@@ -1,8 +1,8 @@
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import * as AWS from "@/AWS";
 import * as Cloudflare from "@/Cloudflare/index.ts";
