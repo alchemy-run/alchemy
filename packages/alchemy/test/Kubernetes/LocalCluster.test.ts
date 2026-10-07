@@ -1,5 +1,7 @@
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
@@ -230,6 +232,60 @@ describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
           expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(/^localhost:5061\//);
         }),
       { timeout: 120_000 },
+    );
+
+    // The build targets the cluster's platform, so the push must too: an
+    // unscoped `docker push` from a containerd image store publishes an OCI
+    // index carrying a Buildx attestation manifest, which strict consumers
+    // (e.g. Lambda) reject.
+    test.provider(
+      "the Effect Job image is pushed as a single manifest for the cluster platform",
+      () =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const transport = yield* connectCluster(cluster.connection);
+          const job = (yield* readObject({
+            transport,
+            object: { apiVersion: "batch/v1", kind: "Job", name: jobName, namespace: "default" },
+          })) as { spec?: { template?: { spec?: { containers?: { image?: string }[] } } } };
+          const image = job.spec?.template?.spec?.containers?.[0]?.image ?? "";
+          const match = /^localhost:5061\/(.+):([^:]+)$/.exec(image);
+          expect(match).not.toBeNull();
+          const [, repository, tag] = match!;
+
+          const get = (reference: string) =>
+            client
+              .execute(
+                HttpClientRequest.get(
+                  `http://localhost:5061/v2/${repository}/manifests/${reference}`,
+                ).pipe(
+                  HttpClientRequest.setHeader(
+                    "accept",
+                    [
+                      "application/vnd.oci.image.index.v1+json",
+                      "application/vnd.oci.image.manifest.v1+json",
+                      "application/vnd.docker.distribution.manifest.list.v2+json",
+                      "application/vnd.docker.distribution.manifest.v2+json",
+                    ].join(", "),
+                  ),
+                ),
+              )
+              .pipe(Effect.flatMap((response) => response.json));
+
+          const manifest = (yield* get(tag!)) as {
+            mediaType?: string;
+            config?: { digest: string };
+          };
+          expect(manifest.mediaType).not.toMatch(/index|manifest\.list/);
+          const config = (yield* client
+            .get(`http://localhost:5061/v2/${repository}/blobs/${manifest.config!.digest}`)
+            .pipe(Effect.flatMap((response) => response.json))) as {
+            os: string;
+            architecture: string;
+          };
+          expect(`${config.os}/${config.architecture}`).toBe(`linux/${cluster.architecture}`);
+        }),
+      { timeout: 60_000 },
     );
 
     test.provider(

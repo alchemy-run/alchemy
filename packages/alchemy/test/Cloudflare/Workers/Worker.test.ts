@@ -1,8 +1,10 @@
+import { pathToFileURL } from "node:url";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -36,6 +38,58 @@ import InternalWorker from "./fixtures/internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: true });
+
+// #1296: after precreate registers a Worker's Durable Object classes,
+// reconcile's script-settings read can 404 "has no versions" under load, and
+// migration planning then re-sends `new_sqlite_classes`, which Cloudflare
+// rejects. The race isn't reproducible on demand, so this file-scoped
+// provider stack forwards every call to the real API except the two
+// settings reads after the precreated class is first observed.
+const precreateRace = { hostPath: undefined as string | undefined, injected: 0 };
+const settingsPath = /\/workers\/scripts\/[^/]+\/settings$/;
+const precreateRaceFetch = async (
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) => {
+  const request = input instanceof Request ? input : new Request(input, init);
+  const path = new URL(request.url).pathname;
+  if (request.method !== "GET" || !settingsPath.test(path)) {
+    return fetch(input, init);
+  }
+  // Only the Durable Object host's own settings reads race.
+  if (path === precreateRace.hostPath && precreateRace.injected < 2) {
+    precreateRace.injected++;
+    return new Response(
+      JSON.stringify({
+        success: false,
+        errors: [{ code: 10007, message: "Worker has no versions" }],
+        messages: [],
+        result: null,
+      }),
+      { status: 404, headers: { "content-type": "application/json" } },
+    );
+  }
+  const response = await fetch(input, init);
+  if (
+    precreateRace.hostPath === undefined &&
+    response.status === 200 &&
+    (await response.clone().text()).includes('"namespace_id"')
+  ) {
+    precreateRace.hostPath = path;
+  }
+  return response;
+};
+const { test: precreateRaceTest } = Test.make({
+  providers: Cloudflare.providers().pipe(
+    Layer.provideMerge(
+      Layer.fresh(FetchHttpClient.layer).pipe(
+        Layer.provide(
+          Layer.succeed(FetchHttpClient.Fetch, precreateRaceFetch as typeof globalThis.fetch),
+        ),
+      ),
+    ),
+  ),
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -184,6 +238,91 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 120_000 },
+    );
+
+    // #1827: drift repair rebuilds the bundle from the `main` stored in
+    // state. Deploy from one checkout with an absolute `main`
+    // (`import.meta.url`), delete that checkout, then repair drift from
+    // another checkout of the same code.
+    test.provider(
+      "drift repair rebuilds a Worker after the checkout that deployed it is gone",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          // Real path: on macOS the temp dir is a symlink, and `cwd` is real.
+          const tempRoot = yield* fs.realPath(
+            yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-moved-checkout-" }),
+          );
+          const writeCheckout = (dir: string) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(pathe.join(dir, "src"), { recursive: true });
+              yield* fs.writeFileString(
+                pathe.join(dir, "package.json"),
+                JSON.stringify({ name: "moved-checkout", private: true, type: "module" }),
+              );
+              yield* fs.writeFileString(
+                pathe.join(dir, "src", "worker.ts"),
+                `export default { fetch() { return new Response("moved-checkout"); } };\n`,
+              );
+            });
+          const checkoutA = pathe.join(tempRoot, "checkout-a");
+          const checkoutB = pathe.join(tempRoot, "checkout-b");
+          yield* writeCheckout(checkoutA);
+          const mainUrl = yield* Effect.sync(
+            () => pathToFileURL(pathe.join(checkoutA, "src", "worker.ts")).href,
+          );
+          const originalCwd = yield* Effect.sync(() => process.cwd());
+
+          yield* stack.destroy();
+
+          const workerName = yield* Effect.gen(function* () {
+            yield* Effect.sync(() => process.chdir(checkoutA));
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("MovedCheckoutWorker", { main: mainUrl, workersDev: true }),
+            );
+
+            // State keeps `main` relative to the deploying checkout.
+            const row = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "MovedCheckoutWorker",
+              });
+            }).pipe(Effect.provide(stack.state));
+            expect((row as { props?: { main?: unknown } } | undefined)?.props?.main).toEqual(
+              pathe.join("src", "worker.ts"),
+            );
+
+            // The deploying checkout is gone; another checkout repairs.
+            yield* writeCheckout(checkoutB);
+            yield* fs.remove(checkoutA, { recursive: true });
+            yield* Effect.sync(() => process.chdir(checkoutB));
+
+            yield* workers.createScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+              enabled: false,
+              previewsEnabled: false,
+            });
+            const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+              Effect.provide(stack.state),
+            );
+            expect(repaired.resources.MovedCheckoutWorker).toMatchObject({ action: "repaired" });
+            const subdomain = yield* workers.getScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(subdomain.enabled).toBe(true);
+            return worker.workerName;
+          }).pipe(Effect.ensuring(Effect.sync(() => process.chdir(originalCwd))));
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(workerName, accountId);
+        }).pipe(Effect.scoped, logLevel),
+      // mutates process-global cwd
+      { tags: ["live"], timeout: 180_000, exclusive: true },
     );
 
     test.provider(
@@ -1920,6 +2059,59 @@ describe.concurrent(
           yield* stack.destroy();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:alerting", "live"], timeout: 180_000 },
+    );
+
+    precreateRaceTest.provider(
+      "deploy survives a settings read that races the precreated durable object",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          precreateRace.hostPath = undefined;
+          precreateRace.injected = 0;
+          yield* stack.destroy();
+
+          // Only Workers in a dependency cycle are precreated, so the Durable
+          // Object host and a second Worker bind each other's URL.
+          const { worker, peer } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const worker = yield* Cloudflare.Worker("PrecreateRaceWorker", {
+                script: `import { DurableObject } from "cloudflare:workers";
+export class Counter extends DurableObject {
+  async increment() {
+    const next = ((await this.ctx.storage.get("count")) ?? 0) + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+}
+export default {
+  async fetch(request, env) {
+    const value = await env.Counter.getByName("shared").increment();
+    return new Response("count=" + value);
+  },
+};`,
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              });
+              const peer = yield* Cloudflare.Worker("PrecreateRacePeer", { main });
+              yield* worker.bind`PEER_URL`({
+                bindings: [{ type: "plain_text", name: "PEER_URL", text: peer.url.as<string>() }],
+              });
+              yield* peer.bind`HOST_URL`({
+                bindings: [{ type: "plain_text", name: "HOST_URL", text: worker.url.as<string>() }],
+              });
+              return { worker, peer };
+            }),
+          );
+
+          // Both racing reads were injected and the deploy still converged.
+          expect(precreateRace.injected).toBe(2);
+          expect(Object.keys(worker.durableObjectNamespaces)).toEqual(["Counter"]);
+          yield* expectUrlContains(worker.url!, "count=");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(peer.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
     );
 
     test.provider(

@@ -17,7 +17,9 @@ import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
+import type { Stream as K2Stream } from "../K2/Stream.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import type { Stream as PipelinesStream } from "../Pipelines/Stream.ts";
 import type { Queue } from "../Queues/Queue.ts";
@@ -129,6 +131,12 @@ export type QueueWorkerBinding = Extract<DistilledWorkerBinding, { type: "queue"
 };
 
 /**
+ * The `k2` metadata binding: produce-only access to a K2 stream, by stream
+ * id (`Cloudflare.K2.WriteStreamBinding`, or a `K2.Stream` in `env`).
+ */
+export type K2WorkerBinding = Extract<DistilledWorkerBinding, { type: "k2" }>;
+
+/**
  * The `service` metadata binding extended with workerd's `ctx.props`.
  * `props` is what a `Cloudflare.WorkerEntrypoint(worker, { props })` env
  * entry lowers to; the local runtime delivers it to the target entrypoint.
@@ -214,6 +222,7 @@ export type WorkerBindingResource =
   | StreamBinding
   | PipelinesStream
   | LegacyPipeline
+  | K2Stream
   | Hyperdrive
   | VectorizeIndex
   | Secret
@@ -230,6 +239,8 @@ export type WorkerBindingResource =
   | WorkflowLike<any>
   | VpcService
   | VpcServiceLookup
+  // An account-level mTLS certificate becomes an `mtls_certificate` binding.
+  | MtlsCertificate
   // A Container bound directly in `env` declares a container-backed Durable
   // Object class (DO namespace binding + ContainerApplication in one).
   | Container.Decl.Any;
