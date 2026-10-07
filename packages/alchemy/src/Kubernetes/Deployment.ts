@@ -2,6 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
@@ -71,9 +72,11 @@ export interface DeploymentPropsBase extends PlatformProps {
    * (`Kubernetes.LocalCluster`, `AWS.EKS.Cluster`), a
    * `Kubernetes.KubeConfig(...)`, or a raw `Kubernetes.Connection`. The
    * connection supplies authentication and the registry `main` / `context`
-   * images are pushed to.
+   * images are pushed to. Also accepts an Effect that produces any of
+   * these, so `{ cluster: Cluster }` and `{ cluster: yield* Cluster }`
+   * both type-check.
    */
-  cluster: ClusterLike;
+  cluster: ClusterLike | Effect.Effect<Input<ClusterLike>, never, any>;
   /**
    * Base name for the generated Deployment / Service / ServiceAccount. If
    * omitted, a deterministic name is derived from the stack, stage, and
@@ -441,10 +444,29 @@ export const Deployment: Platform<
   DeploymentRuntimeContext
 > = Platform("Kubernetes.Deployment", {
   aliases: ["AWS.EKS.Deployment"],
+  // `{ cluster: Cluster }` at module scope is an Effect. Yield it here so the
+  // cluster is registered and `news.cluster` is resolved at reconcile (same
+  // as `yield* Cluster` inside Effect.gen).
+  transformProps: (_id, props) =>
+    Effect.gen(function* () {
+      if (globalThis.__ALCHEMY_RUNTIME__) return props;
+      const cluster = Effect.isEffect(props.cluster)
+        ? yield* props.cluster as Effect.Effect<ClusterLike>
+        : props.cluster;
+      return { ...props, cluster };
+    }),
   createRuntimeContext: createHostRuntimeContext("Kubernetes.Deployment") as (
     id: string,
   ) => DeploymentRuntimeContext,
 });
+
+/**
+ * `cluster` as the provider sees it. `transformProps` yields an Effect-valued
+ * `cluster` before any lifecycle operation runs, so only the resolved shape
+ * reaches the provider.
+ */
+const clusterOf = (cluster: DeploymentPropsBase["cluster"] | undefined) =>
+  cluster as ClusterLike | undefined;
 
 class ServiceNotReady extends Data.TaggedError("Kubernetes.ServiceNotReady")<{}> {}
 
@@ -544,8 +566,8 @@ export const DeploymentProvider = () =>
           const { exports: _exports, ...declared } = input as typeof input & { exports?: unknown };
           if (!isResolved(declared)) return;
           const news = input as unknown as DeploymentProps;
-          const oldCluster = connectionIdentity(tryConnectionOf(olds.cluster));
-          const newCluster = connectionIdentity(tryConnectionOf(news.cluster));
+          const oldCluster = connectionIdentity(tryConnectionOf(clusterOf(olds.cluster)));
+          const newCluster = connectionIdentity(tryConnectionOf(clusterOf(news.cluster)));
           // Workload identity keys on (cluster, namespace, serviceAccount);
           // a change to either forces a replacement. Only compare when the
           // old value is present so a first create (empty `olds`) doesn't
@@ -562,7 +584,7 @@ export const DeploymentProvider = () =>
           // Content drift: the props don't change when files under a build
           // context (or the bundled program) do, so surface hash drift as
           // an update.
-          const connection = tryConnectionOf(news.cluster);
+          const connection = tryConnectionOf(clusterOf(news.cluster));
           if (output && connection) {
             const adapter = yield* findClusterAdapter(connection.auth.kind);
             const source = news as WorkloadImageSource;
@@ -600,7 +622,7 @@ export const DeploymentProvider = () =>
           return output;
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
-          const connection = toConnection(news.cluster);
+          const connection = toConnection(clusterOf(news.cluster)!);
           const adapter = yield* findClusterAdapter(connection.auth.kind);
           const transport = yield* adapter.connect(connection);
           const namespace = news.namespace ?? "default";

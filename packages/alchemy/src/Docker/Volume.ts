@@ -113,7 +113,7 @@ export const VolumeProvider = () =>
       return Volume.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const context = dockerContextName(olds.context);
+          const context = dockerContextName(olds?.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.volume
             .inspect(name, context)
@@ -128,7 +128,7 @@ export const VolumeProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, instanceId, output, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
+          if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
             return { action: "replace" as const, deleteFirst: true };
           }
           const args = yield* makeVolumeArgs(id, news, instanceId);
@@ -148,7 +148,7 @@ export const VolumeProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
-          const context = dockerContextName(news.context);
+          const context = dockerContextName(news?.context);
           const args = yield* makeVolumeArgs(id, news, instanceId);
           // Prefer the deployed name: regenerating would target a different
           // volume if the generator's output for this id ever drifts.
@@ -164,20 +164,21 @@ export const VolumeProvider = () =>
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.volume
-            .remove(output.name, dockerContextName(olds.context))
+            .remove(output.name, dockerContextName(olds?.context))
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });
     }),
   );
 
-const makeVolumeArgs = (id: string, props: VolumeProps, instanceId: string) =>
+// Every prop is optional, so `Docker.Volume("data")` arrives with no props.
+const makeVolumeArgs = (id: string, props: VolumeProps | undefined, instanceId: string) =>
   dockerPhysicalName(id, props, instanceId).pipe(
     Effect.map((name): Parameters<Docker["Service"]["volume"]["create"]>[0] => ({
       name,
-      driver: props.driver ?? "local",
-      opt: props.driverOpts,
-      label: props.labels,
+      driver: props?.driver ?? "local",
+      opt: props?.driverOpts,
+      label: props?.labels,
     })),
   );
 

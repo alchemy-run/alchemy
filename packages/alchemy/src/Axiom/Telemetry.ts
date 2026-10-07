@@ -6,6 +6,7 @@ import * as Output from "../Output.ts";
 import { layerOtlp, type OtlpSignalOptions } from "../Telemetry.ts";
 import type { ApiToken } from "./ApiToken.ts";
 import type { Dataset } from "./Dataset.ts";
+import { otelDatasetHeader } from "./OtelHeaders.ts";
 
 /**
  * A resource passed to the layer: either the module-scope declaration (an
@@ -60,7 +61,7 @@ const signal = (
             (bearer) =>
               Redacted.make(`Bearer ${Redacted.value(bearer)}`) as Redacted.Redacted<string>,
           ),
-          "X-Axiom-Dataset": dataset.name,
+          [otelDatasetHeader(urlAttr === "otelMetricsEndpoint")]: dataset.name,
         },
       };
 

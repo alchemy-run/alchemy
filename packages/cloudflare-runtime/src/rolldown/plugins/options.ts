@@ -95,7 +95,10 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
             },
             optimizeDeps: {
-              noDiscovery: false,
+              noDiscovery:
+                userConfig.environments?.[name]?.optimizeDeps?.noDiscovery ??
+                userConfig.optimizeDeps?.noDiscovery ??
+                false,
               ignoreOutdatedRequests: true,
               entries: asArray(entries)?.map(vite.normalizePath),
               ...(isRolldown

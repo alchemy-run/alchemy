@@ -759,6 +759,34 @@ const PROVIDERS = [
     .v2-hero__visual :global(.v2-hero__term) {
       display: none;
     }
+    /* The copy fills the screen width here, so the desktop halo can't fade
+       the rings at its edges. A blurred veil covering the whole copy block
+       keeps the white text readable over the animation. */
+    .v2-hero__copy::before {
+      inset: -28px -32px;
+      background: color-mix(in srgb, var(--alc-bg) 68%, transparent);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+      -webkit-mask-image: radial-gradient(
+        farthest-side at 50% 50%,
+        #000 72%,
+        transparent 100%
+      );
+      mask-image: radial-gradient(
+        farthest-side at 50% 50%,
+        #000 72%,
+        transparent 100%
+      );
+    }
+    /* Equal-width, stacked CTAs. */
+    .v2-hero__copy :global(.alc-hero__cta) {
+      flex-direction: column;
+      align-items: stretch;
+      max-width: 340px;
+    }
+    .v2-hero__copy :global(.alc-hero__cta .alc-btn) {
+      justify-content: center;
+    }
     /* Stacked, the bottom-left spot falls on the code card. */
     .v2-motion-toggle {
       left: auto;
@@ -884,11 +912,20 @@ const PROVIDERS = [
     margin: 0 auto;
   }
   /* A very faint, static echo of the hero's ring geometry behind each
-     section, alternating sides. Masked so it takes the theme's text color. */
+     section, alternating sides. Masked so it takes the theme's text color.
+     Clipped horizontally only, so a pattern spills into the neighboring
+     sections instead of being cropped; without a per-section stacking
+     context it stays behind their content too. */
   .v2-section {
     position: relative;
+    overflow-x: clip;
+  }
+  /* One stacking context for all sections: patterns (z-index -1) paint above
+     the body background but below every section's content. Clipped so the
+     last section's pattern stops at the footer. */
+  :global(main) {
     isolation: isolate;
-    overflow: hidden;
+    overflow: clip;
   }
   .v2-section::before {
     content: "";

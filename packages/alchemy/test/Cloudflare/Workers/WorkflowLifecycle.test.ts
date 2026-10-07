@@ -1,11 +1,12 @@
 import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { requestWorker } from "../Utils/WorkerRequest.ts";
+import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import LifecycleWorker, { type Scenario } from "./fixtures/workflow-lifecycle/worker.ts";
 
 interface Status {
@@ -16,19 +17,28 @@ interface Status {
   entries: string[];
 }
 
+// Tagged rather than a plain `Error`: a plain `Error` in the same union
+// absorbs `WorkerNotPropagated` (a structural subtype), hiding it from
+// `catchTag`.
+class WorkerRequestFailed extends Data.TaggedError("WorkerRequestFailed")<{
+  readonly message: string;
+}> {}
+
 const request = Effect.fn(function* (url: string, method: "GET" | "POST" = "GET") {
   const response = yield* requestWorker(
     method === "GET" ? HttpClientRequest.get(url) : HttpClientRequest.post(url),
   );
   const body = yield* response.text;
   if (response.status !== 200) {
-    return yield* Effect.fail(new Error(`${method} ${url}: ${response.status}: ${body}`));
+    return yield* Effect.fail(
+      new WorkerRequestFailed({ message: `${method} ${url}: ${response.status}: ${body}` }),
+    );
   }
   return body;
 });
 
 const waitForReady = Effect.fn(function* (url: string) {
-  const ready = yield* Effect.gen(function* () {
+  const readyOnce = Effect.gen(function* () {
     const response = yield* requestWorker(HttpClientRequest.get(url), { retryDelay: "3 seconds" });
     const body = yield* response.text;
     if (
@@ -40,20 +50,21 @@ const waitForReady = Effect.fn(function* (url: string) {
       return false;
     }
     if (response.status !== 200) {
-      return yield* Effect.fail(new Error(`GET ${url}: ${response.status}: ${body}`));
+      return yield* Effect.fail(
+        new WorkerRequestFailed({ message: `GET ${url}: ${response.status}: ${body}` }),
+      );
     }
     if (body === "Alchemy worker is being deployed...") return false;
     expect(body).toBe("ready");
     return true;
-  }).pipe(
-    Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 8, until: (ready) => ready }),
-    Effect.timeout("45 seconds"),
-  );
-  expect(ready, "Journal entries method did not propagate").toBe(true);
+  }).pipe(Effect.catchTag("WorkerNotPropagated", () => Effect.succeed(false)));
+  // One ready answer only proves one host has the new version; scenarios
+  // that land on another host see `entries` missing from the journal RPC.
+  yield* waitUntilStable(`journal RPC at ${url}`, readyOnce, { timeout: "60 seconds" });
 });
 
 const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWorkflow") {
-  const ready = yield* Effect.gen(function* () {
+  const probe = Effect.gen(function* () {
     const started = yield* request(`${url}/probe`, "POST");
     const { id } = yield* Effect.try(() => JSON.parse(started) as { id: string });
     const status = yield* request(`${url}/probe/${id}`).pipe(
@@ -65,12 +76,15 @@ const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWo
       }),
     );
     yield* Effect.logInfo(`Workflow readiness probe ${id}: ${JSON.stringify(status)}`);
-    // Only a probe may be recreated when Workflow execution still sees the stub.
+    // A brand-new script reaches Workflow hosts one at a time, and Cloudflare
+    // exposes no propagation API. Only a probe may observe the script (or its
+    // entrypoint) as absent; scenario instances never retry.
     if (
       status.status === "errored" &&
-      status.error?.name === "TypeError" &&
-      status.error.message ===
-        `The entrypoint name ${className} was not found in this worker. Ensure the worker exports an entrypoint with that name.`
+      ((status.error?.name === "Error" && status.error.message === "Worker not found.") ||
+        (status.error?.name === "TypeError" &&
+          status.error.message ===
+            `The entrypoint name ${className} was not found in this worker. Ensure the worker exports an entrypoint with that name.`))
     ) {
       return false;
     }
@@ -79,11 +93,18 @@ const probeWorkflow = Effect.fn(function* (url: string, className = "LifecycleWo
       output: ["workflow-ready"],
     });
     return true;
-  }).pipe(
-    Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 8, until: (ready) => ready }),
-    Effect.timeout("45 seconds"),
-  );
-  expect(ready, "Workflow entrypoint did not propagate").toBe(true);
+  }).pipe(Effect.catchTag("WorkerNotPropagated", () => Effect.succeed(false)));
+  // Each probe is a fresh instance that may land on a different host, so a
+  // round passes only when every probe completes, and three rounds in a row
+  // must pass before the ~30 scenarios fan out across hosts.
+  const round = Effect.all(
+    Array.from({ length: 6 }, () => probe),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.map((results) => results.every(Boolean)));
+  yield* waitUntilStable(`Workflow ${className} at ${url}`, round, {
+    consecutive: 3,
+    timeout: "90 seconds",
+  });
 });
 
 const cases: Array<{ scenario: Scenario; entries: string[] }> = [
@@ -193,7 +214,7 @@ describe.concurrent.each([
         yield* probeWorkflow(output.url);
         return output;
       }),
-      { timeout: 120_000 },
+      { timeout: 240_000 },
     );
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 30_000 });
 

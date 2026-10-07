@@ -1,4 +1,4 @@
-import { fromApiKey, listSecretRaw } from "@distilled.cloud/infisical";
+import { fromApiKey, getProjectBySlug, listSecretsV4 } from "@distilled.cloud/infisical";
 import * as Retry from "@distilled.cloud/infisical/Retry";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
@@ -117,21 +117,25 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
   credentials: InfisicalCredentials,
 ) {
   const includeImports = options.includeImports ?? true;
-  const byId = isUUID(options.project);
-  const response = yield* listSecretRaw({
-    workspaceId: byId ? options.project : undefined,
-    workspaceSlug: byId ? undefined : options.project,
-    environment: options.environment,
-    secretPath: options.path,
-    recursive: options.recursive,
-    include_imports: includeImports,
-    viewSecretValue: true,
-    expandSecretReferences: true,
+  const response = yield* Effect.gen(function* () {
+    // The v4 secrets API only accepts project ids, so resolve slugs first.
+    const projectId = isUUID(options.project)
+      ? options.project
+      : (yield* getProjectBySlug({ slug: options.project })).id;
+    return yield* listSecretsV4({
+      projectId,
+      environment: options.environment,
+      secretPath: options.path,
+      recursive: options.recursive,
+      includeImports,
+      viewSecretValue: true,
+      expandSecretReferences: true,
+    });
   }).pipe(
     Retry.none,
     Effect.provide(
       fromApiKey({
-        apiKey: Redacted.value(credentials.token),
+        apiKey: credentials.token,
         apiBaseUrl: credentials.apiBaseUrl,
       }),
     ),

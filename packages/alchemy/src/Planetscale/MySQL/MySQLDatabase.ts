@@ -16,7 +16,13 @@ import { hashImports } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
-import { PlanetscaleConflict, waitForBranchReady, waitForDatabaseReady } from "../Util.ts";
+import {
+  deleteUnprotectedDatabase,
+  PlanetscaleConflict,
+  replaceDatabase,
+  waitForBranchReady,
+  waitForDatabaseReady,
+} from "../Util.ts";
 import {
   ensureMySQLProductionBranchClusterSize,
   observeDefaultKeyspaceReplicas,
@@ -149,6 +155,15 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
+ * ### Deletion protection
+ * **Example:** Refuse deletes of a production database
+ * ```typescript
+ * const db = yield* Planetscale.MySQLDatabase("MyDb", {
+ *   clusterSize: "PS_10",
+ *   deletionProtection: true,
+ * });
+ * ```
+ *
  * ### Adoption
  * **Example:** Adopting an existing database
  * ```typescript
@@ -197,7 +212,7 @@ export const MySQLDatabaseProvider = () =>
         output?.region?.slug !== undefined &&
         news.region.slug !== output.region.slug
       ) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "region");
       }
       // Replicas reconcile in place via a keyspace resize — never a
       // replacement. Diff against the observed keyspace replica count so
@@ -224,7 +239,11 @@ export const MySQLDatabaseProvider = () =>
         return { action: "update", stables } as const;
       }
 
-      return undefined;
+      // Nothing changed. Still advertise the conditional `name` stable so
+      // a `--force` deploy (which upgrades this noop to an update) keeps
+      // `name` resolvable downstream instead of falsely replacing
+      // consumers such as roles and passwords (#1832).
+      return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -277,6 +296,7 @@ export const MySQLDatabaseProvider = () =>
                 restrictBranchRegion: data.restrict_branch_region ?? false,
                 insightsRawQueries: data.insights_raw_queries ?? false,
                 productionBranchWebConsole: data.production_branch_web_console ?? false,
+                deletionProtection: data.deletion_protected ?? false,
                 automaticMigrations: data.automatic_migrations ?? false,
                 migrationFramework: data.migration_framework ?? undefined,
                 migrationTableName: data.migration_table_name ?? undefined,
@@ -385,6 +405,7 @@ export const MySQLDatabaseProvider = () =>
         restrict_branch_region: news.restrictBranchRegion,
         insights_raw_queries: news.insightsRawQueries,
         production_branch_web_console: news.productionBranchWebConsole,
+        deletion_protected: news.deletionProtection,
         default_branch: news.defaultBranch,
       });
 
@@ -440,6 +461,7 @@ export const MySQLDatabaseProvider = () =>
         restrictBranchRegion: updated.restrict_branch_region ?? false,
         insightsRawQueries: updated.insights_raw_queries ?? false,
         productionBranchWebConsole: updated.production_branch_web_console ?? false,
+        deletionProtection: updated.deletion_protected ?? false,
         automaticMigrations: updated.automatic_migrations ?? false,
         migrationFramework: updated.migration_framework ?? undefined,
         migrationTableName: updated.migration_table_name ?? undefined,
@@ -449,12 +471,7 @@ export const MySQLDatabaseProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* planetscale
-        .deleteDatabase({
-          organization: output.organization,
-          database: output.name,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* deleteUnprotectedDatabase(output.organization, output.name);
     }),
 
     list: Effect.fn(function* () {
@@ -487,6 +504,7 @@ export const MySQLDatabaseProvider = () =>
                 restrictBranchRegion: data.restrict_branch_region ?? false,
                 insightsRawQueries: data.insights_raw_queries ?? false,
                 productionBranchWebConsole: data.production_branch_web_console ?? false,
+                deletionProtection: data.deletion_protected ?? false,
                 automaticMigrations: data.automatic_migrations ?? false,
                 migrationFramework: data.migration_framework ?? undefined,
                 migrationTableName: data.migration_table_name ?? undefined,

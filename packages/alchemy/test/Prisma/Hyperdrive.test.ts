@@ -12,10 +12,6 @@ import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
 import PrismaHyperdriveWorker from "./fixtures/hyperdrive-worker.ts";
 
-const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials = process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
-const runLive = wantsLive && hasLiveCredentials;
-
 const providers = Layer.merge(Cloudflare.providers(), Prisma.providers());
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -53,15 +49,15 @@ const fetchReady = (req: Effect.Effect<any, any, any>) =>
     }),
   ) as Effect.Effect<HttpClientResponse, never, HttpClient.HttpClient>;
 
-const stack = runLive ? beforeAll(deploy(Stack), { timeout: 600_000 }) : null;
-afterAll.skipIf(!runLive || !!process.env.NO_DESTROY)(destroy(Stack), {
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 600_000,
 });
 
-test.skipIf(!runLive)(
+test(
   "queries Prisma Postgres from a Worker through Hyperdrive",
   Effect.gen(function* () {
-    const { url } = yield* stack!;
+    const { url } = yield* stack;
 
     const insert = yield* fetchReady(
       HttpClient.execute(

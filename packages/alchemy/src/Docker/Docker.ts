@@ -65,9 +65,13 @@ export class Docker extends Context.Service<
         image: string;
         volume: Array<string> | undefined;
         env: Record<string, string> | undefined;
+        /** Paths to Docker env files, forwarded as repeated `--env-file`. */
+        "env-file"?: Array<string> | undefined;
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval": string | undefined;
         "health-timeout": string | undefined;
         "health-retries": number | undefined;
@@ -77,6 +81,12 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         /** `--add-host` entries, each `hostname:address`. */
         "add-host"?: Array<string> | undefined;
+        /** Docker network namespace, including `container:<id>`. */
+        network?: string | undefined;
+        /** Linux capabilities to add. */
+        "cap-add"?: Array<string> | undefined;
+        /** Host devices in Docker's `host:container[:permissions]` form. */
+        device?: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
         context?: string;
@@ -124,6 +134,8 @@ export class Docker extends Context.Service<
           "cache-to"?: Array<string>;
           args?: Array<string>;
           engineContext?: string;
+          /** Registry auth for the build itself (base images, caches); publishes nothing. */
+          credentials?: RegistryCredentials;
         },
         session?: ScopedPlanStatusSession,
         registry?: RegistryCredentials,
@@ -289,6 +301,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -332,6 +346,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -393,8 +409,13 @@ export declare namespace Docker {
 
   export interface Container {
     Id: string;
+    Image: string;
     Name?: string;
-    State: { Status: ContainerStatus };
+    State: {
+      Status: ContainerStatus;
+      /** Present when the container has a healthcheck. */
+      Health?: { Status: "starting" | "healthy" | "unhealthy" };
+    };
     Created: string;
     Config: {
       Image: string;
@@ -417,6 +438,13 @@ export declare namespace Docker {
       ExtraHosts: string[] | null;
       RestartPolicy: { Name: string; MaximumRetryCount: number };
       AutoRemove: boolean;
+      NetworkMode?: string;
+      CapAdd?: string[] | null;
+      Devices?: Array<{
+        PathOnHost: string;
+        PathInContainer: string;
+        CgroupPermissions: string;
+      }> | null;
     };
     NetworkSettings: {
       Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
@@ -530,7 +558,10 @@ export const DockerLive = Layer.effect(
           return systemError({
             _tag: "Unknown",
             args,
-            description: `Command exited with code ${result.exitCode}: ${stderr}`,
+            description: `Command exited with code ${result.exitCode}: ${failureOutput(
+              stderr,
+              result.stdout,
+            )}`,
           });
         }),
         Effect.scoped,
@@ -686,7 +717,7 @@ export const DockerLive = Layer.effect(
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, ...options },
+          { context: buildContext, engineContext, args, credentials, ...options },
           session,
           registry,
         ) {
@@ -703,7 +734,11 @@ export const DockerLive = Layer.effect(
           const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
-            return yield* run([...engine, "image", "build", ...buildArgs], undefined, tap);
+            return yield* run(
+              [...engine, "image", "build", ...buildArgs],
+              credentials ? yield* registryEnvironment(credentials) : undefined,
+              tap,
+            );
           }
           const mode = yield* publication;
           if (mode === "export") {
@@ -867,6 +902,19 @@ export const dockerPhysicalName = (
   props?.name
     ? Effect.succeed(props.name)
     : createPhysicalName({ id, instanceId, maxLength, lowercase: true });
+
+/**
+ * A failing `docker` command splits its diagnosis over both streams: the
+ * builder writes the step log to one and the reason it stopped to the other,
+ * and which carries which depends on the builder, the progress mode and
+ * whether the output is a terminal. A build that fails inside a `RUN` step
+ * therefore reports nothing but its exit code when only `stderr` is kept.
+ * Keep both, the reason first, so the error says why the build failed.
+ */
+const failureOutput = (stderr: string, stdout: string) => {
+  const output = [stderr, stdout].filter((text) => text.length > 0);
+  return output.length > 0 ? output.join("\n") : "the command wrote no output.";
+};
 
 /** Constructs a PlatformError from a command execution result. */
 const systemError = (input: {

@@ -49,7 +49,7 @@ export const attrOrRedactedString = (value: unknown, key: string) => {
 export const devProvider = <R extends ResourceLike>(
   resource: ResourceClass<R>,
   stables: Extract<keyof R["Attributes"], string>[],
-  attrs: (input: { id: string; news: DevRecord; output?: DevRecord }) => DevRecord,
+  attrs: (input: { id: string; fqn: string; news: DevRecord; output?: DevRecord }) => DevRecord,
 ) =>
   Provider.succeed(resource, {
     stables,
@@ -60,12 +60,12 @@ export const devProvider = <R extends ResourceLike>(
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, fqn, news, output }) {
       const newsRecord = isRecord(news) ? news : {};
       const outputRecord = isRecord(output) ? output : undefined;
       return {
         ...outputRecord,
-        ...attrs({ id, news: newsRecord, output: outputRecord }),
+        ...attrs({ id, fqn, news: newsRecord, output: outputRecord }),
       } as R["Attributes"];
     }),
     delete: Effect.fn(function* () {}),

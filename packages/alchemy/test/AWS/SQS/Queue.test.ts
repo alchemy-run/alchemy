@@ -141,12 +141,19 @@ for (const fifo of [false, true]) {
   );
 }
 
-for (const fifo of [false, true]) {
+// Outside a cycle the engine's ownership probe refuses the queue; a
+// self-bound (cyclic) queue is precreated, and precreate refuses it itself.
+for (const { fifo, cycle } of [
+  { fifo: false, cycle: false },
+  { fifo: true, cycle: false },
+  { fifo: false, cycle: true },
+]) {
   const run = fifo ? adoptingTest.provider : provider;
   run(
-    `precreate preserves a foreign ${fifo ? "FIFO" : "standard"} queue when adoption is disabled on the resource`,
+    `preserves a foreign ${fifo ? "FIFO" : "standard"} queue when adoption is disabled on the ${cycle ? "self-bound " : ""}resource`,
     (stack) =>
       Effect.gen(function* () {
+        const { accountId } = yield* AWSEnvironment.current;
         yield* stack.destroy();
         const ownerProps = {
           visibilityTimeout: Duration.seconds(45),
@@ -171,14 +178,28 @@ for (const fifo of [false, true]) {
                 visibilityTimeout: Duration.seconds(90),
                 tags: { dependency: dependency.queueArn },
               };
-              return yield* Queue("IntruderQueue", fifo ? { ...props, fifo: true } : props).pipe(
-                adopt(false),
-              );
+              const intruder = yield* Queue(
+                "IntruderQueue",
+                fifo ? { ...props, fifo: true } : props,
+              ).pipe(adopt(false));
+              if (cycle) {
+                yield* intruder.bind`SelfPolicy`({
+                  policyStatements: [
+                    {
+                      Sid: "SelfBound",
+                      Effect: "Allow",
+                      Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                      Action: ["sqs:GetQueueAttributes"],
+                      Resource: intruder.queueArn,
+                    },
+                  ],
+                });
+              }
+              return intruder;
             }),
           )
           .pipe(Effect.flip);
         expect(JSON.stringify(conflict)).toContain("OwnedBySomeoneElse");
-        expect(JSON.stringify(conflict)).toContain("explicit adoption");
 
         const attributes = yield* SQS.getQueueAttributes({
           QueueUrl: owner.queueUrl,
@@ -1005,27 +1026,61 @@ provider(
 );
 
 for (const property of ["fifo", "queueName"] as const) {
+  // Distinct names: the variants run concurrently and the rejection asserts
+  // no queue exists under its name.
+  const nameFor = (selfBound: boolean) =>
+    `alchemy-test-sqs-${selfBound ? "unresolved" : "resolved"}-${property.toLowerCase()}`;
+  const unresolvedIdentity = (selfBound: boolean) =>
+    Effect.gen(function* () {
+      const queueName = nameFor(selfBound);
+      const source = yield* Queue("IdentitySource");
+      const queue = yield* Queue(
+        "UnresolvedIdentity",
+        property === "fifo"
+          ? { queueName, fifo: source.queueArn.pipe(Output.map(() => false as const)) }
+          : { queueName: source.queueArn.pipe(Output.map(() => queueName)) },
+      );
+      if (selfBound) {
+        const { accountId } = yield* AWSEnvironment.current;
+        yield* queue.bind`SelfPolicy`({
+          policyStatements: [
+            {
+              Sid: "SelfBound",
+              Effect: "Allow",
+              Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+              Action: ["sqs:GetQueueAttributes"],
+              Resource: queue.queueArn,
+            },
+          ],
+        });
+      }
+      return queue;
+    });
+
+  // Outside a cycle there is no precreate: reconcile runs after the upstream
+  // resolves, so the identity is known before the queue is created.
   provider(
-    `rejects unresolved ${property} before creating a queue with the wrong identity`,
+    `creates a queue whose ${property} resolves from an upstream output`,
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
-        const queueName = `alchemy-test-sqs-unresolved-${property.toLowerCase()}`;
-        const result = yield* stack
-          .deploy(
-            Effect.gen(function* () {
-              const source = yield* Queue("IdentitySource");
-              return yield* Queue(
-                "UnresolvedIdentity",
-                property === "fifo"
-                  ? { queueName, fifo: source.queueArn.pipe(Output.map(() => false as const)) }
-                  : { queueName: source.queueArn.pipe(Output.map(() => queueName)) },
-              );
-            }),
-          )
-          .pipe(Effect.flip);
+        const queue = yield* stack.deploy(unresolvedIdentity(false));
+        expect(queue.queueName).toBe(nameFor(false));
+        yield* stack.destroy();
+        yield* assertQueueDeleted(queue.queueUrl);
+      }),
+    { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
+  );
+
+  // A self-bound queue is precreated before its upstream resolves.
+  provider(
+    `rejects unresolved ${property} on a self-bound queue before creating one with the wrong identity`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const result = yield* stack.deploy(unresolvedIdentity(true)).pipe(Effect.flip);
         expect(JSON.stringify(result)).toContain("UnresolvedQueueIdentity");
-        const queues = yield* SQS.listQueues({ QueueNamePrefix: queueName });
+        const queues = yield* SQS.listQueues({ QueueNamePrefix: nameFor(true) });
         expect(queues.QueueUrls ?? []).toEqual([]);
         yield* stack.destroy();
       }),

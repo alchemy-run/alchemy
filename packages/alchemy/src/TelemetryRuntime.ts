@@ -1,4 +1,4 @@
-import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,6 +9,7 @@ import * as OtlpLogger from "effect/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
@@ -31,10 +32,15 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
  * Redacted marker, and a raw string set directly in the environment).
  */
 const readBoundValue = (key: string): Effect.Effect<unknown> =>
-  Config.String(key).pipe(
-    Config.withDefault(undefined),
-    Effect.orElseSucceed(() => undefined),
-    Effect.map((raw) => {
+  Effect.flatMap(ConfigProvider.ConfigProvider, (provider) => provider.load([key])).pipe(
+    // Missing optional bindings are normal on every event. Read their scalar
+    // directly instead of constructing a Config/Schema error for each absence.
+    Effect.orDie,
+    Effect.catchDefect((defect) =>
+      Predicate.isTagged(defect, "SourceError") ? Effect.succeed(undefined) : Effect.die(defect),
+    ),
+    Effect.map((node) => {
+      const raw = node?.value;
       if (raw === undefined || raw === "") {
         return undefined;
       }
@@ -141,10 +147,9 @@ export const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
  * forms an *implicit extra destination*, so platform-injected OTLP config
  * exports without any layer.
  */
-const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS") =>
+const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS", base: string | undefined) =>
   Effect.gen(function* () {
     const specific = yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`);
-    const base = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
     const url =
       specific !== undefined && specific !== ""
         ? specific
@@ -245,10 +250,13 @@ const makeExporterLayer = (options?: {
           ? yield* Effect.try(() => JSON.parse(rawList) as ResolvedDestination[])
           : [];
       // The standard OTEL_* env vars form an implicit extra destination.
+      // Resolve the shared endpoint once per event; custom providers can change
+      // between events, so no configuration or exporters are cached here.
+      const baseEndpoint = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
       const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
-        signalConfig("TRACES"),
-        signalConfig("LOGS"),
-        signalConfig("METRICS"),
+        signalConfig("TRACES", baseEndpoint),
+        signalConfig("LOGS", baseEndpoint),
+        signalConfig("METRICS", baseEndpoint),
       ]);
       const destinations: ResolvedDestination[] = [
         ...bound,
@@ -300,7 +308,12 @@ const makeExporterLayer = (options?: {
             resource,
             exportInterval: options?.exportInterval,
             shutdownTimeout: options?.shutdownTimeout,
-          }),
+          }).pipe(
+            // Metrics go out as protobuf: OTLP/HTTP receivers must accept
+            // it, while JSON is optional and some reject it on /v1/metrics
+            // (Axiom answers 415 Unsupported Media Type).
+            Layer.provide(OtlpSerialization.layerProtobuf),
+          ),
         );
       }
       return Layer.mergeAll(...(layers as [Layer.Layer<never>])).pipe(
@@ -319,9 +332,10 @@ const makeExporterLayer = (options?: {
 /**
  * The runtime half of the {@link layerOtlp} binding, and the default
  * per-event Layer: reads the bound `OTEL_EXPORTER_OTLP_*` values back and
- * constructs the OTLP JSON exporters. Each signal resolves independently;
+ * constructs the OTLP exporters (JSON for traces and logs, protobuf for
+ * metrics). Each signal resolves independently;
  * only configured signals export; resolves to `Layer.empty` when nothing is
- * bound, so telemetry is free until a layer is provided.
+ * bound, so no exporters are built until a destination is configured.
  *
  * The periodic export intervals are effectively disabled: the exporter is
  * built per event and the request-scope flush delivers everything. An
