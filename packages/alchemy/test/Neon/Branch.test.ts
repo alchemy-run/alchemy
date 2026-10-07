@@ -412,6 +412,37 @@ describe.concurrent(
     );
 
     test.provider(
+      "destroys a project whose adopted default branch it manages",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const project = yield* Project("DefaultBranchProject");
+              const main = yield* Branch("DefaultBranch", {
+                project,
+                name: "main",
+                endpoints: [
+                  { type: "read_write", autoscalingLimitMinCu: 0.25, autoscalingLimitMaxCu: 1 },
+                ],
+              }).pipe(adopt(true));
+              return { project, main };
+            }),
+          );
+          expect(deployed.main.branchId).toBe(deployed.project.defaultBranchId);
+          expect(deployed.main.default).toBe(true);
+          yield* stack.destroy();
+          expect(
+            yield* getProject({ project_id: deployed.project.projectId }).pipe(
+              Effect.as(false),
+              Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            ),
+          ).toBe(true);
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
       "explicit branch names use delete-first immutable replacements in one project",
       (stack) =>
         Effect.gen(function* () {
