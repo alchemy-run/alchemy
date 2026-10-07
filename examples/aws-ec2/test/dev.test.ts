@@ -13,9 +13,9 @@
  * is what used to produce an unreachable URL in dev.
  */
 import { afterAll, expect, test } from "bun:test";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
+import { DevCli, fetchOk } from "alchemy-test/DevCli";
 
 const root = path.resolve(import.meta.dirname, "..");
 const STAGE = "dev-cli-test";
@@ -36,8 +36,7 @@ const cli = new DevCli({
   },
 });
 
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
+const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 
 afterAll(async () => {
   await cli.stop();
@@ -51,14 +50,10 @@ test.skipIf(!dockerAvailable)(
   async () => {
     cli.start();
 
-    const url = await cli.pollUntil(
-      "url in stack outputs",
-      () => cli.outputUrl("url"),
-      {
-        tries: 600,
-        delayMs: 1000,
-      },
-    );
+    const url = await cli.pollUntil("url in stack outputs", () => cli.outputUrl("url"), {
+      tries: 600,
+      delayMs: 1000,
+    });
     const enqueueUrl = await cli.pollUntil("enqueueUrl in stack outputs", () =>
       cli.outputUrl("enqueueUrl"),
     );
@@ -67,16 +62,15 @@ test.skipIf(!dockerAvailable)(
     expect(url).not.toContain("amazonaws.com");
     expect(cli.output).not.toContain("apply failed");
 
-    const home = (await (
-      await fetchOk(url, { tries: 120, delayMs: 2000 })
-    ).json()) as {
+    const home = (await (await fetchOk(url, { tries: 120, delayMs: 2000 })).json()) as {
       ok: boolean;
     };
     expect(home.ok).toBe(true);
 
-    const enqueued = (await (
-      await fetchOk(enqueueUrl, { tries: 30, delayMs: 1000 })
-    ).json()) as { ok: boolean; messageId?: string };
+    const enqueued = (await (await fetchOk(enqueueUrl, { tries: 30, delayMs: 1000 })).json()) as {
+      ok: boolean;
+      messageId?: string;
+    };
     expect(enqueued.ok).toBe(true);
     expect(enqueued.messageId).toBeTruthy();
   },

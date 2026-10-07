@@ -280,9 +280,15 @@ extract_zip() {
     unzip -o "\$zip" -d "\$dest"
     return
   fi
+  # extractall drops file modes; keep them so installers stay executable.
   python3 - "\$zip" "\$dest" <<'PY'
-import zipfile, sys
-zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+import os, sys, zipfile
+archive = zipfile.ZipFile(sys.argv[1])
+for info in archive.infolist():
+    path = archive.extract(info, sys.argv[2])
+    mode = (info.external_attr >> 16) & 0o777
+    if mode:
+        os.chmod(path, mode)
 PY
 }
 
