@@ -1,23 +1,20 @@
 #!/usr/bin/env bun
 /**
- * Create a GitHub release for a tag, with channel-aware prerelease/latest flags.
+ * Create a GitHub release for a tag, marked Latest to match npm.
  *
- * GitHub's API does not allow a release to be both `prerelease=true` and
- * `latest=true`. To show an alpha/beta as "Latest" when no stable release
- * exists yet, we publish it with `prerelease=false` — a masquerade. This
- * script compensates on the next release: if the currently-latest release
- * has a pre-release-style tag and prerelease=false, we flip it back to
- * `prerelease=true` before publishing the new one. That keeps the latest
- * badge where the user wants it without leaving stale "stable" markers on
- * alpha/beta tags.
+ * `scripts/release/publish.ts` publishes every release, prereleases included,
+ * under npm's `latest` dist-tag, so the newest release is GitHub's Latest
+ * too. GitHub's API does not allow a release to be both `prerelease=true`
+ * and `latest=true`, so a beta/alpha/rc is published with `prerelease=false`
+ * (a masquerade). Before publishing, every earlier prerelease-style tag still
+ * masquerading is flipped back to `prerelease=true`, so only the newest one
+ * looks stable; that also repairs any left over from earlier releases.
  *
  * Channel → flags on the new release:
- *   release        prerelease=false, latest=true
- *   beta|alpha|rc  if any true-stable release exists: prerelease=true, latest=false
- *                  else:                              prerelease=false, latest=true (masquerade)
- *   tag            prerelease=true, latest=false (always)
+ *   release|beta|alpha|rc  prerelease=false, latest=true
+ *   tag                    prerelease=true,  latest=false
  *
- * Usage: bun github-release.ts <tag> <release|beta|alpha|tag>
+ * Usage: bun github-release.ts <tag> <release|beta|alpha|rc|tag>
  *
  * Reads ALCHEMY_REPO for the GitHub repo to query commit history from.
  */
@@ -45,51 +42,18 @@ if (view.exitCode === 0) {
   process.exit(0);
 }
 
-let prerelease: boolean;
-let latest: boolean;
-if (channel === "release") {
-  prerelease = false;
-  latest = true;
-} else if (channel === "tag") {
-  prerelease = true;
-  latest = false;
-} else {
-  const list = await $`gh release list --limit 500 --json tagName,isPrerelease`.nothrow().quiet();
-  let hasStable = false;
-  if (list.exitCode === 0) {
-    const raw = list.stdout.toString().trim();
-    const releases = raw
-      ? (JSON.parse(raw) as Array<{ tagName: string; isPrerelease: boolean }>)
-      : [];
-    hasStable = releases.some((r) => isStableTag(r.tagName) && !r.isPrerelease);
-  }
-  if (hasStable) {
-    prerelease = true;
-    latest = false;
-  } else {
-    prerelease = false;
-    latest = true;
-    console.log(
-      "No true-stable release exists; publishing this prerelease with prerelease=false so it can be marked latest.",
-    );
-  }
-}
+const latest = channel !== "tag";
 
 if (latest) {
-  const cur = await $`gh release view --latest --json tagName,isPrerelease`.nothrow().quiet();
-  if (cur.exitCode === 0) {
-    const raw = cur.stdout.toString().trim();
-    if (raw) {
-      const current = JSON.parse(raw) as {
-        tagName: string;
-        isPrerelease: boolean;
-      };
-      if (current.tagName !== tag && !isStableTag(current.tagName) && !current.isPrerelease) {
-        console.log(
-          `Demoting previous masquerading latest ${current.tagName}: prerelease=false → true`,
-        );
-        await $`gh release edit ${current.tagName} --prerelease=true --latest=false`;
-      }
+  const list = await $`gh release list --limit 500 --json tagName,isPrerelease`.quiet();
+  const releases = JSON.parse(list.stdout.toString().trim() || "[]") as Array<{
+    tagName: string;
+    isPrerelease: boolean;
+  }>;
+  for (const release of releases) {
+    if (release.tagName !== tag && !isStableTag(release.tagName) && !release.isPrerelease) {
+      console.log(`Demoting masquerading ${release.tagName}: prerelease=false → true`);
+      await $`gh release edit ${release.tagName} --prerelease=true --latest=false`;
     }
   }
 }
@@ -116,6 +80,6 @@ const args = [
   md,
   `--latest=${latest ? "true" : "false"}`,
 ];
-if (prerelease) args.push("--prerelease");
+if (!latest) args.push("--prerelease");
 
 await $`gh ${args}`;
