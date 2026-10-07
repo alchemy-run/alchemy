@@ -1,5 +1,6 @@
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { adopt } from "@/AdoptPolicy.ts";
 import * as GitHub from "@/GitHub";
 import { GitHubCredentials } from "@/GitHub/Credentials.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -20,6 +21,7 @@ const fixtureNames = [
   "alchemy-pr-1570-ruleset-list",
   "alchemy-pr-1570-ruleset-replace-a",
   "alchemy-pr-1570-ruleset-replace-b",
+  "alchemy-pr-1570-ruleset-adopt",
 ];
 
 // Retain public fixtures: the gh token lacks delete_repo, and private rulesets are plan-gated.
@@ -138,6 +140,50 @@ test.provider(
       // Delete the ruleset while its repository is still managed, then release the fixture.
       yield* stack.deploy(repository(repo));
       expect(yield* getRuleset(repo, created.rulesetId)).toBeUndefined();
+      expect(yield* getRulesets(repo)).toEqual([]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
+);
+
+test.provider(
+  "adopts an existing ruleset by name and target",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const repo = fixtureNames[4]!;
+      yield* stack.deploy(repository(repo));
+      const octokit = yield* Octokit;
+      const existing = yield* Effect.tryPromise(() =>
+        octokit.rest.repos.createRepoRuleset({
+          owner,
+          repo,
+          name: "adopted protection",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+          },
+          rules: [{ type: "deletion" }],
+        }),
+      );
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          const fixture = yield* repository(repo);
+          return yield* GitHub.Ruleset("AdoptedRuleset", {
+            owner,
+            repository: repoName(fixture),
+            name: "adopted protection",
+            conditions: { include: ["~DEFAULT_BRANCH"] },
+            rules: { deletion: true },
+          }).pipe(adopt(), destroy());
+        }),
+      );
+      expect(adopted.rulesetId).toBe(existing.data.id);
+      expect((yield* getRulesets(repo)).map((ruleset) => ruleset.id)).toEqual([existing.data.id]);
+
+      yield* stack.deploy(repository(repo));
       expect(yield* getRulesets(repo)).toEqual([]);
       yield* stack.destroy();
     }),
