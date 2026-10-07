@@ -98,7 +98,7 @@ import * as EMRContainers from "./EMRContainers/index.ts";
 import * as EMRServerless from "./EMRServerless/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import * as EntityResolution from "./EntityResolution/index.ts";
-import { Default as DefaultEnvironment } from "./Environment.ts";
+import { ProvidedOrDefault as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as FinSpace from "./FinSpace/index.ts";
 import * as Firehose from "./Firehose/index.ts";
@@ -226,26 +226,15 @@ import * as XRay from "./XRay/index.ts";
 export class Providers extends Provider.ProviderCollection<Providers>()("AWS") {}
 
 /**
- * Every AWS provider, pinned to one AWS environment.
+ * Every AWS provider, pinned to one AWS environment (account, region and
+ * credentials).
  *
- * By default the environment is resolved lazily from the configured
- * profile, CI credentials or the ambient AWS environment on first use. Pass
- * an `AWSEnvironment` layer to supply the account, region and credential
- * source yourself — for example credentials assumed at runtime through a
- * native provider chain — so every provider and `AWS.state(options,
- * environment)` share one lazy credential source instead of stored
- * credentials.
+ * By default the environment resolves lazily from the configured profile, CI
+ * credentials or the ambient AWS environment. Provide your own
+ * `AWSEnvironment` to deploy with another credential source, e.g. a role
+ * assumed at runtime; provide the same layer to {@link state} so resources and
+ * state share it.
  *
- * **Example:** Default environment
- * ```typescript
- * const Stack = Alchemy.Stack(
- *   "my-stack",
- *   { providers: AWS.providers(), state: AWS.state() },
- *   program,
- * );
- * ```
- *
- * **Example:** Runtime-resolved credentials shared with the state store
  * ```typescript
  * const environment = Layer.effect(
  *   AWS.AWSEnvironment,
@@ -262,14 +251,14 @@ export class Providers extends Provider.ProviderCollection<Providers>()("AWS") {
  * const Stack = Alchemy.Stack(
  *   "my-stack",
  *   {
- *     providers: AWS.providers(environment),
- *     state: AWS.state({}, environment),
+ *     providers: AWS.providers().pipe(Layer.provide(environment)),
+ *     state: AWS.state({ bucketName: "my-company-state" }).pipe(Layer.provide(environment)),
  *   },
  *   program,
  * );
  * ```
  */
-export const providers = (environment = DefaultEnvironment) =>
+export const providers = () =>
   Layer.effect(
     Providers,
     // Providers are PINNED to the environment they are registered with (the
@@ -1843,7 +1832,7 @@ export const providers = (environment = DefaultEnvironment) =>
     Layer.provideMerge(Region.fromEnvironment),
     Layer.provideMerge(Credentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(environment),
+    Layer.provideMerge(DefaultEnvironment),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every AWS SDK call. Like distilled's

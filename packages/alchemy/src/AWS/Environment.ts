@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
@@ -89,3 +90,18 @@ export const Default = Layer.effect(
     return yield* resolve.pipe(orDieCredentialsUnavailable(AWS_AUTH_PROVIDER_NAME), Effect.cached);
   }),
 ).pipe(Layer.orDie);
+
+/**
+ * The AWS environment for a provider or state-store layer: an
+ * `AWSEnvironment` the caller provided from outside wins, otherwise
+ * {@link Default} (profile / CI / ambient). Layers that build on this instead
+ * of `Default` can be pointed at another account, region or credential
+ * source with `layer.pipe(Layer.provide(environment))`.
+ */
+export const ProvidedOrDefault = Layer.unwrap(
+  Effect.serviceOption(AWSEnvironment).pipe(
+    Effect.map((provided) =>
+      Option.isSome(provided) ? Layer.succeed(AWSEnvironment, provided.value) : Default,
+    ),
+  ),
+);
