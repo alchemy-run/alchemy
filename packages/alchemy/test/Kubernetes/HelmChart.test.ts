@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
+import { describe as suite, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -7,13 +7,22 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
+import * as Drift from "@/Drift";
 import * as Kubernetes from "@/Kubernetes";
 import { HelmError, parseRenderedManifests, renderHelmChart } from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import {
+  destroyKindStack,
+  KindTestCluster,
+  kubectl,
+  kubectlGet,
+  type KindCluster,
+} from "./fixtures/kind.ts";
 
 const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
-const { test } = Test.make(testOptions);
+const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
 // builds) — `helm` must be installed on the machine running this suite.
@@ -430,4 +439,159 @@ test.provider(
       expect(all).toEqual([]);
     }),
   { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:helmchart", "local"] },
+);
+
+const kindStack = Core.scratchStack(testOptions, "KubernetesHelmChartKind");
+
+// Creates a real kind cluster (~30s); needs Docker, kind, kubectl, and helm.
+suite.skipIf(!process.env.KUBERNETES_TEST_KIND)(
+  "Kubernetes HelmChart on kind",
+  {
+    tags: [
+      "provider:kubernetes",
+      "provider:kubernetes:helmchart",
+      "provider:kubernetes:localcluster",
+      "live",
+    ],
+  },
+  () => {
+    let cluster: KindCluster;
+    const ns = ["--namespace", "default"];
+    const readConfigMap = (name: string, namespace = "default") =>
+      kubectlGet(cluster, ["configmap", name, "--namespace", namespace]);
+
+    beforeAll(
+      Effect.gen(function* () {
+        yield* kindStack.destroy();
+        cluster = yield* kindStack.deploy(KindTestCluster("helm", 5063));
+      }),
+      { timeout: 300_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(
+      Effect.suspend(() => destroyKindStack(kindStack, cluster)),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "Redacted values reach the cluster unwrapped and drift tracks the release's objects",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const secret = "helm-live-sentinel";
+          const chart = (id: string, values: Record<string, unknown>) =>
+            Kubernetes.HelmChart(id, {
+              cluster: cluster.connection,
+              chart: chartDir,
+              releaseName: id.toLowerCase(),
+              values,
+            });
+          yield* stack.deploy(
+            Effect.all([
+              chart("Steady", { message: Redacted.make(secret) }),
+              chart("Annotated", { message: "annotated" }),
+              chart("Edited", { message: "declared" }),
+              chart("Pruned", { message: "pruned", secondConfigMap: { enabled: true } }),
+            ]),
+          );
+
+          // The values file carried the plaintext, not the placeholder.
+          const steady = yield* readConfigMap("steady-config");
+          expect(steady.data.message).toBe(secret);
+          expect(yield* readConfigMap("pruned-second")).toBeDefined();
+
+          const detect = Drift.detect({ name: stack.name, stage: stack.stage });
+          const baseline = yield* detect;
+          for (const id of ["Steady", "Annotated", "Edited", "Pruned"]) {
+            expect({ id, action: baseline.resources[id]?.action }).toEqual({
+              id,
+              action: "unchanged",
+            });
+          }
+
+          // An undeclared annotation is not drift; a declared data edit and a
+          // deleted chart object are.
+          yield* kubectl(cluster, [
+            "annotate",
+            "configmap",
+            "annotated-config",
+            "example.com/owner=someone-else",
+            ...ns,
+          ]);
+          yield* kubectl(cluster, [
+            "patch",
+            "configmap",
+            "edited-config",
+            "--type",
+            "merge",
+            "-p",
+            JSON.stringify({ data: { message: "edited" } }),
+            ...ns,
+          ]);
+          yield* kubectl(cluster, ["delete", "configmap", "pruned-second", ...ns]);
+          const steadyVersion = steady.metadata.resourceVersion;
+
+          const after = yield* detect;
+          expect(after.resources.Steady?.action).toBe("unchanged");
+          expect(after.resources.Annotated?.action).toBe("unchanged");
+          expect(after.resources.Edited?.action).toBe("drifted");
+          expect(after.resources.Pruned?.action).toBe("drifted");
+          // Drift reads are GETs: the untouched object was not written.
+          expect((yield* readConfigMap("steady-config")).metadata.resourceVersion).toBe(
+            steadyVersion,
+          );
+
+          yield* stack.destroy();
+          for (const name of [
+            "steady-config",
+            "annotated-config",
+            "edited-config",
+            "pruned-config",
+          ]) {
+            expect(yield* readConfigMap(name)).toBe(undefined);
+          }
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "turning createNamespace off releases the Namespace and prunes dropped objects",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const namespace = "alchemy-helm-shared";
+          const release = (createNamespace: boolean, second: boolean) =>
+            Kubernetes.HelmChart("Shared", {
+              cluster: cluster.connection,
+              chart: chartDir,
+              releaseName: "shared",
+              namespace,
+              createNamespace,
+              values: { message: "shared", secondConfigMap: { enabled: second } },
+            });
+
+          const created = yield* stack.deploy(release(true, true));
+          expect(created.objects.map((object) => object.kind).sort()).toEqual([
+            "ConfigMap",
+            "ConfigMap",
+            "Namespace",
+          ]);
+          expect(yield* readConfigMap("shared-second", namespace)).toBeDefined();
+
+          const released = yield* stack.deploy(release(false, false));
+          expect(released.objects.map((object) => object.name)).toEqual(["shared-config"]);
+          // The dropped chart object is deleted; the released Namespace stays.
+          expect(yield* readConfigMap("shared-second", namespace)).toBe(undefined);
+          expect(yield* readConfigMap("shared-config", namespace)).toBeDefined();
+          expect(yield* kubectlGet(cluster, ["namespace", namespace])).toBeDefined();
+
+          yield* stack.destroy();
+          expect(yield* readConfigMap("shared-config", namespace)).toBe(undefined);
+          // No longer tracked, so destroy leaves it; clean it up out of band.
+          expect(yield* kubectlGet(cluster, ["namespace", namespace])).toBeDefined();
+          yield* kubectl(cluster, ["delete", "namespace", namespace, "--wait=false"]);
+        }),
+      { timeout: 180_000 },
+    );
+  },
 );

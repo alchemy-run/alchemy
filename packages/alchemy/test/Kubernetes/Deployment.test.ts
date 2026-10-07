@@ -1,8 +1,11 @@
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network.ts";
@@ -14,6 +17,15 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
 import EksHostApi from "./fixtures/deployment.ts";
+import {
+  destroyKindStack,
+  KindTestCluster,
+  kubectlGet,
+  removeRbac,
+  restrictedConnection,
+  updateRole,
+  type KindCluster,
+} from "./fixtures/kind.ts";
 
 const testOptions = { providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -35,6 +47,140 @@ test.provider(
       expect(all).toEqual([]);
     }),
   { tags: ["provider:aws", "provider:kubernetes", "provider:kubernetes:deployment", "live"] },
+);
+
+const kindStack = Core.scratchStack(testOptions, "KubernetesDeploymentKind");
+
+// Creates a real kind cluster (~30s); needs Docker, kind, and kubectl. The
+// pods run a pre-built image; these cases assert on the applied objects, not
+// on pod readiness.
+describe.skipIf(!process.env.KUBERNETES_TEST_KIND)(
+  "Kubernetes Deployment on kind",
+  {
+    tags: [
+      "provider:kubernetes",
+      "provider:kubernetes:deployment",
+      "provider:kubernetes:localcluster",
+      "live",
+    ],
+  },
+  () => {
+    let cluster: KindCluster;
+    const image = "registry.k8s.io/pause:3.10";
+    const ns = ["--namespace", "default"];
+    const objectsOf = (name: string) =>
+      Effect.all({
+        serviceAccount: kubectlGet(cluster, ["serviceaccount", name, ...ns]),
+        deployment: kubectlGet(cluster, ["deployment", name, ...ns]),
+        service: kubectlGet(cluster, ["service", name, ...ns]),
+      });
+
+    beforeAll(
+      Effect.gen(function* () {
+        yield* kindStack.destroy();
+        cluster = yield* kindStack.deploy(KindTestCluster("deployment", 5064));
+      }),
+      { timeout: 300_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(
+      Effect.suspend(() => destroyKindStack(kindStack, cluster)),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "Redacted env values reach the container unwrapped",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const token = "deployment-token-sentinel";
+          const nested = "deployment-nested-sentinel";
+          yield* stack.deploy(
+            Kubernetes.Deployment("SecretEnv", {
+              cluster: cluster.connection,
+              name: "secret-env",
+              image,
+              port: 8080,
+              serviceType: "ClusterIP",
+              env: {
+                TOKEN: Redacted.make(token),
+                CONFIG: Redacted.make({ nested }),
+              },
+            }),
+          );
+
+          const { deployment } = yield* objectsOf("secret-env");
+          const env = Object.fromEntries(
+            (
+              deployment.spec.template.spec.containers[0].env as { name: string; value: string }[]
+            ).map((entry) => [entry.name, entry.value]),
+          );
+          expect(env.TOKEN).toBe(token);
+          expect(env.CONFIG).toBe(JSON.stringify({ nested }));
+
+          yield* stack.destroy();
+          expect(yield* objectsOf("secret-env")).toEqual({
+            serviceAccount: undefined,
+            deployment: undefined,
+            service: undefined,
+          });
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "destroy surfaces a 403 and leaves the objects in place",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const account = "deployment-no-delete";
+          const rules = (verbs: string[]) => [
+            { apiGroups: [""], resources: ["serviceaccounts", "services"], verbs },
+            { apiGroups: ["apps"], resources: ["deployments"], verbs },
+          ];
+          const restricted = yield* restrictedConnection(
+            cluster,
+            account,
+            rules(["get", "list", "create", "patch", "update"]),
+          );
+          yield* stack.deploy(
+            Kubernetes.Deployment("Kept", {
+              cluster: restricted,
+              name: "kept",
+              image,
+              port: 8080,
+              serviceType: "ClusterIP",
+            }),
+          );
+
+          const exit = yield* Effect.exit(stack.destroy());
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.pretty(exit.cause)).toContain("403");
+          }
+          const kept = yield* objectsOf("kept");
+          expect(kept.deployment).toBeDefined();
+          expect(kept.service).toBeDefined();
+
+          // Granting delete lets the same destroy converge.
+          yield* updateRole(
+            cluster,
+            account,
+            rules(["get", "list", "create", "patch", "update", "delete"]),
+          );
+          yield* stack
+            .destroy()
+            .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 5 }));
+          expect(yield* objectsOf("kept")).toEqual({
+            serviceAccount: undefined,
+            deployment: undefined,
+            service: undefined,
+          });
+          yield* removeRbac(cluster, account);
+        }),
+      { timeout: 120_000 },
+    );
+  },
 );
 
 // Full end-to-end (gated). An EKS Auto Mode cluster takes ~10–15 min to
