@@ -454,23 +454,24 @@ describe
         "deletionProtection blocks destroy until it is turned off",
         (stack) =>
           Effect.gen(function* () {
-            const name = "alchemy-test-postgresql-deletion-protection";
+            const name = `${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}-pg-protect`;
             const { organization } = yield* yield* Planetscale.Credentials;
 
+            const program = (deletionProtection: boolean, region?: string) =>
+              Effect.gen(function* () {
+                const database = yield* Planetscale.PostgresDatabase(
+                  "PostgresDatabaseDeletionProtection",
+                  {
+                    name,
+                    clusterSize: "PS_5",
+                    deletionProtection,
+                    ...(region ? { region: { slug: region } } : {}),
+                  },
+                );
+                return { database };
+              });
             const deploy = (deletionProtection: boolean) =>
-              stack.deploy(
-                Effect.gen(function* () {
-                  const database = yield* Planetscale.PostgresDatabase(
-                    "PostgresDatabaseDeletionProtection",
-                    {
-                      name,
-                      clusterSize: "PS_5",
-                      deletionProtection,
-                    },
-                  );
-                  return { database };
-                }),
-              );
+              stack.deploy(program(deletionProtection));
 
             yield* Effect.gen(function* () {
               // Inside the cleanup scope: state left by an interrupted run
@@ -486,6 +487,19 @@ describe
                 database: name,
               });
               expect(live.deletion_protected).toBe(true);
+
+              // Create-first replacement under the same explicit name would
+              // converge onto the old database and then delete it, so the
+              // plan must refuse a region change that keeps the name.
+              const replacement = yield* Effect.exit(
+                stack.plan(
+                  program(true, database.region.slug === "eu-west" ? "us-east" : "eu-west"),
+                ),
+              );
+              expect(Exit.isFailure(replacement)).toBe(true);
+              if (Exit.isFailure(replacement)) {
+                expect(Cause.pretty(replacement.cause)).toContain("requires a new database");
+              }
 
               const exit = yield* Effect.exit(stack.destroy());
               expect(Exit.isFailure(exit)).toBe(true);
