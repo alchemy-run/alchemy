@@ -237,6 +237,7 @@ export const makeAwsTarget = (config: ReactRouterAwsTargetConfig = {}): ReactRou
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "react-router",
       config: {
         rootDir: context.root,

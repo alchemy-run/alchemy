@@ -20,15 +20,15 @@ interface CatalogOpts {
 }
 
 // One program deploying both the R2 bucket and the catalog enabled on it.
-// `bucketName` references the bucket's output attribute, so the engine
-// orders catalog-after-bucket on deploy (and the reverse on destroy).
+// `bucket` references the bucket resource, so the engine orders
+// catalog-after-bucket on deploy (and the reverse on destroy).
 const program = (opts: CatalogOpts = {}) =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {
       forceDestroy: true,
     });
     const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
-      bucketName: bucket.bucketName,
+      bucket,
       ...opts,
     });
     return { bucket, catalog };
@@ -154,6 +154,51 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, initial.bucket.bucketName);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 240_000,
+  },
+);
+
+test.provider(
+  "switching between bucket forms keeps the same catalog",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // The deprecated `bucketName` string form.
+      const legacy = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", { forceDestroy: true });
+          const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
+            bucketName: bucket.bucketName,
+          });
+          return { bucket, catalog };
+        }),
+      );
+
+      // The bucket resource, then a plain bucket name: neither is a change.
+      const viaResource = yield* stack.deploy(program());
+      expect(viaResource.catalog.catalogId).toEqual(legacy.catalog.catalogId);
+
+      const viaName = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", { forceDestroy: true });
+          const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
+            bucket: legacy.bucket.bucketName,
+          });
+          return { bucket, catalog };
+        }),
+      );
+      expect(viaName.catalog.catalogId).toEqual(legacy.catalog.catalogId);
+      expect(viaName.catalog.bucketName).toEqual(legacy.bucket.bucketName);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, legacy.bucket.bucketName);
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],

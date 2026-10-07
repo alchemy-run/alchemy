@@ -98,7 +98,7 @@ import * as EMRContainers from "./EMRContainers/index.ts";
 import * as EMRServerless from "./EMRServerless/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import * as EntityResolution from "./EntityResolution/index.ts";
-import { Default as DefaultEnvironment } from "./Environment.ts";
+import { providedOrDefault } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as FinSpace from "./FinSpace/index.ts";
 import * as Firehose from "./Firehose/index.ts";
@@ -225,6 +225,39 @@ import * as XRay from "./XRay/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("AWS") {}
 
+/**
+ * Every AWS provider, pinned to one AWS environment (account, region and
+ * credentials).
+ *
+ * By default the environment resolves lazily from the configured profile, CI
+ * credentials or the ambient AWS environment. Provide your own
+ * `AWSEnvironment` to deploy with another credential source, e.g. a role
+ * assumed at runtime; provide the same layer to {@link state} so resources and
+ * state share it.
+ *
+ * ```typescript
+ * const environment = Layer.effect(
+ *   AWS.AWSEnvironment,
+ *   Effect.gen(function* () {
+ *     const session = yield* assumeDeployRole;
+ *     return Effect.succeed({
+ *       accountId: session.accountId,
+ *       region: session.region,
+ *       credentials: session.credentials,
+ *     });
+ *   }),
+ * );
+ *
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   {
+ *     providers: AWS.providers().pipe(Layer.provide(environment)),
+ *     state: AWS.state({ bucketName: "my-company-state" }).pipe(Layer.provide(environment)),
+ *   },
+ *   program,
+ * );
+ * ```
+ */
 export const providers = () =>
   Layer.effect(
     Providers,
@@ -1796,10 +1829,13 @@ export const providers = () =>
     // at the stack level lets `Capability.execute(...)` Outputs (e.g.
     // `AWS.EC2.getAmi`) resolve during plan.
     Layer.provideMerge(EC2.GetAmiHttp),
-    Layer.provideMerge(Region.fromEnvironment),
-    Layer.provideMerge(Credentials.fromEnvironment),
-    Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
+    // Fresh per call: these derive from the environment below, and shared
+    // (memoized) instances built for another environment in the same run
+    // would shadow an `AWSEnvironment` provided to this layer.
+    Layer.provideMerge(Layer.fresh(Region.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Credentials.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
+    Layer.provideMerge(providedOrDefault()),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every AWS SDK call. Like distilled's

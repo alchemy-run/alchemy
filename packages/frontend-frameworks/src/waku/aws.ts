@@ -154,7 +154,7 @@ const makeAwsAdapterTarget = (
           { concurrency: "unbounded" },
         ).pipe(Effect.mapError(fail("Failed to write the Lambda serve entry")));
 
-        const serveModule = yield* toOutputFile(path.join("server", SERVE_ENTRY_NAME), serveSource);
+        const serveModule = yield* toOutputFile(`server/${SERVE_ENTRY_NAME}`, serveSource);
         // The serve entry becomes `serverModules[0]` — the module alchemy's
         // Server resource deploys as the Lambda `main`.
         const serverModules = [
@@ -212,6 +212,7 @@ export const makeWakuAwsTarget = (
       runtime: "node",
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "waku",
       config: {
         rootDir: context.root,

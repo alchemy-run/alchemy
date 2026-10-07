@@ -52,8 +52,8 @@ for (const mode of Playwright.SERVER_METHODS) {
       await expect(page.locator("#widgets-title")).toHaveText("sveltekit-spa-widgets");
       await expect(page.locator("#widgets-server")).toHaveText("server:yes");
       await expect(page.locator("#widgets-message")).toHaveText(`message:${MESSAGE}`);
-      // `$spa/widgets` — user alias from vite.config.ts resolved.
-      await expect(page.locator("#widgets-description")).toHaveText("widgets-via-user-alias:3");
+      // `#lib/widgets.js` — package.json subpath import resolved.
+      await expect(page.locator("#widgets-description")).toHaveText("widgets-via-subpath-import:3");
       await expect(page.locator("#widgets-list li")).toHaveCount(3);
     });
 
