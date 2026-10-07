@@ -1292,6 +1292,17 @@ export type Worker<Bindings = any> = Resource<
        * instance and the running container would serve stale code.
        */
       hash: string | undefined;
+      /**
+       * The application name of a `durable_object` application without an image
+       * of its own. Sent in the upload metadata's `containers` entry for the
+       * class, as wrangler does. `undefined` for every other application.
+       */
+      name?: string | undefined;
+      /**
+       * The prepared images of that application, by name. Sent when there is
+       * at least one.
+       */
+      images?: Record<string, string> | undefined;
     }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;

@@ -992,6 +992,28 @@ type MetadataHashValue =
   | { readonly [key: string]: MetadataHashValue };
 
 /**
+ * The upload metadata's `containers`: one entry per container-backed class.
+ * The entry of a `durable_object` application without an image of its own
+ * also names the application and carries its prepared images, in wrangler's
+ * shape: `{ class_name, name, images: { [imageName]: reference } }`.
+ */
+const toMetadataContainers = (
+  bindings: readonly ResourceBinding<Worker["Binding"]>[],
+): workers.PutScriptMetadataContainersList => {
+  const byClass = new Map<string, workers.PutScriptMetadataContainersList[number]>();
+  for (const container of bindings.flatMap((b) => b.data.containers ?? [])) {
+    const images =
+      container.images && Object.keys(container.images).length > 0 ? container.images : undefined;
+    byClass.set(container.className, {
+      className: container.className,
+      ...(container.name !== undefined && { name: container.name }),
+      ...(images !== undefined && { images }),
+    });
+  }
+  return [...byClass.values()];
+};
+
+/**
  * Deeply materialize an arbitrary value into a JSON-stable shape for hashing:
  * unwrap `Redacted` secrets by value, ISO-stringify `Date`s, keep plain
  * objects/arrays/primitives, and drop Effects, functions, `undefined`, and
@@ -3596,11 +3618,6 @@ export const LiveWorkerProvider = () =>
           );
         }
 
-        // Collect container-backed class names so we can send container metadata
-        const containerClassNames = new Set(
-          bindings.flatMap((b) => (b.data.containers ?? []).map((c) => c.className)),
-        );
-
         // Compute new, renamed, and transferred classes
         const newClasses: string[] = [];
         const newSqliteClasses: string[] = [];
@@ -3711,7 +3728,7 @@ export const LiveWorkerProvider = () =>
           newSqliteClasses,
         };
 
-        const metadataContainers = [...containerClassNames].map((className) => ({ className }));
+        const metadataContainers = toMetadataContainers(bindings);
 
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
@@ -4742,9 +4759,11 @@ export const LiveWorkerProvider = () =>
           ).filter((binding) => !binding.transferredFrom);
           const doClasses = durableObjects.map((binding) => binding.className);
           // Only attach container metadata for classes actually fronted by a
-          // Container binding (mirrors reconcile's `containerClassNames`).
+          // Container binding (mirrors reconcile's `toMetadataContainers`).
           // Mapping every DO class to a container would wrongly mark plain DOs
-          // as container-backed in the placeholder.
+          // as container-backed in the placeholder. Precreate sees unresolved
+          // binding data, so the placeholder names only the classes; the
+          // real upload adds a `durable_object` application's name and images.
           const containers = Array.from(
             new Set(bindings.flatMap((b) => (b.data.containers ?? []).map((c) => c.className))),
           ).map((className) => ({ className }));

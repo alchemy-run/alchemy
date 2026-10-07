@@ -119,6 +119,71 @@ const digestFromImageRef = (imageRef: string) => {
   return isRegistryDigest(digest) ? digest : undefined;
 };
 
+class ContainerImagePreparationError extends Schema.TaggedError<ContainerImagePreparationError>()(
+  "ContainerImagePreparationError",
+  {
+    image: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+/**
+ * Prepare one image on Cloudflare's network and wait until it is ready, as
+ * wrangler's `waitForImagePreparation` does: ask again every 2 seconds while
+ * the status is `pending`, for at most 15 minutes. The call is idempotent, and
+ * an image that is already prepared answers `ready` at once.
+ */
+const prepareImage = (accountId: string, image: string) =>
+  Containers.prepareContainerImage({ accountId, image }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      while: (preparation) => preparation.status === "pending",
+    }),
+    Effect.timeoutOrElse({
+      duration: "15 minutes",
+      orElse: () =>
+        Effect.fail(
+          new ContainerImagePreparationError({
+            image,
+            message: "Timed out while preparing the container image on Cloudflare's network.",
+          }),
+        ),
+    }),
+    Effect.flatMap(({ status, reason }) =>
+      status === "ready"
+        ? Effect.void
+        : Effect.fail(
+            new ContainerImagePreparationError({
+              image,
+              message: reason ?? `Container image preparation returned status "${status}".`,
+            }),
+          ),
+    ),
+  );
+
+/**
+ * Prepare each pinned image of a `durable_object` application without an
+ * image of its own, and return what the Worker's container metadata carries:
+ * image name to prepared reference. A Cloudflare-registry reference without
+ * the account namespace gets it, as wrangler's `resolveImageName` does.
+ */
+const prepareDurableObjectImages = Effect.fn(function* (
+  accountId: string,
+  images: AnyContainerApplicationProps["images"],
+  session: { note: (message: string) => Effect.Effect<void> },
+) {
+  const prepared: Record<string, string> = {};
+  for (const [name, { image: reference }] of Object.entries(images ?? {})) {
+    const image = isTargetRegistryRef(reference, "registry.cloudflare.com")
+      ? normalizePrepushedRef(reference, "registry.cloudflare.com", accountId)
+      : reference;
+    yield* session.note(`Preparing container image ${name}...`);
+    yield* prepareImage(accountId, image);
+    prepared[name] = image;
+  }
+  return prepared;
+});
+
 export const LiveContainerProvider = () =>
   Provider.effect(
     ContainerPlatform,
@@ -1018,6 +1083,110 @@ export const LiveContainerProvider = () =>
         );
       };
 
+      // An imageless `durable_object` application is created once from the
+      // Worker's namespace and then only its `observability` is patched. It
+      // has no image to build, no rollout, and it is never deleted and
+      // recreated on the same namespace.
+      const reconcileImagelessApplication = Effect.fn(function* ({
+        name,
+        news,
+        bindings,
+        output,
+        session,
+      }: {
+        name: string;
+        news: AnyContainerApplicationProps;
+        bindings: ResourceBinding<ContainerApplication["Binding"]>[];
+        output: ContainerApplication["Attributes"] | undefined;
+        session: { note: (message: string) => Effect.Effect<void> };
+      }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const images = yield* prepareDurableObjectImages(accountId, news.images, session);
+        const durableObjects =
+          (yield* getDurableObjects(bindings)) ??
+          (output?.durableObjects?.namespaceId ? output.durableObjects : undefined);
+        if (!durableObjects) {
+          // Bound on a Worker that declares the class in this deploy (an
+          // existing Worker gains the container): the engine first reconciles
+          // cycle members against each other's previous attributes, and the
+          // Worker's previous namespaces have no id for the class yet. Keep the
+          // placeholder; the converge pass runs this reconcile again with the
+          // namespace id once the Worker has uploaded.
+          if (bindings.some((binding) => binding.data.durableObjects !== undefined)) {
+            yield* Effect.logInfo(
+              `Cloudflare Container reconcile: ${name} waits for its Worker's Durable Object namespace`,
+            );
+            return imagelessPlaceholder({ name, accountId, images });
+          }
+          return yield* Effect.fail(
+            new Error(
+              `Container application "${name}" has schedulingPolicy "durable_object" and no image, so it needs a Durable Object namespace. Bind it on a Worker's env.`,
+            ),
+          );
+        }
+        const observability = normalizeNulls(news.observability);
+        // The application id is the namespace id.
+        const getApplication = Containers.getContainerApplication({
+          accountId,
+          applicationId: durableObjects.namespaceId,
+        });
+        let application = yield* getApplication.pipe(
+          Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+        );
+        if (!application) {
+          yield* Effect.logInfo(`Cloudflare Container reconcile: creating application ${name}`);
+          yield* session.note(`Creating container application ${name}...`);
+          application = yield* Containers.createDurableObjectContainerApplication({
+            accountId,
+            name,
+            schedulingPolicy: "durable_object",
+            durableObjects,
+            observability,
+          }).pipe(
+            // A concurrent deploy created it first.
+            Effect.catchTag("DurableObjectAlreadyHasApplication", () => getApplication),
+          );
+        }
+        const recovery = resolveDurableObjectApplicationRecovery({
+          namespaceId: durableObjects.namespaceId,
+          expectedName: name,
+          existingName: application.name,
+        });
+        if (!recovery.canAdopt) {
+          return yield* Effect.fail(new Error(recovery.message));
+        }
+        if (
+          observability !== undefined &&
+          !deepEqual(normalizeNulls(application.observability), observability)
+        ) {
+          yield* session.note(`Updating container application ${name}...`);
+          application = yield* Containers.updateContainerApplication({
+            accountId,
+            applicationId: application.id,
+            observability,
+          });
+        }
+        // A different recorded id belongs to a previous namespace. `diff`
+        // cannot see that change while the Worker and the application form a
+        // cycle, so remove the old application once the new one exists.
+        if (
+          output?.applicationId &&
+          isLiveId(output.applicationId) &&
+          output.applicationId !== application.id
+        ) {
+          yield* Containers.deleteContainerApplication({
+            accountId: output.accountId,
+            applicationId: output.applicationId,
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
+        }
+        return {
+          ...toAttributes(application),
+          hash: { image: IMAGELESS_DURABLE_OBJECT_APPLICATION },
+          dev: undefined,
+          images,
+        };
+      });
+
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
@@ -1034,6 +1203,28 @@ export const LiveContainerProvider = () =>
 
           if ((output?.accountId ?? accountId) !== accountId || name !== oldName) {
             return { action: "replace" } as const;
+          }
+
+          // An imageless `durable_object` application has no image to hash,
+          // and its namespace is its identity.
+          const imageless = isImagelessDurableObjectApplication(news);
+          if (
+            output &&
+            imageless !== (output.hash?.image === IMAGELESS_DURABLE_OBJECT_APPLICATION)
+          ) {
+            return { action: "replace" } as const;
+          }
+          if (imageless) {
+            // A placeholder: an earlier apply ended before the Worker's
+            // namespace existed, so the application was never created.
+            if (output && !output.applicationId) {
+              return { action: "update", stables: ["accountId"] } as const;
+            }
+            const namespaceId = (yield* getDurableObjects(newBindings))?.namespaceId;
+            const oldNamespaceId = output?.durableObjects?.namespaceId;
+            return namespaceId && oldNamespaceId && namespaceId !== oldNamespaceId
+              ? ({ action: "replace" } as const)
+              : undefined;
           }
 
           const hasDurableObjects = (yield* getDurableObjects(newBindings)) !== undefined;
@@ -1082,6 +1273,16 @@ export const LiveContainerProvider = () =>
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
           const name = yield* createApplicationName(id, news.name);
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
+
+          // An imageless `durable_object` application needs the Worker's
+          // namespace id, which does not exist yet. Return a placeholder and
+          // let reconcile create the application. The Worker's first upload
+          // already carries the prepared images.
+          if (isImagelessDurableObjectApplication(news)) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            const images = yield* prepareDurableObjectImages(accountId, news.images, session);
+            return imagelessPlaceholder({ name, accountId, images });
+          }
 
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId);
@@ -1136,6 +1337,15 @@ export const LiveContainerProvider = () =>
           // resource if the generator's output for this id ever drifts.
           const name = output?.applicationName ?? (yield* createApplicationName(id, news.name));
           yield* Effect.logInfo(`Cloudflare Container reconcile: starting ${name}`);
+          if (isImagelessDurableObjectApplication(news)) {
+            return yield* reconcileImagelessApplication({
+              name: news.name ?? name,
+              news,
+              bindings,
+              output,
+              session,
+            });
+          }
           const durableObjects = yield* getDurableObjects(bindings);
           const hasUnresolvedAttachment =
             durableObjects === undefined &&
@@ -1350,6 +1560,8 @@ export const LiveContainerProvider = () =>
           // A `dev:` applicationId only exists locally — there is no live
           // application to delete on Cloudflare.
           if (!isLiveId(output.applicationId)) return;
+          // The placeholder of an imageless `durable_object` precreate.
+          if (output.applicationId === "") return;
           yield* Effect.logInfo(`Cloudflare Container delete: deleting ${output.applicationName}`);
           yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
@@ -1480,6 +1692,61 @@ const resolveDurableObjectApplicationRecovery = ({
     canAdopt: true as const,
   };
 };
+
+/**
+ * A `durable_object`-scheduled application with no image source of its own:
+ * its Durable Object picks a Cloudflare-managed image, or one of the
+ * application's pinned `images`, when it calls `ctx.container.start()`. The
+ * pinned images belong to the Worker version, not to the application.
+ * Cloudflare accepts only `name`,
+ * `scheduling_policy`, `durable_objects`, `configuration` (`authorized_keys`,
+ * `wrangler_ssh`) and `observability` for such an application. PATCH accepts
+ * only `observability` and that `configuration`, there are no rollouts, and
+ * the application id is the namespace id.
+ */
+const isImagelessDurableObjectApplication = (props: AnyContainerApplicationProps) =>
+  props.schedulingPolicy === "durable_object" &&
+  props.main === undefined &&
+  props.image === undefined &&
+  props.context === undefined &&
+  props.dockerfile === undefined;
+
+/**
+ * The `hash.image` of an imageless `durable_object` application. It keeps the
+ * Worker's container binding data stable and marks the state.
+ */
+const IMAGELESS_DURABLE_OBJECT_APPLICATION = "durable_object:imageless";
+
+/**
+ * An imageless `durable_object` application before its Worker's namespace
+ * exists: no application id yet, and the prepared images, which the Worker's
+ * upload carries.
+ */
+const imagelessPlaceholder = ({
+  name,
+  accountId,
+  images,
+}: {
+  name: string;
+  accountId: string;
+  images: Record<string, string>;
+}): ContainerApplication["Attributes"] => ({
+  applicationId: "",
+  applicationName: name,
+  accountId,
+  schedulingPolicy: "durable_object",
+  instances: 0,
+  maxInstances: 0,
+  constraints: undefined,
+  affinities: undefined,
+  configuration: {} as ContainerApplication.Configuration,
+  durableObjects: undefined,
+  createdAt: "",
+  version: 0,
+  hash: { image: IMAGELESS_DURABLE_OBJECT_APPLICATION },
+  dev: undefined,
+  images,
+});
 
 // Cap each delay at 3s so the readiness window is ~30s over 10 attempts; an
 // uncapped `Schedule.exponential(150)` reaches a ~76s single delay by the 10th

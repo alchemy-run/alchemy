@@ -376,6 +376,12 @@ const bindContainerClass = Effect.fn(function* (
         className,
         dev: application.dev,
         hash: application.hash.pipe(Output.map((h) => h?.image)),
+        // Only a `durable_object` application without an image of its own
+        // has `images`; the Worker's metadata then also names it.
+        name: Output.all(application.applicationName, application.images).pipe(
+          Output.map(([name, images]) => (images === undefined ? undefined : name)),
+        ),
+        images: application.images,
       },
     ],
   });

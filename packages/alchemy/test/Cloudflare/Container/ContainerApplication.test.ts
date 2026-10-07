@@ -86,6 +86,15 @@ const taggedRefOf = (app: { configuration: { image?: string }; hash?: { image: s
   return `${digestRef.slice(0, digestRef.indexOf("@"))}:${app.hash!.image}`;
 };
 
+/** A Worker whose Durable Object class backs an application without an image. */
+const imagelessScript = `
+import { DurableObject } from "cloudflare:workers";
+export class Box extends DurableObject {
+  async fetch() { return new Response("box"); }
+}
+export default { fetch() { return new Response("ok"); } };
+`;
+
 /** Rewrite the persisted attributes of the scratch row for `fqn`. */
 const patchRow = <A extends Record<string, any>>(fqn: string, patch: (attr: A) => A) =>
   Effect.gen(function* () {
@@ -1696,6 +1705,75 @@ describe.concurrent(
           yield* scratch.destroy();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    test.provider(
+      "creates a durable_object application without an image from its Worker's namespace",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          const program = (observability?: { logs: { enabled: boolean } }) =>
+            Effect.gen(function* () {
+              const container = Cloudflare.Container("ImagelessBox", {
+                className: "Box",
+                schedulingPolicy: "durable_object",
+                observability,
+              });
+              const worker = yield* Cloudflare.Worker("ImagelessBoxWorker", {
+                script: imagelessScript,
+                env: { BOX: container },
+              });
+              const app = yield* container.Application;
+              return { namespaces: worker.durableObjectNamespaces, app };
+            });
+
+          const first = yield* scratch.deploy(program());
+          const namespaceId = first.namespaces.Box;
+          assert(namespaceId);
+          // The application id is the namespace id.
+          expect(first.app.applicationId).toBe(namespaceId);
+          const created = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId: namespaceId,
+          });
+          expect(created).toMatchObject({
+            name: first.app.applicationName,
+            schedulingPolicy: "durable_object",
+            durableObjects: { namespaceId },
+          });
+
+          const unchanged = yield* scratch.plan(program());
+          expect(unchanged.resources.ImagelessBox.action).toBe("noop");
+          expect(unchanged.resources.ImagelessBoxWorker.action).toBe("noop");
+
+          const second = yield* scratch.deploy(program({ logs: { enabled: true } }));
+          expect(second.app.applicationId).toBe(namespaceId);
+          const patched = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId: namespaceId,
+          });
+          expect(patched.createdAt).toBe(created.createdAt);
+          expect((patched as { observability?: unknown }).observability).toMatchObject({
+            logs: { enabled: true },
+          });
+
+          yield* scratch.destroy();
+          const deleted = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId: namespaceId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker"], timeout: 300_000 },
     );
   },
 );

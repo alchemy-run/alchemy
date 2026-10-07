@@ -54,6 +54,17 @@ export namespace ContainerApplication {
     colocation?: "datacenter";
   };
   export type Configuration = Containers.CreateContainerApplicationRequest["configuration"];
+  /**
+   * A named image that a `durable_object` application's Durable Object can
+   * start, as in wrangler's `containers[].images`.
+   */
+  export interface DurableObjectImage {
+    /**
+     * A digest-pinned reference in Cloudflare's managed registry, e.g.
+     * `registry.cloudflare.com/<account-id>/sandbox@sha256:<digest>`.
+     */
+    image: string;
+  }
   export interface Rollout {
     strategy?: "rolling" | "immediate";
     kind?: "full_auto";
@@ -97,9 +108,33 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   maxInstances?: number;
   /**
    * Scheduling policy used by Cloudflare's containers control plane.
+   *
+   * `"durable_object"` without `main`, `image`, `context` or `dockerfile`
+   * declares an application with no image of its own: the Durable Object
+   * picks a Cloudflare-managed image, or one of {@link images}, when it calls
+   * `ctx.container.start()`. Only `name`, `observability` and {@link images}
+   * apply; Alchemy builds no image and creates no rollout.
    * @default "default"
    */
   schedulingPolicy?: ContainerApplication.SchedulingPolicy;
+  /**
+   * Digest-pinned images, by name, that the Durable Object of a
+   * `"durable_object"` application without an image of its own can start.
+   * Before the Worker uploads, Alchemy prepares each image on Cloudflare's
+   * network (`POST /containers/image-preparations`) and waits until it is
+   * ready. The Worker version then carries the prepared images in its
+   * container metadata, as wrangler does. Ignored by other applications.
+   *
+   * @example
+   * ```ts
+   * images: {
+   *   sandbox: {
+   *     image: "registry.cloudflare.com/<account-id>/sandbox@sha256:<digest>",
+   *   },
+   * }
+   * ```
+   */
+  images?: Record<string, ContainerApplication.DurableObjectImage>;
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
@@ -790,6 +825,13 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       configuration?: string;
     };
     dev: DevContainerImage | undefined;
+    /**
+     * The prepared {@link ContainerApplicationPropsBase.images | images} of a
+     * `durable_object` application without an image of its own, by name.
+     * The Worker's container metadata carries them. `undefined` for every
+     * other application.
+     */
+    images?: Record<string, string>;
   },
   {
     /**
