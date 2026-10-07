@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { isDeployTarget } from "../../core/index.ts";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
 import { makeProject, run } from "../../core/test/helpers.ts";
-import { makeNodeAdapter, makeNodeTarget, target } from "../node.ts";
+import { makeNodeAdapter, makeNodeTarget, SERVER_ENTRY_NAME, target } from "../node.ts";
 
 describe("makeNodeTarget", () => {
   it("is a DeployTarget for the node platform with a finish pass", () => {
@@ -21,6 +21,10 @@ describe("makeNodeTarget", () => {
     expect(node.bundle?.external ?? []).not.toContain("@aws-sdk/");
     expect(node.build).toBeTypeOf("function");
     expect(node.finish).toBeTypeOf("function");
+  });
+
+  it("names the server entry with `/` on every platform", () => {
+    expect(SERVER_ENTRY_NAME).toBe("server/index.mjs");
   });
 
   it("produces the in-memory kit adapter from the adapter hook", () => {

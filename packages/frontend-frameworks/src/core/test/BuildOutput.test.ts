@@ -39,6 +39,14 @@ describe("sortServerModules", () => {
       "server/z.js",
     ]);
   });
+
+  it("matches a Windows-style entry against `/`-separated module names", () => {
+    const modules = [
+      { name: "server/chunks/0.js", content: "", hash: "" },
+      { name: "server/index.js", content: "", hash: "" },
+    ];
+    expect(sortServerModules(modules, "server\\index.js")[0]?.name).toBe("server/index.js");
+  });
 });
 
 describe("build output persistence", () => {

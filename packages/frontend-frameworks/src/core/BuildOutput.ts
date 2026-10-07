@@ -59,17 +59,20 @@ export const toOutputFile = (
 /**
  * Sort server modules entry-first (the module named `entry` comes first, the
  * rest sorted lexicographically) — the order the `BuildOutput` contract
- * requires.
+ * requires. Module names always use `/`, so a Windows-style `entry` (e.g.
+ * from `path.join`) is normalized before matching.
  */
 export const sortServerModules = (
   modules: Array<OutputFile>,
   entry: string | undefined,
-): Array<OutputFile> =>
-  [...modules].sort((a, b) => {
-    if (a.name === entry) return -1;
-    if (b.name === entry) return 1;
+): Array<OutputFile> => {
+  const entryName = entry?.replaceAll("\\", "/");
+  return [...modules].sort((a, b) => {
+    if (a.name === entryName) return -1;
+    if (b.name === entryName) return 1;
     return a.name.localeCompare(b.name);
   });
+};
 
 /**
  * Serialize a {@link BuildOutput} for persistence (`dist/build.json`).
