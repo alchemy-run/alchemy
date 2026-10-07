@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -9,8 +10,11 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
+import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
+
+const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -45,6 +49,12 @@ export interface ContainerProps {
   stopTimeout?: Duration.Input;
   /** Networks to connect after create. */
   networks?: Container.NetworkMapping[];
+  /** Network namespace. Use `{ container: id }` to share another container's namespace. */
+  networkMode?: Container.NetworkMode;
+  /** Linux capabilities to add, for example `SYS_ADMIN`. */
+  capAdd?: string[];
+  /** Host devices to expose to the container. */
+  devices?: Container.DeviceMapping[];
   /**
    * Extra `/etc/hosts` entries, each `hostname:address`. Docker's
    * `host-gateway` alias resolves to the host machine, so
@@ -67,7 +77,7 @@ export interface ContainerProps {
 
 export declare namespace Container {
   type Status = "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead";
-  type Image = string | { imageRef: string };
+  type Image = string | { imageRef: string; imageId?: string };
   interface PortMapping {
     /** External port on the host. */
     external: number | string;
@@ -89,6 +99,15 @@ export declare namespace Container {
     name: string;
     /** Network aliases for the container. */
     aliases?: string[];
+  }
+  type NetworkMode = string | { container: string };
+  interface DeviceMapping {
+    /** Host device path. */
+    hostPath: string;
+    /** Container device path. */
+    containerPath: string;
+    /** Cgroup permissions. @default "rwm" */
+    permissions?: string;
   }
   interface Healthcheck {
     /** Command to run for health checks. */
@@ -125,6 +144,12 @@ export interface Container extends Resource<
      * Format: `"80/tcp" -> 8080`.
      */
     ports: Record<string, number>;
+    /** Configured network namespace, when reported by Docker. */
+    networkMode?: string;
+    /** Added Linux capabilities, when reported by Docker. */
+    capAdd?: string[];
+    /** Configured host devices, when reported by Docker. */
+    devices?: Container.DeviceMapping[];
   },
   never,
   Providers
@@ -212,8 +237,27 @@ export interface Container extends Resource<
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   // Any `hostname:address` pair — host access is just the common case.
- *   extraHosts: ["payments.internal:10.1.2.3"],
+ *   extraHosts: ["service.example:192.0.2.10"],
  *   start: true,
+ * });
+ * ```
+ *
+ * ### Runtime Options
+ * **Example:** Share a donor container's network namespace
+ * ```typescript
+ * const donor = yield* Docker.Container("donor", { image: "redis:alpine" });
+ * const sidecar = yield* Docker.Container("sidecar", {
+ *   image: "busybox:latest",
+ *   networkMode: { container: donor.id },
+ * });
+ * ```
+ *
+ * **Example:** Add capabilities and devices
+ * ```typescript
+ * const worker = yield* Docker.Container("worker", {
+ *   image: "ubuntu:latest",
+ *   capAdd: ["SYS_ADMIN"],
+ *   devices: [{ hostPath: "/dev/fuse", containerPath: "/dev/fuse" }],
  * });
  * ```
  *
@@ -329,14 +373,23 @@ export const ContainerProvider = () =>
         );
       });
 
+      const inspect = (name: string, context?: string) =>
+        docker.container
+          .inspect(name, context)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+
+      const remove = (name: string, context?: string) =>
+        docker.container.stop(name, context).pipe(
+          Effect.andThen(docker.container.remove(name, true, context)),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+        );
+
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
-          const info = yield* docker.container
-            .inspect(name, context)
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          const info = yield* inspect(name, context);
           if (!info) return undefined;
           // `olds.image` may be `undefined` when a `creating` row was
           // persisted before upstream Outputs resolved — fall back to the
@@ -372,55 +425,90 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const live = yield* docker.container
-            .inspect(args.name, context)
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-
-          if (live) {
-            yield* reconcileNetworks(live, news, olds);
-            if (news.start && live.State.Status !== "running") {
-              yield* docker.container.start(live.Id, context);
-            } else if (!news.start && live.State.Status === "running") {
-              yield* docker.container.stop(live.Id, context);
-            }
-            return yield* docker.container
-              .inspect(live.Id, context)
-              .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
-          }
-
-          const internalTags = yield* createInternalTags(id);
-          const { stdout: containerId } = yield* docker.container.create({
+          const configHash = yield* sha256Object({
             ...args,
-            context,
-            label: { ...args.label, ...internalTags },
+            imageId: normalizeImageId(news.image),
           });
-          yield* Effect.forEach(
-            news.networks ?? [],
-            (network) =>
-              docker.network.connect({
-                network: network.name,
-                container: containerId,
-                alias: network.aliases,
-                context,
-              }),
-            { concurrency: "unbounded" },
-          );
-          if (news.start) {
-            yield* docker.container.start(containerId, context);
+          // Adoption has output but no olds. In that case the observed
+          // container already lives in the desired context.
+          const oldContext = olds ? dockerContextName(olds.context) : context;
+          const desiredLive = yield* inspect(args.name, context);
+          const previous =
+            output && (output.name !== args.name || oldContext !== context)
+              ? yield* inspect(output.name, oldContext)
+              : undefined;
+          if (previous) {
+            yield* remove(previous.Id, oldContext);
           }
-          const info = yield* docker.container.inspect(containerId, context);
-          return toContainerAttributes(info, args.image);
+          const live = desiredLive?.Id === previous?.Id ? undefined : desiredLive;
+
+          const oldArgs =
+            live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined && olds !== undefined
+              ? yield* makeCreateArgs(
+                  id,
+                  {
+                    ...olds,
+                    image: olds.image ?? output?.imageRef ?? news.image,
+                  },
+                  instanceId,
+                )
+              : undefined;
+          const recreate =
+            live !== undefined &&
+            (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
+              ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
+                normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
+                !matchesLegacyConfig(live, args, news.image)
+              : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
+          if (recreate) {
+            yield* remove(live.Id, context);
+          }
+
+          const current = recreate ? undefined : live;
+          if (!current) {
+            const internalTags = yield* createInternalTags(id);
+            const { stdout: containerId } = yield* docker.container.create({
+              ...args,
+              context,
+              label: {
+                ...args.label,
+                ...internalTags,
+                [CREATE_CONFIG_HASH_LABEL]: configHash,
+              },
+            });
+            yield* Effect.forEach(
+              news.networks ?? [],
+              (network) =>
+                docker.network.connect({
+                  network: network.name,
+                  container: containerId,
+                  alias: network.aliases,
+                  context,
+                }),
+              { concurrency: "unbounded" },
+            );
+            if (news.start) {
+              yield* docker.container.start(containerId, context);
+            }
+            const info = yield* docker.container.inspect(containerId, context);
+            return toContainerAttributes(info, args.image);
+          }
+
+          yield* reconcileNetworks(current, news, olds);
+          if (news.start && current.State.Status !== "running") {
+            yield* docker.container.start(current.Id, context);
+          } else if (!news.start && current.State.Status === "running") {
+            yield* docker.container.stop(current.Id, context);
+          }
+          return yield* docker.container
+            .inspect(current.Id, context)
+            .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.container.stop(output.name, dockerContextName(olds.context)).pipe(
-            Effect.andThen(
-              docker.container.remove(output.name, true, dockerContextName(olds.context)),
-            ),
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          ),
+          remove(output.name, dockerContextName(olds.context)),
         ),
       });
     }),
@@ -429,8 +517,26 @@ export const ContainerProvider = () =>
 const normalizeImageRef = (image: Container.Image): string =>
   typeof image === "string" ? image : image.imageRef;
 
+const normalizeImageId = (image: Container.Image | undefined) =>
+  typeof image === "string" ? undefined : image?.imageId;
+
+type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
+
+// Containers created before config hashes were introduced are compared using
+// the fields Docker reports without image-default normalization. A subsequent
+// create stamps the complete resolved configuration hash.
+const matchesLegacyConfig = (live: Docker.Container, desired: CreateArgs, image: Container.Image) =>
+  (normalizeImageId(image)
+    ? live.Image === normalizeImageId(image)
+    : live.Config.Image === desired.image) &&
+  (desired.command === undefined || Equal.equals(live.Config.Cmd, desired.command)) &&
+  Object.entries(desired.env ?? {}).every(([key, value]) =>
+    live.Config.Env?.includes(`${key}=${value}`),
+  );
+
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
+    Effect.tap(() => validateContainerOptions(news)),
     Effect.map((name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
       name,
       image: normalizeImageRef(news.image),
@@ -448,6 +554,9 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
       }),
       "add-host": news.extraHosts,
+      network: normalizeNetworkMode(news.networkMode),
+      "cap-add": normalizeCapabilities(news.capAdd),
+      device: normalizeDevices(news.devices),
       restart: news.restart ?? "no",
       label: news.labels,
       "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
@@ -484,7 +593,67 @@ const toContainerAttributes = (
   createdAt: Date.parse(info.Created) || Date.now(),
   imageRef,
   ports: toPortAttributes(info),
+  networkMode: info.HostConfig.NetworkMode,
+  capAdd: info.HostConfig.CapAdd ?? undefined,
+  devices: info.HostConfig.Devices?.map((device) => ({
+    hostPath: device.PathOnHost,
+    containerPath: device.PathInContainer,
+    permissions: device.CgroupPermissions,
+  })),
 });
+
+const normalizeNetworkMode = (mode: Container.NetworkMode | undefined): string | undefined =>
+  mode === undefined ? undefined : typeof mode === "string" ? mode : `container:${mode.container}`;
+
+const normalizeCapabilities = (capAdd: string[] | undefined): string[] | undefined => {
+  if (!capAdd?.length) return undefined;
+  return [...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean))].sort();
+};
+
+const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): string[] | undefined => {
+  if (!devices?.length) return undefined;
+  const normalized = devices.map(
+    (device) => `${device.hostPath}:${device.containerPath}:${device.permissions ?? "rwm"}`,
+  );
+  return [...new Set(normalized)].sort();
+};
+
+/**
+ * Raised before Docker is called when a container's options cannot be
+ * combined, e.g. sharing another container's network namespace while
+ * publishing ports.
+ */
+export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerOptions")<{
+  readonly message: string;
+}> {}
+
+const validateContainerOptions = (news: ContainerProps) => {
+  if (
+    isContainerNetworkMode(news.networkMode) &&
+    ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
+  ) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container networkMode.container cannot be combined with ports or networks",
+      }),
+    );
+  }
+  const targets = new Set<string>();
+  for (const device of news.devices ?? []) {
+    if (targets.has(device.containerPath)) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container devices contain conflicting target path ${device.containerPath}`,
+        }),
+      );
+    }
+    targets.add(device.containerPath);
+  }
+  return Effect.void;
+};
+
+const isContainerNetworkMode = (mode: Container.NetworkMode | undefined): boolean =>
+  typeof mode === "string" ? mode.startsWith("container:") : mode !== undefined;
 
 /** First binding that carries a real (non-zero) host port. */
 const boundHostPort = (
