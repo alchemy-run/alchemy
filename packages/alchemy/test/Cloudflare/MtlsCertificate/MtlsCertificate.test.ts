@@ -7,13 +7,20 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import type { InferEnv } from "@/Cloudflare/Workers/InferEnv";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
+import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import { CA_CERT_1, CA_CERT_2, LEAF_CERT, LEAF_KEY } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+// Compile-time: an MtlsCertificate in `env` is typed as a Fetcher.
+type CertEnv = InferEnv<{ CERT: Cloudflare.MtlsCertificate.MtlsCertificate }>;
+const _certIsFetcher: CertEnv["CERT"] extends Fetcher ? true : never = true;
+void _certIsFetcher;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -129,11 +136,13 @@ describe.sequential(
       }).pipe(logLevel),
     );
 
-    // #2080: right after a Worker bound to the certificate is deleted,
-    // Cloudflare still rejects the certificate delete with "Certificate
-    // cannot be deleted while in use." Destroy must ride that out.
+    // A certificate passed in a Worker's `env` becomes an `mtls_certificate`
+    // binding, exposed to the Worker as a Fetcher (#2048). On destroy,
+    // right after the Worker is deleted, Cloudflare still rejects the
+    // certificate delete with "Certificate cannot be deleted while in use."
+    // Destroy must ride that out (#2080).
     test.provider(
-      "destroys a certificate a Worker was bound to",
+      "binds a certificate in Worker env and destroys it after the Worker",
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -148,12 +157,10 @@ describe.sequential(
                 privateKey: Redacted.make(LEAF_KEY),
               });
               const worker = yield* Cloudflare.Worker("MtlsBoundWorker", {
-                script: `export default { fetch: () => new Response("ok") };`,
-              });
-              yield* worker.bind`CERT`({
-                bindings: [
-                  { type: "mtls_certificate", name: "CERT", certificateId: cert.mtlsCertificateId },
-                ],
+                script: `export default {
+  fetch: (_request, env) => new Response("cert-fetch:" + typeof env.CERT?.fetch),
+};`,
+                env: { CERT: cert },
               });
               return { cert, worker };
             }),
@@ -168,6 +175,11 @@ describe.sequential(
               (b) => b.type === "mtls_certificate" && b.certificateId === cert.mtlsCertificateId,
             ),
           ).toBe(true);
+          // The runtime hands the Worker a Fetcher for the binding.
+          yield* expectUrlContains(worker.url!, "cert-fetch:function", {
+            timeout: "60 seconds",
+            label: "mtls_certificate binding is a Fetcher",
+          });
 
           yield* stack.destroy();
 

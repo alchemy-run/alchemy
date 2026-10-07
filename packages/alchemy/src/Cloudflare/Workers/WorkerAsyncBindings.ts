@@ -435,7 +435,7 @@ const toValueBinding = (
  * Outputs also land here (lazily, nothing is resolved); the caller rejects
  * them before the returned Output is ever bound.
  */
-export const toBinding = (
+const toBinding = (
   bindingName: string,
   binding: WorkerBindingResource,
 ): BindingSpec | Output.Output<WorkerBinding, unknown> => {
