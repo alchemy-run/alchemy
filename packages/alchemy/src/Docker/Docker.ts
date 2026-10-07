@@ -775,13 +775,23 @@ export const DockerLive = Layer.effect(
           // `--load` matters for non-loading builders (docker-container):
           // without it the result stays in the build cache and `push` sees no
           // such tag.
+          // The legacy builder (no Buildx plugin) has no `--cache-to` and no
+          // BuildKit cache backends, so its build drops the cache flags. It
+          // does honor DOCKER_AUTH_CONFIG for private base images; older
+          // Buildx ignores it, which is harmless.
+          const legacyArgs = [
+            buildContext,
+            ...formatArgs({ ...options, "cache-from": undefined, "cache-to": undefined }),
+            ...(args ?? []),
+          ];
           yield* run(
             [
               ...engine,
-              ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
-              ...buildArgs,
+              ...(mode === "load"
+                ? ["buildx", "build", "--load", ...buildArgs]
+                : ["image", "build", ...legacyArgs]),
             ],
-            undefined,
+            "username" in registry ? yield* registryEnvironment(registry) : undefined,
             tap,
           );
           const [tag, ...tags] =
