@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI/Client";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -48,7 +49,8 @@ export interface SessionSnapshot {
 
 interface Live {
   snapshot: SessionSnapshot;
-  client: Client | undefined;
+  /** Resolves once the session is connected and started. */
+  client: Deferred.Deferred<Client>;
   scope: Scope.Closeable;
 }
 
@@ -77,12 +79,12 @@ const initial: SessionSnapshot = {
 const open = (id: string, model: string | undefined) => {
   if (sessions.has(id)) return;
   const scope = runtime.runSync(Scope.make());
-  const live: Live = { snapshot: initial, client: undefined, scope };
+  const live: Live = { snapshot: initial, client: runtime.runSync(Deferred.make<Client>()), scope };
   sessions.set(id, live);
   const program = Effect.gen(function* () {
     const client = yield* connect(id);
-    live.client = client;
     const info = yield* client.start(model ? { model } : {});
+    yield* Deferred.succeed(live.client, client);
     update(id, (s) => ({
       ...s,
       connected: true,
@@ -109,11 +111,14 @@ const open = (id: string, model: string | undefined) => {
   runtime.runFork(program);
 };
 
-/** Run one session operation with its client. */
+/**
+ * Run one session operation with its client — waiting for the session to
+ * connect first, so a prompt sent while its container cold-starts is not lost.
+ */
 const call = <A>(id: string, f: (client: Client) => Effect.Effect<A, unknown>) => {
-  const client = sessions.get(id)?.client;
-  if (!client) return Promise.reject(new Error(`session ${id} is not connected yet`));
-  return runtime.runPromise(f(client)).catch((e: unknown) => {
+  const live = sessions.get(id);
+  if (!live) return Promise.reject(new Error(`session ${id} is not open`));
+  return runtime.runPromise(Effect.flatMap(Deferred.await(live.client), f)).catch((e: unknown) => {
     update(id, (s) => ({ ...s, error: String(e) }));
     throw e;
   });
