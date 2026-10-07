@@ -154,10 +154,7 @@ const hasGlob = (segment: string) => /[*?\[]/.test(segment);
  * it. This is deliberately conservative: a false positive costs a directory
  * read, while a false negative would change the build hash.
  */
-const canDockerRuleMatchDescendant = (
-  relativeDirectory: string,
-  rule: DockerIgnoreRule,
-) => {
+const canDockerRuleMatchDescendant = (relativeDirectory: string, rule: DockerIgnoreRule) => {
   const pattern = rule.pattern;
   const directory = normalizeRelativePath(relativeDirectory).split("/");
   const patternParts = pattern.split("/");
@@ -167,11 +164,7 @@ const canDockerRuleMatchDescendant = (
   // `ignored/keep/**` cannot re-include anything below `ignored/other`.
   const recursiveIndex = patternParts.indexOf("**");
   if (recursiveIndex !== -1) {
-    for (
-      let index = 0;
-      index < recursiveIndex && index < directory.length;
-      index++
-    ) {
+    for (let index = 0; index < recursiveIndex && index < directory.length; index++) {
       const part = patternParts[index];
       if (!hasGlob(part) && part !== directory[index]) return false;
     }
@@ -190,19 +183,12 @@ const canDockerRuleMatchDescendant = (
   return true;
 };
 
-const matchingDockerRuleIndex = (
-  relativePath: string,
-  rules: ReadonlyArray<DockerIgnoreRule>,
-) => {
+const matchingDockerRuleIndex = (relativePath: string, rules: ReadonlyArray<DockerIgnoreRule>) => {
   const segments = normalizeRelativePath(relativePath).split("/");
-  const candidates = segments.map((_, index) =>
-    segments.slice(0, index + 1).join("/"),
-  );
+  const candidates = segments.map((_, index) => segments.slice(0, index + 1).join("/"));
   let matching: number | undefined;
   for (let index = 0; index < rules.length; index++) {
-    if (
-      candidates.some((candidate) => rules[index].expression.test(candidate))
-    ) {
+    if (candidates.some((candidate) => rules[index].expression.test(candidate))) {
       matching = index;
     }
   }
@@ -220,8 +206,7 @@ const descendantIgnoreRuleIndex = (
   rules: ReadonlyArray<DockerIgnoreRule>,
 ) => {
   const matching = matchingDockerRuleIndex(relativeDirectory, rules);
-  let result =
-    matching !== undefined && rules[matching].ignored ? matching : undefined;
+  let result = matching !== undefined && rules[matching].ignored ? matching : undefined;
 
   for (let index = 0; index < rules.length; index++) {
     const rule = rules[index];
@@ -252,9 +237,7 @@ const canPruneDockerDirectory = (
   // before the last applicable ignore have already been superseded.
   return !rules.some(
     (rule, index) =>
-      index > ignoreIndex &&
-      !rule.ignored &&
-      canDockerRuleMatchDescendant(relativeDirectory, rule),
+      index > ignoreIndex && !rule.ignored && canDockerRuleMatchDescendant(relativeDirectory, rule),
   );
 };
 
@@ -417,19 +400,14 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     normalizeRelativePath(path.relative(context, dockerfile)),
   ].filter(
     (entry): entry is string =>
-      entry !== undefined &&
-      entry !== ".." &&
-      !entry.startsWith("../") &&
-      !path.isAbsolute(entry),
+      entry !== undefined && entry !== ".." && !entry.startsWith("../") && !path.isAbsolute(entry),
   );
 
   const isForced = (relativeEntry: string) =>
     forcedPaths.some((forcedPath) => relativeEntry === forcedPath);
 
   const hasForcedDescendant = (relativeEntry: string) =>
-    forcedPaths.some((forcedPath) =>
-      forcedPath.startsWith(`${relativeEntry}/`),
-    );
+    forcedPaths.some((forcedPath) => forcedPath.startsWith(`${relativeEntry}/`));
 
   // FileSystem.readDirectory's recursive implementation enumerates every
   // descendant before the ignore matcher gets a chance to reject it. Walk one
@@ -440,9 +418,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     const directory = path.join(context, relativeDirectory);
     for (const name of yield* fs.readDirectory(directory)) {
       const relativeEntry = normalizeRelativePath(
-        relativeDirectory.length === 0
-          ? name
-          : path.join(relativeDirectory, name),
+        relativeDirectory.length === 0 ? name : path.join(relativeDirectory, name),
       );
       const fullPath = path.join(context, relativeEntry);
       const forced = isForced(relativeEntry);
@@ -458,10 +434,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
 
       const info = yield* fs.stat(fullPath);
       if (info.type === "Directory") {
-        const prune =
-          !forced &&
-          !forcedDescendant &&
-          canPruneDockerDirectory(relativeEntry, rules);
+        const prune = !forced && !forcedDescendant && canPruneDockerDirectory(relativeEntry, rules);
         if (!prune) {
           if (forced || !isDockerIgnored(relativeEntry, rules)) {
             entries.push(relativeEntry);
