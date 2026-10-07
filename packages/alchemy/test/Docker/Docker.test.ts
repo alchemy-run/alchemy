@@ -9,7 +9,7 @@ import * as Path from "effect/Path";
 import { PlatformError, SystemError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
-import { Docker, DockerLive } from "@/Docker";
+import { Docker, DockerLive, dockerLive } from "@/Docker";
 import type { RegistryCredentials } from "@/Docker/Docker.ts";
 import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
 import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
@@ -17,6 +17,43 @@ import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
 const describe = layer(
   Layer.provideMerge(DockerLive, Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 );
+
+// Which CLI the client runs: declared in code, overridable by DOCKER_BIN.
+describe("Docker CLI binary", (it) => {
+  const version = (layer: Layer.Layer<Docker, never, any>) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      return (yield* docker.run(["--version"])).stdout;
+    }).pipe(Effect.provide(layer));
+
+  it.effect(
+    "runs the bin declared in code",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* version(dockerLive({ bin: "alchemy-test-no-such-cli" })).pipe(
+          Effect.flip,
+        );
+        expect(String(error)).toContain("alchemy-test-no-such-cli");
+        expect(yield* version(dockerLive({ bin: "docker" }))).toMatch(/^Docker version/);
+      }).pipe(
+        // Ignore any DOCKER_BIN in the host environment for this case.
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      ),
+    { tags: ["provider:docker", "local"] },
+  );
+
+  it.effect(
+    "lets DOCKER_BIN override the bin declared in code",
+    () =>
+      Effect.gen(function* () {
+        const output = yield* version(dockerLive({ bin: "alchemy-test-no-such-cli" }));
+        expect(output).toMatch(/^Docker version/);
+      }).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_BIN: "docker" }))),
+      ),
+    { tags: ["provider:docker", "local"] },
+  );
+});
 
 describe("Docker.materialize", (it) => {
   it.effect(

@@ -69,9 +69,9 @@
     {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
-    // {
-    //   "path": "./tsconfig.scripts.json"
-    // },
+    {
+      "path": "./tsconfig.scripts.json"
+    },
     {
       "path": "./packages/alchemy-test/tsconfig.json"
     },
