@@ -70,6 +70,8 @@ export class Docker extends Context.Service<
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval": string | undefined;
         "health-timeout": string | undefined;
         "health-retries": number | undefined;
@@ -299,6 +301,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -342,6 +346,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -405,7 +411,11 @@ export declare namespace Docker {
     Id: string;
     Image: string;
     Name?: string;
-    State: { Status: ContainerStatus };
+    State: {
+      Status: ContainerStatus;
+      /** Present when the container has a healthcheck. */
+      Health?: { Status: "starting" | "healthy" | "unhealthy" };
+    };
     Created: string;
     Config: {
       Image: string;
