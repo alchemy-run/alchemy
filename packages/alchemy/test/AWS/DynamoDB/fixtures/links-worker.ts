@@ -1,10 +1,10 @@
-import * as DynamoDB from "@/AWS/DynamoDB/index.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as DynamoDB from "@/AWS/DynamoDB/index.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * A link shortener's storage on DynamoDB, served from a Cloudflare Worker.
@@ -24,6 +24,7 @@ export default class LinksWorker extends Cloudflare.Worker<LinksWorker>()(
     const getItem = yield* DynamoDB.GetItem(table);
     const putItem = yield* DynamoDB.PutItem(table);
     const scan = yield* DynamoDB.Scan(table);
+    const batchGetItem = yield* DynamoDB.BatchGetItem(table);
 
     return {
       fetch: Effect.gen(function* () {
@@ -51,6 +52,26 @@ export default class LinksWorker extends Cloudflare.Worker<LinksWorker>()(
             : HttpServerResponse.text("Not Found", { status: 404 });
         }
 
+        // GET /links?ids=a,b — one BatchGetItem round trip
+        const ids = url.searchParams.get("ids");
+        if (request.method === "GET" && url.pathname === "/links" && ids) {
+          const { Responses } = yield* batchGetItem({
+            // Keyed by logical ID; the binding maps it to the table's physical name.
+            RequestItems: {
+              LinksTable: {
+                Keys: ids.split(",").map((id) => ({ id: { S: id } })),
+                ConsistentRead: true,
+              },
+            },
+          });
+          return yield* HttpServerResponse.json({
+            urls: Object.values(Responses ?? {})
+              .flat()
+              .map((item) => item?.url?.S)
+              .sort(),
+          });
+        }
+
         // GET /links
         if (request.method === "GET" && url.pathname === "/links") {
           const { Items } = yield* scan({ ConsistentRead: true });
@@ -63,10 +84,7 @@ export default class LinksWorker extends Cloudflare.Worker<LinksWorker>()(
       }).pipe(
         // Surface the failure (e.g. IAM not yet propagated) to the test.
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };
@@ -76,6 +94,7 @@ export default class LinksWorker extends Cloudflare.Worker<LinksWorker>()(
         DynamoDB.GetItemHttp,
         DynamoDB.PutItemHttp,
         DynamoDB.ScanHttp,
+        DynamoDB.BatchGetItemHttp,
       ),
     ),
   ),
