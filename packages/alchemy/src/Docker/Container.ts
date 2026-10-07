@@ -210,7 +210,9 @@ export interface Container extends Resource<
  * });
  * ```
  *
- * Editing an env file replaces the container on the next deploy. Alchemy reads
+ * Editing an env file replaces the container on the next deploy, as does
+ * adopting a container that uses env files (once, so later edits are tracked).
+ * Alchemy reads
  * the files at plan time but keeps only a digest of their contents, on the
  * container's own label; neither the values nor the digest are written to
  * Alchemy state. Docker exposes the resolved values through `docker inspect`,
@@ -527,7 +529,10 @@ export const ContainerProvider = () =>
             (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
               ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
                 normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
-                !matchesLegacyConfig(live, args, news.image)
+                !matchesLegacyConfig(live, args, news.image) ||
+                // Env file contents can't be compared without a label (e.g. an
+                // adopted container); recreate once so later edits are tracked.
+                (news.envFiles?.length ?? 0) > 0
               : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
           if (recreate) {
             yield* remove(live.Id, context);

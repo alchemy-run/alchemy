@@ -104,6 +104,34 @@ test.provider(
   { tags: ["provider:docker", "provider:docker:container", "local"] },
 );
 
+// The config-hash formula must not change for containers that don't use env
+// files: a new hash would recreate every existing container on upgrade.
+// Value recorded from the formula as first released (#1397).
+test.provider(
+  "keeps the config hash of containers without env files stable",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      yield* stack.destroy();
+      const container = yield* stack.deploy(
+        Docker.Container("golden-container", {
+          name: "alchemy-test-golden-config-hash",
+          image: "nginx:alpine",
+          command: ["nginx", "-g", "daemon off;"],
+          environment: { MODE: "golden" },
+          labels: { "com.alchemy.test": "golden" },
+          start: false,
+        }),
+      );
+      const label = (yield* docker.container.inspect(container.name)).Config.Labels?.[
+        "alchemy::container-config"
+      ];
+      expect(label).toBe("3c4c8eb58f436f13f0eb2cfe0a1edb45f0fab73d888ac381e163f986ce0e4e17");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
 describe(
   "Docker.Container",
   { tags: ["provider:docker", "provider:docker:container", "local"], concurrent: false },
@@ -510,6 +538,158 @@ describe(
         const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
         expect(report).toContain(base);
         expect(report).toContain("NotFound");
+      }),
+    );
+
+    // Prints a marker even when the variable is unset, so the log is never empty.
+    const printLayered = ["sh", "-c", 'echo "[$LAYERED]"'];
+
+    test.provider("fails the plan with the path when an env file is unreadable", (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { base } = yield* writeEnvFiles;
+        const container = Docker.Container("env-file-unreadable-container", {
+          image: "nginx:alpine",
+          envFiles: [base],
+          start: false,
+        });
+        yield* stack.deploy(container);
+
+        yield* Effect.acquireRelease(fs.chmod(base, 0o000), () =>
+          fs.chmod(base, 0o644).pipe(Effect.ignore),
+        );
+        const error = yield* stack.plan(container).pipe(Effect.flip);
+        const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
+        expect(report).toContain(base);
+        expect(report).toContain("PermissionDenied");
+      }),
+    );
+
+    test.provider("replaces the container when env files are added and removed", (stack) =>
+      Effect.gen(function* () {
+        const { base } = yield* writeEnvFiles;
+        const deploy = (envFiles: string[] | undefined) =>
+          stack.deploy(
+            Docker.Container("env-file-toggle-container", {
+              image: "nginx:alpine",
+              command: printLayered,
+              envFiles,
+              start: true,
+            }),
+          );
+
+        const without = yield* deploy(undefined);
+        expect(yield* readPrintedEnv(without.name)).toBe("[]");
+        const added = yield* deploy([base]);
+        expect(added.id).not.toBe(without.id);
+        expect(yield* readPrintedEnv(added.name)).toBe("[base]");
+        const removed = yield* deploy(undefined);
+        expect(removed.id).not.toBe(added.id);
+        expect(yield* readPrintedEnv(removed.name)).toBe("[]");
+      }),
+    );
+
+    test.provider("keys on env file contents, not timestamps or formatting intent", (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { base } = yield* writeEnvFiles;
+        const container = Docker.Container("env-file-bytes-container", {
+          image: "nginx:alpine",
+          command: printLayered,
+          envFiles: [base],
+          start: true,
+        });
+        const first = yield* stack.deploy(container);
+
+        // Rewriting identical bytes (new mtime) is not a change.
+        const original = yield* fs.readFileString(base);
+        yield* Effect.sleep("1100 millis");
+        yield* fs.writeFileString(base, original);
+        const touched = yield* stack.plan(container);
+        expect(touched.resources["env-file-bytes-container"]?.action).toBe("noop");
+        expect((yield* stack.deploy(container)).id).toBe(first.id);
+
+        // The digest covers raw bytes, so even a comment-only edit rolls the
+        // container: Alchemy does not interpret Docker's env-file syntax.
+        yield* fs.writeFileString(base, `${original}# reviewed\n`);
+        const commented = yield* stack.plan(container);
+        expect(commented.resources["env-file-bytes-container"]?.action).toBe("update");
+      }),
+    );
+
+    test.provider("tracks env files on an adopted container", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const { base } = yield* writeEnvFiles;
+        const name = "alchemy-test-adopted-env-file-container";
+        yield* docker.container.remove(name, true).pipe(Effect.ignore);
+        yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+        // Created outside Alchemy: no config-hash label to compare against.
+        const { stdout: foreignId } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          "--env-file",
+          base,
+          "nginx:alpine",
+          ...printLayered,
+        ]);
+        const container = Docker.Container("env-file-adopted-container", {
+          name,
+          image: "nginx:alpine",
+          command: printLayered,
+          envFiles: [base],
+          start: true,
+        });
+
+        // Adoption recreates it once so the label exists from then on.
+        const adopted = yield* stack.deploy(container);
+        expect(adopted.id).not.toBe(foreignId.trim());
+        const label = (yield* docker.container.inspect(name)).Config.Labels?.[
+          "alchemy::container-config"
+        ];
+        expect(label).toBeDefined();
+
+        yield* fs.writeFileString(base, "LAYERED=after-adoption\n");
+        const plan = yield* stack.plan(container);
+        expect(plan.resources["env-file-adopted-container"]?.action).toBe("update");
+        const updated = yield* stack.deploy(container);
+        expect(yield* readPrintedEnv(updated.name)).toBe("[after-adoption]");
+      }),
+    );
+
+    test.provider("detects env file edits for a container in a named Docker context", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const { base } = yield* writeEnvFiles;
+        const context = "alchemy-test-env-file-context";
+        const { stdout: host } = yield* docker.run([
+          "context",
+          "inspect",
+          "--format",
+          "{{.Endpoints.docker.Host}}",
+        ]);
+        yield* docker.context.remove(context, true).pipe(Effect.ignore);
+        yield* docker.context.create({ name: context, docker: `host=${host.trim()}` });
+        yield* Effect.addFinalizer(() => docker.context.remove(context, true).pipe(Effect.ignore));
+
+        const container = Docker.Container("env-file-context-container", {
+          image: "nginx:alpine",
+          command: printLayered,
+          envFiles: [base],
+          context,
+          start: true,
+        });
+        const first = yield* stack.deploy(container);
+        yield* fs.writeFileString(base, "LAYERED=in-context\n");
+        const plan = yield* stack.plan(container);
+        expect(plan.resources["env-file-context-container"]?.action).toBe("update");
+        const second = yield* stack.deploy(container);
+        expect(second.id).not.toBe(first.id);
+        yield* stack.destroy();
       }),
     );
 
