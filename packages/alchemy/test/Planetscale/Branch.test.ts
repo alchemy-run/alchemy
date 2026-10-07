@@ -139,6 +139,43 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
       { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
     );
 
+    test.provider(
+      "Postgres branch off an ARM parent expands a short cluster size to an ARM SKU",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, branch } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ArmParentDatabase", {
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const branch = yield* Planetscale.PostgresBranch("ArmChildBranch", {
+                database,
+                parentBranch: "main",
+                clusterSize: "PS_DEV",
+              });
+
+              return { database, branch };
+            }),
+          );
+
+          const live = yield* ps.getBranch({
+            organization: database.organization,
+            database: database.name,
+            branch: branch.name,
+          });
+
+          expect(live.cluster_architecture).toEqual("aarch64");
+          expect(live.cluster_name).toEqual("PS_DEV_AWS_ARM");
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
     // Canonical `list()` test (PARENT FAN-OUT): branches live under a database
     // within the credentialed organization. `list()` enumerates every database
     // in the org, lists each database's branches, and keeps only the engine's
