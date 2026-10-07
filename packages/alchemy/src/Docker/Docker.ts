@@ -539,7 +539,11 @@ export const DockerLive = Layer.effect(
         Effect.tap((result) => {
           if (result.exitCode === 0) return Effect.void;
           const stderr = result.stderr.replace(/^Error response from daemon: /, "");
-          if (/no such/i.test(stderr) || /not found/i.test(stderr) || /not known/i.test(stderr)) {
+          if (
+            stderr.match(/not found/i) ||
+            stderr.match(/not known/i) ||
+            stderr.match(/no such/i)
+          ) {
             return systemError({ _tag: "NotFound", args, description: stderr });
           }
           if (stderr.match(/already exists/i)) {
