@@ -42,6 +42,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { routePatternUrl } from "./RoutePattern.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
 import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
@@ -1789,10 +1790,17 @@ export const LiveWorkerProvider = () =>
         const routesByZone = Effect.all(
           uniqueZoneIds.map((zoneId) =>
             workers.listRoutes({ zoneId }).pipe(
-              Effect.map((response) =>
+              Effect.map((response): Worker["Attributes"]["routes"] =>
                 (response.result ?? []).flatMap((route) =>
                   route.id && route.pattern && route.script === scriptName
-                    ? [{ id: route.id, pattern: route.pattern, zoneId }]
+                    ? [
+                        {
+                          id: route.id,
+                          pattern: route.pattern,
+                          zoneId,
+                          url: routePatternUrl(route.pattern),
+                        },
+                      ]
                     : [],
                 ),
               ),
@@ -1922,7 +1930,12 @@ export const LiveWorkerProvider = () =>
                   }),
                 ),
               );
-            return { id: created.id, pattern: created.pattern, zoneId: route.zoneId };
+            return {
+              id: created.id,
+              pattern: created.pattern,
+              zoneId: route.zoneId,
+              url: routePatternUrl(created.pattern),
+            };
           });
 
           return yield* Effect.all(desired.map(attachRoute), { concurrency: "unbounded" });
@@ -5163,10 +5176,23 @@ export const LiveWorkerProvider = () =>
           ).pipe(
             // After a pre-create stub (or under a busy account right after
             // the first upload) the settings read can race the script
-            // registry and 404 with "has no versions". Treat it as "no
-            // existing settings" so reconcile proceeds to upload/converge.
-            // The dispatch-namespace endpoints raise
+            // registry and 404 with "has no versions" (or the script itself as
+            // not-yet-found, as the version-settings read after the first
+            // upload also sees). If we already hold attributes for this script,
+            // wait briefly for the registry: planning the stub's Durable Object
+            // classes as new again is rejected by Cloudflare. A worker that
+            // really is gone still falls through to the upsert below.
+            // Dispatch-namespace precreate returns a stub without uploading,
+            // so a missing dispatch script or namespace is expected on its
+            // first reconcile, not this race, and is not retried; the
+            // dispatch-namespace endpoints raise
             // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
+            Effect.retry({
+              while: (error) =>
+                output !== undefined &&
+                (error._tag === "WorkerNotFound" || error._tag === "WorkerHasNoVersions"),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
+            }),
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
             Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
             Effect.catchTag("DispatchNamespaceScriptNotFound", () => Effect.succeed(undefined)),

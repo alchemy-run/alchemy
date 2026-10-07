@@ -634,12 +634,15 @@ export default defineConfig({
                   link: "/cloudflare/data/branch-from-shared-database",
                 },
                 { label: "Artifacts", link: "/cloudflare/data/artifacts" },
+                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
+                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
               ],
             },
             {
               label: "Messaging & events",
               items: [
                 { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
                 { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
                 {
                   label: "GitHub events",
@@ -715,6 +718,10 @@ export default defineConfig({
                 {
                   label: "Custom domains & routes",
                   link: "/cloudflare/networking/custom-domains",
+                },
+                {
+                  label: "Federated APIs",
+                  link: "/cloudflare/networking/federated-apis",
                 },
                 { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
@@ -1227,6 +1234,7 @@ export default defineConfig({
               items: [
                 { label: "Branching", link: "/neon/data/branching" },
                 { label: "Connections", link: "/neon/data/connections" },
+                { label: "Roles", link: "/neon/data/roles" },
                 { label: "Migrations", link: "/neon/data/migrations" },
               ],
             },
@@ -1673,6 +1681,14 @@ export default defineConfig({
       }),
       tailwindcss(),
     ],
+    build: {
+      // Astro builds with `target: "esnext"`, which Vite hands to Lightning
+      // CSS as empty browser targets. Lightning CSS then drops every vendor
+      // prefix, including `-webkit-text-size-adjust` — the only form iOS
+      // Safari reads — so phones inflate wide code lines. List the browsers
+      // (iOS included) so the prefixes survive minification.
+      cssTarget: ["chrome111", "edge111", "firefox114", "safari16.4", "ios16.4"],
+    },
     server: {
       // Dev-only: allow sharing the dev server through cloudflared quick
       // tunnels (random *.trycloudflare.com hostnames).

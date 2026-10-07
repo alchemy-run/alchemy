@@ -4,13 +4,16 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
-import { Budget } from "@/AWS/Budgets/Budget.ts";
+import { Budget, type BudgetCostTypes } from "@/AWS/Budgets/Budget.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { defaultStage } from "@/Test/Core";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const budgetName = "alchemy-test-budget-lifecycle";
+// Budget names are unique per account: scope to the test stage (`test_$USER`)
+// so concurrent runs by different developers don't share one budget.
+const budgetName = `alchemy-test-budget-lifecycle-${defaultStage()}`;
 
 const getBudget = (accountId: string) =>
   budgets.describeBudget({ AccountId: accountId, BudgetName: budgetName }).pipe(
@@ -69,6 +72,7 @@ const deployBudget = (options: {
   amount: string;
   subscriberAddress?: string;
   tags?: Record<string, string>;
+  costTypes?: BudgetCostTypes;
 }) =>
   Effect.gen(function* () {
     const budget = yield* Budget("LifecycleBudget", {
@@ -76,6 +80,7 @@ const deployBudget = (options: {
       budgetType: "COST",
       timeUnit: "MONTHLY",
       budgetLimit: { amount: options.amount, unit: "USD" },
+      costTypes: options.costTypes,
       tags: options.tags,
       notifications: options.subscriberAddress
         ? [
@@ -98,7 +103,7 @@ const deployBudget = (options: {
   });
 
 test.provider(
-  "lifecycle: create with notification+tags, sync subscribers+tags, drop notification, destroy",
+  "lifecycle: create with notification+tags+cost types, sync subscribers+tags, change cost types and drop notification, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -108,6 +113,7 @@ test.provider(
           amount: "100",
           subscriberAddress: "budget-test@example.com",
           tags: { Team: "alchemy-test" },
+          costTypes: { includeCredit: false, includeRefund: false },
         }),
       );
 
@@ -120,6 +126,20 @@ test.provider(
       expect(Number(created?.BudgetLimit?.Amount)).toBe(100);
       expect(created?.BudgetLimit?.Unit).toBe("USD");
       expect(created?.TimeUnit).toBe("MONTHLY");
+      // Flags left out read back as their AWS defaults.
+      expect(created?.CostTypes).toMatchObject({
+        IncludeTax: true,
+        IncludeSubscription: true,
+        UseBlended: false,
+        IncludeRefund: false,
+        IncludeCredit: false,
+        IncludeUpfront: true,
+        IncludeRecurring: true,
+        IncludeOtherSubscription: true,
+        IncludeSupport: true,
+        IncludeDiscount: true,
+        UseAmortized: false,
+      });
 
       const notifications = yield* getNotifications(accountId).pipe(
         Effect.repeat({
@@ -142,16 +162,20 @@ test.provider(
 
       // Update — raise the limit, change the notification's subscriber
       // (exercises subscriber sync on a kept notification), update the tag.
+      // The cost types are unchanged and must survive the update.
       yield* stack.deploy(
         deployBudget({
           amount: "250",
           subscriberAddress: "budget-test-updated@example.com",
           tags: { Team: "alchemy-test-updated" },
+          costTypes: { includeCredit: false, includeRefund: false },
         }),
       );
 
       const updated = yield* getBudget(accountId);
       expect(Number(updated?.BudgetLimit?.Amount)).toBe(250);
+      expect(updated?.CostTypes?.IncludeCredit).toBe(false);
+      expect(updated?.CostTypes?.IncludeRefund).toBe(false);
 
       const subscribers = yield* getSubscribers(accountId, 80).pipe(
         Effect.repeat({
@@ -164,8 +188,17 @@ test.provider(
       const updatedTags = yield* getTags(deployed.budgetArn);
       expect(updatedTags.Team).toBe("alchemy-test-updated");
 
-      // Update — drop the notification entirely.
-      yield* stack.deploy(deployBudget({ amount: "250" }));
+      // Update — drop the notification entirely and stop excluding refunds.
+      yield* stack.deploy(
+        deployBudget({
+          amount: "250",
+          costTypes: { includeCredit: false },
+        }),
+      );
+
+      const changed = yield* getBudget(accountId);
+      expect(changed?.CostTypes?.IncludeCredit).toBe(false);
+      expect(changed?.CostTypes?.IncludeRefund).toBe(true);
 
       const afterDrop = yield* getNotifications(accountId).pipe(
         Effect.repeat({

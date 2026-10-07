@@ -74,7 +74,12 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
         })
         .handle("getTaskDO", ({ params }) =>
           getTaskDO().pipe(
-            Effect.flatMap((client) => client.TasksDO.getTask({ params }).pipe(Effect.orDie)),
+            Effect.flatMap((client) =>
+              client.TasksDO.getTask({ params }).pipe(
+                // Forward the DO's domain 404; transport failures are defects.
+                Effect.catchIf((e) => e._tag !== "TaskNotFound", Effect.die),
+              ),
+            ),
           ),
         )
         .handle("createTaskDO", ({ payload }) =>
