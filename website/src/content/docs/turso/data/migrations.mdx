@@ -1,0 +1,70 @@
+---
+title: Migrations
+description: Apply SQL migrations and seed files to Turso databases on every deploy.
+---
+
+Point `migrations` at a folder of `.sql` files. Every deploy applies the ones that haven't run yet, in order.
+
+## Apply a folder
+
+```typescript
+const db = yield* Turso.Database("Db", {
+  group: group.name,
+  migrations: "./migrations",
+});
+```
+
+```sql
+-- migrations/0001_users.sql
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+```
+
+Each file runs in a transaction. If a statement fails, the file rolls back and the deploy fails.
+
+Alchemy records applied files in the database's `__alchemy_migrations` table.
+
+## Generate migrations with Drizzle
+
+```typescript
+const schema = yield* Drizzle.Schema("Schema", {
+  schema: "./src/schema.ts",
+  out: "./migrations",
+  dialect: "sqlite",
+});
+
+const db = yield* Turso.Database("Db", {
+  group: group.name,
+  migrations: schema,
+});
+```
+
+`Drizzle.Schema` writes a migration when `src/schema.ts` changes. See [Drizzle ORM with Turso](/turso/guides/drizzle).
+
+A database migrated before with drizzle-kit keeps its history. Alchemy copies it into `__alchemy_migrations` on the first deploy.
+
+## Use your own tracking table
+
+```typescript
+migrations: { dir: "./migrations", table: "schema_migrations" },
+```
+
+## Seed with SQL files
+
+```typescript
+const db = yield* Turso.Database("Db", {
+  group: group.name,
+  migrations: "./migrations",
+  importFiles: ["./seed/users.sql"],
+});
+```
+
+`importFiles` run after migrations. A file runs again only when its contents change.
+
+## Don't edit applied migrations
+
+Changing or deleting a file that already ran fails the deploy. Add a new migration instead.
+
+## Where next
+
+- [SQL migrations](/sql/effect-sql/migrations) — the shared rules for every database
+- [Database per tenant](/turso/guides/database-per-tenant#migrate-existing-tenants) — migrating many databases

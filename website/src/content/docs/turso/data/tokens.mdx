@@ -1,0 +1,69 @@
+---
+title: Tokens
+description: Database tokens, group tokens, and Platform API tokens for clients outside your Stack.
+---
+
+Turso has two kinds of tokens. A SQL token lets a client query databases. A Platform API token lets a client manage groups and databases.
+
+Workers bound with [Connect](/turso/data/connections) or [ManageDatabases](/turso/guides/database-per-tenant) get their tokens automatically. Mint one yourself when something outside your Stack needs access.
+
+## A token for one database
+
+```typescript
+const token = yield* Turso.DatabaseToken("Token", { database: db.name });
+```
+
+Hand `db.url` and `token.token` to a libSQL client. `token.token` is `Redacted`.
+
+## A read-only token that expires
+
+```typescript
+const token = yield* Turso.DatabaseToken("Reader", {
+  database: db.name,
+  authorization: "read-only",
+  expiration: "2w",
+});
+```
+
+An expired token is re-minted on the next deploy.
+
+## A token for a whole group
+
+```typescript
+const token = yield* Turso.GroupToken("Token", { group: group.name });
+```
+
+A group token works for every database in the group, including databases created later.
+
+## SQL tokens can't be revoked one at a time
+
+Changing a token's props mints a new token, but the old one keeps working until it expires. Destroying the resource doesn't revoke it either.
+
+Give tokens that leave your infrastructure an `expiration`. To cut off every token for a database at once, run `turso db tokens invalidate <database>`.
+
+## A Platform API token
+
+```typescript
+const token = yield* Turso.ApiToken("Ci", {});
+```
+
+The token can manage everything in your organization. Destroying the resource revokes it.
+
+## Scope it to one group
+
+```typescript
+const token = yield* Turso.ApiToken("Provisioner", {
+  group: group.name,
+  scopes: ["read", "db:create", "db:delete", "db:mint-token"],
+});
+```
+
+The token can only touch databases in `group`. `read-only` and `full-access` are shorthands for sets of scopes.
+
+Changing `group` or `scopes` replaces the token.
+
+## Where next
+
+- [Database reference](/providers/turso/reference/database#databasetoken)
+- [Group reference](/providers/turso/reference/group#grouptoken)
+- [API Token reference](/providers/turso/reference/api-token)

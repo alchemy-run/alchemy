@@ -1,0 +1,85 @@
+---
+title: Connections
+description: Query Turso from a Worker with Effect SQL, Drizzle, or @libsql/client.
+---
+
+`Turso.Connect` binds a database's URL and a token into a Worker. The token is minted for that Worker. Your Turso API token never reaches it.
+
+## Bind the database
+
+```typescript
+const conn = yield* Turso.Connect(Db);
+```
+
+Provide the binding's implementation on the Worker:
+
+```typescript
+Effect.gen(function* () {
+  const conn = yield* Turso.Connect(Db);
+  // ...
+}).pipe(Effect.provide(Turso.ConnectHttp))
+```
+
+`conn.url` and `conn.authToken` are Effects that read the bound values at runtime.
+
+## Query with Effect SQL
+
+```typescript
+import * as SQL from "alchemy/SQL/LibSQL";
+
+const sql = yield* SQL.LibSQL(conn);
+
+const users = yield* sql`SELECT * FROM users`;
+```
+
+See [Effect SQL: libSQL](/sql/effect-sql/libsql).
+
+## Query with Drizzle
+
+```typescript
+import * as Drizzle from "alchemy/Drizzle/LibSQL";
+
+const db = yield* Drizzle.LibSQL(conn);
+
+const users = yield* db.select().from(Users);
+```
+
+See [Drizzle: libSQL](/sql/drizzle/libsql).
+
+Both install `@effect/sql-libsql`:
+
+```sh
+pnpm add @effect/sql-libsql
+```
+
+## Connect read-only
+
+```typescript
+const conn = yield* Turso.Connect(Db, { authorization: "read-only" });
+```
+
+Writes through this connection fail.
+
+## Use @libsql/client directly
+
+```typescript
+import { createClient } from "@libsql/client/web";
+import * as Redacted from "effect/Redacted";
+
+const client = createClient({
+  url: yield* conn.url,
+  authToken: Redacted.value(yield* conn.authToken),
+});
+```
+
+Read `conn.url` and `conn.authToken` inside a request, not at Worker startup.
+
+## Connect from outside your Stack
+
+Mint a [DatabaseToken](/turso/data/tokens) and hand `db.url` and the token to the client.
+
+## Where next
+
+- [Tokens](/turso/data/tokens)
+- [Database per tenant](/turso/guides/database-per-tenant) — connect to databases created at runtime
+- [Connect reference](/providers/turso/reference/database#connect)

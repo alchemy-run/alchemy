@@ -1,0 +1,84 @@
+---
+title: Create tenant databases from a Worker
+description: Bind ManageDatabases to a Worker and fork a database for each tenant.
+---
+
+Open `src/Api.ts`. The Worker creates, lists, and deletes tenant databases at request time.
+
+## Bind the group
+
+```diff lang="typescript"
+Effect.gen(function* () {
++  const tenants = yield* Turso.ManageDatabases(Tenants);
+  return { fetch };
+}).pipe(Effect.provide(Turso.ManageDatabasesHttp))
+```
+
+The Worker gets a Turso API token scoped to the `Tenants` group. It can create and delete databases there, and nowhere else in your organization.
+
+## Read the template's name
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const tenants = yield* Turso.ManageDatabases(Tenants);
++  const template = yield* Template;
++  const templateName = yield* template.name;
+  return { fetch };
+})
+```
+
+`templateName` is an Effect that returns the template's name inside a request.
+
+## Fork the template for a new tenant
+
+```diff lang="typescript"
+case "POST": {
++  const database = yield* tenants.create(tenant, {
++    seed: { type: "database", name: yield* templateName },
++  });
++  return yield* HttpServerResponse.json({ tenant: database });
+}
+```
+
+`POST /tenants/acme` creates the `acme` database as a copy of the template. It starts with the `notes` table and no rows.
+
+## List tenants
+
+```diff lang="typescript"
+if (tenant === undefined || tenant === "") {
++  const databases = yield* tenants.list();
++  const template = yield* templateName;
++  return yield* HttpServerResponse.json({
++    tenants: databases.map((d) => d.name).filter((name) => name !== template),
++  });
+}
+```
+
+`list()` returns every database in the group. Filter out the template.
+
+## Delete a tenant
+
+```diff lang="typescript"
+case "DELETE": {
++  yield* tenants.delete(tenant);
++  return yield* HttpServerResponse.json({ deleted: tenant });
+}
+```
+
+Deleting a tenant deletes its database and its data.
+
+## Add the Worker to the Stack
+
+```diff lang="typescript"
+// alchemy.run.ts
+Effect.gen(function* () {
+  const template = yield* Template;
++  const api = yield* Api;
+  return {
++    url: api.url.as<string>(),
+    template: template.name,
+  };
+}),
+```
+
+Continue with [Query a tenant's notes](/turso/tutorial/notes/).

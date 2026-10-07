@@ -1,0 +1,58 @@
+---
+title: Turso
+description: libSQL databases at the edge — groups, databases, tokens, and database-per-tenant apps as Stack resources.
+---
+
+Turso hosts libSQL, an open-source fork of SQLite, as managed databases. Declare groups, databases, and tokens in the same Stack as your Workers, and query them with Effect SQL or Drizzle.
+
+New here? [Set up credentials](/turso/setup) first, then [build the tutorial](/turso/tutorial).
+
+## Declare a database
+
+Every database lives in a group. A group pins a location.
+
+```typescript
+import * as Turso from "alchemy/Turso";
+
+export const Group = Turso.Group("Group", { location: "aws-us-east-1" });
+
+export const Db = Effect.gen(function* () {
+  const group = yield* Group;
+  return yield* Turso.Database("Db", {
+    group: group.name,
+    migrations: "./migrations",
+  });
+});
+```
+
+Pending migrations apply on every deploy. See [Migrations](/turso/data/migrations).
+
+## Query it from a Worker
+
+`Turso.Connect` binds the database URL and a token into the Worker. Hand it to [Drizzle](/sql/drizzle/libsql) or [Effect SQL](/sql/effect-sql/libsql):
+
+```typescript
+const conn = yield* Turso.Connect(Db);
+const db = yield* Drizzle.LibSQL(conn);
+```
+
+See [Connections](/turso/data/connections).
+
+## One database per tenant
+
+Turso databases are cheap enough to give every customer their own. `Turso.ManageDatabases` lets a Worker create, query, and delete databases inside one group:
+
+```typescript
+const tenants = yield* Turso.ManageDatabases(Tenants);
+const acme = yield* tenants.create("acme");
+const sql = yield* SQL.LibSQL(tenants.connect(acme.name));
+```
+
+The [tutorial](/turso/tutorial) builds this end to end. The [Database per tenant](/turso/guides/database-per-tenant) guide covers the details.
+
+## Where next
+
+- [Groups](/turso/data/groups) and [Databases](/turso/data/databases)
+- [Tokens](/turso/data/tokens) for clients outside your Stack
+- [Preview databases](/turso/guides/preview-databases) forked per pull request
+- [Organization](/turso/organization) invites, members, and settings

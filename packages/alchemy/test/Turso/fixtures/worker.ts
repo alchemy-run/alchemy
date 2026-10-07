@@ -36,6 +36,29 @@ export default class TursoWorker extends Cloudflare.Worker<TursoWorker>()(
           return yield* HttpServerResponse.json({ count: rows[0]?.n });
         }
 
+        if (url.pathname === "/tx") {
+          yield* sql`CREATE TABLE IF NOT EXISTS ledger (v INTEGER NOT NULL)`;
+          const before = yield* sql<{ n: number }>`SELECT count(*) AS n FROM ledger`;
+          // The second insert violates NOT NULL, so the first must roll back.
+          const failed = yield* sql
+            .withTransaction(
+              Effect.gen(function* () {
+                yield* sql`INSERT INTO ledger (v) VALUES (${1})`;
+                yield* sql`INSERT INTO ledger (v) VALUES (${null})`;
+              }),
+            )
+            .pipe(
+              Effect.as(false),
+              Effect.catchTag("SqlError", () => Effect.succeed(true)),
+            );
+          const after = yield* sql<{ n: number }>`SELECT count(*) AS n FROM ledger`;
+          return yield* HttpServerResponse.json({
+            failed,
+            before: before[0]?.n,
+            after: after[0]?.n,
+          });
+        }
+
         if (url.pathname === "/drizzle") {
           yield* db.insert(notes).values({ body: "from-drizzle" });
           const rows = yield* db

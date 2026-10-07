@@ -1,0 +1,69 @@
+---
+title: Query a tenant's notes
+description: Connect Drizzle to a tenant's database and read and write its notes.
+---
+
+Each request picks a tenant from the URL and queries only that tenant's database.
+
+## Install the libSQL driver
+
+```diff lang="sh"
++pnpm add drizzle-orm @effect/sql-libsql
+```
+
+## Connect to the tenant's database
+
+```diff lang="typescript"
++import * as Drizzle from "alchemy/Drizzle/LibSQL";
+
+if (resource === "notes") {
++  const db = yield* Drizzle.LibSQL(tenants.connect(tenant));
+}
+```
+
+`tenants.connect(tenant)` returns the database URL and a token valid for every database in the group. The connection opens on the first query and closes when the request ends.
+
+## List notes
+
+```diff lang="typescript"
+case "GET": {
++  const notes = yield* db.select().from(Notes);
++  return yield* HttpServerResponse.json({ notes });
+}
+```
+
+## Add a note
+
+```diff lang="typescript"
+case "POST": {
++  const { body } = (yield* request.json) as { body: string };
++  const [note] = yield* db.insert(Notes).values({ body }).returning();
++  return yield* HttpServerResponse.json({ note });
+}
+```
+
+Notes written for `acme` never appear for `globex`. They live in different databases.
+
+## Deploy and try it
+
+```diff lang="sh"
++pnpm alchemy deploy
++curl -X POST $URL/tenants/acme
++curl -X POST $URL/tenants/acme/notes -d '{"body":"hello"}'
++curl $URL/tenants/acme/notes
+```
+
+## Clean up
+
+Delete the tenants you created, then destroy the Stack:
+
+```diff lang="sh"
++curl -X DELETE $URL/tenants/acme
++pnpm alchemy destroy
+```
+
+Destroying the Stack deletes the `Tenants` group. That also deletes any tenant database still in it.
+
+:::note
+Change the schema later and deploy: the template migrates, but existing tenants do not. See [Database per tenant](/turso/guides/database-per-tenant#migrate-existing-tenants).
+:::

@@ -1,0 +1,86 @@
+---
+title: Drizzle ORM with Turso
+description: A Drizzle schema, generated migrations, and typed queries over a Turso database from a Worker.
+---
+
+Define the schema once. Alchemy generates migrations from it, applies them to the database, and your Worker queries it with typed Drizzle builders.
+
+## Install
+
+```sh
+pnpm add drizzle-orm @effect/sql-libsql
+pnpm add -D drizzle-kit
+```
+
+## Define the schema
+
+```typescript
+// src/schema.ts
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const Users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull().unique(),
+});
+```
+
+Turso is SQLite-compatible, so use `sqlite-core` columns.
+
+## Migrate the database from the schema
+
+```typescript
+// src/Db.ts
+import * as Drizzle from "alchemy/Drizzle";
+import * as Turso from "alchemy/Turso";
+import * as Effect from "effect/Effect";
+
+export const Db = Effect.gen(function* () {
+  const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+  const schema = yield* Drizzle.Schema("Schema", {
+    schema: "./src/schema.ts",
+    out: "./migrations",
+    dialect: "sqlite",
+  });
+  return yield* Turso.Database("Db", { group: group.name, migrations: schema });
+});
+```
+
+Register `Drizzle.providers()` and `Turso.providers()` in your Stack. Commit the generated `./migrations` folder.
+
+Prefer running `drizzle-kit generate` yourself? Pass the folder instead: `migrations: "./migrations"`.
+
+## Query from a Worker
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/LibSQL";
+import * as Turso from "alchemy/Turso";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Db } from "./Db.ts";
+import { Users } from "./schema.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const conn = yield* Turso.Connect(Db);
+    const db = yield* Drizzle.LibSQL(conn);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* db.select().from(Users);
+        return yield* HttpServerResponse.json({ users });
+      }),
+    };
+  }).pipe(Effect.provide(Turso.ConnectHttp)),
+) {}
+```
+
+Queries are Effects. Pass `{ relations }` to `Drizzle.LibSQL` for the `db.query.*` API.
+
+## Where next
+
+- [Drizzle: libSQL](/sql/drizzle/libsql) — queries, transactions, and errors
+- [The tutorial](/turso/tutorial) — Drizzle across many tenant databases

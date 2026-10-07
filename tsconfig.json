@@ -245,6 +245,9 @@
       "path": "./examples/cloudflare-planetscale-postgres-drizzle/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
     },
     {

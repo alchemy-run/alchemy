@@ -1,0 +1,54 @@
+---
+title: Build a multi-tenant notes API
+description: Give every tenant its own Turso database, forked from a migrated template, behind a Cloudflare Worker.
+---
+
+Build a notes API where every tenant gets a private Turso database. A Worker creates each tenant's database by forking a migrated template, then queries it with Drizzle.
+
+The complete source is in [`examples/cloudflare-turso-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-turso-drizzle). The following pages build it one step at a time.
+
+## Prerequisites
+
+Complete [Turso setup](/turso/setup) and [Cloudflare setup](/cloudflare/setup). The tutorial fits in Turso's free Starter plan.
+
+## Open the example
+
+```diff lang="sh"
++cd examples/cloudflare-turso-drizzle
+```
+
+## Deploy
+
+```diff lang="sh"
++pnpm alchemy deploy
+```
+
+The Stack prints the Worker `url` and the `template` database name.
+
+## Create two tenants
+
+```diff lang="sh"
++curl -X POST $URL/tenants/acme
++curl -X POST $URL/tenants/globex
+```
+
+Each call creates a database named after the tenant. Database names are unique across your Turso organization, so pick names nobody else in it uses.
+
+## Write a note
+
+```diff lang="sh"
++curl -X POST $URL/tenants/acme/notes -d '{"body":"hello from acme"}'
++curl $URL/tenants/acme/notes
+```
+
+`acme` sees its note. `globex` has its own empty database:
+
+```diff lang="sh"
++curl $URL/tenants/globex/notes
+```
+
+## Follow the implementation
+
+1. [Create the template database](/turso/tutorial/database/)
+2. [Create tenant databases from a Worker](/turso/tutorial/tenants/)
+3. [Query a tenant's notes](/turso/tutorial/notes/)

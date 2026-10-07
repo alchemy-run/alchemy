@@ -1,0 +1,88 @@
+---
+title: Database per tenant
+description: Create, query, and delete a Turso database per customer from a Worker.
+---
+
+Give each customer their own database. Their data stays isolated, and deleting a customer deletes their database.
+
+The [tutorial](/turso/tutorial) builds this end to end.
+
+## Bind a group
+
+```typescript
+const tenants = yield* Turso.ManageDatabases(Tenants);
+```
+
+Provide `Turso.ManageDatabasesHttp` on the Worker. The Worker gets two tokens:
+
+- A Turso API token that can create, configure, and delete databases in `Tenants` only.
+- A SQL token that can query every database in `Tenants`.
+
+Your own Turso API token never reaches the Worker.
+
+## Create a tenant
+
+```typescript
+const acme = yield* tenants.create("acme");
+```
+
+Database names are unique across your organization. Prefix them if several stages or apps share it.
+
+## Start every tenant from a template
+
+```typescript
+const acme = yield* tenants.create("acme", {
+  seed: { type: "database", name: yield* templateName },
+});
+```
+
+Fork a migrated template so new tenants start with the current schema. See [Create the template database](/turso/tutorial/database/).
+
+## Query a tenant
+
+```typescript
+const sql = yield* SQL.LibSQL(tenants.connect("acme"));
+const notes = yield* sql`SELECT * FROM notes`;
+```
+
+`connect` works with [Drizzle.LibSQL](/sql/drizzle/libsql) too. The connection opens on the first query and closes when the request ends.
+
+## List and delete tenants
+
+```typescript
+const all = yield* tenants.list();
+const acme = yield* tenants.get("acme"); // undefined when missing
+yield* tenants.delete("acme");
+```
+
+`delete` succeeds when the database is already gone.
+
+## Migrate existing tenants
+
+Deploying migrates the template, not the tenants already forked from it.
+
+When the tenants are known at deploy time, declare each one so every deploy migrates it:
+
+```typescript
+for (const name of ["acme", "globex"]) {
+  yield* Turso.Database(name, { name, group: group.name, migrations: "./migrations" });
+}
+```
+
+For tenants created at runtime, apply new statements to each one from the Worker. Keep the statements safe to run twice:
+
+```typescript
+for (const { name } of yield* tenants.list()) {
+  const sql = yield* SQL.LibSQL(tenants.connect(name));
+  yield* sql`CREATE INDEX IF NOT EXISTS notes_created ON notes (created_at)`;
+}
+```
+
+## Destroying the Stack
+
+Destroying the Stack deletes the group, which deletes every tenant database in it.
+
+## Where next
+
+- [ManageDatabases reference](/providers/turso/reference/group#managedatabases)
+- [Tokens](/turso/data/tokens)

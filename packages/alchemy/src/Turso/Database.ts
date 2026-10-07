@@ -77,7 +77,8 @@ export interface DatabaseProps {
   seed?: DatabaseSeed;
   /**
    * Encrypt the database at rest with your own key. Only used when the
-   * database is created; changing it replaces the database.
+   * database is created; changing it replaces the database. Requires a Pro
+   * or Enterprise plan.
    */
   encryption?: DatabaseEncryption;
   /**

@@ -28,7 +28,7 @@ export interface ConnectOptions {
 }
 
 /**
- * Connect to a Turso database from a Worker, Lambda, or any other Platform
+ * Connect to a Turso database from a Worker or any other Platform
  * host. Mints a {@link DatabaseToken} for the host and binds the database
  * URL and token into its environment — the deployer's Platform API token
  * never reaches the runtime.

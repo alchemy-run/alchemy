@@ -52,6 +52,16 @@ test(
 );
 
 test(
+  "SQL.LibSQL transactions roll back on failure",
+  Effect.gen(function* () {
+    const body = (yield* get("/tx")) as { failed: boolean; before: number; after: number };
+    expect(body.failed).toBe(true);
+    expect(body.after).toBe(body.before);
+  }),
+  { timeout: 120_000 },
+);
+
+test(
   "Connect + Drizzle.LibSQL queries the bound database",
   Effect.gen(function* () {
     yield* get("/sql");

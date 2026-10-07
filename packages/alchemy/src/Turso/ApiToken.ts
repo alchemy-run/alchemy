@@ -94,7 +94,7 @@ export type ApiToken = Resource<
  * ```
  *
  * @resource
- * @product ApiToken
+ * @product API Token
  */
 export const ApiToken = Resource<ApiToken>("Turso.ApiToken");
 

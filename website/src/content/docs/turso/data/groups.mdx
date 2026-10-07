@@ -1,0 +1,57 @@
+---
+title: Groups
+description: Turso groups pin a location for their databases and scope tokens and permissions.
+---
+
+Every Turso database belongs to a group. The group decides where its databases run.
+
+## Create a group
+
+```typescript
+const group = yield* Turso.Group("Group", { location: "aws-us-east-1" });
+```
+
+`location` defaults to `aws-us-east-1`. List the locations available to you with `turso db locations`.
+
+Changing `location` replaces the group and every database in it.
+
+## Name it
+
+```typescript
+const group = yield* Turso.Group("Group", {
+  name: "production",
+  location: "aws-eu-west-1",
+});
+```
+
+Without `name`, Alchemy generates one per stage. Group names are unique within your organization.
+
+## Enable extensions
+
+```typescript
+const group = yield* Turso.Group("Group", { extensions: "all" });
+```
+
+Pass `"all"` or a list of extension names. Changing `extensions` replaces the group.
+
+## Protect it from deletion
+
+```typescript
+const group = yield* Turso.Group("Group", { deleteProtection: true });
+```
+
+While protection is on, destroying the group fails. Set it to `false` and deploy before you destroy.
+
+## Delete a group
+
+Destroying a group deletes every database in it, including databases created at runtime with [ManageDatabases](/turso/guides/database-per-tenant).
+
+## Replicas
+
+`replicas` adds read replicas in other locations. AWS-hosted groups do not support replication, so this only applies to organizations with legacy Fly-hosted groups.
+
+## Where next
+
+- [Databases](/turso/data/databases)
+- [Tokens](/turso/data/tokens) — a [GroupToken](/turso/data/tokens#a-token-for-a-whole-group) reaches every database in a group
+- [Group reference](/providers/turso/reference/group)

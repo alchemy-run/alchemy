@@ -1,0 +1,47 @@
+---
+title: Organization
+description: Invite teammates, manage member roles, and configure your Turso organization.
+---
+
+These resources act on the organization your [credentials](/turso/setup) use.
+
+Invites and members need a team organization on a paid plan. The Starter plan rejects them.
+
+## Invite a teammate
+
+```typescript
+yield* Turso.OrganizationInvite("Alice", {
+  email: "alice@example.com",
+  role: "admin",
+});
+```
+
+`role` is `admin`, `member`, or `viewer`, and defaults to `member`. Changing it re-sends the invite. Destroying the resource withdraws a pending invite.
+
+## Add an existing user
+
+```typescript
+yield* Turso.OrganizationMember("Bob", {
+  username: "bob",
+  role: "viewer",
+});
+```
+
+Use this when the person already has a Turso account. Changing `role` updates it in place. Destroying the resource removes the member.
+
+## Configure the organization
+
+```typescript
+yield* Turso.OrganizationSettings("Org", {
+  requireMfa: true,
+  restoreEnabled: true,
+});
+```
+
+Only the settings you set are managed. Destroying the resource restores the values the organization had before.
+
+`overages` lets usage beyond your plan's quota be billed. Turn it on deliberately.
+
+## Where next
+
+- [Organization reference](/providers/turso/reference/organization)
