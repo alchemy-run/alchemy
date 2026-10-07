@@ -26,7 +26,7 @@ serves files from it:
 // src/api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export const Uploads = Cloudflare.R2.Bucket("Uploads");
 

@@ -2,7 +2,6 @@ import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -115,9 +114,7 @@ export const ImpersonationRegistryEntry = Resource<ImpersonationRegistryEntry>(
  * Returns true if the given value is an
  * ImpersonationRegistryEntry resource.
  */
-export const isImpersonationRegistryEntry = (
-  value: unknown,
-): value is ImpersonationRegistryEntry =>
+export const isImpersonationRegistryEntry = (value: unknown): value is ImpersonationRegistryEntry =>
   Predicate.hasProperty(value, "Type") &&
   value.Type === EmailSecurityImpersonationRegistryEntryTypeId;
 
@@ -131,29 +128,25 @@ export const ImpersonationRegistryEntryProvider = () =>
     // `EmailSecurityNotEntitled` error → treat as an empty registry.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* emailSecurity.listSettingImpersonationRegistries
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((entry) =>
-                toAttributes(entry, accountId),
-              ),
-            ),
+      return yield* emailSecurity.listSettingImpersonationRegistries.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((entry) => toAttributes(entry, accountId)),
           ),
-          // Email Security is a paid add-on gated by both account
-          // entitlement and token scope: an unentitled account answers
-          // `EmailSecurityNotEntitled`, while a credential lacking the
-          // Email Security scope (e.g. Cloudflare OAuth) answers a bare
-          // `Forbidden`. Neither can enumerate, so both mean "none
-          // visible" — matching `Domain.list()`. Returning `[]` is the
-          // safe direction for the callers of `list` (orphan detection
-          // never deletes what it cannot see).
-          Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
-            Effect.succeed([] as ImpersonationRegistryEntryAttributes[]),
-          ),
-        );
+        ),
+        // Email Security is a paid add-on gated by both account
+        // entitlement and token scope: an unentitled account answers
+        // `EmailSecurityNotEntitled`, while a credential lacking the
+        // Email Security scope (e.g. Cloudflare OAuth) answers a bare
+        // `Forbidden`. Neither can enumerate, so both mean "none
+        // visible" — matching `Domain.list()`. Returning `[]` is the
+        // safe direction for the callers of `list` (orphan detection
+        // never deletes what it cannot see).
+        Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
+          Effect.succeed([] as ImpersonationRegistryEntryAttributes[]),
+        ),
+      );
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -181,24 +174,20 @@ export const ImpersonationRegistryEntryProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       // 1. Observe — id hint first, then identity scan.
-      let observed = output?.entryId
-        ? yield* getEntry(accountId, output.entryId)
-        : undefined;
+      let observed = output?.entryId ? yield* getEntry(accountId, output.entryId) : undefined;
       if (!observed) {
         observed = yield* findByIdentity(accountId, news.name, news.email);
       }
 
       // 2. Ensure — create when missing.
       if (!observed) {
-        const created = yield* emailSecurity.createSettingImpersonationRegistry(
-          {
-            accountId,
-            name: news.name,
-            email: news.email,
-            isEmailRegex: news.isEmailRegex ?? false,
-            comments: news.comments,
-          },
-        );
+        const created = yield* emailSecurity.createSettingImpersonationRegistry({
+          accountId,
+          name: news.name,
+          email: news.email,
+          isEmailRegex: news.isEmailRegex ?? false,
+          comments: news.comments,
+        });
         return toAttributes(created, accountId);
       }
 
@@ -207,8 +196,7 @@ export const ImpersonationRegistryEntryProvider = () =>
         (observed.name ?? "") !== news.name ||
         (observed.email ?? "") !== news.email ||
         (observed.isEmailRegex ?? false) !== (news.isEmailRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (news.comments !== undefined && (observed.comments ?? "") !== news.comments);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -230,12 +218,7 @@ export const ImpersonationRegistryEntryProvider = () =>
           accountId: output.accountId,
           impersonationRegistryId: output.entryId,
         })
-        .pipe(
-          Effect.catchTag(
-            "ImpersonationRegistryEntryNotFound",
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("ImpersonationRegistryEntryNotFound", () => Effect.void));
     }),
   });
 
@@ -246,14 +229,10 @@ type ObservedEntry = emailSecurity.GetSettingImpersonationRegistryResponse;
  * (`ImpersonationRegistryEntryNotFound`, HTTP 404) to `undefined`.
  */
 const getEntry = (accountId: string, impersonationRegistryId: string) =>
-  emailSecurity
-    .getSettingImpersonationRegistry({ accountId, impersonationRegistryId })
-    .pipe(
-      Effect.map((entry): ObservedEntry | undefined => entry),
-      Effect.catchTag("ImpersonationRegistryEntryNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  emailSecurity.getSettingImpersonationRegistry({ accountId, impersonationRegistryId }).pipe(
+    Effect.map((entry): ObservedEntry | undefined => entry),
+    Effect.catchTag("ImpersonationRegistryEntryNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find an entry by exact display name + email. The `search` query is a
@@ -261,20 +240,17 @@ const getEntry = (accountId: string, impersonationRegistryId: string) =>
  * oldest match for determinism.
  */
 const findByIdentity = (accountId: string, name: string, email: string) =>
-  emailSecurity.listSettingImpersonationRegistries
-    .items({ accountId, search: email })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk)
-          .filter((entry) => entry.name === name && entry.email === email)
-          .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
-          .at(0),
-      ),
-    );
+  emailSecurity.listSettingImpersonationRegistries.items({ accountId, search: email }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .filter((entry) => entry.name === name && entry.email === email)
+        .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
+        .at(0),
+    ),
+  );
 
-type ListedEntry =
-  emailSecurity.ListSettingImpersonationRegistriesResponse["result"][number];
+type ListedEntry = emailSecurity.ListSettingImpersonationRegistriesResponse["result"][number];
 
 const toAttributes = (
   entry:

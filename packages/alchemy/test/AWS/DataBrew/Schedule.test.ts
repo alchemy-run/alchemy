@@ -1,20 +1,16 @@
-import * as AWS from "@/AWS";
-import { Schedule } from "@/AWS/DataBrew";
-import * as Test from "@/Test/Alchemy";
 import * as databrew from "@distilled.cloud/aws/databrew";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Schedule } from "@/AWS/DataBrew";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getSchedule = (name: string) =>
   databrew
     .describeSchedule({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const withSchedule = (cronExpression: string) =>
   Effect.gen(function* () {
@@ -32,9 +28,7 @@ test.provider(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(withSchedule("cron(0 3 * * ? *)"));
-      expect(created.schedule.scheduleArn).toContain(
-        `:schedule/${created.schedule.scheduleName}`,
-      );
+      expect(created.schedule.scheduleArn).toContain(`:schedule/${created.schedule.scheduleName}`);
 
       // out-of-band verification
       const observed = yield* getSchedule(created.schedule.scheduleName);

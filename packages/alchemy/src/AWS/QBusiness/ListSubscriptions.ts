@@ -37,10 +37,7 @@ export interface ListSubscriptions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListSubscriptionsRequest,
-    ) => Effect.Effect<
-      qbusiness.ListSubscriptionsResponse,
-      qbusiness.ListSubscriptionsError
-    >
+    ) => Effect.Effect<qbusiness.ListSubscriptionsResponse, qbusiness.ListSubscriptionsError>
   >
 > {}
 export const ListSubscriptions = Binding.Service<ListSubscriptions>(

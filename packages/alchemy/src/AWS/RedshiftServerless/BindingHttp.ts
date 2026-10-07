@@ -91,10 +91,7 @@ export const makeServerlessNamespaceHttpBinding = <
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource: resources
-                  ? Output.map(namespace.namespaceArn, (arn) => [
-                      arn,
-                      ...resources(arn),
-                    ])
+                  ? Output.map(namespace.namespaceArn, (arn) => [arn, ...resources(arn)])
                   : [Output.interpolate`${namespace.namespaceArn}`],
               },
             ],
@@ -118,5 +115,4 @@ export const makeServerlessNamespaceHttpBinding = <
  * `recoverypoint/*`, `workgroup/*`) that snapshot and restore operations
  * also authorize against.
  */
-export const serverlessArnPrefix = (arn: string): string =>
-  arn.split(":").slice(0, 5).join(":");
+export const serverlessArnPrefix = (arn: string): string => arn.split(":").slice(0, 5).join(":");

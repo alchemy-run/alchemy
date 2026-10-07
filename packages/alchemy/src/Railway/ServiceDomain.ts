@@ -1,26 +1,51 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import { Railway, type ServiceDomain as RailwayServiceDomain } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { waitUntilDeleted } from "./GraphQL.ts";
 import { sanitizeRailwayName } from "./Metadata.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 
-const selection = {
-  id: true,
-  domain: true,
-  serviceId: true,
-  environmentId: true,
-  projectId: true,
-  targetPort: true,
-  suffix: true,
-  deletedAt: true,
-  syncStatus: true,
-} as const satisfies railway.Selection<"ServiceDomain">;
-type DomainsResponseServiceDomainsItem = railway.Result<
-  "ServiceDomain!",
-  typeof selection
->;
+const domainFields = <E>(domain: Query<RailwayServiceDomain, E>) => ({
+  id: domain.id,
+  domain: domain.domain,
+  serviceId: domain.serviceId,
+  environmentId: domain.environmentId,
+  projectId: domain.projectId,
+  targetPort: domain.targetPort,
+  suffix: domain.suffix,
+  deletedAt: domain.deletedAt,
+  syncStatus: domain.syncStatus,
+});
+type DomainsResponseServiceDomainsItem = UnwrapPlan<ReturnType<typeof domainFields>>;
+
+const readServiceDomains = Query.fn((projectId: string, environmentId: string, serviceId: string) =>
+  Railway.domains({ environmentId, projectId, serviceId }).serviceDomains.pipe(
+    Query.map(domainFields),
+  ),
+);
+
+const serviceDomainCreate = Query.fn((input: { environmentId: string; serviceId: string }) =>
+  domainFields(Railway.serviceDomainCreate({ input })),
+);
+
+const serviceDomainUpdate = Query.fn(
+  (input: {
+    domain: string;
+    environmentId: string;
+    serviceDomainId: string;
+    serviceId: string;
+    targetPort?: number;
+  }) => Railway.serviceDomainUpdate({ input }),
+);
+
+const serviceDomainDelete = Query.fn((id: string) => Railway.serviceDomainDelete({ id }));
+
+const environmentPatchCommit = Query.fn(
+  (input: { environmentId: string; commitMessage: string; patch: Record<string, unknown> }) =>
+    Railway.environmentPatchCommit(input),
+);
 
 /**
  * A Railway-generated `*.up.railway.app` hostname on a Service. Created
@@ -38,9 +63,7 @@ export type ServiceDomainRecord = {
   url: string;
 };
 
-export class ServiceDomainNotCreated extends Data.TaggedError(
-  "Railway.ServiceDomainNotCreated",
-)<{
+export class ServiceDomainNotCreated extends Data.TaggedError("Railway.ServiceDomainNotCreated")<{
   serviceId: string;
   environmentId: string;
 }> {}
@@ -64,24 +87,13 @@ const toRecord = (domain: CloudDomain): ServiceDomainRecord => ({
   url: `https://${domain.domain}`,
 });
 
-export const listServiceDomains = (
-  projectId: string,
-  environmentId: string,
-  serviceId: string,
-) =>
-  railway
-    .domains(
-      { environmentId, projectId, serviceId },
-      { serviceDomains: selection },
-    )
-    .pipe(
-      Effect.map((result) =>
-        result.serviceDomains.filter((domain) => !isGone(domain)),
-      ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed([] as DomainsResponseServiceDomainsItem[]),
-      ),
-    );
+export const listServiceDomains = (projectId: string, environmentId: string, serviceId: string) =>
+  readServiceDomains(projectId, environmentId, serviceId).pipe(
+    Effect.map((serviceDomains) => serviceDomains.filter((domain) => !isGone(domain))),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed([] as DomainsResponseServiceDomainsItem[]),
+    ),
+  );
 
 const findCloudDomainById = (input: {
   projectId: string;
@@ -89,23 +101,12 @@ const findCloudDomainById = (input: {
   serviceId: string;
   domainId: string;
 }) =>
-  railway
-    .domains(
-      {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-      },
-      { serviceDomains: selection },
-    )
-    .pipe(
-      Effect.map((result) =>
-        result.serviceDomains.find(
-          (candidate) => candidate.id === input.domainId,
-        ),
-      ),
-      railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-    );
+  readServiceDomains(input.projectId, input.environmentId, input.serviceId).pipe(
+    Effect.map((serviceDomains) =>
+      serviceDomains.find((candidate) => candidate.id === input.domainId),
+    ),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+  );
 
 export const findServiceDomainById = Effect.fn(function* (input: {
   projectId: string;
@@ -141,11 +142,7 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
 }) {
   if (input.domainId === undefined && input.domain === undefined) return;
 
-  const live = yield* listServiceDomains(
-    input.projectId,
-    input.environmentId,
-    input.serviceId,
-  );
+  const live = yield* listServiceDomains(input.projectId, input.environmentId, input.serviceId);
   const owned = live.filter(
     (row) =>
       (input.domainId !== undefined && row.id === input.domainId) ||
@@ -159,30 +156,23 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
 
   yield* withEnvironmentConfigLock(
     input.environmentId,
-    railway.environmentPatchCommit({
+    environmentPatchCommit({
       environmentId: input.environmentId,
       commitMessage: "Remove Railway service domain",
       patch: {
         services: {
           [input.serviceId]: {
-            networking: {
-              serviceDomains: Object.fromEntries(
-                [...keys].map((id) => [id, null]),
-              ),
-            },
+            networking: { serviceDomains: Object.fromEntries([...keys].map((id) => [id, null])) },
           },
         },
       },
     }),
-  ).pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
+  ).pipe(Effect.catchTag("RailwayNotFound", () => Effect.void));
 
   for (const row of owned) {
     if (row.syncStatus === "DELETING") continue;
-    yield* withEnvironmentConfigLock(
-      input.environmentId,
-      railway.deleteServiceDomain({ id: row.id }),
-    ).pipe(
-      railway.catchTags(["RailwayNotFound"], () => Effect.void),
+    yield* withEnvironmentConfigLock(input.environmentId, serviceDomainDelete(row.id)).pipe(
+      Effect.catchTag("RailwayNotFound", () => Effect.void),
       Effect.asVoid,
     );
   }
@@ -190,17 +180,12 @@ export const deleteOwnedServiceDomain = Effect.fn(function* (input: {
   yield* waitUntilDeleted(
     "ServiceDomain",
     [...keys].join(","),
-    listServiceDomains(
-      input.projectId,
-      input.environmentId,
-      input.serviceId,
-    ).pipe(
+    listServiceDomains(input.projectId, input.environmentId, input.serviceId).pipe(
       Effect.map(
         (rows) =>
           !rows.some(
             (row) =>
-              keys.has(row.id) ||
-              (input.domain !== undefined && row.domain === input.domain),
+              keys.has(row.id) || (input.domain !== undefined && row.domain === input.domain),
           ),
       ),
     ),
@@ -214,11 +199,7 @@ const listedOrUndefined = (input: {
   serviceId: string;
   domainId?: string | null;
 }) =>
-  listServiceDomains(
-    input.projectId,
-    input.environmentId,
-    input.serviceId,
-  ).pipe(
+  listServiceDomains(input.projectId, input.environmentId, input.serviceId).pipe(
     Effect.map((rows) =>
       input.domainId === undefined
         ? (rows[0] as CloudDomain | undefined)
@@ -238,27 +219,16 @@ const listedOrUndefined = (input: {
  *
  * @see https://backboard.railway.com/schema/environment.schema.json
  */
-const createViaEnvironmentPatch = (input: {
-  environmentId: string;
-  serviceId: string;
-}) =>
+const createViaEnvironmentPatch = (input: { environmentId: string; serviceId: string }) =>
   Effect.gen(function* () {
     const domainKey = yield* Effect.sync(() => crypto.randomUUID());
     yield* withEnvironmentConfigLock(
       input.environmentId,
-      railway.environmentPatchCommit({
+      environmentPatchCommit({
         environmentId: input.environmentId,
         commitMessage: "Generate Railway service domain",
         patch: {
-          services: {
-            [input.serviceId]: {
-              networking: {
-                serviceDomains: {
-                  [domainKey]: {},
-                },
-              },
-            },
-          },
+          services: { [input.serviceId]: { networking: { serviceDomains: { [domainKey]: {} } } } },
         },
       }),
     );
@@ -285,9 +255,7 @@ const waitForServiceDomainById = (input: {
       until: (domain) => domain !== undefined && !isGone(domain),
       times: 8,
     }),
-    Effect.map((domain) =>
-      domain !== undefined && !isGone(domain) ? domain : undefined,
-    ),
+    Effect.map((domain) => (domain !== undefined && !isGone(domain) ? domain : undefined)),
   );
 
 /**
@@ -304,19 +272,11 @@ const waitForNewServiceDomain = (input: {
   preferId: string;
   preexistingIds: ReadonlySet<string>;
 }) =>
-  listServiceDomains(
-    input.projectId,
-    input.environmentId,
-    input.serviceId,
-  ).pipe(
+  listServiceDomains(input.projectId, input.environmentId, input.serviceId).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (rows) =>
-        rows.some(
-          (domain) =>
-            domain.id === input.preferId ||
-            !input.preexistingIds.has(domain.id),
-        ),
+        rows.some((domain) => domain.id === input.preferId || !input.preexistingIds.has(domain.id)),
       times: 10,
     }),
     Effect.map(
@@ -337,49 +297,30 @@ const createViaMutation = (input: {
       ? listedOrUndefined(input)
       : waitForServiceDomainById({ ...input, domainId: input.domainId });
   const missing = () =>
-    new ServiceDomainNotCreated({
-      serviceId: input.serviceId,
-      environmentId: input.environmentId,
-    });
+    new ServiceDomainNotCreated({ serviceId: input.serviceId, environmentId: input.environmentId });
   const listedOrFail = <E>(error: E) =>
     listed.pipe(
-      Effect.flatMap((row) =>
-        row !== undefined ? Effect.succeed(row) : Effect.fail(error),
-      ),
+      Effect.flatMap((row) => (row !== undefined ? Effect.succeed(row) : Effect.fail(error))),
     );
-  const create = railway
-    .createServiceDomain(
-      {
-        input: {
-          environmentId: input.environmentId,
-          serviceId: input.serviceId,
-        },
-      },
-      selection,
-    )
-    .pipe(
-      Effect.flatMap((created) =>
-        input.domainId === undefined
-          ? listedOrFail(missing())
-          : Effect.succeed(created),
-      ),
-      railway.catchTags("RailwayServiceDomainCreateFailed", (_issue, error) =>
-        listedOrFail(error),
-      ),
-      railway.catchTags("RailwayServiceInstanceNotFound", (_issue, error) =>
-        input.domainId !== undefined ? listedOrFail(error) : Effect.fail(error),
-      ),
-      railway.catchTags("RailwayValidationError", (_issue, error) =>
-        listedOrFail(error),
-      ),
-    );
+  const create = serviceDomainCreate({
+    environmentId: input.environmentId,
+    serviceId: input.serviceId,
+  }).pipe(
+    Effect.flatMap((created) =>
+      input.domainId === undefined ? listedOrFail(missing()) : Effect.succeed(created),
+    ),
+    Effect.catchTag("RailwayServiceDomainCreateFailed", (error) => listedOrFail(error)),
+    Effect.catchTag("RailwayServiceInstanceNotFound", (error) =>
+      input.domainId !== undefined ? listedOrFail(error) : Effect.fail(error),
+    ),
+    Effect.catchTag("RailwayValidationError", (error) => listedOrFail(error)),
+  );
 
   return withEnvironmentConfigLock(input.environmentId, create).pipe(
     Effect.retry({
       while: (error) =>
-        (input.domainId === undefined &&
-          railway.isErrorTag(error, "RailwayServiceDomainCreateFailed")) ||
-        railway.isErrorTag(error, "RailwayServiceInstanceNotFound"),
+        (input.domainId === undefined && error._tag === "RailwayServiceDomainCreateFailed") ||
+        error._tag === "RailwayServiceInstanceNotFound",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -401,11 +342,7 @@ const desiredDomainName = (input: {
   if (input.subdomain === undefined || input.subdomain.length === 0) {
     return undefined;
   }
-  if (
-    input.suffix === undefined ||
-    input.suffix === null ||
-    input.suffix.length === 0
-  ) {
+  if (input.suffix === undefined || input.suffix === null || input.suffix.length === 0) {
     return undefined;
   }
   const subdomain = sanitizeRailwayName(input.subdomain);
@@ -422,21 +359,17 @@ const syncDomain = (input: {
     suffix: input.current.suffix,
   });
   const observedPort = input.current.targetPort ?? undefined;
-  const rename =
-    domainName !== undefined && domainName !== input.current.domain;
-  const retarget =
-    input.targetPort !== undefined && input.targetPort !== observedPort;
+  const rename = domainName !== undefined && domainName !== input.current.domain;
+  const retarget = input.targetPort !== undefined && input.targetPort !== observedPort;
   if (!rename && !retarget) return Effect.succeed(undefined);
   return withEnvironmentConfigLock(
     input.current.environmentId,
-    railway.updateServiceDomain({
-      input: {
-        domain: domainName ?? input.current.domain,
-        environmentId: input.current.environmentId,
-        serviceDomainId: input.current.id,
-        serviceId: input.current.serviceId,
-        ...(retarget ? { targetPort: input.targetPort } : {}),
-      },
+    serviceDomainUpdate({
+      domain: domainName ?? input.current.domain,
+      environmentId: input.current.environmentId,
+      serviceDomainId: input.current.id,
+      serviceId: input.current.serviceId,
+      ...(retarget ? { targetPort: input.targetPort } : {}),
     }),
   );
 };
@@ -509,14 +442,9 @@ export const ensureServiceDomain = Effect.fn(function* (input: {
     });
   }
 
-  yield* syncDomain({
-    current,
-    subdomain: input.subdomain,
-    targetPort: input.targetPort,
-  });
+  yield* syncDomain({ current, subdomain: input.subdomain, targetPort: input.targetPort });
 
-  current =
-    (yield* listedOrUndefined({ ...input, domainId: current.id })) ?? current;
+  current = (yield* listedOrUndefined({ ...input, domainId: current.id })) ?? current;
 
   if (current === undefined || isGone(current)) {
     return yield* new ServiceDomainNotCreated({

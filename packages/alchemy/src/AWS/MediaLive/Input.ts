@@ -159,10 +159,7 @@ export const InputProvider = () =>
   Provider.effect(
     Input,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
@@ -184,11 +181,7 @@ export const InputProvider = () =>
       const getInput = Effect.fn(function* (inputId: string) {
         const input = yield* medialive
           .describeInput({ InputId: inputId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         if (input === undefined || isGone(input.State)) return undefined;
         return yield* ensureIdentified(input, "DescribeInput Id/Arn");
       });
@@ -202,9 +195,7 @@ export const InputProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const match = inputs.find(
-          (input) => input.Name === name && !isGone(input.State),
-        );
+        const match = inputs.find((input) => input.Name === name && !isGone(input.State));
         if (match === undefined) return undefined;
         return yield* ensureIdentified(match, "ListInputs item Id/Arn");
       });
@@ -222,9 +213,7 @@ export const InputProvider = () =>
               : Effect.succeed(input),
           ),
           retryWhilePending,
-          Effect.flatMap((input) =>
-            ensureIdentified(input, "DescribeInput Id/Arn"),
-          ),
+          Effect.flatMap((input) => ensureIdentified(input, "DescribeInput Id/Arn")),
         );
       });
 
@@ -238,9 +227,7 @@ export const InputProvider = () =>
               Array.from(chunk)
                 .filter(
                   (input): input is medialive.Input & IdentifiedInput =>
-                    input.Id !== undefined &&
-                    input.Arn !== undefined &&
-                    !isGone(input.State),
+                    input.Id !== undefined && input.Arn !== undefined && !isGone(input.State),
                 )
                 .map(toAttrs),
             ),
@@ -253,9 +240,7 @@ export const InputProvider = () =>
               : yield* findByName(yield* createName(id, olds ?? {}));
           if (input === undefined) return undefined;
           const attrs = toAttrs(input);
-          return (yield* hasAlchemyTags(id, toTagRecord(input.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toTagRecord(input.Tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -283,10 +268,7 @@ export const InputProvider = () =>
             input = yield* getInput(output.inputId);
           } else {
             const found = yield* findByName(name);
-            input =
-              found !== undefined && found.Type === news.type
-                ? found
-                : undefined;
+            input = found !== undefined && found.Type === news.type ? found : undefined;
           }
 
           // 2. Ensure — create if missing, then wait for CREATING to settle.
@@ -302,10 +284,7 @@ export const InputProvider = () =>
               Vpc: news.vpc,
               Tags: desiredTags,
             });
-            const fresh = yield* ensureIdentified(
-              created.Input,
-              "CreateInput Input Id/Arn",
-            );
+            const fresh = yield* ensureIdentified(created.Input, "CreateInput Input Id/Arn");
             input = yield* awaitActive(fresh.Id);
           } else {
             // 3. Sync — apply the in-place-updatable aspects only on drift.
@@ -314,11 +293,9 @@ export const InputProvider = () =>
             const sameStringSet = (
               a: readonly (string | undefined)[],
               b: readonly (string | undefined)[],
-            ) =>
-              JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+            ) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
             const nameDrift = input.Name !== name;
-            const roleDrift =
-              news.roleArn !== undefined && input.RoleArn !== news.roleArn;
+            const roleDrift = news.roleArn !== undefined && input.RoleArn !== news.roleArn;
             const sgDrift = !sameStringSet(
               news.inputSecurityGroups ?? [],
               input.SecurityGroups ?? [],
@@ -334,16 +311,8 @@ export const InputProvider = () =>
             const destinationDrift =
               olds === undefined
                 ? news.destinations !== undefined
-                : JSON.stringify(olds.destinations) !==
-                  JSON.stringify(news.destinations);
-            if (
-              nameDrift ||
-              roleDrift ||
-              sgDrift ||
-              sourceDrift ||
-              flowDrift ||
-              destinationDrift
-            ) {
+                : JSON.stringify(olds.destinations) !== JSON.stringify(news.destinations);
+            if (nameDrift || roleDrift || sgDrift || sourceDrift || flowDrift || destinationDrift) {
               yield* medialive
                 .updateInput({
                   InputId: input.Id,

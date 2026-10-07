@@ -2,13 +2,16 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import {
+  deferUntilFirstUse,
+  orDieCredentialsUnavailable,
+  resolveProviderConfig,
+} from "../Auth/Resolve.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
   type CloudflareResolvedCredentials,
 } from "./Auth/AuthConfig.ts";
-
 import { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
 
 export { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
@@ -34,16 +37,15 @@ export const fromProfile = () =>
       // Building providers must work before Cloudflare is configured. Capture
       // the resolver's services now, but read profiles/credentials only when
       // a cloud operation actually evaluates this environment.
-      const resolve = resolveProviderConfig<
+      const resolve = yield* resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME).pipe(
         Effect.flatMap(({ resolve }) => resolve),
+        deferUntilFirstUse,
       );
-      const context = yield* Effect.context<Effect.Services<typeof resolve>>();
       return yield* resolve.pipe(
-        Effect.provideContext(context),
-        Effect.orDie,
+        orDieCredentialsUnavailable(CLOUDFLARE_AUTH_PROVIDER_NAME),
         Effect.cached,
       );
     }),

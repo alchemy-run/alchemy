@@ -1,30 +1,24 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import { buildCommand as nativeBuildCommand } from "./fixtures/nextjs-app/open-next.native.config.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { prepareNextjsFixture } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-app");
 
@@ -55,11 +49,7 @@ const fetchJsonReady = <T>(url: string) =>
                 try: () => JSON.parse(body) as T,
                 catch: () => new Error(`non-json body: ${body}`),
               })
-            : Effect.fail(
-                new Error(
-                  `Worker not ready (${res.status}): ${body.slice(0, 300)}`,
-                ),
-              ),
+            : Effect.fail(new Error(`Worker not ready (${res.status}): ${body.slice(0, 300)}`)),
         ),
       ),
       // Bounded: ~60s of edge propagation, then fail with the last body.
@@ -109,9 +99,7 @@ describe.concurrent(
           yield* prepareNextjsFixture(rootDir);
           const nextConfigPath = path.join(rootDir, "next.config.mjs");
           const nextConfig = yield* fs.readFileString(nextConfigPath);
-          expect(
-            yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
-          ).toBe(false);
+          expect(yield* fs.exists(path.join(rootDir, "open-next.config.ts"))).toBe(false);
 
           const bindingMarker = "nextjs-binding-marker";
 
@@ -121,21 +109,15 @@ describe.concurrent(
                 const kv = yield* Cloudflare.KV.Namespace("NextjsFixtureKv");
                 return yield* Cloudflare.Website.Nextjs("NextjsSite", {
                   ...nextjsProps(rootDir),
-                  openNext:
-                    buildCommand === undefined ? undefined : { buildCommand },
-                  env: {
-                    TEST_TEXT: bindingMarker,
-                    FIXTURE_KV: kv,
-                  },
+                  openNext: buildCommand === undefined ? undefined : { buildCommand },
+                  env: { TEST_TEXT: bindingMarker, FIXTURE_KV: kv },
                 });
               }),
             );
 
           const site1 = yield* deploy();
           expect(yield* fs.readFileString(nextConfigPath)).toBe(nextConfig);
-          expect(
-            yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
-          ).toBe(false);
+          expect(yield* fs.exists(path.join(rootDir, "open-next.config.ts"))).toBe(false);
 
           expect(site1.url).toBeDefined();
           expect(site1.hash?.input).toBeDefined();
@@ -150,18 +132,14 @@ describe.concurrent(
           // API route handler — the middleware matcher covers /api/*, so the
           // pass-through header also proves middleware executes on deploy.
           const client = yield* HttpClient.HttpClient;
-          const helloRes = yield* Test.getWhenReady(`${site1.url!}/api/hello`, {
-            times: 6,
-          });
+          const helloRes = yield* Test.getWhenReady(`${site1.url!}/api/hello`, { times: 6 });
           expect(helloRes.status).toBe(200);
           expect(helloRes.headers["x-fixture-middleware"]).toBe("passed");
           const hello = (yield* helloRes.json) as { hello: string };
           expect(hello.hello).toBe("world");
 
           // Middleware rewrite: /mw-rewrite serves the API route's response.
-          const rewritten = yield* fetchJsonReady<{ hello: string }>(
-            `${site1.url!}/mw-rewrite`,
-          );
+          const rewritten = yield* fetchJsonReady<{ hello: string }>(`${site1.url!}/mw-rewrite`);
           expect(rewritten.hello).toBe("world");
 
           // Binding read through OpenNext's `getCloudflareContext()`.
@@ -186,14 +164,10 @@ describe.concurrent(
           expect(kvRead.value).toBe(kvValue);
 
           // Static asset from `public/`.
-          yield* expectUrlContains(
-            `${site1.url!}/static.txt`,
-            "NEXTJS_STATIC_ASSET_MARKER",
-            {
-              timeout: "60 seconds",
-              label: "nextjs static asset",
-            },
-          );
+          yield* expectUrlContains(`${site1.url!}/static.txt`, "NEXTJS_STATIC_ASSET_MARKER", {
+            timeout: "60 seconds",
+            label: "nextjs static asset",
+          });
 
           // ISR page: the prerendered payload serves (read-only static-assets
           // incremental cache; revalidation writes are a documented no-op).
@@ -203,23 +177,15 @@ describe.concurrent(
           });
 
           // Dynamic segment prerendered by generateStaticParams (SSG).
-          yield* expectUrlContains(
-            `${site1.url!}/products/alpha`,
-            "product-slug:",
-            {
-              timeout: "60 seconds",
-              label: "nextjs prerendered dynamic segment",
-            },
-          );
+          yield* expectUrlContains(`${site1.url!}/products/alpha`, "product-slug:", {
+            timeout: "60 seconds",
+            label: "nextjs prerendered dynamic segment",
+          });
           // Non-prerendered slug renders on demand in the Worker.
-          yield* expectUrlContains(
-            `${site1.url!}/products/gamma`,
-            "product-slug:",
-            {
-              timeout: "60 seconds",
-              label: "nextjs on-demand dynamic segment",
-            },
-          );
+          yield* expectUrlContains(`${site1.url!}/products/gamma`, "product-slug:", {
+            timeout: "60 seconds",
+            label: "nextjs on-demand dynamic segment",
+          });
           // Catch-all dynamic segment.
           yield* expectUrlContains(
             `${site1.url!}/docs/guides/deploy/workers`,
@@ -253,44 +219,28 @@ describe.concurrent(
                   res.status === 404 && body.includes("CUSTOM_NOT_FOUND_MARKER")
                     ? Effect.void
                     : Effect.fail(
-                        new Error(
-                          `${label}: status=${res.status}, custom not-found marker absent`,
-                        ),
+                        new Error(`${label}: status=${res.status}, custom not-found marker absent`),
                       ),
                 ),
               ),
-              Effect.retry({
-                schedule: Schedule.spaced("2 seconds"),
-                times: 30,
-              }),
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
             );
-          yield* expectCustom404(
-            `${site1.url!}/definitely/not/a/route`,
-            "unmatched route",
-          );
+          yield* expectCustom404(`${site1.url!}/definitely/not/a/route`, "unmatched route");
           yield* expectCustom404(`${site1.url!}/gone`, "notFound() page");
 
           // next.config redirects / rewrites / headers. The fetch-backed
           // client follows the 308, so assert the redirect lands on the home
           // page's content — a broken redirect would 404 instead.
-          yield* expectUrlContains(
-            `${site1.url!}/old-home`,
-            "NEXTJS_SSR_MARKER",
-            {
-              timeout: "60 seconds",
-              label: "nextjs next.config redirect (followed to home)",
-            },
-          );
+          yield* expectUrlContains(`${site1.url!}/old-home`, "NEXTJS_SSR_MARKER", {
+            timeout: "60 seconds",
+            label: "nextjs next.config redirect (followed to home)",
+          });
           const rewritten2 = yield* fetchJsonReady<{ hello: string }>(
             `${site1.url!}/rewritten-hello`,
           );
           expect(rewritten2.hello).toBe("world");
-          const headered = yield* Test.getWhenReady(`${site1.url!}/api/hello`, {
-            times: 6,
-          });
-          expect(headered.headers["x-fixture-config-header"]).toBe(
-            "from-next-config",
-          );
+          const headered = yield* Test.getWhenReady(`${site1.url!}/api/hello`, { times: 6 });
+          expect(headered.headers["x-fixture-config-header"]).toBe("from-next-config");
 
           // next/image (unoptimized): the page renders the img and the raw
           // asset serves through the ASSETS binding. Real optimization needs
@@ -299,25 +249,17 @@ describe.concurrent(
             timeout: "60 seconds",
             label: "nextjs next/image page",
           });
-          const pixel = yield* Test.getWhenReady(`${site1.url!}/pixel.png`, {
-            times: 6,
-          });
+          const pixel = yield* Test.getWhenReady(`${site1.url!}/pixel.png`, { times: 6 });
           expect(pixel.status).toBe(200);
           expect(pixel.headers["content-type"]).toContain("image/png");
 
           // Pages Router page (getServerSideProps) + API route, coexisting
           // with the App Router.
-          yield* expectUrlContains(
-            `${site1.url!}/legacy`,
-            "PAGES_ROUTER_MARKER",
-            {
-              timeout: "60 seconds",
-              label: "nextjs pages-router page",
-            },
-          );
-          const legacy = yield* fetchJsonReady<{ legacy: string }>(
-            `${site1.url!}/api/legacy`,
-          );
+          yield* expectUrlContains(`${site1.url!}/legacy`, "PAGES_ROUTER_MARKER", {
+            timeout: "60 seconds",
+            label: "nextjs pages-router page",
+          });
+          const legacy = yield* fetchJsonReady<{ legacy: string }>(`${site1.url!}/api/legacy`);
           expect(legacy.legacy).toBe("pages-api");
 
           // ── deploy 2: no changes ⇒ the rebuild-free input hash matches and
@@ -349,9 +291,7 @@ describe.concurrent(
           const configRoute = () =>
             client.get(`${site1.url!}/api/config`).pipe(
               Effect.flatMap((response) =>
-                response.text.pipe(
-                  Effect.as(response.headers["x-config-priority"]),
-                ),
+                response.text.pipe(Effect.as(response.headers["x-config-priority"])),
               ),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
@@ -374,65 +314,48 @@ describe.concurrent(
             "pages",
             "public",
           ]) {
-            yield* fs.copy(
-              path.join(rootDir, entry),
-              path.join(nativeApp, entry),
-            );
+            yield* fs.copy(path.join(rootDir, entry), path.join(nativeApp, entry));
           }
           yield* fs.writeFileString(nativeConfigPath, nativeConfig);
           const site4 = yield* deploy();
           expect(site4.hash?.input).not.toEqual(site3.hash?.input);
           expect(yield* fs.readFileString(nativeConfigPath)).toBe(nativeConfig);
+          expect(yield* fs.readFileString(path.join(rootDir, "native-build-marker"))).toBe(
+            "native",
+          );
           expect(
-            yield* fs.readFileString(path.join(rootDir, "native-build-marker")),
-          ).toBe("native");
-          expect(
-            yield* fs.exists(
-              path.join(rootDir, "native-output", ".open-next", "worker.js"),
-            ),
+            yield* fs.exists(path.join(rootDir, "native-output", ".open-next", "worker.js")),
           ).toBe(true);
           expect(yield* configRoute()).toBe("handler");
           yield* expectUrlContains(`${site4.url!}/`, "NEXTJS_SSR_MARKER_V2");
-          yield* expectUrlContains(
-            `${site4.url!}/static.txt`,
-            "NEXTJS_STATIC_ASSET_MARKER",
-          );
+          yield* expectUrlContains(`${site4.url!}/static.txt`, "NEXTJS_STATIC_ASSET_MARKER");
           expect((yield* deploy()).hash?.input).toEqual(site4.hash?.input);
 
-          const editedConfig = nativeConfig.replace(
-            '["/api/config"]',
-            '["/other"]',
-          );
+          const editedConfig = nativeConfig.replace('["/api/config"]', '["/other"]');
           yield* fs.writeFileString(nativeConfigPath, editedConfig);
           const site5 = yield* deploy();
           expect(site5.hash?.input).not.toEqual(site4.hash?.input);
           expect(yield* fs.readFileString(nativeConfigPath)).toBe(editedConfig);
-          expect(
-            yield* fs.readFileString(path.join(rootDir, "native-build-marker")),
-          ).toBe("native");
-          const middlewarePriority = yield* client
-            .get(`${site5.url!}/api/config`)
-            .pipe(
-              Effect.flatMap((response) =>
-                response.text.pipe(
-                  Effect.as(response.headers["x-config-priority"]),
-                ),
-              ),
-              Effect.repeat({
-                schedule: Schedule.spaced("1 second"),
-                times: 30,
-                until: (priority) => priority === "middleware",
-              }),
-            );
+          expect(yield* fs.readFileString(path.join(rootDir, "native-build-marker"))).toBe(
+            "native",
+          );
+          const middlewarePriority = yield* client.get(`${site5.url!}/api/config`).pipe(
+            Effect.flatMap((response) =>
+              response.text.pipe(Effect.as(response.headers["x-config-priority"])),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 30,
+              until: (priority) => priority === "middleware",
+            }),
+          );
           expect(middlewarePriority).toBe("middleware");
 
-          const overrideSite = yield* deploy(
-            nativeBuildCommand.replace("'native'", "'resource'"),
-          );
+          const overrideSite = yield* deploy(nativeBuildCommand.replace("'native'", "'resource'"));
           expect(overrideSite.hash?.input).not.toEqual(site5.hash?.input);
-          expect(
-            yield* fs.readFileString(path.join(rootDir, "native-build-marker")),
-          ).toBe("resource");
+          expect(yield* fs.readFileString(path.join(rootDir, "native-build-marker"))).toBe(
+            "resource",
+          );
           expect(yield* fs.readFileString(nativeConfigPath)).toBe(editedConfig);
 
           yield* fs.remove(nativeConfigPath);

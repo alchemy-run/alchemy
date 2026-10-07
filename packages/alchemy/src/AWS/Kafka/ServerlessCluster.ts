@@ -93,9 +93,7 @@ export interface ServerlessCluster extends Resource<
  *
  * @resource
  */
-export const ServerlessCluster = Resource<ServerlessCluster>(
-  "AWS.Kafka.ServerlessCluster",
-);
+export const ServerlessCluster = Resource<ServerlessCluster>("AWS.Kafka.ServerlessCluster");
 
 const sameStringSet = (
   a: readonly string[] | undefined,
@@ -143,11 +141,7 @@ export const ServerlessClusterProvider = () =>
       const describeByArn = Effect.fn(function* (arn: string) {
         const response = yield* kafka
           .describeClusterV2({ ClusterArn: arn })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
         return response?.ClusterInfo;
       });
 
@@ -155,9 +149,7 @@ export const ServerlessClusterProvider = () =>
         return yield* kafka.getBootstrapBrokers({ ClusterArn: arn }).pipe(
           Effect.map((r) => r.BootstrapBrokerStringSaslIam),
           // Brokers are only resolvable once the cluster is ACTIVE.
-          Effect.catchTag("BadRequestException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)),
           Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
         );
       });
@@ -165,10 +157,7 @@ export const ServerlessClusterProvider = () =>
       // Bounded readiness wait. MSK Serverless create typically completes in
       // 5-10 minutes; budget ~15 min (60 * 15s).
       const waitForActive = Effect.fn(function* (arn: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("15 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]);
         return yield* describeByArn(arn).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster) {
@@ -183,9 +172,7 @@ export const ServerlessClusterProvider = () =>
             }
             if (cluster.State !== "ACTIVE") {
               return Effect.fail(
-                new Error(
-                  `MSK cluster '${arn}' not active (state: ${cluster.State})`,
-                ),
+                new Error(`MSK cluster '${arn}' not active (state: ${cluster.State})`),
               );
             }
             return Effect.succeed(cluster);
@@ -197,15 +184,11 @@ export const ServerlessClusterProvider = () =>
       const toAttrs = Effect.fn(function* (cluster: kafka.Cluster) {
         if (!cluster.ClusterName || !cluster.ClusterArn) {
           return yield* Effect.fail(
-            new Error(
-              `MSK cluster is missing its name or ARN (state: ${cluster.State})`,
-            ),
+            new Error(`MSK cluster is missing its name or ARN (state: ${cluster.State})`),
           );
         }
         const bootstrap =
-          cluster.State === "ACTIVE"
-            ? yield* readBrokers(cluster.ClusterArn)
-            : undefined;
+          cluster.State === "ACTIVE" ? yield* readBrokers(cluster.ClusterArn) : undefined;
         const vpcConfigs = cluster.Serverless?.VpcConfigs ?? [];
         return {
           clusterName: cluster.ClusterName,
@@ -224,16 +207,11 @@ export const ServerlessClusterProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // VPC configuration is create-only for serverless clusters.
-          if (
-            olds?.subnetIds !== undefined &&
-            !sameStringSet(news?.subnetIds, olds.subnetIds)
-          ) {
+          if (olds?.subnetIds !== undefined && !sameStringSet(news?.subnetIds, olds.subnetIds)) {
             return { action: "replace" } as const;
           }
           if (
@@ -250,9 +228,7 @@ export const ServerlessClusterProvider = () =>
             : yield* findByName(yield* toName(id, olds ?? {}));
           if (!cluster?.ClusterArn) return undefined;
           const attrs = yield* toAttrs(cluster);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -309,19 +285,14 @@ export const ServerlessClusterProvider = () =>
 
           // 3. Sync tags — diff against OBSERVED cloud tags so adoption
           //    rewrites ownership tags correctly.
-          const { removed, upsert } = diffTags(
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          const { removed, upsert } = diffTags(toTagRecord(observed.Tags), desiredTags);
           if (removed.length > 0) {
             yield* kafka.untagResource({ ResourceArn: arn, TagKeys: removed });
           }
           if (upsert.length > 0) {
             yield* kafka.tagResource({
               ResourceArn: arn,
-              Tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              Tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
             observed = (yield* describeByArn(arn)) ?? observed;
           }
@@ -338,10 +309,7 @@ export const ServerlessClusterProvider = () =>
             // be deleted (or is gone). Bounded.
             Effect.retry({
               while: (e) => e._tag === "BadRequestException",
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
             }),
             Effect.catchTag("BadRequestException", () => Effect.void),
           );
@@ -353,14 +321,11 @@ export const ServerlessClusterProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.ClusterInfoList ?? []).filter(
-                  (c) =>
-                    c.ClusterName !== undefined && c.ClusterArn !== undefined,
+                  (c) => c.ClusterName !== undefined && c.ClusterArn !== undefined,
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((cluster) => toAttrs(cluster), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((cluster) => toAttrs(cluster), { concurrency: 4 })),
           ),
       };
     }),

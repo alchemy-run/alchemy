@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { DBCluster, DBInstance, DBSubnetGroup } from "@/AWS/Neptune";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as neptune from "@distilled.cloud/aws/neptune";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { DBCluster, DBInstance, DBSubnetGroup } from "@/AWS/Neptune";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -61,8 +61,7 @@ test.provider(
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         neptune.describeDBClusterParameterGroups({
-          DBClusterParameterGroupName:
-            "alchemy-nonexistent-neptune-params-probe",
+          DBClusterParameterGroupName: "alchemy-nonexistent-neptune-params-probe",
         }),
       );
       expect(error._tag).toBe("DBParameterGroupNotFoundFault");
@@ -104,26 +103,17 @@ const defaultNetwork = Effect.gen(function* () {
 // it would push the test into its timeout.
 const assertClusterDeleting = (identifier: string) =>
   Effect.gen(function* () {
-    const status = yield* neptune
-      .describeDBClusters({ DBClusterIdentifier: identifier })
-      .pipe(
-        Effect.map((r) => r.DBClusters?.[0]?.Status ?? "gone"),
-        Effect.catchTag("DBClusterNotFoundFault", () =>
-          Effect.succeed("gone" as const),
-        ),
-      );
+    const status = yield* neptune.describeDBClusters({ DBClusterIdentifier: identifier }).pipe(
+      Effect.map((r) => r.DBClusters?.[0]?.Status ?? "gone"),
+      Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed("gone" as const)),
+    );
     if (status !== "gone" && status !== "deleting") {
       return yield* Effect.fail(
         new Error(`cluster '${identifier}' still exists (status: ${status})`),
       );
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]) }),
   );
 
 // A Neptune cluster + instance take ~10 minutes to provision and bill per
@@ -149,10 +139,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             backupRetentionPeriod: "1 day",
             deletionProtection: false,
             enableIAMDatabaseAuthentication: true,
-            serverlessV2ScalingConfiguration: {
-              minCapacity: 1,
-              maxCapacity: 2.5,
-            },
+            serverlessV2ScalingConfiguration: { minCapacity: 1, maxCapacity: 2.5 },
             tags: { fixture: "neptune-cluster" },
           });
           const instance = yield* DBInstance("Writer", {
@@ -189,9 +176,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const describedInstance = yield* neptune.describeDBInstances({
         DBInstanceIdentifier: instance.dbInstanceIdentifier,
       });
-      expect(describedInstance.DBInstances?.[0]?.DBInstanceStatus).toBe(
-        "available",
-      );
+      expect(describedInstance.DBInstances?.[0]?.DBInstanceStatus).toBe("available");
 
       // Destroy immediately — instances bill while they exist — and verify
       // cluster deletion was initiated out-of-band.

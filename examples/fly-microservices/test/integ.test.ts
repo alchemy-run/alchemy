@@ -1,10 +1,10 @@
+import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 import { USERS } from "../src/users.ts";
 
@@ -17,9 +17,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const getJson = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((res) =>
-      res.status === 200
-        ? res.json
-        : Effect.fail(new Error(`HTTP ${res.status}`)),
+      res.status === 200 ? res.json : Effect.fail(new Error(`HTTP ${res.status}`)),
     ),
     Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 20 }),
   );

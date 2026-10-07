@@ -1,27 +1,21 @@
 import * as ivschat from "@distilled.cloud/aws/ivschat";
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import WebSocket from "ws";
-
-import IVSChatTestFunctionLive, {
-  IVSChatTestFunction,
-} from "./fixtures/handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import IVSChatTestFunctionLive, { IVSChatTestFunction } from "./fixtures/handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "IVSChatBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]);
 
 let baseUrl: string;
 
@@ -30,9 +24,7 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly body: string;
 }> {}
 
-class WsFailure extends Data.TaggedError("WsFailure")<{
-  readonly reason: string;
-}> {}
+class WsFailure extends Data.TaggedError("WsFailure")<{ readonly reason: string }> {}
 
 const post = (path: string) =>
   HttpClient.execute(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
@@ -40,38 +32,24 @@ const post = (path: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
 describe(
   "IVSChat Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:ivschat",
-      "provider:aws:lambda",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:ivschat", "provider:aws:lambda", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "IVSChat test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("IVSChat test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("IVSChat test setup: deploying fixture");
@@ -85,21 +63,15 @@ describe(
         baseUrl = functionUrl!.replace(/\/+$/, "");
         const readinessUrl = `${baseUrl}/ping`;
 
-        yield* Effect.logInfo(
-          `IVSChat test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`IVSChat test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `IVSChat test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`IVSChat test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -114,9 +86,7 @@ describe(
         "mints a redacted chat token honoring sessionDuration",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* post("/token").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as {
+            const response = (yield* post("/token").pipe(Effect.flatMap((r) => r.json))) as {
               tokenLength: number;
               tokenIsRedacted: boolean;
               tokenExpirationTime?: string;
@@ -132,9 +102,7 @@ describe(
             // sessionDuration: "30 minutes" must reach the wire as
             // sessionDurationInMinutes: 30 (the API default is 60).
             const sessionMinutes =
-              (new Date(response.sessionExpirationTime!).getTime() -
-                Date.now()) /
-              60_000;
+              (new Date(response.sessionExpirationTime!).getTime() - Date.now()) / 60_000;
             expect(sessionMinutes).toBeGreaterThan(20);
             expect(sessionMinutes).toBeLessThan(40);
           }),
@@ -147,9 +115,9 @@ describe(
         "broadcasts an application event to the room",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* post("/send-event").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as { id?: string };
+            const response = (yield* post("/send-event").pipe(Effect.flatMap((r) => r.json))) as {
+              id?: string;
+            };
 
             expect(typeof response.id).toBe("string");
             expect(response.id!.length).toBeGreaterThan(0);
@@ -194,11 +162,7 @@ describe(
        * it denies). Encapsulated in `Effect.callback` so fiber interruption
        * closes the socket.
        */
-      const wsSendMessage = (
-        endpoint: string,
-        token: string,
-        content: string,
-      ) =>
+      const wsSendMessage = (endpoint: string, token: string, content: string) =>
         Effect.callback<ChatFrame, WsFailure>((resume, signal) => {
           const socket = new WebSocket(endpoint, token);
           let settled = false;
@@ -241,9 +205,7 @@ describe(
             settle(Effect.fail(new WsFailure({ reason: String(error) }))),
           );
           socket.on("close", (code) =>
-            settle(
-              Effect.fail(new WsFailure({ reason: `closed early (${code})` })),
-            ),
+            settle(Effect.fail(new WsFailure({ reason: `closed early (${code})` }))),
           );
         }).pipe(
           Effect.timeout("15 seconds"),
@@ -253,9 +215,11 @@ describe(
         );
 
       const wsInfo = Effect.gen(function* () {
-        const info = (yield* post("/ws-info").pipe(
-          Effect.flatMap((r) => r.json),
-        )) as { token?: string; endpoint?: string; roomArn?: string };
+        const info = (yield* post("/ws-info").pipe(Effect.flatMap((r) => r.json))) as {
+          token?: string;
+          endpoint?: string;
+          roomArn?: string;
+        };
         expect(info.token).toBeTruthy();
         expect(info.endpoint).toContain("wss://edge.ivschat.");
         return info as { token: string; endpoint: string; roomArn: string };
@@ -270,9 +234,7 @@ describe(
             // its messageReviewHandler (set through the binding contract).
             const room = yield* ivschat.getRoom({ identifier: roomArn });
             expect(room.messageReviewHandler?.uri).toContain(":function:");
-            expect(room.messageReviewHandler?.fallbackResult ?? "ALLOW").toBe(
-              "ALLOW",
-            );
+            expect(room.messageReviewHandler?.fallbackResult ?? "ALLOW").toBe("ALLOW");
           }),
         { timeout: 120_000 },
       );
@@ -286,19 +248,10 @@ describe(
             // delivers the ORIGINAL content — treat that as retryable.
             const frame = yield* Effect.gen(function* () {
               const { token, endpoint } = yield* wsInfo;
-              const received = yield* wsSendMessage(
-                endpoint,
-                token,
-                "hello moderators",
-              );
-              if (
-                received.Type !== "MESSAGE" ||
-                !received.Content?.includes("[reviewed]")
-              ) {
+              const received = yield* wsSendMessage(endpoint, token, "hello moderators");
+              if (received.Type !== "MESSAGE" || !received.Content?.includes("[reviewed]")) {
                 return yield* Effect.fail(
-                  new WsFailure({
-                    reason: `not yet reviewed: ${JSON.stringify(received)}`,
-                  }),
+                  new WsFailure({ reason: `not yet reviewed: ${JSON.stringify(received)}` }),
                 );
               }
               return received;
@@ -309,10 +262,7 @@ describe(
                 ),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("2 seconds"),
-                  Schedule.recurs(5),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(5)]),
               }),
             );
 
@@ -328,16 +278,10 @@ describe(
           Effect.gen(function* () {
             const frame = yield* Effect.gen(function* () {
               const { token, endpoint } = yield* wsInfo;
-              const received = yield* wsSendMessage(
-                endpoint,
-                token,
-                "please deny-me now",
-              );
+              const received = yield* wsSendMessage(endpoint, token, "please deny-me now");
               if (received.Type !== "ERROR") {
                 return yield* Effect.fail(
-                  new WsFailure({
-                    reason: `not yet denied: ${JSON.stringify(received)}`,
-                  }),
+                  new WsFailure({ reason: `not yet denied: ${JSON.stringify(received)}` }),
                 );
               }
               return received;
@@ -348,10 +292,7 @@ describe(
                 ),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("2 seconds"),
-                  Schedule.recurs(5),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(5)]),
               }),
             );
 

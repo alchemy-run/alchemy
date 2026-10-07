@@ -25,12 +25,7 @@ export interface ListImports extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudformation.ListImportsInput,
-    ) => Effect.Effect<
-      cloudformation.ListImportsOutput,
-      cloudformation.ListImportsError
-    >
+    ) => Effect.Effect<cloudformation.ListImportsOutput, cloudformation.ListImportsError>
   >
 > {}
-export const ListImports = Binding.Service<ListImports>(
-  "AWS.CloudFormation.ListImports",
-);
+export const ListImports = Binding.Service<ListImports>("AWS.CloudFormation.ListImports");

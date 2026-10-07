@@ -26,10 +26,7 @@ export interface ListEventActions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: dataexchange.ListEventActionsRequest,
-    ) => Effect.Effect<
-      dataexchange.ListEventActionsResponse,
-      dataexchange.ListEventActionsError
-    >
+    ) => Effect.Effect<dataexchange.ListEventActionsResponse, dataexchange.ListEventActionsError>
   >
 > {}
 export const ListEventActions = Binding.Service<ListEventActions>(

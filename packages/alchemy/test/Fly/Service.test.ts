@@ -1,37 +1,34 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Result from "effect/Result";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
-import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
-import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
 import { fetchFrom, fetchOnce, nginx } from "./fixtures/flycast.ts";
-import { Ping, Pong } from "./fixtures/rpc-cycle.ts";
-import PingLive from "./fixtures/rpc-ping.ts";
-import PongLive from "./fixtures/rpc-pong.ts";
 import RegionalApi from "./fixtures/regional-api.ts";
+import { Ping, Pong } from "./fixtures/rpc-cycle.ts";
 import RpcGateway from "./fixtures/rpc-gateway.ts";
 import RpcOrders, { ORDERS } from "./fixtures/rpc-orders.ts";
+import PingLive from "./fixtures/rpc-ping.ts";
+import PongLive from "./fixtures/rpc-pong.ts";
 import RpcStranger from "./fixtures/rpc-stranger.ts";
 import RpcUsers, { USERS } from "./fixtures/rpc-users.ts";
 import SecureGateway from "./fixtures/secure-gateway.ts";
 import SecureUsers, { SECURE_USERS_BODY } from "./fixtures/secure-users.ts";
+import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (appName: string, machineId: string) =>
   machines
@@ -109,9 +106,7 @@ test.provider(
       expect(deployed.api.name).toEqual(expect.any(String));
       expect(deployed.api.region).toEqual("iad");
       expect(deployed.api.state).toEqual("started");
-      expect(deployed.api.url).toEqual(
-        `https://${deployed.app.appName}.fly.dev`,
-      );
+      expect(deployed.api.url).toEqual(`https://${deployed.app.appName}.fly.dev`);
       expect(deployed.api.code.hash).toEqual(expect.any(String));
       expect(deployed.api.code.hash.length).toBeGreaterThan(0);
       expect(deployed.api.mounts[0]?.path).toEqual(VOLUME_PATH);
@@ -126,19 +121,11 @@ test.provider(
       expect(fetched.region).toEqual("iad");
       expect(fetched.state).toEqual("started");
       expect(fetched.config?.metadata?.["alchemy.type"]).toEqual("Fly.Service");
-      expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(
-        expect.any(String),
-      );
-      expect(fetched.config?.image).toEqual(
-        expect.stringContaining("registry.fly.io/"),
-      );
-      expect(fetched.config?.image).toEqual(
-        expect.stringContaining(deployed.api.code.hash),
-      );
+      expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(expect.any(String));
+      expect(fetched.config?.image).toEqual(expect.stringContaining("registry.fly.io/"));
+      expect(fetched.config?.image).toEqual(expect.stringContaining(deployed.api.code.hash));
       expect(fetched.config?.mounts?.[0]?.path).toEqual(VOLUME_PATH);
-      expect(fetched.config?.mounts?.[0]?.volume).toEqual(
-        deployed.api.mounts[0]?.volumeId,
-      );
+      expect(fetched.config?.mounts?.[0]?.volume).toEqual(deployed.api.mounts[0]?.volumeId);
       expect(fetched.config?.metadata?.["alchemy.replica"]).toEqual("0");
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
@@ -157,9 +144,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Fly.Service);
       const all = yield* provider.list();
-      const found = all.find(
-        (service) => service.machineId === deployed.api.machineId,
-      );
+      const found = all.find((service) => service.machineId === deployed.api.machineId);
       expect(found).toBeDefined();
       expect(found?.appName).toEqual(deployed.api.appName);
       expect(found?.name).toEqual(deployed.api.name);
@@ -167,9 +152,7 @@ test.provider(
 
       const body = yield* HttpClient.get(deployed.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
@@ -182,10 +165,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.api.appName,
-        deployed.api.machineId,
-      );
+      const gone = yield* waitUntilGone(deployed.api.appName, deployed.api.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
@@ -216,14 +196,10 @@ test.provider(
         });
       }
       const live = yield* machines.listMachines({ app_name: app.appName });
-      expect(
-        live.filter((machine) => machine.state !== "destroyed"),
-      ).toHaveLength(1);
+      expect(live.filter((machine) => machine.state !== "destroyed")).toHaveLength(1);
       const volumes = yield* machines.listVolumes({ app_name: app.appName });
       expect(volumes).toHaveLength(2);
-      const attached = volumes.find(
-        (volume) => volume.attached_machine_id === live[0]?.id,
-      );
+      const attached = volumes.find((volume) => volume.attached_machine_id === live[0]?.id);
       expect(attached).toBeDefined();
       const blocked = yield* machines
         .deleteVolume({
@@ -288,21 +264,14 @@ test.provider(
       expect(check?.grace_period).toEqual("20s");
 
       const serviceChecks =
-        live.checks?.filter((check) =>
-          check.name?.startsWith("servicecheck-"),
-        ) ?? [];
+        live.checks?.filter((check) => check.name?.startsWith("servicecheck-")) ?? [];
       expect(serviceChecks).toHaveLength(1);
-      expect(serviceChecks[0]?.name).toEqual(
-        `servicecheck-00-http-${API_PORT}`,
-      );
+      expect(serviceChecks[0]?.name).toEqual(`servicecheck-00-http-${API_PORT}`);
       expect(serviceChecks[0]?.status).toEqual("passing");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.service.appName,
-        deployed.service.machineId,
-      );
+      const gone = yield* waitUntilGone(deployed.service.appName, deployed.service.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
@@ -392,11 +361,7 @@ test.provider(
           url: `https://${owned.appName}.fly.dev`,
         },
       ]);
-      expect(yield* addressKinds(owned.appName)).toEqual([
-        "flycast",
-        "shared_v4",
-        "v6",
-      ]);
+      expect(yield* addressKinds(owned.appName)).toEqual(["flycast", "shared_v4", "v6"]);
       expect(yield* getText(owned.url!)).toEqual(ECHO_BODY);
 
       // Moving into a shared App replaces the Service and deletes its App.
@@ -439,9 +404,7 @@ test.provider(
       const hidden = yield* deploy(false);
       expect(hidden.echo.ownsApp).toBe(true);
       expect(hidden.echo.url).toBeUndefined();
-      expect(hidden.echo.privateUrl).toEqual(
-        `http://${hidden.echo.appName}.flycast`,
-      );
+      expect(hidden.echo.privateUrl).toEqual(`http://${hidden.echo.appName}.flycast`);
       expect(hidden.echo.endpoints).toEqual([
         {
           host: `${hidden.echo.appName}.flycast`,
@@ -453,26 +416,20 @@ test.provider(
         },
       ]);
       expect(yield* addressKinds(hidden.echo.appName)).toEqual(["flycast"]);
-      expect(
-        yield* fetchFrom(hidden.caller, hidden.echo.privateUrl!, ECHO_BODY),
-      ).toContain(ECHO_BODY);
+      expect(yield* fetchFrom(hidden.caller, hidden.echo.privateUrl!, ECHO_BODY)).toContain(
+        ECHO_BODY,
+      );
 
       const shown = yield* deploy(true);
       expect(shown.echo.appName).toEqual(hidden.echo.appName);
       expect(shown.echo.url).toEqual(`https://${shown.echo.appName}.fly.dev`);
-      expect(yield* addressKinds(shown.echo.appName)).toEqual([
-        "flycast",
-        "shared_v4",
-        "v6",
-      ]);
+      expect(yield* addressKinds(shown.echo.appName)).toEqual(["flycast", "shared_v4", "v6"]);
       expect(yield* getText(shown.echo.url!)).toEqual(ECHO_BODY);
 
       const hiddenAgain = yield* deploy(false);
       expect(hiddenAgain.echo.appName).toEqual(hidden.echo.appName);
       expect(hiddenAgain.echo.url).toBeUndefined();
-      expect(yield* addressKinds(hiddenAgain.echo.appName)).toEqual([
-        "flycast",
-      ]);
+      expect(yield* addressKinds(hiddenAgain.echo.appName)).toEqual(["flycast"]);
 
       yield* stack.destroy();
       expect(yield* appGone(hidden.echo.appName)).toBe(true);
@@ -498,9 +455,7 @@ test.provider(
           .pipe(Effect.flip);
         expect(failed).toMatchObject({ _tag: "Fly.InvalidServiceProps" });
       }
-      expect(yield* machines.listMachines({ app_name: app.appName })).toEqual(
-        [],
-      );
+      expect(yield* machines.listMachines({ app_name: app.appName })).toEqual([]);
       yield* stack.destroy();
       expect(yield* appGone(app.appName)).toBe(true);
     }).pipe(logLevel),
@@ -547,10 +502,7 @@ test.provider(
       expect(yield* getText(gateway.url!)).toEqual(SECURE_USERS_BODY);
 
       // An App on the default network cannot resolve either private name.
-      for (const url of [
-        users.privateUrl!,
-        `http://${users.appName}.internal:3000`,
-      ]) {
+      for (const url of [users.privateUrl!, `http://${users.appName}.internal:3000`]) {
         const response = yield* fetchOnce(outsider, url);
         expect(response).not.toContain(SECURE_USERS_BODY);
         expect(response).toContain("bad address");
@@ -691,9 +643,7 @@ test.provider(
       expect(users.url).toBeUndefined();
       expect(users.privateUrl).toEqual(`http://${users.appName}.flycast`);
       expect(orders.privateUrl).toEqual(`http://${orders.appName}.flycast`);
-      expect(gateway.privateUrl).toEqual(
-        `http://${gateway.appName}.flycast:7780`,
-      );
+      expect(gateway.privateUrl).toEqual(`http://${gateway.appName}.flycast:7780`);
 
       // A method call returns a typed result.
       expect(JSON.parse(yield* getText(`${base}/users`))).toEqual(USERS);
@@ -719,18 +669,13 @@ test.provider(
       expect(snooped).not.toContain("Ada");
 
       // A public request never passes the Fly-Src check.
-      const publicCall = yield* HttpClient.post(
-        `${base}/__rpc__/listUsers`,
-      ).pipe(Effect.map((response) => response.status));
+      const publicCall = yield* HttpClient.post(`${base}/__rpc__/listUsers`).pipe(
+        Effect.map((response) => response.status),
+      );
       expect(publicCall).toEqual(401);
 
       yield* stack.destroy();
-      for (const appName of [
-        users.appName,
-        orders.appName,
-        gateway.appName,
-        snoop.appName,
-      ])
+      for (const appName of [users.appName, orders.appName, gateway.appName, snoop.appName])
         expect(yield* appGone(appName)).toBe(true);
     }).pipe(logLevel),
   { tags: ownedTags, timeout: 600_000 },
@@ -798,11 +743,7 @@ test.provider(
       const machinesIn = (appName: string) =>
         machines
           .listMachines({ app_name: appName })
-          .pipe(
-            Effect.map((listed) =>
-              listed.filter((machine) => machine.state !== "destroyed"),
-            ),
-          );
+          .pipe(Effect.map((listed) => listed.filter((machine) => machine.state !== "destroyed")));
 
       // Two new Services on the same default ports in one deploy.
       const both = yield* stack.deploy(program({})).pipe(Effect.flip);
@@ -859,10 +800,7 @@ const machineIdsIn = (appName: string, region: string) =>
   machines.listMachines({ app_name: appName }).pipe(
     Effect.map((listed) =>
       listed
-        .filter(
-          (machine) =>
-            machine.state !== "destroyed" && machine.region === region,
-        )
+        .filter((machine) => machine.state !== "destroyed" && machine.region === region)
         .map((machine) => machine.id ?? "")
         .sort(),
     ),
@@ -889,11 +827,7 @@ test.provider(
       const three = yield* deploy({ region: ["iad", "lhr", "sin"] });
       expect(three.appName).toEqual(two.appName);
       expect(three.regions).toEqual(["iad", "lhr", "sin"]);
-      expect(yield* machineRegions(three.appName)).toEqual([
-        "iad",
-        "lhr",
-        "sin",
-      ]);
+      expect(yield* machineRegions(three.appName)).toEqual(["iad", "lhr", "sin"]);
       expect(yield* machineIdsIn(three.appName, "iad")).toEqual(iad);
       expect(yield* machineIdsIn(three.appName, "lhr")).toEqual(lhr);
 
@@ -914,12 +848,7 @@ test.provider(
       const dropped = yield* deploy({ region: ["iad", "sin"], count: 2 });
       expect(dropped.appName).toEqual(two.appName);
       expect(dropped.url).toEqual(two.url);
-      expect(yield* machineRegions(dropped.appName)).toEqual([
-        "iad",
-        "iad",
-        "sin",
-        "sin",
-      ]);
+      expect(yield* machineRegions(dropped.appName)).toEqual(["iad", "iad", "sin", "sin"]);
       expect(yield* getText(dropped.url!)).toEqual(ECHO_BODY);
 
       // A single region string still works.
@@ -945,14 +874,9 @@ test.provider(
       const live = (yield* machines.listMachines({
         app_name: api.appName,
       })).filter((machine) => machine.state !== "destroyed");
-      expect(volumes.map((volume) => volume.region).sort()).toEqual([
-        "iad",
-        "lhr",
-      ]);
+      expect(volumes.map((volume) => volume.region).sort()).toEqual(["iad", "lhr"]);
       for (const volume of volumes) {
-        const attached = live.find(
-          (machine) => machine.id === volume.attached_machine_id,
-        );
+        const attached = live.find((machine) => machine.id === volume.attached_machine_id);
         expect(attached?.region).toEqual(volume.region);
       }
       yield* stack.destroy();
@@ -981,9 +905,7 @@ test.provider(
       expect(yield* machineRegions(first.appName)).toEqual(["iad", "lhr"]);
       const second = yield* deploy("two");
       expect(second.appName).toEqual(first.appName);
-      expect(
-        second.machineIds.some((id) => first.machineIds.includes(id)),
-      ).toBe(false);
+      expect(second.machineIds.some((id) => first.machineIds.includes(id))).toBe(false);
       expect(yield* machineRegions(second.appName)).toEqual(["iad", "lhr"]);
       expect(yield* getText(second.url!)).toEqual("two");
       yield* stack.destroy();

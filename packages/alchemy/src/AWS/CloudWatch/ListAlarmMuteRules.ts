@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListAlarmMuteRulesRequest
-  extends cloudwatch.ListAlarmMuteRulesInput {}
+export interface ListAlarmMuteRulesRequest extends cloudwatch.ListAlarmMuteRulesInput {}
 
 /**
  * Runtime binding for `cloudwatch:ListAlarmMuteRules` — list the alarm
@@ -30,10 +29,7 @@ export interface ListAlarmMuteRules extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListAlarmMuteRulesRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListAlarmMuteRulesOutput,
-      cloudwatch.ListAlarmMuteRulesError
-    >
+    ) => Effect.Effect<cloudwatch.ListAlarmMuteRulesOutput, cloudwatch.ListAlarmMuteRulesError>
   >
 > {}
 

@@ -48,9 +48,7 @@ export const canonicalizePolicy = (
 };
 
 /** Convert the API's `[{ key, value }]` tag list into a plain record. */
-export const tagsToRecord = (
-  tags: aoss.Tag[] | undefined,
-): Record<string, string> =>
+export const tagsToRecord = (tags: aoss.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.key, t.value]));
 
 /** Convert a plain record into the API's `[{ key, value }]` tag list. */
@@ -70,8 +68,7 @@ const untilCollectionTerminal = <E, R>(
     Effect.map(self, (response) => response.collectionDetails?.[0]),
     {
       schedule: Schedule.spaced("10 seconds"),
-      until: (detail) =>
-        detail?.status === "ACTIVE" || detail?.status === "FAILED",
+      until: (detail) => detail?.status === "ACTIVE" || detail?.status === "FAILED",
       times: 30,
     },
   );
@@ -81,25 +78,23 @@ const untilCollectionTerminal = <E, R>(
  * `OpenSearchServerlessProvisioningFailed` on a `FAILED` terminal status or a
  * budget timeout.
  */
-export const awaitCollectionActive = Effect.fn(
-  "AWS.OpenSearchServerless.awaitCollectionActive",
-)(function* (id: string) {
-  const detail = yield* untilCollectionTerminal(
-    aoss.batchGetCollection({ ids: [id] }),
-  );
-  if (detail?.status !== "ACTIVE") {
-    return yield* Effect.fail(
-      new OpenSearchServerlessProvisioningFailed({
-        resource: "Collection",
-        id,
-        status: detail?.status,
-        failureCode: detail?.failureCode,
-        failureMessage: detail?.failureMessage,
-      }),
-    );
-  }
-  return detail;
-});
+export const awaitCollectionActive = Effect.fn("AWS.OpenSearchServerless.awaitCollectionActive")(
+  function* (id: string) {
+    const detail = yield* untilCollectionTerminal(aoss.batchGetCollection({ ids: [id] }));
+    if (detail?.status !== "ACTIVE") {
+      return yield* Effect.fail(
+        new OpenSearchServerlessProvisioningFailed({
+          resource: "Collection",
+          id,
+          status: detail?.status,
+          failureCode: detail?.failureCode,
+          failureMessage: detail?.failureMessage,
+        }),
+      );
+    }
+    return detail;
+  },
+);
 
 const untilVpcEndpointTerminal = <E, R>(
   self: Effect.Effect<aoss.BatchGetVpcEndpointResponse, E, R>,
@@ -108,8 +103,7 @@ const untilVpcEndpointTerminal = <E, R>(
     Effect.map(self, (response) => response.vpcEndpointDetails?.[0]),
     {
       schedule: Schedule.spaced("10 seconds"),
-      until: (detail) =>
-        detail?.status === "ACTIVE" || detail?.status === "FAILED",
+      until: (detail) => detail?.status === "ACTIVE" || detail?.status === "FAILED",
       times: 30,
     },
   );
@@ -119,25 +113,23 @@ const untilVpcEndpointTerminal = <E, R>(
  * `OpenSearchServerlessProvisioningFailed` on a `FAILED` terminal status or a
  * budget timeout.
  */
-export const awaitVpcEndpointActive = Effect.fn(
-  "AWS.OpenSearchServerless.awaitVpcEndpointActive",
-)(function* (id: string) {
-  const detail = yield* untilVpcEndpointTerminal(
-    aoss.batchGetVpcEndpoint({ ids: [id] }),
-  );
-  if (detail?.status !== "ACTIVE") {
-    return yield* Effect.fail(
-      new OpenSearchServerlessProvisioningFailed({
-        resource: "VpcEndpoint",
-        id,
-        status: detail?.status,
-        failureCode: detail?.failureCode,
-        failureMessage: detail?.failureMessage,
-      }),
-    );
-  }
-  return detail;
-});
+export const awaitVpcEndpointActive = Effect.fn("AWS.OpenSearchServerless.awaitVpcEndpointActive")(
+  function* (id: string) {
+    const detail = yield* untilVpcEndpointTerminal(aoss.batchGetVpcEndpoint({ ids: [id] }));
+    if (detail?.status !== "ACTIVE") {
+      return yield* Effect.fail(
+        new OpenSearchServerlessProvisioningFailed({
+          resource: "VpcEndpoint",
+          id,
+          status: detail?.status,
+          failureCode: detail?.failureCode,
+          failureMessage: detail?.failureMessage,
+        }),
+      );
+    }
+    return detail;
+  },
+);
 
 /**
  * Bounded retry through the `ConflictException` window that AOSS raises while a

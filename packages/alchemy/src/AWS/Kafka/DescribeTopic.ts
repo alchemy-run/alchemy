@@ -32,6 +32,4 @@ export interface DescribeTopic extends Binding.Service<
     ) => Effect.Effect<kafka.DescribeTopicResponse, kafka.DescribeTopicError>
   >
 > {}
-export const DescribeTopic = Binding.Service<DescribeTopic>(
-  "AWS.Kafka.DescribeTopic",
-);
+export const DescribeTopic = Binding.Service<DescribeTopic>("AWS.Kafka.DescribeTopic");

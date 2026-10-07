@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -25,10 +22,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // timeout in a single wait after ~7 misses, even though the edge would
 // have propagated moments later.
 const coldStartRetry = Effect.retry({
-  schedule: Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("3 seconds"),
-  ]),
+  schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
   times: 30,
 });
 
@@ -54,11 +48,32 @@ test(
     const { asyncCallerUrl } = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
-      .get(`${asyncCallerUrl}/?name=alice`)
-      .pipe(coldStartRetry);
+    const res = yield* client.get(`${asyncCallerUrl}/?name=alice`).pipe(coldStartRetry);
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello alice");
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
+  "async caller can await a toRpcAsync view and call through it",
+  Effect.gen(function* () {
+    const { asyncCallerUrl } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    // Warm the binding on the plain route so cold starts don't mask the
+    // result; the `/rpc-async` call itself is not retried, so a view that
+    // is mistaken for a thenable surfaces as the fixture's timeout 500.
+    yield* HttpClient.filterStatusOk(client)
+      .get(`${asyncCallerUrl}/?name=warmup`)
+      .pipe(coldStartRetry);
+
+    const res = yield* client.get(`${asyncCallerUrl}/rpc-async?name=carol`);
+    expect(yield* res.text).toBe("hello carol");
+    expect(res.status).toBe(200);
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
@@ -72,9 +87,7 @@ test(
     const { effectCallerUrl } = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
-      .get(`${effectCallerUrl}/?name=bob`)
-      .pipe(coldStartRetry);
+    const res = yield* client.get(`${effectCallerUrl}/?name=bob`).pipe(coldStartRetry);
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello bob");
   }).pipe(logLevel),

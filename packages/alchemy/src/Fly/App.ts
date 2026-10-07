@@ -3,30 +3,28 @@ import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { resolveOrgSlug } from "./Environment.ts";
+import type { MachineService } from "./Machine.ts";
 import {
   createFlyAppName,
   isAlchemyOwnedMetadata,
   matchesAlchemyPhysicalName,
   sanitizeFlyAppName,
 } from "./Metadata.ts";
-import type { MachineService } from "./Machine.ts";
 import { findPortConflict, portsOfProps, withBindingPort } from "./ports.ts";
-import { DEFAULT_BINDING_PORT } from "./rpc.ts";
 import type { Providers } from "./Providers.ts";
+import { DEFAULT_BINDING_PORT } from "./rpc.ts";
 
-export class AppDeletionAmbiguous extends Data.TaggedError(
-  "Fly.AppDeletionAmbiguous",
-)<{
+export class AppDeletionAmbiguous extends Data.TaggedError("Fly.AppDeletionAmbiguous")<{
   appName: string;
   evidence: string;
 }> {
@@ -228,11 +226,7 @@ const toAttrs = (app: FlyApp, fallbackName?: string): App["Attributes"] => {
   };
 };
 
-const resolveAppName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveAppName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyAppName(name);
     if (existing !== undefined) return existing;
@@ -247,9 +241,7 @@ const getByName = (appName: string) =>
 const hasAlchemyMachines = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
     Effect.map((machines) =>
-      machines.some((machine) =>
-        isAlchemyOwnedMetadata(machine.config?.metadata),
-      ),
+      machines.some((machine) => isAlchemyOwnedMetadata(machine.config?.metadata)),
     ),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
@@ -259,25 +251,19 @@ const hasAlchemyNamed = (names: Array<string | undefined>) =>
 
 const hasAlchemyVolumes = (appName: string) =>
   machines.listVolumes({ app_name: appName }).pipe(
-    Effect.map((volumes) =>
-      hasAlchemyNamed(volumes.map((volume) => volume.name)),
-    ),
+    Effect.map((volumes) => hasAlchemyNamed(volumes.map((volume) => volume.name))),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
 const hasAlchemySecrets = (appName: string) =>
   machines.listSecrets({ app_name: appName }).pipe(
-    Effect.map((res) =>
-      hasAlchemyNamed((res.secrets ?? []).map((secret) => secret.name)),
-    ),
+    Effect.map((res) => hasAlchemyNamed((res.secrets ?? []).map((secret) => secret.name))),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
 const hasAlchemySecretKeys = (appName: string) =>
   machines.listSecretKeys({ app_name: appName }).pipe(
-    Effect.map((res) =>
-      hasAlchemyNamed((res.secret_keys ?? []).map((key) => key.name)),
-    ),
+    Effect.map((res) => hasAlchemyNamed((res.secret_keys ?? []).map((key) => key.name))),
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed(false)),
   );
 
@@ -305,15 +291,10 @@ const isOwnedApp = (app: FlyApp) =>
  */
 export const listOwnedApps = Effect.fn(function* () {
   const orgSlug = yield* resolveOrgSlug();
-  const { apps } = yield* machines.listApps({
-    org_slug: orgSlug,
-  });
+  const { apps } = yield* machines.listApps({ org_slug: orgSlug });
   const flagged = yield* Effect.forEach(
     apps ?? [],
-    (app) =>
-      isOwnedApp(app).pipe(
-        Effect.map((owned) => (owned ? toAttrs(app) : undefined)),
-      ),
+    (app) => isOwnedApp(app).pipe(Effect.map((owned) => (owned ? toAttrs(app) : undefined))),
     { concurrency: 8 },
   );
   return flagged.filter((attrs) => attrs !== undefined);
@@ -331,10 +312,7 @@ export const ensureApp = Effect.fn(function* (input: {
   /** Physical name from a previous reconcile, observed first. */
   previousName?: string;
 }) {
-  let current =
-    input.previousName !== undefined
-      ? yield* getByName(input.previousName)
-      : undefined;
+  let current = input.previousName !== undefined ? yield* getByName(input.previousName) : undefined;
   if (current === undefined && input.previousName !== input.name) {
     current = yield* getByName(input.name);
   }
@@ -353,9 +331,7 @@ export const ensureApp = Effect.fn(function* (input: {
       })
       .pipe(
         Effect.as(undefined),
-        Effect.catchTag(["Conflict", "UnprocessableEntity"], (error) =>
-          Effect.succeed(error),
-        ),
+        Effect.catchTag(["Conflict", "UnprocessableEntity"], (error) => Effect.succeed(error)),
       );
     // A new App can take a moment to become readable.
     const observe = getByName(input.name).pipe(
@@ -402,12 +378,10 @@ export const deleteApp = Effect.fn(function* (appName: string) {
       ) {
         return Effect.void;
       }
-      return machines
-        .deleteVolume({ app_name: appName, volume_id: volumeId })
-        .pipe(
-          Effect.asVoid,
-          Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
-        );
+      return machines.deleteVolume({ app_name: appName, volume_id: volumeId }).pipe(
+        Effect.asVoid,
+        Effect.catchTag(["NotFound", "Conflict"], () => Effect.void),
+      );
     },
     { concurrency: 4 },
   );
@@ -418,10 +392,7 @@ export const deleteApp = Effect.fn(function* (appName: string) {
     // Bun can replay DELETE on a reused socket below the SDK retry policy.
     Effect.provideService(
       HttpClient.HttpClient,
-      HttpClient.mapRequest(
-        http,
-        HttpClientRequest.setHeader("connection", "close"),
-      ),
+      HttpClient.mapRequest(http, HttpClientRequest.setHeader("connection", "close")),
     ),
     Effect.provideService(FetchHttpClient.RequestInit, {
       ...Option.getOrUndefined(fetchOptions),
@@ -439,19 +410,12 @@ export const deleteApp = Effect.fn(function* (appName: string) {
         "ServiceUnavailable",
         "GatewayTimeout",
       ],
-      (error) =>
-        Effect.fail(
-          new AppDeletionAmbiguous({ appName, evidence: error._tag }),
-        ),
+      (error) => Effect.fail(new AppDeletionAmbiguous({ appName, evidence: error._tag })),
     ),
   );
   const gone = yield* getByName(appName).pipe(
     Effect.map((app) => app === undefined),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (gone) => gone,
-      times: 8,
-    }),
+    Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (gone) => gone, times: 8 }),
     Effect.timeout("30 seconds"),
     Effect.mapError(
       (error) =>
@@ -503,15 +467,10 @@ export const AppProvider = () =>
       }
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const desiredName =
-        news.name !== undefined
-          ? sanitizeFlyAppName(news.name)
-          : output.appName;
+      const desiredName = news.name !== undefined ? sanitizeFlyAppName(news.name) : output.appName;
       const nameChanged = desiredName !== output.appName;
-      const orgChanged =
-        news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
-      const networkChanged =
-        news.network !== undefined && news.network !== output.network;
+      const orgChanged = news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
+      const networkChanged = news.network !== undefined && news.network !== output.network;
       if (nameChanged || orgChanged || networkChanged) {
         return {
           action: "replace" as const,
@@ -525,9 +484,8 @@ export const AppProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const name = yield* resolveAppName(id, olds?.name, output?.appName);
       const found =
-        (output?.appName !== undefined
-          ? yield* getByName(output.appName)
-          : undefined) ?? (yield* getByName(name));
+        (output?.appName !== undefined ? yield* getByName(output.appName) : undefined) ??
+        (yield* getByName(name));
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, name);
       if (output !== undefined) return attrs;

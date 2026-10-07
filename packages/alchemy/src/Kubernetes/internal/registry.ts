@@ -7,18 +7,13 @@
  */
 import * as Effect from "effect/Effect";
 import type { RegistryCredentials } from "../../Docker/Docker.ts";
-import {
-  makeContainerImageSource,
-  type ImageRegistryTarget,
-} from "../../Docker/ImageSource.ts";
+import { makeContainerImageSource, type ImageRegistryTarget } from "../../Docker/ImageSource.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { RegistryState, WorkloadImageSource } from "../ClusterAdapter.ts";
 import type { ContainerRegistry } from "../Connection.ts";
 
 /** Docker credentials for a registry, or `undefined` to use `docker login`. */
-const credentialsOf = (
-  registry: ContainerRegistry,
-): RegistryCredentials | undefined =>
+const credentialsOf = (registry: ContainerRegistry): RegistryCredentials | undefined =>
   registry.username !== undefined && registry.password !== undefined
     ? {
         // Docker keys credentials by host; `server` may carry a namespace.
@@ -107,6 +102,4 @@ export const makeConnectionRegistry = Effect.gen(function* () {
 });
 
 /** The publisher returned by {@link makeConnectionRegistry}. */
-export interface ConnectionRegistry extends Effect.Success<
-  typeof makeConnectionRegistry
-> {}
+export interface ConnectionRegistry extends Effect.Success<typeof makeConnectionRegistry> {}

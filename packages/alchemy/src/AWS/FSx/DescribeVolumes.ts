@@ -33,6 +33,4 @@ export interface DescribeVolumes extends Binding.Service<
     ) => Effect.Effect<fsx.DescribeVolumesResponse, fsx.DescribeVolumesError>
   >
 > {}
-export const DescribeVolumes = Binding.Service<DescribeVolumes>(
-  "AWS.FSx.DescribeVolumes",
-);
+export const DescribeVolumes = Binding.Service<DescribeVolumes>("AWS.FSx.DescribeVolumes");

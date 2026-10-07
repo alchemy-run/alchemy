@@ -1,13 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import RedshiftQueryFunctionLive, {
-  RedshiftQueryFunction,
-} from "./fixtures/query-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import RedshiftQueryFunctionLive, { RedshiftQueryFunction } from "./fixtures/query-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -32,9 +30,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "RedshiftData test setup: destroying previous run",
-        );
+        yield* Effect.logInfo("RedshiftData test setup: destroying previous run");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("RedshiftData test setup: deploying fixture");
@@ -46,9 +42,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
 
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
-        yield* Effect.logInfo(
-          `RedshiftData test setup: function URL ready (${functionUrl})`,
-        );
+        yield* Effect.logInfo(`RedshiftData test setup: function URL ready (${functionUrl})`);
       }),
       // namespace (~1 min) + workgroup create (~2-5 min) + Lambda deploy.
       { timeout: 900_000 },
@@ -68,10 +62,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)(
                   : Effect.fail(new Error(`query returned ${res.status}`)),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("1 second"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(10)]),
               }),
               Effect.flatMap((res) => res.json),
             );
