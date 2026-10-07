@@ -77,6 +77,12 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         /** `--add-host` entries, each `hostname:address`. */
         "add-host"?: Array<string> | undefined;
+        /** Docker network namespace, including `container:<id>`. */
+        network?: string | undefined;
+        /** Linux capabilities to add. */
+        "cap-add"?: Array<string> | undefined;
+        /** Host devices in Docker's `host:container[:permissions]` form. */
+        device?: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
         context?: string;
@@ -393,6 +399,7 @@ export declare namespace Docker {
 
   export interface Container {
     Id: string;
+    Image: string;
     Name?: string;
     State: { Status: ContainerStatus };
     Created: string;
@@ -417,6 +424,13 @@ export declare namespace Docker {
       ExtraHosts: string[] | null;
       RestartPolicy: { Name: string; MaximumRetryCount: number };
       AutoRemove: boolean;
+      NetworkMode?: string;
+      CapAdd?: string[] | null;
+      Devices?: Array<{
+        PathOnHost: string;
+        PathInContainer: string;
+        CgroupPermissions: string;
+      }> | null;
     };
     NetworkSettings: {
       Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
