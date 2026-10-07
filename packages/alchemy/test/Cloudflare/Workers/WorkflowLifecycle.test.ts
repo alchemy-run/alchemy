@@ -1,4 +1,5 @@
 import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
@@ -16,13 +17,22 @@ interface Status {
   entries: string[];
 }
 
+// Tagged rather than a plain `Error`: a plain `Error` in the same union
+// absorbs `WorkerNotPropagated` (a structural subtype), hiding it from
+// `catchTag`.
+class WorkerRequestFailed extends Data.TaggedError("WorkerRequestFailed")<{
+  readonly message: string;
+}> {}
+
 const request = Effect.fn(function* (url: string, method: "GET" | "POST" = "GET") {
   const response = yield* requestWorker(
     method === "GET" ? HttpClientRequest.get(url) : HttpClientRequest.post(url),
   );
   const body = yield* response.text;
   if (response.status !== 200) {
-    return yield* Effect.fail(new Error(`${method} ${url}: ${response.status}: ${body}`));
+    return yield* Effect.fail(
+      new WorkerRequestFailed({ message: `${method} ${url}: ${response.status}: ${body}` }),
+    );
   }
   return body;
 });
@@ -40,7 +50,9 @@ const waitForReady = Effect.fn(function* (url: string) {
       return false;
     }
     if (response.status !== 200) {
-      return yield* Effect.fail(new Error(`GET ${url}: ${response.status}: ${body}`));
+      return yield* Effect.fail(
+        new WorkerRequestFailed({ message: `GET ${url}: ${response.status}: ${body}` }),
+      );
     }
     if (body === "Alchemy worker is being deployed...") return false;
     expect(body).toBe("ready");
