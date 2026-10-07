@@ -10,6 +10,7 @@ const thirdPartyPackages: Array<string> = [
   "node-utils",
 ];
 const readmePackages: Array<string> = ["alchemy"];
+const agentInstructionPackages: Array<string> = ["alchemy"];
 
 const packageNames = await readdir(packagesDirectory, {
   withFileTypes: true,
@@ -36,5 +37,16 @@ for (const packageName of targets) {
 
   if (readmePackages.includes(packageName)) {
     await copyFile(path.join(root, "README.md"), path.join(packageDirectory, "README.md"));
+  }
+
+  if (agentInstructionPackages.includes(packageName)) {
+    await copyFile(
+      path.join(root, "AGENTS.md"),
+      path.join(packageDirectory, "AGENTS.md"),
+    );
+    await copyFile(
+      path.join(root, "CLAUDE.md"),
+      path.join(packageDirectory, "CLAUDE.md"),
+    );
   }
 }
