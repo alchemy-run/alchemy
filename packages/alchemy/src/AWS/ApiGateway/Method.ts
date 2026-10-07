@@ -303,11 +303,7 @@ const putMethod = (news: Input.ResolveProps<MethodProps>) =>
     authorizationScopes: news.authorizationScopes,
   });
 
-const deleteIntegrationSafe = (p: {
-  restApiId: string;
-  resourceId: string;
-  httpMethod: string;
-}) =>
+const deleteIntegrationSafe = (p: { restApiId: string; resourceId: string; httpMethod: string }) =>
   ag
     .deleteIntegration({
       restApiId: p.restApiId,
@@ -316,11 +312,7 @@ const deleteIntegrationSafe = (p: {
     })
     .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
 
-const deleteMethodSafe = (p: {
-  restApiId: string;
-  resourceId: string;
-  httpMethod: string;
-}) =>
+const deleteMethodSafe = (p: { restApiId: string; resourceId: string; httpMethod: string }) =>
   ag
     .deleteMethod({
       restApiId: p.restApiId,
@@ -329,11 +321,7 @@ const deleteMethodSafe = (p: {
     })
     .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
 
-const readMethodSnapshot = (p: {
-  restApiId: string;
-  resourceId: string;
-  httpMethod: string;
-}) =>
+const readMethodSnapshot = (p: { restApiId: string; resourceId: string; httpMethod: string }) =>
   Effect.gen(function* () {
     const method = yield* ag
       .getMethod({
@@ -341,9 +329,7 @@ const readMethodSnapshot = (p: {
         resourceId: p.resourceId,
         httpMethod: p.httpMethod,
       })
-      .pipe(
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
     if (!method?.httpMethod) return undefined;
 
     const integ = yield* ag
@@ -352,9 +338,7 @@ const readMethodSnapshot = (p: {
         resourceId: p.resourceId,
         httpMethod: p.httpMethod,
       })
-      .pipe(
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
     const integration: MethodIntegrationProps | undefined = integ?.type
       ? {
@@ -447,19 +431,15 @@ export const MethodProvider = () =>
                     .pages({ restApiId: api.id, embed: ["methods"] })
                     .pipe(
                       Stream.runCollect,
-                      Effect.map((chunk) =>
-                        Array.from(chunk).flatMap((page) => page.items ?? []),
-                      ),
+                      Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
                     );
 
                   const keys = resources.flatMap((resource) =>
                     resource.id
-                      ? Object.keys(resource.resourceMethods ?? {}).map(
-                          (httpMethod) => ({
-                            resourceId: resource.id as string,
-                            httpMethod,
-                          }),
-                        )
+                      ? Object.keys(resource.resourceMethods ?? {}).map((httpMethod) => ({
+                          resourceId: resource.id as string,
+                          httpMethod,
+                        }))
                       : [],
                   );
 
@@ -475,8 +455,7 @@ export const MethodProvider = () =>
                   );
 
                   return snaps.filter(
-                    (snap): snap is NonNullable<typeof snap> =>
-                      snap !== undefined,
+                    (snap): snap is NonNullable<typeof snap> => snap !== undefined,
                   );
                 }),
               { concurrency: 5 },
@@ -517,10 +496,7 @@ export const MethodProvider = () =>
               !deepEqual(news.requestParameters, observed.requestParameters) ||
               !deepEqual(news.requestModels, observed.requestModels) ||
               news.requestValidatorId !== observed.requestValidatorId ||
-              !deepEqual(
-                news.authorizationScopes,
-                observed.authorizationScopes,
-              ));
+              !deepEqual(news.authorizationScopes, observed.authorizationScopes));
 
           if (observed === undefined || needsRecreate) {
             if (needsRecreate) {
@@ -539,12 +515,7 @@ export const MethodProvider = () =>
             });
             if (news.integration) {
               yield* ag.putIntegration(
-                putIntegrationRequest(
-                  restApiId,
-                  resourceId,
-                  httpMethod,
-                  news.integration,
-                ),
+                putIntegrationRequest(restApiId, resourceId, httpMethod, news.integration),
               );
             }
             yield* session.note(
@@ -607,12 +578,7 @@ export const MethodProvider = () =>
           if (!deepEqual(desiredIntegration, observed.integration)) {
             if (news.integration) {
               yield* ag.putIntegration(
-                putIntegrationRequest(
-                  restApiId,
-                  resourceId,
-                  httpMethod,
-                  news.integration,
-                ),
+                putIntegrationRequest(restApiId, resourceId, httpMethod, news.integration),
               );
             } else {
               yield* deleteIntegrationSafe({

@@ -35,10 +35,7 @@ import {
   waitUntilExists,
   waitUntilGone,
 } from "./internal.ts";
-import type {
-  BareMetalNodePoolConfig,
-  BareMetalNodePoolUpgradePolicy,
-} from "./types.ts";
+import type { BareMetalNodePoolConfig, BareMetalNodePoolUpgradePolicy } from "./types.ts";
 
 const COLLECTION = "bareMetalNodePools";
 const PARENT_COLLECTION = "bareMetalClusters";
@@ -183,19 +180,14 @@ export type BareMetalClustersBareMetalNodePool = Resource<
  * @resource
  * @category GKEOnPrem
  */
-export const BareMetalClustersBareMetalNodePool =
-  Resource<BareMetalClustersBareMetalNodePool>(
-    "GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool",
-  );
+export const BareMetalClustersBareMetalNodePool = Resource<BareMetalClustersBareMetalNodePool>(
+  "GCP.GKEOnPrem.BareMetalClustersBareMetalNodePool",
+);
 
 const resourceName = (cluster: string, bareMetalNodePoolId: string) =>
   `${cluster}/${COLLECTION}/${bareMetalNodePoolId}`;
 
-const toAttrs = (
-  item: gkeonprem.BareMetalNodePool,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkeonprem.BareMetalNodePool, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.displayName);
@@ -237,8 +229,7 @@ const listChildren = (parent: string) =>
       pageSize: 1000,
       view: "FULL",
     }),
-    (page): readonly gkeonprem.BareMetalNodePool[] | undefined =>
-      page.bareMetalNodePools,
+    (page): readonly gkeonprem.BareMetalNodePool[] | undefined => page.bareMetalNodePools,
   );
 
 const listOwned = (project: string, region: string) =>
@@ -254,8 +245,7 @@ const listOwned = (project: string, region: string) =>
                   pageSize: 1000,
                   view: "BASIC",
                 }),
-                (page): readonly gkeonprem.BareMetalCluster[] | undefined =>
-                  page.bareMetalClusters,
+                (page): readonly gkeonprem.BareMetalCluster[] | undefined => page.bareMetalClusters,
               ),
             ),
             (cluster: gkeonprem.BareMetalCluster) => cluster.name,
@@ -289,10 +279,7 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
         nextId: news.bareMetalNodePoolId
           ? rfc1035(news.bareMetalNodePoolId, "baremetalnodepool")
           : (olds?.bareMetalNodePoolId ?? output?.bareMetalNodePoolId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -310,10 +297,7 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
         output?.bareMetalNodePoolId,
         "baremetalnodepool",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const cluster = expandParent(
         olds?.bareMetalCluster ?? output?.bareMetalCluster ?? "",
         env.project,
@@ -348,23 +332,11 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
         output?.bareMetalNodePoolId,
         "baremetalnodepool",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const cluster = expandParent(
-        news.bareMetalCluster,
-        env.project,
-        location,
-        PARENT_COLLECTION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const cluster = expandParent(news.bareMetalCluster, env.project, location, PARENT_COLLECTION);
       const name = resourceName(cluster, bareMetalNodePoolId);
       const ownership = yield* createInternalLabels(id);
-      const annotations = desiredAnnotations(
-        ownership,
-        news.labels,
-        news.annotations,
-      );
+      const annotations = desiredAnnotations(ownership, news.labels, news.annotations);
       const displayName = encodeOwnership(ownership, news.displayName);
       const body: gkeonprem.BareMetalNodePool = {
         nodePoolConfig: news.nodePoolConfig,
@@ -395,30 +367,23 @@ export const BareMetalClustersBareMetalNodePoolProvider = () =>
 
       const mask = fieldMask([
         differs(current.annotations, annotations) && "annotations",
-        !sameText(parseOwnership(current.displayName).text, news.displayName) &&
-          "displayName",
-        differs(current.nodePoolConfig, news.nodePoolConfig) &&
-          "nodePoolConfig",
+        !sameText(parseOwnership(current.displayName).text, news.displayName) && "displayName",
+        differs(current.nodePoolConfig, news.nodePoolConfig) && "nodePoolConfig",
         differs(current.upgradePolicy, news.upgradePolicy) && "upgradePolicy",
       ]);
 
       if (mask.length > 0) {
         const operation =
-          yield* gkeonprem.patchProjectsLocationsBareMetalClustersBareMetalNodePools(
-            {
-              name: current.name ?? name,
-              updateMask: mask,
-              body: {
-                ...body,
-                etag: current.etag,
-              },
+          yield* gkeonprem.patchProjectsLocationsBareMetalClustersBareMetalNodePools({
+            name: current.name ?? name,
+            updateMask: mask,
+            body: {
+              ...body,
+              etag: current.etag,
             },
-          );
+          });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {

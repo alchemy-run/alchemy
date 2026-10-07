@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -304,11 +299,7 @@ export const Target = Resource<Target>("GCP.CloudDeploy.Target");
 const resourceName = (project: string, location: string, targetId: string) =>
   `projects/${project}/locations/${location}/targets/${targetId}`;
 
-const desiredDestination = (
-  news: TargetProps,
-  project: string,
-  location: string,
-) => {
+const desiredDestination = (news: TargetProps, project: string, location: string) => {
   const gke =
     news.gke === undefined
       ? undefined
@@ -335,11 +326,7 @@ const desiredDestination = (
           membership:
             news.anthosCluster.membership === undefined
               ? undefined
-              : membershipName(
-                  news.anthosCluster.membership,
-                  project,
-                  location,
-                ),
+              : membershipName(news.anthosCluster.membership, project, location),
         };
   const customTarget =
     news.customTarget === undefined
@@ -364,9 +351,7 @@ const desiredDestination = (
   };
 };
 
-const toGke = (
-  value: clouddeploy.GkeCluster | undefined,
-): GkeCluster | undefined =>
+const toGke = (value: clouddeploy.GkeCluster | undefined): GkeCluster | undefined =>
   value === undefined
     ? undefined
     : {
@@ -376,26 +361,16 @@ const toGke = (
         proxyUrl: value.proxyUrl,
       };
 
-const toRun = (
-  value: clouddeploy.CloudRunLocation | undefined,
-): CloudRunLocation | undefined =>
+const toRun = (value: clouddeploy.CloudRunLocation | undefined): CloudRunLocation | undefined =>
   value === undefined ? undefined : { location: value.location };
 
-const toAnthos = (
-  value: clouddeploy.AnthosCluster | undefined,
-): AnthosCluster | undefined =>
+const toAnthos = (value: clouddeploy.AnthosCluster | undefined): AnthosCluster | undefined =>
   value === undefined ? undefined : { membership: value.membership };
 
-const toCustom = (
-  value: clouddeploy.CustomTarget | undefined,
-): CustomTarget | undefined =>
-  value === undefined
-    ? undefined
-    : { customTargetType: value.customTargetType };
+const toCustom = (value: clouddeploy.CustomTarget | undefined): CustomTarget | undefined =>
+  value === undefined ? undefined : { customTargetType: value.customTargetType };
 
-const toMulti = (
-  value: clouddeploy.MultiTarget | undefined,
-): MultiTarget | undefined =>
+const toMulti = (value: clouddeploy.MultiTarget | undefined): MultiTarget | undefined =>
   value === undefined ? undefined : { targetIds: value.targetIds };
 
 const toExecutionConfigs = (
@@ -468,9 +443,7 @@ export const TargetProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.targetId ?? output?.targetId,
         nextId: news.targetId ?? olds?.targetId ?? output?.targetId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -479,23 +452,13 @@ export const TargetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const targetId = yield* toPhysicalId(
-        id,
-        olds?.targetId,
-        output?.targetId,
-        "target",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, targetId);
+      const targetId = yield* toPhysicalId(id, olds?.targetId, output?.targetId, "target");
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, targetId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -507,15 +470,8 @@ export const TargetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const targetId = yield* toPhysicalId(
-        id,
-        news.targetId,
-        output?.targetId,
-        "target",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const targetId = yield* toPhysicalId(id, news.targetId, output?.targetId, "target");
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, targetId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -563,27 +519,24 @@ export const TargetProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.description, news.description) && "description",
-        !sameBool(current.requireApproval, desiredApproval) &&
-          "requireApproval",
-        fingerprint(toGke(current.gke)) !== fingerprint(destination.gke) &&
-          "gke",
-        fingerprint(toRun(current.run)) !== fingerprint(destination.run) &&
-          "run",
-        fingerprint(toAnthos(current.anthosCluster)) !==
-          fingerprint(destination.anthosCluster) && "anthosCluster",
-        fingerprint(toCustom(current.customTarget)) !==
-          fingerprint(destination.customTarget) && "customTarget",
-        fingerprint(toMulti(current.multiTarget)) !==
-          fingerprint(destination.multiTarget) && "multiTarget",
+        !sameBool(current.requireApproval, desiredApproval) && "requireApproval",
+        fingerprint(toGke(current.gke)) !== fingerprint(destination.gke) && "gke",
+        fingerprint(toRun(current.run)) !== fingerprint(destination.run) && "run",
+        fingerprint(toAnthos(current.anthosCluster)) !== fingerprint(destination.anthosCluster) &&
+          "anthosCluster",
+        fingerprint(toCustom(current.customTarget)) !== fingerprint(destination.customTarget) &&
+          "customTarget",
+        fingerprint(toMulti(current.multiTarget)) !== fingerprint(destination.multiTarget) &&
+          "multiTarget",
         fingerprint(toExecutionConfigs(current.executionConfigs)) !==
           fingerprint(news.executionConfigs) && "executionConfigs",
-        fingerprint(stringMap(current.deployParameters)) !==
-          fingerprint(desiredParameters) && "deployParameters",
-        fingerprint(current.associatedEntities) !==
-          fingerprint(news.associatedEntities) && "associatedEntities",
+        fingerprint(stringMap(current.deployParameters)) !== fingerprint(desiredParameters) &&
+          "deployParameters",
+        fingerprint(current.associatedEntities) !== fingerprint(news.associatedEntities) &&
+          "associatedEntities",
       ]);
 
       if (mask.length > 0) {
@@ -607,10 +560,7 @@ export const TargetProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

@@ -5,16 +5,15 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { stripInternalLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const MAX_DISPLAY_NAME_LENGTH = 30;
 export const MIN_DISPLAY_NAME_LENGTH = 4;
 
-export type ApiWorkload =
-  assuredworkloads.GoogleCloudAssuredworkloadsV1Workload;
+export type ApiWorkload = assuredworkloads.GoogleCloudAssuredworkloadsV1Workload;
 export type ApiOperation = assuredworkloads.GoogleLongrunningOperation;
 
 export class AssuredworkloadsNotResolved extends Data.TaggedError(
@@ -42,14 +41,11 @@ export const lastSegment = (value: string) => {
 };
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const organizationIdOf = (value: string) => lastSegment(value);
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 export const locationParent = (organization: string, location: string) =>
   `${organizationParent(organization)}/locations/${normalizeLocation(location)}`;
@@ -62,13 +58,8 @@ export const parseName = (name: string, defaultLocation: string) => {
   return {
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : defaultLocation,
-    id:
-      workloadsAt >= 0 && parts[workloadsAt + 1]
-        ? parts[workloadsAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : defaultLocation,
+    id: workloadsAt >= 0 && parts[workloadsAt + 1] ? parts[workloadsAt + 1]! : lastSegment(name),
     parent:
       workloadsAt > 0
         ? parts.slice(0, workloadsAt).join("/")
@@ -112,17 +103,14 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameBool = (
-  left: boolean | undefined,
-  right: boolean | undefined,
-) => (left ?? true) === (right ?? true);
+export const sameBool = (left: boolean | undefined, right: boolean | undefined) =>
+  (left ?? true) === (right ?? true);
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -145,18 +133,13 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const replaceOnIdentity = (changed: boolean) =>
-  changed
-    ? ({ action: "replace" as const, deleteFirst: false } as const)
-    : undefined;
+  changed ? ({ action: "replace" as const, deleteFirst: false } as const) : undefined;
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
@@ -175,9 +158,7 @@ export const listWorkloads = (organization: string, location: string) =>
       pageSize: 100,
     }),
     (page) => page.workloads,
-  ).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed([] as ApiWorkload[])),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as ApiWorkload[])));
 
 export const listOwnedWorkloads = (organization: string, region: string) =>
   Effect.gen(function* () {
@@ -187,31 +168,19 @@ export const listOwnedWorkloads = (organization: string, region: string) =>
     for (const workload of [...wildcard, ...regional]) {
       if (workload.name) byName.set(workload.name, workload);
     }
-    return Array.from(byName.values()).filter((workload) =>
-      hasAlchemyLabelMap(workload.labels),
-    );
+    return Array.from(byName.values()).filter((workload) => hasAlchemyLabelMap(workload.labels));
   });
 
-export const resourceNameFromOperation = (
-  operation: ApiOperation,
-): string | undefined => {
+export const resourceNameFromOperation = (operation: ApiOperation): string | undefined => {
   const response = operation.response;
-  if (
-    response &&
-    typeof response.name === "string" &&
-    response.name.includes("/workloads/")
-  ) {
+  if (response && typeof response.name === "string" && response.name.includes("/workloads/")) {
     return response.name;
   }
   const metadata = operation.metadata;
   if (metadata && typeof metadata.target === "string") {
     return metadata.target;
   }
-  if (
-    metadata &&
-    typeof metadata.name === "string" &&
-    metadata.name.includes("/workloads/")
-  ) {
+  if (metadata && typeof metadata.name === "string" && metadata.name.includes("/workloads/")) {
     return metadata.name;
   }
   return undefined;
@@ -283,10 +252,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);
@@ -306,9 +272,7 @@ export const deleteChildResources = (workload: ApiWorkload) =>
         resource.resourceType === "CONSUMER_PROJECT" ||
         resource.resourceType === "ENCRYPTION_KEYS_PROJECT",
     );
-    const folders = resources.filter(
-      (resource) => resource.resourceType === "CONSUMER_FOLDER",
-    );
+    const folders = resources.filter((resource) => resource.resourceType === "CONSUMER_FOLDER");
 
     yield* Effect.forEach(
       projects,

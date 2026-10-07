@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { CERT_A_PEM, KEY_A_PEM } from "../Compute/fixtures/https-proxy-cert.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { CERT_A_PEM, KEY_A_PEM } from "../Compute/fixtures/https-proxy-cert.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsProductsCertificates({ name }).pipe(
@@ -74,10 +71,9 @@ test.provider(
       expect(created.displayName).toEqual("alchemy-client-tls");
       expect(created.description).toEqual("client tls");
 
-      const fetched =
-        yield* integrations.getProjectsLocationsProductsCertificates({
-          name: created.name,
-        });
+      const fetched = yield* integrations.getProjectsLocationsProductsCertificates({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toContain("alchemy-id=");
 

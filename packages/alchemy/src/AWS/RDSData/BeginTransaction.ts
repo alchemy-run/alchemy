@@ -67,6 +67,4 @@ export interface BeginTransaction extends Binding.Service<
   >
 > {}
 
-export const BeginTransaction = Binding.Service<BeginTransaction>(
-  "AWS.RDSData.BeginTransaction",
-);
+export const BeginTransaction = Binding.Service<BeginTransaction>("AWS.RDSData.BeginTransaction");

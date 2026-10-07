@@ -1,18 +1,15 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   scc.getFoldersNotificationConfigs({ name }).pipe(
@@ -75,15 +72,12 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const topic = yield* GCP.PubSub.Topic("SccFindings", {});
-          const config = yield* GCP.SecurityCenter.FolderNotificationConfig(
-            "Findings",
-            {
-              folder,
-              pubsubTopic: topic.name,
-              filter: 'state="ACTIVE"',
-              description: "active findings",
-            },
-          );
+          const config = yield* GCP.SecurityCenter.FolderNotificationConfig("Findings", {
+            folder,
+            pubsubTopic: topic.name,
+            filter: 'state="ACTIVE"',
+            description: "active findings",
+          });
           return { config, topicName: topic.name };
         }),
       );
@@ -105,16 +99,13 @@ test.provider.skipIf(!runLifecycle)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const topic = yield* GCP.PubSub.Topic("SccFindings", {});
-          return yield* GCP.SecurityCenter.FolderNotificationConfig(
-            "Findings",
-            {
-              folder,
-              configId: created.config.configId,
-              pubsubTopic: topic.name,
-              filter: 'state="INACTIVE"',
-              description: "inactive findings",
-            },
-          );
+          return yield* GCP.SecurityCenter.FolderNotificationConfig("Findings", {
+            folder,
+            configId: created.config.configId,
+            pubsubTopic: topic.name,
+            filter: 'state="INACTIVE"',
+            description: "inactive findings",
+          });
         }),
       );
 

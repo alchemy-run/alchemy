@@ -5,7 +5,6 @@
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-
 import type { LogEntry } from "./Model.ts";
 
 export type TestStatus = "pass" | "fail" | "skip" | "todo";
@@ -156,9 +155,7 @@ export interface ReporterService {
    */
   readonly waitForExit: (summary: RunSummary) => Effect.Effect<void>;
   /** Called once by the runner when interactive control becomes available. */
-  readonly attachController?: (
-    controller: RunController,
-  ) => Effect.Effect<void>;
+  readonly attachController?: (controller: RunController) => Effect.Effect<void>;
 }
 
 export class Reporter extends Context.Service<Reporter, ReporterService>()(

@@ -185,29 +185,19 @@ export const AttestorProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousNote = lastSegment(
-        olds?.noteReference ?? output?.noteReference ?? "",
-      );
+      const previousNote = lastSegment(olds?.noteReference ?? output?.noteReference ?? "");
       const nextNote = lastSegment(news.noteReference);
       return replaceOnIdentity({
         previousId: olds?.attestorId ?? output?.attestorId,
         nextId: news.attestorId,
-        extra:
-          previousNote.length > 0 &&
-          nextNote.length > 0 &&
-          previousNote !== nextNote,
+        extra: previousNote.length > 0 && nextNote.length > 0 && previousNote !== nextNote,
         deleteFirst: true,
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const attestorId = yield* toPhysicalId(
-        id,
-        olds?.attestorId,
-        output?.attestorId,
-        "attestor",
-      );
+      const attestorId = yield* toPhysicalId(id, olds?.attestorId, output?.attestorId, "attestor");
       const name = output?.name ?? attestorName(env.project, attestorId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -227,12 +217,7 @@ export const AttestorProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const attestorId = yield* toPhysicalId(
-        id,
-        news.attestorId,
-        output?.attestorId,
-        "attestor",
-      );
+      const attestorId = yield* toPhysicalId(id, news.attestorId, output?.attestorId, "attestor");
       const name = attestorName(env.project, attestorId);
       if (news.noteReference.trim().length === 0) {
         return yield* new NoteReferenceRequired({ attestorId });
@@ -259,10 +244,7 @@ export const AttestorProvider = () =>
       }
 
       const observedNote = current.userOwnedGrafeasNote?.noteReference ?? "";
-      const descriptionChanged = !sameText(
-        current.description,
-        desiredDescription,
-      );
+      const descriptionChanged = !sameText(current.description, desiredDescription);
       const keysChanged = !samePublicKeys(
         current.userOwnedGrafeasNote?.publicKeys,
         news.publicKeys,
@@ -291,8 +273,6 @@ export const AttestorProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* ignoreGone(
-        binaryauthorization.deleteProjectsAttestors({ name: output.name }),
-      );
+      yield* ignoreGone(binaryauthorization.deleteProjectsAttestors({ name: output.name }));
     }),
   });

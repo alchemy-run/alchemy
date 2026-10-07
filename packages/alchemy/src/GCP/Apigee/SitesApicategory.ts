@@ -90,9 +90,7 @@ export type SitesApicategory = Resource<
  * @resource
  * @category Apigee
  */
-export const SitesApicategory = Resource<SitesApicategory>(
-  "GCP.Apigee.SitesApicategory",
-);
+export const SitesApicategory = Resource<SitesApicategory>("GCP.Apigee.SitesApicategory");
 
 export class SitesApicategoryNotResolved extends Data.TaggedError(
   "GCP.Apigee.SitesApicategoryNotResolved",
@@ -100,17 +98,12 @@ export class SitesApicategoryNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const siteParent = (org: string, siteId: string) =>
-  `${orgParent(org)}/sites/${siteId}`;
+const siteParent = (org: string, siteId: string) => `${orgParent(org)}/sites/${siteId}`;
 
 const resourceName = (org: string, siteId: string, categoryId: string) =>
   `${siteParent(org, siteId)}/apicategories/${categoryId}`;
 
-const toDisplayName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
@@ -125,11 +118,7 @@ const unwrap = (
   response: apigee.GoogleCloudApigeeV1ApiCategoryResponse | undefined,
 ): apigee.GoogleCloudApigeeV1ApiCategory | undefined => response?.data;
 
-const toAttrs = (
-  category: apigee.GoogleCloudApigeeV1ApiCategory,
-  org: string,
-  siteId: string,
-) => {
+const toAttrs = (category: apigee.GoogleCloudApigeeV1ApiCategory, org: string, siteId: string) => {
   const categoryId = category.id ?? "";
   return {
     name: categoryId ? resourceName(org, siteId, categoryId) : "",
@@ -144,9 +133,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee.getOrganizationsSitesApicategories({ name }).pipe(
     Effect.map((response) => unwrap(response)),
-    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
   );
 
 const listBySite = (org: string, siteId: string) =>
@@ -156,16 +143,12 @@ const listBySite = (org: string, siteId: string) =>
     })
     .pipe(
       Effect.map((page) => page.data ?? []),
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed([]),
-      ),
+      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed([])),
     );
 
 const findByDisplayName = (org: string, siteId: string, displayName: string) =>
   listBySite(org, siteId).pipe(
-    Effect.map((categories) =>
-      categories.find((category) => category.name === displayName),
-    ),
+    Effect.map((categories) => categories.find((category) => category.name === displayName)),
   );
 
 export const SitesApicategoryProvider = () =>
@@ -175,8 +158,7 @@ export const SitesApicategoryProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousSite = olds?.siteId ?? output?.siteId;
-      const siteChanged =
-        previousSite !== undefined && news.siteId !== previousSite;
+      const siteChanged = previousSite !== undefined && news.siteId !== previousSite;
       const previousOrg = olds?.organization ?? output?.organization;
       const orgChanged =
         previousOrg !== undefined &&
@@ -184,9 +166,7 @@ export const SitesApicategoryProvider = () =>
         orgIdOf(news.organization, previousOrg) !== previousOrg;
       const previousId = olds?.categoryId ?? output?.categoryId;
       const idChanged =
-        previousId !== undefined &&
-        news.categoryId !== undefined &&
-        news.categoryId !== previousId;
+        previousId !== undefined && news.categoryId !== undefined && news.categoryId !== previousId;
       if (siteChanged || orgChanged || idChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -195,18 +175,13 @@ export const SitesApicategoryProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        olds?.organization ?? output?.organization,
-        env.project,
-      );
+      const org = orgIdOf(olds?.organization ?? output?.organization, env.project);
       const siteId = olds?.siteId ?? output?.siteId;
       if (siteId === undefined) return undefined;
       const categoryId = olds?.categoryId ?? output?.categoryId;
       const name =
         output?.name ??
-        (categoryId !== undefined
-          ? resourceName(org, siteId, categoryId)
-          : undefined);
+        (categoryId !== undefined ? resourceName(org, siteId, categoryId) : undefined);
       const generated = yield* toDisplayName(id, undefined);
       const displayName = olds?.name ?? output?.categoryName ?? generated;
       const existing =
@@ -220,16 +195,9 @@ export const SitesApicategoryProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const org = orgIdOf(
-        news.organization ?? output?.organization,
-        env.project,
-      );
+      const org = orgIdOf(news.organization ?? output?.organization, env.project);
       const siteId = news.siteId;
-      const displayName = yield* toDisplayName(
-        id,
-        news.name,
-        output?.categoryName,
-      );
+      const displayName = yield* toDisplayName(id, news.name, output?.categoryName);
       const desiredName = displayName;
 
       let current =
@@ -250,9 +218,7 @@ export const SitesApicategoryProvider = () =>
           })
           .pipe(
             Effect.map((response) => unwrap(response)),
-            Effect.catchTag("Conflict", () =>
-              findByDisplayName(org, siteId, desiredName),
-            ),
+            Effect.catchTag("Conflict", () => findByDisplayName(org, siteId, desiredName)),
           );
         current = created ?? undefined;
       }
@@ -282,11 +248,6 @@ export const SitesApicategoryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsSitesApicategories({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

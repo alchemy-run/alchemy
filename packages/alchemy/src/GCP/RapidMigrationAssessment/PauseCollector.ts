@@ -38,11 +38,7 @@ export interface PauseCollector extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: PauseCollectorRequest,
-    ) => Effect.Effect<
-      rma.Operation,
-      rma.PauseProjectsLocationsCollectorsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<rma.Operation, rma.PauseProjectsLocationsCollectorsError, RuntimeContext>
   >
 > {}
 

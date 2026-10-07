@@ -7,9 +7,7 @@ import * as Schedule from "effect/Schedule";
  * Raised when an EMR Serverless application never settles into the expected
  * state within the bounded polling budget.
  */
-export class EmrServerlessStateTimeout extends Data.TaggedError(
-  "EmrServerlessStateTimeout",
-)<{
+export class EmrServerlessStateTimeout extends Data.TaggedError("EmrServerlessStateTimeout")<{
   readonly applicationId: string;
   readonly expected: readonly string[];
   readonly actual: string | undefined;
@@ -40,26 +38,23 @@ const untilNotInState = <E, R>(
  * `EmrServerlessStateTimeout` if it does not settle into `CREATED` (or an
  * auto-started `STARTING`/`STARTED`) within the budget.
  */
-export const awaitApplicationCreated = Effect.fn(
-  "AWS.EMRServerless.awaitApplicationCreated",
-)(function* (applicationId: string) {
-  const application = yield* untilNotInState(
-    emr.getApplication({ applicationId }),
-    ["CREATING"],
-  );
-  const settled = ["CREATED", "STARTING", "STARTED"];
-  if (!settled.includes(application.state)) {
-    return yield* Effect.fail(
-      new EmrServerlessStateTimeout({
-        applicationId,
-        expected: settled,
-        actual: application.state,
-        stateDetails: application.stateDetails,
-      }),
-    );
-  }
-  return application;
-});
+export const awaitApplicationCreated = Effect.fn("AWS.EMRServerless.awaitApplicationCreated")(
+  function* (applicationId: string) {
+    const application = yield* untilNotInState(emr.getApplication({ applicationId }), ["CREATING"]);
+    const settled = ["CREATED", "STARTING", "STARTED"];
+    if (!settled.includes(application.state)) {
+      return yield* Effect.fail(
+        new EmrServerlessStateTimeout({
+          applicationId,
+          expected: settled,
+          actual: application.state,
+          stateDetails: application.stateDetails,
+        }),
+      );
+    }
+    return application;
+  },
+);
 
 /**
  * Await an application settling into an updatable/deletable state (`CREATED`
@@ -67,26 +62,27 @@ export const awaitApplicationCreated = Effect.fn(
  * responsible for issuing `stopApplication` first when the application is
  * `STARTED`.
  */
-export const awaitApplicationStopped = Effect.fn(
-  "AWS.EMRServerless.awaitApplicationStopped",
-)(function* (applicationId: string) {
-  const application = yield* untilNotInState(
-    emr.getApplication({ applicationId }),
-    ["CREATING", "STARTING", "STOPPING"],
-  );
-  // TERMINATED is tolerated: a concurrent delete winning the race is a settled
-  // outcome for both the update path (the follow-up call surfaces the truth)
-  // and the delete path (nothing left to delete).
-  const settled = ["CREATED", "STOPPED", "TERMINATED"];
-  if (!settled.includes(application.state)) {
-    return yield* Effect.fail(
-      new EmrServerlessStateTimeout({
-        applicationId,
-        expected: settled,
-        actual: application.state,
-        stateDetails: application.stateDetails,
-      }),
-    );
-  }
-  return application;
-});
+export const awaitApplicationStopped = Effect.fn("AWS.EMRServerless.awaitApplicationStopped")(
+  function* (applicationId: string) {
+    const application = yield* untilNotInState(emr.getApplication({ applicationId }), [
+      "CREATING",
+      "STARTING",
+      "STOPPING",
+    ]);
+    // TERMINATED is tolerated: a concurrent delete winning the race is a settled
+    // outcome for both the update path (the follow-up call surfaces the truth)
+    // and the delete path (nothing left to delete).
+    const settled = ["CREATED", "STOPPED", "TERMINATED"];
+    if (!settled.includes(application.state)) {
+      return yield* Effect.fail(
+        new EmrServerlessStateTimeout({
+          applicationId,
+          expected: settled,
+          actual: application.state,
+          stateDetails: application.stateDetails,
+        }),
+      );
+    }
+    return application;
+  },
+);

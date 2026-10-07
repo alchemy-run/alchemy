@@ -1,22 +1,18 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { uploadChatTranscript } from "./transcript.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const transcriptBucketOf = (project: string) =>
-  `alchemy-cci-transcripts-${project}`;
+const transcriptBucketOf = (project: string) => `alchemy-cci-transcripts-${project}`;
 const conversationId = "alchemy-cci-analyses-conv";
 const conversationNameOf = (project: string) =>
   `projects/${project}/locations/us-central1/conversations/${conversationId}`;
@@ -102,13 +98,10 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.ContactCenterInsights.ConversationsAnalyses(
-            "Silence",
-            {
-              parent: conversation.name ?? conversationName,
-              annotatorSelector: { runSilenceAnnotator: true },
-            },
-          );
+          return yield* GCP.ContactCenterInsights.ConversationsAnalyses("Silence", {
+            parent: conversation.name ?? conversationName,
+            annotatorSelector: { runSilenceAnnotator: true },
+          });
         }),
       );
 

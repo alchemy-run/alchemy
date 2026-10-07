@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as GCP from "@/GCP";
 import * as Kubernetes from "@/Kubernetes";
-import * as Effect from "effect/Effect";
 import {
   JOB_MARKER_BODY,
   JOB_MARKER_KEY,

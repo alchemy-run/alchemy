@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as speech from "@distilled.cloud/gcp/speech_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { location, logLevel, currentParent, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -60,10 +60,7 @@ test.provider(
       expect(created.customClassId.length).toBeGreaterThanOrEqual(4);
       expect(created.project).toEqual(project);
       expect(created.location).toEqual(location);
-      expect(created.items.map((item) => item.value).sort()).toEqual([
-        "ketch",
-        "sloop",
-      ]);
+      expect(created.items.map((item) => item.value).sort()).toEqual(["ketch", "sloop"]);
 
       const fetched = yield* speech.getProjectsLocationsCustomClasses({
         name: created.name,
@@ -75,9 +72,7 @@ test.provider(
       expect(fetchedValues).toContain("sloop");
       expect(fetchedValues).toContain("ketch");
       // Items steer recognition: Alchemy adds no ownership item.
-      expect(fetchedValues.some((value) => value.startsWith("alc "))).toEqual(
-        false,
-      );
+      expect(fetchedValues.some((value) => value.startsWith("alc "))).toEqual(false);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -90,17 +85,12 @@ test.provider(
       );
 
       expect(updated.name).toEqual(created.name);
-      expect(updated.items.map((item) => item.value).sort()).toEqual([
-        "barque",
-        "brig",
-      ]);
+      expect(updated.items.map((item) => item.value).sort()).toEqual(["barque", "brig"]);
 
       const fetchedUpdate = yield* speech.getProjectsLocationsCustomClasses({
         name: created.name,
       });
-      const updatedValues = (fetchedUpdate.items ?? []).map(
-        (item) => item.value ?? "",
-      );
+      const updatedValues = (fetchedUpdate.items ?? []).map((item) => item.value ?? "");
       expect(updatedValues).toContain("brig");
       expect(updatedValues).toContain("barque");
       expect(updatedValues).not.toContain("sloop");

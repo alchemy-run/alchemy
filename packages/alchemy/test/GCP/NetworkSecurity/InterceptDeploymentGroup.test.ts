@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsInterceptDeploymentGroups({ name }).pipe(
@@ -60,15 +57,12 @@ test.provider.skipIf(!!process.env.FAST)(
             autoCreateSubnetworks: false,
             description: "intercept group vpc",
           });
-          const group = yield* GCP.NetworkSecurity.InterceptDeploymentGroup(
-            "Inspect",
-            {
-              location: "global",
-              network: vpc.selfLink.as<string>(),
-              description: "intercept group a",
-              labels: { env: "test" },
-            },
-          );
+          const group = yield* GCP.NetworkSecurity.InterceptDeploymentGroup("Inspect", {
+            location: "global",
+            network: vpc.selfLink.as<string>(),
+            description: "intercept group a",
+            labels: { env: "test" },
+          });
           return { vpc, group };
         }),
       );
@@ -77,22 +71,17 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.group.location).toEqual("global");
       expect(created.group.description).toEqual("intercept group a");
       expect(created.group.labels).toMatchObject({ env: "test" });
-      expect(created.group.network).toContain(
-        `/global/networks/${created.vpc.networkName}`,
-      );
+      expect(created.group.network).toContain(`/global/networks/${created.vpc.networkName}`);
 
-      const fetched =
-        yield* networksecurity.getProjectsLocationsInterceptDeploymentGroups({
-          name: created.group.name,
-        });
+      const fetched = yield* networksecurity.getProjectsLocationsInterceptDeploymentGroups({
+        name: created.group.name,
+      });
       expect(fetched.name).toEqual(created.group.name);
       expect(fetched.description).toEqual("intercept group a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -101,17 +90,13 @@ test.provider.skipIf(!!process.env.FAST)(
             autoCreateSubnetworks: false,
             description: "intercept group vpc",
           });
-          const group = yield* GCP.NetworkSecurity.InterceptDeploymentGroup(
-            "Inspect",
-            {
-              interceptDeploymentGroupId:
-                created.group.interceptDeploymentGroupId,
-              location: "global",
-              network: vpc.selfLink.as<string>(),
-              description: "intercept group b",
-              labels: { env: "prod", role: "intercept" },
-            },
-          );
+          const group = yield* GCP.NetworkSecurity.InterceptDeploymentGroup("Inspect", {
+            interceptDeploymentGroupId: created.group.interceptDeploymentGroupId,
+            location: "global",
+            network: vpc.selfLink.as<string>(),
+            description: "intercept group b",
+            labels: { env: "prod", role: "intercept" },
+          });
           return { vpc, group };
         }),
       );
@@ -123,10 +108,9 @@ test.provider.skipIf(!!process.env.FAST)(
         role: "intercept",
       });
 
-      const refetched =
-        yield* networksecurity.getProjectsLocationsInterceptDeploymentGroups({
-          name: created.group.name,
-        });
+      const refetched = yield* networksecurity.getProjectsLocationsInterceptDeploymentGroups({
+        name: created.group.name,
+      });
       expect(refetched.description).toEqual("intercept group b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("intercept");

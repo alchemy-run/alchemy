@@ -29,12 +29,7 @@ export interface RepositoryScopedRequest {
  * Registry-level operations (`ecr:GetAuthorizationToken`, which authorizes
  * only on `Resource: ["*"]`) stay bespoke in their own `{Op}Http.ts`.
  */
-export const makeEcrRepositoryHttpBinding = <
-  I extends RepositoryScopedRequest,
-  A,
-  E,
-  R,
->(options: {
+export const makeEcrRepositoryHttpBinding = <I extends RepositoryScopedRequest, A, E, R>(options: {
   /**
    * Short capability name used in the binding sid and runtime span, e.g.
    * `"DescribeImages"`.
@@ -53,28 +48,26 @@ export const makeEcrRepositoryHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ECR.${options.capability}(${repository}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [repository.repositoryArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ECR.${options.capability}(${repository}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: [repository.repositoryArn],
+              },
+            ],
+          });
         }
       }
       // The request is optional at the impl level so contracts whose
       // remaining fields are all optional (DescribeImages, ListImages, …) can
       // declare `(request?: …)`; contracts with required fields keep the
       // parameter required and narrow this signature.
-      return Effect.fn(
-        `AWS.ECR.${options.capability}(${repository.LogicalId})`,
-      )(function* (request?: Omit<I, keyof RepositoryScopedRequest>) {
+      return Effect.fn(`AWS.ECR.${options.capability}(${repository.LogicalId})`)(function* (
+        request?: Omit<I, keyof RepositoryScopedRequest>,
+      ) {
         return yield* op({
-          ...(request ?? {}),
+          ...request,
           repositoryName: yield* RepositoryName,
         } as unknown as I);
       });

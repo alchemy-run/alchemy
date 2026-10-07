@@ -1,9 +1,8 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
-export const ITEMS_DDL =
-  "CREATE TABLE Items (\n  Id STRING(36) NOT NULL,\n) PRIMARY KEY(Id)";
+export const ITEMS_DDL = "CREATE TABLE Items (\n  Id STRING(36) NOT NULL,\n) PRIMARY KEY(Id)";
 
 export const Db = GCP.Spanner.Instance("Db", {
   config: "regional-us-central1",

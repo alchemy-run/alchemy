@@ -1,6 +1,6 @@
 import * as managedidentities from "@distilled.cloud/gcp/managedidentities_v1";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -29,16 +29,12 @@ export class ResourceStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.ManagedIdentities.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.ManagedIdentities.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.ManagedIdentities.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.ManagedIdentities.ResourceFailed")<{
   name: string;
   state: string;
   details: string | undefined;
@@ -50,11 +46,7 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (
-  name: string,
-  fallback = "ad",
-  maxLength = MAX_NAME_LENGTH,
-): string => {
+export const rfc1035 = (name: string, fallback = "ad", maxLength = MAX_NAME_LENGTH): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
@@ -69,11 +61,9 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+export const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
-export const globalParent = (project: string) =>
-  `projects/${project}/locations/${GLOBAL_LOCATION}`;
+export const globalParent = (project: string) => `projects/${project}/locations/${GLOBAL_LOCATION}`;
 
 export const parseName = (name: string, collection: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -81,16 +71,10 @@ export const parseName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : GLOBAL_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : GLOBAL_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -162,14 +146,11 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -178,9 +159,7 @@ export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
 ) =>
-  JSON.stringify(
-    [...(left ?? [])].map((value) => value.toLowerCase()).sort(),
-  ) ===
+  JSON.stringify([...(left ?? [])].map((value) => value.toLowerCase()).sort()) ===
   JSON.stringify([...(right ?? [])].map((value) => value.toLowerCase()).sort());
 
 export const replaceOnIdentity = (input: {
@@ -202,21 +181,14 @@ export const replaceOnIdentity = (input: {
       input.nextId !== input.previousId);
   if (!replace) return undefined;
   const samePhysical =
-    !parentChanged &&
-    input.previousId !== undefined &&
-    input.nextId === input.previousId;
+    !parentChanged && input.previousId !== undefined && input.nextId === input.previousId;
   return {
     action: "replace" as const,
     deleteFirst: samePhysical,
   };
 };
 
-const READY_STATES = new Set([
-  "READY",
-  "ACTIVE",
-  "CONNECTED",
-  "PERFORMING_MAINTENANCE",
-]);
+const READY_STATES = new Set(["READY", "ACTIVE", "CONNECTED", "PERFORMING_MAINTENANCE"]);
 const FAILED_STATES = new Set(["ERROR", "FAILED", "UNAVAILABLE"]);
 
 export const isReadyState = (state: string | undefined) =>
@@ -239,15 +211,13 @@ export const waitForOperation = (
     return waitForLongRunningOperation(
       operation,
       (name) => {
-        const get = managedidentities
-          .getProjectsLocationsGlobalOperations({ name })
-          .pipe(
-            Effect.tap((current) =>
-              Effect.sync(() => {
-                latest = current;
-              }),
-            ),
-          );
+        const get = managedidentities.getProjectsLocationsGlobalOperations({ name }).pipe(
+          Effect.tap((current) =>
+            Effect.sync(() => {
+              latest = current;
+            }),
+          ),
+        );
         const observe: Effect.Effect<
           managedidentities.Operation,
           managedidentities.GetProjectsLocationsGlobalOperationsError,
@@ -294,8 +264,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ManagedIdentities.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.ManagedIdentities.ResourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -311,8 +280,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.ManagedIdentities.ResourceStillExists",
+      while: (error) => error._tag === "GCP.ManagedIdentities.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -332,11 +300,7 @@ export const waitUntilReady = <
     times?: number;
     interval?: `${number} seconds`;
   },
-): Effect.Effect<
-  A,
-  E | ResourceNotResolved | ResourceNotReady | ResourceFailed,
-  R
-> =>
+): Effect.Effect<A, E | ResourceNotResolved | ResourceNotReady | ResourceFailed, R> =>
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
@@ -345,9 +309,7 @@ export const waitUntilReady = <
     Effect.filterOrFail(
       (value) => {
         const state = stateOf(value) ?? "";
-        return (
-          isReadyState(state) || isFailedState(state) || state.length === 0
-        );
+        return isReadyState(state) || isFailedState(state) || state.length === 0;
       },
       (value) => new ResourceNotReady({ name, state: stateOf(value) ?? "" }),
     ),

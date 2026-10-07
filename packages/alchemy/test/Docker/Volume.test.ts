@@ -1,15 +1,12 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
-const { test } = Test.make({
-  providers: Docker.providers(),
-  state: inMemoryState(),
-});
+const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
 test.provider(
   "diff replaces a volume when labels change",
@@ -48,14 +45,8 @@ test.provider(
         id: "data",
         fqn: "data",
         instanceId: "instance",
-        olds: {
-          name: "data",
-          context: "default",
-        },
-        news: {
-          name: "data",
-          context: "remote-build",
-        },
+        olds: { name: "data", context: "default" },
+        news: { name: "data", context: "remote-build" },
         oldBindings: [],
         newBindings: [],
         output: {
@@ -75,18 +66,29 @@ test.provider(
 
 describe(
   "Docker.Volume",
-  {
-    tags: ["provider:docker", "provider:docker:volume", "local"],
-    concurrent: false,
-  },
+  { tags: ["provider:docker", "provider:docker:volume", "local"], concurrent: false },
   () => {
+    // Every prop is optional: `Docker.Volume("data")` must plan, deploy,
+    // redeploy in place, and destroy without a props object.
+    test.provider("deploys a volume declared without props", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Docker.Volume("bare-volume"));
+        expect(first.driver).toBe("local");
+        const second = yield* stack.deploy(Docker.Volume("bare-volume"));
+        expect(second.createdAt).toBe(first.createdAt);
+        yield* stack.destroy();
+        const gone = yield* docker.volume.inspect(first.name).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
     test.provider("creates a volume with labels", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
         const volumeName = "alchemy-test-volume-create";
-        yield* Effect.addFinalizer(() =>
-          docker.volume.remove(volumeName).pipe(Effect.ignore),
-        );
+        yield* Effect.addFinalizer(() => docker.volume.remove(volumeName).pipe(Effect.ignore));
         const volume = yield* stack.deploy(
           Docker.Volume("created-volume", {
             name: volumeName,
@@ -105,14 +107,10 @@ describe(
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
         const volumeName = "alchemy-test-volume-adopt-existing";
-        yield* Effect.addFinalizer(() =>
-          docker.volume.remove(volumeName).pipe(Effect.ignore),
-        );
+        yield* Effect.addFinalizer(() => docker.volume.remove(volumeName).pipe(Effect.ignore));
         yield* docker.volume
           .remove(volumeName)
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          );
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
         yield* docker.volume.create({ name: volumeName });
 
         const error = yield* stack
@@ -120,9 +118,7 @@ describe(
           .pipe(Effect.flip);
         expect(error).toBeInstanceOf(OwnedBySomeoneElse);
         const volume = yield* stack.deploy(
-          Docker.Volume("existing-volume", { name: volumeName }).pipe(
-            adopt(true),
-          ),
+          Docker.Volume("existing-volume", { name: volumeName }).pipe(adopt(true)),
         );
         expect(volume.name).toBe(volumeName);
         expect(volume.id).toBe(volumeName);
@@ -136,18 +132,12 @@ describe(
         const volumeName = "alchemy-test-volume-replace";
         yield* docker.volume
           .remove(volumeName)
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          );
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
         const first = yield* stack.deploy(
-          Docker.Volume("replaceable-volume", {
-            labels: { generation: "1" },
-          }),
+          Docker.Volume("replaceable-volume", { labels: { generation: "1" } }),
         );
         const second = yield* stack.deploy(
-          Docker.Volume("replaceable-volume", {
-            labels: { generation: "2" },
-          }),
+          Docker.Volume("replaceable-volume", { labels: { generation: "2" } }),
         );
         expect(second.id).not.toBe(first.id);
         expect(second.labels.generation).toBe("2");

@@ -1,38 +1,32 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import { quotaTolerant } from "./parent.ts";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Conversations need the Large Language Model add-on (BadRequest "This
 // feature is only available when Large Language Model add-on is enabled.").
 // Set GCP_TEST_DISCOVERYENGINE_LLM=1 on a project with the add-on.
-const runLifecycle =
-  !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
+const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
 
 const waitUntilGone = (name: string) =>
-  discoveryengine
-    .getProjectsLocationsCollectionsEnginesConversations({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  discoveryengine.getProjectsLocationsCollectionsEnginesConversations({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsCollectionsEnginesConversations on a missing conversation fails with a typed tag",
@@ -65,26 +59,19 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              location: "global",
-              displayName: "conversation-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "conversation engine",
-            },
-          );
-          const conversation =
-            yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
-              engine: engine.name,
-              state: "IN_PROGRESS",
-            });
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            location: "global",
+            displayName: "conversation-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "conversation engine",
+          });
+          const conversation = yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
+            engine: engine.name,
+            state: "IN_PROGRESS",
+          });
           return { store, engine, conversation };
         }),
       );
@@ -93,37 +80,29 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.conversation.engine).toEqual(created.engine.name);
       expect(created.conversation.state).toEqual("IN_PROGRESS");
 
-      const fetched =
-        yield* discoveryengine.getProjectsLocationsCollectionsEnginesConversations(
-          { name: created.conversation.name },
-        );
+      const fetched = yield* discoveryengine.getProjectsLocationsCollectionsEnginesConversations({
+        name: created.conversation.name,
+      });
       expect(fetched.name).toEqual(created.conversation.name);
       expect(fetched.state).toEqual("IN_PROGRESS");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
-            {
-              dataStoreId: created.store.dataStoreId,
-              location: "global",
-              displayName: "conversation-docs",
-            },
-          );
-          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine(
-            "Search",
-            {
-              engineId: created.engine.engineId,
-              location: "global",
-              dataStoreIds: [store.dataStoreId],
-              displayName: "conversation engine",
-            },
-          );
-          const conversation =
-            yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
-              engine: engine.name,
-              state: "COMPLETED",
-            });
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            dataStoreId: created.store.dataStoreId,
+            location: "global",
+            displayName: "conversation-docs",
+          });
+          const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
+            engineId: created.engine.engineId,
+            location: "global",
+            dataStoreIds: [store.dataStoreId],
+            displayName: "conversation engine",
+          });
+          const conversation = yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
+            engine: engine.name,
+            state: "COMPLETED",
+          });
           return { store, engine, conversation };
         }),
       );

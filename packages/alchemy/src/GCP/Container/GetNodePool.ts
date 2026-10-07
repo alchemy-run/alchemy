@@ -41,6 +41,4 @@ export interface GetNodePool extends Binding.Service<
   >
 > {}
 
-export const GetNodePool = Binding.Service<GetNodePool>(
-  "GCP.Container.GetNodePool",
-);
+export const GetNodePool = Binding.Service<GetNodePool>("GCP.Container.GetNodePool");

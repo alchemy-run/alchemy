@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import type {
   CallbackRow,
   Column,
@@ -48,9 +48,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
           const schema = yield* (yield* storage.sql.exec<SchemaObject>(
             "SELECT name, type, sql FROM sqlite_master WHERE name LIKE 'alchemy_%' OR name LIKE 'idx_alchemy_%' ORDER BY name",
           )).toArray();
-          const tables = schema
-            .filter((row) => row.type === "table")
-            .map((row) => row.name);
+          const tables = schema.filter((row) => row.type === "table").map((row) => row.name);
           const schemaRows = tables.includes("alchemy_alarm_schema")
             ? yield* (yield* storage.sql.exec<SchemaVersion>(
                 "SELECT id, version FROM alchemy_alarm_schema ORDER BY id",
@@ -87,8 +85,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
       return {
         // V1 Workers can still reach the upgraded object during edge rollout.
         snapshot: () => snapshot(true),
-        reconstruct: () =>
-          state.abort("alarm upgrade reconstruction", { retryAlarm: false }),
+        reconstruct: () => state.abort("alarm upgrade reconstruction", { retryAlarm: false }),
         probe: Effect.fn(
           function* (kind: "future" | "rollback") {
             if (kind === "future") {
@@ -97,14 +94,10 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
                 after: "5 minutes",
                 payload: { value: "future-preserved" },
               });
-              yield* storage.sql.exec(
-                "UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1",
-              );
+              yield* storage.sql.exec("UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1");
             } else {
               // Fail after the migration has created its first index and callback table.
-              yield* storage.sql.exec(
-                "DROP INDEX idx_alchemy_scheduled_events_run_at",
-              );
+              yield* storage.sql.exec("DROP INDEX idx_alchemy_scheduled_events_run_at");
               yield* storage.sql.exec(
                 "CREATE TABLE idx_alchemy_alarm_callbacks_run_at (value TEXT)",
               );
@@ -133,9 +126,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
             let retryBefore: Snapshot | null = null;
             let recovered: Snapshot | null = null;
             if (kind === "rollback") {
-              yield* storage.sql.exec(
-                "DROP TABLE idx_alchemy_alarm_callbacks_run_at",
-              );
+              yield* storage.sql.exec("DROP TABLE idx_alchemy_alarm_callbacks_run_at");
               yield* storage.sql.exec(`
               CREATE TABLE alchemy_alarm_schema (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -239,17 +230,23 @@ export default class AlarmUpgradeWorker extends Cloudflare.Worker<AlarmUpgradeWo
         }
         const url = new URL(request.url, "http://localhost");
         const action = url.pathname.slice(1);
-        const object = objects.getByName(
-          url.searchParams.get("name") ?? "persisted-object",
-        );
+        const object = objects.getByName(url.searchParams.get("name") ?? "persisted-object");
         if (request.method !== "POST" && action !== "snapshot") {
           return HttpServerResponse.text("Method Not Allowed", { status: 405 });
         }
         if (action === "reconstruct") {
           const aborted = yield* object.reconstruct().pipe(
-            Effect.matchCause({
-              onFailure: () => true,
-              onSuccess: () => false,
+            Effect.catchCause((cause) => {
+              // The method declares no application errors, but aborting the
+              // object rejects its RPC transport with RpcCallError.
+              const error = Cause.squash(cause);
+              if (
+                error instanceof Cloudflare.RpcCallError &&
+                error.cause instanceof Error &&
+                error.cause.message.includes("alarm upgrade reconstruction")
+              )
+                return Effect.succeed(true);
+              return Effect.failCause(cause);
             }),
           );
           return yield* HttpServerResponse.json({ aborted });
@@ -262,7 +259,11 @@ export default class AlarmUpgradeWorker extends Cloudflare.Worker<AlarmUpgradeWo
         }
         const snapshot = yield* object.execute(action).pipe(Effect.orDie);
         return yield* HttpServerResponse.json(snapshot);
-      }),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
+      ),
     };
   }),
 ) {}

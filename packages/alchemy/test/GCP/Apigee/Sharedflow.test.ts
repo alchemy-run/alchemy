@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { unzipFiles } from "@/Util/zip.ts";
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { unzipFiles } from "@/Util/zip.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Needs a provisioned Apigee organization on the testing project (paid, or
 // ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission
@@ -24,9 +21,7 @@ const runLifecycle = !!process.env.GCP_TEST_APIGEE_ORG;
 const waitUntilGone = (name: string) =>
   apigee.getOrganizationsSharedflows({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -44,9 +39,7 @@ const descriptionFromBundle = (body: apigee.GoogleApiHttpBody) =>
       /^sharedflowbundle\/[^/]+\.xml$/i.test(path),
     );
     if (xmlPath === undefined) return "";
-    return yield* Effect.sync(() =>
-      Buffer.from(entries[xmlPath]!).toString("utf8"),
-    );
+    return yield* Effect.sync(() => Buffer.from(entries[xmlPath]!).toString("utf8"));
   });
 
 test.provider(
@@ -87,9 +80,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.sharedflowId).toEqual(expect.any(String));
       expect(created.organization).toEqual(project);
-      expect(created.name).toEqual(
-        `organizations/${project}/sharedflows/${created.sharedflowId}`,
-      );
+      expect(created.name).toEqual(`organizations/${project}/sharedflows/${created.sharedflowId}`);
       expect(created.description).toEqual("alchemy test shared flow");
       expect(created.latestRevisionId).toEqual(expect.any(String));
 
@@ -119,11 +110,10 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toEqual("alchemy updated shared flow");
       expect(updated.latestRevisionId).not.toEqual(created.latestRevisionId);
 
-      const fetchedRevision =
-        yield* apigee.getOrganizationsSharedflowsRevisions({
-          name: `${updated.name}/revisions/${updated.latestRevisionId}`,
-          format: "bundle",
-        });
+      const fetchedRevision = yield* apigee.getOrganizationsSharedflowsRevisions({
+        name: `${updated.name}/revisions/${updated.latestRevisionId}`,
+        format: "bundle",
+      });
       const updatedXml = yield* descriptionFromBundle(fetchedRevision);
       expect(updatedXml).toContain("alchemy updated shared flow");
       expect(updatedXml).toContain("alchemy-id=");

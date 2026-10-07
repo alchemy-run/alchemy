@@ -179,9 +179,7 @@ export const ModelProvider = () =>
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const modelId = olds?.modelId ?? output?.modelId;
-      const name =
-        output?.name ??
-        (modelId ? resourceName(env.project, location, modelId) : "");
+      const name = output?.name ?? (modelId ? resourceName(env.project, location, modelId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -191,15 +189,12 @@ export const ModelProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(env.project, location);
       const dataset = datasetNameOf(env.project, location, news.dataset);
       const displayName = toRestrictedDisplayName(news.displayName ?? id);
       const hinted =
-        output?.name ??
-        (news.modelId ? resourceName(env.project, location, news.modelId) : "");
+        output?.name ?? (news.modelId ? resourceName(env.project, location, news.modelId) : "");
 
       let current = yield* getByName(hinted);
 
@@ -213,9 +208,7 @@ export const ModelProvider = () =>
         // Training a custom model takes hours.
         const done = yield* waitForOperation(operation, { budget: "12 hours" });
         const createdName = done.response?.name;
-        current = yield* getByName(
-          typeof createdName === "string" ? createdName : "",
-        );
+        current = yield* getByName(typeof createdName === "string" ? createdName : "");
       }
 
       if (current === undefined) {

@@ -1,5 +1,5 @@
-import { Task } from "@/AWS/ECS/Task.ts";
 import * as Effect from "effect/Effect";
+import { Task } from "@/AWS/ECS/Task.ts";
 
 /**
  * A one-shot `AWS.ECS.Task` in the TAGGED form: the class declares the task
@@ -15,9 +15,7 @@ import * as Effect from "effect/Effect";
  * The `{ run }` impl logs a marker and completes, so a successful boot is
  * observable as the Fargate task stopping with container exit code 0.
  */
-export class TaggedOneShotTask extends Task<TaggedOneShotTask>()(
-  "EcsTaggedOneShotTask",
-) {}
+export class TaggedOneShotTask extends Task<TaggedOneShotTask>()("EcsTaggedOneShotTask") {}
 
 export default TaggedOneShotTask.make(
   {

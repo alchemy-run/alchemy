@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 // Organization flow-log configs need Network Management admin on the org; the
 // testing credentials are rejected (probe). Set GOOGLE_ORGANIZATION_ID when the
 // credentials administer the org.
@@ -102,14 +99,11 @@ test.provider.skipIf(!runOrgLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig(
-            "OrgLogs",
-            {
-              description: "org flow logs a",
-              labels: { env: "test" },
-              aggregationInterval: "INTERVAL_5_SEC",
-            },
-          );
+          return yield* GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig("OrgLogs", {
+            description: "org flow logs a",
+            labels: { env: "test" },
+            aggregationInterval: "INTERVAL_5_SEC",
+          });
         }),
       );
 
@@ -119,30 +113,24 @@ test.provider.skipIf(!runOrgLifecycle)(
       expect(created.description).toEqual("org flow logs a");
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched =
-        yield* networkmanagement.getOrganizationsLocationsVpcFlowLogsConfigs({
-          name: created.name,
-        });
+      const fetched = yield* networkmanagement.getOrganizationsLocationsVpcFlowLogsConfigs({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig(
-            "OrgLogs",
-            {
-              vpcFlowLogsConfigId: created.vpcFlowLogsConfigId,
-              organization: created.organization,
-              description: "org flow logs b",
-              labels: { env: "prod", role: "logs" },
-              aggregationInterval: "INTERVAL_1_MIN",
-            },
-          );
+          return yield* GCP.NetworkManagement.OrganizationsVpcFlowLogsConfig("OrgLogs", {
+            vpcFlowLogsConfigId: created.vpcFlowLogsConfigId,
+            organization: created.organization,
+            description: "org flow logs b",
+            labels: { env: "prod", role: "logs" },
+            aggregationInterval: "INTERVAL_1_MIN",
+          });
         }),
       );
 

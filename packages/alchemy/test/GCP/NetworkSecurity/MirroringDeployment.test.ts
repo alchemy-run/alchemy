@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsMirroringDeployments({ name }).pipe(
@@ -85,20 +82,16 @@ test.provider.skipIf(!!process.env.FAST)(
             backendService: backend.selfLink.as<string>(),
             isMirroringCollector: true,
           });
-          const collectors =
-            yield* GCP.NetworkSecurity.MirroringDeploymentGroup("Collectors", {
-              network: vpc.selfLink.as<string>(),
-            });
-          const deployment = yield* GCP.NetworkSecurity.MirroringDeployment(
-            "ZoneA",
-            {
-              location: "us-central1-a",
-              mirroringDeploymentGroup: collectors.name,
-              forwardingRule: rule.selfLink.as<string>(),
-              description: "mirroring dep a",
-              labels: { env: "test" },
-            },
-          );
+          const collectors = yield* GCP.NetworkSecurity.MirroringDeploymentGroup("Collectors", {
+            network: vpc.selfLink.as<string>(),
+          });
+          const deployment = yield* GCP.NetworkSecurity.MirroringDeployment("ZoneA", {
+            location: "us-central1-a",
+            mirroringDeploymentGroup: collectors.name,
+            forwardingRule: rule.selfLink.as<string>(),
+            description: "mirroring dep a",
+            labels: { env: "test" },
+          });
           return { vpc, subnet, health, backend, rule, collectors, deployment };
         }),
       );
@@ -107,22 +100,17 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(created.deployment.location).toEqual("us-central1-a");
       expect(created.deployment.description).toEqual("mirroring dep a");
       expect(created.deployment.labels).toMatchObject({ env: "test" });
-      expect(created.deployment.mirroringDeploymentGroup).toEqual(
-        created.collectors.name,
-      );
+      expect(created.deployment.mirroringDeploymentGroup).toEqual(created.collectors.name);
 
-      const fetched =
-        yield* networksecurity.getProjectsLocationsMirroringDeployments({
-          name: created.deployment.name,
-        });
+      const fetched = yield* networksecurity.getProjectsLocationsMirroringDeployments({
+        name: created.deployment.name,
+      });
       expect(fetched.name).toEqual(created.deployment.name);
       expect(fetched.description).toEqual("mirroring dep a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -160,23 +148,18 @@ test.provider.skipIf(!!process.env.FAST)(
             backendService: backend.selfLink.as<string>(),
             isMirroringCollector: true,
           });
-          const collectors =
-            yield* GCP.NetworkSecurity.MirroringDeploymentGroup("Collectors", {
-              mirroringDeploymentGroupId:
-                created.collectors.mirroringDeploymentGroupId,
-              network: vpc.selfLink.as<string>(),
-            });
-          const deployment = yield* GCP.NetworkSecurity.MirroringDeployment(
-            "ZoneA",
-            {
-              mirroringDeploymentId: created.deployment.mirroringDeploymentId,
-              location: "us-central1-a",
-              mirroringDeploymentGroup: collectors.name,
-              forwardingRule: rule.selfLink.as<string>(),
-              description: "mirroring dep b",
-              labels: { env: "prod", role: "nsi" },
-            },
-          );
+          const collectors = yield* GCP.NetworkSecurity.MirroringDeploymentGroup("Collectors", {
+            mirroringDeploymentGroupId: created.collectors.mirroringDeploymentGroupId,
+            network: vpc.selfLink.as<string>(),
+          });
+          const deployment = yield* GCP.NetworkSecurity.MirroringDeployment("ZoneA", {
+            mirroringDeploymentId: created.deployment.mirroringDeploymentId,
+            location: "us-central1-a",
+            mirroringDeploymentGroup: collectors.name,
+            forwardingRule: rule.selfLink.as<string>(),
+            description: "mirroring dep b",
+            labels: { env: "prod", role: "nsi" },
+          });
           return { vpc, subnet, health, backend, rule, collectors, deployment };
         }),
       );

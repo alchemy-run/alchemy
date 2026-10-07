@@ -34,11 +34,7 @@ export interface GetSession extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: GetSessionInput,
-    ) => Effect.Effect<emr.GetSessionResponse, emr.GetSessionError>
+    (request: GetSessionInput) => Effect.Effect<emr.GetSessionResponse, emr.GetSessionError>
   >
 > {}
-export const GetSession = Binding.Service<GetSession>(
-  "AWS.EMRServerless.GetSession",
-);
+export const GetSession = Binding.Service<GetSession>("AWS.EMRServerless.GetSession");

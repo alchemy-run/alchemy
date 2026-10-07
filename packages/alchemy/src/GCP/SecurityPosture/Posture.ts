@@ -177,14 +177,10 @@ export type Posture = Resource<
  */
 export const Posture = Resource<Posture>("GCP.SecurityPosture.Posture");
 
-const resourceName = (
-  organization: string,
-  location: string,
-  postureId: string,
-) => `${locationParent(organization, location)}/postures/${postureId}`;
+const resourceName = (organization: string, location: string, postureId: string) =>
+  `${locationParent(organization, location)}/postures/${postureId}`;
 
-const waitPostureOperation = (operation: securityposture.Operation) =>
-  waitForOperation(operation);
+const waitPostureOperation = (operation: securityposture.Operation) => waitForOperation(operation);
 
 const waitPostureOperationGone = (operation: securityposture.Operation) =>
   waitForOperation(operation, { notFoundOk: true });
@@ -192,9 +188,7 @@ const waitPostureOperationGone = (operation: securityposture.Operation) =>
 const toAttrs = (posture: securityposture.Posture, project: string) => {
   const name = posture.name ?? "";
   const parsed = parseName(name, "postures");
-  const organization = parsed.organization
-    ? organizationParent(parsed.organization)
-    : "";
+  const organization = parsed.organization ? organizationParent(parsed.organization) : "";
   return {
     name,
     postureId: parsed.id || lastSegment(name),
@@ -252,13 +246,9 @@ export const PostureProvider = () =>
       const nextId = news.postureId ?? previousId;
       const previousOrg = olds?.organization ?? output?.organization;
       const nextOrg =
-        news.organization !== undefined
-          ? organizationParent(news.organization)
-          : previousOrg;
+        news.organization !== undefined ? organizationParent(news.organization) : previousOrg;
       return replaceOnIdentity(
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
           (previousOrg !== undefined &&
             nextOrg !== undefined &&
             organizationParent(previousOrg) !== organizationParent(nextOrg)),
@@ -268,12 +258,7 @@ export const PostureProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const postureId = yield* toPhysicalId(
-        id,
-        olds?.postureId,
-        output?.postureId,
-        "posture",
-      );
+      const postureId = yield* toPhysicalId(id, olds?.postureId, output?.postureId, "posture");
       const organization = yield* resolveOrganization(
         olds?.organization ?? output?.organization,
         output?.organization,
@@ -282,14 +267,10 @@ export const PostureProvider = () =>
           Effect.succeed(output?.organization ?? ""),
         ),
       );
-      const location = lastSegment(
-        olds?.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = lastSegment(olds?.location ?? output?.location ?? DEFAULT_LOCATION);
       const name =
         output?.name ??
-        (organization.length > 0
-          ? resourceName(organization, location, postureId)
-          : "");
+        (organization.length > 0 ? resourceName(organization, location, postureId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -308,9 +289,7 @@ export const PostureProvider = () =>
           .pages({ parent, pageSize: 1000 })
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.postures ?? [])),
-            Stream.filter((posture) =>
-              hasAlchemyAnnotationMap(posture.annotations),
-            ),
+            Stream.filter((posture) => hasAlchemyAnnotationMap(posture.annotations)),
             Stream.map((posture) => toAttrs(posture, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -320,19 +299,12 @@ export const PostureProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const postureId = yield* toPhysicalId(
-        id,
-        news.postureId,
-        output?.postureId,
-        "posture",
-      );
+      const postureId = yield* toPhysicalId(id, news.postureId, output?.postureId, "posture");
       const organization = yield* resolveOrganization(
         news.organization ?? output?.organization,
         output?.organization,
       );
-      const location = lastSegment(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = lastSegment(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(organization, location);
       const name = resourceName(organization, location, postureId);
       const desiredAnnotations = {
@@ -358,9 +330,7 @@ export const PostureProvider = () =>
         current = yield* waitUntilExists(
           getByName(name).pipe(
             Effect.map((value) =>
-              value &&
-              value.reconciling !== true &&
-              (value.revisionId ?? "").length > 0
+              value && value.reconciling !== true && (value.revisionId ?? "").length > 0
                 ? value
                 : undefined,
             ),
@@ -373,63 +343,50 @@ export const PostureProvider = () =>
         return yield* new SecuritypostureNotResolved({ name });
       }
 
-      const descriptionChanged = !sameText(
-        current.description,
-        desired.description,
-      );
-      const policySetsChanged =
-        fingerprint(current.policySets) !== fingerprint(desired.policySets);
-      const stateChanged = !sameText(
-        current.state ?? DEFAULT_STATE,
-        desired.state,
-      );
+      const descriptionChanged = !sameText(current.description, desired.description);
+      const policySetsChanged = fingerprint(current.policySets) !== fingerprint(desired.policySets);
+      const stateChanged = !sameText(current.state ?? DEFAULT_STATE, desired.state);
       const contentMask = fieldMask([
         descriptionChanged && "description",
         policySetsChanged && "policy_sets",
       ]);
 
       if (contentMask.length > 0) {
-        const operation =
-          yield* securityposture.patchOrganizationsLocationsPostures({
+        const operation = yield* securityposture.patchOrganizationsLocationsPostures({
+          name: current.name ?? name,
+          revisionId: current.revisionId,
+          updateMask: contentMask,
+          body: {
             name: current.name ?? name,
-            revisionId: current.revisionId,
-            updateMask: contentMask,
-            body: {
-              name: current.name ?? name,
-              description: desired.description,
-              policySets: desired.policySets,
-              etag: current.etag,
-            },
-          });
+            description: desired.description,
+            policySets: desired.policySets,
+            etag: current.etag,
+          },
+        });
         yield* waitPostureOperation(operation);
         current = yield* waitUntilExists(
           getByName(current.name ?? name).pipe(
-            Effect.map((value) =>
-              value && value.reconciling !== true ? value : undefined,
-            ),
+            Effect.map((value) => (value && value.reconciling !== true ? value : undefined)),
           ),
           current.name ?? name,
         );
       }
 
       if (stateChanged) {
-        const operation =
-          yield* securityposture.patchOrganizationsLocationsPostures({
+        const operation = yield* securityposture.patchOrganizationsLocationsPostures({
+          name: current.name ?? name,
+          revisionId: current.revisionId,
+          updateMask: "state",
+          body: {
             name: current.name ?? name,
-            revisionId: current.revisionId,
-            updateMask: "state",
-            body: {
-              name: current.name ?? name,
-              state: desired.state,
-              etag: current.etag,
-            },
-          });
+            state: desired.state,
+            etag: current.etag,
+          },
+        });
         yield* waitPostureOperation(operation);
         current = yield* waitUntilExists(
           getByName(current.name ?? name).pipe(
-            Effect.map((value) =>
-              value && value.reconciling !== true ? value : undefined,
-            ),
+            Effect.map((value) => (value && value.reconciling !== true ? value : undefined)),
           ),
           current.name ?? name,
         );

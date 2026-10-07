@@ -77,6 +77,54 @@ export type TableClustering = {
   fields?: string[];
 };
 
+export type TableView = {
+  /** Query that defines the view. Updates in place. */
+  query: string;
+  /**
+   * Use legacy SQL instead of GoogleSQL. The BigQuery API defaults views
+   * to legacy SQL; this resource defaults them to GoogleSQL.
+   * @default false
+   */
+  useLegacySql?: boolean;
+};
+
+export type TableHivePartitioningOptions = {
+  /**
+   * How partition keys are read from the source paths: `AUTO` infers
+   * their types, `STRINGS` reads every key as `STRING`, and `CUSTOM`
+   * takes keys and types from `sourceUriPrefix`.
+   */
+  mode?: string;
+  /**
+   * Prefix shared by every source URI, up to the first partition key
+   * (`gs://bucket/events`). In `CUSTOM` mode it also declares the keys:
+   * `gs://bucket/events/{day:DATE}`.
+   */
+  sourceUriPrefix?: string;
+  /**
+   * Require a filter on a partition key in every query of the table.
+   * @default false
+   */
+  requirePartitionFilter?: boolean;
+};
+
+export type TableExternalDataConfiguration = {
+  /** Source URIs, e.g. `gs://bucket/events/*`. */
+  sourceUris: string[];
+  /**
+   * Source format: `PARQUET`, `NEWLINE_DELIMITED_JSON`, `CSV`, `AVRO`,
+   * `ORC`, …
+   */
+  sourceFormat: string;
+  /**
+   * Infer the schema from the data. Self-describing formats such as
+   * Parquet do not need it.
+   */
+  autodetect?: boolean;
+  /** Hive partitioning of the source paths. */
+  hivePartitioningOptions?: TableHivePartitioningOptions;
+};
+
 export type TableProps = {
   /**
    * Dataset id (the `{dataset}` segment of
@@ -130,6 +178,18 @@ export type TableProps = {
    * Immutable — changing it replaces the table.
    */
   kmsKeyName?: string;
+  /**
+   * Make the table a logical view defined by a query. Mutually exclusive
+   * with `externalDataConfiguration`. Switching between a native table, a
+   * view, and an external table replaces the table.
+   */
+  view?: TableView;
+  /**
+   * Make the table an external table over data outside BigQuery, such as
+   * files in Cloud Storage. Mutually exclusive with `view`. Updates in
+   * place; switching to or from a native table or a view replaces it.
+   */
+  externalDataConfiguration?: TableExternalDataConfiguration;
 };
 
 export type Table = Resource<
@@ -170,6 +230,10 @@ export type Table = Resource<
     requirePartitionFilter: boolean;
     /** CMEK key, if set. */
     kmsKeyName: string | undefined;
+    /** View definition, for views. */
+    view: TableView | undefined;
+    /** External data configuration, for external tables. */
+    externalDataConfiguration: TableExternalDataConfiguration | undefined;
     /** Creation time in milliseconds since epoch. */
     creationTime: string | undefined;
     /** Row count, excluding the streaming buffer. */
@@ -182,13 +246,14 @@ export type Table = Resource<
 >;
 
 /**
- * A Google BigQuery table.
+ * A Google BigQuery table: a native table, a view, or an external table.
  *
- * Native tables only — views, materialized views, snapshots, and external
- * tables are not managed by this resource. `datasetId`, `tableId`, time
- * partitioning `type`/`field`, and `kmsKeyName` are immutable (changing
- * them replaces the table). Schema, labels, description, clustering, and
- * partition expiration update in place.
+ * Materialized views and snapshots are not managed by this resource.
+ * `datasetId`, `tableId`, time partitioning `type`/`field`, `kmsKeyName`,
+ * and the kind of table (native, `view`, or `externalDataConfiguration`)
+ * are immutable (changing them replaces the table). Schema, labels,
+ * description, clustering, partition expiration, the view query, and the
+ * external data configuration update in place.
  *
  * ### Creating a Table
  * **Example:** Generated name in an existing dataset
@@ -217,6 +282,32 @@ export type Table = Resource<
  * });
  * ```
  *
+ * ### Views and External Tables
+ * **Example:** View over another table
+ * ```typescript
+ * const daily = yield* GCP.BigQuery.Table("DailyEvents", {
+ *   datasetId: "analytics",
+ *   view: {
+ *     query: "SELECT DATE(created_at) AS day, COUNT(*) AS n FROM analytics.order_events GROUP BY day",
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Hive-partitioned Parquet files in Cloud Storage
+ * ```typescript
+ * const inventory = yield* GCP.BigQuery.Table("Inventory", {
+ *   datasetId: "ops",
+ *   externalDataConfiguration: {
+ *     sourceUris: ["gs://my-bucket/inventory/*.parquet"],
+ *     sourceFormat: "PARQUET",
+ *     hivePartitioningOptions: {
+ *       mode: "CUSTOM",
+ *       sourceUriPrefix: "gs://my-bucket/inventory/{bucket:STRING}/{date:DATE}",
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Inserting Rows
  * **Example:** Stream rows with InsertAll
  * ```typescript
@@ -231,10 +322,13 @@ export type Table = Resource<
  */
 export const Table = Resource<Table>("GCP.BigQuery.Table");
 
-export class TableNotResolved extends Data.TaggedError(
-  "GCP.BigQuery.TableNotResolved",
-)<{
+export class TableNotResolved extends Data.TaggedError("GCP.BigQuery.TableNotResolved")<{
   name: string;
+}> {}
+
+/** `view` and `externalDataConfiguration` were both set; a table is one kind. */
+export class ConflictingTableKind extends Data.TaggedError("GCP.BigQuery.ConflictingTableKind")<{
+  message: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -280,9 +374,7 @@ const toFieldSchema = (fields: TableField[]): bigquery.TableFieldSchema[] =>
     collation: field.collation,
   }));
 
-const schemaOf = (
-  schema: bigquery.TableSchema | undefined,
-): TableField[] | undefined => {
+const schemaOf = (schema: bigquery.TableSchema | undefined): TableField[] | undefined => {
   const fields = schema?.fields;
   if (fields === undefined || fields.length === 0) return undefined;
   return fields.flatMap((field) =>
@@ -331,10 +423,7 @@ const schemaChanged = (
   observed: bigquery.TableSchema | undefined,
 ) =>
   desired !== undefined &&
-  !jsonEqual(
-    desired.map(canonField),
-    (schemaOf(observed) ?? []).map(canonField),
-  );
+  !jsonEqual(desired.map(canonField), (schemaOf(observed) ?? []).map(canonField));
 
 const timePartitioningOf = (
   value: bigquery.TimePartitioning | undefined,
@@ -347,24 +436,97 @@ const timePartitioningOf = (
   };
 };
 
-const clusteringOf = (
-  value: bigquery.Clustering | undefined,
-): TableClustering | undefined => {
+const clusteringOf = (value: bigquery.Clustering | undefined): TableClustering | undefined => {
   const fields = (value?.fields ?? []).filter(
     (field): field is string => field !== undefined && field.length > 0,
   );
   return fields.length > 0 ? { fields } : undefined;
 };
 
-const sameOptionalString = (
-  left: string | undefined,
-  right: string | undefined,
-) => (left ?? "") === (right ?? "");
+const sameOptionalString = (left: string | undefined, right: string | undefined) =>
+  (left ?? "") === (right ?? "");
 
-const toAttrs = (
-  table: bigquery.Table | bigquery.TableListTablesItem,
-  project: string,
+/** Table kind as BigQuery reports it in `type`. */
+const kindOf = (props: Pick<TableProps, "view" | "externalDataConfiguration">) =>
+  props.view !== undefined
+    ? "VIEW"
+    : props.externalDataConfiguration !== undefined
+      ? "EXTERNAL"
+      : DEFAULT_TYPE;
+
+// The API defaults views to legacy SQL, so the flag is always sent.
+const toView = (view: TableView): bigquery.ViewDefinition => ({
+  query: view.query,
+  useLegacySql: view.useLegacySql ?? false,
+});
+
+const viewOf = (value: bigquery.ViewDefinition | undefined): TableView | undefined =>
+  value?.query === undefined
+    ? undefined
+    : { query: value.query, useLegacySql: value.useLegacySql === true };
+
+const viewChanged = (
+  desired: TableView | undefined,
+  observed: bigquery.ViewDefinition | undefined,
+) =>
+  desired !== undefined &&
+  (desired.query !== observed?.query ||
+    (desired.useLegacySql ?? false) !== (observed?.useLegacySql === true));
+
+const toExternal = (
+  config: TableExternalDataConfiguration,
+): bigquery.ExternalDataConfiguration => ({
+  sourceUris: config.sourceUris,
+  sourceFormat: config.sourceFormat,
+  autodetect: config.autodetect,
+  hivePartitioningOptions: config.hivePartitioningOptions,
+});
+
+const externalOf = (
+  value: bigquery.ExternalDataConfiguration | undefined,
+): TableExternalDataConfiguration | undefined => {
+  if (value?.sourceFormat === undefined) return undefined;
+  const hive = value.hivePartitioningOptions;
+  return {
+    sourceUris: [...(value.sourceUris ?? [])],
+    sourceFormat: value.sourceFormat,
+    autodetect: value.autodetect,
+    hivePartitioningOptions:
+      hive === undefined
+        ? undefined
+        : {
+            mode: hive.mode,
+            sourceUriPrefix: hive.sourceUriPrefix,
+            requirePartitionFilter: hive.requirePartitionFilter === true,
+          },
+  };
+};
+
+// Only the keys the user set are compared: BigQuery fills in defaults.
+const differs = <T>(desired: T | undefined, observed: T | undefined) =>
+  desired !== undefined && desired !== observed;
+
+const externalChanged = (
+  desired: TableExternalDataConfiguration | undefined,
+  observed: bigquery.ExternalDataConfiguration | undefined,
 ) => {
+  if (desired === undefined) return false;
+  if (observed === undefined) return true;
+  const hive = desired.hivePartitioningOptions;
+  const observedHive = observed.hivePartitioningOptions;
+  return (
+    !jsonEqual(desired.sourceUris, observed.sourceUris ?? []) ||
+    desired.sourceFormat.toUpperCase() !== (observed.sourceFormat ?? "").toUpperCase() ||
+    differs(desired.autodetect, observed.autodetect === true) ||
+    (hive !== undefined &&
+      (observedHive === undefined ||
+        differs(hive.mode, observedHive.mode) ||
+        differs(hive.sourceUriPrefix, observedHive.sourceUriPrefix) ||
+        differs(hive.requirePartitionFilter, observedHive.requirePartitionFilter === true)))
+  );
+};
+
+const toAttrs = (table: bigquery.Table | bigquery.TableListTablesItem, project: string) => {
   const full = table as bigquery.Table;
   const ref = table.tableReference;
   const tableId = ref?.tableId ?? "";
@@ -387,6 +549,8 @@ const toAttrs = (
     clustering: clusteringOf(table.clustering),
     requirePartitionFilter: table.requirePartitionFilter === true,
     kmsKeyName: full.encryptionConfiguration?.kmsKeyName,
+    view: viewOf(full.view),
+    externalDataConfiguration: externalOf(full.externalDataConfiguration),
     creationTime: table.creationTime,
     numRows: full.numRows,
     selfLink: full.selfLink,
@@ -438,6 +602,12 @@ const toTableBody = (
   if (news.kmsKeyName !== undefined) {
     body.encryptionConfiguration = { kmsKeyName: news.kmsKeyName };
   }
+  if (news.view !== undefined) {
+    body.view = toView(news.view);
+  }
+  if (news.externalDataConfiguration !== undefined) {
+    body.externalDataConfiguration = toExternal(news.externalDataConfiguration);
+  }
   return body;
 };
 
@@ -466,28 +636,23 @@ export const TableProvider = () =>
       const previousDataset = olds?.datasetId ?? output?.datasetId;
       const nextDataset = datasetIdOf(news.datasetId);
       const datasetChanged =
-        previousDataset !== undefined &&
-        datasetIdOf(previousDataset) !== nextDataset;
+        previousDataset !== undefined && datasetIdOf(previousDataset) !== nextDataset;
 
-      const previousPartition =
-        olds?.timePartitioning ?? output?.timePartitioning;
+      const previousPartition = olds?.timePartitioning ?? output?.timePartitioning;
       const nextPartition = news.timePartitioning;
       const partitionChanged =
         nextPartition !== undefined &&
-        ((previousPartition?.type ?? "").toUpperCase() !==
-          nextPartition.type.toUpperCase() ||
+        ((previousPartition?.type ?? "").toUpperCase() !== nextPartition.type.toUpperCase() ||
           (previousPartition?.field ?? "") !== (nextPartition.field ?? ""));
 
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.kmsKeyName ?? previousKms;
       const kmsChanged = previousKms !== nextKms;
 
-      if (
-        !tableIdChanged &&
-        !datasetChanged &&
-        !partitionChanged &&
-        !kmsChanged
-      ) {
+      const previousKind = olds !== undefined ? kindOf(olds) : output?.type;
+      const kindChanged = previousKind !== undefined && previousKind !== kindOf(news);
+
+      if (!tableIdChanged && !datasetChanged && !partitionChanged && !kmsChanged && !kindChanged) {
         return undefined;
       }
       return {
@@ -509,9 +674,7 @@ export const TableProvider = () =>
       const existing = yield* getByRef(env.project, datasetId, tableId);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -545,13 +708,9 @@ export const TableProvider = () =>
                 maxResults: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.tables ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.tables ?? [])),
                 Stream.filter((table) =>
-                  Object.keys(table.labels ?? {}).some((key) =>
-                    key.startsWith("alchemy-"),
-                  ),
+                  Object.keys(table.labels ?? {}).some((key) => key.startsWith("alchemy-")),
                 ),
                 Stream.map((table) => toAttrs(table, env.project)),
                 Stream.runCollect,
@@ -567,6 +726,11 @@ export const TableProvider = () =>
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
+      if (news.view !== undefined && news.externalDataConfiguration !== undefined) {
+        return yield* new ConflictingTableKind({
+          message: "Set either view or externalDataConfiguration on a BigQuery table, not both",
+        });
+      }
       const env = yield* GcpEnvironment.current;
       const tableId = yield* toId(id, news.tableId, output?.tableId);
       const datasetId = datasetIdOf(news.datasetId);
@@ -583,19 +747,9 @@ export const TableProvider = () =>
           .insertTables({
             projectId: env.project,
             datasetId,
-            body: toTableBody(
-              env.project,
-              datasetId,
-              tableId,
-              news,
-              desiredLabels,
-            ),
+            body: toTableBody(env.project, datasetId, tableId, news, desiredLabels),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByRef(env.project, datasetId, tableId),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, tableId)));
         current = created ?? undefined;
       }
 
@@ -634,14 +788,15 @@ export const TableProvider = () =>
         );
       const clusteringChanged =
         news.clustering !== undefined &&
-        !jsonEqual(
-          news.clustering.fields ?? [],
-          current.clustering?.fields ?? [],
-        );
+        !jsonEqual(news.clustering.fields ?? [], current.clustering?.fields ?? []);
       const requireFilterChanged =
         news.requirePartitionFilter !== undefined &&
-        news.requirePartitionFilter !==
-          (current.requirePartitionFilter === true);
+        news.requirePartitionFilter !== (current.requirePartitionFilter === true);
+      const queryChanged = viewChanged(news.view, current.view);
+      const externalConfigChanged = externalChanged(
+        news.externalDataConfiguration,
+        current.externalDataConfiguration,
+      );
 
       if (
         labelsChanged ||
@@ -651,7 +806,9 @@ export const TableProvider = () =>
         fieldsChanged ||
         partitionExpirationChanged ||
         clusteringChanged ||
-        requireFilterChanged
+        requireFilterChanged ||
+        queryChanged ||
+        externalConfigChanged
       ) {
         const body: bigquery.Table = {};
         if (labelsChanged) body.labels = desiredLabels;
@@ -669,6 +826,12 @@ export const TableProvider = () =>
         }
         if (requireFilterChanged) {
           body.requirePartitionFilter = news.requirePartitionFilter;
+        }
+        if (queryChanged && news.view !== undefined) {
+          body.view = toView(news.view);
+        }
+        if (externalConfigChanged && news.externalDataConfiguration !== undefined) {
+          body.externalDataConfiguration = toExternal(news.externalDataConfiguration);
         }
         current = yield* bigquery.patchTables({
           projectId: env.project,

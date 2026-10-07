@@ -132,10 +132,9 @@ export type TasksPushNotificationConfig = Resource<
  * @resource
  * @category WorkspaceEvents
  */
-export const TasksPushNotificationConfig =
-  Resource<TasksPushNotificationConfig>(
-    "GCP.WorkspaceEvents.TasksPushNotificationConfig",
-  );
+export const TasksPushNotificationConfig = Resource<TasksPushNotificationConfig>(
+  "GCP.WorkspaceEvents.TasksPushNotificationConfig",
+);
 
 export class TasksPushNotificationConfigNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.TasksPushNotificationConfigNotResolved",
@@ -143,9 +142,7 @@ export class TasksPushNotificationConfigNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const authOf = (
-  auth: we.AuthenticationInfo | undefined,
-): AuthenticationInfo | undefined => {
+const authOf = (auth: we.AuthenticationInfo | undefined): AuthenticationInfo | undefined => {
   if (auth === undefined) return undefined;
   return {
     schemes: auth.schemes,
@@ -184,17 +181,13 @@ export const TasksPushNotificationConfigProvider = () =>
       const previousId = olds?.configId ?? output?.configId;
       const identityChanged =
         (previousTask !== undefined && toTaskName(previousTask) !== nextTask) ||
-        (previousId !== undefined &&
-          news.configId !== undefined &&
-          news.configId !== previousId);
+        (previousId !== undefined && news.configId !== undefined && news.configId !== previousId);
       const previousUrl = olds?.url ?? output?.url;
       const previousToken = olds?.token ?? output?.token;
       const previousAuth = olds?.authentication ?? output?.authentication;
       const payloadChanged =
         (previousUrl !== undefined && news.url !== previousUrl) ||
-        (news.token !== undefined &&
-          previousToken !== undefined &&
-          news.token !== previousToken) ||
+        (news.token !== undefined && previousToken !== undefined && news.token !== previousToken) ||
         (news.authentication !== undefined &&
           previousAuth !== undefined &&
           !jsonEqual(news.authentication, previousAuth));
@@ -223,15 +216,9 @@ export const TasksPushNotificationConfigProvider = () =>
       const name = output?.name ?? toConfigName(task, configId);
       const existing = yield* getConfig(name, olds?.tenant ?? output?.tenant);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        env.project,
-        olds?.tenant ?? output?.tenant,
-      );
+      const attrs = toAttrs(existing, env.project, olds?.tenant ?? output?.tenant);
       // Only an explicit config id found without state is ambiguous.
-      return output === undefined && olds?.configId !== undefined
-        ? Unowned(attrs)
-        : attrs;
+      return output === undefined && olds?.configId !== undefined ? Unowned(attrs) : attrs;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -265,9 +252,7 @@ export const TasksPushNotificationConfigProvider = () =>
               },
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => getConfig(name, news.tenant)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getConfig(name, news.tenant)));
         current = created ?? (yield* getConfig(name, news.tenant));
       }
 

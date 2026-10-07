@@ -229,9 +229,7 @@ const listModules = (organization: string) =>
     (page) => page.securityHealthAnalyticsCustomModules,
   ).pipe(
     Effect.catchTag("NotFound", () =>
-      Effect.succeed(
-        [] as scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule[],
-      ),
+      Effect.succeed([] as scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule[]),
     ),
   );
 
@@ -240,155 +238,127 @@ const observe = (organization: string, id: string, name: string) =>
     const existing = yield* getByName(name);
     if (existing !== undefined) return existing;
     const items = yield* listModules(organization);
-    return yield* findOwned(
-      items,
-      (item) => item.customConfig?.description,
-      id,
-    );
+    return yield* findOwned(items, (item) => item.customConfig?.description, id);
   });
 
-export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider =
-  () =>
-    Provider.succeed(OrganizationsSecurityHealthAnalyticsSettingsCustomModule, {
-      stables: [
-        "name",
-        "moduleId",
-        "organization",
-        "organizationId",
-        "project",
-        "displayName",
-        "ancestorModule",
-      ],
+export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
+  Provider.succeed(OrganizationsSecurityHealthAnalyticsSettingsCustomModule, {
+    stables: [
+      "name",
+      "moduleId",
+      "organization",
+      "organizationId",
+      "project",
+      "displayName",
+      "ancestorModule",
+    ],
 
-      diff: Effect.fn(function* ({ news, olds, output }) {
-        if (!isResolved(news)) return undefined;
-        return (
-          replaceOn(olds?.moduleId ?? output?.moduleId, news.moduleId) ??
-          replaceOn(
-            olds?.organization ?? output?.organization,
-            news.organization === undefined
-              ? undefined
-              : organizationParent(news.organization),
-          ) ??
-          replaceOn(olds?.displayName ?? output?.displayName, news.displayName)
-        );
-      }),
-
-      read: Effect.fn(function* ({ id, olds, output }) {
-        const env = yield* GcpEnvironment.current;
-        const organization = yield* resolveOrganization(
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (!isResolved(news)) return undefined;
+      return (
+        replaceOn(olds?.moduleId ?? output?.moduleId, news.moduleId) ??
+        replaceOn(
           olds?.organization ?? output?.organization,
-          output?.organization,
-        );
-        const moduleId = olds?.moduleId ?? output?.moduleId;
-        const name =
-          output?.name ??
-          (moduleId ? resourceName(organization, moduleId) : "");
-        const existing = yield* observe(organization, id, name);
-        if (existing === undefined) return undefined;
-        const attrs = toAttrs(existing, organization, env.project);
-        return (yield* ownedByAlchemy(id, existing.customConfig?.description))
-          ? attrs
-          : Unowned(attrs);
+          news.organization === undefined ? undefined : organizationParent(news.organization),
+        ) ??
+        replaceOn(olds?.displayName ?? output?.displayName, news.displayName)
+      );
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(
+        olds?.organization ?? output?.organization,
+        output?.organization,
+      );
+      const moduleId = olds?.moduleId ?? output?.moduleId;
+      const name = output?.name ?? (moduleId ? resourceName(organization, moduleId) : "");
+      const existing = yield* observe(organization, id, name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization, env.project);
+      return (yield* ownedByAlchemy(id, existing.customConfig?.description))
+        ? attrs
+        : Unowned(attrs);
+    }),
+
+    list: () =>
+      Effect.gen(function* () {
+        const env = yield* GcpEnvironment.current;
+        const organization = yield* tryResolveOrganization();
+        if (organization === undefined) return [];
+        const items = yield* listModules(organization);
+        return items
+          .filter((module) => hasOwnershipMarker(module.customConfig?.description))
+          .map((module) => toAttrs(module, organization, env.project));
       }),
 
-      list: () =>
-        Effect.gen(function* () {
-          const env = yield* GcpEnvironment.current;
-          const organization = yield* tryResolveOrganization();
-          if (organization === undefined) return [];
-          const items = yield* listModules(organization);
-          return items
-            .filter((module) =>
-              hasOwnershipMarker(module.customConfig?.description),
-            )
-            .map((module) => toAttrs(module, organization, env.project));
-        }),
-
-      reconcile: Effect.fn(function* ({ id, news, output }) {
-        const env = yield* GcpEnvironment.current;
-        const organization = yield* resolveOrganization(
-          news.organization,
-          output?.organization,
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
+      const parent = shaSettingsParent(organization);
+      const moduleId = news.moduleId ?? output?.moduleId;
+      const name = output?.name ?? (moduleId ? resourceName(organization, moduleId) : "");
+      const ownership = yield* createInternalLabels(id);
+      const customConfig = desiredCustomConfig(news.customConfig, ownership);
+      const enablementState = news.enablementState ?? "ENABLED";
+      const displayName =
+        news.displayName ??
+        shaDisplayNameOf(
+          yield* createPhysicalName({
+            id,
+            maxLength: 63,
+            lowercase: true,
+          }),
         );
-        const parent = shaSettingsParent(organization);
-        const moduleId = news.moduleId ?? output?.moduleId;
-        const name =
-          output?.name ??
-          (moduleId ? resourceName(organization, moduleId) : "");
-        const ownership = yield* createInternalLabels(id);
-        const customConfig = desiredCustomConfig(news.customConfig, ownership);
-        const enablementState = news.enablementState ?? "ENABLED";
-        const displayName =
-          news.displayName ??
-          shaDisplayNameOf(
-            yield* createPhysicalName({
-              id,
-              maxLength: 63,
-              lowercase: true,
-            }),
-          );
-        const body: scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule =
-          {
-            displayName,
+      const body: scc.GoogleCloudSecuritycenterV1SecurityHealthAnalyticsCustomModule = {
+        displayName,
+        enablementState,
+        customConfig,
+        cloudProvider: news.cloudProvider,
+      };
+
+      let current = yield* observe(organization, id, name);
+
+      if (current === undefined) {
+        current = yield* scc.createOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          parent,
+          body,
+        });
+      }
+
+      if (current === undefined) {
+        return yield* new OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved({
+          name: name || parent,
+        });
+      }
+
+      const currentName = current.name ?? name;
+      const enablementChanged = !sameText(current.enablementState, enablementState);
+      const configChanged = !jsonEqual(current.customConfig, customConfig);
+      const updateMask = updateMaskOf(
+        enablementChanged ? "enablement_state" : undefined,
+        configChanged ? "custom_config" : undefined,
+      );
+
+      if (updateMask.length > 0) {
+        current = yield* scc.patchOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          name: currentName,
+          updateMask,
+          body: {
             enablementState,
             customConfig,
-            cloudProvider: news.cloudProvider,
-          };
+          },
+        });
+      }
 
-        let current = yield* observe(organization, id, name);
+      return toAttrs(current, organization, env.project);
+    }),
 
-        if (current === undefined) {
-          current =
-            yield* scc.createOrganizationsSecurityHealthAnalyticsSettingsCustomModules(
-              {
-                parent,
-                body,
-              },
-            );
-        }
-
-        if (current === undefined) {
-          return yield* new OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved(
-            {
-              name: name || parent,
-            },
-          );
-        }
-
-        const currentName = current.name ?? name;
-        const enablementChanged = !sameText(
-          current.enablementState,
-          enablementState,
-        );
-        const configChanged = !jsonEqual(current.customConfig, customConfig);
-        const updateMask = updateMaskOf(
-          enablementChanged ? "enablement_state" : undefined,
-          configChanged ? "custom_config" : undefined,
-        );
-
-        if (updateMask.length > 0) {
-          current =
-            yield* scc.patchOrganizationsSecurityHealthAnalyticsSettingsCustomModules(
-              {
-                name: currentName,
-                updateMask,
-                body: {
-                  enablementState,
-                  customConfig,
-                },
-              },
-            );
-        }
-
-        return toAttrs(current, organization, env.project);
-      }),
-
-      delete: Effect.fn(function* ({ output }) {
-        yield* scc
-          .deleteOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
-            name: output.name,
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      }),
-    });
+    delete: Effect.fn(function* ({ output }) {
+      yield* scc
+        .deleteOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          name: output.name,
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    }),
+  });

@@ -1,10 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import { CAPACITY_REGION } from "../zones.ts";
 import DataprocBindingsHost, { Jobs } from "./fixtures/bindings-host.ts";
@@ -22,13 +22,9 @@ let clusterName: string;
 let clusterResource: string;
 let project: string;
 
-const rolesOf = (
-  bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>,
-) =>
+const rolesOf = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>) =>
   bindings
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)
     .sort();
 
@@ -78,19 +74,14 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the cluster as the host's service account, granted on the cluster only",
         (_stack) =>
           Effect.gen(function* () {
-            const cluster = yield* expectProbe<dataproc.Cluster>(
-              baseUrl,
-              "getCluster",
-            );
+            const cluster = yield* expectProbe<dataproc.Cluster>(baseUrl, "getCluster");
             expect(cluster.clusterName).toEqual(clusterName);
             expect(cluster.status?.state).toEqual("RUNNING");
 
             const policy = yield* dataproc.getIamPolicyProjectsRegionsClusters({
               resource: clusterResource,
             });
-            expect(rolesOf(policy.bindings ?? [])).toEqual([
-              "roles/dataproc.viewer",
-            ]);
+            expect(rolesOf(policy.bindings ?? [])).toEqual(["roles/dataproc.viewer"]);
             expect(yield* projectRoles).not.toContain("roles/dataproc.viewer");
           }),
         {

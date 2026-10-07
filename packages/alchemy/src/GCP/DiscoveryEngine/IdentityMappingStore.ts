@@ -143,9 +143,7 @@ const listStores = (project: string) =>
           pageSize: 100,
         })
         .pipe(
-          Stream.flatMap((page) =>
-            Stream.fromIterable(page.identityMappingStores ?? []),
-          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.identityMappingStores ?? [])),
           Stream.filter((store) => isAlchemyId(lastId(store.name))),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
@@ -164,41 +162,25 @@ const lastId = (name: string | undefined) =>
 
 export const IdentityMappingStoreProvider = () =>
   Provider.succeed(IdentityMappingStore, {
-    stables: [
-      "name",
-      "identityMappingStoreId",
-      "project",
-      "location",
-      "kmsKey",
-      "cmekConfigName",
-    ],
+    stables: ["name", "identityMappingStoreId", "project", "location", "kmsKey", "cmekConfigName"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.identityMappingStoreId ?? output?.identityMappingStoreId;
+      const previousId = olds?.identityMappingStoreId ?? output?.identityMappingStoreId;
       const nextId = news.identityMappingStoreId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousKey = olds?.kmsKeyName ?? output?.kmsKey ?? "";
       const nextKey = news.kmsKeyName ?? previousKey;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousKey !== nextKey;
       if (!replace) return undefined;
       return {
         action: "replace" as const,
         deleteFirst:
-          previousLocation === nextLocation &&
-          previousId !== undefined &&
-          nextId === previousId,
+          previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
 

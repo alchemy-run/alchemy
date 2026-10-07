@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -52,9 +52,7 @@ test.provider(
           return yield* GCP.ContainerAnalysis.Note("Authority", {
             shortDescription: "alchemy test attestor",
             longDescription: "initial",
-            relatedUrl: [
-              { url: "https://example.com/policy", label: "policy" },
-            ],
+            relatedUrl: [{ url: "https://example.com/policy", label: "policy" }],
             attestation: { hint: { humanReadableName: "Alchemy QA" } },
           });
         }),
@@ -65,9 +63,7 @@ test.provider(
       expect(created.shortDescription).toEqual("alchemy test attestor");
       expect(created.longDescription).toEqual("initial");
       expect(created.kind).toEqual("ATTESTATION");
-      expect(created.attestation?.hint?.humanReadableName).toEqual(
-        "Alchemy QA",
-      );
+      expect(created.attestation?.hint?.humanReadableName).toEqual("Alchemy QA");
 
       const fetched = yield* containeranalysis.getProjectsNotes({
         name: created.name,

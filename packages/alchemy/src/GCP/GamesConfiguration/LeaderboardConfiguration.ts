@@ -37,9 +37,7 @@ export type LeaderboardConfigurationProps = {
    * Sort order for posted scores.
    * @default "LARGER_IS_BETTER"
    */
-  scoreOrder?:
-    | gamesConfiguration.LeaderboardConfigurationScoreOrderEnum
-    | (string & {});
+  scoreOrder?: gamesConfiguration.LeaderboardConfigurationScoreOrderEnum | (string & {});
   /**
    * Minimum score that can be posted (int64 string).
    */
@@ -165,10 +163,7 @@ export class LeaderboardConfigurationNotResolved extends Data.TaggedError(
 const localeOf = (
   news: LeaderboardConfigurationProps,
   current?: gamesConfiguration.LeaderboardConfiguration,
-) =>
-  news.locale ??
-  current?.draft?.name?.translations?.[0]?.locale ??
-  DEFAULT_LOCALE;
+) => news.locale ?? current?.draft?.name?.translations?.[0]?.locale ?? DEFAULT_LOCALE;
 
 const toAttrs = (
   leaderboard: gamesConfiguration.LeaderboardConfiguration,
@@ -199,8 +194,7 @@ const desiredBody = (input: {
   const draft = input.news.draft ?? {};
   const name = withTranslation(draft.name, input.locale, input.name);
   return {
-    scoreOrder:
-      input.news.scoreOrder ?? input.current?.scoreOrder ?? DEFAULT_SCORE_ORDER,
+    scoreOrder: input.news.scoreOrder ?? input.current?.scoreOrder ?? DEFAULT_SCORE_ORDER,
     scoreMin: input.news.scoreMin ?? input.current?.scoreMin,
     scoreMax: input.news.scoreMax ?? input.current?.scoreMax,
     token: input.current?.token,
@@ -273,9 +267,7 @@ export const LeaderboardConfigurationProvider = () =>
         MAX_LEADERBOARD_NAME_LENGTH,
       );
 
-      let current = yield* getLeaderboard(
-        news.leaderboardId ?? output?.leaderboardId ?? "",
-      );
+      let current = yield* getLeaderboard(news.leaderboardId ?? output?.leaderboardId ?? "");
 
       const locale = localeOf(news, current);
       const desired = desiredBody({

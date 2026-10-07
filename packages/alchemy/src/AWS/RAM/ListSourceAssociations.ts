@@ -28,10 +28,7 @@ export interface ListSourceAssociations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ram.ListSourceAssociationsRequest,
-    ) => Effect.Effect<
-      ram.ListSourceAssociationsResponse,
-      ram.ListSourceAssociationsError
-    >
+    ) => Effect.Effect<ram.ListSourceAssociationsResponse, ram.ListSourceAssociationsError>
   >
 > {}
 export const ListSourceAssociations = Binding.Service<ListSourceAssociations>(

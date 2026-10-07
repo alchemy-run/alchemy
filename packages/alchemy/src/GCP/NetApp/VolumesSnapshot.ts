@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -132,18 +127,11 @@ export type VolumesSnapshot = Resource<
  * @resource
  * @category NetApp
  */
-export const VolumesSnapshot = Resource<VolumesSnapshot>(
-  "GCP.NetApp.VolumesSnapshot",
-);
+export const VolumesSnapshot = Resource<VolumesSnapshot>("GCP.NetApp.VolumesSnapshot");
 
-const resourceName = (volume: string, snapshotId: string) =>
-  `${volume}/snapshots/${snapshotId}`;
+const resourceName = (volume: string, snapshotId: string) => `${volume}/snapshots/${snapshotId}`;
 
-const toAttrs = (
-  snapshot: netapp.Snapshot,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (snapshot: netapp.Snapshot, project: string, region: string) => {
   const name = snapshot.name ?? "";
   const parsed = parseName(name, "snapshots", region);
   return {
@@ -182,22 +170,12 @@ const listOwned = (project: string) =>
 
 export const VolumesSnapshotProvider = () =>
   Provider.succeed(VolumesSnapshot, {
-    stables: [
-      "name",
-      "snapshotId",
-      "volume",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "snapshotId", "volume", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -224,28 +202,14 @@ export const VolumesSnapshotProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const volume = volumeOf(
-        olds?.volume ?? output?.volume ?? "",
-        env.project,
-        location,
-      );
-      const snapshotId = yield* toPhysicalId(
-        id,
-        olds?.snapshotId,
-        output?.snapshotId,
-        "snapshot",
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const volume = volumeOf(olds?.volume ?? output?.volume ?? "", env.project, location);
+      const snapshotId = yield* toPhysicalId(id, olds?.snapshotId, output?.snapshotId, "snapshot");
       const name = output?.name ?? resourceName(volume, snapshotId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -257,17 +221,9 @@ export const VolumesSnapshotProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const locationHint = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const locationHint = normalizeLocation(news.location ?? output?.location, env.region);
       const volume = volumeOf(news.volume, env.project, locationHint);
-      const snapshotId = yield* toPhysicalId(
-        id,
-        news.snapshotId,
-        output?.snapshotId,
-        "snapshot",
-      );
+      const snapshotId = yield* toPhysicalId(id, news.snapshotId, output?.snapshotId, "snapshot");
       const name = output?.name ?? resourceName(volume, snapshotId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -306,12 +262,8 @@ export const VolumesSnapshotProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const mask = fieldMask([
-        labelsChanged && "labels",
-        descriptionChanged && "description",
-      ]);
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const mask = fieldMask([labelsChanged && "labels", descriptionChanged && "description"]);
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsVolumesSnapshots({

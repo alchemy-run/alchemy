@@ -7,14 +7,14 @@
  */
 import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway } from "@distilled.cloud/railway";
-import { RailwayAuth } from "@/Railway/AuthProvider.ts";
-import { fromAuthProvider } from "@/Railway/Credentials.ts";
-import { resolveWorkspace } from "@/Railway/Environment.ts";
-import { Environment } from "@/Railway/ProjectEnvironment.ts";
-import { createProject, type Project } from "@/Railway/Project.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
+import { resolveWorkspace } from "@/Railway/Environment.ts";
+import { createProject, type Project } from "@/Railway/Project.ts";
+import { Environment } from "@/Railway/ProjectEnvironment.ts";
 import { SUITE_PROJECT_NAME } from "./suiteProjectName.ts";
 
 export { SUITE_PROJECT_NAME } from "./suiteProjectName.ts";
@@ -36,10 +36,7 @@ const toProject = (
   name: project.name || SUITE_PROJECT_NAME,
   workspaceId: project.workspaceId ?? project.workspace?.id ?? workspaceId,
   environmentId:
-    project.primaryEnvironmentId ??
-    project.baseEnvironmentId ??
-    project.baseEnvironment?.id ??
-    "",
+    project.primaryEnvironmentId ?? project.baseEnvironmentId ?? project.baseEnvironment?.id ?? "",
   url: `https://railway.com/project/${project.id}`,
 });
 
@@ -77,10 +74,7 @@ const projectEnvironments = (projectId: string) =>
 
 const findByName = (workspaceId: string) =>
   workspaceProjects(workspaceId).pipe(
-    Stream.filter(
-      (project) =>
-        project.deletedAt == null && project.name === SUITE_PROJECT_NAME,
-    ),
+    Stream.filter((project) => project.deletedAt == null && project.name === SUITE_PROJECT_NAME),
     Stream.take(1),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
@@ -104,9 +98,7 @@ const acquire = Effect.gen(function* () {
         Stream.take(1),
         Stream.runHead,
       );
-      return env._tag === "Some"
-        ? { ...attrs, environmentId: env.value.id }
-        : attrs;
+      return env._tag === "Some" ? { ...attrs, environmentId: env.value.id } : attrs;
     });
 
   if (existing !== undefined) {
@@ -121,19 +113,12 @@ const acquire = Effect.gen(function* () {
     Effect.flatMap((project) => resolve(project)),
     Effect.catch((error) =>
       findByName(workspace.id).pipe(
-        Effect.flatMap((found) =>
-          found !== undefined ? resolve(found) : Effect.fail(error),
-        ),
+        Effect.flatMap((found) => (found !== undefined ? resolve(found) : Effect.fail(error))),
       ),
     ),
   );
 }).pipe(
-  Effect.provide(
-    Layer.mergeAll(
-      GraphQLLive,
-      fromAuthProvider().pipe(Layer.provide(RailwayAuth)),
-    ),
-  ),
+  Effect.provide(Layer.mergeAll(GraphQLLive, fromAuthProvider().pipe(Layer.provide(RailwayAuth)))),
 );
 
 /**

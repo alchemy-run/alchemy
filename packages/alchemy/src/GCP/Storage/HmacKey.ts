@@ -97,17 +97,13 @@ export type HmacKey = Resource<
  */
 export const HmacKey = Resource<HmacKey>("GCP.Storage.HmacKey");
 
-export class HmacKeyNotResolved extends Data.TaggedError(
-  "GCP.Storage.HmacKeyNotResolved",
-)<{
+export class HmacKeyNotResolved extends Data.TaggedError("GCP.Storage.HmacKeyNotResolved")<{
   projectId: string;
   serviceAccountEmail: string;
   accessId?: string;
 }> {}
 
-export class HmacKeyStillExists extends Data.TaggedError(
-  "GCP.Storage.HmacKeyStillExists",
-)<{
+export class HmacKeyStillExists extends Data.TaggedError("GCP.Storage.HmacKeyStillExists")<{
   projectId: string;
   accessId: string;
 }> {}
@@ -121,11 +117,7 @@ const normalizeState = (state: string | undefined): HmacKeyState =>
 const toSecret = (
   value: string | Redacted.Redacted<string> | undefined,
 ): Redacted.Redacted<string> | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? Redacted.make(value)
-      : value;
+  value === undefined ? undefined : typeof value === "string" ? Redacted.make(value) : value;
 
 const toAttrs = (
   metadata: storage.HmacKeyMetadata,
@@ -192,8 +184,7 @@ const deactivateThenDelete = (projectId: string, accessId: string) =>
       .pipe(Effect.catchTag("NotFound", () => Effect.void));
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "BadRequest" || error._tag === "Conflict",
+      while: (error) => error._tag === "BadRequest" || error._tag === "Conflict",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -214,10 +205,7 @@ export const HmacKeyProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.serviceAccountEmail ?? output?.serviceAccountEmail;
-      if (
-        previous !== undefined &&
-        !sameEmail(previous, news.serviceAccountEmail)
-      ) {
+      if (previous !== undefined && !sameEmail(previous, news.serviceAccountEmail)) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -243,10 +231,7 @@ export const HmacKeyProvider = () =>
             maxResults: 250,
           })
           .pipe(
-            Stream.filter(
-              (item) =>
-                !!item.accessId && item.state?.toUpperCase() !== "DELETED",
-            ),
+            Stream.filter((item) => !!item.accessId && item.state?.toUpperCase() !== "DELETED"),
             Stream.map((item) => toAttrs(item, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),

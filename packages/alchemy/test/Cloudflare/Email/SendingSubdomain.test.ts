@@ -1,9 +1,3 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as emailSending from "@distilled.cloud/cloudflare/email-sending";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -12,17 +6,19 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { emailRoutingScoped } from "./scope.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test subdomain names. Each test owns a disjoint
 // subdomain so reruns and parallel runs never collide, and the same name is
@@ -38,9 +34,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -80,16 +74,14 @@ const purgeSubdomain = (zoneId: string, name: string) =>
   findByName(zoneId, name).pipe(
     Effect.flatMap((existing) =>
       existing
-        ? emailSending
-            .deleteSubdomain({ zoneId, subdomainId: existing.tag })
-            .pipe(
-              Effect.catchTag("SendingSubdomainNotFound", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "Forbidden",
-                schedule: forbiddenRetrySchedule,
-                times: 8,
-              }),
-            )
+        ? emailSending.deleteSubdomain({ zoneId, subdomainId: existing.tag }).pipe(
+            Effect.catchTag("SendingSubdomainNotFound", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: forbiddenRetrySchedule,
+              times: 8,
+            }),
+          )
         : Effect.void,
     ),
   );
@@ -131,9 +123,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       // Gone after destroy — the typed not-found is the success signal.
       const gone = yield* getSubdomain(zoneId, sending.subdomainId).pipe(
         Effect.map(() => "still-there" as const),
-        Effect.catchTag("SendingSubdomainNotFound", () =>
-          Effect.succeed("gone" as const),
-        ),
+        Effect.catchTag("SendingSubdomainNotFound", () => Effect.succeed("gone" as const)),
       );
       expect(gone).toEqual("gone");
 
@@ -141,12 +131,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:email",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -242,12 +227,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:email",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "provider:cloudflare:zone", "live"],
   },
 );
 
@@ -262,15 +242,13 @@ test.provider.skipIf(!emailRoutingScoped)(
 
       // Create the subdomain out-of-band so the stack has no state of its
       // own for it — exactly the "already exists" scenario.
-      const pre = yield* emailSending
-        .createSubdomain({ zoneId, name: NAME_ADOPT })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
+      const pre = yield* emailSending.createSubdomain({ zoneId, name: NAME_ADOPT }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
       expect(pre.tag).toBeDefined();
 
       // Without `adopt`: sending subdomains carry no ownership markers, so
@@ -309,12 +287,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:email",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "provider:cloudflare:zone", "live"],
     timeout: 180_000,
   },
 );
@@ -337,9 +310,7 @@ test.provider.skipIf(!emailRoutingScoped)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.SendingSubdomain,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.SendingSubdomain);
       // The scoped token may still be propagating across the edge; ride out
       // the typed Forbidden blips on the enumeration itself.
       const all = yield* provider.list().pipe(
@@ -362,12 +333,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:email",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "provider:cloudflare:zone", "live"],
     timeout: 180_000,
   },
 );
@@ -376,9 +342,7 @@ test.provider.skipIf(!emailRoutingScoped)(
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -387,7 +351,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

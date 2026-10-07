@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -9,6 +8,7 @@ import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 import { Service } from "../Service.ts";
 import {
   bindWebsiteDomain,
@@ -19,7 +19,6 @@ import {
   type FrameworkSiteProps,
   type Website,
 } from "./FrameworkSite.ts";
-import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 
 export interface StaticSiteProps extends Pick<
   FrameworkSiteProps,
@@ -163,14 +162,8 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         cwd: props.dev.cwd ?? props.cwd,
         env: props.dev.env ?? props.env,
       }).pipe(Namespace.push(id));
-      const url = Output.map(
-        (detected: string | undefined) => detected ?? props.dev?.url,
-      )(dev.url);
-      return {
-        url,
-        server: undefined,
-        service: undefined,
-      } satisfies Website;
+      const url = Output.map((detected: string | undefined) => detected ?? props.dev?.url)(dev.url);
+      return { url, server: undefined, service: undefined } satisfies Website;
     }
 
     const build = yield* Command.Build("Build", {
@@ -181,34 +174,19 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       env: props.env,
     }).pipe(Namespace.push(id));
 
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const outdir = path.resolve(cwd, props.outdir);
-    const {
-      NODE_SERVE_ENTRY_FILE_NAME,
-      relativeClientDirExpression,
-      writeNodeServeEntry,
-    } = yield* loadFrontendCore;
-    const servePath = path.join(
-      path.dirname(outdir),
-      NODE_SERVE_ENTRY_FILE_NAME,
-    );
+    const { NODE_SERVE_ENTRY_FILE_NAME, relativeClientDirExpression, writeNodeServeEntry } =
+      yield* loadFrontendCore;
+    const servePath = path.join(path.dirname(outdir), NODE_SERVE_ENTRY_FILE_NAME);
     yield* writeNodeServeEntry({
-      output: {
-        clientDirectory: outdir,
-        serverModules: [],
-        externalWorkspaces: new Set<string>(),
-      },
+      output: { clientDirectory: outdir, serverModules: [], externalWorkspaces: new Set<string>() },
       servePath,
       serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
       clientDirExpression: relativeClientDirExpression(servePath, outdir),
       notFoundHandling:
-        props.errorPage !== undefined
-          ? "404-page"
-          : props.spa === true
-            ? "spa"
-            : "none",
+        props.errorPage !== undefined ? "404-page" : props.spa === true ? "spa" : "none",
       printUrl: isLocal,
       defaultPort: port,
       platform: "node",
@@ -226,11 +204,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
           HOST: "127.0.0.1",
         },
       }).pipe(Namespace.push(id));
-      return {
-        url: dev.url,
-        server: undefined,
-        service: undefined,
-      } satisfies Website;
+      return { url: dev.url, server: undefined, service: undefined } satisfies Website;
     }
 
     const server =
@@ -240,17 +214,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const service = yield* Service(id, {
       server,
       main: servePath,
-      extraFiles: [
-        {
-          source: outdir,
-          destination: path.basename(outdir),
-        },
-      ],
+      extraFiles: [{ source: outdir, destination: path.basename(outdir) }],
       port,
-      env: {
-        ...unwrapEnv(props.env),
-        PORT: String(port),
-      },
+      env: { ...unwrapEnv(props.env), PORT: String(port) },
       // Generated static-file server is a complete bun/node program.
       isExternal: true,
     });

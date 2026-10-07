@@ -152,10 +152,7 @@ const parentOf = (name: string) => {
 const resourceName = (metadataStore: string, executionId: string) =>
   `${metadataStore}/executions/${executionId}`;
 
-const toAttrs = (
-  execution: aiplatform.GoogleCloudAiplatformV1Execution,
-  project: string,
-) => {
+const toAttrs = (execution: aiplatform.GoogleCloudAiplatformV1Execution, project: string) => {
   const name = execution.name ?? "";
   return {
     name,
@@ -180,30 +177,22 @@ const getByName = (name: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listExecutions = (parent: string) =>
-  aiplatform.listProjectsLocationsMetadataStoresExecutions
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.executions ?? []),
-      ),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Execution[]),
-      ),
-    );
+  aiplatform.listProjectsLocationsMetadataStoresExecutions.pages({ parent, pageSize: 100 }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.executions ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1Execution[]),
+    ),
+  );
 
 const listStores = (parent: string) =>
-  aiplatform.listProjectsLocationsMetadataStores
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((pages) =>
-        Array.from(pages).flatMap((page) => page.metadataStores ?? []),
-      ),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
-      ),
-    );
+  aiplatform.listProjectsLocationsMetadataStores.pages({ parent, pageSize: 100 }).pipe(
+    Stream.runCollect,
+    Effect.map((pages) => Array.from(pages).flatMap((page) => page.metadataStores ?? [])),
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as aiplatform.GoogleCloudAiplatformV1MetadataStore[]),
+    ),
+  );
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
@@ -213,8 +202,7 @@ const waitUntilGone = (name: string) =>
     ),
     Effect.asVoid,
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.MetadataStoresExecutionStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.MetadataStoresExecutionStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -222,14 +210,7 @@ const waitUntilGone = (name: string) =>
 
 export const MetadataStoresExecutionProvider = () =>
   Provider.succeed(MetadataStoresExecution, {
-    stables: [
-      "name",
-      "executionId",
-      "metadataStore",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "executionId", "metadataStore", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -241,16 +222,12 @@ export const MetadataStoresExecutionProvider = () =>
         (previousParent !== undefined &&
           nextParent !== undefined &&
           nextParent !== previousParent) ||
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId)
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousParent === nextParent &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousParent === nextParent && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -258,24 +235,16 @@ export const MetadataStoresExecutionProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const executionId = yield* toResourceId(
-        id,
-        olds?.executionId,
-        output?.executionId,
-      );
+      const executionId = yield* toResourceId(id, olds?.executionId, output?.executionId);
       const metadataStore = olds?.metadataStore ?? output?.metadataStore;
       const name =
         output?.name ??
-        (metadataStore !== undefined
-          ? resourceName(metadataStore, executionId)
-          : "");
+        (metadataStore !== undefined ? resourceName(metadataStore, executionId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -283,8 +252,7 @@ export const MetadataStoresExecutionProvider = () =>
         const env = yield* GcpEnvironment.current;
         const stores = yield* Effect.forEach(
           listLocations(env.region),
-          (location) =>
-            listStores(`projects/${env.project}/locations/${location}`),
+          (location) => listStores(`projects/${env.project}/locations/${location}`),
           { concurrency: 4 },
         );
         const executions = yield* Effect.forEach(
@@ -300,18 +268,10 @@ export const MetadataStoresExecutionProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const executionId = yield* toResourceId(
-        id,
-        news.executionId,
-        output?.executionId,
-      );
+      const executionId = yield* toResourceId(id, news.executionId, output?.executionId);
       const metadataStore = news.metadataStore;
       const name = resourceName(metadataStore, executionId);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -342,19 +302,15 @@ export const MetadataStoresExecutionProvider = () =>
         return yield* new MetadataStoresExecutionNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const displayChanged = (current.displayName ?? "") !== displayName;
       const labelsChanged = labelsDiffer(current.labels, desiredLabels);
       const stateChanged = (current.state ?? "") !== (news.state ?? "");
       const schemaTitleChanged =
-        (current.schemaTitle ?? "") !==
-        (news.schemaTitle ?? DEFAULT_SCHEMA_TITLE);
-      const schemaVersionChanged =
-        (current.schemaVersion ?? "") !== (news.schemaVersion ?? "");
+        (current.schemaTitle ?? "") !== (news.schemaTitle ?? DEFAULT_SCHEMA_TITLE);
+      const schemaVersionChanged = (current.schemaVersion ?? "") !== (news.schemaVersion ?? "");
       const metadataChanged =
-        news.metadata !== undefined &&
-        stableJson(current.metadata) !== stableJson(news.metadata);
+        news.metadata !== undefined && stableJson(current.metadata) !== stableJson(news.metadata);
 
       if (
         descriptionChanged ||
@@ -365,32 +321,31 @@ export const MetadataStoresExecutionProvider = () =>
         schemaVersionChanged ||
         metadataChanged
       ) {
-        current =
-          yield* aiplatform.patchProjectsLocationsMetadataStoresExecutions({
+        current = yield* aiplatform.patchProjectsLocationsMetadataStoresExecutions({
+          name,
+          updateMask: [
+            descriptionChanged ? "description" : undefined,
+            displayChanged ? "display_name" : undefined,
+            labelsChanged ? "labels" : undefined,
+            stateChanged ? "state" : undefined,
+            schemaTitleChanged ? "schema_title" : undefined,
+            schemaVersionChanged ? "schema_version" : undefined,
+            metadataChanged ? "metadata" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name,
-            updateMask: [
-              descriptionChanged ? "description" : undefined,
-              displayChanged ? "display_name" : undefined,
-              labelsChanged ? "labels" : undefined,
-              stateChanged ? "state" : undefined,
-              schemaTitleChanged ? "schema_title" : undefined,
-              schemaVersionChanged ? "schema_version" : undefined,
-              metadataChanged ? "metadata" : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name,
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              state: news.state,
-              schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
-              schemaVersion: news.schemaVersion,
-              metadata: news.metadata,
-              etag: current.etag,
-            },
-          });
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            state: news.state,
+            schemaTitle: news.schemaTitle ?? DEFAULT_SCHEMA_TITLE,
+            schemaVersion: news.schemaVersion,
+            metadata: news.metadata,
+            etag: current.etag,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

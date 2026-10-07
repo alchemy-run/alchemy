@@ -1,8 +1,8 @@
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import * as RemovalPolicy from "../../RemovalPolicy.ts";
@@ -49,19 +49,14 @@ const isStorageEvent = (props: EventarcEventSourceProps) =>
  */
 const eventDataContentType = (props: EventarcEventSourceProps) =>
   props.eventDataContentType ??
-  (hasTypePrefix(props, "google.cloud.firestore.")
-    ? "application/protobuf"
-    : undefined);
+  (hasTypePrefix(props, "google.cloud.firestore.") ? "application/protobuf" : undefined);
 
 /**
  * Decode a binary-mode CloudEvent delivery. JSON payloads are parsed,
  * `text/*` payloads stay strings, and anything else (e.g. the
  * `application/protobuf` Firestore events) is handed over as raw bytes.
  */
-const toCloudEvent = (
-  request: HttpServerRequest,
-  body: Uint8Array,
-): CloudEvent => {
+const toCloudEvent = (request: HttpServerRequest, body: Uint8Array): CloudEvent => {
   const attributes: Record<string, string> = {};
   for (const [name, value] of Object.entries(request.headers)) {
     if (name.startsWith("ce-") && typeof value === "string") {

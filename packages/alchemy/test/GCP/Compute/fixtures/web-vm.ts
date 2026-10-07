@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { DEFAULT_NETWORK } from "../../networkQuota.ts";
 
 export const REGION = "us-central1";
@@ -57,10 +57,7 @@ export const webVm = (phase: "initial" | "updated") =>
         },
       ],
       tags: [WEB_TAG],
-      labels:
-        phase === "initial"
-          ? { smoke: "instance" }
-          : { smoke: "instance", phase: "updated" },
+      labels: phase === "initial" ? { smoke: "instance" } : { smoke: "instance", phase: "updated" },
       metadata: {
         "startup-script": STARTUP_SCRIPT,
         "smoke-phase": phase,

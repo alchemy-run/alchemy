@@ -10,10 +10,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type {
-  LogBucketCmekSettings,
-  LogBucketIndexConfig,
-} from "./LogBucket.ts";
 import {
   DEFAULT_LOCATION,
   DEFAULT_RETENTION_DAYS,
@@ -27,6 +23,7 @@ import {
   toPhysicalId,
   tryResolveOrganization,
 } from "./internal.ts";
+import type { LogBucketCmekSettings, LogBucketIndexConfig } from "./LogBucket.ts";
 
 export type OrganizationLogBucketProps = {
   /**
@@ -192,16 +189,11 @@ export class OrganizationLogBucketFailed extends Data.TaggedError(
   state: string | undefined;
 }> {}
 
-const resourceName = (
-  organization: string,
-  location: string,
-  bucketId: string,
-) => `${organization}/locations/${location}/buckets/${bucketId}`;
+const resourceName = (organization: string, location: string, bucketId: string) =>
+  `${organization}/locations/${location}/buckets/${bucketId}`;
 
 const parseBucketName = (name: string) => {
-  const match = name.match(
-    /^(organizations\/[^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/,
-  );
+  const match = name.match(/^(organizations\/[^/]+)\/locations\/([^/]+)\/buckets\/([^/]+)$/);
   if (!match) return undefined;
   return {
     organization: match[1]!,
@@ -225,22 +217,16 @@ const organizationOf = (bucket: logging.LogBucket, fallback: string) => {
   return parsed?.organization ?? fallback;
 };
 
-const isDeleted = (
-  bucket: logging.LogBucket | undefined,
-): bucket is undefined =>
+const isDeleted = (bucket: logging.LogBucket | undefined): bucket is undefined =>
   bucket === undefined || bucket.lifecycleState === "DELETE_REQUESTED";
 
-const isPending = (state: string | undefined) =>
-  state === "CREATING" || state === "UPDATING";
+const isPending = (state: string | undefined) => state === "CREATING" || state === "UPDATING";
 
 const canonRestricted = (fields: readonly string[] | undefined) =>
   [...(fields ?? [])].slice().sort();
 
 const canonIndexConfigs = (
-  configs:
-    | readonly logging.IndexConfig[]
-    | readonly LogBucketIndexConfig[]
-    | undefined,
+  configs: readonly logging.IndexConfig[] | readonly LogBucketIndexConfig[] | undefined,
 ): LogBucketIndexConfig[] =>
   [...(configs ?? [])]
     .flatMap((config) =>
@@ -248,8 +234,7 @@ const canonIndexConfigs = (
         ? [
             {
               fieldPath: config.fieldPath,
-              type: (config.type ??
-                "INDEX_TYPE_STRING") as LogBucketIndexConfig["type"],
+              type: (config.type ?? "INDEX_TYPE_STRING") as LogBucketIndexConfig["type"],
             },
           ]
         : [],
@@ -268,9 +253,7 @@ const toAttrs = (
   const parsed = parseDescription(bucket.description);
   const cmekKey = bucket.cmekSettings?.kmsKeyName;
   return {
-    name:
-      bucket.name ??
-      (bucketId ? resourceName(resolvedOrg, resolvedLocation, bucketId) : ""),
+    name: bucket.name ?? (bucketId ? resourceName(resolvedOrg, resolvedLocation, bucketId) : ""),
     bucketId,
     organization: resolvedOrg,
     organizationId: organizationIdOf(resolvedOrg),
@@ -317,8 +300,7 @@ const waitUntilActive = (name: string) =>
     return bucket;
   }).pipe(
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.OrganizationLogBucketNotResolved",
+      while: (error) => error._tag === "GCP.Logging.OrganizationLogBucketNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -327,13 +309,10 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket)
-        ? Effect.void
-        : Effect.fail(new OrganizationLogBucketNotResolved({ name })),
+      isDeleted(bucket) ? Effect.void : Effect.fail(new OrganizationLogBucketNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Logging.OrganizationLogBucketNotResolved",
+      while: (error) => error._tag === "GCP.Logging.OrganizationLogBucketNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -358,9 +337,7 @@ const toCreateBody = (
           type: config.type,
         }))
       : undefined,
-  cmekSettings: props.cmekSettings
-    ? { kmsKeyName: props.cmekSettings.kmsKeyName }
-    : undefined,
+  cmekSettings: props.cmekSettings ? { kmsKeyName: props.cmekSettings.kmsKeyName } : undefined,
 });
 
 export const OrganizationLogBucketProvider = () =>
@@ -379,9 +356,7 @@ export const OrganizationLogBucketProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.bucketId ?? output?.bucketId;
       const idChanged =
-        previousId !== undefined &&
-        news.bucketId !== undefined &&
-        news.bucketId !== previousId;
+        previousId !== undefined && news.bucketId !== undefined && news.bucketId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -403,14 +378,8 @@ export const OrganizationLogBucketProvider = () =>
         output?.organization,
       );
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const bucketId = yield* toPhysicalId(
-        id,
-        olds?.bucketId,
-        output?.bucketId,
-        "b",
-      );
-      const name =
-        output?.name ?? resourceName(organization, location, bucketId);
+      const bucketId = yield* toPhysicalId(id, olds?.bucketId, output?.bucketId, "b");
+      const name = output?.name ?? resourceName(organization, location, bucketId);
       const existing = yield* getByName(name);
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, organization, env.project, location);
@@ -430,10 +399,7 @@ export const OrganizationLogBucketProvider = () =>
           })
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.buckets ?? [])),
-            Stream.filter(
-              (bucket) =>
-                !isDeleted(bucket) && hasOwnershipMarker(bucket.description),
-            ),
+            Stream.filter((bucket) => !isDeleted(bucket) && hasOwnershipMarker(bucket.description)),
             Stream.map((bucket) =>
               toAttrs(
                 bucket,
@@ -450,27 +416,16 @@ export const OrganizationLogBucketProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const bucketId = yield* toPhysicalId(
-        id,
-        news.bucketId,
-        output?.bucketId,
-        "b",
-      );
+      const bucketId = yield* toPhysicalId(id, news.bucketId, output?.bucketId, "b");
       const name = resourceName(organization, location, bucketId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
 
       let current = yield* getByName(output?.name ?? name);
 
-      if (
-        current !== undefined &&
-        current.lifecycleState === "DELETE_REQUESTED"
-      ) {
+      if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
         yield* undelete(current.name ?? name);
         current = yield* waitUntilActive(current.name ?? name);
       }
@@ -484,10 +439,7 @@ export const OrganizationLogBucketProvider = () =>
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
-        if (
-          current !== undefined &&
-          current.lifecycleState === "DELETE_REQUESTED"
-        ) {
+        if (current !== undefined && current.lifecycleState === "DELETE_REQUESTED") {
           yield* undelete(current.name ?? name);
           current = yield* waitUntilActive(current.name ?? name);
         } else if (current !== undefined && isPending(current.lifecycleState)) {
@@ -501,13 +453,11 @@ export const OrganizationLogBucketProvider = () =>
 
       const desiredLocked = news.locked === true;
       const desiredAnalytics = news.analyticsEnabled === true;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const retentionChanged =
         news.retentionDays !== undefined &&
         current.locked !== true &&
-        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !==
-          news.retentionDays;
+        (current.retentionDays ?? DEFAULT_RETENTION_DAYS) !== news.retentionDays;
       const restrictedChanged =
         news.restrictedFields !== undefined &&
         !jsonEqual(
@@ -516,20 +466,15 @@ export const OrganizationLogBucketProvider = () =>
         );
       const indexChanged =
         news.indexConfigs !== undefined &&
-        !jsonEqual(
-          canonIndexConfigs(current.indexConfigs),
-          canonIndexConfigs(news.indexConfigs),
-        );
+        !jsonEqual(canonIndexConfigs(current.indexConfigs), canonIndexConfigs(news.indexConfigs));
       const analyticsChanged =
         news.analyticsEnabled !== undefined &&
         desiredAnalytics &&
         current.analyticsEnabled !== true;
       const cmekChanged =
         news.cmekSettings !== undefined &&
-        (current.cmekSettings?.kmsKeyName ?? "") !==
-          news.cmekSettings.kmsKeyName;
-      const lockedChanged =
-        news.locked !== undefined && desiredLocked && current.locked !== true;
+        (current.cmekSettings?.kmsKeyName ?? "") !== news.cmekSettings.kmsKeyName;
+      const lockedChanged = news.locked !== undefined && desiredLocked && current.locked !== true;
 
       const syncMask = [
         descriptionChanged ? "description" : undefined,

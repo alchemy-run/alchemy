@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
 const MAX_NAME_LENGTH = 100;
@@ -240,9 +236,7 @@ export type Metric = Resource<
  */
 export const Metric = Resource<Metric>("GCP.Logging.Metric");
 
-export class MetricNotResolved extends Data.TaggedError(
-  "GCP.Logging.MetricNotResolved",
-)<{
+export class MetricNotResolved extends Data.TaggedError("GCP.Logging.MetricNotResolved")<{
   name: string;
 }> {}
 
@@ -304,13 +298,9 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toLabels = (
-  labels: logging.LabelDescriptorList | undefined,
-): MetricLabel[] =>
+const toLabels = (labels: logging.LabelDescriptorList | undefined): MetricLabel[] =>
   (labels ?? []).flatMap((label) =>
     label.key
       ? [
@@ -375,17 +365,12 @@ const toAttrs = (metric: logging.LogMetric, project: string) => {
   };
 };
 
-const recordsEqual = (
-  left: Record<string, string>,
-  right: Record<string, string>,
-) => {
+const recordsEqual = (left: Record<string, string>, right: Record<string, string>) => {
   const leftKeys = Object.keys(left).sort();
   const rightKeys = Object.keys(right).sort();
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && left[key] === right[key],
-    )
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
   );
 };
 
@@ -408,32 +393,24 @@ const descriptorChanged = (
   if (desired === undefined) return false;
   if (
     desired.metricKind !== undefined &&
-    (observed?.metricKind ?? DEFAULT_METRIC_KIND).toUpperCase() !==
-      desired.metricKind.toUpperCase()
+    (observed?.metricKind ?? DEFAULT_METRIC_KIND).toUpperCase() !== desired.metricKind.toUpperCase()
   ) {
     return true;
   }
   if (
     desired.valueType !== undefined &&
-    (observed?.valueType ?? DEFAULT_VALUE_TYPE).toUpperCase() !==
-      desired.valueType.toUpperCase()
+    (observed?.valueType ?? DEFAULT_VALUE_TYPE).toUpperCase() !== desired.valueType.toUpperCase()
   ) {
     return true;
   }
   if (desired.unit !== undefined && (observed?.unit ?? "1") !== desired.unit) {
     return true;
   }
-  if (
-    desired.displayName !== undefined &&
-    (observed?.displayName ?? "") !== desired.displayName
-  ) {
+  if (desired.displayName !== undefined && (observed?.displayName ?? "") !== desired.displayName) {
     return true;
   }
   if (desired.labels !== undefined) {
-    return !jsonEqual(
-      canonLabels(toLabels(observed?.labels)),
-      canonLabels(desired.labels),
-    );
+    return !jsonEqual(canonLabels(toLabels(observed?.labels)), canonLabels(desired.labels));
   }
   return false;
 };
@@ -476,9 +453,7 @@ const toBody = (
   labelExtractors: news.labelExtractors,
   bucketName: news.bucketName,
   bucketOptions: news.bucketOptions,
-  metricDescriptor: toWritableDescriptor(
-    news.metricDescriptor ?? current?.metricDescriptor,
-  ),
+  metricDescriptor: toWritableDescriptor(news.metricDescriptor ?? current?.metricDescriptor),
 });
 
 const getByName = (metricName: string) =>
@@ -495,34 +470,26 @@ export const MetricProvider = () =>
       const previousId = olds?.metricId ?? output?.metricId;
       const nextId = news.metricId ?? previousId;
       const idChanged =
-        previousId !== undefined &&
-        news.metricId !== undefined &&
-        previousId !== news.metricId;
+        previousId !== undefined && news.metricId !== undefined && previousId !== news.metricId;
 
       const previousKind = (
-        olds?.metricDescriptor?.metricKind ??
-        output?.metricDescriptor?.metricKind
+        olds?.metricDescriptor?.metricKind ?? output?.metricDescriptor?.metricKind
       )?.toUpperCase();
       const nextKind = news.metricDescriptor?.metricKind?.toUpperCase();
       const kindChanged =
-        nextKind !== undefined &&
-        previousKind !== undefined &&
-        nextKind !== previousKind;
+        nextKind !== undefined && previousKind !== undefined && nextKind !== previousKind;
 
       const previousType = (
         olds?.metricDescriptor?.valueType ?? output?.metricDescriptor?.valueType
       )?.toUpperCase();
       const nextType = news.metricDescriptor?.valueType?.toUpperCase();
       const typeChanged =
-        nextType !== undefined &&
-        previousType !== undefined &&
-        nextType !== previousType;
+        nextType !== undefined && previousType !== undefined && nextType !== previousType;
 
       if (!idChanged && !kindChanged && !typeChanged) return undefined;
       return {
         action: "replace" as const,
-        deleteFirst:
-          !idChanged && previousId !== undefined && nextId === previousId,
+        deleteFirst: !idChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -533,10 +500,7 @@ export const MetricProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseDescription(existing.description).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseDescription(existing.description).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -590,10 +554,7 @@ export const MetricProvider = () =>
         (current.valueExtractor ?? "") !== (news.valueExtractor ?? "") ||
         !recordsEqual(tagRecord(current.labelExtractors), desiredExtractors) ||
         (current.bucketName ?? "") !== (news.bucketName ?? "") ||
-        !jsonEqual(
-          toBucketOptions(current.bucketOptions) ?? null,
-          news.bucketOptions ?? null,
-        ) ||
+        !jsonEqual(toBucketOptions(current.bucketOptions) ?? null, news.bucketOptions ?? null) ||
         descriptorChanged(current.metricDescriptor, news.metricDescriptor);
 
       if (needsUpdate) {
@@ -603,8 +564,7 @@ export const MetricProvider = () =>
         });
       }
 
-      const latest =
-        (yield* getByName(current.resourceName ?? metricName)) ?? current;
+      const latest = (yield* getByName(current.resourceName ?? metricName)) ?? current;
       return toAttrs(latest, env.project);
     }),
 

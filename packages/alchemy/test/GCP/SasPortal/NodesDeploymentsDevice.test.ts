@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { firstCustomerName, logLevel, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -75,13 +75,10 @@ test.provider.skipIf(!runLifecycle)(
             parent: customer,
             displayName: "site-a",
           });
-          const deployment = yield* GCP.SasPortal.CustomersNodesDeployment(
-            "Campus",
-            {
-              parent: node.name,
-              displayName: "downtown",
-            },
-          );
+          const deployment = yield* GCP.SasPortal.CustomersNodesDeployment("Campus", {
+            parent: node.name,
+            displayName: "downtown",
+          });
           const device = yield* GCP.SasPortal.NodesDeploymentsDevice("Cbsd", {
             parent: deployment.name,
             displayName: "sector-a",
@@ -108,14 +105,11 @@ test.provider.skipIf(!runLifecycle)(
             name: created.node.name,
             displayName: "site-a",
           });
-          const deployment = yield* GCP.SasPortal.CustomersNodesDeployment(
-            "Campus",
-            {
-              parent: node.name,
-              name: created.deployment.name,
-              displayName: "downtown",
-            },
-          );
+          const deployment = yield* GCP.SasPortal.CustomersNodesDeployment("Campus", {
+            parent: node.name,
+            name: created.deployment.name,
+            displayName: "downtown",
+          });
           const device = yield* GCP.SasPortal.NodesDeploymentsDevice("Cbsd", {
             parent: deployment.name,
             name: created.device.name,

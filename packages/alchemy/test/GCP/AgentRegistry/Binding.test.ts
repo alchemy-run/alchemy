@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as registry from "@distilled.cloud/gcp/agentregistry_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Agent Registry is not enabled in the test project (ServiceDisabled, see
 // the probe below). Set GCP_TEST_AGENT_REGISTRY=1 in a project that has it.
@@ -48,11 +45,7 @@ const getService = (name: string) =>
     .getProjectsLocationsServices({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const ensureService = (input: {
-  serviceId: string;
-  displayName: string;
-  body: registry.Service;
-}) =>
+const ensureService = (input: { serviceId: string; displayName: string; body: registry.Service }) =>
   Effect.gen(function* () {
     const parent = yield* currentParent;
     const name = `${parent}/services/${input.serviceId}`;
@@ -195,12 +188,8 @@ test.provider.skipIf(!runLifecycle)(
       const parent = yield* currentParent;
       yield* stack.destroy();
 
-      const {
-        sourceService,
-        targetService,
-        sourceIdentifier,
-        targetIdentifier,
-      } = yield* ensureFixtures();
+      const { sourceService, targetService, sourceIdentifier, targetIdentifier } =
+        yield* ensureFixtures();
       expect(sourceIdentifier).toEqual(expect.any(String));
       expect(targetIdentifier).toEqual(expect.any(String));
 

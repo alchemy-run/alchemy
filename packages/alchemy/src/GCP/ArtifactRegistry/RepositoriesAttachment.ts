@@ -6,11 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  hasAlchemyLabels,
-  stripInternalLabels,
-} from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -172,11 +168,7 @@ const userAnnotations = (
   annotations: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(annotations));
 
-const toAttrs = (
-  attachment: artifactregistry.Attachment,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (attachment: artifactregistry.Attachment, project: string, region: string) => {
   const name = attachment.name ?? "";
   const parsed = parseName(name, "attachments", region);
   return {
@@ -196,33 +188,20 @@ const toAttrs = (
   };
 };
 
-const getByName = missingGet(
-  artifactregistry.getProjectsLocationsRepositoriesAttachments,
-);
+const getByName = missingGet(artifactregistry.getProjectsLocationsRepositoriesAttachments);
 
 export const RepositoriesAttachmentProvider = () =>
   Provider.succeed(RepositoriesAttachment, {
-    stables: [
-      "name",
-      "attachmentId",
-      "repository",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "attachmentId", "repository", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.attachmentId ?? output?.attachmentId;
       const nextId = news.attachmentId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
-        news.location ??
-          locationFromRepository(news.repository, previousLocation),
+        news.location ?? locationFromRepository(news.repository, previousLocation),
         env.region,
       );
       const extra =
@@ -234,10 +213,7 @@ export const RepositoriesAttachmentProvider = () =>
           olds?.attachmentNamespace ?? output?.attachmentNamespace,
           news.attachmentNamespace,
         ) ||
-        !sameJson(
-          olds?.annotations ?? output?.annotations ?? {},
-          news.annotations ?? {},
-        );
+        !sameJson(olds?.annotations ?? output?.annotations ?? {}, news.annotations ?? {});
       return replaceOnIdentity({
         previousId,
         nextId,
@@ -254,10 +230,7 @@ export const RepositoriesAttachmentProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          locationFromRepository(
-            olds?.repository ?? output?.repository,
-            env.region,
-          ),
+          locationFromRepository(olds?.repository ?? output?.repository, env.region),
         env.region,
       );
       const repository = expandRepository(
@@ -293,16 +266,10 @@ export const RepositoriesAttachmentProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromRepository(news.repository, env.region),
+        news.location ?? output?.location ?? locationFromRepository(news.repository, env.region),
         env.region,
       );
-      const repository = expandRepository(
-        news.repository,
-        env.project,
-        location,
-      );
+      const repository = expandRepository(news.repository, env.project, location);
       const attachmentId = yield* toPhysicalId(
         id,
         news.attachmentId,

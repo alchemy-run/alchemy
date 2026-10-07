@@ -2,8 +2,7 @@ import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface DeleteConnectionRequest
-  extends iotdata.DeleteConnectionRequest {}
+export interface DeleteConnectionRequest extends iotdata.DeleteConnectionRequest {}
 
 /**
  * Runtime binding for the IoT data-plane `DeleteConnection` operation (IAM
@@ -32,13 +31,8 @@ export interface DeleteConnection extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteConnectionRequest,
-    ) => Effect.Effect<
-      iotdata.DeleteConnectionResponse,
-      iotdata.DeleteConnectionError
-    >
+    ) => Effect.Effect<iotdata.DeleteConnectionResponse, iotdata.DeleteConnectionError>
   >
 > {}
 
-export const DeleteConnection = Binding.Service<DeleteConnection>(
-  "AWS.IoT.DeleteConnection",
-);
+export const DeleteConnection = Binding.Service<DeleteConnection>("AWS.IoT.DeleteConnection");

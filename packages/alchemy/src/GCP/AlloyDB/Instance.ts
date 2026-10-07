@@ -256,35 +256,25 @@ export type Instance = Resource<
  */
 export const Instance = Resource<Instance>("GCP.AlloyDB.Instance");
 
-export class InstanceNotResolved extends Data.TaggedError(
-  "GCP.AlloyDB.InstanceNotResolved",
-)<{
+export class InstanceNotResolved extends Data.TaggedError("GCP.AlloyDB.InstanceNotResolved")<{
   name: string;
 }> {}
 
-export class InstanceClusterMissing extends Data.TaggedError(
-  "GCP.AlloyDB.InstanceClusterMissing",
-)<{
+export class InstanceClusterMissing extends Data.TaggedError("GCP.AlloyDB.InstanceClusterMissing")<{
   message: string;
 }> {}
 
-export class InstanceNotReady extends Data.TaggedError(
-  "GCP.AlloyDB.InstanceNotReady",
-)<{
+export class InstanceNotReady extends Data.TaggedError("GCP.AlloyDB.InstanceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceFailed extends Data.TaggedError(
-  "GCP.AlloyDB.InstanceFailed",
-)<{
+export class InstanceFailed extends Data.TaggedError("GCP.AlloyDB.InstanceFailed")<{
   name: string;
   state: string;
 }> {}
 
-export class InstanceStillExists extends Data.TaggedError(
-  "GCP.AlloyDB.InstanceStillExists",
-)<{
+export class InstanceStillExists extends Data.TaggedError("GCP.AlloyDB.InstanceStillExists")<{
   name: string;
 }> {}
 
@@ -295,8 +285,7 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeInstanceType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_INSTANCE_TYPE).toUpperCase();
@@ -316,12 +305,7 @@ const rfc1035 = (name: string): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  clusterId: string,
-  instanceId: string,
-) =>
+const resourceName = (project: string, location: string, clusterId: string, instanceId: string) =>
   `projects/${project}/locations/${location}/clusters/${clusterId}/instances/${instanceId}`;
 
 const clusterNameOf = (project: string, location: string, clusterId: string) =>
@@ -334,24 +318,15 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    clusterId:
-      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    clusterId: clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
     instanceId:
-      instancesAt >= 0 && parts[instancesAt + 1]
-        ? parts[instancesAt + 1]!
-        : lastSegment(name),
+      instancesAt >= 0 && parts[instancesAt + 1] ? parts[instancesAt + 1]! : lastSegment(name),
   };
 };
 
-const parseClusterRef = (
-  cluster: string,
-  fallbackProject: string,
-  fallbackLocation: string,
-) => {
+const parseClusterRef = (cluster: string, fallbackProject: string, fallbackLocation: string) => {
   const trimmed = cluster.trim();
   if (trimmed.length === 0) {
     return {
@@ -361,9 +336,7 @@ const parseClusterRef = (
     };
   }
   if (trimmed.includes("/clusters/") || trimmed.includes("projects/")) {
-    const parsed = parseName(
-      trimmed.includes("/instances/") ? trimmed : `${trimmed}/instances/_`,
-    );
+    const parsed = parseName(trimmed.includes("/instances/") ? trimmed : `${trimmed}/instances/_`);
     return {
       project: parsed.project || fallbackProject,
       location: normalizeLocation(parsed.location || fallbackLocation),
@@ -386,8 +359,7 @@ const stringMapOf = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[1].length > 0,
+      (entry): entry is [string, string] => entry[1] !== undefined && entry[1].length > 0,
     ),
   );
 
@@ -427,8 +399,7 @@ const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const specifiedChanged = (
   desired: Record<string, unknown> | undefined,
@@ -485,8 +456,7 @@ const isAvailable = (state: string | undefined) => {
   return value === "READY" || value === "STOPPED";
 };
 
-const isFailed = (state: string | undefined) =>
-  (state ?? "").toUpperCase() === "FAILED";
+const isFailed = (state: string | undefined) => (state ?? "").toUpperCase() === "FAILED";
 
 const toAttrs = (instance: alloydb.Instance, project: string) => {
   const name = instance.name ?? "";
@@ -534,9 +504,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance
-        ? Effect.succeed(instance)
-        : Effect.fail(new InstanceNotResolved({ name })),
+      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceNotResolved",
@@ -575,9 +543,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined
-        ? Effect.void
-        : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceStillExists",
@@ -662,26 +628,14 @@ export const InstanceProvider = () =>
       const nextId = news.instanceId ?? previousId;
       const previousCluster = lastSegment(olds?.cluster ?? output?.clusterId);
       const nextCluster = lastSegment(news.cluster ?? previousCluster);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const previousType = normalizeInstanceType(
-        olds?.instanceType ?? output?.instanceType,
-      );
-      const nextType = normalizeInstanceType(
-        news.instanceType ?? output?.instanceType,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const previousType = normalizeInstanceType(olds?.instanceType ?? output?.instanceType);
+      const nextType = normalizeInstanceType(news.instanceType ?? output?.instanceType);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousCluster.length > 0 &&
-          nextCluster.length > 0 &&
-          previousCluster !== nextCluster) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousCluster.length > 0 && nextCluster.length > 0 && previousCluster !== nextCluster) ||
         previousLocation !== nextLocation ||
         previousType !== nextType;
 
@@ -702,9 +656,7 @@ export const InstanceProvider = () =>
         const existing = yield* getByName(output.name);
         if (existing === undefined) return undefined;
         const attrs = toAttrs(existing, env.project);
-        return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-          ? attrs
-          : Unowned(attrs);
+        return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
       }
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
       const ref = parseClusterRef(
@@ -713,18 +665,11 @@ export const InstanceProvider = () =>
         olds?.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) return undefined;
-      const name = resourceName(
-        ref.project,
-        ref.location,
-        ref.clusterId,
-        instanceId,
-      );
+      const name = resourceName(ref.project, ref.location, ref.clusterId, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -740,9 +685,7 @@ export const InstanceProvider = () =>
             Stream.filter(
               (instance) =>
                 !isPlaceholder(instance) &&
-                Object.keys(instance.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(instance.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((instance) => toAttrs(instance, env.project)),
             Stream.runCollect,
@@ -761,16 +704,10 @@ export const InstanceProvider = () =>
       );
       if (ref.clusterId.length === 0) {
         return yield* new InstanceClusterMissing({
-          message:
-            "GCP.AlloyDB.Instance requires `cluster` (cluster id or full resource name)",
+          message: "GCP.AlloyDB.Instance requires `cluster` (cluster id or full resource name)",
         });
       }
-      const name = resourceName(
-        ref.project,
-        ref.location,
-        ref.clusterId,
-        instanceId,
-      );
+      const name = resourceName(ref.project, ref.location, ref.clusterId, instanceId);
       const parent = clusterNameOf(ref.project, ref.location, ref.clusterId);
       const instanceType = normalizeInstanceType(news.instanceType);
       const machineConfig = desiredMachineConfig(news);
@@ -783,13 +720,7 @@ export const InstanceProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const body = toCreateBody(
-          news,
-          desiredLabels,
-          instanceType,
-          machineConfig,
-          readPoolConfig,
-        );
+        const body = toCreateBody(news, desiredLabels, instanceType, machineConfig, readPoolConfig);
         yield* (
           instanceType === "SECONDARY"
             ? alloydb.createsecondaryProjectsLocationsClustersInstances({
@@ -811,8 +742,7 @@ export const InstanceProvider = () =>
           // ("an internal error has occurred") after a long provisioning wait;
           // the failed instance is removed, so the create is retried.
           Effect.retry({
-            while: (error) =>
-              error._tag === "GCP.OperationFailed" && error.code === 13,
+            while: (error) => error._tag === "GCP.OperationFailed" && error.code === 13,
             times: 2,
             schedule: Schedule.spaced("30 seconds"),
           }),
@@ -833,14 +763,11 @@ export const InstanceProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       // AlloyDB omits `displayName` from instance reads (as for clusters and
       // backups); compare against the last applied value instead.
-      const observedDisplayName =
-        current.displayName ?? output?.displayName ?? olds?.displayName;
-      const displayNameChanged =
-        (observedDisplayName ?? "") !== (news.displayName ?? "");
+      const observedDisplayName = current.displayName ?? output?.displayName ?? olds?.displayName;
+      const displayNameChanged = (observedDisplayName ?? "") !== (news.displayName ?? "");
       const annotationsChanged =
         news.annotations !== undefined &&
-        fingerprint(stringMapOf(current.annotations)) !==
-          fingerprint(news.annotations);
+        fingerprint(stringMapOf(current.annotations)) !== fingerprint(news.annotations);
       const machineChanged = specifiedChanged(
         news.machineConfig as Record<string, unknown> | undefined,
         current.machineConfig as Record<string, unknown> | undefined,
@@ -848,21 +775,17 @@ export const InstanceProvider = () =>
       const availabilityChanged =
         news.availabilityType !== undefined &&
         (current.availabilityType ?? "") !== news.availabilityType;
-      const zoneChanged =
-        news.gceZone !== undefined && (current.gceZone ?? "") !== news.gceZone;
+      const zoneChanged = news.gceZone !== undefined && (current.gceZone ?? "") !== news.gceZone;
       const activationChanged =
         news.activationPolicy !== undefined &&
         (current.activationPolicy ?? "") !== news.activationPolicy;
       const flagsChanged =
         news.databaseFlags !== undefined &&
-        fingerprint(stringMapOf(current.databaseFlags)) !==
-          fingerprint(news.databaseFlags);
+        fingerprint(stringMapOf(current.databaseFlags)) !== fingerprint(news.databaseFlags);
       const readPoolChanged =
         news.readPoolConfig !== undefined &&
         (current.readPoolConfig?.nodeCount ?? 0) !==
-          (news.readPoolConfig.nodeCount ??
-            current.readPoolConfig?.nodeCount ??
-            0);
+          (news.readPoolConfig.nodeCount ?? current.readPoolConfig?.nodeCount ?? 0);
       const insightsChanged = specifiedChanged(
         news.queryInsightsConfig as Record<string, unknown> | undefined,
         current.queryInsightsConfig as Record<string, unknown> | undefined,
@@ -888,8 +811,7 @@ export const InstanceProvider = () =>
         current.connectionPoolConfig as Record<string, unknown> | undefined,
       );
       const dataApiChanged =
-        news.dataApiAccess !== undefined &&
-        (current.dataApiAccess ?? "") !== news.dataApiAccess;
+        news.dataApiAccess !== undefined && (current.dataApiAccess ?? "") !== news.dataApiAccess;
 
       if (
         labelsChanged ||

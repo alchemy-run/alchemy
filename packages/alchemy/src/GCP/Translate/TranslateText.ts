@@ -51,6 +51,4 @@ export interface TranslateText extends Binding.Service<
   >
 > {}
 
-export const TranslateText = Binding.Service<TranslateText>(
-  "GCP.Translate.TranslateText",
-);
+export const TranslateText = Binding.Service<TranslateText>("GCP.Translate.TranslateText");

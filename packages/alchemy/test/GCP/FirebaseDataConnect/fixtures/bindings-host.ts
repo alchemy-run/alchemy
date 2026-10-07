@@ -1,11 +1,7 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
-import {
-  connectorSource,
-  schemaSource,
-  unlinkedDatasources,
-} from "../common.ts";
+import { connectorSource, schemaSource, unlinkedDatasources } from "../common.ts";
 
 /** Data Connect service with an unlinked Postgres datasource. */
 export const App = GCP.FirebaseDataConnect.Service("App", {
@@ -47,13 +43,10 @@ export default class DataConnectBindingsHost extends GCP.Function<DataConnectBin
   Effect.gen(function* () {
     const service = yield* App;
     const connector = yield* Queries;
-    const executeGraphql =
-      yield* GCP.FirebaseDataConnect.ExecuteGraphql(service);
-    const executeGraphqlRead =
-      yield* GCP.FirebaseDataConnect.ExecuteGraphqlRead(service);
+    const executeGraphql = yield* GCP.FirebaseDataConnect.ExecuteGraphql(service);
+    const executeGraphqlRead = yield* GCP.FirebaseDataConnect.ExecuteGraphqlRead(service);
     const executeQuery = yield* GCP.FirebaseDataConnect.ExecuteQuery(connector);
-    const executeMutation =
-      yield* GCP.FirebaseDataConnect.ExecuteMutation(connector);
+    const executeMutation = yield* GCP.FirebaseDataConnect.ExecuteMutation(connector);
 
     return {
       fetch: serveProbes({

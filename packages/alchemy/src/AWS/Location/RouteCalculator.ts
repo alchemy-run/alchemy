@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
 
@@ -73,14 +68,9 @@ export interface RouteCalculator extends Resource<
  *
  * @resource
  */
-export const RouteCalculator = Resource<RouteCalculator>(
-  "AWS.Location.RouteCalculator",
-);
+export const RouteCalculator = Resource<RouteCalculator>("AWS.Location.RouteCalculator");
 
-const createCalculatorName = (
-  id: string,
-  props: { calculatorName?: string | undefined },
-) =>
+const createCalculatorName = (id: string, props: { calculatorName?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.calculatorName) return props.calculatorName;
     return yield* createPhysicalName({ id, maxLength: 100 });
@@ -89,11 +79,7 @@ const createCalculatorName = (
 const readCalculator = Effect.fn(function* (calculatorName: string) {
   const found = yield* location
     .describeRouteCalculator({ CalculatorName: calculatorName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!found) return undefined;
   return {
     calculatorName: found.CalculatorName,
@@ -120,25 +106,19 @@ export const RouteCalculatorProvider = () =>
                 ),
               ),
             );
-            const hydrated = yield* Effect.forEach(
-              names,
-              (name) => readCalculator(name),
-              { concurrency: 10 },
-            );
+            const hydrated = yield* Effect.forEach(names, (name) => readCalculator(name), {
+              concurrency: 10,
+            });
             return hydrated.filter(
-              (attrs): attrs is RouteCalculator["Attributes"] =>
-                attrs !== undefined,
+              (attrs): attrs is RouteCalculator["Attributes"] => attrs !== undefined,
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const calculatorName =
-            output?.calculatorName ??
-            (yield* createCalculatorName(id, olds ?? {}));
+            output?.calculatorName ?? (yield* createCalculatorName(id, olds ?? {}));
           const state = yield* readCalculator(calculatorName);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -149,8 +129,7 @@ export const RouteCalculatorProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const calculatorName =
-            output?.calculatorName ?? (yield* createCalculatorName(id, news));
+          const calculatorName = output?.calculatorName ?? (yield* createCalculatorName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -168,9 +147,7 @@ export const RouteCalculatorProvider = () =>
             state = yield* readCalculator(calculatorName);
             if (state === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `failed to read created route calculator ${calculatorName}`,
-                ),
+                new Error(`failed to read created route calculator ${calculatorName}`),
               );
             }
           }
@@ -201,9 +178,7 @@ export const RouteCalculatorProvider = () =>
           const final = yield* readCalculator(calculatorName);
           if (!final) {
             return yield* Effect.fail(
-              new Error(
-                `failed to read reconciled route calculator ${calculatorName}`,
-              ),
+              new Error(`failed to read reconciled route calculator ${calculatorName}`),
             );
           }
           return final;
@@ -211,9 +186,7 @@ export const RouteCalculatorProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* location
             .deleteRouteCalculator({ CalculatorName: output.calculatorName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

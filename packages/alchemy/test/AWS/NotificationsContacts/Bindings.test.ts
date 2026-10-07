@@ -1,50 +1,33 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import NotificationsContactsTestFunctionLive, {
   NotificationsContactsTestFunction,
 } from "./handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "NotificationsContactsBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "NotificationsContactsBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
 describe(
   "NotificationsContacts Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:notificationscontacts",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:notificationscontacts", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "NotificationsContacts test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("NotificationsContacts test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "NotificationsContacts test setup: deploying fixture",
-        );
+        yield* Effect.logInfo("NotificationsContacts test setup: deploying fixture");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* NotificationsContactsTestFunction;
@@ -62,9 +45,7 @@ describe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -104,10 +85,7 @@ describe(
           Effect.gen(function* () {
             const response = (yield* HttpClient.execute(
               HttpClientRequest.post(`${baseUrl}/send-code`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              sent: boolean;
-              conflict: boolean;
-            };
+            ).pipe(Effect.flatMap((r) => r.json))) as { sent: boolean; conflict: boolean };
 
             // A successful send, or the typed ConflictException for an
             // already-active contact — either outcome proves the binding.
@@ -124,18 +102,13 @@ describe(
           Effect.gen(function* () {
             const response = (yield* HttpClient.execute(
               HttpClientRequest.post(`${baseUrl}/activate-bogus`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              activated: boolean;
-              errorTag?: string;
-            };
+            ).pipe(Effect.flatMap((r) => r.json))) as { activated: boolean; errorTag?: string };
 
             // The code from the activation email is a human loop — a bogus
             // code must surface one of the operation's TYPED error tags,
             // proving the IAM grant and request wiring end-to-end.
             expect(response.activated).toBe(false);
-            expect(["ValidationException", "ConflictException"]).toContain(
-              response.errorTag,
-            );
+            expect(["ValidationException", "ConflictException"]).toContain(response.errorTag);
           }),
         { timeout: 120_000 },
       );

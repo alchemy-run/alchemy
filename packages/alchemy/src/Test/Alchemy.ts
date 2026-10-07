@@ -22,7 +22,6 @@ import {
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
-
 import type { AlchemyContext } from "../AlchemyContext.ts";
 import type { CompiledStack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
@@ -76,6 +75,11 @@ interface ProviderFn {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     options?: TestOptions,
   ) => void;
+  todo: (
+    name: string,
+    fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
+    options?: TestOptions,
+  ) => void;
 }
 
 interface BeforeAllFn {
@@ -88,9 +92,7 @@ interface BeforeEachFn {
 
 interface AfterAllFn {
   (eff: TestEffect<any>, options?: TestOptions): void;
-  skipIf: (
-    predicate: boolean,
-  ) => (eff: TestEffect<any>, options?: TestOptions) => void;
+  skipIf: (predicate: boolean) => (eff: TestEffect<any>, options?: TestOptions) => void;
 }
 
 interface AfterEachFn {
@@ -139,8 +141,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // which `destroy(Stack)` closes mid-file in self-contained tests — and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
-  const wrap = <A>(eff: TestEffect<A>) =>
-    Core.toEffect(eff, options, sharedScope, sidecar);
+  const wrap = <A>(eff: TestEffect<A>) => Core.toEffect(eff, options, sharedScope, sidecar);
 
   const addTest = (
     name: string,
@@ -192,19 +193,14 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
       Effect.ensuring(scratch.destroy().pipe(Effect.ignore)),
     );
-    return Core.toEffect(
-      body,
-      { ...options, state: scratch.state },
-      sharedScope,
-      sidecar,
-    );
+    return Core.toEffect(body, { ...options, state: scratch.state }, sharedScope, sidecar);
   };
 
   const addProvider = (
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     opts: TestOptions | undefined,
-    mode: "run" | "skip",
+    mode: "run" | "skip" | "todo",
   ) => {
     // Captured at registration (module evaluation during collection) — the
     // collection context is gone by the time the body runs.
@@ -217,7 +213,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
       timeout: timeoutOf(opts),
       tags: tagsOf(opts),
       optInTags: optInTagsOf(opts),
-      body: mode === "skip" ? undefined : () => wrapProvider(name, fn, file),
+      body: mode === "run" ? () => wrapProvider(name, fn, file) : undefined,
     });
   };
 
@@ -227,12 +223,10 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   provider.skip = (name, fn, opts) => addProvider(name, fn, opts, "skip");
   provider.skipIf = (condition) => (name, fn, opts) =>
     addProvider(name, fn, opts, condition ? "skip" : "run");
+  provider.todo = (name, fn, opts) => addProvider(name, fn, opts, "todo");
   test.provider = provider;
 
-  const beforeAll: BeforeAllFn = <A>(
-    eff: TestEffect<A>,
-    hookOptions?: TestOptions,
-  ) => {
+  const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: TestOptions) => {
     let result: A;
     registerHook("beforeAll", {
       body: () =>
@@ -248,10 +242,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   const beforeEach: BeforeEachFn = (eff, hookOptions) => {
-    registerHook("beforeEach", {
-      body: () => wrap(eff),
-      timeout: timeoutOf(hookOptions),
-    });
+    registerHook("beforeEach", { body: () => wrap(eff), timeout: timeoutOf(hookOptions) });
   };
 
   const afterAll = ((eff, hookOptions) => {
@@ -271,19 +262,14 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   const afterEach: AfterEachFn = (eff, hookOptions) => {
-    registerHook("afterEach", {
-      body: () => wrap(eff),
-      timeout: timeoutOf(hookOptions),
-    });
+    registerHook("afterEach", { body: () => wrap(eff), timeout: timeoutOf(hookOptions) });
   };
 
   // `destroy(Stack)` needs the dev sidecar alive so it can call `sidecar.stop`
   // for each worker. We close the shared scope only AFTER destroy completes.
   // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
   // the destroy wrapper AND the fallback cleanup hook below to call it.
-  const closeScope = Effect.suspend(() =>
-    Scope.close(sharedScope, Exit.void),
-  ).pipe(Effect.ignore);
+  const closeScope = Effect.suspend(() => Scope.close(sharedScope, Exit.void)).pipe(Effect.ignore);
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
@@ -294,14 +280,9 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // `afterAll` (including `destroy(Stack)`); the runner executes afterAll
   // hooks in registration order, and file collection flushes microtasks
   // before sealing the file's suite tree and advancing to the next file.
-  const closeAll = sidecar
-    ? Effect.andThen(closeScope, sidecar.close)
-    : closeScope;
+  const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
   queueMicrotask(() => {
-    registerHook("afterAll", {
-      body: () => closeAll,
-      timeout: DEFAULT_TIMEOUT,
-    });
+    registerHook("afterAll", { body: () => closeAll, timeout: DEFAULT_TIMEOUT });
   });
 
   return {

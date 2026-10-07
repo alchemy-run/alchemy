@@ -1,13 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  normalizeRegion,
-  parseDescription,
-  runRegionOp,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,10 +10,17 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  normalizeRegion,
+  parseDescription,
+  runRegionOp,
+  toPhysicalName,
+} from "./internal.ts";
 
-export type PublicDelegatedPrefixMode =
-  | compute.PublicDelegatedPrefixModeEnum
-  | (string & {});
+export type PublicDelegatedPrefixMode = compute.PublicDelegatedPrefixModeEnum | (string & {});
 
 export type PublicDelegatedPrefixProps = {
   /**
@@ -206,13 +204,10 @@ const awaitResource = (project: string, region: string, prefixName: string) =>
     Effect.flatMap((prefix) =>
       prefix !== undefined
         ? Effect.succeed(prefix)
-        : Effect.fail(
-            new PublicDelegatedPrefixNotResolved({ prefixName, region }),
-          ),
+        : Effect.fail(new PublicDelegatedPrefixNotResolved({ prefixName, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.PublicDelegatedPrefixNotResolved",
+      while: (error) => error._tag === "GCP.Compute.PublicDelegatedPrefixNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -235,20 +230,11 @@ export const PublicDelegatedPrefixProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.prefixName ?? output?.prefixName;
       const nextName = news.prefixName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? (previousRegion || env.region),
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? (previousRegion || env.region), env.region);
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        previousName !== nextName;
-      const regionChanged =
-        previousRegion.length > 0 && previousRegion !== nextRegion;
+        previousName !== undefined && nextName !== undefined && previousName !== nextName;
+      const regionChanged = previousRegion.length > 0 && previousRegion !== nextRegion;
       const parentChanged =
         lastSegment(olds?.parentPrefix ?? output?.parentPrefix) !==
           lastSegment(news.parentPrefix) &&
@@ -260,17 +246,10 @@ export const PublicDelegatedPrefixProvider = () =>
         news.mode !== undefined &&
         (olds?.mode ?? output?.mode) !== undefined &&
         news.mode !== (olds?.mode ?? output?.mode);
-      if (
-        nameChanged ||
-        regionChanged ||
-        parentChanged ||
-        cidrChanged ||
-        modeChanged
-      ) {
+      if (nameChanged || regionChanged || parentChanged || cidrChanged || modeChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            !nameChanged || nextName === undefined || nextName === previousName,
+          deleteFirst: !nameChanged || nextName === undefined || nextName === previousName,
         };
       }
       return undefined;
@@ -278,16 +257,8 @@ export const PublicDelegatedPrefixProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const prefixName = yield* toPhysicalName(
-        id,
-        olds?.prefixName,
-        output?.prefixName,
-        "prefix",
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const prefixName = yield* toPhysicalName(id, olds?.prefixName, output?.prefixName, "prefix");
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, prefixName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -308,26 +279,20 @@ export const PublicDelegatedPrefixProvider = () =>
             Stream.runCollect,
             Effect.catchTag("NotFound", () => Effect.succeed([] as never[])),
           );
-        return Array.from(
-          pages as readonly compute.PublicDelegatedPrefixAggregatedList[],
-        ).flatMap((page) =>
-          Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
-            if (!scope.startsWith("regions/")) return [];
-            return (scoped?.publicDelegatedPrefixes ?? [])
-              .filter((item) => hasOwnershipMarker(item.description))
-              .map((item) => toAttrs(item, env.project));
-          }),
+        return Array.from(pages as readonly compute.PublicDelegatedPrefixAggregatedList[]).flatMap(
+          (page) =>
+            Object.entries(page.items ?? {}).flatMap(([scope, scoped]) => {
+              if (!scope.startsWith("regions/")) return [];
+              return (scoped?.publicDelegatedPrefixes ?? [])
+                .filter((item) => hasOwnershipMarker(item.description))
+                .map((item) => toAttrs(item, env.project));
+            }),
         );
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const prefixName = yield* toPhysicalName(
-        id,
-        news.prefixName,
-        output?.prefixName,
-        "prefix",
-      );
+      const prefixName = yield* toPhysicalName(id, news.prefixName, output?.prefixName, "prefix");
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -377,8 +342,7 @@ export const PublicDelegatedPrefixProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, region, prefixName)) ?? current;
+        current = (yield* getByName(env.project, region, prefixName)) ?? current;
       }
 
       return toAttrs(current, env.project);

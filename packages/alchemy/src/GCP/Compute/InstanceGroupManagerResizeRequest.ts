@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitZoneOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -10,12 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitZoneOperation } from "./operations.ts";
 
 const DEFAULT_ZONE = "us-central1-a";
 
@@ -120,10 +116,9 @@ export type InstanceGroupManagerResizeRequest = Resource<
  * @resource
  * @category Compute
  */
-export const InstanceGroupManagerResizeRequest =
-  Resource<InstanceGroupManagerResizeRequest>(
-    "GCP.Compute.InstanceGroupManagerResizeRequest",
-  );
+export const InstanceGroupManagerResizeRequest = Resource<InstanceGroupManagerResizeRequest>(
+  "GCP.Compute.InstanceGroupManagerResizeRequest",
+);
 
 export class InstanceGroupManagerResizeRequestNotResolved extends Data.TaggedError(
   "GCP.Compute.InstanceGroupManagerResizeRequestNotResolved",
@@ -139,8 +134,7 @@ const lastSegment = (value: string | undefined): string => {
   return parts[parts.length - 1] || value;
 };
 
-const zoneOf = (value: string | undefined): string =>
-  lastSegment(value) || DEFAULT_ZONE;
+const zoneOf = (value: string | undefined): string => lastSegment(value) || DEFAULT_ZONE;
 
 const rfc1035 = (name: string): string => {
   let next = name
@@ -270,16 +264,12 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
       const nextName = news.resizeRequestName;
       const previousZone = zoneOf(olds?.zone ?? output?.zone);
       const nextZone = zoneOf(news.zone ?? output?.zone);
-      const previousMig = lastSegment(
-        olds?.instanceGroupManager ?? output?.instanceGroupManager,
-      );
+      const previousMig = lastSegment(olds?.instanceGroupManager ?? output?.instanceGroupManager);
       const nextMig = lastSegment(news.instanceGroupManager);
       const previousBy = olds?.resizeBy ?? output?.resizeBy;
       const nextBy = news.resizeBy;
       if (
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName) ||
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName) ||
         previousZone !== nextZone ||
         previousMig !== nextMig ||
         (previousBy !== undefined && previousBy !== nextBy)
@@ -309,12 +299,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
         olds?.instanceGroupManager ?? output?.instanceGroupManager,
       );
       if (!instanceGroupManager) return undefined;
-      const existing = yield* getByName(
-        env.project,
-        zone,
-        instanceGroupManager,
-        resizeRequestName,
-      );
+      const existing = yield* getByName(env.project, zone, instanceGroupManager, resizeRequestName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, instanceGroupManager);
       const { labels } = parseDescription(existing.description);
@@ -356,9 +341,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
               .pipe(
                 Stream.filter((request) => {
                   const { labels } = parseDescription(request.description);
-                  return Object.keys(labels).some((key) =>
-                    key.startsWith("alchemy-"),
-                  );
+                  return Object.keys(labels).some((key) => key.startsWith("alchemy-"));
                 }),
                 Stream.map((request) => toAttrs(request, env.project, name)),
                 Stream.runCollect,
@@ -382,12 +365,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
       const ownership = yield* createInternalLabels(id);
       const description = encodeDescription(ownership, news.description);
 
-      let current = yield* getByName(
-        env.project,
-        zone,
-        instanceGroupManager,
-        resizeRequestName,
-      );
+      let current = yield* getByName(env.project, zone, instanceGroupManager, resizeRequestName);
 
       if (current === undefined) {
         yield* compute
@@ -410,12 +388,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
             ),
             Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
           );
-        current = yield* awaitResource(
-          env.project,
-          zone,
-          instanceGroupManager,
-          resizeRequestName,
-        );
+        current = yield* awaitResource(env.project, zone, instanceGroupManager, resizeRequestName);
       }
 
       if (current === undefined) {
@@ -459,16 +432,10 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
             Effect.catchTag("NotFound", () => Effect.void),
           );
         }
-        yield* getByName(
-          env.project,
-          zone,
-          instanceGroupManager,
-          output.resizeRequestName,
-        ).pipe(
+        yield* getByName(env.project, zone, instanceGroupManager, output.resizeRequestName).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),
-            until: (item) =>
-              item === undefined || terminalStates.has(item.state ?? ""),
+            until: (item) => item === undefined || terminalStates.has(item.state ?? ""),
             times: 10,
           }),
         );

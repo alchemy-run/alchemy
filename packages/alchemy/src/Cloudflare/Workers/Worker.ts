@@ -4,6 +4,7 @@ import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import path from "pathe";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
@@ -27,6 +28,7 @@ import {
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self as SelfService } from "../../Self.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -36,24 +38,13 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
-import type {
-  WorkerAccessConfig,
-  WorkerAccessIdentity,
-} from "./WorkerAccess.ts";
-import {
-  WorkerEnvironment,
-  WorkerExecutionContext,
-  WorkerTypeId,
-} from "./WorkerRuntime.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
+import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type {
-  WorkerBinding,
-  WorkerBindingResource,
-  WorkerBindings,
-} from "./WorkerBinding.ts";
+import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
+import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerExport,
@@ -62,8 +53,7 @@ import {
 
 export * from "./WorkerRuntime.ts";
 
-export const isWorker = <T>(value: T): value is T & Worker =>
-  isResourceOfType(value, WorkerTypeId);
+export const isWorker = <T>(value: T): value is T & Worker => isResourceOfType(value, WorkerTypeId);
 
 /**
  * Assets configuration that includes a pre-computed hash.
@@ -93,10 +83,7 @@ export interface WorkerCache extends Exclude<
   undefined
 > {}
 
-export type WorkerPlacement = Exclude<
-  workers.PutScriptRequest["metadata"]["placement"],
-  undefined
->;
+export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
 
 export type WorkerServices =
   | Worker
@@ -107,8 +94,7 @@ export type WorkerServices =
   | Container.Application<any>
   | SelfService;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
-  MainRpc<WorkerServices | Req>;
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -122,9 +108,7 @@ export type WorkerEnv = Record<
 >;
 
 export type WorkerBindingProps = {
-  [bindingName in string]:
-    | WorkerBindingResource
-    | Effect.Effect<WorkerBindingResource, any, any>;
+  [bindingName in string]: WorkerBindingResource | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
 export type NormalizedBindings<
@@ -132,15 +116,9 @@ export type NormalizedBindings<
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
 > = {
   // Containers are declarations and Outputs stay deferred at declaration time.
-  [B in keyof Bindings]: Bindings[B] extends
-    | Container.Decl.Any
-    | Output.Output<any, any>
+  [B in keyof Bindings]: Bindings[B] extends Container.Decl.Any | Output.Output<any, any>
     ? Bindings[B]
-    : Bindings[B] extends Effect.Effect<
-          infer T extends WorkerBindingResource,
-          any,
-          any
-        >
+    : Bindings[B] extends Effect.Effect<infer T extends WorkerBindingResource, any, any>
       ? T
       : Extract<Bindings[B], WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
@@ -518,9 +496,7 @@ export interface WorkerProps<
   // the `extends WorkerBindingProps` proof is expensive for generic mapped
   // types and the call-site overloads already constrain user input.
   Bindings = any,
-  Assets extends WorkerAssetsConfig | undefined =
-    | WorkerAssetsConfig
-    | undefined,
+  Assets extends WorkerAssetsConfig | undefined = WorkerAssetsConfig | undefined,
 > extends PlatformProps {
   /**
    * Worker name override. If omitted, Alchemy derives a deterministic physical
@@ -665,6 +641,11 @@ export interface WorkerProps<
    * If omitted, defaults to `{ enabled: true, logs: { enabled: true,
    * invocationLogs: true } }`. Traces are off by default — opt in via
    * `traces: { enabled: true, ... }`.
+   *
+   * Set `issues: { enabled: true }` to enable Workers Issues error detection
+   * across full deployments. Setting it to `false` or omitting `issues`
+   * disables Issues on the next full deployment. Version-only uploads and
+   * gradual rollouts keep the parent's live observability settings.
    */
   observability?: WorkerObservability;
   /**
@@ -856,6 +837,11 @@ export interface WorkerProps<
    * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
    * `pattern`. When the zone is omitted, it is inferred from the pattern's
+   * hostname.
+   *
+   * `alchemy dev` emulates zone routing locally: a Worker whose custom
+   * {@link domain} matches a route's hostname serves the routes on its own
+   * dev URL, and each route's `url` attribute is a local listener for its
    * hostname.
    */
   routes?: WorkerRouteConfig[];
@@ -1170,7 +1156,12 @@ export type Worker<Bindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    routes: { id: string; pattern: string; zoneId: string }[];
+    /**
+     * The zone routes attached to this Worker. `url` is the origin serving
+     * the route's hostname — `https://<host>` when deployed, the local edge
+     * listener under `alchemy dev` — and `undefined` for a wildcard host.
+     */
+    routes: { id: string; pattern: string; zoneId: string; url?: string }[];
     crons: string[];
     /**
      * The tail consumers attached to this Worker's script — each entry the
@@ -1364,11 +1355,7 @@ export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
  * value cycle with Worker.ts that the deploy bundler's scope hoisting turns
  * into a startup crash.
  */
-export interface URLEffect extends Effect.Effect<
-  URLAccessor,
-  never,
-  WorkerEnvironment | Worker
-> {
+export interface URLEffect extends Effect.Effect<URLAccessor, never, WorkerEnvironment | Worker> {
   "~alchemy/Kind": "Cloudflare.Workers.URL";
 }
 
@@ -1818,6 +1805,28 @@ export const isSelf = (value: unknown): value is Self =>
  * }
  * ```
  *
+ * **Example:** Federating one hostname across Workers
+ * Routes take precedence over custom domains, so one Worker can own the
+ * hostname while others claim paths under it — no gateway Worker in the
+ * request path, and each Worker binds only what its paths need. `alchemy
+ * dev` applies the same routing on the custom-domain Worker's local URL.
+ * ```typescript
+ * const home = yield* Cloudflare.Worker("Home", {
+ *   main: "./src/home.ts",
+ *   domain: "api.example.com",
+ * });
+ * yield* Cloudflare.Worker("Products", {
+ *   main: "./src/products.ts",
+ *   routes: [{ pattern: "api.example.com/products*" }],
+ * });
+ * yield* Cloudflare.Worker("Orders", {
+ *   main: "./src/orders.ts",
+ *   routes: [{ pattern: "api.example.com/orders*" }],
+ * });
+ * // https://api.example.com/orders/1 runs Orders; /about runs Home.
+ * return { url: home.url };
+ * ```
+ *
  * **Example:** Deploying a prebuilt Worker without bundling
  * When `main` already points at a complete, runtime-ready ESM bundle
  * produced by an external tool (e.g. OpenNext), set `bundle: false` to
@@ -2114,6 +2123,23 @@ export const isSelf = (value: unknown): value is Self =>
  *   },
  * }
  * ```
+ *
+ * **Example:** Enabling Workers Issues
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   observability: {
+ *     issues: { enabled: true },
+ *   },
+ * });
+ * ```
+ *
+ * Workers Issues groups recurring failures in the Cloudflare dashboard.
+ * Alchemy includes the flag in upload metadata and reconciles it through
+ * script settings after a full deployment so it survives redeploys. Set
+ * `issues.enabled` to `false` or remove `issues` to disable detection.
+ * Configure logs and traces alongside `issues` when you need those channels.
+ * Version-only uploads and gradual rollouts retain the parent's settings.
  *
  * ### Tail Workers
  * A [Tail Worker](https://developers.cloudflare.com/workers/observability/logs/tail-workers/)
@@ -2416,11 +2442,7 @@ export const isSelf = (value: unknown): value is Self =>
  */
 export const Worker: ResourceClassLike<Worker> &
   Pick<ResourceClass<Worker>, "ref"> &
-  Effect.Effect<
-    Worker & WorkerRuntimeContext & RuntimeContext,
-    never,
-    Worker
-  > & {
+  Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(
         id: Id,
@@ -2431,9 +2453,7 @@ export const Worker: ResourceClassLike<Worker> &
       > &
         Named<Id> &
         PlatformIdentity<Id> & {
-          new (
-            _: never,
-          ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
+          new (_: never): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
           of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
           make<PropsReq = never, InitReq = never>(
             props:
@@ -2445,10 +2465,7 @@ export const Worker: ResourceClassLike<Worker> &
             never,
             | Extract<Deps, Container.Application<any>>
             | Providers
-            | Exclude<
-                PropsReq | InitReq,
-                Self | WorkerServices | Tag<WorkerTypeId>
-              >
+            | Exclude<PropsReq | InitReq, Self | WorkerServices | Tag<WorkerTypeId>>
           >;
         };
     };
@@ -2456,11 +2473,7 @@ export const Worker: ResourceClassLike<Worker> &
       <
         const Id extends string,
         Shape extends WorkerShape,
-        Req extends
-          | WorkerServices
-          | Container.Application<any>
-          | PlatformServices
-          | Tag,
+        Req extends WorkerServices | Container.Application<any> | PlatformServices | Tag,
         PropsReq = never,
       >(
         id: Id,
@@ -2497,11 +2510,7 @@ export const Worker: ResourceClassLike<Worker> &
         id: Id,
         props:
           | InputProps<WorkerProps<Bindings, Assets>>
-          | Effect.Effect<
-              InputProps<WorkerProps<Bindings, Assets>>,
-              ConfigError,
-              Req
-            >,
+          | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, ConfigError, Req>,
       ): Effect.Effect<
         ExternalWorker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
         never,
@@ -2512,10 +2521,7 @@ export const Worker: ResourceClassLike<Worker> &
           new (): Named<Id> &
             Tag<WorkerTypeId> & {
               /** @internal phantom */
-              readonly "~alchemy/WorkerEnv": NormalizedBindings<
-                Bindings,
-                Assets
-              >;
+              readonly "~alchemy/WorkerEnv": NormalizedBindings<Bindings, Assets>;
             };
         };
     };
@@ -2528,16 +2534,13 @@ export const Worker: ResourceClassLike<Worker> &
       id: Id,
       props:
         | InputProps<WorkerProps<Bindings, Assets>>
-        | Effect.Effect<
-            InputProps<WorkerProps<Bindings, Assets>>,
-            ConfigError,
-            Req
-          >,
+        | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, ConfigError, Req>,
     ): Effect.Effect<
       ExternalWorker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, Assets>
-        ]: NormalizedBindings<Bindings, Assets>[binding];
+        [binding in keyof NormalizedBindings<Bindings, Assets>]: NormalizedBindings<
+          Bindings,
+          Assets
+        >[binding];
       }> &
         Rpc<{}>,
       never,
@@ -2547,10 +2550,7 @@ export const Worker: ResourceClassLike<Worker> &
     <
       const Id extends string,
       Shape extends WorkerShape,
-      Req extends
-        | WorkerServices
-        | Container.Application<any>
-        | PlatformServices,
+      Req extends WorkerServices | Container.Application<any> | PlatformServices,
     >(
       id: Id,
       props: InputProps<WorkerProps>,
@@ -2573,9 +2573,29 @@ export const Worker: ResourceClassLike<Worker> &
   WorkerTypeId,
   {
     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
-    onCreate: (resource, props) =>
-      bindWorkerAsyncBindings(resource as Worker, props),
+    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+    transformProps: (_id, props) =>
+      Effect.sync(() =>
+        globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"
+          ? props
+          : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+      ),
   },
   { URL },
 );
+
+/**
+ * `main` as a path relative to `cwd` when it points inside `cwd`. State keeps
+ * the Worker's props and `alchemy drift` rebuilds the bundle from them, so an
+ * absolute `main` (such as `import.meta.url`) fails once the checkout that
+ * deployed it moves or is removed. Paths outside `cwd` are kept as given.
+ *
+ * @internal exported for unit testing.
+ */
+export const relativeWorkerMain = (main: string, cwd: string): string => {
+  const file = main.startsWith("file:")
+    ? decodeURIComponent(new globalThis.URL(main).pathname)
+    : main;
+  return path.isAbsolute(file) && isPathWithin(cwd, file, cwd) ? path.relative(cwd, file) : main;
+};

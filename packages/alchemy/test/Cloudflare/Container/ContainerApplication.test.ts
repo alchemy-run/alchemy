@@ -1,31 +1,34 @@
+import * as Containers from "@distilled.cloud/cloudflare/containers";
+import { assert, describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Cloudflare from "@/Cloudflare";
-import * as Drift from "@/Drift.ts";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts";
 import * as Deploy from "@/Deploy.ts";
 import * as Destroy from "@/Destroy.ts";
 import { Docker, DockerLive } from "@/Docker/Docker.ts";
-import * as Layer from "effect/Layer";
-import * as Config from "effect/Config";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { ExternalContainer } from "./fixtures/external/object.ts";
-import ExternalContainerWorker from "./fixtures/external/worker.ts";
-import MyContainerLive, {
-  MyContainer,
-} from "./fixtures/effectful/container.ts";
-import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Drift from "@/Drift.ts";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
+import { buildHistory, supportsRegistryExport, withBuilder } from "./fixtures/buildx.ts";
+import MyContainerLive, { MyContainer } from "./fixtures/effectful/container.ts";
+import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
+import { ExternalContainer } from "./fixtures/external/object.ts";
+import ExternalContainerWorker from "./fixtures/external/worker.ts";
 import { applications } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
@@ -33,29 +36,15 @@ import {
   recoveryApplications,
   historyApplications,
 } from "./fixtures/publication/applications.ts";
-import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
-import {
-  buildHistory,
-  supportsRegistryExport,
-  withBuilder,
-} from "./fixtures/buildx.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
-const { test } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
-});
+const { test } = Test.make({ providers: Layer.mergeAll(Cloudflare.providers(), DockerLive) });
 const { test: registryCacheTest } = Test.make({
   // Each deployment must consult the registry, not a previous provider's map.
   providers: Layer.fresh(Layer.mergeAll(Cloudflare.providers(), DockerLive)),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 type Scratch = Parameters<Parameters<typeof test.provider>[1]>[0];
 
@@ -63,9 +52,7 @@ type Scratch = Parameters<Parameters<typeof test.provider>[1]>[0];
 const deployImage = (scratch: Scratch, image: string) =>
   scratch.deploy(
     Effect.gen(function* () {
-      return {
-        app: yield* Cloudflare.Container("DigestReuse", { image }).Application,
-      };
+      return { app: yield* Cloudflare.Container("DigestReuse", { image }).Application };
     }),
   );
 
@@ -84,11 +71,7 @@ const live = (accountId: string, applicationId: string) =>
  * the ACTIVE configuration (and version) until a rollout completes, so any
  * assertion on a changed image has to wait for the rollout.
  */
-const waitForImage = (
-  accountId: string,
-  applicationId: string,
-  image: string,
-) =>
+const waitForImage = (accountId: string, applicationId: string, image: string) =>
   live(accountId, applicationId).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
@@ -98,28 +81,19 @@ const waitForImage = (
   );
 
 /** `<repo>:<sourceHash>` — the mutable tag the provider pushed `app` as. */
-const taggedRefOf = (app: {
-  configuration: { image?: string };
-  hash?: { image: string };
-}) => {
+const taggedRefOf = (app: { configuration: { image?: string }; hash?: { image: string } }) => {
   const digestRef = app.configuration.image!;
   return `${digestRef.slice(0, digestRef.indexOf("@"))}:${app.hash!.image}`;
 };
 
 /** Rewrite the persisted attributes of the scratch row for `fqn`. */
-const patchRow = <A extends Record<string, any>>(
-  fqn: string,
-  patch: (attr: A) => A,
-) =>
+const patchRow = <A extends Record<string, any>>(fqn: string, patch: (attr: A) => A) =>
   Effect.gen(function* () {
     const state = yield* yield* State;
     const stk = yield* Stack;
     const key = { stack: stk.name, stage: stk.stage, fqn };
     const row = (yield* state.get(key)) as ResourceState;
-    yield* state.set({
-      ...key,
-      value: { ...row, attr: patch(row.attr as A) },
-    });
+    yield* state.set({ ...key, value: { ...row, attr: patch(row.attr as A) } });
   });
 
 // Every test owns a name-namespaced scratch stack, so they can run
@@ -128,14 +102,7 @@ const patchRow = <A extends Record<string, any>>(
 // themselves.
 describe.concurrent(
   "ContainerApplication",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:container",
-      "provider:docker",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:container", "provider:docker", "live"] },
   () => {
     test.provider(
       "recovers an interrupted generated create and reconciles observed drift",
@@ -144,11 +111,7 @@ describe.concurrent(
           yield* stack.destroy();
           const first = yield* stack.deploy(applications());
           const state = yield* yield* State;
-          const key = {
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "CachedIdentity",
-          };
+          const key = { stack: stack.name, stage: stack.stage, fqn: "CachedIdentity" };
           const row = yield* state.get(key);
           assert(row?.status === "created" || row?.status === "updated");
           yield* Containers.updateContainerApplication({
@@ -161,11 +124,7 @@ describe.concurrent(
             applicationId: first.owned.applicationId,
           });
           expect(observed.maxInstances).toBe(4);
-          const interrupted = {
-            ...row,
-            status: "creating" as const,
-            attr: undefined,
-          };
+          const interrupted = { ...row, status: "creating" as const, attr: undefined };
           yield* Effect.gen(function* () {
             yield* state.set({ ...key, value: interrupted });
             const plan = yield* stack.plan(applications());
@@ -185,10 +144,7 @@ describe.concurrent(
             expect(yield* state.get(key)).toEqual(interrupted);
 
             const renamed = yield* stack.plan(
-              applications(
-                2,
-                `renamed-${first.owned.applicationName.slice(-24)}`,
-              ),
+              applications(2, `renamed-${first.owned.applicationName.slice(-24)}`),
             );
             expect(renamed.resources.CachedIdentity.action).toBe("replace");
             expect(yield* state.get(key)).toEqual(interrupted);
@@ -199,27 +155,17 @@ describe.concurrent(
               }),
             ).toEqual(observed);
 
-            yield* state.set({
-              ...key,
-              value: { ...interrupted, providerMode: "local" },
-            });
+            yield* state.set({ ...key, value: { ...interrupted, providerMode: "local" } });
             const switched = yield* stack.plan(applications());
             expect(switched.resources.CachedIdentity.action).toBe("replace");
-            expect(
-              switched.resources.CachedIdentity.state?.attr,
-            ).toBeUndefined();
+            expect(switched.resources.CachedIdentity.state?.attr).toBeUndefined();
             yield* state.set({
               ...key,
-              value: {
-                ...interrupted,
-                instanceId: "00000000000000000000000000000000",
-              },
+              value: { ...interrupted, instanceId: "00000000000000000000000000000000" },
             });
             const unrelated = yield* stack.plan(applications());
             expect(unrelated.resources.CachedIdentity.action).toBe("create");
-            expect(
-              unrelated.resources.CachedIdentity.state?.attr,
-            ).toBeUndefined();
+            expect(unrelated.resources.CachedIdentity.state?.attr).toBeUndefined();
 
             yield* state.delete(key);
             const fresh = yield* stack.plan(applications());
@@ -229,19 +175,12 @@ describe.concurrent(
 
             yield* state.set({ ...key, value: interrupted });
             const recovered = yield* stack.deploy(applications(5));
-            expect(recovered.owned.applicationId).toBe(
-              first.owned.applicationId,
-            );
-            expect(recovered.other.applicationId).toBe(
-              first.other.applicationId,
-            );
+            expect(recovered.owned.applicationId).toBe(first.owned.applicationId);
+            expect(recovered.other.applicationId).toBe(first.other.applicationId);
             expect(yield* state.get(key)).toMatchObject({
               status: "created",
               instanceId: row.instanceId,
-              attr: {
-                applicationId: first.owned.applicationId,
-                maxInstances: 5,
-              },
+              attr: { applicationId: first.owned.applicationId, maxInstances: 5 },
             });
             const live = yield* Containers.getContainerApplication({
               accountId: first.owned.accountId,
@@ -266,9 +205,7 @@ describe.concurrent(
               accountId: app.accountId,
               applicationId: app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -289,11 +226,7 @@ describe.concurrent(
           const first = yield* stack.deploy(applications());
           const program = applications(2, first.owned.applicationName);
           const state = yield* yield* State;
-          const key = {
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "CachedIdentity",
-          };
+          const key = { stack: stack.name, stage: stack.stage, fqn: "CachedIdentity" };
           const row = yield* state.get(key);
           assert(row?.status === "created" || row?.status === "updated");
           const observed = yield* Containers.getContainerApplication({
@@ -310,21 +243,13 @@ describe.concurrent(
             yield* state.set({ ...key, value: interrupted });
             const recovery = yield* stack
               .plan(program)
-              .pipe(
-                Effect.catchTag("OwnedBySomeoneElse", () =>
-                  Effect.succeed("unowned"),
-                ),
-              );
+              .pipe(Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed("unowned")));
             expect(recovery).toBe("unowned");
             expect(yield* state.get(key)).toEqual(interrupted);
             yield* state.delete(key);
             const discovery = yield* stack
               .plan(program)
-              .pipe(
-                Effect.catchTag("OwnedBySomeoneElse", () =>
-                  Effect.succeed("unowned"),
-                ),
-              );
+              .pipe(Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed("unowned")));
             expect(discovery).toBe("unowned");
             expect(yield* state.get(key)).toBeUndefined();
             expect(
@@ -351,9 +276,7 @@ describe.concurrent(
               accountId: app.accountId,
               applicationId: app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -373,27 +296,18 @@ describe.concurrent(
           yield* stack.destroy();
           const first = yield* stack.deploy(applications());
           const state = yield* yield* State;
-          const key = {
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: "CachedIdentity",
-          };
+          const key = { stack: stack.name, stage: stack.stage, fqn: "CachedIdentity" };
           const row = yield* state.get(key);
           assert(row?.status === "created" || row?.status === "updated");
           yield* Effect.gen(function* () {
-            yield* state.set({
-              ...key,
-              value: { ...row, status: "creating", attr: undefined },
-            });
+            yield* state.set({ ...key, value: { ...row, status: "creating", attr: undefined } });
             yield* stack.destroy();
             for (const app of [first.owned, first.other]) {
               const deleted = yield* Containers.getContainerApplication({
                 accountId: app.accountId,
                 applicationId: app.applicationId,
               }).pipe(
-                Effect.catchTag("ContainerApplicationNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
                 Effect.repeat({
                   schedule: Schedule.spaced("1 second"),
                   until: (app) => app === undefined,
@@ -423,9 +337,7 @@ describe.concurrent(
         Effect.gen(function* () {
           yield* stack.destroy();
           const initial = yield* stack.deploy(historyApplications());
-          expect(initial.first.hash?.digest).not.toBe(
-            initial.second.hash?.digest,
-          );
+          expect(initial.first.hash?.digest).not.toBe(initial.second.hash?.digest);
           const state = yield* yield* State;
           const ids = ["HistoryFirst", "HistorySecond"];
           const updated = yield* Effect.acquireUseRelease(
@@ -445,24 +357,12 @@ describe.concurrent(
                 expect(updated.target.configuration.image).not.toBe(
                   initial.first.configuration.image,
                 );
-                expect(updated.target.hash?.digest).toBe(
-                  initial.first.hash?.digest,
-                );
-                expect(updated.first.applicationId).toBe(
-                  initial.first.applicationId,
-                );
-                expect(updated.first.configuration.image).toBe(
-                  initial.first.configuration.image,
-                );
-                expect(updated.second.applicationId).toBe(
-                  initial.second.applicationId,
-                );
-                expect(updated.second.configuration.image).toBe(
-                  updated.target.configuration.image,
-                );
-                expect(updated.second.hash?.digest).toBe(
-                  initial.first.hash?.digest,
-                );
+                expect(updated.target.hash?.digest).toBe(initial.first.hash?.digest);
+                expect(updated.first.applicationId).toBe(initial.first.applicationId);
+                expect(updated.first.configuration.image).toBe(initial.first.configuration.image);
+                expect(updated.second.applicationId).toBe(initial.second.applicationId);
+                expect(updated.second.configuration.image).toBe(updated.target.configuration.image);
+                expect(updated.second.hash?.digest).toBe(initial.first.hash?.digest);
                 const desiredImage = updated.target.configuration.image;
                 const observed = yield* live(
                   updated.second.accountId,
@@ -495,9 +395,7 @@ describe.concurrent(
               accountId: app.accountId,
               applicationId: app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -519,9 +417,7 @@ describe.concurrent(
             const provider = yield* Provider.findProvider(ContainerPlatform);
             const program = (includeSecond = false) =>
               Effect.gen(function* () {
-                expect(yield* Provider.findProvider(ContainerPlatform)).toBe(
-                  provider,
-                );
+                expect(yield* Provider.findProvider(ContainerPlatform)).toBe(provider);
                 return yield* recoveryApplications(
                   failure === "interrupted" ? 10 : 0,
                   includeSecond,
@@ -537,15 +433,12 @@ describe.concurrent(
                 () => stack.deploy(program()).pipe(Effect.exit),
                 (previous) =>
                   Effect.sync(() => {
-                    if (previous === undefined)
-                      delete process.env.BUILDX_BUILDER;
+                    if (previous === undefined) delete process.env.BUILDX_BUILDER;
                     else process.env.BUILDX_BUILDER = previous;
                   }),
               );
               assert(Exit.isFailure(failed));
-              expect(Cause.pretty(failed.cause)).toContain(
-                "alchemy-publication-missing",
-              );
+              expect(Cause.pretty(failed.cause)).toContain("alchemy-publication-missing");
             } else {
               yield* Effect.acquireUseRelease(
                 stack.deploy(program()).pipe(Effect.forkChild),
@@ -554,14 +447,11 @@ describe.concurrent(
                     const history = yield* buildHistory.pipe(
                       Effect.repeat({
                         schedule: Schedule.spaced("1 second"),
-                        until: (builds) =>
-                          builds.some((build) => build.status === "Running"),
+                        until: (builds) => builds.some((build) => build.status === "Running"),
                         times: 10,
                       }),
                     );
-                    const running = history.find(
-                      (build) => build.status === "Running",
-                    );
+                    const running = history.find((build) => build.status === "Running");
                     assert(running);
                     yield* Fiber.interrupt(fiber);
                     const interrupted = yield* Fiber.await(fiber);
@@ -572,16 +462,12 @@ describe.concurrent(
                         schedule: Schedule.spaced("1 second"),
                         until: (builds) =>
                           builds.some(
-                            (build) =>
-                              build.ref === running.ref &&
-                              build.status !== "Running",
+                            (build) => build.ref === running.ref && build.status !== "Running",
                           ),
                         times: 8,
                       }),
                     );
-                    const stoppedBuild = stopped.find(
-                      (build) => build.ref === running.ref,
-                    );
+                    const stoppedBuild = stopped.find((build) => build.ref === running.ref);
                     assert(stoppedBuild);
                     expect(stoppedBuild.status).not.toBe("Running");
                   }),
@@ -589,40 +475,24 @@ describe.concurrent(
               );
             }
             const failedBuilds = yield* buildHistory;
-            expect(
-              failedBuilds.filter((build) => build.status === "Completed"),
-            ).toHaveLength(0);
+            expect(failedBuilds.filter((build) => build.status === "Completed")).toHaveLength(0);
             const recovered = yield* stack.deploy(program());
             const recoveredBuilds = yield* buildHistory;
-            expect(
-              recoveredBuilds.length - failedBuilds.length,
-            ).toBeGreaterThanOrEqual(1);
-            expect(
-              recoveredBuilds.length - failedBuilds.length,
-            ).toBeLessThanOrEqual(6);
-            expect(
-              recoveredBuilds.filter((build) => build.status === "Completed"),
-            ).toHaveLength(1);
+            expect(recoveredBuilds.length - failedBuilds.length).toBeGreaterThanOrEqual(1);
+            expect(recoveredBuilds.length - failedBuilds.length).toBeLessThanOrEqual(6);
+            expect(recoveredBuilds.filter((build) => build.status === "Completed")).toHaveLength(1);
             const shared = yield* stack.deploy(program(true));
             assert(shared.second);
-            expect(shared.first.applicationId).toBe(
-              recovered.first.applicationId,
-            );
-            expect(shared.second.applicationId).not.toBe(
-              shared.first.applicationId,
-            );
-            expect(shared.second.configuration.image).toBe(
-              shared.first.configuration.image,
-            );
+            expect(shared.first.applicationId).toBe(recovered.first.applicationId);
+            expect(shared.second.applicationId).not.toBe(shared.first.applicationId);
+            expect(shared.second.configuration.image).toBe(shared.first.configuration.image);
             expect(yield* buildHistory).toEqual(recoveredBuilds);
             for (const app of [shared.first, shared.second]) {
               const observed = yield* Containers.getContainerApplication({
                 accountId: app.accountId,
                 applicationId: app.applicationId,
               });
-              expect(observed.configuration.image).toBe(
-                shared.first.configuration.image,
-              );
+              expect(observed.configuration.image).toBe(shared.first.configuration.image);
             }
             yield* stack.destroy();
             for (const app of [shared.first, shared.second]) {
@@ -630,9 +500,7 @@ describe.concurrent(
                 accountId: app.accountId,
                 applicationId: app.applicationId,
               }).pipe(
-                Effect.catchTag("ContainerApplicationNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
                 Effect.repeat({
                   schedule: Schedule.spaced("1 second"),
                   until: (app) => app === undefined,
@@ -653,9 +521,7 @@ describe.concurrent(
           yield* stack.destroy();
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-publication-",
-          });
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-publication-" });
           const contexts = {
             shared: path.join(root, "shared"),
             other: path.join(root, "other"),
@@ -663,10 +529,7 @@ describe.concurrent(
           };
           for (const [kind, context] of Object.entries(contexts)) {
             yield* fs.makeDirectory(context);
-            yield* fs.writeFileString(
-              path.join(context, ".gitignore"),
-              "payload.txt\n",
-            );
+            yield* fs.writeFileString(path.join(context, ".gitignore"), "payload.txt\n");
             yield* fs.writeFileString(path.join(context, "payload.txt"), kind);
             yield* fs.writeFileString(path.join(context, "input.txt"), "first");
             yield* fs.writeFileString(
@@ -682,22 +545,14 @@ describe.concurrent(
           const program = publicationApplications(contexts);
           const first = yield* stack.deploy(program);
           const history = yield* buildHistory;
-          expect(
-            history.filter((build) => build.status === "Completed"),
-          ).toHaveLength(3);
+          expect(history.filter((build) => build.status === "Completed")).toHaveLength(3);
           // Each distinct publication can make at most six export attempts.
           expect(history.length).toBeLessThanOrEqual(18);
           expect(first.first.hash?.image).not.toBe(first.other.hash?.image);
-          expect(first.first.configuration.image).toBe(
-            first.second.configuration.image,
-          );
-          expect(first.first.configuration.image).not.toBe(
-            first.other.configuration.image,
-          );
+          expect(first.first.configuration.image).toBe(first.second.configuration.image);
+          expect(first.first.configuration.image).not.toBe(first.other.configuration.image);
           expect(first.first.hash?.image).not.toBe(first.changed.hash?.image);
-          expect(first.first.applicationId).not.toBe(
-            first.second.applicationId,
-          );
+          expect(first.first.applicationId).not.toBe(first.second.applicationId);
           for (const [slot, app] of [
             ["first", first.first],
             ["second", first.second],
@@ -706,9 +561,7 @@ describe.concurrent(
               accountId: app.accountId,
               applicationId: app.applicationId,
             });
-            expect(observed.configuration.image).toBe(
-              first.first.configuration.image,
-            );
+            expect(observed.configuration.image).toBe(first.first.configuration.image);
             expect(observed.configuration.environmentVariables).toContainEqual({
               name: "SLOT",
               value: slot,
@@ -716,44 +569,29 @@ describe.concurrent(
             expect(observed.maxInstances).toBe(slot === "first" ? 2 : 3);
           }
           const unchanged = yield* stack.deploy(program);
-          expect(unchanged.first.configuration.image).toBe(
-            first.first.configuration.image,
-          );
+          expect(unchanged.first.configuration.image).toBe(first.first.configuration.image);
           expect(yield* buildHistory).toEqual(history);
 
-          yield* fs.writeFileString(
-            path.join(contexts.shared, "input.txt"),
-            "second",
-          );
+          yield* fs.writeFileString(path.join(contexts.shared, "input.txt"), "second");
           const updated = yield* stack.deploy(program);
           const updateHistory = (yield* buildHistory).filter(
             (build) => !history.some((previous) => previous.ref === build.ref),
           );
-          expect(
-            updateHistory.filter((build) => build.status === "Completed"),
-          ).toHaveLength(1);
+          expect(updateHistory.filter((build) => build.status === "Completed")).toHaveLength(1);
           expect(updateHistory.length).toBeLessThanOrEqual(6);
           expect(updated.first.applicationId).toBe(first.first.applicationId);
           expect(updated.second.applicationId).toBe(first.second.applicationId);
-          expect(updated.first.configuration.image).toBe(
-            updated.second.configuration.image,
-          );
+          expect(updated.first.configuration.image).toBe(updated.second.configuration.image);
           expect(updated.first.hash?.digest).not.toBe(first.first.hash?.digest);
-          expect(updated.other.configuration.image).toBe(
-            first.other.configuration.image,
-          );
-          expect(updated.changed.configuration.image).toBe(
-            first.changed.configuration.image,
-          );
+          expect(updated.other.configuration.image).toBe(first.other.configuration.image);
+          expect(updated.changed.configuration.image).toBe(first.changed.configuration.image);
           yield* stack.destroy();
           for (const app of Object.values(updated)) {
             const deleted = yield* Containers.getContainerApplication({
               accountId: app.accountId,
               applicationId: app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -774,9 +612,7 @@ describe.concurrent(
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
           const docker = yield* Docker;
-          const context = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-default-cache-",
-          });
+          const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-default-cache-" });
           yield* fs.writeFileString(
             path.join(context, "Dockerfile"),
             'FROM alpine:3.19\nRUN cat /proc/sys/kernel/random/uuid > /layer\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
@@ -784,21 +620,16 @@ describe.concurrent(
           yield* fs.writeFileString(path.join(context, "payload"), "first");
           const program = sharedApplication(context);
           const first = yield* stack.deploy(program);
-          expect(first.app.configuration.image).toContain(
-            `/${first.app.applicationName}@sha256:`,
-          );
+          expect(first.app.configuration.image).toContain(`/${first.app.applicationName}@sha256:`);
           const firstHistory = yield* buildHistory;
-          expect(
-            firstHistory.filter((build) => build.status === "Completed"),
-          ).toHaveLength(1);
+          expect(firstHistory.filter((build) => build.status === "Completed")).toHaveLength(1);
 
-          const credentials =
-            yield* Containers.createContainerRegistryCredentials({
-              accountId: first.app.accountId,
-              registryId: "registry.cloudflare.com",
-              permissions: ["pull"],
-              expirationMinutes: 15,
-            });
+          const credentials = yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
           const username = credentials.username ?? credentials.user;
           assert(username);
           const client = yield* HttpClient.HttpClient;
@@ -834,11 +665,7 @@ describe.concurrent(
             const manifest = yield* response.json.pipe(
               Effect.flatMap(
                 Schema.decodeUnknownEffect(
-                  Schema.Struct({
-                    layers: Schema.Array(
-                      Schema.Struct({ digest: Schema.String }),
-                    ),
-                  }),
+                  Schema.Struct({ layers: Schema.Array(Schema.Struct({ digest: Schema.String })) }),
                 ),
               ),
             );
@@ -852,9 +679,7 @@ describe.concurrent(
             // A new BuildKit instance cannot reuse the first builder's local layers.
             expect(yield* buildHistory).toHaveLength(0);
             const changed = yield* stack.deploy(program);
-            const completed = (yield* buildHistory).filter(
-              (build) => build.status === "Completed",
-            );
+            const completed = (yield* buildHistory).filter((build) => build.status === "Completed");
             expect(completed).toHaveLength(1);
             const log = yield* docker.run([
               "buildx",
@@ -870,29 +695,30 @@ describe.concurrent(
             );
             const changedLayers = yield* layersOf(changed.app.hash!.digest!);
             // Re-executing RUN would create a different UUID and therefore a different layer.
-            expect(changedLayers.slice(0, -1)).toEqual(
-              firstLayers.slice(0, -1),
-            );
+            expect(changedLayers.slice(0, -1)).toEqual(firstLayers.slice(0, -1));
             expect(changedLayers.at(-1)).not.toBe(firstLayers.at(-1));
             return changed;
-          }).pipe(
-            withBuilder("alchemy-default-cache-changed", {
-              attestations: false,
-            }),
-          );
+          }).pipe(withBuilder("alchemy-default-cache-changed", { attestations: false }));
           expect(changed.app.applicationId).toBe(first.app.applicationId);
           expect(changed.app.applicationName).toBe(first.app.applicationName);
-          expect(changed.app.configuration.image).not.toBe(
-            first.app.configuration.image,
-          );
-          expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
+          expect(changed.app.configuration.image).not.toBe(first.app.configuration.image);
+          // The registry keeps serving an overwritten tag's previous target
+          // for a while (observed ~25s), so wait for the new one.
+          expect(
+            yield* cacheDigest.pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("4 seconds"),
+                until: (digest) => digest === changed.app.hash?.digest,
+                times: 10,
+              }),
+            ),
+          ).toBe(changed.app.hash?.digest);
 
           yield* fs.writeFileString(path.join(context, "payload"), "first");
           const restored = yield* Effect.acquireUseRelease(
             Effect.sync(() => {
               const previous = process.env.BUILDX_BUILDER;
-              process.env.BUILDX_BUILDER =
-                "alchemy-default-cache-must-not-build";
+              process.env.BUILDX_BUILDER = "alchemy-default-cache-must-not-build";
               return previous;
             }),
             () => stack.deploy(program),
@@ -903,9 +729,7 @@ describe.concurrent(
               }),
           );
           expect(restored.app.applicationId).toBe(first.app.applicationId);
-          expect(restored.app.configuration.image).toBe(
-            first.app.configuration.image,
-          );
+          expect(restored.app.configuration.image).toBe(first.app.configuration.image);
           expect(yield* buildHistory).toEqual(firstHistory);
           // Reusing a finished image leaves the latest exported layer cache in place.
           expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
@@ -921,9 +745,7 @@ describe.concurrent(
             accountId: first.app.accountId,
             applicationId: first.app.applicationId,
           }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
             Effect.repeat({
               until: (app) => app === undefined,
               schedule: Schedule.spaced("1 second"),
@@ -931,10 +753,7 @@ describe.concurrent(
             }),
           );
           expect(gone).toBeUndefined();
-        }).pipe(
-          withBuilder("alchemy-default-cache", { attestations: false }),
-          logLevel,
-        ),
+        }).pipe(withBuilder("alchemy-default-cache", { attestations: false }), logLevel),
       { timeout: 120_000, exclusive: true },
     );
 
@@ -947,28 +766,14 @@ describe.concurrent(
           yield* stack.destroy();
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-registry-cache-",
-          });
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-registry-cache-" });
           const context = path.join(root, "context");
           const repositoryName = `alchemy-registry-cache-${stack.stage.toLowerCase()}`;
           yield* fs.makeDirectory(context);
-          yield* fs.writeFileString(
-            path.join(root, "bun.lock"),
-            "outside-first",
-          );
-          yield* fs.writeFileString(
-            path.join(context, ".gitignore"),
-            "payload\n",
-          );
-          yield* fs.writeFileString(
-            path.join(context, ".dockerignore"),
-            "ignored\n",
-          );
-          yield* fs.writeFileString(
-            path.join(context, "ignored"),
-            "ignored-first",
-          );
+          yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-first");
+          yield* fs.writeFileString(path.join(context, ".gitignore"), "payload\n");
+          yield* fs.writeFileString(path.join(context, ".dockerignore"), "ignored\n");
+          yield* fs.writeFileString(path.join(context, "ignored"), "ignored-first");
           // Fresh payload bytes force a cold source tag even after a prior run.
           yield* fs.writeFileString(path.join(context, "payload"), root);
           yield* fs.writeFileString(
@@ -979,94 +784,77 @@ describe.concurrent(
             stack.deploy(
               Effect.gen(function* () {
                 return {
-                  app: yield* Cloudflare.Container(id, {
-                    context,
-                    publish: { repository },
-                  }).Application,
+                  app: yield* Cloudflare.Container(id, { context, publish: { repository } })
+                    .Application,
                 };
               }),
             );
 
           const first = yield* deploy("First");
           const history = yield* buildHistory;
-          expect(
-            history.filter((build) => build.status === "Completed"),
-          ).toHaveLength(1);
-          expect(first.app.configuration.image).toContain(
-            `/${repositoryName}@sha256:`,
-          );
-          const credentials =
-            yield* Containers.createContainerRegistryCredentials({
-              accountId: first.app.accountId,
-              registryId: "registry.cloudflare.com",
-              permissions: ["pull"],
-              expirationMinutes: 15,
-            });
+          expect(history.filter((build) => build.status === "Completed")).toHaveLength(1);
+          expect(first.app.configuration.image).toContain(`/${repositoryName}@sha256:`);
+          const credentials = yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
           const username = credentials.username ?? credentials.user;
           assert(username);
           const http = yield* HttpClient.HttpClient;
-          const cached = yield* http.execute(
-            HttpClientRequest.head(
-              `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
-            ).pipe(
-              HttpClientRequest.basicAuth(username, credentials.password),
-              HttpClientRequest.setHeader(
-                "Accept",
-                "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+          // The registry keeps serving an overwritten tag's previous target
+          // for a while (observed ~25s), so wait for the new one.
+          const cached = yield* http
+            .execute(
+              HttpClientRequest.head(
+                `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
+              ).pipe(
+                HttpClientRequest.basicAuth(username, credentials.password),
+                HttpClientRequest.setHeader(
+                  "Accept",
+                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+                ),
               ),
-            ),
-          );
+            )
+            .pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("4 seconds"),
+                until: (response) =>
+                  response.headers["docker-content-digest"] === first.app.hash?.digest,
+                times: 10,
+              }),
+            );
           expect(cached.status).toBe(200);
-          expect(cached.headers["docker-content-digest"]).toBe(
-            first.app.hash?.digest,
-          );
+          expect(cached.headers["docker-content-digest"]).toBe(first.app.hash?.digest);
 
           yield* stack.destroy();
-          yield* fs.writeFileString(
-            path.join(root, "bun.lock"),
-            "outside-second",
-          );
-          yield* fs.writeFileString(
-            path.join(context, "ignored"),
-            "ignored-second",
-          );
+          yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-second");
+          yield* fs.writeFileString(path.join(context, "ignored"), "ignored-second");
           const second = yield* deploy("Second");
           expect(yield* buildHistory).toEqual(history);
           expect(second.app.applicationId).not.toBe(first.app.applicationId);
-          expect(second.app.configuration.image).toBe(
-            first.app.configuration.image,
-          );
+          expect(second.app.configuration.image).toBe(first.app.configuration.image);
 
           // Git ignores this file, but Docker copies it into the image.
-          yield* fs.writeFileString(
-            path.join(context, "payload"),
-            `${root}-changed`,
-          );
+          yield* fs.writeFileString(path.join(context, "payload"), `${root}-changed`);
           const changed = yield* deploy("Second");
           expect(changed.app.hash?.digest).not.toBe(second.app.hash?.digest);
           expect(
-            (yield* buildHistory).filter(
-              (build) => build.status === "Completed",
-            ),
+            (yield* buildHistory).filter((build) => build.status === "Completed"),
           ).toHaveLength(2);
 
           const moved = yield* deploy("Second", `${repositoryName}-other`);
-          expect(moved.app.configuration.image).toContain(
-            `/${repositoryName}-other@sha256:`,
-          );
+          expect(moved.app.configuration.image).toContain(`/${repositoryName}-other@sha256:`);
           expect(
-            (yield* buildHistory).filter(
-              (build) => build.status === "Completed",
-            ),
+            (yield* buildHistory).filter((build) => build.status === "Completed"),
           ).toHaveLength(3);
           yield* stack.destroy();
           const deleted = yield* Containers.getContainerApplication({
             accountId: moved.app.accountId,
             applicationId: moved.app.applicationId,
           }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
               until: (app) => app === undefined,
@@ -1075,7 +863,7 @@ describe.concurrent(
           );
           expect(deleted).toBeUndefined();
         }).pipe(withBuilder("alchemy-registry-cache"), logLevel),
-      { timeout: 120_000, exclusive: true },
+      { timeout: 180_000, exclusive: true },
     );
 
     test.provider(
@@ -1085,9 +873,7 @@ describe.concurrent(
           yield* stack.destroy();
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const root = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-shared-publication-",
-          });
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-shared-publication-" });
           const context = path.join(root, "first");
           const otherContext = path.join(root, "second");
           for (const dir of [context, otherContext]) {
@@ -1100,23 +886,16 @@ describe.concurrent(
           }
           const initial = yield* stack.deploy(sharedApplication(context));
           const repositoryName = initial.app.applicationName;
-          const shared = yield* stack.deploy(
-            sharedApplication(context, repositoryName),
-          );
+          const shared = yield* stack.deploy(sharedApplication(context, repositoryName));
           expect(shared.app.applicationId).toBe(initial.app.applicationId);
           const history = yield* buildHistory;
-          expect(
-            history.filter((build) => build.status === "Completed"),
-          ).toHaveLength(2);
+          expect(history.filter((build) => build.status === "Completed")).toHaveLength(2);
 
           const secondStage = {
             stage: `${stack.stage}-shared`,
             stack: Stack(
               stack.name,
-              {
-                providers: Layer.fresh(Cloudflare.providers()),
-                state: stack.state,
-              },
+              { providers: Layer.fresh(Cloudflare.providers()), state: stack.state },
               sharedApplication(otherContext, repositoryName),
             ),
           };
@@ -1126,8 +905,7 @@ describe.concurrent(
             const reused = yield* Effect.acquireUseRelease(
               Effect.sync(() => {
                 const previous = process.env.BUILDX_BUILDER;
-                process.env.BUILDX_BUILDER =
-                  "alchemy-shared-cache-must-not-build";
+                process.env.BUILDX_BUILDER = "alchemy-shared-cache-must-not-build";
                 return previous;
               }),
               () => Deploy.deploy(secondStage),
@@ -1139,23 +917,18 @@ describe.concurrent(
             );
             expect(reused.app.applicationId).not.toBe(shared.app.applicationId);
             expect(reused.app.hash?.image).toBe(shared.app.hash?.image);
-            expect(reused.app.configuration.image).toBe(
+            expect(reused.app.configuration.image).toBe(shared.app.configuration.image);
+            expect(yield* buildHistory).toEqual(history);
+            expect((yield* live(reused.app.accountId, reused.app.applicationId)).image).toBe(
               shared.app.configuration.image,
             );
-            expect(yield* buildHistory).toEqual(history);
-            expect(
-              (yield* live(reused.app.accountId, reused.app.applicationId))
-                .image,
-            ).toBe(shared.app.configuration.image);
 
             const moved = yield* stack.deploy(
               sharedApplication(context, `${repositoryName}-moved`),
             );
             expect(moved.app.applicationId).toBe(shared.app.applicationId);
             expect(moved.app.hash?.digest).toBe(shared.app.hash?.digest);
-            expect(moved.app.configuration.image).toContain(
-              `/${repositoryName}-moved@sha256:`,
-            );
+            expect(moved.app.configuration.image).toContain(`/${repositoryName}-moved@sha256:`);
             expect(
               (yield* waitForImage(
                 moved.app.accountId,
@@ -1163,23 +936,18 @@ describe.concurrent(
                 moved.app.configuration.image!,
               )).image,
             ).toBe(moved.app.configuration.image);
-            expect(
-              (yield* live(reused.app.accountId, reused.app.applicationId))
-                .image,
-            ).toBe(shared.app.configuration.image);
+            expect((yield* live(reused.app.accountId, reused.app.applicationId)).image).toBe(
+              shared.app.configuration.image,
+            );
             return reused;
-          }).pipe(
-            Effect.ensuring(Destroy.destroy(secondStage).pipe(Effect.orDie)),
-          );
+          }).pipe(Effect.ensuring(Destroy.destroy(secondStage).pipe(Effect.orDie)));
           yield* stack.destroy();
           for (const app of [shared.app, reused.app]) {
             const deleted = yield* Containers.getContainerApplication({
               accountId: app.accountId,
               applicationId: app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -1201,8 +969,7 @@ describe.concurrent(
         name: "Dockerfile",
         program: Effect.gen(function* () {
           const worker = yield* ExternalContainerWorker;
-          const app: Cloudflare.ContainerApplication =
-            yield* ExternalContainer.Application;
+          const app: Cloudflare.ContainerApplication = yield* ExternalContainer.Application;
           return { app, url: worker.url.as<string>() };
         }),
         route: "/hello",
@@ -1212,8 +979,7 @@ describe.concurrent(
         name: "generated",
         program: Effect.gen(function* () {
           const worker = yield* EffectfulContainerWorker;
-          const app: Cloudflare.ContainerApplication =
-            yield* MyContainer.Application;
+          const app: Cloudflare.ContainerApplication = yield* MyContainer.Application;
           return { app, url: worker.url.as<string>() };
         }).pipe(Effect.provide(MyContainerLive)),
         route: "/ping",
@@ -1230,18 +996,14 @@ describe.concurrent(
             const path = yield* Path.Path;
             const configDir = yield* Config.String("DOCKER_CONFIG").pipe(
               Config.orElse(() =>
-                Config.String("HOME").pipe(
-                  Config.map((home) => path.join(home, ".docker")),
-                ),
+                Config.String("HOME").pipe(Config.map((home) => path.join(home, ".docker"))),
               ),
             );
             const configFile = path.join(configDir, "config.json");
             const readConfig = fs
               .readFileString(configFile)
               .pipe(
-                Effect.catchReason("PlatformError", "NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
               );
             const configBefore = yield* readConfig;
             const builder = `alchemy-registry-export-${fixture.name.toLowerCase()}`;
@@ -1254,9 +1016,7 @@ describe.concurrent(
             const local = yield* docker.image
               .inspect(tag)
               .pipe(
-                Effect.catchReason("PlatformError", "NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
               );
             // Buildx 0.26+ exports from BuildKit straight to the registry, so
             // the image never enters the local store. Older plugins `--load`
@@ -1270,20 +1030,16 @@ describe.concurrent(
             expect(deployed.app.hash?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 
             const { accountId, applicationId } = deployed.app;
-            const credentials =
-              yield* Containers.createContainerRegistryCredentials({
-                accountId,
-                registryId: "registry.cloudflare.com",
-                permissions: ["pull"],
-                expirationMinutes: 15,
-              });
+            const credentials = yield* Containers.createContainerRegistryCredentials({
+              accountId,
+              registryId: "registry.cloudflare.com",
+              permissions: ["pull"],
+              expirationMinutes: 15,
+            });
             const username = credentials.username ?? credentials.user;
             assert(username);
             const client = yield* HttpClient.HttpClient;
-            const repository = tag.slice(
-              "registry.cloudflare.com/".length,
-              tag.lastIndexOf(":"),
-            );
+            const repository = tag.slice("registry.cloudflare.com/".length, tag.lastIndexOf(":"));
             const manifest = yield* client.execute(
               HttpClientRequest.get(
                 `https://registry.cloudflare.com/v2/${repository}/manifests/${deployed.app.hash!.digest}`,
@@ -1296,9 +1052,7 @@ describe.concurrent(
               ),
             );
             expect(manifest.status).toBe(200);
-            expect(manifest.headers["docker-content-digest"]).toBe(
-              deployed.app.hash!.digest,
-            );
+            expect(manifest.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
             const cache = yield* client.execute(
               HttpClientRequest.head(
                 `https://registry.cloudflare.com/v2/${repository}/manifests/buildcache`,
@@ -1311,9 +1065,7 @@ describe.concurrent(
               ),
             );
             expect(cache.status).toBe(200);
-            expect(cache.headers["docker-content-digest"]).toBe(
-              deployed.app.hash!.digest,
-            );
+            expect(cache.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
             if (exported) {
               // BuildKit's registry exporter publishes an OCI index (with
               // attestations) carrying the requested platform.
@@ -1334,23 +1086,17 @@ describe.concurrent(
                   ),
                 ),
               );
-              expect(index.mediaType).toBe(
-                "application/vnd.oci.image.index.v1+json",
-              );
+              expect(index.mediaType).toBe("application/vnd.oci.image.index.v1+json");
               expect(
                 index.manifests.some(
-                  ({ platform }) =>
-                    platform.os === "linux" &&
-                    platform.architecture === "amd64",
+                  ({ platform }) => platform.os === "linux" && platform.architecture === "amd64",
                 ),
               ).toBe(true);
             } else {
               // `docker push --platform` ships the single platform variant.
               const single = yield* manifest.json.pipe(
                 Effect.flatMap(
-                  Schema.decodeUnknownEffect(
-                    Schema.Struct({ mediaType: Schema.String }),
-                  ),
+                  Schema.decodeUnknownEffect(Schema.Struct({ mediaType: Schema.String })),
                 ),
               );
               expect([
@@ -1362,22 +1108,17 @@ describe.concurrent(
               accountId,
               applicationId,
             });
-            expect(observed.configuration.image).toBe(
-              deployed.app.configuration.image,
-            );
+            expect(observed.configuration.image).toBe(deployed.app.configuration.image);
 
             const response = yield* Effect.gen(function* () {
-              const response = yield* client.get(
-                `${deployed.url}${fixture.route}`,
-              );
+              const response = yield* client.get(`${deployed.url}${fixture.route}`);
               return { status: response.status, body: yield* response.text };
             }).pipe(
               Effect.timeout("45 seconds"),
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
                 until: (response) =>
-                  response.status === 200 &&
-                  response.body.includes(fixture.response),
+                  response.status === 200 && response.body.includes(fixture.response),
                 times: 8,
               }),
             );
@@ -1393,9 +1134,7 @@ describe.concurrent(
               accountId,
               applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -1403,12 +1142,7 @@ describe.concurrent(
               }),
             );
             expect(deleted).toBeUndefined();
-          }).pipe(
-            withBuilder(
-              `alchemy-registry-export-${fixture.name.toLowerCase()}`,
-            ),
-            logLevel,
-          ),
+          }).pipe(withBuilder(`alchemy-registry-export-${fixture.name.toLowerCase()}`), logLevel),
         {
           tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"],
           timeout: 120_000,
@@ -1418,11 +1152,7 @@ describe.concurrent(
     }
 
     for (const maxInstances of [2, 4]) {
-      for (const field of [
-        "applicationId",
-        "applicationName",
-        "accountId",
-      ] as const) {
+      for (const field of ["applicationId", "applicationName", "accountId"] as const) {
         test.provider(
           `plans replacement for cached ${field} mismatches with ${maxInstances === 2 ? "unchanged" : "changed"} props`,
           (stack) =>
@@ -1431,20 +1161,11 @@ describe.concurrent(
 
               const first = yield* stack.deploy(applications());
               const { accountId } = first.owned;
-              const observed = yield* Effect.forEach(
-                [first.owned, first.other],
-                (app) =>
-                  Containers.getContainerApplication({
-                    accountId,
-                    applicationId: app.applicationId,
-                  }),
+              const observed = yield* Effect.forEach([first.owned, first.other], (app) =>
+                Containers.getContainerApplication({ accountId, applicationId: app.applicationId }),
               );
               const state = yield* yield* State;
-              const key = {
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "CachedIdentity",
-              };
+              const key = { stack: stack.name, stage: stack.stage, fqn: "CachedIdentity" };
               const row = yield* state.get(key);
               assert(row?.status === "created" || row?.status === "updated");
 
@@ -1463,9 +1184,7 @@ describe.concurrent(
 
                 const plan = yield* stack.plan(applications(maxInstances));
                 expect(plan.resources.CachedIdentity.action).toBe("replace");
-                expect(plan.resources.CachedIdentity.state).toEqual(
-                  inconsistent,
-                );
+                expect(plan.resources.CachedIdentity.state).toEqual(inconsistent);
                 expect(plan.resources.OtherIdentity.action).toBe("noop");
                 expect(yield* state.get(key)).toEqual(inconsistent);
 
@@ -1484,9 +1203,7 @@ describe.concurrent(
                 }
               }).pipe(
                 // Restore the real identity before teardown, even on failure.
-                Effect.ensuring(
-                  state.set({ ...key, value: row }).pipe(Effect.orDie),
-                ),
+                Effect.ensuring(state.set({ ...key, value: row }).pipe(Effect.orDie)),
               );
 
               const checked = yield* Drift.detect(stack);
@@ -1496,12 +1213,8 @@ describe.concurrent(
                 accountId,
               });
               const recovered = yield* stack.deploy(applications());
-              expect(recovered.owned.applicationId).toBe(
-                first.owned.applicationId,
-              );
-              expect(recovered.other.applicationId).toBe(
-                first.other.applicationId,
-              );
+              expect(recovered.owned.applicationId).toBe(first.owned.applicationId);
+              expect(recovered.other.applicationId).toBe(first.other.applicationId);
 
               yield* stack.destroy();
               for (const app of [first.owned, first.other]) {
@@ -1509,9 +1222,7 @@ describe.concurrent(
                   accountId,
                   applicationId: app.applicationId,
                 }).pipe(
-                  Effect.catchTag("ContainerApplicationNotFound", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
                   Effect.repeat({
                     schedule: Schedule.spaced("1 second"),
                     until: (app) => app === undefined,
@@ -1549,9 +1260,7 @@ describe.concurrent(
 
           const second = yield* stack.deploy(renamed);
           expect(second.owned.applicationName).toBe(name);
-          expect(second.owned.applicationId).not.toBe(
-            first.owned.applicationId,
-          );
+          expect(second.owned.applicationId).not.toBe(first.owned.applicationId);
           expect(second.other.applicationId).toBe(first.other.applicationId);
           const observed = yield* Containers.getContainerApplication({
             accountId: second.owned.accountId,
@@ -1565,9 +1274,7 @@ describe.concurrent(
               accountId: app.accountId,
               applicationId: app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
               Effect.repeat({
                 schedule: Schedule.spaced("1 second"),
                 until: (app) => app === undefined,
@@ -1600,9 +1307,7 @@ describe.concurrent(
             accountId: app.accountId,
             applicationId: app.applicationId,
           }).pipe(
-            Effect.catchTag("ContainerApplicationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
               until: (app) => app === undefined,
@@ -1669,9 +1374,7 @@ describe.concurrent(
             }),
           );
           const pushedRef = source.app.configuration.image!;
-          expect(pushedRef).toMatch(
-            /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
-          );
+          expect(pushedRef).toMatch(/^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/);
           // The mutable tag the provider pushed: `<repo>:<sourceHash>`.
           const taggedRef = `${pushedRef.slice(0, pushedRef.indexOf("@"))}:${source.app.hash!.image}`;
 
@@ -1681,12 +1384,10 @@ describe.concurrent(
                 app: yield* Cloudflare.Container("PrepushSource", {
                   image: "mendhak/http-https-echo:latest",
                 }).Application,
-                byDigest: yield* Cloudflare.Container("PrepushByDigest", {
-                  image: pushedRef,
-                }).Application,
-                byTag: yield* Cloudflare.Container("PrepushByTag", {
-                  image: taggedRef,
-                }).Application,
+                byDigest: yield* Cloudflare.Container("PrepushByDigest", { image: pushedRef })
+                  .Application,
+                byTag: yield* Cloudflare.Container("PrepushByTag", { image: taggedRef })
+                  .Application,
               };
             }),
           );
@@ -1713,28 +1414,18 @@ describe.concurrent(
           yield* scratch.destroy();
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const first = yield* deployImage(
-            scratch,
-            "mendhak/http-https-echo:41",
-          );
+          const first = yield* deployImage(scratch, "mendhak/http-https-echo:41");
 
           // Same image, different reference: the source hash changes and the
           // image is pulled + pushed again, but the registry digest does not.
-          const second = yield* deployImage(
-            scratch,
-            "docker.io/mendhak/http-https-echo:41",
-          );
+          const second = yield* deployImage(scratch, "docker.io/mendhak/http-https-echo:41");
           expect(second.app.applicationId).toBe(first.app.applicationId);
-          expect(second.app.configuration.image).toBe(
-            first.app.configuration.image,
-          );
+          expect(second.app.configuration.image).toBe(first.app.configuration.image);
           expect(second.app.version).toBe(first.app.version);
-          expect(yield* live(accountId, first.app.applicationId)).toMatchObject(
-            {
-              version: first.app.version,
-              image: first.app.configuration.image,
-            },
-          );
+          expect(yield* live(accountId, first.app.applicationId)).toMatchObject({
+            version: first.app.version,
+            image: first.app.configuration.image,
+          });
           // The live reference is the immutable digest, not the mutable tag.
           expect(first.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
@@ -1743,24 +1434,20 @@ describe.concurrent(
           // A genuinely different image still updates and rolls out. The API
           // reports the ACTIVE configuration (and version) until the rollout
           // completes, so poll until the new digest is live.
-          const third = yield* deployImage(
-            scratch,
-            "mendhak/http-https-echo:40",
-          );
+          const third = yield* deployImage(scratch, "mendhak/http-https-echo:40");
           expect(third.app.applicationId).toBe(first.app.applicationId);
           expect(third.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
-          expect(third.app.configuration.image).not.toBe(
-            first.app.configuration.image,
-          );
+          expect(third.app.configuration.image).not.toBe(first.app.configuration.image);
           const rolledOut = yield* waitForImage(
             accountId,
             first.app.applicationId,
             third.app.configuration.image!,
           );
           expect(rolledOut.image).toBe(third.app.configuration.image);
-          expect(rolledOut.version).toBeGreaterThan(first.app.version);
+          expect(first.app.version).toEqual(expect.any(Number));
+          expect(rolledOut.version).toBeGreaterThan(first.app.version!);
 
           yield* scratch.destroy();
         }).pipe(logLevel),
@@ -1787,14 +1474,9 @@ describe.concurrent(
             stage: scratch.stage,
             stack: Stack(
               `${scratch.name}-consumer`,
-              {
-                providers: Layer.fresh(Cloudflare.providers()),
-                state: scratch.state,
-              },
+              { providers: Layer.fresh(Cloudflare.providers()), state: scratch.state },
               Effect.gen(function* () {
-                const app = yield* Cloudflare.Container.ref("RefTarget", {
-                  stack: scratch.name,
-                });
+                const app = yield* Cloudflare.Container.ref("RefTarget", { stack: scratch.name });
                 return {
                   applicationId: app.applicationId,
                   applicationName: app.applicationName,
@@ -1836,19 +1518,13 @@ describe.concurrent(
           yield* scratch.destroy();
           const { accountId } = yield* yield* CloudflareEnvironment;
 
-          const first = yield* deployImage(
-            scratch,
-            "mendhak/http-https-echo:41",
-          );
+          const first = yield* deployImage(scratch, "mendhak/http-https-echo:41");
           const { applicationId } = first.app;
           const taggedRef = taggedRefOf(first.app);
 
           // Put the cloud where a pre-digest engine left it: the mutable tag
           // is the ACTIVE image (update + rollout, then wait for it to land).
-          const legacyConfiguration = {
-            ...first.app.configuration,
-            image: taggedRef,
-          };
+          const legacyConfiguration = { ...first.app.configuration, image: taggedRef };
           yield* Containers.updateContainerApplication({
             accountId,
             applicationId,
@@ -1863,11 +1539,7 @@ describe.concurrent(
             stepPercentage: 100,
             targetConfiguration: legacyConfiguration,
           });
-          const legacy = yield* waitForImage(
-            accountId,
-            applicationId,
-            taggedRef,
-          );
+          const legacy = yield* waitForImage(accountId, applicationId, taggedRef);
 
           // And the state row: tag reference, source hash only.
           yield* patchRow<typeof first.app>("DigestReuse", (attr) => ({
@@ -1883,10 +1555,7 @@ describe.concurrent(
           // carries one rollout — the live configuration is Cloudflare-
           // enriched, so the pre-fingerprint `deepEqual` misses — which is
           // exactly what the fingerprint prevents from here on.
-          const migrated = yield* deployImage(
-            scratch,
-            "docker.io/mendhak/http-https-echo:41",
-          );
+          const migrated = yield* deployImage(scratch, "docker.io/mendhak/http-https-echo:41");
           expect(migrated.app.applicationId).toBe(applicationId);
           expect(migrated.app.configuration.image).toBe(taggedRef);
           expect(migrated.app.hash?.digest).toBe(first.app.hash?.digest);
@@ -1894,17 +1563,15 @@ describe.concurrent(
           const after = yield* live(accountId, applicationId).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
-              until: (app) => app.version > legacy.version,
+              until: (app) =>
+                app.version != null && legacy.version != null && app.version > legacy.version,
               times: 30,
             }),
           );
           expect(after.image).toBe(taggedRef);
 
           // From here on, drift is free: no update, no rollout.
-          const settled = yield* deployImage(
-            scratch,
-            "mendhak/http-https-echo:41",
-          );
+          const settled = yield* deployImage(scratch, "mendhak/http-https-echo:41");
           expect(settled.app.configuration.image).toBe(taggedRef);
           expect(settled.app.hash?.image).not.toBe(migrated.app.hash?.image);
           yield* Effect.sleep("10 seconds");
@@ -1953,16 +1620,10 @@ describe.concurrent(
               accountId,
               applicationId: first.app.applicationId,
             }).pipe(
-              Effect.catchTag("ContainerApplicationNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
             );
-            const apps = yield* Containers.listContainerApplications({
-              accountId,
-            });
-            const absentFromList = apps.every(
-              (app) => app.id !== first.app.applicationId,
-            );
+            const apps = yield* Containers.listContainerApplications({ accountId });
+            const absentFromList = apps.every((app) => app.id !== first.app.applicationId);
             if (app !== undefined && absentFromList) {
               yield* Effect.logInfo(
                 "Deleted container is absent from list but still readable by ID",
@@ -1978,6 +1639,7 @@ describe.concurrent(
             }),
           );
           expect(deleted).toBe(true);
+          assert(first.app.maxInstances !== undefined);
           const detached = yield* Containers.createContainerApplication({
             accountId,
             name: first.app.applicationName,
@@ -2029,17 +1691,11 @@ describe.concurrent(
                 times: 8,
               }),
             ),
-          ).toMatchObject({
-            image: digestRef,
-            durableObjects: { namespaceId },
-          });
+          ).toMatchObject({ image: digestRef, durableObjects: { namespaceId } });
 
           yield* scratch.destroy();
         }).pipe(logLevel),
-      {
-        tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"],
-        timeout: 900_000,
-      },
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
     );
   },
 );

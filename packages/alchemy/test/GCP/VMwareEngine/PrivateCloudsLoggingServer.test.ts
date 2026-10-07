@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as vmwareengine from "@distilled.cloud/gcp/vmwareengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Private clouds need VMware Engine node quota and bill thousands of dollars
 // a month; set GCP_TEST_VMWAREENGINE=1 on an entitled project to opt in.
@@ -76,16 +73,13 @@ test.provider.skipIf(!runLifecycle)(
             },
             description: "syslog parent",
           });
-          const syslog = yield* GCP.VMwareEngine.PrivateCloudsLoggingServer(
-            "Esxi",
-            {
-              privateCloud: cloud.name,
-              hostname: "logs.example.com",
-              port: 514,
-              protocol: "UDP",
-              sourceType: "ESXI",
-            },
-          );
+          const syslog = yield* GCP.VMwareEngine.PrivateCloudsLoggingServer("Esxi", {
+            privateCloud: cloud.name,
+            hostname: "logs.example.com",
+            port: 514,
+            protocol: "UDP",
+            sourceType: "ESXI",
+          });
           return { ven, cloud, syslog };
         }),
       );
@@ -96,10 +90,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.syslog.protocol).toEqual("UDP");
       expect(created.syslog.sourceType).toEqual("ESXI");
 
-      const fetched =
-        yield* vmwareengine.getProjectsLocationsPrivateCloudsLoggingServers({
-          name: created.syslog.name,
-        });
+      const fetched = yield* vmwareengine.getProjectsLocationsPrivateCloudsLoggingServers({
+        name: created.syslog.name,
+      });
       expect(fetched.name).toEqual(created.syslog.name);
       expect(fetched.hostname).toEqual("logs.example.com");
 
@@ -123,17 +116,14 @@ test.provider.skipIf(!runLifecycle)(
             },
             description: "syslog parent",
           });
-          const syslog = yield* GCP.VMwareEngine.PrivateCloudsLoggingServer(
-            "Esxi",
-            {
-              privateCloud: cloud.name,
-              loggingServerId: created.syslog.loggingServerId,
-              hostname: "logs.example.com",
-              port: 6514,
-              protocol: "TCP",
-              sourceType: "VCSA",
-            },
-          );
+          const syslog = yield* GCP.VMwareEngine.PrivateCloudsLoggingServer("Esxi", {
+            privateCloud: cloud.name,
+            loggingServerId: created.syslog.loggingServerId,
+            hostname: "logs.example.com",
+            port: 6514,
+            protocol: "TCP",
+            sourceType: "VCSA",
+          });
           return { ven, cloud, syslog };
         }),
       );

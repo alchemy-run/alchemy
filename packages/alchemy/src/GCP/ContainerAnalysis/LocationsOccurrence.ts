@@ -7,7 +7,6 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type { OccurrenceProps } from "./Occurrence.ts";
 import {
   findOwnedOccurrence,
   hasOwnershipMarker,
@@ -23,6 +22,7 @@ import {
   replaceOnIdentity,
   retryTransient,
 } from "./internal.ts";
+import type { OccurrenceProps } from "./Occurrence.ts";
 
 export type LocationsOccurrenceProps = OccurrenceProps & {
   /**
@@ -185,8 +185,7 @@ export const LocationsOccurrenceProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousKind =
-        occurrenceKind(olds ?? { noteName: "", resourceUri: "" }) ??
-        output?.kind;
+        occurrenceKind(olds ?? { noteName: "", resourceUri: "" }) ?? output?.kind;
       const nextKind = occurrenceKind(news) ?? previousKind;
       return replaceOnIdentity({
         previousParent: locationParent(
@@ -195,19 +194,14 @@ export const LocationsOccurrenceProvider = () =>
         ),
         nextParent: locationParent(
           "x",
-          normalizeLocation(
-            news.location ?? olds?.location ?? output?.location,
-            env.region,
-          ),
+          normalizeLocation(news.location ?? olds?.location ?? output?.location, env.region),
         ),
         extra:
           ((olds?.noteName ?? output?.noteName) !== undefined &&
             news.noteName !== (olds?.noteName ?? output?.noteName)) ||
           ((olds?.resourceUri ?? output?.resourceUri) !== undefined &&
             news.resourceUri !== (olds?.resourceUri ?? output?.resourceUri)) ||
-          (previousKind !== undefined &&
-            nextKind !== undefined &&
-            previousKind !== nextKind),
+          (previousKind !== undefined && nextKind !== undefined && previousKind !== nextKind),
       });
     }),
 
@@ -221,10 +215,7 @@ export const LocationsOccurrenceProvider = () =>
         const { labels } = parseDescription(existing.remediation);
         return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
       }
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const items = yield* listLocationOccurrences(env.project, location);
       const owned = yield* findOwnedOccurrence(id, items, env.project);
       if (owned === undefined) return undefined;
@@ -267,10 +258,7 @@ export const LocationsOccurrenceProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const current = yield* reconcileOccurrence({
         id,

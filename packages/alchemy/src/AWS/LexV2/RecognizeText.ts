@@ -76,6 +76,4 @@ export interface RecognizeText extends Binding.Service<
   >
 > {}
 
-export const RecognizeText = Binding.Service<RecognizeText>(
-  "AWS.LexV2.RecognizeText",
-);
+export const RecognizeText = Binding.Service<RecognizeText>("AWS.LexV2.RecognizeText");

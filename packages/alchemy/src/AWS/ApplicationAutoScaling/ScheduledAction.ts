@@ -145,10 +145,7 @@ export const ScheduledActionProvider = () =>
   Provider.effect(
     ScheduledAction,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: { scheduledActionName?: string } = {},
-      ) =>
+      const toName = (id: string, props: { scheduledActionName?: string } = {}) =>
         props.scheduledActionName
           ? Effect.succeed(props.scheduledActionName)
           : createPhysicalName({ id, maxLength: 255 });
@@ -174,9 +171,7 @@ export const ScheduledActionProvider = () =>
             ),
           );
 
-      const toAttributes = (
-        action: aas.ScheduledAction,
-      ): ScheduledAction["Attributes"] => ({
+      const toAttributes = (action: aas.ScheduledAction): ScheduledAction["Attributes"] => ({
         scheduledActionName: action.ScheduledActionName,
         scheduledActionArn: action.ScheduledActionARN,
         serviceNamespace: action.ServiceNamespace,
@@ -202,16 +197,14 @@ export const ScheduledActionProvider = () =>
           Effect.forEach(
             SERVICE_NAMESPACES,
             (namespace) =>
-              aas.describeScheduledActions
-                .pages({ ServiceNamespace: namespace })
-                .pipe(
-                  Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) =>
-                      (page.ScheduledActions ?? []).map(toAttributes),
-                    ),
+              aas.describeScheduledActions.pages({ ServiceNamespace: namespace }).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.ScheduledActions ?? []).map(toAttributes),
                   ),
                 ),
+              ),
             { concurrency: 4 },
           ).pipe(Effect.map((groups) => groups.flat())),
 
@@ -225,25 +218,16 @@ export const ScheduledActionProvider = () =>
           // The target triple pins the action to a scalable target — any
           // change replaces the action. Only compare sides that are known:
           // a half-created state row may have lost Output-valued props.
-          for (const key of [
-            "serviceNamespace",
-            "resourceId",
-            "scalableDimension",
-          ] as const) {
+          for (const key of ["serviceNamespace", "resourceId", "scalableDimension"] as const) {
             const oldValue = olds?.[key];
-            if (
-              oldValue !== undefined &&
-              isResolved(oldValue) &&
-              oldValue !== news[key]
-            ) {
+            if (oldValue !== undefined && isResolved(oldValue) && oldValue !== news[key]) {
               return { action: "replace" } as const;
             }
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const serviceNamespace =
-            output?.serviceNamespace ?? olds?.serviceNamespace;
+          const serviceNamespace = output?.serviceNamespace ?? olds?.serviceNamespace;
           if (serviceNamespace === undefined) return undefined;
           const scheduledActionName =
             output?.scheduledActionName ?? (yield* toName(id, olds ?? {}));
@@ -251,8 +235,7 @@ export const ScheduledActionProvider = () =>
             serviceNamespace,
             scheduledActionName,
             resourceId: output?.resourceId ?? olds?.resourceId,
-            scalableDimension:
-              output?.scalableDimension ?? olds?.scalableDimension,
+            scalableDimension: output?.scalableDimension ?? olds?.scalableDimension,
           });
           return action ? toAttributes(action) : undefined;
         }),
@@ -274,12 +257,8 @@ export const ScheduledActionProvider = () =>
               ScalableDimension: news.scalableDimension,
               Schedule: news.schedule,
               Timezone: news.timezone,
-              StartTime:
-                news.startTime !== undefined
-                  ? new Date(news.startTime)
-                  : undefined,
-              EndTime:
-                news.endTime !== undefined ? new Date(news.endTime) : undefined,
+              StartTime: news.startTime !== undefined ? new Date(news.startTime) : undefined,
+              EndTime: news.endTime !== undefined ? new Date(news.endTime) : undefined,
               ScalableTargetAction: news.scalableTargetAction,
             }),
           );
@@ -314,9 +293,7 @@ export const ScheduledActionProvider = () =>
               ResourceId: output.resourceId,
               ScalableDimension: output.scalableDimension,
             })
-            .pipe(
-              Effect.catchTag("ObjectNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ObjectNotFoundException", () => Effect.void));
         }),
       };
     }),

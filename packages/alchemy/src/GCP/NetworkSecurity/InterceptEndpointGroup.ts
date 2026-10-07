@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -105,9 +100,7 @@ export type InterceptEndpointGroup = Resource<
     /** Associations attached to this group. */
     associations: InterceptEndpointGroupAssociationDetail[];
     /** Connected deployment group details. */
-    connectedDeploymentGroup:
-      | InterceptEndpointGroupConnectedDeploymentGroup
-      | undefined;
+    connectedDeploymentGroup: InterceptEndpointGroupConnectedDeploymentGroup | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
     /** RFC3339 last-update timestamp. */
@@ -184,9 +177,7 @@ const isPendingState = (state: string | undefined) =>
   state === "CREATING" || state === "DELETING" || state === "STATE_UNSPECIFIED";
 
 const toAssociations = (
-  associations:
-    | networksecurity.InterceptEndpointGroupAssociationDetailsList
-    | undefined,
+  associations: networksecurity.InterceptEndpointGroupAssociationDetailsList | undefined,
 ): InterceptEndpointGroupAssociationDetail[] =>
   (associations ?? []).map((item) => ({
     name: item.name,
@@ -195,9 +186,7 @@ const toAssociations = (
   }));
 
 const toConnected = (
-  group:
-    | networksecurity.InterceptEndpointGroupConnectedDeploymentGroup
-    | undefined,
+  group: networksecurity.InterceptEndpointGroupConnectedDeploymentGroup | undefined,
 ): InterceptEndpointGroupConnectedDeploymentGroup | undefined =>
   group === undefined
     ? undefined
@@ -209,10 +198,7 @@ const toConnected = (
         })),
       };
 
-const toAttrs = (
-  group: networksecurity.InterceptEndpointGroup,
-  project: string,
-) => {
+const toAttrs = (group: networksecurity.InterceptEndpointGroup, project: string) => {
   const name = group.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -240,8 +226,7 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (group): group is networksecurity.InterceptEndpointGroup =>
-        group !== undefined,
+      (group): group is networksecurity.InterceptEndpointGroup => group !== undefined,
       () => new InterceptEndpointGroupNotResolved({ name }),
     ),
     Effect.filterOrFail(
@@ -253,8 +238,7 @@ const waitUntilReady = (name: string) =>
       () => new InterceptEndpointGroupNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -268,8 +252,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new InterceptEndpointGroupStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -282,13 +265,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.interceptEndpointGroups ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.interceptEndpointGroups ?? [])),
       Stream.filter((group) =>
-        Object.keys(group.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(group.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((group) => toAttrs(group, project)),
       Stream.runCollect,
@@ -309,25 +288,16 @@ export const InterceptEndpointGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.interceptEndpointGroupId ?? output?.interceptEndpointGroupId;
+      const previousId = olds?.interceptEndpointGroupId ?? output?.interceptEndpointGroupId;
       const nextId = news.interceptEndpointGroupId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousGroup = lastSegment(
-        olds?.interceptDeploymentGroup ??
-          output?.interceptDeploymentGroup ??
-          "",
+        olds?.interceptDeploymentGroup ?? output?.interceptDeploymentGroup ?? "",
       );
       const nextGroup = lastSegment(news.interceptDeploymentGroup);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousGroup.length > 0 && previousGroup !== nextGroup);
       if (!replace) return undefined;
@@ -344,19 +314,11 @@ export const InterceptEndpointGroupProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(
-          env.project,
-          location,
-          COLLECTION,
-          interceptEndpointGroupId,
-        );
+        output?.name ?? resourceName(env.project, location, COLLECTION, interceptEndpointGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -374,15 +336,8 @@ export const InterceptEndpointGroupProvider = () =>
         "ieg",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        interceptEndpointGroupId,
-      );
-      const interceptDeploymentGroup = toResourcePath(
-        news.interceptDeploymentGroup,
-      );
+      const name = resourceName(env.project, location, COLLECTION, interceptEndpointGroupId);
+      const interceptDeploymentGroup = toResourcePath(news.interceptDeploymentGroup);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -422,24 +377,22 @@ export const InterceptEndpointGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsInterceptEndpointGroups({
+        const operation = yield* networksecurity.patchProjectsLocationsInterceptEndpointGroups({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

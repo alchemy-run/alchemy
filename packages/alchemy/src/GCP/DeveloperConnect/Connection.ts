@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
@@ -347,9 +342,7 @@ export type Connection = Resource<
     /** Bitbucket Data Center configuration, if any. */
     bitbucketDataCenterConfig: BitbucketDataCenterConfig | undefined;
     /** Secure Source Manager configuration, if any. */
-    secureSourceManagerInstanceConfig:
-      | SecureSourceManagerInstanceConfig
-      | undefined;
+    secureSourceManagerInstanceConfig: SecureSourceManagerInstanceConfig | undefined;
     /** Git proxy configuration. */
     gitProxyConfig: GitProxyConfig | undefined;
     /** Customer-managed encryption, if any. */
@@ -412,9 +405,7 @@ export type Connection = Resource<
  * @resource
  * @category DeveloperConnect
  */
-export const Connection = Resource<Connection>(
-  "GCP.DeveloperConnect.Connection",
-);
+export const Connection = Resource<Connection>("GCP.DeveloperConnect.Connection");
 
 type ScmKind =
   | "github"
@@ -425,11 +416,8 @@ type ScmKind =
   | "bitbucketDataCenter"
   | "secureSourceManager";
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectionId: string,
-) => `projects/${project}/locations/${location}/connections/${connectionId}`;
+const resourceName = (project: string, location: string, connectionId: string) =>
+  `projects/${project}/locations/${location}/connections/${connectionId}`;
 
 const toUserCredential = (
   credential: UserCredential | undefined,
@@ -454,9 +442,7 @@ const toServiceDirectory = (
   return compact({ service: config.service });
 };
 
-const toGithub = (
-  config: GitHubConfig | undefined,
-): developerconnect.GitHubConfig | undefined => {
+const toGithub = (config: GitHubConfig | undefined): developerconnect.GitHubConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({
     githubApp: config.githubApp ?? "DEVELOPER_CONNECT",
@@ -481,9 +467,7 @@ const toGithubEnterprise = (
   });
 };
 
-const toGitlab = (
-  config: GitLabConfig | undefined,
-): developerconnect.GitLabConfig | undefined => {
+const toGitlab = (config: GitLabConfig | undefined): developerconnect.GitLabConfig | undefined => {
   if (config === undefined) return undefined;
   return compact({
     authorizerCredential: toUserCredential(config.authorizerCredential),
@@ -547,8 +531,7 @@ const fromGithub = (
     githubApp: config.githubApp,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          oauthTokenSecretVersion:
-            config.authorizerCredential.oauthTokenSecretVersion,
+          oauthTokenSecretVersion: config.authorizerCredential.oauthTokenSecretVersion,
         })
       : undefined,
     appInstallationId: config.appInstallationId,
@@ -580,15 +563,13 @@ const fromGitlab = (
   return compact({
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
   });
@@ -603,14 +584,12 @@ const fromGitlabEnterprise = (
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     serviceDirectoryConfig: config.serviceDirectoryConfig
@@ -629,14 +608,12 @@ const fromBitbucketCloud = (
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
   });
@@ -651,14 +628,12 @@ const fromBitbucketDataCenter = (
     webhookSecretSecretVersion: config.webhookSecretSecretVersion,
     readAuthorizerCredential: config.readAuthorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.readAuthorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.readAuthorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     authorizerCredential: config.authorizerCredential
       ? compact({
-          userTokenSecretVersion:
-            config.authorizerCredential.userTokenSecretVersion,
+          userTokenSecretVersion: config.authorizerCredential.userTokenSecretVersion,
         })
       : undefined,
     serviceDirectoryConfig: config.serviceDirectoryConfig
@@ -687,21 +662,16 @@ const scmKindOf = (value: {
   if (value.githubEnterpriseConfig !== undefined) return "githubEnterprise";
   if (value.gitlabEnterpriseConfig !== undefined) return "gitlabEnterprise";
   if (value.gitlabConfig !== undefined) return "gitlab";
-  if (value.bitbucketDataCenterConfig !== undefined)
-    return "bitbucketDataCenter";
+  if (value.bitbucketDataCenterConfig !== undefined) return "bitbucketDataCenter";
   if (value.bitbucketCloudConfig !== undefined) return "bitbucketCloud";
-  if (value.secureSourceManagerInstanceConfig !== undefined)
-    return "secureSourceManager";
+  if (value.secureSourceManagerInstanceConfig !== undefined) return "secureSourceManager";
   if (value.githubConfig !== undefined) return "github";
   return undefined;
 };
 
-const desiredScmKind = (news: ConnectionProps): ScmKind | undefined =>
-  scmKindOf(news);
+const desiredScmKind = (news: ConnectionProps): ScmKind | undefined => scmKindOf(news);
 
-const toScmBody = (
-  news: ConnectionProps,
-): Partial<developerconnect.Connection> => {
+const toScmBody = (news: ConnectionProps): Partial<developerconnect.Connection> => {
   const kind = desiredScmKind(news) ?? "github";
   switch (kind) {
     case "githubEnterprise":
@@ -720,15 +690,11 @@ const toScmBody = (
       };
     case "bitbucketDataCenter":
       return {
-        bitbucketDataCenterConfig: toBitbucketDataCenter(
-          news.bitbucketDataCenterConfig,
-        ),
+        bitbucketDataCenterConfig: toBitbucketDataCenter(news.bitbucketDataCenterConfig),
       };
     case "secureSourceManager":
       return {
-        secureSourceManagerInstanceConfig: toSsm(
-          news.secureSourceManagerInstanceConfig,
-        ),
+        secureSourceManagerInstanceConfig: toSsm(news.secureSourceManagerInstanceConfig),
       };
     default:
       return { githubConfig: toGithub(news.githubConfig ?? {}) };
@@ -784,11 +750,7 @@ const immutableWebhookOf = (value: {
   value.bitbucketDataCenterConfig?.webhookSecretSecretVersion ??
   value.bitbucketCloudConfig?.webhookSecretSecretVersion;
 
-const toAttrs = (
-  item: developerconnect.Connection,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: developerconnect.Connection, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "connections", region);
   return {
@@ -804,12 +766,8 @@ const toAttrs = (
     gitlabConfig: fromGitlab(item.gitlabConfig),
     gitlabEnterpriseConfig: fromGitlabEnterprise(item.gitlabEnterpriseConfig),
     bitbucketCloudConfig: fromBitbucketCloud(item.bitbucketCloudConfig),
-    bitbucketDataCenterConfig: fromBitbucketDataCenter(
-      item.bitbucketDataCenterConfig,
-    ),
-    secureSourceManagerInstanceConfig: fromSsm(
-      item.secureSourceManagerInstanceConfig,
-    ),
+    bitbucketDataCenterConfig: fromBitbucketDataCenter(item.bitbucketDataCenterConfig),
+    secureSourceManagerInstanceConfig: fromSsm(item.secureSourceManagerInstanceConfig),
     gitProxyConfig: item.gitProxyConfig
       ? compact({ enabled: item.gitProxyConfig.enabled === true })
       : undefined,
@@ -850,46 +808,29 @@ const listOwned = (project: string, region: string) =>
 
 export const ConnectionProvider = () =>
   Provider.succeed(Connection, {
-    stables: [
-      "name",
-      "connectionId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "connectionId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousKind =
-        desiredScmKind(olds ?? {}) ??
-        (output === undefined ? undefined : scmKindOf(output));
+        desiredScmKind(olds ?? {}) ?? (output === undefined ? undefined : scmKindOf(output));
       const nextKind = desiredScmKind(news);
-      const previousHost =
-        immutableHostOf(olds ?? {}) ?? immutableHostOf(output ?? {});
+      const previousHost = immutableHostOf(olds ?? {}) ?? immutableHostOf(output ?? {});
       const nextHost = immutableHostOf(news);
-      const previousWebhook =
-        immutableWebhookOf(olds ?? {}) ?? immutableWebhookOf(output ?? {});
+      const previousWebhook = immutableWebhookOf(olds ?? {}) ?? immutableWebhookOf(output ?? {});
       const nextWebhook = immutableWebhookOf(news);
       return replaceOnIdentity({
         previousId: olds?.connectionId ?? output?.connectionId,
         nextId: news.connectionId ?? olds?.connectionId ?? output?.connectionId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          (previousKind !== undefined &&
-            nextKind !== undefined &&
-            nextKind !== previousKind) ||
-          (previousHost !== undefined &&
-            nextHost !== undefined &&
-            nextHost !== previousHost) ||
+          (previousKind !== undefined && nextKind !== undefined && nextKind !== previousKind) ||
+          (previousHost !== undefined && nextHost !== undefined && nextHost !== previousHost) ||
           (previousWebhook !== undefined &&
             nextWebhook !== undefined &&
             nextWebhook !== previousWebhook),
@@ -904,18 +845,12 @@ export const ConnectionProvider = () =>
         output?.connectionId,
         "connection",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, connectionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -933,10 +868,7 @@ export const ConnectionProvider = () =>
         output?.connectionId,
         "connection",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, connectionId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -984,34 +916,21 @@ export const ConnectionProvider = () =>
       const observedKind = scmKindOf(toAttrs(current, env.project, env.region));
       const observedScm = compact({
         githubConfig: fromGithub(current.githubConfig),
-        githubEnterpriseConfig: fromGithubEnterprise(
-          current.githubEnterpriseConfig,
-        ),
+        githubEnterpriseConfig: fromGithubEnterprise(current.githubEnterpriseConfig),
         gitlabConfig: fromGitlab(current.gitlabConfig),
-        gitlabEnterpriseConfig: fromGitlabEnterprise(
-          current.gitlabEnterpriseConfig,
-        ),
+        gitlabEnterpriseConfig: fromGitlabEnterprise(current.gitlabEnterpriseConfig),
         bitbucketCloudConfig: fromBitbucketCloud(current.bitbucketCloudConfig),
-        bitbucketDataCenterConfig: fromBitbucketDataCenter(
-          current.bitbucketDataCenterConfig,
-        ),
-        secureSourceManagerInstanceConfig: fromSsm(
-          current.secureSourceManagerInstanceConfig,
-        ),
+        bitbucketDataCenterConfig: fromBitbucketDataCenter(current.bitbucketDataCenterConfig),
+        secureSourceManagerInstanceConfig: fromSsm(current.secureSourceManagerInstanceConfig),
       });
       const desiredScm = compact({
-        githubConfig:
-          nextKind === "github" ? toGithub(news.githubConfig ?? {}) : undefined,
+        githubConfig: nextKind === "github" ? toGithub(news.githubConfig ?? {}) : undefined,
         githubEnterpriseConfig: toGithubEnterprise(news.githubEnterpriseConfig),
         gitlabConfig: toGitlab(news.gitlabConfig),
         gitlabEnterpriseConfig: toGitlabEnterprise(news.gitlabEnterpriseConfig),
         bitbucketCloudConfig: toBitbucketCloud(news.bitbucketCloudConfig),
-        bitbucketDataCenterConfig: toBitbucketDataCenter(
-          news.bitbucketDataCenterConfig,
-        ),
-        secureSourceManagerInstanceConfig: toSsm(
-          news.secureSourceManagerInstanceConfig,
-        ),
+        bitbucketDataCenterConfig: toBitbucketDataCenter(news.bitbucketDataCenterConfig),
+        secureSourceManagerInstanceConfig: toSsm(news.secureSourceManagerInstanceConfig),
       });
       const scmChanged = fingerprint(observedScm) !== fingerprint(desiredScm);
       const mask = fieldMask([
@@ -1020,12 +939,10 @@ export const ConnectionProvider = () =>
           fingerprint(userAnnotations(annotations)) && "annotations",
         !sameBool(current.disabled, desiredDisabled) && "disabled",
         scmChanged && scmField(nextKind ?? observedKind),
-        !sameBool(
-          current.gitProxyConfig?.enabled,
-          news.gitProxyConfig?.enabled,
-        ) && "gitProxyConfig",
-        fingerprint(current.cryptoKeyConfig) !==
-          fingerprint(news.cryptoKeyConfig) && "cryptoKeyConfig",
+        !sameBool(current.gitProxyConfig?.enabled, news.gitProxyConfig?.enabled) &&
+          "gitProxyConfig",
+        fingerprint(current.cryptoKeyConfig) !== fingerprint(news.cryptoKeyConfig) &&
+          "cryptoKeyConfig",
       ]);
 
       if (mask.length > 0) {
@@ -1054,10 +971,7 @@ export const ConnectionProvider = () =>
         } else {
           yield* waitForOperation(operation);
         }
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

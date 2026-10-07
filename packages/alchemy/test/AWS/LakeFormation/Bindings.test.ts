@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import LakeFormationTestFunctionLive, {
-  LakeFormationTestFunction,
-} from "./handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import LakeFormationTestFunctionLive, { LakeFormationTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "LakeFormationBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,26 +32,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "LakeFormation Bindings",
@@ -72,9 +60,7 @@ describe.sequential(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "LakeFormation test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("LakeFormation test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("LakeFormation test setup: deploying fixture");
@@ -92,14 +78,10 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `LakeFormation test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`LakeFormation test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -151,10 +133,7 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* getJson("/tag-missing")) as any;
-            expect([
-              "EntityNotFoundException",
-              "AccessDeniedException",
-            ]).toContain(response.tag);
+            expect(["EntityNotFoundException", "AccessDeniedException"]).toContain(response.tag);
           }),
         { timeout: 60_000 },
       );
@@ -179,11 +158,9 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* getJson("/search-databases")) as any;
-            expect([
-              "Ok",
-              "EntityNotFoundException",
-              "AccessDeniedException",
-            ]).toContain(response.tag);
+            expect(["Ok", "EntityNotFoundException", "AccessDeniedException"]).toContain(
+              response.tag,
+            );
             expect(response.count).toBe(0);
           }),
         { timeout: 60_000 },
@@ -196,11 +173,9 @@ describe.sequential(
         (_stack) =>
           Effect.gen(function* () {
             const response = (yield* getJson("/search-tables")) as any;
-            expect([
-              "Ok",
-              "EntityNotFoundException",
-              "AccessDeniedException",
-            ]).toContain(response.tag);
+            expect(["Ok", "EntityNotFoundException", "AccessDeniedException"]).toContain(
+              response.tag,
+            );
             expect(response.count).toBe(0);
           }),
         { timeout: 60_000 },
@@ -215,11 +190,9 @@ describe.sequential(
             const response = (yield* getJson("/resource-tags")) as any;
             // Ok (no tags assigned) under the default catalog settings; a
             // Lake-Formation-locked catalog surfaces the typed denial instead.
-            expect([
-              "Ok",
-              "AccessDeniedException",
-              "EntityNotFoundException",
-            ]).toContain(response.tag);
+            expect(["Ok", "AccessDeniedException", "EntityNotFoundException"]).toContain(
+              response.tag,
+            );
           }),
         { timeout: 60_000 },
       );
@@ -233,11 +206,9 @@ describe.sequential(
             const response = (yield* getJson("/effective-permissions")) as any;
             // verified live: an unregistered path returns an empty permission
             // list rather than EntityNotFound
-            expect([
-              "Ok",
-              "EntityNotFoundException",
-              "InvalidInputException",
-            ]).toContain(response.tag);
+            expect(["Ok", "EntityNotFoundException", "InvalidInputException"]).toContain(
+              response.tag,
+            );
             expect(response.count).toBe(0);
           }),
         { timeout: 60_000 },

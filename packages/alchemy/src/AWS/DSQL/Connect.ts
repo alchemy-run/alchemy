@@ -85,8 +85,6 @@ export interface Connect extends Binding.Service<
   (
     cluster: Cluster,
     options?: ConnectOptions,
-  ) => Effect.Effect<
-    Effect.Effect<SqlConnectionInfo, PresignError, RuntimeContext>
-  >
+  ) => Effect.Effect<Effect.Effect<SqlConnectionInfo, PresignError, RuntimeContext>>
 > {}
 export const Connect = Binding.Service<Connect>("AWS.DSQL.Connect");

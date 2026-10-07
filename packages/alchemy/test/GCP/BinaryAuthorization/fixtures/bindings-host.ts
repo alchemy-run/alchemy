@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 import { TEST_ATTESTATION, TEST_POD, TEST_RESOURCE_URI } from "../common.ts";
 
@@ -39,12 +39,9 @@ export default class BinaryAuthorizationBindingsHost extends GCP.Function<Binary
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const getAttestor = yield* GCP.BinaryAuthorization.GetAttestor(Viewed);
-    const validate =
-      yield* GCP.BinaryAuthorization.ValidateAttestation(Verifier);
-    const getPolicy =
-      yield* GCP.BinaryAuthorization.GetPlatformsPolicy(GkePolicy);
-    const evaluate =
-      yield* GCP.BinaryAuthorization.EvaluateGkePolicy(GkePolicy);
+    const validate = yield* GCP.BinaryAuthorization.ValidateAttestation(Verifier);
+    const getPolicy = yield* GCP.BinaryAuthorization.GetPlatformsPolicy(GkePolicy);
+    const evaluate = yield* GCP.BinaryAuthorization.EvaluateGkePolicy(GkePolicy);
 
     return {
       fetch: serveProbes({

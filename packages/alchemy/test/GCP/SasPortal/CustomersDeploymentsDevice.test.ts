@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { firstCustomerName, logLevel, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -75,15 +75,12 @@ test.provider.skipIf(!runLifecycle)(
             parent: customer,
             displayName: "site-a",
           });
-          const device = yield* GCP.SasPortal.CustomersDeploymentsDevice(
-            "Cbsd",
-            {
-              parent: parent.name,
-              displayName: "sector-a",
-              fccId: "TESTFCC",
-              serialNumber: "ALCHSNNEST1",
-            },
-          );
+          const device = yield* GCP.SasPortal.CustomersDeploymentsDevice("Cbsd", {
+            parent: parent.name,
+            displayName: "sector-a",
+            fccId: "TESTFCC",
+            serialNumber: "ALCHSNNEST1",
+          });
           return { parent, device };
         }),
       );
@@ -104,16 +101,13 @@ test.provider.skipIf(!runLifecycle)(
             name: created.parent.name,
             displayName: "site-a",
           });
-          const device = yield* GCP.SasPortal.CustomersDeploymentsDevice(
-            "Cbsd",
-            {
-              parent: parent.name,
-              name: created.device.name,
-              displayName: "sector-b",
-              fccId: "TESTFCC",
-              serialNumber: "ALCHSNNEST1",
-            },
-          );
+          const device = yield* GCP.SasPortal.CustomersDeploymentsDevice("Cbsd", {
+            parent: parent.name,
+            name: created.device.name,
+            displayName: "sector-b",
+            fccId: "TESTFCC",
+            serialNumber: "ALCHSNNEST1",
+          });
           return { parent, device };
         }),
       );

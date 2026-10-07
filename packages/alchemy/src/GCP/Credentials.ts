@@ -1,16 +1,17 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import {
-  Credentials,
-  type Config as CredentialsConfig,
-} from "@distilled.cloud/gcp/Credentials";
+import { Credentials, type Config as CredentialsConfig } from "@distilled.cloud/gcp/Credentials";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/http/HttpClient";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import {
+  deferUntilFirstUse,
+  orDieCredentialsUnavailable,
+  resolveProviderConfig,
+} from "../Auth/Resolve.ts";
 import {
   GCP_AUTH_PROVIDER_NAME,
   type GcpAuthConfig,
@@ -43,28 +44,30 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const { profileName, resolve } = yield* resolveProviderConfig<
-        GcpAuthConfig,
-        GcpResolvedCredentials
-      >(GCP_AUTH_PROVIDER_NAME);
-
-      // Return the resolver Effect (not a one-shot token). Distilled yields
-      // `Credentials` then the inner Effect on every call so SA tokens can
-      // refresh from AuthProvider's cache.
-      return resolve.pipe(
-        Effect.map((creds) => ({
-          accessToken: creds.accessToken,
-          project: creds.project,
-          region: creds.region,
-        })),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({
-              message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-            }),
+      // Defer the profile lookup until first use, so building the provider
+      // layers never requires a configured profile. Only the lookup is
+      // cached: distilled yields `Credentials` then the inner Effect on
+      // every call so SA tokens can refresh from AuthProvider's cache.
+      const lookup = yield* resolveProviderConfig<GcpAuthConfig, GcpResolvedCredentials>(
+        GCP_AUTH_PROVIDER_NAME,
+      ).pipe(deferUntilFirstUse, Effect.flatMap(Effect.cached));
+      return lookup.pipe(
+        Effect.flatMap(({ profileName, resolve }) =>
+          resolve.pipe(
+            Effect.map((creds) => ({
+              accessToken: creds.accessToken,
+              project: creds.project,
+              region: creds.region,
+            })),
+            Effect.mapError(
+              (e) =>
+                new ConfigError({
+                  message: `Failed to resolve GCP credentials from ${profileName === undefined ? "the environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
+                }),
+            ),
+          ),
         ),
-        // Distilled `Credentials` is `Effect<Config>` (error `never`).
-        Effect.orDie,
+        orDieCredentialsUnavailable(GCP_AUTH_PROVIDER_NAME),
       );
     }),
   );
@@ -84,9 +87,7 @@ export const fromChain = () =>
       const http = yield* HttpClient.HttpClient;
       const cached = yield* cacheCredentials(
         Effect.gen(function* () {
-          const envToken = yield* Config.option(
-            Config.String("GOOGLE_ACCESS_TOKEN"),
-          );
+          const envToken = yield* Config.option(Config.String("GOOGLE_ACCESS_TOKEN"));
           const envProject = yield* Config.option(
             Config.String("GOOGLE_PROJECT_ID").pipe(
               Config.orElse(() => Config.String("GOOGLE_CLOUD_PROJECT")),
@@ -102,9 +103,7 @@ export const fromChain = () =>
             };
           }
 
-          const keyFile = yield* Config.option(
-            Config.String("GOOGLE_APPLICATION_CREDENTIALS"),
-          );
+          const keyFile = yield* Config.option(Config.String("GOOGLE_APPLICATION_CREDENTIALS"));
           if (Option.isSome(keyFile)) {
             const raw = yield* fs.readFileString(keyFile.value).pipe(
               Effect.mapError(
@@ -133,10 +132,7 @@ export const fromChain = () =>
             return {
               config: {
                 accessToken: minted.accessToken,
-                project:
-                  Option.getOrUndefined(envProject) ??
-                  sa.project_id ??
-                  minted.project,
+                project: Option.getOrUndefined(envProject) ?? sa.project_id ?? minted.project,
               },
               expiresAt: minted.expirationMs,
             };
@@ -145,9 +141,7 @@ export const fromChain = () =>
           const token = yield* fetchMetadataToken(http);
           const project =
             Option.getOrUndefined(envProject) ??
-            (yield* fetchMetadataProject(http).pipe(
-              Effect.orElseSucceed(() => undefined),
-            ));
+            (yield* fetchMetadataProject(http).pipe(Effect.orElseSucceed(() => undefined)));
           return {
             config: { accessToken: token.accessToken, project },
             expiresAt: token.expiresAt,

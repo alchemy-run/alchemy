@@ -1,17 +1,13 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import ParameterManagerBindingsHost, {
-  AppConfig,
-  PAYLOAD,
-  V1,
-} from "./fixtures/bindings-host.ts";
+import ParameterManagerBindingsHost, { AppConfig, PAYLOAD, V1 } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -42,12 +38,7 @@ const base64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
 describe.skipIf(!dockerAvailable)(
   "ParameterManager Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:parametermanager",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:parametermanager", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -79,10 +70,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the parameter, granted parameterViewer scoped to it",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<parametermanager.Parameter>(
-              baseUrl,
-              "getParameter",
-            );
+            const live = yield* expectProbe<parametermanager.Parameter>(baseUrl, "getParameter");
             expect(live.name).toEqual(parameterName);
             expect(live.format).toEqual("JSON");
 
@@ -127,19 +115,17 @@ describe.skipIf(!dockerAvailable)(
         "renders the version, granted parameterAccessor scoped to it",
         (_stack) =>
           Effect.gen(function* () {
-            const rendered =
-              yield* expectProbe<parametermanager.RenderParameterVersionResponse>(
-                baseUrl,
-                "renderParameterVersion",
-              );
+            const rendered = yield* expectProbe<parametermanager.RenderParameterVersionResponse>(
+              baseUrl,
+              "renderParameterVersion",
+            );
             expect(rendered.parameterVersion).toEqual(versionName);
             expect(rendered.renderedPayload).toEqual(base64(PAYLOAD));
 
             // Out of band: the deployer renders the same payload.
-            const direct =
-              yield* parametermanager.renderProjectsLocationsParametersVersions(
-                { name: versionName },
-              );
+            const direct = yield* parametermanager.renderProjectsLocationsParametersVersions({
+              name: versionName,
+            });
             expect(direct.renderedPayload).toEqual(rendered.renderedPayload);
 
             const grants = yield* hostProjectGrants;

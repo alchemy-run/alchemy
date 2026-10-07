@@ -163,10 +163,8 @@ const needsSync = (
   desired: androidenterprise.StoreCluster,
 ) =>
   !jsonEqual(current.name, desired.name) ||
-  (desired.productId !== undefined &&
-    !sameStringList(current.productId, desired.productId)) ||
-  (desired.orderInPage !== undefined &&
-    !sameText(current.orderInPage, desired.orderInPage));
+  (desired.productId !== undefined && !sameStringList(current.productId, desired.productId)) ||
+  (desired.orderInPage !== undefined && !sameText(current.orderInPage, desired.orderInPage));
 
 export const StorelayoutclusterProvider = () =>
   Provider.succeed(Storelayoutcluster, {
@@ -175,10 +173,7 @@ export const StorelayoutclusterProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousEnterprise = olds?.enterpriseId ?? output?.enterpriseId;
-      if (
-        previousEnterprise !== undefined &&
-        news.enterpriseId !== previousEnterprise
-      ) {
+      if (previousEnterprise !== undefined && news.enterpriseId !== previousEnterprise) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousPage = olds?.pageId ?? output?.pageId;
@@ -204,21 +199,12 @@ export const StorelayoutclusterProvider = () =>
       let existing = yield* getCluster(enterpriseId, pageId, clusterId);
       let observedPageId = pageId;
       if (existing === undefined && enterpriseId.length > 0) {
-        const found = yield* findOwnedCluster(
-          id,
-          enterpriseId,
-          pageId || undefined,
-        );
+        const found = yield* findOwnedCluster(id, enterpriseId, pageId || undefined);
         existing = found?.cluster;
         observedPageId = found?.pageId ?? pageId;
       }
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(
-        existing,
-        enterpriseId,
-        observedPageId,
-        env.project,
-      );
+      const attrs = toAttrs(existing, enterpriseId, observedPageId, env.project);
       // Only a recorded id (or a legacy ownership marker) proves ownership;
       // names and titles are user-visible and carry no marker.
       return output !== undefined ||
@@ -232,9 +218,7 @@ export const StorelayoutclusterProvider = () =>
         const env = yield* GcpEnvironment.current;
         const clusters = yield* listOwnedClusters();
         return clusters
-          .filter(({ cluster }) =>
-            hasOwnershipMarker(ownershipTextFromNames(cluster.name)),
-          )
+          .filter(({ cluster }) => hasOwnershipMarker(ownershipTextFromNames(cluster.name)))
           .map(({ cluster, enterpriseId, pageId }) =>
             toAttrs(cluster, enterpriseId, pageId, env.project),
           );
@@ -244,11 +228,7 @@ export const StorelayoutclusterProvider = () =>
       const env = yield* GcpEnvironment.current;
       const enterpriseId = news.enterpriseId;
       const pageId = news.pageId;
-      const displayName = yield* toDisplayName(
-        id,
-        news.name?.[0]?.text,
-        output?.name?.[0]?.text,
-      );
+      const displayName = yield* toDisplayName(id, news.name?.[0]?.text, output?.name?.[0]?.text);
       const name = defaultNames(news.name, displayName);
 
       let current = yield* getCluster(

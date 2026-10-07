@@ -1,3 +1,9 @@
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
@@ -5,26 +11,16 @@ import { normalizePolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { Secret } from "@/AWS/SecretsManager/Secret.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 class SecretNotListed extends Data.TaggedError("SecretNotListed") {}
 
-class ResourcePolicyNotAttached extends Data.TaggedError(
-  "ResourcePolicyNotAttached",
-) {}
+class ResourcePolicyNotAttached extends Data.TaggedError("ResourcePolicyNotAttached") {}
 
 class SecretStillExists extends Data.TaggedError("SecretStillExists") {}
 
-class SecretVersionNotVisible extends Data.TaggedError(
-  "SecretVersionNotVisible",
-)<{
+class SecretVersionNotVisible extends Data.TaggedError("SecretVersionNotVisible")<{
   readonly expectedVersionId: string;
   readonly observedVersionId: string | undefined;
   readonly descriptionMatches: boolean;
@@ -38,12 +34,8 @@ const readCurrentSecret = Effect.fn(function* (
 ) {
   return yield* Effect.retry(
     Effect.gen(function* () {
-      const value = yield* secretsmanager.getSecretValue({
-        SecretId: secretArn,
-      });
-      const described = yield* secretsmanager.describeSecret({
-        SecretId: secretArn,
-      });
+      const value = yield* secretsmanager.getSecretValue({ SecretId: secretArn });
+      const described = yield* secretsmanager.describeSecret({ SecretId: secretArn });
       if (
         value.VersionId !== versionId ||
         !value.VersionStages?.includes("AWSCURRENT") ||
@@ -68,8 +60,7 @@ const readCurrentSecret = Effect.fn(function* (
     ),
     {
       while: (error) =>
-        error._tag === "SecretVersionNotVisible" ||
-        error._tag === "ResourceNotFoundException",
+        error._tag === "SecretVersionNotVisible" || error._tag === "ResourceNotFoundException",
       schedule: Schedule.fixed("2 seconds"),
       times: 10,
     },
@@ -78,23 +69,13 @@ const readCurrentSecret = Effect.fn(function* (
 
 // Secrets Manager marks values as sensitive, so the distilled client can hand
 // them back either raw or wrapped in `Redacted` — unwrap for assertions.
-const unwrapString = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const unwrapString = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const unwrapBinary = (
   value: Uint8Array | Redacted.Redacted<Uint8Array> | undefined,
 ): Uint8Array | undefined =>
-  value === undefined
-    ? undefined
-    : value instanceof Uint8Array
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : value instanceof Uint8Array ? value : Redacted.value(value);
 
 // Typed wait-until-gone: the provider deletes with
 // `ForceDeleteWithoutRecovery`, which completes asynchronously — poll
@@ -105,10 +86,7 @@ const assertSecretDeleted = (secretArn: string) =>
     Effect.flatMap(() => Effect.fail(new SecretStillExists())),
     Effect.retry({
       while: (e) => e._tag === "SecretStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
@@ -169,13 +147,148 @@ test.provider(
 
       expect(described.Description).toBe("lifecycle v2");
       expect(updated.description).toBe(described.Description);
-      expect(described.VersionIdsToStages?.[updated.versionId!]).toContain(
-        "AWSCURRENT",
-      );
+      expect(described.VersionIdsToStages?.[updated.versionId!]).toContain("AWSCURRENT");
 
       yield* stack.destroy();
 
       yield* assertSecretDeleted(secret.secretArn);
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// `recoveryWindowInDays` opts out of force deletion: removing the secret
+// schedules it for deletion (still describable, `DeletedDate` set), and
+// re-adding the same `Secret` restores that secret rather than failing on a
+// name that is pending deletion. Restoring needs a stable `name` (a re-added
+// resource otherwise gets a fresh generated name); it is scoped to the test
+// stage. Cleanup force-deletes out-of-band so the scheduled secret does not
+// linger for the window.
+test.provider(
+  "recovery window: removal schedules deletion, re-adding restores",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (included: boolean) =>
+        Effect.gen(function* () {
+          if (!included) return {};
+          const secret = yield* Secret("RecoverableSecret", {
+            name: `alchemy-test-recoverable-${stack.stage}`,
+            description: "recoverable",
+            secretString: Redacted.make("recoverable-value"),
+            recoveryWindowInDays: 7,
+          });
+          return { secret };
+        });
+
+      // DescribeSecret is eventually consistent after DeleteSecret /
+      // RestoreSecret; poll (bounded) until the deletion state shows.
+      const describeUntil = (secretArn: string, scheduled: boolean) =>
+        secretsmanager.describeSecret({ SecretId: secretArn }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (d): boolean => (d.DeletedDate !== undefined) === scheduled,
+            times: 15,
+          }),
+        );
+
+      const created = (yield* stack.deploy(program(true))).secret!;
+
+      // Removal schedules deletion instead of force-deleting.
+      yield* stack.deploy(program(false));
+      const scheduled = yield* describeUntil(created.secretArn, true);
+      expect(scheduled.DeletedDate).toBeDefined();
+
+      // Re-adding restores the same secret.
+      const restored = (yield* stack.deploy(program(true))).secret!;
+      expect(restored.secretArn).toBe(created.secretArn);
+      const live = yield* describeUntil(created.secretArn, false);
+      expect(live.DeletedDate).toBeUndefined();
+      expect(live.Description).toBe("recoverable");
+
+      // Destroy schedules it again; then force-delete so nothing lingers.
+      yield* stack.destroy();
+      const afterDestroy = yield* describeUntil(created.secretArn, true);
+      expect(afterDestroy.DeletedDate).toBeDefined();
+      yield* secretsmanager
+        .deleteSecret({ SecretId: created.secretArn, ForceDeleteWithoutRecovery: true })
+        .pipe(
+          // Briefly unfindable right after being scheduled; retry (bounded).
+          Effect.retry({
+            while: (e) => e._tag === "ResourceNotFoundException",
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+          }),
+        );
+      yield* assertSecretDeleted(created.secretArn);
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// The recovery window is validated before any API call: DeleteSecret only
+// accepts a whole number of days from 7 to 30.
+test.provider(
+  "recovery window outside 7..30 fails before creating anything",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = `alchemy-test-bad-window-${stack.stage}`;
+      const failure = yield* stack
+        .deploy(
+          Secret("BadWindowSecret", {
+            name,
+            secretString: Redacted.make("value"),
+            recoveryWindowInDays: 3,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "SecretRecoveryWindowOutOfRange" });
+      const absent = yield* secretsmanager.describeSecret({ SecretId: name }).pipe(Effect.flip);
+      expect(absent._tag).toBe("ResourceNotFoundException");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// A pending secret this resource did not create (no ownership tags) is never
+// restored: the deploy fails with OwnedBySomeoneElse and the secret stays
+// scheduled for deletion.
+test.provider(
+  "recovery window never restores a foreign pending secret",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = `alchemy-test-foreign-pending-${stack.stage}`;
+      const foreign = yield* secretsmanager.createSecret({
+        Name: name,
+        SecretString: "foreign",
+      });
+      yield* secretsmanager.deleteSecret({ SecretId: foreign.ARN!, RecoveryWindowInDays: 7 });
+
+      const failure = yield* stack
+        .deploy(
+          Secret("ForeignNameSecret", {
+            name,
+            secretString: Redacted.make("mine"),
+            recoveryWindowInDays: 7,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      const still = yield* secretsmanager.describeSecret({ SecretId: foreign.ARN! });
+      expect(still.DeletedDate).toBeDefined();
+
+      yield* stack.destroy();
+      yield* secretsmanager
+        .deleteSecret({ SecretId: foreign.ARN!, ForceDeleteWithoutRecovery: true })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ResourceNotFoundException",
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+          }),
+        );
+      yield* assertSecretDeleted(foreign.ARN!);
     }),
   { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
 );
@@ -215,9 +328,7 @@ test.provider(
       );
       expect(v1.VersionId).toBe(secret.versionId);
       expect(v1.VersionStages).toContain("AWSCURRENT");
-      expect(Array.from(unwrapBinary(v1.SecretBinary)!)).toEqual(
-        Array.from(BINARY_V1),
-      );
+      expect(Array.from(unwrapBinary(v1.SecretBinary)!)).toEqual(Array.from(BINARY_V1));
       expect(unwrapString(v1.SecretString)).toBeUndefined();
 
       // Rotate the binary value in place (no replacement).
@@ -240,16 +351,12 @@ test.provider(
       );
       expect(v2.VersionId).toBe(updated.versionId);
       expect(v2.VersionStages).toContain("AWSCURRENT");
-      expect(Array.from(unwrapBinary(v2.SecretBinary)!)).toEqual(
-        Array.from(BINARY_V2),
-      );
+      expect(Array.from(unwrapBinary(v2.SecretBinary)!)).toEqual(Array.from(BINARY_V2));
       expect(unwrapString(v2.SecretString)).toBeUndefined();
 
       expect(described.Description).toBe("binary lifecycle v2");
       expect(updated.description).toBe(described.Description);
-      expect(described.VersionIdsToStages?.[updated.versionId!]).toContain(
-        "AWSCURRENT",
-      );
+      expect(described.VersionIdsToStages?.[updated.versionId!]).toContain("AWSCURRENT");
 
       yield* stack.destroy();
       yield* assertSecretDeleted(secret.secretArn);
@@ -292,25 +399,18 @@ test.provider(
 
       // Out-of-band verification via distilled: the attached policy is
       // equivalent to the typed document (bounded retry through propagation).
-      const attached = yield* secretsmanager
-        .getResourcePolicy({ SecretId: secret.secretArn })
-        .pipe(
-          Effect.flatMap((response) =>
-            response.ResourcePolicy === undefined
-              ? Effect.fail(new ResourcePolicyNotAttached())
-              : Effect.succeed(response.ResourcePolicy),
-          ),
-          Effect.retry({
-            while: (e) => e._tag === "ResourcePolicyNotAttached",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(5),
-            ]),
-          }),
-        );
-      expect(normalizePolicyDocument(attached)).toBe(
-        normalizePolicyDocument(resourcePolicy),
+      const attached = yield* secretsmanager.getResourcePolicy({ SecretId: secret.secretArn }).pipe(
+        Effect.flatMap((response) =>
+          response.ResourcePolicy === undefined
+            ? Effect.fail(new ResourcePolicyNotAttached())
+            : Effect.succeed(response.ResourcePolicy),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "ResourcePolicyNotAttached",
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
+        }),
       );
+      expect(normalizePolicyDocument(attached)).toBe(normalizePolicyDocument(resourcePolicy));
 
       // Re-deploy the identical PolicyDocument — must be a clean no-op.
       const redeployed = yield* stack.deploy(
@@ -324,9 +424,7 @@ test.provider(
       );
       expect(redeployed.secretArn).toBe(secret.secretArn);
 
-      const afterRedeploy = yield* secretsmanager.getResourcePolicy({
-        SecretId: secret.secretArn,
-      });
+      const afterRedeploy = yield* secretsmanager.getResourcePolicy({ SecretId: secret.secretArn });
       expect(afterRedeploy.ResourcePolicy).toBeTruthy();
       expect(normalizePolicyDocument(afterRedeploy.ResourcePolicy ?? "")).toBe(
         normalizePolicyDocument(resourcePolicy),
@@ -341,22 +439,13 @@ test.provider(
           });
         }),
       );
-      const removed = yield* secretsmanager.getResourcePolicy({
-        SecretId: secret.secretArn,
-      });
+      const removed = yield* secretsmanager.getResourcePolicy({ SecretId: secret.secretArn });
       expect(removed.ResourcePolicy).toBeUndefined();
 
       yield* stack.destroy();
       yield* assertSecretDeleted(secret.secretArn);
     }),
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:iam",
-      "provider:aws:secretsmanager",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:iam", "provider:aws:secretsmanager", "live"] },
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a real
@@ -395,10 +484,7 @@ test.provider(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "SecretNotListed",
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
 

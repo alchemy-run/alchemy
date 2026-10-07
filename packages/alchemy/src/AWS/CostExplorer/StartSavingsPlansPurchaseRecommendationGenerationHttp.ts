@@ -3,12 +3,11 @@ import * as Layer from "effect/Layer";
 import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 import { StartSavingsPlansPurchaseRecommendationGeneration } from "./StartSavingsPlansPurchaseRecommendationGeneration.ts";
 
-export const StartSavingsPlansPurchaseRecommendationGenerationHttp =
-  Layer.effect(
-    StartSavingsPlansPurchaseRecommendationGeneration,
-    makeCostExplorerHttpBinding({
-      capability: "StartSavingsPlansPurchaseRecommendationGeneration",
-      iamActions: ["ce:StartSavingsPlansPurchaseRecommendationGeneration"],
-      operation: ce.startSavingsPlansPurchaseRecommendationGeneration,
-    }),
-  );
+export const StartSavingsPlansPurchaseRecommendationGenerationHttp = Layer.effect(
+  StartSavingsPlansPurchaseRecommendationGeneration,
+  makeCostExplorerHttpBinding({
+    capability: "StartSavingsPlansPurchaseRecommendationGeneration",
+    iamActions: ["ce:StartSavingsPlansPurchaseRecommendationGeneration"],
+    operation: ce.startSavingsPlansPurchaseRecommendationGeneration,
+  }),
+);

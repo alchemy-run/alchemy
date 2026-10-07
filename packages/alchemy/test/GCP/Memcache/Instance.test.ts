@@ -1,26 +1,22 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Memcached instances need Private Service Access on the project's default
 // network — without it create fails with BadRequest "Google private service
 // access is not enabled." — and take ~10 minutes to provision. Set
 // GCP_TEST_PRIVATE_SERVICE_ACCESS=1 on a project with PSA configured.
 const privateServiceAccess = !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS;
-const runLifecycle =
-  privateServiceAccess && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = privateServiceAccess && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   memcache.getProjectsLocationsInstances({ name }).pipe(
@@ -51,9 +47,7 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect(
-        (page.instances ?? []).map((instance) => instance.name),
-      ).not.toContain(
+      expect((page.instances ?? []).map((instance) => instance.name)).not.toContain(
         `projects/${project}/locations/us-central1/instances/alchemy-memcache-missing`,
       );
 

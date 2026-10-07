@@ -19,9 +19,7 @@ import {
   toResourceId,
 } from "./internal.ts";
 
-export type AssignmentJobType =
-  | bigqueryreservation.AssignmentJobTypeEnum
-  | (string & {});
+export type AssignmentJobType = bigqueryreservation.AssignmentJobTypeEnum | (string & {});
 
 export type AssignmentSchedulingPolicy = {
   /**
@@ -144,9 +142,7 @@ export type Assignment = Resource<
  * @resource
  * @category BigQueryReservation
  */
-export const Assignment = Resource<Assignment>(
-  "GCP.BigQueryReservation.Assignment",
-);
+export const Assignment = Resource<Assignment>("GCP.BigQueryReservation.Assignment");
 
 export class AssignmentNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.AssignmentNotResolved",
@@ -177,16 +173,10 @@ const parseName = (name: string) => {
   };
 };
 
-const reservationParent = (
-  project: string,
-  location: string,
-  reservation: string,
-) => {
+const reservationParent = (project: string, location: string, reservation: string) => {
   if (reservation.includes("/reservations/")) {
     const parsed = parseName(
-      reservation.endsWith("/assignments")
-        ? reservation
-        : `${reservation}/assignments/_`,
+      reservation.endsWith("/assignments") ? reservation : `${reservation}/assignments/_`,
     );
     return `projects/${parsed.project || project}/locations/${parsed.location || location}/reservations/${parsed.reservationId || lastSegment(reservation)}`;
   }
@@ -196,8 +186,7 @@ const reservationParent = (
 const assigneeOf = (project: string, assignee: string | undefined) =>
   assignee && assignee.length > 0 ? assignee : `projects/${project}`;
 
-const jobTypeOf = (jobType: string | undefined) =>
-  (jobType ?? DEFAULT_JOB_TYPE).toUpperCase();
+const jobTypeOf = (jobType: string | undefined) => (jobType ?? DEFAULT_JOB_TYPE).toUpperCase();
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
 
@@ -211,10 +200,7 @@ const desiredSchedulingPolicy = (
         concurrency: news.schedulingPolicy.concurrency,
       });
 
-const toAttrs = (
-  current: bigqueryreservation.Assignment,
-  fallbackProject: string,
-) => {
+const toAttrs = (current: bigqueryreservation.Assignment, fallbackProject: string) => {
   const name = current.name ?? "";
   const parsed = parseName(name);
   return {
@@ -241,9 +227,7 @@ const listAt = (parent: string) =>
           Stream.flatMap((page) => Stream.fromIterable(page.assignments ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed([] as bigqueryreservation.Assignment[]),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed([] as bigqueryreservation.Assignment[])),
         );
 
 const getByName = (name: string) => {
@@ -254,36 +238,21 @@ const getByName = (name: string) => {
   );
 };
 
-const findExisting = (
-  parent: string,
-  assignee: string,
-  jobType: string,
-  assignmentId?: string,
-) =>
+const findExisting = (parent: string, assignee: string, jobType: string, assignmentId?: string) =>
   listAt(parent).pipe(
     Effect.map((assignments) =>
       assignments.find((item) => {
         if (assignmentId && lastSegment(item.name ?? "") === assignmentId) {
           return true;
         }
-        return (
-          (item.assignee ?? "") === assignee &&
-          jobTypeOf(item.jobType) === jobType
-        );
+        return (item.assignee ?? "") === assignee && jobTypeOf(item.jobType) === jobType;
       }),
     ),
   );
 
 export const AssignmentProvider = () =>
   Provider.succeed(Assignment, {
-    stables: [
-      "name",
-      "assignmentId",
-      "reservation",
-      "reservationId",
-      "project",
-      "location",
-    ],
+    stables: ["name", "assignmentId", "reservation", "reservationId", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -291,17 +260,12 @@ export const AssignmentProvider = () =>
       const previousReservation = olds?.reservation ?? output?.reservation;
       const previousAssignee = olds?.assignee ?? output?.assignee;
       const previousJobType = jobTypeOf(olds?.jobType ?? output?.jobType);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const previousId = olds?.assignmentId ?? output?.assignmentId;
       const nextJobType = jobTypeOf(news.jobType ?? previousJobType);
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
       if (
-        (previousReservation !== undefined &&
-          news.reservation !== previousReservation) ||
+        (previousReservation !== undefined && news.reservation !== previousReservation) ||
         (previousAssignee !== undefined &&
           news.assignee !== undefined &&
           news.assignee !== previousAssignee) ||
@@ -318,21 +282,14 @@ export const AssignmentProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const parent = reservationParent(
         env.project,
         location,
         olds?.reservation ?? output?.reservation ?? "",
       );
-      const assignmentId = yield* toResourceId(
-        id,
-        olds?.assignmentId,
-        output?.assignmentId,
-      );
-      const name =
-        output?.name ?? (parent ? `${parent}/assignments/${assignmentId}` : "");
+      const assignmentId = yield* toResourceId(id, olds?.assignmentId, output?.assignmentId);
+      const name = output?.name ?? (parent ? `${parent}/assignments/${assignmentId}` : "");
       const existing =
         (yield* getByName(name)) ??
         (yield* findExisting(
@@ -343,9 +300,7 @@ export const AssignmentProvider = () =>
         ));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, attrs.assignmentId))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, attrs.assignmentId)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -357,9 +312,7 @@ export const AssignmentProvider = () =>
             listAt(`${parentOf(env.project, location)}/reservations/-`).pipe(
               Effect.map((assignments) =>
                 assignments
-                  .filter((item) =>
-                    hasOwnershipMarker(lastSegment(item.name ?? "")),
-                  )
+                  .filter((item) => hasOwnershipMarker(lastSegment(item.name ?? "")))
                   .map((item) => toAttrs(item, env.project)),
               ),
             ),
@@ -374,15 +327,9 @@ export const AssignmentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const parent = reservationParent(env.project, location, news.reservation);
-      const assignmentId = yield* toResourceId(
-        id,
-        news.assignmentId,
-        output?.assignmentId,
-      );
+      const assignmentId = yield* toResourceId(id, news.assignmentId, output?.assignmentId);
       const name = `${parent}/assignments/${assignmentId}`;
       const assignee = assigneeOf(env.project, news.assignee);
       const jobType = jobTypeOf(news.jobType);
@@ -418,26 +365,21 @@ export const AssignmentProvider = () =>
 
       const currentName = current.name ?? name;
       const principalChanged =
-        news.principal !== undefined &&
-        (current.principal ?? "") !== news.principal;
+        news.principal !== undefined && (current.principal ?? "") !== news.principal;
       const schedulingChanged =
         news.schedulingPolicy !== undefined &&
-        jsonOf(current.schedulingPolicy) !==
-          jsonOf(desiredSchedulingPolicy(news));
+        jsonOf(current.schedulingPolicy) !== jsonOf(desiredSchedulingPolicy(news));
       const updateMask = [
         principalChanged ? "principal" : undefined,
         schedulingChanged ? "schedulingPolicy" : undefined,
       ].filter((field): field is string => field !== undefined);
 
       if (updateMask.length > 0) {
-        current =
-          yield* bigqueryreservation.patchProjectsLocationsReservationsAssignments(
-            {
-              name: currentName,
-              updateMask: updateMask.join(","),
-              body,
-            },
-          );
+        current = yield* bigqueryreservation.patchProjectsLocationsReservationsAssignments({
+          name: currentName,
+          updateMask: updateMask.join(","),
+          body,
+        });
       }
 
       return toAttrs(current, env.project);

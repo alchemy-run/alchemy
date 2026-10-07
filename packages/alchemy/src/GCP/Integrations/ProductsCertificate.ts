@@ -133,12 +133,7 @@ export class ProductsCertificateNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  product: string,
-  certificateId: string,
-) =>
+const resourceName = (project: string, location: string, product: string, certificateId: string) =>
   `${productParent(project, location, product)}/certificates/${certificateId}`;
 
 const toAttrs = (
@@ -171,53 +166,33 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string, project: string, region: string) =>
-  integrations.listProjectsLocationsProductsCertificates
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
-      Stream.filter((certificate) =>
-        hasOwnershipMarker(certificate.description),
-      ),
-      Stream.map((certificate) => toAttrs(certificate, project, region)),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  integrations.listProjectsLocationsProductsCertificates.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
+    Stream.filter((certificate) => hasOwnershipMarker(certificate.description)),
+    Stream.map((certificate) => toAttrs(certificate, project, region)),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
 const findOwned = (parent: string, id: string) =>
-  integrations.listProjectsLocationsProductsCertificates
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
-      Stream.filterEffect((certificate) =>
-        ownedByAlchemy(id, certificate.description),
-      ),
-      Stream.runHead,
-      Effect.map((option) =>
-        option._tag === "Some" ? option.value : undefined,
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-    );
+  integrations.listProjectsLocationsProductsCertificates.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.certificates ?? [])),
+    Stream.filterEffect((certificate) => ownedByAlchemy(id, certificate.description)),
+    Stream.runHead,
+    Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const ProductsCertificateProvider = () =>
   Provider.succeed(ProductsCertificate, {
-    stables: [
-      "name",
-      "certificateId",
-      "location",
-      "product",
-      "project",
-      "requestorId",
-    ],
+    stables: ["name", "certificateId", "location", "product", "project", "requestorId"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousLocation = olds?.location ?? output?.location;
-      const nextLocation = normalizeLocation(
-        news.location,
-        previousLocation ?? env.region,
-      );
+      const nextLocation = normalizeLocation(news.location, previousLocation ?? env.region);
       if (
         previousLocation !== undefined &&
         normalizeLocation(previousLocation, env.region) !== nextLocation
@@ -226,10 +201,7 @@ export const ProductsCertificateProvider = () =>
       }
       const previousProduct = olds?.product ?? output?.product;
       const nextProduct = normalizeProduct(news.product);
-      if (
-        previousProduct !== undefined &&
-        normalizeProduct(previousProduct) !== nextProduct
-      ) {
+      if (previousProduct !== undefined && normalizeProduct(previousProduct) !== nextProduct) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.certificateId ?? output?.certificateId;
@@ -244,8 +216,7 @@ export const ProductsCertificateProvider = () =>
       // certificate_status, so a new raw certificate needs a new resource.
       if (
         olds !== undefined &&
-        JSON.stringify(olds.rawCertificate ?? null) !==
-          JSON.stringify(news.rawCertificate ?? null)
+        JSON.stringify(olds.rawCertificate ?? null) !== JSON.stringify(news.rawCertificate ?? null)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -254,31 +225,17 @@ export const ProductsCertificateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const certificateId = yield* toResourceId(
-        id,
-        olds?.certificateId,
-        output?.certificateId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const certificateId = yield* toResourceId(id, olds?.certificateId, output?.certificateId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const product = normalizeProduct(olds?.product ?? output?.product);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, product, certificateId);
+      const name = output?.name ?? resourceName(env.project, location, product, certificateId);
       let existing = yield* getByName(name);
       if (existing === undefined && output?.name === undefined) {
-        existing = yield* findOwned(
-          productParent(env.project, location, product),
-          id,
-        );
+        existing = yield* findOwned(productParent(env.project, location, product), id);
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -293,22 +250,11 @@ export const ProductsCertificateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const product = normalizeProduct(
-        news.product ?? output?.product ?? DEFAULT_PRODUCT,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const product = normalizeProduct(news.product ?? output?.product ?? DEFAULT_PRODUCT);
       const parent = productParent(env.project, location, product);
-      const certificateId = yield* toResourceId(
-        id,
-        news.certificateId,
-        output?.certificateId,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, product, certificateId);
+      const certificateId = yield* toResourceId(id, news.certificateId, output?.certificateId);
+      const name = output?.name ?? resourceName(env.project, location, product, certificateId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
       const displayName = news.displayName ?? certificateId;
@@ -342,19 +288,18 @@ export const ProductsCertificateProvider = () =>
       const descriptionChanged = (current.description ?? "") !== description;
 
       if (displayChanged || descriptionChanged) {
-        current =
-          yield* integrations.patchProjectsLocationsProductsCertificates({
+        current = yield* integrations.patchProjectsLocationsProductsCertificates({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "certificate_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+          ),
+          body: {
             name: currentName,
-            updateMask: updateMaskOf(
-              displayChanged ? "certificate_name" : undefined,
-              descriptionChanged ? "description" : undefined,
-            ),
-            body: {
-              name: currentName,
-              displayName,
-              description,
-            },
-          });
+            displayName,
+            description,
+          },
+        });
       }
 
       return toAttrs(current, env.project, env.region);

@@ -109,18 +109,11 @@ export type VolumesSnapshot = Resource<
  * @resource
  * @category BareMetalSolution
  */
-export const VolumesSnapshot = Resource<VolumesSnapshot>(
-  "GCP.BareMetalSolution.VolumesSnapshot",
-);
+export const VolumesSnapshot = Resource<VolumesSnapshot>("GCP.BareMetalSolution.VolumesSnapshot");
 
-const resourceName = (volume: string, snapshotId: string) =>
-  `${volume}/snapshots/${snapshotId}`;
+const resourceName = (volume: string, snapshotId: string) => `${volume}/snapshots/${snapshotId}`;
 
-const toAttrs = (
-  snapshot: baremetalsolution.VolumeSnapshot,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (snapshot: baremetalsolution.VolumeSnapshot, project: string, region: string) => {
   const name = snapshot.name ?? "";
   const parsed = parseName(name, "snapshots", region);
   const ownership = parseOwnership(snapshot.description);
@@ -149,23 +142,12 @@ const getByName = (name: string) =>
 
 export const VolumesSnapshotProvider = () =>
   Provider.succeed(VolumesSnapshot, {
-    stables: [
-      "name",
-      "snapshotId",
-      "volume",
-      "project",
-      "location",
-      "id",
-      "createTime",
-    ],
+    stables: ["name", "snapshotId", "volume", "project", "location", "id", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -192,17 +174,13 @@ export const VolumesSnapshotProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const volumeHint = olds?.volume ?? output?.volume ?? "";
       if (!output?.name && volumeHint.length === 0) return undefined;
       const volume = volumeOf(volumeHint, env.project, location);
       const snapshotId = olds?.snapshotId ?? output?.snapshotId;
       const name =
-        output?.name ??
-        (snapshotId !== undefined ? resourceName(volume, snapshotId) : "");
+        output?.name ?? (snapshotId !== undefined ? resourceName(volume, snapshotId) : "");
       if (name.length === 0) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -222,15 +200,11 @@ export const VolumesSnapshotProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const locationHint = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const locationHint = normalizeLocation(news.location ?? output?.location, env.region);
       const volume = volumeOf(news.volume, env.project, locationHint);
       const snapshotId = news.snapshotId ?? output?.snapshotId;
       const name =
-        output?.name ??
-        (snapshotId !== undefined ? resourceName(volume, snapshotId) : "");
+        output?.name ?? (snapshotId !== undefined ? resourceName(volume, snapshotId) : "");
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeOwnership(ownership, news.description);
 

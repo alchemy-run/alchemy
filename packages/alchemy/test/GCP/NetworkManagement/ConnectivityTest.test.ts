@@ -1,19 +1,16 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -61,21 +58,18 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const test = yield* GCP.NetworkManagement.ConnectivityTest(
-            "DnsPath",
-            {
-              source: {
-                ipAddress: "10.8.0.1",
-                network: defaultNetworkSelfLink(project),
-                networkType: "GCP_NETWORK",
-                projectId: project,
-              },
-              destination: { ipAddress: "10.8.0.2", port: 443 },
-              protocol: "TCP",
-              description: "reach a",
-              labels: { env: "test" },
+          const test = yield* GCP.NetworkManagement.ConnectivityTest("DnsPath", {
+            source: {
+              ipAddress: "10.8.0.1",
+              network: defaultNetworkSelfLink(project),
+              networkType: "GCP_NETWORK",
+              projectId: project,
             },
-          );
+            destination: { ipAddress: "10.8.0.2", port: 443 },
+            protocol: "TCP",
+            description: "reach a",
+            labels: { env: "test" },
+          });
           return { test };
         }),
       );
@@ -92,38 +86,32 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.test.labels).toMatchObject({ env: "test" });
       expect(created.test.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networkmanagement.getProjectsLocationsGlobalConnectivityTests({
-          name: created.test.name,
-        });
+      const fetched = yield* networkmanagement.getProjectsLocationsGlobalConnectivityTests({
+        name: created.test.name,
+      });
       expect(fetched.name).toEqual(created.test.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("reach a");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const test = yield* GCP.NetworkManagement.ConnectivityTest(
-            "DnsPath",
-            {
-              testId: created.test.testId,
-              source: {
-                ipAddress: "10.8.0.1",
-                network: defaultNetworkSelfLink(project),
-                networkType: "GCP_NETWORK",
-                projectId: project,
-              },
-              destination: { ipAddress: "10.8.0.2", port: 80 },
-              protocol: "TCP",
-              description: "reach b",
-              labels: { env: "prod", role: "reach" },
-              bypassFirewallChecks: true,
+          const test = yield* GCP.NetworkManagement.ConnectivityTest("DnsPath", {
+            testId: created.test.testId,
+            source: {
+              ipAddress: "10.8.0.1",
+              network: defaultNetworkSelfLink(project),
+              networkType: "GCP_NETWORK",
+              projectId: project,
             },
-          );
+            destination: { ipAddress: "10.8.0.2", port: 80 },
+            protocol: "TCP",
+            description: "reach b",
+            labels: { env: "prod", role: "reach" },
+            bypassFirewallChecks: true,
+          });
           return { test };
         }),
       );
@@ -134,10 +122,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.test.bypassFirewallChecks).toEqual(true);
       expect(updated.test.labels).toMatchObject({ env: "prod", role: "reach" });
 
-      const refetched =
-        yield* networkmanagement.getProjectsLocationsGlobalConnectivityTests({
-          name: created.test.name,
-        });
+      const refetched = yield* networkmanagement.getProjectsLocationsGlobalConnectivityTests({
+        name: created.test.name,
+      });
       expect(refetched.description).toEqual("reach b");
       expect(refetched.destination?.port).toEqual(80);
       expect(refetched.labels?.env).toEqual("prod");

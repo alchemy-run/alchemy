@@ -25,4 +25,3 @@ export const Schema = Drizzle.Schema("app-schema", {
 });
 
 export const Db = Fly.Postgres("Db", { region: "iad" });
-

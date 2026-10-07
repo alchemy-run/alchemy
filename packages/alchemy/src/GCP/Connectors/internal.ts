@@ -70,11 +70,7 @@ export const retryTransient = <A, E extends { readonly _tag: string }, R>(
 export const getEntity = (name: string) =>
   name.length === 0
     ? Effect.succeed(undefined)
-    : connectors
-        .getProjectsLocationsConnectionsEntityTypesEntities({ name })
-        .pipe(
-          // A missing connection answers 501, so its entities are gone too.
-          Effect.catchTag(["NotFound", "EntitiesNotImplemented"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+    : connectors.getProjectsLocationsConnectionsEntityTypesEntities({ name }).pipe(
+        // A missing connection answers 501, so its entities are gone too.
+        Effect.catchTag(["NotFound", "EntitiesNotImplemented"], () => Effect.succeed(undefined)),
+      );

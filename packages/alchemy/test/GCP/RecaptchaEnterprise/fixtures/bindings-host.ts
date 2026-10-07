@@ -1,6 +1,6 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** SCORE key the assessment is created against. */
@@ -19,8 +19,7 @@ export default class RecaptchaBindingsHost extends GCP.Function<RecaptchaBinding
   "RecaptchaBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const createAssessment =
-      yield* GCP.RecaptchaEnterprise.CreateAssessment(Signup);
+    const createAssessment = yield* GCP.RecaptchaEnterprise.CreateAssessment(Signup);
 
     return {
       fetch: serveProbes({

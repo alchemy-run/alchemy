@@ -1,6 +1,6 @@
-import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as Schema from "effect/Schema";
 
 /**
  * Shared RPC group for the cross-script `tagged-rpc-do` fixture.

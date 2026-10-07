@@ -1,9 +1,5 @@
 import type * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export { createInternalLabels, hasAlchemyLabels };
 
@@ -73,9 +69,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (value: string | undefined) =>
-  Object.keys(parseOwnership(value).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(value).labels).some((key) => key.startsWith("alchemy-"));
 
 export const encodeDescription = (
   labels: Record<string, string>,
@@ -101,9 +95,7 @@ export const encodeComments = (
   comments: readonly string[] | undefined,
 ): string[] => {
   const marker = encodeOwnership(labels, undefined);
-  const rest = (comments ?? []).filter(
-    (comment) => !comment.startsWith("[alchemy "),
-  );
+  const rest = (comments ?? []).filter((comment) => !comment.startsWith("[alchemy "));
   return [marker, ...rest];
 };
 
@@ -122,12 +114,8 @@ export const parseComments = (
   };
 };
 
-export const commentsHaveOwnership = (
-  comments: readonly string[] | undefined,
-) =>
-  hasOwnershipMarker(
-    comments?.find((comment) => comment.startsWith("[alchemy ")),
-  );
+export const commentsHaveOwnership = (comments: readonly string[] | undefined) =>
+  hasOwnershipMarker(comments?.find((comment) => comment.startsWith("[alchemy ")));
 
 export type Attribute = {
   name?: string;
@@ -139,10 +127,7 @@ const isAttributeObject = (
 ): value is { attribute?: readonly Attribute[] } => !Array.isArray(value);
 
 const attributeList = (
-  value:
-    | readonly Attribute[]
-    | { attribute?: readonly Attribute[] }
-    | undefined,
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] } | undefined,
 ): Attribute[] => {
   if (value === undefined) return [];
   if (isAttributeObject(value)) return [...(value.attribute ?? [])];
@@ -150,10 +135,7 @@ const attributeList = (
 };
 
 export const fromAttributes = (
-  value:
-    | readonly Attribute[]
-    | { attribute?: readonly Attribute[] }
-    | undefined,
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] } | undefined,
 ): {
   labels: Record<string, string>;
   attributes: Record<string, string>;
@@ -178,11 +160,7 @@ export const toAttributes = (
   user?: Record<string, string> | readonly Attribute[],
 ): Attribute[] => {
   const record =
-    user === undefined
-      ? {}
-      : isAttributeArray(user)
-        ? fromAttributes(user).attributes
-        : user;
+    user === undefined ? {} : isAttributeArray(user) ? fromAttributes(user).attributes : user;
   return Object.entries({ ...record, ...ownership }).map(([name, value]) => ({
     name,
     value,
@@ -190,10 +168,7 @@ export const toAttributes = (
 };
 
 export const userAttributeList = (
-  value:
-    | readonly Attribute[]
-    | { attribute?: readonly Attribute[] }
-    | undefined,
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] } | undefined,
 ): Attribute[] =>
   Object.entries(fromAttributes(value).attributes).map(([name, value]) => ({
     name,
@@ -207,9 +182,7 @@ const sanitizeHostname = (value: string) =>
 
 export const withOwnershipExtension = (
   labels: Record<string, string>,
-  extensions:
-    | readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[]
-    | undefined,
+  extensions: readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[] | undefined,
 ): apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[] => [
   {
     name: OWNERSHIP_EXTENSION,
@@ -220,19 +193,13 @@ export const withOwnershipExtension = (
     ].join("."),
     matchCondition: "false",
   },
-  ...(extensions ?? []).filter(
-    (extension) => extension.name !== OWNERSHIP_EXTENSION,
-  ),
+  ...(extensions ?? []).filter((extension) => extension.name !== OWNERSHIP_EXTENSION),
 ];
 
 export const parseOwnershipExtension = (
-  extensions:
-    | readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[]
-    | undefined,
+  extensions: readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[] | undefined,
 ): Record<string, string> => {
-  const found = (extensions ?? []).find(
-    (extension) => extension.name === OWNERSHIP_EXTENSION,
-  );
+  const found = (extensions ?? []).find((extension) => extension.name === OWNERSHIP_EXTENSION);
   if (found?.hostname === undefined) return {};
   const [stack, stage, ...idParts] = found.hostname.split(".");
   if (stack === undefined || stage === undefined || idParts.length === 0) {
@@ -246,19 +213,9 @@ export const parseOwnershipExtension = (
 };
 
 export const hasOwnershipExtension = (
-  extensions:
-    | readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[]
-    | undefined,
-) =>
-  (extensions ?? []).some(
-    (extension) => extension.name === OWNERSHIP_EXTENSION,
-  );
+  extensions: readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[] | undefined,
+) => (extensions ?? []).some((extension) => extension.name === OWNERSHIP_EXTENSION);
 
 export const stripOwnershipExtension = (
-  extensions:
-    | readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[]
-    | undefined,
-) =>
-  (extensions ?? []).filter(
-    (extension) => extension.name !== OWNERSHIP_EXTENSION,
-  );
+  extensions: readonly apigee.GoogleCloudApigeeV1ApimServiceExtensionExtension[] | undefined,
+) => (extensions ?? []).filter((extension) => extension.name !== OWNERSHIP_EXTENSION);

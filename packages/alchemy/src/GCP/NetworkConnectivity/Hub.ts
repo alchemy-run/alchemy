@@ -21,19 +21,13 @@ import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./internal.ts";
 
 const DEFAULT_LOCATION = "global";
-const DEFAULT_POLICY_MODE =
-  "PRESET" satisfies networkconnectivity.HubPolicyModeEnum;
-const DEFAULT_PRESET_TOPOLOGY =
-  "MESH" satisfies networkconnectivity.HubPresetTopologyEnum;
+const DEFAULT_POLICY_MODE = "PRESET" satisfies networkconnectivity.HubPolicyModeEnum;
+const DEFAULT_PRESET_TOPOLOGY = "MESH" satisfies networkconnectivity.HubPresetTopologyEnum;
 const MAX_NAME_LENGTH = 63;
 
 export type HubState = networkconnectivity.HubStateEnum | (string & {});
-export type HubPolicyMode =
-  | networkconnectivity.HubPolicyModeEnum
-  | (string & {});
-export type HubPresetTopology =
-  | networkconnectivity.HubPresetTopologyEnum
-  | (string & {});
+export type HubPolicyMode = networkconnectivity.HubPolicyModeEnum | (string & {});
+export type HubPresetTopology = networkconnectivity.HubPresetTopologyEnum | (string & {});
 
 export type HubRoutingVpc = {
   /** URI of the VPC network attached via a spoke. */
@@ -179,22 +173,16 @@ export type Hub = Resource<
  */
 export const Hub = Resource<Hub>("GCP.NetworkConnectivity.Hub");
 
-export class HubNotResolved extends Data.TaggedError(
-  "GCP.NetworkConnectivity.HubNotResolved",
-)<{
+export class HubNotResolved extends Data.TaggedError("GCP.NetworkConnectivity.HubNotResolved")<{
   name: string;
 }> {}
 
-export class HubFailed extends Data.TaggedError(
-  "GCP.NetworkConnectivity.HubFailed",
-)<{
+export class HubFailed extends Data.TaggedError("GCP.NetworkConnectivity.HubFailed")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class HubStillExists extends Data.TaggedError(
-  "GCP.NetworkConnectivity.HubStillExists",
-)<{
+export class HubStillExists extends Data.TaggedError("GCP.NetworkConnectivity.HubStillExists")<{
   name: string;
 }> {}
 
@@ -221,8 +209,7 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, hubId: string) =>
   `projects/${project}/locations/${DEFAULT_LOCATION}/hubs/${hubId}`;
 
-const parentOf = (project: string) =>
-  `projects/${project}/locations/${DEFAULT_LOCATION}`;
+const parentOf = (project: string) => `projects/${project}/locations/${DEFAULT_LOCATION}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
@@ -230,14 +217,10 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    hubId:
-      hubsAt >= 0 && parts[hubsAt + 1] ? parts[hubsAt + 1]! : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    hubId: hubsAt >= 0 && parts[hubsAt + 1] ? parts[hubsAt + 1]! : lastSegment(name),
   };
 };
 
@@ -258,8 +241,7 @@ const toId = (id: string, hubId: string | undefined, existing?: string) =>
     );
   });
 
-const desiredPolicyMode = (news: HubProps): HubPolicyMode =>
-  news.policyMode ?? DEFAULT_POLICY_MODE;
+const desiredPolicyMode = (news: HubProps): HubPolicyMode => news.policyMode ?? DEFAULT_POLICY_MODE;
 
 const desiredPresetTopology = (news: HubProps): HubPresetTopology => {
   if (desiredPolicyMode(news) === "CUSTOM") {
@@ -268,13 +250,10 @@ const desiredPresetTopology = (news: HubProps): HubPresetTopology => {
   return news.presetTopology ?? DEFAULT_PRESET_TOPOLOGY;
 };
 
-const toRoutingVpcs = (
-  vpcs: networkconnectivity.RoutingVPCList | undefined,
-): HubRoutingVpc[] =>
+const toRoutingVpcs = (vpcs: networkconnectivity.RoutingVPCList | undefined): HubRoutingVpc[] =>
   (vpcs ?? []).map((vpc) => ({
     uri: vpc.uri,
-    requiredForNewSiteToSiteDataTransferSpokes:
-      vpc.requiredForNewSiteToSiteDataTransferSpokes,
+    requiredForNewSiteToSiteDataTransferSpokes: vpc.requiredForNewSiteToSiteDataTransferSpokes,
   }));
 
 const toAttrs = (hub: networkconnectivity.Hub, project: string) => {
@@ -336,9 +315,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((hub) =>
-      hub === undefined
-        ? Effect.void
-        : Effect.fail(new HubStillExists({ name })),
+      hub === undefined ? Effect.void : Effect.fail(new HubStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.HubStillExists",
@@ -372,11 +349,7 @@ export const HubProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.hubId ?? output?.hubId;
       const nextId = news.hubId ?? previousId;
-      if (
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId
-      ) {
+      if (previousId !== undefined && nextId !== undefined && nextId !== previousId) {
         return { action: "replace" as const };
       }
       return undefined;
@@ -389,9 +362,7 @@ export const HubProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -448,11 +419,9 @@ export const HubProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const exportPscChanged = (current.exportPsc === true) !== exportPsc;
-      const policyModeChanged =
-        (current.policyMode ?? DEFAULT_POLICY_MODE) !== policyMode;
+      const policyModeChanged = (current.policyMode ?? DEFAULT_POLICY_MODE) !== policyMode;
       const presetTopologyChanged =
         (current.presetTopology ?? DEFAULT_PRESET_TOPOLOGY) !== presetTopology;
 
@@ -471,19 +440,18 @@ export const HubProvider = () =>
           presetTopologyChanged ? "presetTopology" : undefined,
         ].filter((field): field is string => field !== undefined);
 
-        const operation =
-          yield* networkconnectivity.patchProjectsLocationsGlobalHubs({
+        const operation = yield* networkconnectivity.patchProjectsLocationsGlobalHubs({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              exportPsc,
-              policyMode,
-              presetTopology,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            exportPsc,
+            policyMode,
+            presetTopology,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

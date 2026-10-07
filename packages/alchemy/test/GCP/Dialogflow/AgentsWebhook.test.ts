@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { deleteAgent, ensureAgent, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 // Non-global Dialogflow CX locations need the {region}-dialogflow host, which
@@ -81,9 +78,7 @@ test.provider.skipIf(!runLifecycle)(
         expect(created.location).toEqual(location);
         expect(created.displayName).toEqual("orders");
         expect(created.disabled).toEqual(false);
-        expect(created.genericWebService?.uri).toEqual(
-          "https://example.com/dialogflow",
-        );
+        expect(created.genericWebService?.uri).toEqual("https://example.com/dialogflow");
 
         const fetched = yield* dialogflow.getProjectsLocationsAgentsWebhooks({
           name: created.name,
@@ -109,9 +104,7 @@ test.provider.skipIf(!runLifecycle)(
         expect(updated.name).toEqual(created.name);
         expect(updated.displayName).toEqual("orders-v2");
         expect(updated.disabled).toEqual(true);
-        expect(updated.genericWebService?.uri).toEqual(
-          "https://example.com/dialogflow-v2",
-        );
+        expect(updated.genericWebService?.uri).toEqual("https://example.com/dialogflow-v2");
 
         yield* stack.destroy();
         const gone = yield* waitUntilGone(created.name);

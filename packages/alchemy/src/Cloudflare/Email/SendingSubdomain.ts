@@ -4,7 +4,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -132,10 +131,9 @@ export type SendingSubdomain = Resource<
  * @product Email
  * @category Email
  */
-export const SendingSubdomain = Resource<SendingSubdomain>(
-  SendingSubdomainTypeId,
-  { aliases: ["Cloudflare.EmailSendingSubdomain"] },
-);
+export const SendingSubdomain = Resource<SendingSubdomain>(SendingSubdomainTypeId, {
+  aliases: ["Cloudflare.EmailSendingSubdomain"],
+});
 
 /**
  * Returns true if the given value is an SendingSubdomain resource.
@@ -146,14 +144,7 @@ export const isSendingSubdomain = (value: unknown): value is SendingSubdomain =>
 export const SendingSubdomainProvider = () =>
   Provider.succeed(SendingSubdomain, {
     // Only `previewEnabled` changes in place.
-    stables: [
-      "subdomainId",
-      "zoneId",
-      "name",
-      "dkimSelector",
-      "returnPathDomain",
-      "created",
-    ],
+    stables: ["subdomainId", "zoneId", "name", "dkimSelector", "returnPathDomain", "created"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -168,9 +159,7 @@ export const SendingSubdomainProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((subdomain) =>
-                  toAttributes(subdomain, zone.id),
-                ),
+                (page.result ?? []).map((subdomain) => toAttributes(subdomain, zone.id)),
               ),
             ),
             // Email Sending may be unavailable / plan-gated on a zone —
@@ -190,20 +179,14 @@ export const SendingSubdomainProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
 
       // Owned path: refresh by our persisted subdomain id.
@@ -315,9 +298,7 @@ type ObservedSubdomain = emailSending.GetSubdomainResponse;
 const getSubdomain = (zoneId: string, subdomainId: string) =>
   emailSending.getSubdomain({ zoneId, subdomainId }).pipe(
     Effect.map((subdomain): ObservedSubdomain | undefined => subdomain),
-    Effect.catchTag("SendingSubdomainNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("SendingSubdomainNotFound", () => Effect.succeed(undefined)),
   );
 
 /**

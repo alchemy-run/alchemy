@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   changedFields,
@@ -40,9 +35,7 @@ export type AuthzExtensionLoadBalancingScheme =
   | networkservices.AuthzExtensionLoadBalancingSchemeEnum
   | (string & {});
 
-export type AuthzExtensionWireFormat =
-  | networkservices.AuthzExtensionWireFormatEnum
-  | (string & {});
+export type AuthzExtensionWireFormat = networkservices.AuthzExtensionWireFormatEnum | (string & {});
 
 export type AuthzExtensionProps = {
   /**
@@ -195,15 +188,9 @@ export type AuthzExtension = Resource<
  * @resource
  * @category NetworkServices
  */
-export const AuthzExtension = Resource<AuthzExtension>(
-  "GCP.NetworkServices.AuthzExtension",
-);
+export const AuthzExtension = Resource<AuthzExtension>("GCP.NetworkServices.AuthzExtension");
 
-const toAttrs = (
-  extension: networkservices.AuthzExtension,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (extension: networkservices.AuthzExtension, project: string, region: string) => {
   const name = extension.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -243,23 +230,16 @@ export const AuthzExtensionProvider = () =>
       const nextId = news.authzExtensionId
         ? rfc1035(news.authzExtensionId, "authz-extension")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const previousScheme =
-        olds?.loadBalancingScheme ??
-        output?.loadBalancingScheme ??
-        DEFAULT_SCHEME;
+        olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? DEFAULT_SCHEME;
       const nextScheme = news.loadBalancingScheme ?? previousScheme;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousScheme !== nextScheme
       ) {
@@ -276,19 +256,13 @@ export const AuthzExtensionProvider = () =>
         output?.authzExtensionId,
         "authz-extension",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, authzExtensionId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, authzExtensionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -314,16 +288,8 @@ export const AuthzExtensionProvider = () =>
         output?.authzExtensionId,
         "authz-extension",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        authzExtensionId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, authzExtensionId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -372,24 +338,15 @@ export const AuthzExtensionProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
       const serviceChanged = (current.service ?? "") !== (news.service ?? "");
       const timeoutChanged = (current.timeout ?? "") !== timeout;
-      const authorityChanged =
-        (current.authority ?? "") !== (news.authority ?? "");
+      const authorityChanged = (current.authority ?? "") !== (news.authority ?? "");
       const failOpenChanged = (current.failOpen === true) !== failOpen;
       const metadataChanged = !sameJson(current.metadata, news.metadata);
-      const headersChanged = !sameStringList(
-        current.forwardHeaders,
-        desiredHeaders,
-      );
-      const attributesChanged = !sameStringList(
-        current.forwardAttributes,
-        desiredAttributes,
-      );
-      const wireChanged =
-        (current.wireFormat ?? "") !== (news.wireFormat ?? "");
+      const headersChanged = !sameStringList(current.forwardHeaders, desiredHeaders);
+      const attributesChanged = !sameStringList(current.forwardAttributes, desiredAttributes);
+      const wireChanged = (current.wireFormat ?? "") !== (news.wireFormat ?? "");
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -405,30 +362,26 @@ export const AuthzExtensionProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsAuthzExtensions({
+        const operation = yield* networkservices.patchProjectsLocationsAuthzExtensions({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              service: news.service,
-              timeout,
-              loadBalancingScheme,
-              authority: news.authority,
-              failOpen,
-              metadata: news.metadata,
-              forwardHeaders: desiredHeaders,
-              forwardAttributes: desiredAttributes,
-              wireFormat: news.wireFormat,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            service: news.service,
+            timeout,
+            loadBalancingScheme,
+            authority: news.authority,
+            failOpen,
+            metadata: news.metadata,
+            forwardHeaders: desiredHeaders,
+            forwardAttributes: desiredAttributes,
+            wireFormat: news.wireFormat,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

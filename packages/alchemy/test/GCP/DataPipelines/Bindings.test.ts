@@ -1,17 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as dataflow from "@distilled.cloud/gcp/dataflow_v1b3";
 import * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import DataPipelinesBindingsHost, {
-  BindBatch,
-} from "./fixtures/bindings-host.ts";
+import DataPipelinesBindingsHost, { BindBatch } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -29,9 +27,7 @@ const projectRoles = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({
       role: binding.role,
       condition: binding.condition?.expression,
@@ -51,12 +47,7 @@ describe.skipIf(!dockerAvailable)(
   "DataPipelines Bindings",
   {
     sequential: true,
-    tags: [
-      "provider:gcp",
-      "provider:gcp:datapipelines",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:datapipelines", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -131,11 +122,10 @@ describe.skipIf(!dockerAvailable)(
         "archives the pipeline as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const stopped =
-              yield* expectProbe<datapipelines.GoogleCloudDatapipelinesV1Pipeline>(
-                baseUrl,
-                "stopPipeline",
-              );
+            const stopped = yield* expectProbe<datapipelines.GoogleCloudDatapipelinesV1Pipeline>(
+              baseUrl,
+              "stopPipeline",
+            );
             expect(stopped.name).toEqual(pipelineName);
             expect(stopped.state).toEqual("STATE_ARCHIVED");
 
