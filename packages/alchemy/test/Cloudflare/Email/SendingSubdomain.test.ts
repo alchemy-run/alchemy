@@ -157,26 +157,17 @@ test.provider.skipIf(!emailRoutingScoped)(
 
       const off = yield* deploy(false);
       expect(off.previewEnabled).toEqual(false);
-      expect(
-        (yield* getSubdomain(zoneId, off.subdomainId)).previewEnabled,
-      ).toEqual(false);
+      expect((yield* getSubdomain(zoneId, off.subdomainId)).previewEnabled).toEqual(false);
 
       const on = yield* deploy(true);
       expect(on.subdomainId).toEqual(off.subdomainId);
       expect(on.previewEnabled).toEqual(true);
-      expect(
-        (yield* getSubdomain(zoneId, on.subdomainId)).previewEnabled,
-      ).toEqual(true);
+      expect((yield* getSubdomain(zoneId, on.subdomainId)).previewEnabled).toEqual(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:email",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "provider:cloudflare:zone", "live"],
   },
 );
 

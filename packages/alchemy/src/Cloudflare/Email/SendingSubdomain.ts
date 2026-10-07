@@ -250,8 +250,7 @@ export const SendingSubdomainProvider = () =>
       //    way (an externally-hosted zone stays disabled until the user
       //    adds the records — that is not a deploy failure).
       const ensured =
-        news.previewEnabled !== undefined &&
-        observed.previewEnabled !== news.previewEnabled
+        news.previewEnabled !== undefined && observed.previewEnabled !== news.previewEnabled
           ? yield* emailSending.editSubdomain({
               zoneId,
               subdomainId: observed.tag,
