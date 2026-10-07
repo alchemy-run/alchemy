@@ -275,6 +275,7 @@ overrides:
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
+  typescript@7.1.0-dev.20260905.1: patches/typescript@7.1.0-dev.20260905.1.patch
 
 minimumReleaseAgeExclude:
   - typescript@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1

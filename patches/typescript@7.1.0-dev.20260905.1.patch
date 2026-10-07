@@ -1,0 +1,14 @@
+diff --git a/package.json b/package.json
+index 814b3749e52860cf34664f17006e306680a8435e..9d9ab82f60df708de9c4dc61d4d14c50904051dc 100644
+--- a/package.json
++++ b/package.json
+@@ -31,9 +31,6 @@
+         "vendor",
+         "NOTICE.txt"
+     ],
+-    "bin": {
+-        "tsc": "./bin/tsc"
+-    },
+     "exports": {
+         "./package.json": "./package.json",
+         ".": "./lib/version.cjs",
