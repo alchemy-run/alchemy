@@ -326,6 +326,11 @@ export class TableNotResolved extends Data.TaggedError("GCP.BigQuery.TableNotRes
   name: string;
 }> {}
 
+/** `view` and `externalDataConfiguration` were both set; a table is one kind. */
+export class ConflictingTableKind extends Data.TaggedError("GCP.BigQuery.ConflictingTableKind")<{
+  message: string;
+}> {}
+
 const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");
   const parts = trimmed.split("/");
@@ -721,6 +726,11 @@ export const TableProvider = () =>
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
+      if (news.view !== undefined && news.externalDataConfiguration !== undefined) {
+        return yield* new ConflictingTableKind({
+          message: "Set either view or externalDataConfiguration on a BigQuery table, not both",
+        });
+      }
       const env = yield* GcpEnvironment.current;
       const tableId = yield* toId(id, news.tableId, output?.tableId);
       const datasetId = datasetIdOf(news.datasetId);

@@ -2,6 +2,7 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
 import * as Output from "@/Output";
@@ -378,4 +379,38 @@ test.provider(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "rejects a table that is both a view and an external table",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const result = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const dataset = yield* GCP.BigQuery.Dataset("Analytics", {
+              location: "US-CENTRAL1",
+              forceDestroy: true,
+            });
+            return yield* GCP.BigQuery.Table("Both", {
+              datasetId: dataset.datasetId,
+              view: { query: "SELECT 1 AS id" },
+              externalDataConfiguration: {
+                sourceUris: ["gs://example-bucket/events/*"],
+                sourceFormat: "NEWLINE_DELIMITED_JSON",
+              },
+            });
+          }),
+        )
+        .pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure).toBeInstanceOf(GCP.BigQuery.ConflictingTableKind);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 90_000 },
 );
