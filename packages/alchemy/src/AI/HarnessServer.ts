@@ -15,7 +15,7 @@ import type { ImageLayer } from "../Docker/ImageLayer.ts";
 import { gitCliLayer } from "../FS/GitMount.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import { makeHarness, type HarnessDriver } from "./HarnessEngine.ts";
-import { sessionCwd } from "./LocalWorkspace.ts";
+import { prewarmWorkspaces, sessionCwd } from "./LocalWorkspace.ts";
 import { SessionError, type Harness } from "./Session.ts";
 import { HarnessRpcs, serveHarness } from "./SessionRpcs.ts";
 import { MemorySessionStore } from "./SessionStore.ts";
@@ -159,6 +159,8 @@ export const makeHarnessServer = <R>(
     const platform = (yield* Effect.context<never>()) as Context.Context<
       FileSystem.FileSystem | Path.Path | ChildProcessSpawner
     >;
+    // Have a worktree ready before the first session asks for one.
+    yield* prewarmWorkspaces.pipe(Effect.provideContext(platform));
     const driver: HarnessDriver = {
       ...native,
       open: (session) =>

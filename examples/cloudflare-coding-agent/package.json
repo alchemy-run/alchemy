@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test:e2e": "playwright test --tsconfig e2e/tsconfig.json"
   },
   "dependencies": {
     "@radix-ui/react-use-controllable-state": "^1.2.6",
@@ -33,6 +34,7 @@
     "use-stick-to-bottom": "^1.1.6"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

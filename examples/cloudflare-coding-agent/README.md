@@ -44,3 +44,15 @@ curl -X POST $URL/agents/fix-42/interrupt
 ```
 
 Swap the harness by swapping the server: `OpenAI.CodexServer`, `OpenCode.Server`, or any ACP agent with `AI.AcpServer`.
+
+## Test it
+
+End-to-end tests drive the API and the web UI (Playwright). They start
+`alchemy dev` (or reuse a running one), so run them with the same
+environment:
+
+```sh
+GITHUB_TOKEN=$(gh auth token) doppler run -- pnpm test:e2e
+```
+
+Point them at a deployment with `WEB_URL` and `API_URL`.

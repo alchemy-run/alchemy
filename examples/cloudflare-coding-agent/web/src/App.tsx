@@ -393,7 +393,7 @@ function Composer({ id, transcript }: { id: string; transcript: AI.Transcript })
 }
 
 function Chat({ id }: { id: string }) {
-  const { transcript, error } = useSession(id);
+  const { transcript, error, connected, pending } = useSession(id);
   const running = transcript.state === "running";
   const last = transcript.messages.at(-1);
   const waiting = running && (last?.role !== "assistant" || last.parts.length === 0);
@@ -402,7 +402,7 @@ function Chat({ id }: { id: string }) {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <Conversation className="min-h-0 flex-1">
         <ConversationContent className="mx-auto w-full max-w-3xl gap-6 px-4 py-6">
-          {transcript.messages.length === 0 ? (
+          {transcript.messages.length === 0 && pending.length === 0 ? (
             <ConversationEmptyState
               icon={<TerminalIcon className="size-8" />}
               title="Start a session"
@@ -419,6 +419,12 @@ function Chat({ id }: { id: string }) {
               </Message>
             ))
           )}
+          {pending.map((text, i) => (
+            <Message key={`pending-${i}`} from="user">
+              <MessageContent>{text}</MessageContent>
+            </Message>
+          ))}
+          {!connected && !error && <Shimmer className="text-sm">Preparing workspace…</Shimmer>}
           {waiting && <Shimmer className="text-sm">Working…</Shimmer>}
           {error && <div className="text-destructive text-xs">{error}</div>}
         </ConversationContent>

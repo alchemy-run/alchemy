@@ -45,6 +45,8 @@ export interface SessionSnapshot {
   readonly transcript: AI.Transcript;
   readonly connected: boolean;
   readonly error: string | undefined;
+  /** Prompts sent before the session connected, shown until they land in its log. */
+  readonly pending: ReadonlyArray<string>;
 }
 
 interface Live {
@@ -69,6 +71,7 @@ const initial: SessionSnapshot = {
   transcript: AI.emptyTranscript,
   connected: false,
   error: undefined,
+  pending: [],
 };
 
 /**
@@ -133,7 +136,13 @@ export const agents = {
     notify();
     void runtime.runPromise(Scope.close(live.scope, Exit.void));
   },
-  prompt: (id: string, text: string) => call(id, (c) => c.prompt({ prompt: text })),
+  prompt: (id: string, text: string) => {
+    const queued = !sessions.get(id)?.snapshot.connected;
+    if (queued) update(id, (s) => ({ ...s, pending: [...s.pending, text] }));
+    return call(id, (c) => c.prompt({ prompt: text })).finally(() => {
+      if (queued) update(id, (s) => ({ ...s, pending: s.pending.filter((p) => p !== text) }));
+    });
+  },
   steer: (id: string, text: string) => call(id, (c) => c.steer({ prompt: text })),
   interrupt: (id: string) => call(id, (c) => c.interrupt()),
   setModel: (id: string, model: string) => call(id, (c) => c.setModel({ model })),
