@@ -1,7 +1,11 @@
+import { Octokit as RestOctokit } from "@octokit/rest";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as GitHub from "@/GitHub";
+import { GitHubCredentials } from "@/GitHub/Credentials";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
@@ -229,4 +233,106 @@ test.provider(
     ],
     timeout: 120_000,
   },
+);
+
+const checksRepository = "branch-protection-checks";
+const protectionPath = `/repos/${owner}/${checksRepository}/branches/main/protection`;
+const requests: Array<{ method: string; path: string; body: unknown }> = [];
+
+const readBody = (body: BodyInit | null | undefined): unknown => {
+  if (typeof body !== "string" || body.length === 0) return undefined;
+  return JSON.parse(body);
+};
+
+const requiredStatusChecksOf = (body: unknown): unknown => {
+  if (typeof body !== "object" || body === null || !("required_status_checks" in body)) {
+    return undefined;
+  }
+  return body.required_status_checks;
+};
+
+const mockedCredentials = Layer.succeed(
+  GitHubCredentials,
+  Effect.succeed({
+    token: Redacted.make("test-token"),
+    octokit: () =>
+      new RestOctokit({
+        auth: "test-token",
+        request: {
+          fetch: (input: string | URL | Request, init?: RequestInit) =>
+            Effect.runPromise(
+              Effect.sync(() => {
+                const url = new URL(
+                  typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+                );
+                const method = init?.method ?? "GET";
+                const body = readBody(init?.body);
+                requests.push({ method, path: url.pathname, body });
+                const json = (data: unknown, status = 200) =>
+                  new Response(JSON.stringify(data), {
+                    status,
+                    headers: { "content-type": "application/json" },
+                  });
+                if (url.pathname === protectionPath && method === "PUT") {
+                  return json({ url: `https://api.github.com${protectionPath}` });
+                }
+                if (url.pathname === protectionPath && method === "GET") {
+                  return json({ url: `https://api.github.com${protectionPath}` });
+                }
+                if (url.pathname === protectionPath && method === "DELETE") {
+                  return new Response(null, { status: 204 });
+                }
+                throw new Error(`Unexpected mocked request: ${method} ${url.pathname}`);
+              }),
+            ),
+        },
+      }),
+  }),
+);
+
+const { test: unit } = Test.make({
+  providers: Layer.effect(GitHub.Providers, Provider.collection([GitHub.BranchProtection])).pipe(
+    Layer.provide(GitHub.BranchProtectionProvider()),
+    Layer.provideMerge(mockedCredentials),
+  ),
+});
+
+unit.provider(
+  "sends checks without contexts, and contexts only when checks are omitted",
+  (stack) =>
+    Effect.gen(function* () {
+      requests.splice(0, requests.length);
+
+      const deploy = (requiredStatusChecks: GitHub.BranchProtectionProps["requiredStatusChecks"]) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* GitHub.BranchProtection("Protection", {
+              owner,
+              repository: checksRepository,
+              branch: "main",
+              requiredStatusChecks,
+            }).pipe(destroy());
+          }),
+        );
+
+      yield* deploy({
+        strict: false,
+        contexts: ["ci"],
+        checks: [{ context: "Verify" }, { context: "API tests", appId: 7 }],
+      });
+      yield* deploy({ strict: true, contexts: ["ci"] });
+      yield* stack.destroy();
+
+      const updates = requests.filter(
+        (request) => request.method === "PUT" && request.path === protectionPath,
+      );
+      expect(updates.map((request) => requiredStatusChecksOf(request.body))).toEqual([
+        {
+          strict: false,
+          checks: [{ context: "Verify" }, { context: "API tests", app_id: 7 }],
+        },
+        { strict: true, contexts: ["ci"] },
+      ]);
+    }),
+  { tags: ["unit", "provider:github", "provider:github:branchprotection", "local"] },
 );
