@@ -21,7 +21,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -41,6 +41,7 @@ import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
@@ -293,6 +294,15 @@ export interface FunctionCommonProps extends PlatformProps {
    * config to an alias instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
+  /**
+   * Retention for the function's CloudWatch log group
+   * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
+   * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
+   * log group so the policy applies before the first invocation, and
+   * deletes it with the function. When omitted the log group is left to
+   * Lambda, which creates it on first invoke with no expiry.
+   */
+  logging?: LogRetentionConfig;
 }
 
 export interface FunctionZipProps extends FunctionCommonProps {
@@ -1939,7 +1949,17 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, oldBindings, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the bundle hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? ({
+                  ...desired,
+                  exports: stripEffects(desired.exports),
+                } as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
@@ -2039,6 +2059,12 @@ export const FunctionProvider = () =>
             layers: (props.layers ?? []).map(layerVersionArnOf),
           });
           if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            // Bindings (env / policies from `bind`) are not props. An explicit
+            // noop would skip the engine's binding comparison, so defer to it
+            // whenever they may have changed.
+            if (!isResolved(newBindings) || !deepEqual(oldBindings, newBindings)) {
+              return undefined;
+            }
             return { action: "noop" };
           }
         }),
@@ -2350,6 +2376,17 @@ export const FunctionProvider = () =>
             functionName,
             config: news.eventInvokeConfig,
           });
+
+          // Lambda only auto-creates the log group on first invoke and with
+          // no expiry, so create (or adopt) it here to give the retention
+          // policy a group to attach to. The delete path already reaps it.
+          if (news.logging?.retention !== undefined) {
+            const logGroupName = `/aws/lambda/${functionName}`;
+            yield* logs
+              .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+            yield* syncLogGroupRetention({ logGroupName, retention: news.logging.retention });
+          }
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,

@@ -1,4 +1,3 @@
-import createIgnore from "@alchemy.run/node-utils/ignore";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
@@ -11,6 +10,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
+import { listFileSystemDirectory, parseIgnoreRules, walkIgnoring } from "../../Util/Ignore.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
 
@@ -228,11 +228,6 @@ const maybeReadString = Effect.fn(function* (file: string) {
   );
 });
 
-const createIgnoreMatcher = (patterns: string[]) => {
-  const matcher = createIgnore().add(patterns);
-  return (file: string) => matcher.ignores(file);
-};
-
 /**
  * Read the special `_headers` / `_redirects` files from an assets
  * directory. They are excluded from the upload manifest, but their raw
@@ -293,29 +288,39 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   // `Command.Build` (relative to the initial cwd), and a live
   // `process.cwd()` read can race a concurrent tool's transient chdir.
   const resolvedDirectory = path.resolve(initialCwd, directory);
-  const [files, ignore, _headers, _redirects] = yield* Effect.all([
-    fs.readDirectory(resolvedDirectory, { recursive: true }),
+  const [ignore, _headers, _redirects] = yield* Effect.all([
     maybeReadString(path.join(resolvedDirectory, ".assetsignore")),
     maybeReadString(path.join(resolvedDirectory, "_headers")),
     maybeReadString(path.join(resolvedDirectory, "_redirects")),
   ]);
-  const ignores = createIgnoreMatcher([
-    ".assetsignore",
-    "_headers",
-    "_redirects",
-    ...(ignore
-      ?.split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
-  ]);
+  // `.assetsignore` uses gitignore semantics (as in wrangler). Excluded
+  // directories are skipped without being read.
+  const files = yield* walkIgnoring({
+    list: yield* listFileSystemDirectory(resolvedDirectory),
+    rules: parseIgnoreRules(
+      [
+        ".assetsignore",
+        "_headers",
+        "_redirects",
+        ...(ignore
+          ?.split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
+      ],
+      "gitignore",
+    ),
+  }).pipe(
+    // Symlinked files are uploaded by their target's content (stat follows
+    // links below); directories only contribute their files.
+    Effect.map((entries) =>
+      entries.flatMap((entry) => (entry.type === "Directory" ? [] : [entry.path])),
+    ),
+  );
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;
   yield* Effect.forEach(
     files,
     Effect.fn(function* (name) {
-      if (ignores(name)) {
-        return;
-      }
       const file = path.join(resolvedDirectory, name);
       const stat = yield* fs.stat(file);
       if (stat.type !== "File") {

@@ -1079,6 +1079,30 @@ export const PERMISSION_GROUPS = [
     scopes: ["com.cloudflare.api.account"],
   },
   {
+    id: "9159aeca78b949818ec1556aa42ffd2e",
+    name: "K2 Config Read",
+    description: "Grants read access to K2 streams",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "0a50f569ebae4364a205dfc3137dbc5f",
+    name: "K2 Config Write",
+    description: "Grants write access to K2 streams",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "3a6cae593f454607a4db52e67a45b19f",
+    name: "K2 Consume",
+    description: "Grants access to manage subscriptions and consume records from K2 streams",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
+    id: "47b72b140c694f90bfcd21b7da1e8a06",
+    name: "K2 Produce",
+    description: "Grants access to produce records to K2 streams",
+    scopes: ["com.cloudflare.api.account"],
+  },
+  {
     id: "4657621393f94f83b8ef94adba382e48",
     name: "L4 DDoS Managed Ruleset Read",
     description: "Grants read access to L4 DDoS Managed Ruleset",
