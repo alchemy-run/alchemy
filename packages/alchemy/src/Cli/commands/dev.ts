@@ -1,31 +1,28 @@
+import { fileURLToPath } from "node:url";
 import * as Floci from "@alchemy.run/floci";
+import * as Command from "effect/cli/Command";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";
-import * as Command from "effect/unstable/cli/Command";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
-import {
-  isRegisterHooksSupported,
-  transformTypesFlags,
-} from "../../Util/Node.ts";
-import { DevOptions } from "../DevOptions.ts";
+import { nodeLoaderArgs } from "../../Util/Node.ts";
+import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
+import { suppressInterruptMessages } from "./errors.ts";
 import {
   configPath,
   envFile,
   force,
+  include,
+  exclude,
   devStage,
   optionalConfig,
   profile,
   resolveStackArgs,
 } from "./flags.ts";
-import {
-  installShutdownFeedback,
-  suppressInterruptMessages,
-} from "./errors.ts";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -43,6 +40,8 @@ export const devCommand = Command.make(
   "dev",
   {
     force,
+    include,
+    exclude,
     config: optionalConfig,
     configPath,
     envFile,
@@ -56,10 +55,10 @@ export const devCommand = Command.make(
       // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
       // hits both processes and the interrupt message prints twice.
       yield* suppressInterruptMessages;
-      // Feedback stays silent here (suppressed — the exec child owns the
-      // terminal); this install is for the force-quit on a second Ctrl+C.
-      yield* installShutdownFeedback;
       const options = yield* Schema.encodeEffect(DevOptions)(args);
+      // A missing entry is this process's error to report, not a stack
+      // trace out of the exec child.
+      yield* resolveStackEntrypoint(options.main);
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
@@ -68,43 +67,32 @@ export const devCommand = Command.make(
         process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
       }
       const spawner = yield* RpcSpawner.RpcSpawner;
-      // We no longer force Bun in development because this prevents us from testing in Node.
-      const command =
-        typeof globalThis.Bun !== "undefined"
-          ? [
-              "bun",
-              "run",
-              ...process.execArgv,
-              "--watch",
-              "--no-clear-screen",
-              fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
-            ]
-          : import.meta.url.endsWith(".ts") && isRegisterHooksSupported()
-            ? [
-                // Source checkout under node: run the .ts exec entry with
-                // the dev-mode hooks (tsx loader + src-condition
-                // resolution), so dev works without a build (mirrors
-                // bin/cli.js's launcher path). `process.execPath`, not
-                // "node": the hooks are gated on THIS node's version. A
-                // duplicate --import inherited via execArgv is harmless —
-                // the second import of the same URL hits the module cache.
-                process.execPath,
-                ...process.execArgv,
-                "--import",
-                import.meta.resolve("../../../bin/register-dev-mode.js"),
-                "--watch",
-                "--watch-preserve-output",
-                fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
-              ]
-            : [
-                process.execPath,
-                ...process.execArgv,
-                ...transformTypesFlags(),
-                "--watch",
-                "--watch-preserve-output",
-                fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
-              ];
-      const child = yield* ChildProcess.make(command[0], command.slice(1), {
+      // Neither runtime uses its native `--watch`: those hard-restart the exec
+      // child with no teardown, leaving the previous generation's widget in
+      // scrollback and never saying what changed. exec.ts watches the user's
+      // stack graph itself. Under Node it reloads the graph in-process; under
+      // Bun (which cannot evict evaluated modules) it tears down and exits
+      // with DEV_RELOAD_EXIT_CODE, and this supervisor starts a fresh child.
+      let command: [string, ...string[]];
+      const entry = fileURLToPath(import.meta.resolve("alchemy/bin/exec.js"));
+      if (typeof globalThis.Bun !== "undefined") {
+        command = ["bun", "run", ...process.execArgv, entry];
+      } else {
+        // Node: the exec entry runs with alchemy's Oxc loader hooks,
+        // exactly as bin/cli.js started this process. Select the loader from
+        // this module's source or compiled location; the entry is always JS.
+        // Node's own TypeScript support is never relied on. `process.execPath`,
+        // not "node": the hooks are gated on THIS node's version. A
+        // duplicate --import inherited via execArgv is harmless — the
+        // second import of the same URL hits the module cache.
+        command = [
+          process.execPath,
+          ...process.execArgv,
+          ...nodeLoaderArgs(import.meta.url),
+          entry,
+        ];
+      }
+      const runChild = ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
@@ -120,13 +108,16 @@ export const devCommand = Command.make(
         // Same process group as this supervisor: the exec child owns the
         // terminal (TUI stdin), so the tty's Ctrl+C must reach it directly.
         detached: false,
-        // The watcher won't die while its inner exec child is still shutting
-        // down — it forwards SIGTERM to the child and lingers. Without this
-        // bound the kill finalizer waits on it forever (the double-Ctrl+C
-        // hang); with it, a stuck shutdown escalates to SIGKILL.
-        forceKillAfter: "3 seconds",
+      }).pipe(
+        Effect.flatMap((child) => child.exitCode),
+        Effect.scoped,
+      );
+      // Each child gets its own scope so a reload exit releases the old
+      // handle before the replacement starts; the sidecar spawner lives in
+      // the command scope and survives every restart.
+      yield* Effect.repeat(runChild, {
+        until: (code) => code !== DEV_RELOAD_EXIT_CODE,
       });
-      yield* child.exitCode;
     },
     (effect, args) =>
       Effect.provide(

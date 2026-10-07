@@ -1,15 +1,12 @@
-import {
-  applyEnvRegionOverride,
-  parseAwsSsoLoginOutput,
-} from "@/AWS/AuthProvider.ts";
-import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { applyEnvRegionOverride, parseAwsSsoLoginOutput } from "@/AWS/AuthProvider.ts";
+import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const withEnv = (env: Record<string, string>) =>
   Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
@@ -18,18 +15,13 @@ const withEnv = (env: Record<string, string>) =>
 // region differs from the region the user explicitly set in the environment.
 const profileCreds = { accountId: "123456789012", region: "us-west-2" };
 
-describe("parseAwsSsoLoginOutput", () => {
+describe("parseAwsSsoLoginOutput", { tags: ["unit", "provider:aws", "local"] }, () => {
   it("reads browser authorization JSON", () => {
     expect(
       parseAwsSsoLoginOutput(
-        JSON.stringify({
-          authorizationUrl: "https://oidc.example.com/authorize?state=abc",
-        }),
+        JSON.stringify({ authorizationUrl: "https://oidc.example.com/authorize?state=abc" }),
       ),
-    ).toEqual({
-      url: "https://oidc.example.com/authorize?state=abc",
-      code: undefined,
-    });
+    ).toEqual({ url: "https://oidc.example.com/authorize?state=abc", code: undefined });
   });
 
   it("reads the text AWS emits despite --output json", () => {
@@ -42,14 +34,11 @@ https://example.awsapps.com/start/#/device
 Then enter the code:
 
 CRKF-LVXR`),
-    ).toEqual({
-      url: "https://example.awsapps.com/start/#/device",
-      code: "CRKF-LVXR",
-    });
+    ).toEqual({ url: "https://example.awsapps.com/start/#/device", code: "CRKF-LVXR" });
   });
 });
 
-describe("applyEnvRegionOverride", () => {
+describe("applyEnvRegionOverride", { tags: ["unit", "provider:aws", "local"] }, () => {
   it.effect("AWS_REGION overrides the profile region", () =>
     Effect.gen(function* () {
       const creds = yield* applyEnvRegionOverride(profileCreds);
@@ -81,13 +70,8 @@ describe("applyEnvRegionOverride", () => {
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const tempDir = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-config-provider-",
-          });
-          yield* fs.writeFileString(
-            path.join(tempDir, ".env"),
-            "AWS_REGION=ap-south-1\n",
-          );
+          const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-config-provider-" });
+          yield* fs.writeFileString(path.join(tempDir, ".env"), "AWS_REGION=ap-south-1\n");
 
           const originalCwd = process.cwd();
           const originalRegion = process.env.AWS_REGION;

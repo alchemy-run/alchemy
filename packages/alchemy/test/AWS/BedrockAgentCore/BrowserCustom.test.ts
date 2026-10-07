@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { BrowserCustom } from "@/AWS/BedrockAgentCore";
-import * as Test from "@/Test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { BrowserCustom } from "@/AWS/BedrockAgentCore";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,34 +14,24 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        control.getBrowser({
-          browserId: "alchemy_nonexistent_probe-0000000000",
-        }),
+        control.getBrowser({ browserId: "alchemy_nonexistent_probe-0000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:bedrockagentcore", "live"] },
 );
 
 const assertBrowserGone = (browserId: string) =>
   Effect.gen(function* () {
     const status = yield* control.getBrowser({ browserId }).pipe(
       Effect.map((r) => r.status as string),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("DELETED" as string),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("DELETED" as string)),
     );
     if (status !== "DELETED") {
-      return yield* Effect.fail(
-        new Error(`browser still live (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`browser still live (status: ${status})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 test.provider(
@@ -64,21 +54,17 @@ test.provider(
       expect(browser.browserArn).toContain(":browser");
       expect(browser.status).toBe("READY");
 
-      const observed = yield* control.getBrowser({
-        browserId: browser.browserId,
-      });
+      const observed = yield* control.getBrowser({ browserId: browser.browserId });
       expect(observed.status).toBe("READY");
       expect(observed.networkConfiguration.networkMode).toBe("PUBLIC");
 
       // tags observed on the resource
-      const tags = yield* control.listTagsForResource({
-        resourceArn: browser.browserArn,
-      });
+      const tags = yield* control.listTagsForResource({ resourceArn: browser.browserArn });
       expect(tags.tags?.fixture).toBe("agentcore-browser");
       expect(tags.tags?.["alchemy::id"]).toBe("AgentBrowser");
 
       yield* stack.destroy();
       yield* assertBrowserGone(browser.browserId);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:bedrockagentcore", "live"], timeout: 120_000 },
 );

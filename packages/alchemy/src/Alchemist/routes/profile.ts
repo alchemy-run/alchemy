@@ -1,21 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { Interaction } from "../../Interaction.ts";
+import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
-import {
-  inspectProvider,
-  type ProviderConnection,
-} from "../../Auth/Inspect.ts";
+import { inspectProvider, type ProviderConnection } from "../../Auth/Inspect.ts";
 import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
 import { ProfileStore } from "../../Auth/Profile.ts";
+import type { Interaction } from "../../Interaction.ts";
 import { AlchemistInvalidInput, AlchemistNotFound } from "../Errors.ts";
 import { Progress } from "../Progress.ts";
-import {
-  collectAuthProviders,
-  DEFAULT_ENTRYPOINT,
-  type Target,
-} from "../Session.ts";
+import { collectAuthProviders, DEFAULT_ENTRYPOINT, type Target } from "../Session.ts";
 
 /** Which project/profile pair a provider-scoped route resolves against. */
 export interface ProviderContext extends Target {
@@ -88,20 +82,18 @@ export const current = Effect.fn("Alchemist.profile.current")(function* () {
 /** Every profile with its connected providers, active profile first. */
 export const list = Effect.fn("Alchemist.profile.list")(function* () {
   const profiles = yield* ProfileStore;
-  const [manifest, selected] = yield* Effect.all([
-    profiles.readManifest,
-    profiles.current,
-  ]);
+  const [manifest, selected] = yield* Effect.all([profiles.readManifest, profiles.current]);
   return Object.entries(manifest.profiles)
-    .sort(([a], [b]) =>
-      a === "default" ? -1 : b === "default" ? 1 : a.localeCompare(b),
-    )
+    .sort(([a], [b]) => (a === "default" ? -1 : b === "default" ? 1 : a.localeCompare(b)))
     .map(([name, profile]): ProfileSummary => ({
       name,
       active: name === selected.name,
       providers: Object.entries(profile.providers)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, config]) => ({ name, method: config.method })),
+        .map(([name, config]) => ({
+          name,
+          method: config.method ?? "unknown",
+        })),
     }));
 });
 
@@ -119,9 +111,7 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
     profiles.current,
   ]);
   if (profile === undefined) {
-    return yield* Effect.fail(
-      new AlchemistNotFound({ kind: "profile", id: input.name }),
-    );
+    return yield* Effect.fail(new AlchemistNotFound({ kind: "profile", id: input.name }));
   }
   // Skipping the status probe is what makes `profile list` fast: it
   // reaches no provider APIs, so every connection reads as connected.
@@ -132,24 +122,28 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
         envFile: input.envFile,
       })
     : {};
-  const entries = Object.entries(profile.providers).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  const entries = Object.entries(profile.providers).sort(([a], [b]) => a.localeCompare(b));
   return {
     name: input.name,
     active: selected.name === input.name,
     providers: yield* Effect.forEach(
       entries,
-      ([provider, config]): Effect.Effect<
-        ProviderConnection,
-        never,
-        Interaction
-      > =>
+      ([provider, config]): Effect.Effect<ProviderConnection, never, Interaction> =>
         includeProviderStatus
-          ? inspectProvider(input.name, provider, config, registered)
+          ? inspectProvider(input.name, provider, config, registered, (updated) =>
+              profiles.setProviderConfig(input.name, provider, updated).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new AuthError({
+                      message: `Could not persist repaired ${provider} credentials for profile '${input.name}'.`,
+                      cause,
+                    }),
+                ),
+              ),
+            )
           : Effect.succeed({
               name: provider,
-              method: config.method,
+              method: config.method ?? "unknown",
               status: "connected",
               details: [],
             }),
@@ -173,81 +167,71 @@ export const rename = Effect.fn("Alchemist.profile.rename")(function* (input: {
 });
 
 /** Delete a profile and every credential stored for it. */
-export const deleteProfile = Effect.fn("Alchemist.profile.delete")(
-  function* (input: { readonly name: string }) {
-    const profiles = yield* ProfileStore;
-    const credentials = yield* CredentialsStore;
-    return yield* withProfileCredentialsLock(
-      input.name,
-      Effect.gen(function* () {
-        const deleted = yield* profiles.deleteProfile(input.name);
-        if (!deleted) {
-          return yield* Effect.fail(
-            new AlchemistNotFound({ kind: "profile", id: input.name }),
-          );
-        }
-        yield* credentials.deleteProfile(input.name);
-        return { name: input.name, credentialsDeleted: true } as const;
-      }),
-    );
-  },
-);
+export const deleteProfile = Effect.fn("Alchemist.profile.delete")(function* (input: {
+  readonly name: string;
+}) {
+  const profiles = yield* ProfileStore;
+  const credentials = yield* CredentialsStore;
+  return yield* withProfileCredentialsLock(
+    input.name,
+    Effect.gen(function* () {
+      const deleted = yield* profiles.deleteProfile(input.name);
+      if (!deleted) {
+        return yield* Effect.fail(new AlchemistNotFound({ kind: "profile", id: input.name }));
+      }
+      yield* credentials.deleteProfile(input.name);
+      return { name: input.name, credentialsDeleted: true } as const;
+    }),
+  );
+});
 
 /** Every registered auth provider and how it can be configured. */
-export const providers = Effect.fn("Alchemist.profile.providers")(
-  function* (input: {
-    readonly profile?: string;
-    readonly entrypoint?: string;
-    readonly envFile?: string;
-  }) {
-    const profiles = yield* ProfileStore;
-    const profile = input.profile ?? (yield* profiles.current).name;
-    const stored = yield* profiles.ensureProfile(profile);
-    const registered = yield* registry({ ...input, profile });
-    return Object.values(registered)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((provider): AuthProviderDescriptor => ({
-        name: provider.name,
-        connected: provider.name in stored.providers,
-        configureMethods: (provider.configureMethods ?? []).map((method) => ({
-          method: method.method,
-          label: method.method,
-          fields: method.fields.map((field) => ({
-            name: field.name,
-            label: field.label,
-            secret: field.secret ?? false,
-            required: !(field.optional ?? false),
-            description: field.description,
-            placeholder: field.placeholder,
-          })),
+export const providers = Effect.fn("Alchemist.profile.providers")(function* (input: {
+  readonly profile?: string;
+  readonly entrypoint?: string;
+  readonly envFile?: string;
+}) {
+  const profiles = yield* ProfileStore;
+  const profile = input.profile ?? (yield* profiles.current).name;
+  const stored = yield* profiles.ensureProfile(profile);
+  const registered = yield* registry({ ...input, profile });
+  return Object.values(registered)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((provider): AuthProviderDescriptor => ({
+      name: provider.name,
+      connected: provider.name in stored.providers,
+      configureMethods: (provider.configureMethods ?? []).map((method) => ({
+        method: method.method,
+        label: method.method,
+        fields: method.fields.map((field) => ({
+          name: field.name,
+          label: field.label,
+          secret: field.secret ?? false,
+          required: !(field.optional ?? false),
+          description: field.description,
+          placeholder: field.placeholder,
         })),
-        supportsRefresh: true,
-        supportsLogout: true,
-      }));
-  },
-);
+      })),
+      supportsRefresh: true,
+      supportsLogout: true,
+    }));
+});
 
 /** The configure methods (and fields) one provider accepts. */
-export const configureForm = Effect.fn("Alchemist.profile.configureForm")(
-  function* (input: {
-    readonly profile: string;
-    readonly provider: string;
-    readonly method?: string;
-  }) {
-    const registered = yield* providers({ profile: input.profile });
-    const provider = registered.find(({ name }) => name === input.provider);
-    if (provider === undefined) {
-      return yield* Effect.fail(
-        new AlchemistNotFound({ kind: "provider", id: input.provider }),
-      );
-    }
-    return input.method === undefined
-      ? provider.configureMethods
-      : provider.configureMethods.filter(
-          ({ method }) => method === input.method,
-        );
-  },
-);
+export const configureForm = Effect.fn("Alchemist.profile.configureForm")(function* (input: {
+  readonly profile: string;
+  readonly provider: string;
+  readonly method?: string;
+}) {
+  const registered = yield* providers({ profile: input.profile });
+  const provider = registered.find(({ name }) => name === input.provider);
+  if (provider === undefined) {
+    return yield* Effect.fail(new AlchemistNotFound({ kind: "provider", id: input.provider }));
+  }
+  return input.method === undefined
+    ? provider.configureMethods
+    : provider.configureMethods.filter(({ method }) => method === input.method);
+});
 
 /**
  * Connect or reconfigure a provider in a profile. Reported through
@@ -274,10 +258,7 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
     );
   }
   const connected = input.provider in stored.providers;
-  if (
-    (input.action === "add" && connected) ||
-    (input.action === "reconfigure" && !connected)
-  ) {
+  if ((input.action === "add" && connected) || (input.action === "reconfigure" && !connected)) {
     return yield* Effect.fail(
       new AlchemistInvalidInput({
         field: "provider",
@@ -286,16 +267,11 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
     );
   }
   const config =
-    input.method !== undefined &&
-    input.values !== undefined &&
-    provider.configureWith !== undefined
+    input.method !== undefined && input.values !== undefined && provider.configureWith !== undefined
       ? yield* provider.configureWith(input.profile, {
           method: input.method,
           values: Object.fromEntries(
-            Object.entries(input.values).map(([key, value]) => [
-              key,
-              Redacted.value(value),
-            ]),
+            Object.entries(input.values).map(([key, value]) => [key, Redacted.value(value)]),
           ),
         })
       : yield* provider.configure(
@@ -306,10 +282,7 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
                 .pipe(Effect.orElseSucceed(() => undefined))
             : undefined,
         );
-  yield* profiles.setProfile(input.profile, {
-    ...stored,
-    providers: { ...stored.providers, [input.provider]: config },
-  });
+  yield* profiles.setProviderConfig(input.profile, input.provider, config);
   yield* report({
     _tag: "provider.configure.completed",
     provider: input.provider,
@@ -322,42 +295,30 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
 });
 
 /** Log a provider out and disconnect it from the profile. */
-export const removeProvider = Effect.fn("Alchemist.profile.removeProvider")(
-  function* (
-    input: ProviderContext & {
-      readonly provider: string;
-      readonly logout?: boolean;
-    },
-  ) {
-    const profiles = yield* ProfileStore;
-    const stored = yield* profiles.ensureProfile(input.profile);
-    const config = stored.providers[input.provider];
-    if (config === undefined) {
-      return yield* Effect.fail(
-        new AlchemistNotFound({ kind: "provider", id: input.provider }),
-      );
-    }
-    const provider = (yield* registry(input))[input.provider];
-    let logout: "completed" | "skipped-invalid-config" | "unavailable" =
-      "unavailable";
-    if (provider !== undefined) {
-      const decoded = yield* provider
-        .decodeConfig(input.profile, config)
-        .pipe(Effect.option);
-      if (Option.isSome(decoded)) {
-        if (input.logout ?? true)
-          yield* provider.logout(input.profile, decoded.value);
-        logout = "completed";
-      } else logout = "skipped-invalid-config";
-    }
-    const { [input.provider]: _removed, ...remaining } = stored.providers;
-    yield* profiles.setProfile(input.profile, {
-      ...stored,
-      providers: remaining,
-    });
-    return { profile: input.profile, provider: input.provider, logout };
+export const removeProvider = Effect.fn("Alchemist.profile.removeProvider")(function* (
+  input: ProviderContext & {
+    readonly provider: string;
+    readonly logout?: boolean;
   },
-);
+) {
+  const profiles = yield* ProfileStore;
+  const stored = yield* profiles.ensureProfile(input.profile);
+  const config = stored.providers[input.provider];
+  if (config === undefined) {
+    return yield* Effect.fail(new AlchemistNotFound({ kind: "provider", id: input.provider }));
+  }
+  const provider = (yield* registry(input))[input.provider];
+  let logout: "completed" | "skipped-invalid-config" | "unavailable" = "unavailable";
+  if (provider !== undefined) {
+    const decoded = yield* provider.decodeConfig(input.profile, config).pipe(Effect.option);
+    if (Option.isSome(decoded)) {
+      if (input.logout ?? true) yield* provider.logout(input.profile, decoded.value);
+      logout = "completed";
+    } else logout = "skipped-invalid-config";
+  }
+  yield* profiles.deleteProviderConfig(input.profile, input.provider);
+  return { profile: input.profile, provider: input.provider, logout };
+});
 
 /**
  * Re-run login for connected providers without reconfiguring them. Each
@@ -388,10 +349,23 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
       );
     }
     yield* report({ _tag: "provider.refresh.started", provider: name });
-    yield* provider.login(
+    const refreshed = yield* provider.login(
       input.profile,
       yield* provider.decodeConfig(input.profile, config),
+      (updated) =>
+        profiles.setProviderConfig(input.profile, name, updated).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AuthError({
+                message: `Could not persist refreshed ${name} credentials for profile '${input.profile}'.`,
+                cause,
+              }),
+          ),
+        ),
     );
+    if (refreshed !== undefined) {
+      yield* profiles.setProviderConfig(input.profile, name, refreshed);
+    }
     yield* report({ _tag: "provider.refresh.completed", provider: name });
   }
   return yield* get({

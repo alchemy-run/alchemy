@@ -3,31 +3,20 @@
  * unit running bun). The generated entry imports this module and the user's
  * `main`, nothing else — see {@link ./Process.ts} for why.
  */
-import {
-  Credentials,
-  fromChain as credentialsFromChain,
-} from "@distilled.cloud/aws/Credentials";
+import { Credentials, fromChain as credentialsFromChain } from "@distilled.cloud/aws/Credentials";
 import { fromEnv as endpointFromEnv } from "@distilled.cloud/aws/Endpoint";
 import { Region, fromEnv as regionFromEnv } from "@distilled.cloud/aws/Region";
 import { BunServices } from "@effect/platform-bun";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { LOCAL_ACCOUNT_ID } from "../../AWS/AuthProvider.ts";
-import {
-  AWSEnvironment,
-  type AWSEnvironmentShape,
-} from "../../AWS/Environment.ts";
+import { AWSEnvironment, type AWSEnvironmentShape } from "../../AWS/Environment.ts";
 import { BunHttpServer } from "../../Http.ts";
 import { reifyBoundConfigProvider } from "../../Runtime.ts";
-import {
-  entrypointLayer,
-  resolveProgram,
-  runProcess,
-  stackFromEnv,
-} from "./Process.ts";
+import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Process.ts";
 
 // Named imports + shared layer refs: `import * as Credentials` then
 // `yield* Credentials` yields the module namespace (TypeError at boot),

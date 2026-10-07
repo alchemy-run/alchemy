@@ -19,7 +19,6 @@ export type NeonResolvedCredentials = {
 
 const neonAuth = makeStoredAuthProvider<NeonResolvedCredentials>({
   provider: NEON_AUTH_PROVIDER_NAME,
-  storageKey: "neon-stored",
   fields: [{ name: "apiKey", label: "Neon API Key", secret: true }],
   toResolved: (values) => ({
     type: "apiKey",

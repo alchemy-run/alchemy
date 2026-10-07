@@ -1,18 +1,15 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as docdbelastic from "@distilled.cloud/aws/docdb-elastic";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { getDefaultVpc } from "../DefaultVpc.ts";
-
-import DocDBElasticTestFunctionLive, {
-  DocDBElasticTestFunction,
-} from "./handler";
+import DocDBElasticTestFunctionLive, { DocDBElasticTestFunction } from "./handler";
 import DocDBElasticSlowTestFunctionLive, {
   DocDBElasticSlowTestFunction,
   SECURITY_GROUPS_ENV,
@@ -27,10 +24,7 @@ const NONEXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -52,107 +46,99 @@ const getJson = (path: string) =>
         : Effect.succeed(response),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
     Effect.flatMap((r) => r.json),
   );
 
-describe.sequential("DocDBElastic Bindings", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "DocDBElastic test setup: destroying previous resources",
-      );
-      yield* sharedStack.destroy();
+describe.sequential(
+  "DocDBElastic Bindings",
+  { tags: ["provider:aws", "provider:aws:docdbelastic", "provider:aws:lambda", "live"] },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* Effect.logInfo("DocDBElastic test setup: destroying previous resources");
+        yield* sharedStack.destroy();
 
-      yield* Effect.logInfo("DocDBElastic test setup: deploying fixture");
-      const { functionUrl } = yield* sharedStack.deploy(
+        yield* Effect.logInfo("DocDBElastic test setup: deploying fixture");
+        const { functionUrl } = yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            return yield* DocDBElasticTestFunction;
+          }).pipe(Effect.provide(DocDBElasticTestFunctionLive)),
+        );
+
+        expect(functionUrl).toBeTruthy();
+        baseUrl = functionUrl!.replace(/\/+$/, "");
+
+        const readinessUrl = `${baseUrl}/bindings`;
+        yield* HttpClient.get(readinessUrl).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+          ),
+          Effect.retry({ schedule: readinessPolicy }),
+        );
+      }),
+      { timeout: 240_000 },
+    );
+
+    afterAll(sharedStack.destroy(), { timeout: 120_000 });
+
+    describe("binding registration", () => {
+      test.provider("all eight capabilities initialize in the runtime", () =>
         Effect.gen(function* () {
-          return yield* DocDBElasticTestFunction;
-        }).pipe(Effect.provide(DocDBElasticTestFunctionLive)),
+          const response = yield* getJson("/bindings");
+          expect((response as any).bound).toHaveLength(8);
+        }),
       );
+    });
 
-      expect(functionUrl).toBeTruthy();
-      baseUrl = functionUrl!.replace(/\/+$/, "");
-
-      const readinessUrl = `${baseUrl}/bindings`;
-      yield* HttpClient.get(readinessUrl).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
-        ),
-        Effect.retry({ schedule: readinessPolicy }),
+    describe("ListClusterSnapshots", () => {
+      test.provider("lists the account's snapshots", () =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/snapshots");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
       );
-    }),
-    { timeout: 240_000 },
-  );
+    });
 
-  afterAll(sharedStack.destroy(), { timeout: 120_000 });
+    describe("ListPendingMaintenanceActions", () => {
+      test.provider("lists the account's pending maintenance", () =>
+        Effect.gen(function* () {
+          const response = yield* getJson("/maintenance");
+          expect((response as any).count).toBeGreaterThanOrEqual(0);
+        }),
+      );
+    });
 
-  describe("binding registration", () => {
-    test.provider("all eight capabilities initialize in the runtime", () =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/bindings");
-        expect((response as any).bound).toHaveLength(8);
-      }),
-    );
-  });
-
-  describe("ListClusterSnapshots", () => {
-    test.provider("lists the account's snapshots", () =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/snapshots");
-        expect((response as any).count).toBeGreaterThanOrEqual(0);
-      }),
-    );
-  });
-
-  describe("ListPendingMaintenanceActions", () => {
-    test.provider("lists the account's pending maintenance", () =>
-      Effect.gen(function* () {
-        const response = yield* getJson("/maintenance");
-        expect((response as any).count).toBeGreaterThanOrEqual(0);
-      }),
-    );
-  });
-
-  describe("GetClusterSnapshot", () => {
-    test.provider("surfaces the typed not-found tag", () =>
-      Effect.gen(function* () {
-        const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/snapshot-probe?arn=${encodeURIComponent(arns.snapshot)}`,
-        );
-        expect((response as any).tag).toBe("ResourceNotFoundException");
-      }),
-    );
-  });
-
-  describe("DeleteClusterSnapshot", () => {
-    test.provider("surfaces the typed not-found tag", () =>
-      Effect.gen(function* () {
-        const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/delete-probe?arn=${encodeURIComponent(arns.snapshot)}`,
-        );
-        expect((response as any).tag).toBe("ResourceNotFoundException");
-      }),
-    );
-  });
-
-  describe("CopyClusterSnapshot", () => {
-    test.provider(
-      "rejects a nonexistent source snapshot with a typed tag",
-      () =>
+    describe("GetClusterSnapshot", () => {
+      test.provider("surfaces the typed not-found tag", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
           const response = yield* getJson(
-            `/copy-probe?arn=${encodeURIComponent(arns.snapshot)}`,
+            `/snapshot-probe?arn=${encodeURIComponent(arns.snapshot)}`,
           );
+          expect((response as any).tag).toBe("ResourceNotFoundException");
+        }),
+      );
+    });
+
+    describe("DeleteClusterSnapshot", () => {
+      test.provider("surfaces the typed not-found tag", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const response = yield* getJson(`/delete-probe?arn=${encodeURIComponent(arns.snapshot)}`);
+          expect((response as any).tag).toBe("ResourceNotFoundException");
+        }),
+      );
+    });
+
+    describe("CopyClusterSnapshot", () => {
+      test.provider("rejects a nonexistent source snapshot with a typed tag", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const response = yield* getJson(`/copy-probe?arn=${encodeURIComponent(arns.snapshot)}`);
           // Copy authorizes against the source-snapshot resource; a
           // nonexistent snapshot is reported as AccessDeniedException
           // (existence non-disclosure) rather than not-found.
@@ -162,13 +148,11 @@ describe.sequential("DocDBElastic Bindings", () => {
             "AccessDeniedException",
           ]).toContain((response as any).tag);
         }),
-    );
-  });
+      );
+    });
 
-  describe("RestoreClusterFromSnapshot", () => {
-    test.provider(
-      "rejects a nonexistent source snapshot with a typed tag",
-      () =>
+    describe("RestoreClusterFromSnapshot", () => {
+      test.provider("rejects a nonexistent source snapshot with a typed tag", () =>
         Effect.gen(function* () {
           const arns = yield* probeArns;
           const response = yield* getJson(
@@ -183,37 +167,34 @@ describe.sequential("DocDBElastic Bindings", () => {
             "AccessDeniedException",
           ]).toContain((response as any).tag);
         }),
-    );
-  });
+      );
+    });
 
-  describe("GetPendingMaintenanceAction", () => {
-    test.provider("surfaces a typed tag for a nonexistent cluster", () =>
-      Effect.gen(function* () {
-        const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/pending-probe?arn=${encodeURIComponent(arns.cluster)}`,
-        );
-        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-          (response as any).tag,
-        );
-      }),
-    );
-  });
+    describe("GetPendingMaintenanceAction", () => {
+      test.provider("surfaces a typed tag for a nonexistent cluster", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const response = yield* getJson(`/pending-probe?arn=${encodeURIComponent(arns.cluster)}`);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(
+            (response as any).tag,
+          );
+        }),
+      );
+    });
 
-  describe("ApplyPendingMaintenanceAction", () => {
-    test.provider("surfaces a typed tag for a nonexistent cluster", () =>
-      Effect.gen(function* () {
-        const arns = yield* probeArns;
-        const response = yield* getJson(
-          `/apply-probe?arn=${encodeURIComponent(arns.cluster)}`,
-        );
-        expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-          (response as any).tag,
-        );
-      }),
-    );
-  });
-});
+    describe("ApplyPendingMaintenanceAction", () => {
+      test.provider("surfaces a typed tag for a nonexistent cluster", () =>
+        Effect.gen(function* () {
+          const arns = yield* probeArns;
+          const response = yield* getJson(`/apply-probe?arn=${encodeURIComponent(arns.cluster)}`);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(
+            (response as any).tag,
+          );
+        }),
+      );
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Cluster-scoped bindings (CreateClusterSnapshot, StopCluster, StartCluster)
@@ -239,9 +220,7 @@ const defaultNetwork = Effect.gen(function* () {
   });
   const subnetIds = (subnets.Subnets ?? [])
     .filter((s) => /[abc]$/.test(s.AvailabilityZone ?? ""))
-    .sort((l, r) =>
-      (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""),
-    )
+    .sort((l, r) => (l.AvailabilityZone ?? "").localeCompare(r.AvailabilityZone ?? ""))
     .map((s) => s.SubnetId)
     .filter((id): id is `subnet-${string}` => id !== undefined)
     .slice(0, 2);
@@ -268,10 +247,7 @@ const deleteSnapshot = (snapshotArn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e): boolean => e._tag === "ConflictException",
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(40),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
     }),
   );
 
@@ -283,9 +259,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const network = yield* defaultNetwork;
       yield* Effect.sync(() => {
         process.env[SUBNETS_ENV] = JSON.stringify(network.subnetIds);
-        process.env[SECURITY_GROUPS_ENV] = JSON.stringify(
-          network.securityGroupIds,
-        );
+        process.env[SECURITY_GROUPS_ENV] = JSON.stringify(network.securityGroupIds);
       });
 
       let snapshotArn: string | undefined;
@@ -302,33 +276,29 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
 
         // Take an on-demand snapshot of the live cluster.
-        const snapshot = (yield* get(
-          `/snapshot?name=${SLOW_SNAPSHOT_NAME}`,
-        )) as { snapshotArn: string; status: string };
+        const snapshot = (yield* get(`/snapshot?name=${SLOW_SNAPSHOT_NAME}`)) as {
+          snapshotArn: string;
+          status: string;
+        };
         expect(snapshot.snapshotArn).toContain(":cluster-snapshot/");
         snapshotArn = snapshot.snapshotArn;
 
         // Wait (bounded) for the snapshot to become AVAILABLE so the stop
         // call below does not conflict with the in-flight snapshot.
-        yield* docdbelastic
-          .getClusterSnapshot({ snapshotArn: snapshot.snapshotArn })
-          .pipe(
-            Effect.map((r) => r.snapshot.status),
-            Effect.repeat({
-              schedule: Schedule.spaced("10 seconds"),
-              until: (status): boolean => status === "AVAILABLE",
-              times: 60,
-            }),
-          );
+        yield* docdbelastic.getClusterSnapshot({ snapshotArn: snapshot.snapshotArn }).pipe(
+          Effect.map((r) => r.snapshot.status),
+          Effect.repeat({
+            schedule: Schedule.spaced("10 seconds"),
+            until: (status): boolean => status === "AVAILABLE",
+            times: 60,
+          }),
+        );
 
         // Stop the cluster (compute billing pauses).
         const stop = (yield* get("/stop")) as { status: string };
@@ -350,5 +320,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       );
     }),
   // cluster create (~10 min) + snapshot + stop + destroy in one test.
-  { timeout: 2_400_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:docdbelastic",
+      "provider:aws:ec2",
+      "provider:aws:lambda",
+      "live",
+    ],
+    timeout: 2_400_000,
+  },
 );

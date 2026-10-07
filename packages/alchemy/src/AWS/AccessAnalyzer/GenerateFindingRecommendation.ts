@@ -40,7 +40,6 @@ export interface GenerateFindingRecommendation extends Binding.Service<
   >
 > {}
 
-export const GenerateFindingRecommendation =
-  Binding.Service<GenerateFindingRecommendation>(
-    "AWS.AccessAnalyzer.GenerateFindingRecommendation",
-  );
+export const GenerateFindingRecommendation = Binding.Service<GenerateFindingRecommendation>(
+  "AWS.AccessAnalyzer.GenerateFindingRecommendation",
+);

@@ -4,10 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Key } from "./Key.ts";
-import {
-  TranslateKeyMaterial,
-  type TranslateKeyMaterialRequest,
-} from "./TranslateKeyMaterial.ts";
+import { TranslateKeyMaterial, type TranslateKeyMaterialRequest } from "./TranslateKeyMaterial.ts";
 
 /**
  * HTTP implementation of {@link TranslateKeyMaterial} — bespoke (not
@@ -22,25 +19,22 @@ import {
 export const TranslateKeyMaterialHttp = Layer.effect(
   TranslateKeyMaterial,
   Effect.gen(function* () {
-    const translateKeyMaterial =
-      yield* paymentcryptographydata.translateKeyMaterial;
+    const translateKeyMaterial = yield* paymentcryptographydata.translateKeyMaterial;
 
     return Effect.fn(function* (...keys: readonly [Key, ...Key[]]) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           for (const key of keys) {
-            yield* host.bind`Allow(${host}, AWS.PaymentCryptography.TranslateKeyMaterial(${key}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: ["payment-cryptography:TranslateKeyMaterial"],
-                    Resource: [key.keyArn],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.PaymentCryptography.TranslateKeyMaterial(${key}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["payment-cryptography:TranslateKeyMaterial"],
+                  Resource: [key.keyArn],
+                },
+              ],
+            });
           }
         }
       }

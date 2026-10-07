@@ -51,10 +51,7 @@ export interface SendTextMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendTextMessageRequest,
-    ) => Effect.Effect<
-      smsvoice.SendTextMessageResult,
-      smsvoice.SendTextMessageError
-    >
+    ) => Effect.Effect<smsvoice.SendTextMessageResult, smsvoice.SendTextMessageError>
   >
 > {}
 export const SendTextMessage = Binding.Service<SendTextMessage>(

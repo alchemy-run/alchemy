@@ -1,8 +1,9 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Metric from "effect/Metric";
 import * as Axiom from "@/Axiom";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * End-to-end fixture for Axiom telemetry: datasets and an ingest token
@@ -12,6 +13,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  */
 export const TRACES_DATASET = "alchemy-test-otel-traces";
 export const LOGS_DATASET = "alchemy-test-otel-logs";
+export const METRICS_DATASET = "alchemy-test-otel-metrics";
 
 export const Traces = Axiom.Dataset("Traces", {
   name: TRACES_DATASET,
@@ -23,11 +25,20 @@ export const Logs = Axiom.Dataset("Logs", {
   kind: "otel:logs:v1",
 });
 
+export const Metrics = Axiom.Dataset("Metrics", {
+  name: METRICS_DATASET,
+  kind: "otel:metrics:v1",
+});
+
+/** Counted once per `/work` request; the test queries it out of Axiom. */
+const workCounter = Metric.counter("axiom_e2e_work_total");
+
 export const Ingest = Axiom.ApiToken("Ingest", {
   name: "alchemy-test-otel-ingest",
   datasetCapabilities: {
     [TRACES_DATASET]: { ingest: ["create"] },
     [LOGS_DATASET]: { ingest: ["create"] },
+    [METRICS_DATASET]: { ingest: ["create"] },
   },
 });
 
@@ -42,9 +53,8 @@ export default class AxiomTracedWorker extends Cloudflare.Worker<AxiomTracedWork
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         if (url.pathname === "/work") {
-          yield* Effect.log("axiom-work-log").pipe(
-            Effect.withSpan("axiom.child-span"),
-          );
+          yield* Effect.log("axiom-work-log").pipe(Effect.withSpan("axiom.child-span"));
+          yield* Metric.update(workCounter, 1);
           return yield* HttpServerResponse.json({ marker: "axiom-did-work" });
         }
         return HttpServerResponse.text("axiom-ok");
@@ -59,6 +69,7 @@ export default class AxiomTracedWorker extends Cloudflare.Worker<AxiomTracedWork
         token: Ingest,
         traces: Traces,
         logs: Logs,
+        metrics: Metrics,
         serviceName: "otel-axiom-e2e",
       }),
     ),

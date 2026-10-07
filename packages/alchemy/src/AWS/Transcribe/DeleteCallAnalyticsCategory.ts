@@ -32,7 +32,6 @@ export interface DeleteCallAnalyticsCategory extends Binding.Service<
     >
   >
 > {}
-export const DeleteCallAnalyticsCategory =
-  Binding.Service<DeleteCallAnalyticsCategory>(
-    "AWS.Transcribe.DeleteCallAnalyticsCategory",
-  );
+export const DeleteCallAnalyticsCategory = Binding.Service<DeleteCallAnalyticsCategory>(
+  "AWS.Transcribe.DeleteCallAnalyticsCategory",
+);

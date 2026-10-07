@@ -1,5 +1,4 @@
 import { Runtime } from "foldkit";
-
 import { init, Message, Model, update, view } from "./main.ts";
 
 const application = Runtime.makeApplication({

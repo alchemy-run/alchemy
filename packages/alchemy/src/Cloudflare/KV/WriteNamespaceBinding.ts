@@ -1,10 +1,7 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  makeKVNamespaceBinding,
-  makeKVNamespaceHelpers,
-} from "./NamespaceBinding.ts";
+import { makeKVNamespaceBinding, makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
 import { WriteNamespace, type WriteNamespaceClient } from "./WriteNamespace.ts";
 
 /**
@@ -13,9 +10,7 @@ import { WriteNamespace, type WriteNamespaceClient } from "./WriteNamespace.ts";
  */
 export const WriteNamespaceBinding = Layer.effect(
   WriteNamespace,
-  Effect.suspend(() =>
-    makeKVNamespaceBinding({ makeClient: makeWriteKVClient }),
-  ),
+  Effect.suspend(() => makeKVNamespaceBinding({ makeClient: makeWriteKVClient })),
 );
 
 /** Build the write half of the binding client. */

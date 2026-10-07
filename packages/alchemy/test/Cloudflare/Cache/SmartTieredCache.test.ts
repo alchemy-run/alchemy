@@ -1,30 +1,24 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -60,46 +54,47 @@ const setBaseline = (zoneId: string, value: "on" | "off") =>
 // Both cases mutate the same zone-level Smart Tiered Cache singleton with
 // opposite baselines; run them serially so they don't corrupt each other's
 // captured `initialValue` under the global concurrent test config.
-describe.sequential("SmartTieredCache", () => {
-  test.provider(
-    "enables Smart Tiered Cache and restores the original value on destroy",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+describe.sequential(
+  "SmartTieredCache",
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:cache", "provider:cloudflare:zone", "live"],
+  },
+  () => {
+    test.provider(
+      "enables Smart Tiered Cache and restores the original value on destroy",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        // Known baseline: Smart Tiered Cache defaults to "off".
-        yield* setBaseline(zoneId, "off");
+          yield* stack.destroy();
+          // Known baseline: Smart Tiered Cache defaults to "off".
+          yield* setBaseline(zoneId, "off");
 
-        const setting = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Cache.SmartTieredCache("SmartCache", {
-              zoneId,
-            });
-          }),
-        );
+          const setting = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Cache.SmartTieredCache("SmartCache", { zoneId });
+            }),
+          );
 
-        expect(setting.zoneId).toEqual(zoneId);
-        expect(setting.value).toEqual("on");
-        // The pre-management value was captured for restore-on-destroy.
-        expect(setting.initialValue).toEqual("off");
-        expect(setting.editable).toEqual(true);
+          expect(setting.zoneId).toEqual(zoneId);
+          expect(setting.value).toEqual("on");
+          // The pre-management value was captured for restore-on-destroy.
+          expect(setting.initialValue).toEqual("off");
+          expect(setting.editable).toEqual(true);
 
-        // Out-of-band verification via the distilled API.
-        const live = yield* getSmartTieredCache(zoneId);
-        expect(live.value).toEqual("on");
+          // Out-of-band verification via the distilled API.
+          const live = yield* getSmartTieredCache(zoneId);
+          expect(live.value).toEqual("on");
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        // Destroy restored the value the setting had before we managed it.
-        const restored = yield* getSmartTieredCache(zoneId);
-        expect(restored.value).toEqual("off");
-      }).pipe(logLevel),
-  );
+          // Destroy restored the value the setting had before we managed it.
+          const restored = yield* getSmartTieredCache(zoneId);
+          expect(restored.value).toEqual("off");
+        }).pipe(logLevel),
+    );
 
-  test.provider(
-    "updates the setting in place and keeps the captured initial value",
-    (stack) =>
+    test.provider("updates the setting in place and keeps the captured initial value", (stack) =>
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
 
@@ -145,27 +140,26 @@ describe.sequential("SmartTieredCache", () => {
         // Leave the zone at its Cloudflare default ("off") for other suites.
         yield* setBaseline(zoneId, "off");
       }).pipe(logLevel),
-  );
+    );
 
-  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
-  // API for this per-zone setting, so `list()` enumerates every zone via
-  // `listAllZones` and reads the singleton in each. Assert the result is
-  // non-empty and contains the standing test zone.
-  test.provider("list enumerates the setting across all zones", (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+    // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+    // API for this per-zone setting, so `list()` enumerates every zone via
+    // `listAllZones` and reads the singleton in each. Assert the result is
+    // non-empty and contains the standing test zone.
+    test.provider("list enumerates the setting across all zones", (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Cache.SmartTieredCache,
-      );
-      const all = yield* provider.list();
+        const provider = yield* Provider.findProvider(Cloudflare.Cache.SmartTieredCache);
+        const all = yield* provider.list();
 
-      expect(all.length).toBeGreaterThan(0);
-      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
 
-      // `stack` is unused here (the singleton always exists on every zone),
-      // but keep the destroy bookends so the harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  );
-});
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookends so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    );
+  },
+);

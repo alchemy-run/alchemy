@@ -15,7 +15,7 @@ export const AXIOM_AUTH_PROVIDER_NAME = "Axiom";
 export type AxiomAuthConfig = StoredAuthConfig;
 
 /**
- * Resolved Axiom credentials. The stored credential file is a flat record
+ * Resolved Axiom credentials. The provider values are a flat record
  * (token + optional orgId/apiBaseUrl); the `apiToken`/`pat` distinction is
  * derived at resolution time from orgId presence — an org id means the token
  * is treated as a personal access token, mirroring how the CI environment
@@ -39,12 +39,10 @@ export type AxiomResolvedCredentials =
 
 const readEnvironment = Effect.gen(function* () {
   const apiToken =
-    (yield* getEnvRedacted("AXIOM_TOKEN")) ??
-    (yield* getEnvRedacted("AXIOM_API_KEY"));
+    (yield* getEnvRedacted("AXIOM_TOKEN")) ?? (yield* getEnvRedacted("AXIOM_API_KEY"));
   if (!apiToken) {
     return yield* new AuthError({
-      message:
-        "Axiom CI credentials not found. Set AXIOM_TOKEN or AXIOM_API_KEY.",
+      message: "Axiom CI credentials not found. Set AXIOM_TOKEN or AXIOM_API_KEY.",
     });
   }
   const apiBaseUrl = (yield* getEnv("AXIOM_URL")) ?? DEFAULT_API_BASE_URL;
@@ -67,7 +65,6 @@ const readEnvironment = Effect.gen(function* () {
 
 const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
   provider: AXIOM_AUTH_PROVIDER_NAME,
-  storageKey: "axiom-stored",
   fields: [
     {
       name: "token",
@@ -88,8 +85,7 @@ const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
   ],
   toResolved: (values, source) => {
     const apiToken = storedSecret(values.token) ?? Redacted.make("");
-    const apiBaseUrl =
-      storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL;
+    const apiBaseUrl = storedValueText(values.apiBaseUrl) ?? DEFAULT_API_BASE_URL;
     return values.orgId !== undefined
       ? {
           type: "pat",
@@ -122,8 +118,7 @@ const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
     {
       name: "AXIOM_ORG_ID",
       required: false,
-      description:
-        "Organization id; required when the token is a personal access token.",
+      description: "Organization id; required when the token is a personal access token.",
     },
   ],
 });
@@ -135,6 +130,6 @@ const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
  */
 export const AxiomAuth = axiomAuth.layer;
 
-/** Schema of the stored Axiom credential file (flat field record). */
+/** Schema of Axiom's inline static-token values. */
 export const AxiomStoredCredentials = axiomAuth.storedSchema;
 export type AxiomStoredCredentials = typeof AxiomStoredCredentials.Type;

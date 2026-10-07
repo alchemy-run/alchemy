@@ -1,19 +1,9 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { useAnimation } from "@alchemy.run/sigil";
+import { stringWidth } from "@alchemy.run/sigil/ansi";
 import type { ReactNode } from "react";
-import stringWidth from "string-width";
-import {
-  spinnerFramesFor,
-  statusColor,
-  statusPaint,
-  theme,
-  type StatusVariant,
-} from "../../../Util/Theme.ts";
-import {
-  useBorderStyle,
-  useCliEnvironment,
-  useGlyphs,
-} from "./Environment.tsx";
+import { spinnerFramesFor, statusColor, theme, type StatusVariant } from "../../../Util/Theme.ts";
+import { useBorderStyle, useCliEnvironment, useGlyphs } from "./Environment.tsx";
 import { Box, tabsWindow } from "./Layout.tsx";
 import { Text } from "./Typography.tsx";
 
@@ -28,9 +18,7 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
   return (
     <Box gap={1} flexWrap="wrap">
       <Text color={statusColor(variant)}>{glyphs[variant]}</Text>
-      <Text color={variant === "error" ? statusColor(variant) : undefined}>
-        {children}
-      </Text>
+      <Text color={variant === "error" ? statusColor(variant) : undefined}>{children}</Text>
       {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
     </Box>
   );
@@ -38,23 +26,16 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
 
 export type ToastProps = StatusProps;
 
-/** Compact application notice, distinguished by its semantic rail. */
+/**
+ * Compact application notice. Severity is carried by the status glyph and
+ * its colour alone — the same vocabulary as transcript lines — so a notice
+ * row never needs a rail of its own.
+ */
 export function Toast({ variant = "info", children, detail }: ToastProps) {
-  const borderStyle = useBorderStyle();
   return (
-    <Box
-      paddingLeft={1}
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-    >
-      <Status variant={variant} detail={detail}>
-        {children}
-      </Status>
-    </Box>
+    <Status variant={variant} detail={detail}>
+      {children}
+    </Status>
   );
 }
 
@@ -62,63 +43,96 @@ export interface AlertProps extends StatusProps {
   readonly title?: ReactNode;
 }
 
-export function Alert({
-  variant = "info",
-  title,
-  children,
-  detail,
-}: AlertProps) {
-  const borderStyle = useBorderStyle();
+/** Glyph + bold title on one row, body indented beneath it. */
+export function Alert({ variant = "info", title, children, detail }: AlertProps) {
   const glyphs = useGlyphs();
   return (
-    <Box
-      flexDirection="column"
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-      paddingLeft={1}
-    >
+    <Box flexDirection="column">
       <Box gap={1} alignItems="center">
         <Text bold color={statusColor(variant)}>
-          {glyphs[variant]} {variant.toUpperCase()}
+          {glyphs[variant]}
         </Text>
         {title === undefined ? null : <Text bold>{title}</Text>}
         {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
       </Box>
-      <Box paddingLeft={1}>
-        <Text>{children}</Text>
+      <Box paddingLeft={theme.space.indent}>
+        <Text tone="muted">{children}</Text>
       </Box>
     </Box>
   );
 }
 
-type KeyBarProps = {
+export interface KeyBarProps {
   readonly keys: ReadonlyArray<readonly [key: string, label: string]>;
   readonly marginTop?: number;
-};
+  readonly inline?: boolean;
+  /** Widget rendered before the key hints. */
+  readonly before?: ReactNode;
+  /** Widget rendered after the key hints. */
+  readonly after?: ReactNode;
+  /** Draw border rails between populated widget/key sections. */
+  readonly divider?: boolean;
+}
 
-export function KeyBar({ keys, marginTop = 1 }: KeyBarProps) {
+export function KeyBar({
+  keys,
+  marginTop = 1,
+  inline = false,
+  before,
+  after,
+  divider = false,
+}: KeyBarProps) {
+  const borderStyle = useBorderStyle();
+  const sectionBorder = {
+    borderStyle,
+    borderLeft: true,
+    borderRight: false,
+    borderTop: false,
+    borderBottom: false,
+    borderColor: theme.color.muted,
+    borderDimColor: true,
+    marginLeft: 1,
+    paddingLeft: 1,
+  } as const;
   return (
     <Box
-      width="100%"
+      width={inline ? undefined : "100%"}
       flexWrap="wrap"
       marginTop={marginTop}
-      paddingLeft={theme.space.indent}
+      paddingLeft={before === undefined ? theme.space.indent : 0}
     >
-      {keys.map(([key, label], index) => (
-        <Box key={`${key}:${label}`}>
-          {index === 0 ? null : <Text tone="muted"> • </Text>}
-          <Text>
-            <Text bold color={theme.color.brand}>
-              {key}
+      {before === undefined ? null : <Box>{before}</Box>}
+      <Box
+        flexWrap="wrap"
+        {...(divider && before !== undefined
+          ? sectionBorder
+          : before === undefined
+            ? {}
+            : { marginLeft: 1 })}
+      >
+        {keys.map(([key, label], index) => (
+          <Box key={`${key}:${label}`}>
+            {index === 0 ? null : <Text tone="muted"> • </Text>}
+            <Text>
+              <Text bold color={theme.color.brand}>
+                {key}
+              </Text>
+              <Text tone="muted"> {label}</Text>
             </Text>
-            <Text tone="muted"> {label}</Text>
-          </Text>
+          </Box>
+        ))}
+      </Box>
+      {after === undefined ? null : (
+        <Box
+          {...(divider
+            ? sectionBorder
+            : {
+                marginLeft: 1,
+              })}
+        >
+          {after}
         </Box>
-      ))}
+      )}
     </Box>
   );
 }
@@ -155,50 +169,6 @@ export function Spinner({ label, detail }: SpinnerProps) {
   );
 }
 
-type ProgressBarProps = {
-  /** Completion ratio. Values outside 0..1 are clamped. */
-  readonly value: number;
-  readonly width?: number;
-  readonly showPercent?: boolean;
-  readonly label?: ReactNode;
-  readonly detail?: ReactNode;
-  readonly variant?: StatusVariant;
-};
-
-export function ProgressBar({
-  value,
-  width = 24,
-  showPercent = true,
-  label,
-  detail,
-  variant = "success",
-}: ProgressBarProps) {
-  const { unicode } = useCliEnvironment();
-  const ratio = Math.max(0, Math.min(1, value));
-  const cells = Math.max(1, Math.floor(width));
-  const filled = Math.round(cells * ratio);
-  return (
-    <Box
-      gap={1}
-      aria-role="progressbar"
-      aria-label={`${Math.round(ratio * 100)}%`}
-      aria-state={{ busy: ratio < 1 }}
-    >
-      <Text>
-        <Text color={statusPaint(variant)}>
-          {(unicode ? "█" : "#").repeat(filled)}
-        </Text>
-        <Text tone="muted">{(unicode ? "░" : ".").repeat(cells - filled)}</Text>
-      </Text>
-      {showPercent ? (
-        <Text tone="muted">{`${Math.round(ratio * 100)}%`.padStart(4)}</Text>
-      ) : null}
-      {label === undefined ? null : <Text>{label}</Text>}
-      {detail === undefined ? null : <Text tone="muted">{detail}</Text>}
-    </Box>
-  );
-}
-
 type TabsProps = {
   readonly tabs: ReadonlyArray<{
     readonly id: string;
@@ -218,26 +188,17 @@ export function Tabs({ tabs, active }: TabsProps) {
   );
   // chip width = paddingX (2) + optional marker glyph + space + label
   const widths = tabs.map(
-    (tab) =>
-      2 +
-      stringWidth(tab.label) +
-      (tab.marked ? stringWidth(glyphs.selected) + 1 : 0),
+    (tab) => 2 + stringWidth(tab.label) + (tab.marked ? stringWidth(glyphs.selected) + 1 : 0),
   );
   const totalWidth =
-    widths.reduce((sum, width) => sum + width, 0) +
-    Math.max(0, tabs.length - 1) * gap;
+    widths.reduce((sum, width) => sum + width, 0) + Math.max(0, tabs.length - 1) * gap;
   const contentWidth = Math.max(1, columns - theme.space.indent);
   const { start, end } =
     totalWidth <= contentWidth
       ? { start: 0, end: tabs.length }
       : // reserve an arrow cell + gap on each side so the window stays put
         // whether or not the edge arrows render
-        tabsWindow(
-          widths,
-          activeIndex,
-          Math.max(1, contentWidth - 2 * (1 + gap)),
-          gap,
-        );
+        tabsWindow(widths, activeIndex, Math.max(1, contentWidth - 2 * (1 + gap)), gap);
   return (
     <Box
       width="100%"
@@ -264,9 +225,7 @@ export function Tabs({ tabs, active }: TabsProps) {
               dimColor={!selected}
             >
               {tab.marked ? (
-                <Text
-                  color={selected ? theme.color.onAccent : theme.color.brand}
-                >
+                <Text color={selected ? theme.color.onAccent : theme.color.brand}>
                   {glyphs.selected}{" "}
                 </Text>
               ) : null}
@@ -275,9 +234,7 @@ export function Tabs({ tabs, active }: TabsProps) {
           </Box>
         );
       })}
-      {end < tabs.length ? (
-        <Text tone="muted">{glyphs.overflowRight}</Text>
-      ) : null}
+      {end < tabs.length ? <Text tone="muted">{glyphs.overflowRight}</Text> : null}
     </Box>
   );
 }

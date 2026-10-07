@@ -1,20 +1,34 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
+import VolumeApi, { Data, MARKER, MARKER_FILE, VOLUME_PATH } from "./fixtures/volume-api.ts";
+import { suitePartition } from "./suiteProject.ts";
+import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const readVolumeInstance = Query.fn((id: string) => {
+  const instance = RailwayApi.volumeInstance({ id });
+  return {
+    id: instance.id,
+    volumeId: instance.volumeId,
+    mountPath: instance.mountPath,
+    environmentId: instance.environmentId,
+    volume: { name: instance.volume.name, projectId: instance.volume.projectId },
+    serviceId: instance.serviceId,
+  };
+});
+
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update, list, and delete a volume",
@@ -39,9 +53,7 @@ test.provider(
       expect(created.volume.volumeInstanceId).toEqual(expect.any(String));
       expect(created.volume.volumeInstanceId.length).toBeGreaterThan(0);
       expect(created.volume.projectId).toEqual(created.project.projectId);
-      expect(created.volume.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.volume.environmentId).toEqual(created.environment.environmentId);
       expect(created.volume.mountPath).toEqual("/data");
       expect(created.volume.serviceId).toBeUndefined();
       expect(created.volume.name).toEqual(expect.any(String));
@@ -51,9 +63,7 @@ test.provider(
       expect(created.volume.sizeMB).toEqual(expect.any(Number));
       expect(created.volume.createdAt).toEqual(expect.any(String));
 
-      const fetched = yield* railway.volumeInstance({
-        id: created.volume.volumeInstanceId,
-      });
+      const fetched = yield* readVolumeInstance(created.volume.volumeInstanceId);
       expect(fetched.id).toEqual(created.volume.volumeInstanceId);
       expect(fetched.volumeId).toEqual(created.volume.volumeId);
       expect(fetched.mountPath).toEqual("/data");
@@ -64,9 +74,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Volume);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (volume) => volume.volumeId === created.volume.volumeId,
-      );
+      const found = listed.find((volume) => volume.volumeId === created.volume.volumeId);
       expect(found).toBeDefined();
       expect(found?.volumeInstanceId).toEqual(created.volume.volumeInstanceId);
       expect(found?.mountPath).toEqual("/data");
@@ -85,19 +93,13 @@ test.provider(
       );
 
       expect(updated.volume.volumeId).toEqual(created.volume.volumeId);
-      expect(updated.volume.volumeInstanceId).toEqual(
-        created.volume.volumeInstanceId,
-      );
+      expect(updated.volume.volumeInstanceId).toEqual(created.volume.volumeInstanceId);
       expect(updated.volume.projectId).toEqual(created.volume.projectId);
-      expect(updated.volume.environmentId).toEqual(
-        created.volume.environmentId,
-      );
+      expect(updated.volume.environmentId).toEqual(created.volume.environmentId);
       expect(updated.volume.mountPath).toEqual("/app/data");
       expect(updated.volume.name).toEqual(created.volume.name);
 
-      const fetchedUpdate = yield* railway.volumeInstance({
-        id: updated.volume.volumeInstanceId,
-      });
+      const fetchedUpdate = yield* readVolumeInstance(updated.volume.volumeInstanceId);
       expect(fetchedUpdate.id).toEqual(updated.volume.volumeInstanceId);
       expect(fetchedUpdate.mountPath).toEqual("/app/data");
       expect(fetchedUpdate.volume.name).toEqual(updated.volume.name);
@@ -107,7 +109,16 @@ test.provider(
       const gone = yield* waitUntilVolumeGone(created.volume.volumeInstanceId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -170,5 +181,83 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 3_600_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "MountVolume attaches a disk to a hosted Service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const data = yield* Data;
+          const api = yield* VolumeApi;
+          return { data, api };
+        }),
+      );
+
+      expect(created.data.volumeId.length).toBeGreaterThan(0);
+      // Volume is created disconnected; MountVolume attaches it from
+      // the Service. Resource attrs are not refreshed after that bind.
+      expect(created.data.serviceId).toBeUndefined();
+      expect(created.data.mountPath).toEqual(VOLUME_PATH);
+      expect(created.api.url).toEqual(expect.any(String));
+      expect(created.api.url).toContain("up.railway.app");
+
+      const fetched = yield* readVolumeInstance(created.data.volumeInstanceId);
+      expect(fetched.serviceId).toEqual(created.api.serviceId);
+      expect(fetched.mountPath).toEqual(VOLUME_PATH);
+      expect(fetched.volumeId).toEqual(created.data.volumeId);
+
+      const client = yield* HttpClient.HttpClient;
+      const health = yield* client.get(`${created.api.url}/health`).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? Effect.succeed(res)
+            : Effect.fail(new Error(`health returned ${res.status}`)),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 10 }),
+      );
+      expect(health.status).toEqual(200);
+
+      const put = yield* client.execute(
+        HttpClientRequest.put(`${created.api.url}/${MARKER_FILE}`).pipe(
+          HttpClientRequest.bodyText(MARKER),
+        ),
+      );
+      expect(put.status).toEqual(204);
+
+      const got = yield* client.get(`${created.api.url}/${MARKER_FILE}`);
+      expect(got.status).toEqual(200);
+      expect(yield* got.text).toEqual(MARKER);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilVolumeGone(created.data.volumeInstanceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:mountvolume",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:volume",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloudflare Email Security (Area 1) is an enterprise add-on — the standard
 // testing account has no entitlement and every settings call fails with the
@@ -56,7 +53,7 @@ const findByPattern = (accountId: string) =>
 // and is refused at the edge instead:
 //
 //     Forbidden: Authentication error
-//       at matchTypedError (distilled/packages/core/src/protocol-http.ts)
+//       at matchTypedError (submodules/distilled/packages/core/src/protocol-http.ts)
 //
 // Set `CLOUDFLARE_TEST_EMAIL_SECURITY=1` with an API-token credential
 // carrying the Email Security read scope to run it.
@@ -70,22 +67,23 @@ test.provider.skipIf(entitled || !reachable)(
 
       // The testing account lacks the Email Security entitlement — the
       // distilled list call must fail with the typed entitlement tag.
-      const error = yield* emailSecurity.listSettingAllowPolicies
-        .items({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-          Effect.flip,
-        );
+      const error = yield* emailSecurity.listSettingAllowPolicies.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+        Effect.flip,
+      );
       expect(error._tag).toEqual("EmailSecurityNotEntitled");
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Read-only list assertion that runs on every account. On unentitled
@@ -97,15 +95,16 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.AllowPolicy,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.AllowPolicy);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Requires the Email Security (Area 1) enterprise add-on — unentitled accounts fail
@@ -126,15 +125,16 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Email.AllowPolicy,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Email.AllowPolicy);
       const all = yield* provider.list();
       expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Requires the Email Security (Area 1) enterprise add-on — unentitled accounts fail
@@ -201,5 +201,8 @@ test.provider.skipIf(!entitled)(
       );
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "live"],
+    timeout: 120_000,
+  },
 );

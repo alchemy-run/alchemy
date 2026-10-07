@@ -1,16 +1,16 @@
-import * as Data from "effect/Data";
+import http from "node:http";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
-import * as Encoding from "effect/Encoding";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { Base64Url } from "effect/encoding";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import http from "node:http";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { AUTH_ERROR_URL, AUTH_SUCCESS_URL } from "./AuthProvider.ts";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 export class OAuthError extends Data.TaggedError("OAuthError")<{
   error: string;
@@ -22,9 +22,7 @@ export class OAuthError extends Data.TaggedError("OAuthError")<{
  * already taken). Distinct from {@link OAuthError} so callers can fall back to
  * manual code entry instead of failing the whole flow.
  */
-export class CallbackServerStartError extends Data.TaggedError(
-  "CallbackServerStartError",
-)<{
+export class CallbackServerStartError extends Data.TaggedError("CallbackServerStartError")<{
   message: string;
 }> {}
 
@@ -79,10 +77,7 @@ export interface OAuthClientSpec {
    */
   readonly auth:
     | { readonly kind: "pkce" }
-    | {
-        readonly kind: "clientSecret";
-        readonly clientSecret: Redacted.Redacted<string>;
-      };
+    | { readonly kind: "clientSecret"; readonly clientSecret: Redacted.Redacted<string> };
   /**
    * How token-request parameters travel: URL-encoded POST body (the OAuth 2
    * standard, default) or the query string (PlanetScale's documented form).
@@ -93,9 +88,7 @@ export interface OAuthClientSpec {
 export interface OAuthClient {
   readonly clientId: string;
   /** Whether persisted credentials were issued to this client. */
-  readonly usesCurrentClient: (credentials: {
-    readonly clientId?: unknown;
-  }) => boolean;
+  readonly usesCurrentClient: (credentials: { readonly clientId?: unknown }) => boolean;
   /**
    * Generate an authorization URL. Pass `scopes` only for providers that
    * take them per-authorization; omit for providers whose scopes are
@@ -127,19 +120,13 @@ export interface OAuthClient {
    */
   readonly callback: (
     authorization: Authorization,
-  ) => Effect.Effect<
-    OAuthCredentials,
-    OAuthError | CallbackServerStartError,
-    never
-  >;
+  ) => Effect.Effect<OAuthCredentials, OAuthError | CallbackServerStartError, never>;
   /** Refresh expired OAuth credentials with the stored refresh token. */
   readonly refresh: (
     credentials: OAuthCredentials,
   ) => Effect.Effect<OAuthCredentials, OAuthError, never>;
   /** Revoke the refresh token; no-op when the spec has no revoke endpoint. */
-  readonly revoke: (
-    credentials: OAuthCredentials,
-  ) => Effect.Effect<void, OAuthError>;
+  readonly revoke: (credentials: OAuthCredentials) => Effect.Effect<void, OAuthError>;
 }
 
 const randomText = Effect.fn(function* (length: number) {
@@ -153,24 +140,22 @@ const randomText = Effect.fn(function* (length: number) {
         }),
     ),
   );
-  return Encoding.encodeBase64Url(bytes);
+  return Base64Url.encode(bytes);
 });
 
 const generatePKCE = Effect.fn(function* (length = 96) {
   const crypto = yield* Crypto.Crypto;
   const verifier = yield* randomText(length);
-  const challenge = yield* crypto
-    .digest("SHA-256", new TextEncoder().encode(verifier))
-    .pipe(
-      Effect.mapError(
-        (cause) =>
-          new OAuthError({
-            error: "crypto_error",
-            errorDescription: `PKCE digest failed: ${cause}`,
-          }),
-      ),
-    );
-  return { verifier, challenge: Encoding.encodeBase64Url(challenge) };
+  const challenge = yield* crypto.digest("SHA-256", new TextEncoder().encode(verifier)).pipe(
+    Effect.mapError(
+      (cause) =>
+        new OAuthError({
+          error: "crypto_error",
+          errorDescription: `PKCE digest failed: ${cause}`,
+        }),
+    ),
+  );
+  return { verifier, challenge: Base64Url.encode(challenge) };
 });
 
 const TokenResponse = Schema.Struct({
@@ -186,33 +171,24 @@ const TokenErrorResponse = Schema.Struct({
 });
 
 export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
-  const provideHttp = <A, E>(
-    effect: Effect.Effect<A, E, HttpClient.HttpClient>,
-  ) => effect.pipe(Effect.provide(FetchHttpClient.layer));
+  const provideHttp = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
+    effect.pipe(Effect.provide(FetchHttpClient.layer));
   const clientAuthParams = (): Record<string, string> =>
     spec.auth.kind === "clientSecret"
       ? { client_secret: Redacted.value(spec.auth.clientSecret) }
       : {};
 
   const extractCredentials = (
-    json: {
-      access_token: string;
-      refresh_token?: string;
-      expires_in: number;
-      scope?: string;
-    },
+    json: { access_token: string; refresh_token?: string; expires_in: number; scope?: string },
     previous?: OAuthCredentials,
   ): Effect.Effect<OAuthCredentials, OAuthError> => {
     const refresh =
-      json.refresh_token === undefined
-        ? previous?.refresh
-        : Redacted.make(json.refresh_token);
+      json.refresh_token === undefined ? previous?.refresh : Redacted.make(json.refresh_token);
     if (!refresh) {
       return Effect.fail(
         new OAuthError({
           error: "invalid_token_response",
-          errorDescription:
-            "The provider did not return a refresh token for this authorization.",
+          errorDescription: "The provider did not return a refresh token for this authorization.",
         }),
       );
     }
@@ -252,9 +228,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     );
 
     if (response.status < 200 || response.status >= 300) {
-      const json = yield* HttpClientResponse.schemaBodyJson(TokenErrorResponse)(
-        response,
-      ).pipe(
+      const json = yield* HttpClientResponse.schemaBodyJson(TokenErrorResponse)(response).pipe(
         Effect.mapError(
           () =>
             new OAuthError({
@@ -265,15 +239,11 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       );
       return yield* new OAuthError({
         error: json.error,
-        errorDescription:
-          json.error_description ??
-          `Token endpoint returned ${response.status}`,
+        errorDescription: json.error_description ?? `Token endpoint returned ${response.status}`,
       });
     }
 
-    const json = yield* HttpClientResponse.schemaBodyJson(TokenResponse)(
-      response,
-    ).pipe(
+    const json = yield* HttpClientResponse.schemaBodyJson(TokenResponse)(response).pipe(
       Effect.mapError(
         () =>
           new OAuthError({
@@ -304,19 +274,14 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     return { url: url.toString(), state };
   });
 
-  const exchange = Effect.fn(function (
-    code: string,
-    authorization?: Authorization,
-  ) {
+  const exchange = Effect.fn(function (code: string, authorization?: Authorization) {
     return tokenRequest({
       grant_type: "authorization_code",
       code,
       client_id: spec.clientId,
       redirect_uri: spec.redirectUri,
       ...clientAuthParams(),
-      ...(authorization?.verifier === undefined
-        ? {}
-        : { code_verifier: authorization.verifier }),
+      ...(authorization?.verifier === undefined ? {} : { code_verifier: authorization.verifier }),
     });
   });
 
@@ -357,10 +322,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     );
   });
 
-  const exchangeCallbackInput = Effect.fn(function* (
-    input: string,
-    authorization: Authorization,
-  ) {
+  const exchangeCallbackInput = Effect.fn(function* (input: string, authorization: Authorization) {
     const value = input.trim();
     let code = value;
     let state: string | null = null;
@@ -394,8 +356,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
 
   const callback = Effect.fn(function* (authorization: Authorization) {
     const { pathname, port, protocol } = new URL(spec.localCallbackUri);
-    const listenPort =
-      port === "" ? (protocol === "https:" ? 443 : 80) : Number(port);
+    const listenPort = port === "" ? (protocol === "https:" ? 443 : 80) : Number(port);
     const listen = Effect.callback<
       OAuthCredentials,
       OAuthError | CallbackServerStartError,
@@ -444,8 +405,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
             Effect.fail(
               new OAuthError({
                 error,
-                errorDescription:
-                  errorDescription ?? "An unknown error occurred.",
+                errorDescription: errorDescription ?? "An unknown error occurred.",
               }),
             ),
           );
@@ -473,10 +433,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
           res.end();
           resolveOnce(
             Effect.fail(
-              new OAuthError({
-                error: "invalid_request",
-                errorDescription: "Invalid state",
-              }),
+              new OAuthError({ error: "invalid_request", errorDescription: "Invalid state" }),
             ),
           );
           return;
@@ -542,8 +499,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     usesCurrentClient: (credentials) => credentials.clientId === spec.clientId,
     authorize,
     exchange: (...args) => provideHttp(exchange(...args)),
-    exchangeCallbackInput: (...args) =>
-      provideHttp(exchangeCallbackInput(...args)),
+    exchangeCallbackInput: (...args) => provideHttp(exchangeCallbackInput(...args)),
     callback: (authorization) => provideHttp(callback(authorization)),
     refresh: (credentials) => provideHttp(refresh(credentials)),
     revoke: (credentials) => provideHttp(revoke(credentials)),

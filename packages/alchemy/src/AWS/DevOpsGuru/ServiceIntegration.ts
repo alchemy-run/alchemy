@@ -80,9 +80,7 @@ export interface ServiceIntegration extends Resource<
  *
  * @resource
  */
-export const ServiceIntegration = Resource<ServiceIntegration>(
-  "AWS.DevOpsGuru.ServiceIntegration",
-);
+export const ServiceIntegration = Resource<ServiceIntegration>("AWS.DevOpsGuru.ServiceIntegration");
 
 interface ObservedIntegration {
   opsCenter: boolean;
@@ -121,26 +119,19 @@ export const ServiceIntegrationProvider = () =>
       // Observe the live account configuration. Absent sections and absent
       // opt-in statuses mean "account default" (disabled / AWS-owned key).
       const observe = Effect.gen(function* () {
-        const { ServiceIntegration: config } =
-          yield* devopsguru.describeServiceIntegration({});
+        const { ServiceIntegration: config } = yield* devopsguru.describeServiceIntegration({});
         const kms = config?.KMSServerSideEncryption;
         const encryptionType: devopsguru.ServerSideEncryptionType =
           kms?.Type ?? "AWS_OWNED_KMS_KEY";
         return {
           opsCenter: config?.OpsCenter?.OptInStatus === "ENABLED",
-          logsAnomalyDetection:
-            config?.LogsAnomalyDetection?.OptInStatus === "ENABLED",
+          logsAnomalyDetection: config?.LogsAnomalyDetection?.OptInStatus === "ENABLED",
           encryptionType,
-          kmsKeyId:
-            encryptionType === "CUSTOMER_MANAGED_KEY"
-              ? kms?.KMSKeyId
-              : undefined,
+          kmsKeyId: encryptionType === "CUSTOMER_MANAGED_KEY" ? kms?.KMSKeyId : undefined,
         } satisfies ObservedIntegration;
       });
 
-      const update = Effect.fn(function* (
-        config: devopsguru.UpdateServiceIntegrationConfig,
-      ) {
+      const update = Effect.fn(function* (config: devopsguru.UpdateServiceIntegrationConfig) {
         yield* retryUpdateConflict(
           devopsguru.updateServiceIntegration({ ServiceIntegration: config }),
         );
@@ -195,10 +186,7 @@ export const ServiceIntegrationProvider = () =>
 
       return {
         // Account/region singleton — surfaced only when non-default.
-        list: () =>
-          observe.pipe(
-            Effect.map((observed) => (isDefault(observed) ? [] : [observed])),
-          ),
+        list: () => observe.pipe(Effect.map((observed) => (isDefault(observed) ? [] : [observed]))),
 
         read: Effect.fn(function* ({ output }) {
           const observed = yield* observe;

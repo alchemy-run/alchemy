@@ -196,8 +196,7 @@ const retryWhileRolePropagates = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      e._tag === "StudioServiceRoleNotAssumable" ||
-      e._tag === "StudioServiceRoleMissingS3Access",
+      e._tag === "StudioServiceRoleNotAssumable" || e._tag === "StudioServiceRoleMissingS3Access",
     schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(10)]),
   });
 
@@ -213,9 +212,7 @@ export const StudioProvider = () =>
       const readStudio = Effect.fn(function* (studioId: string) {
         const response = yield* emr
           .describeStudio({ StudioId: studioId })
-          .pipe(
-            Effect.catchTag("StudioNotFound", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("StudioNotFound", () => Effect.succeed(undefined)));
         return response?.Studio;
       });
 
@@ -228,9 +225,7 @@ export const StudioProvider = () =>
           Stream.runCollect,
         );
         const summary = Array.from(matches)[0];
-        return summary?.StudioId
-          ? yield* readStudio(summary.StudioId)
-          : undefined;
+        return summary?.StudioId ? yield* readStudio(summary.StudioId) : undefined;
       });
 
       const toAttrs = Effect.fn(function* (studio: emr.Studio) {
@@ -291,21 +286,13 @@ export const StudioProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.idcUserAssignment ?? undefined) !==
-            (o.idcUserAssignment ?? undefined)
-          ) {
+          if ((n.idcUserAssignment ?? undefined) !== (o.idcUserAssignment ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.idcInstanceArn ?? undefined) !== (o.idcInstanceArn ?? undefined)
-          ) {
+          if ((n.idcInstanceArn ?? undefined) !== (o.idcInstanceArn ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (n.encryptionKeyArn ?? undefined) !==
-            (o.encryptionKeyArn ?? undefined)
-          ) {
+          if ((n.encryptionKeyArn ?? undefined) !== (o.encryptionKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -316,9 +303,7 @@ export const StudioProvider = () =>
             : yield* findStudioByName(yield* toName(id, olds ?? {}));
           if (!studio) return undefined;
           const attrs = yield* toAttrs(studio);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -350,8 +335,7 @@ export const StudioProvider = () =>
                 Description: props.description,
                 IdpAuthUrl: props.idpAuthUrl,
                 IdpRelayStateParameterName: props.idpRelayStateParameterName,
-                TrustedIdentityPropagationEnabled:
-                  props.trustedIdentityPropagationEnabled,
+                TrustedIdentityPropagationEnabled: props.trustedIdentityPropagationEnabled,
                 IdcUserAssignment: props.idcUserAssignment,
                 IdcInstanceArn: props.idcInstanceArn,
                 EncryptionKeyArn: props.encryptionKeyArn,
@@ -369,9 +353,7 @@ export const StudioProvider = () =>
             observed = yield* readStudio(created.StudioId);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `EMR Studio '${created.StudioId}' not visible after create`,
-                ),
+                new Error(`EMR Studio '${created.StudioId}' not visible after create`),
               );
             }
           }
@@ -384,10 +366,7 @@ export const StudioProvider = () =>
             update.Name = name;
             mutated = true;
           }
-          if (
-            props.description !== undefined &&
-            props.description !== observed.Description
-          ) {
+          if (props.description !== undefined && props.description !== observed.Description) {
             update.Description = props.description;
             mutated = true;
           }
@@ -429,9 +408,7 @@ export const StudioProvider = () =>
           emr.listStudios.items({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((summary) =>
-                summary.StudioId ? [summary.StudioId] : [],
-              ),
+              Array.from(chunk).flatMap((summary) => (summary.StudioId ? [summary.StudioId] : [])),
             ),
             Effect.flatMap(
               Effect.forEach((studioId) => readStudio(studioId), {
@@ -439,13 +416,9 @@ export const StudioProvider = () =>
               }),
             ),
             Effect.map((studios) =>
-              studios.filter(
-                (studio): studio is emr.Studio => studio !== undefined,
-              ),
+              studios.filter((studio): studio is emr.Studio => studio !== undefined),
             ),
-            Effect.flatMap(
-              Effect.forEach((studio) => toAttrs(studio), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((studio) => toAttrs(studio), { concurrency: 4 })),
           ),
       };
     }),

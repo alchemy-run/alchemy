@@ -3,8 +3,8 @@ import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
+import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import * as Socket from "effect/unstable/socket/Socket";
 import type { LogLine, LogsInput } from "../Provider.ts";
 import { profileCommandHint } from "../Util/interactive.ts";
 
@@ -55,9 +55,7 @@ interface TailEventMessage {
     | undefined;
 }
 
-const parseEvents = (
-  response: workers.QueryObservabilityTelemetryResponse,
-): LogLine[] => {
+const parseEvents = (response: workers.QueryObservabilityTelemetryResponse): LogLine[] => {
   const lines: LogLine[] = [];
   if (response.events?.events) {
     for (const event of response.events.events) {
@@ -65,9 +63,7 @@ const parseEvents = (
       const meta = event.metadata;
       const msg =
         meta.message ??
-        (meta.level === "error"
-          ? `error: ${meta.error ?? "unknown"}`
-          : `${meta.level ?? "log"}`);
+        (meta.level === "error" ? `error: ${meta.error ?? "unknown"}` : `${meta.level ?? "log"}`);
       lines.push({ timestamp: ts, message: msg });
     }
   }
@@ -108,11 +104,7 @@ export const CloudflareLogs = Effect.gen(function* () {
       ),
     );
 
-  const queryLogs = (opts: {
-    accountId: string;
-    filters: TelemetryFilter[];
-    options: LogsInput;
-  }) =>
+  const queryLogs = (opts: { accountId: string; filters: TelemetryFilter[]; options: LogsInput }) =>
     Effect.gen(function* () {
       const now = Date.now();
       const limit = opts.options.limit ?? 100;
@@ -170,71 +162,74 @@ export const CloudflareLogs = Effect.gen(function* () {
 
       const queue = yield* Queue.make<LogLine, Cause.Done>();
 
-      yield* socket
-        .runRaw((raw) => {
-          const text =
-            typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-          const data: TailEventMessage = JSON.parse(text);
-          const eventTs = new Date(data.eventTimestamp ?? Date.now());
+      const decoder = new TextDecoder();
+      const offerTailMessage = (raw: Uint8Array) => {
+        const data: TailEventMessage = JSON.parse(decoder.decode(raw));
+        const eventTs = new Date(data.eventTimestamp ?? Date.now());
 
-          if (data.event && "request" in data.event) {
-            const reqEvent = data.event;
-            const pathname = (() => {
-              try {
-                return new URL(reqEvent.request.url).pathname;
-              } catch {
-                return reqEvent.request.url;
-              }
-            })();
-            const status = reqEvent.response?.status ?? 500;
-            Queue.offerUnsafe(queue, {
-              timestamp: eventTs,
-              message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
-            });
-          }
+        if (data.event && "request" in data.event) {
+          const reqEvent = data.event;
+          const pathname = (() => {
+            try {
+              return new URL(reqEvent.request.url).pathname;
+            } catch {
+              return reqEvent.request.url;
+            }
+          })();
+          const status = reqEvent.response?.status ?? 500;
+          Queue.offerUnsafe(queue, {
+            timestamp: eventTs,
+            message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
+          });
+        }
 
-          for (const log of data.logs) {
-            const msg = log.message.join(" ");
-            Queue.offerUnsafe(queue, {
-              timestamp: new Date(log.timestamp),
-              message: log.level === "log" ? msg : `${log.level}: ${msg}`,
-            });
-          }
+        for (const log of data.logs) {
+          const msg = log.message.join(" ");
+          Queue.offerUnsafe(queue, {
+            timestamp: new Date(log.timestamp),
+            message: log.level === "log" ? msg : `${log.level}: ${msg}`,
+          });
+        }
 
-          for (const exception of data.exceptions) {
-            Queue.offerUnsafe(queue, {
-              timestamp: new Date(exception.timestamp),
-              message: `${exception.name} ${exception.message}\n${exception.stack}`,
-            });
-          }
-        })
-        .pipe(
-          Effect.ensuring(
-            Effect.all([
-              deleteScriptTail({
-                scriptName: opts.scriptName,
-                id: tailId,
-                accountId: opts.accountId,
-              }).pipe(Effect.ignore),
-              Queue.end(queue),
-            ]),
-          ),
-          Effect.ignore,
-          Effect.forkChild(),
-        );
+        for (const exception of data.exceptions) {
+          Queue.offerUnsafe(queue, {
+            timestamp: new Date(exception.timestamp),
+            message: `${exception.name} ${exception.message}\n${exception.stack}`,
+          });
+        }
+      };
+
+      yield* Socket.toStream(socket).pipe(
+        Stream.runForEach((raw) => Effect.sync(() => offerTailMessage(raw))),
+        Effect.catchIf(
+          (error) =>
+            Socket.isSocketError(error) &&
+            error.reason._tag === "SocketCloseError" &&
+            (error.reason.code === 1000 || error.reason.code === 1006),
+          () => Effect.void,
+        ),
+        Effect.ensuring(
+          Effect.all([
+            deleteScriptTail({
+              scriptName: opts.scriptName,
+              id: tailId,
+              accountId: opts.accountId,
+            }).pipe(Effect.ignore),
+            Queue.end(queue),
+          ]),
+        ),
+        Effect.scoped,
+        Effect.ignore,
+        Effect.forkChild(),
+      );
 
       return Stream.fromQueue(queue);
     });
 
-    return Stream.unwrap(runTailSession).pipe(
-      Stream.repeat(Schedule.spaced("1 second")),
-    );
+    return Stream.unwrap(runTailSession).pipe(Stream.repeat(Schedule.spaced("1 second")));
   };
 
-  const tailStream = (opts: {
-    accountId: string;
-    filters: TelemetryFilter[];
-  }) => {
+  const tailStream = (opts: { accountId: string; filters: TelemetryFilter[] }) => {
     const poll = (since: number): Stream.Stream<LogLine, any> =>
       Stream.unwrap(
         Effect.gen(function* () {
@@ -257,9 +252,7 @@ export const CloudflareLogs = Effect.gen(function* () {
 
           const lines = parseEvents(response);
           const nextSince =
-            lines.length > 0
-              ? Math.max(...lines.map((l) => l.timestamp.getTime())) + 1
-              : since;
+            lines.length > 0 ? Math.max(...lines.map((l) => l.timestamp.getTime())) + 1 : since;
 
           return Stream.concat(Stream.fromIterable(lines), poll(nextSince));
         }),

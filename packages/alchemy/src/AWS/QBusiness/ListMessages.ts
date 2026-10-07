@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `ListMessages` request with `applicationId` injected from the bound application.
  */
-export interface ListMessagesRequest extends Omit<
-  qbusiness.ListMessagesRequest,
-  "applicationId"
-> {}
+export interface ListMessagesRequest extends Omit<qbusiness.ListMessagesRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `ListMessages` operation (IAM action
@@ -37,12 +34,7 @@ export interface ListMessages extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListMessagesRequest,
-    ) => Effect.Effect<
-      qbusiness.ListMessagesResponse,
-      qbusiness.ListMessagesError
-    >
+    ) => Effect.Effect<qbusiness.ListMessagesResponse, qbusiness.ListMessagesError>
   >
 > {}
-export const ListMessages = Binding.Service<ListMessages>(
-  "AWS.QBusiness.ListMessages",
-);
+export const ListMessages = Binding.Service<ListMessages>("AWS.QBusiness.ListMessages");

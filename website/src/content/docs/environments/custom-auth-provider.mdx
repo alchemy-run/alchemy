@@ -67,7 +67,6 @@ export type StripeResolvedCredentials = {
 export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
   makeStoredAuthProvider<StripeResolvedCredentials>({
     provider: STRIPE_AUTH_PROVIDER_NAME,
-    storageKey: "stripe-stored",
     fields: [
       {
         name: "apiKey",
@@ -100,7 +99,9 @@ export const { layer: StripeAuth, storedSchema: StripeStoredCredentials } =
   });
 ```
 
-`fields` drive interactive prompts and `--set`; validation applies to both.
+`fields` drive interactive prompts and `--set`; each field name is also the
+property persisted in the credentials file, alongside `method: "stored"`
+(the `--method` value). Validation applies to both paths.
 The generated `storedSchema` validates credential reads and writes.
 `readEnvironment` resolves CI credentials, while `environment` documents
 the variables it consumes. Missing stored credentials appear as
@@ -214,8 +215,8 @@ alchemy profile refresh --provider Stripe    # re-authenticate without changing 
 alchemy profile edit --reconfigure Stripe    # replace the stored credentials interactively
 
 # non-interactive (agents, scripts): value from env, stdin, or a literal
-alchemy profile edit --add stripe --set apiKey=env:STRIPE_API_KEY
-op read op://vault/stripe/key | alchemy profile edit --add stripe --set apiKey=-
+alchemy profile edit --add stripe --method stored --set apiKey=env:STRIPE_API_KEY
+op read op://vault/stripe/key | alchemy profile edit --add stripe --method stored --set apiKey=-
 
 alchemy profile show       # renders your provider's details
 alchemy provider check-env --provider stripe   # CI preflight for STRIPE_API_KEY

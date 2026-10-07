@@ -1,22 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as argo from "@distilled.cloud/cloudflare/argo";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Argo Smart Routing is a paid, usage-billed add-on. On the testing
 // account's zone every GET/PATCH of `/argo/smart_routing` fails with
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -64,98 +58,99 @@ const setBaseline = (zoneId: string, value: "on" | "off") =>
     }),
   );
 
-describe.sequential("SmartRouting", () => {
-  test.provider(
-    "surfaces the typed NotAuthorized error on zones without the Argo add-on",
-    (stack) =>
+describe.sequential(
+  "SmartRouting",
+  { tags: ["provider:cloudflare", "provider:cloudflare:argo", "live"] },
+  () => {
+    test.provider(
+      "surfaces the typed NotAuthorized error on zones without the Argo add-on",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+
+          // The standard testing zone lacks the paid Argo subscription — the
+          // distilled call must fail with the typed entitlement tag (1015).
+          const error = yield* getSmartRouting(zoneId).pipe(Effect.flip);
+          expect(error._tag).toEqual("NotAuthorized");
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:zone"] },
+    );
+
+    test.provider.skipIf(!entitledZoneId)(
+      "enables Smart Routing and restores the original value on destroy",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = entitledZoneId!;
+
+          yield* stack.destroy();
+          // Known baseline: smart routing off before we manage it.
+          yield* setBaseline(zoneId, "off");
+
+          const setting = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Argo.SmartRouting("SmartRouting", { zoneId });
+            }),
+          );
+
+          expect(setting.zoneId).toEqual(zoneId);
+          expect(setting.value).toEqual("on");
+          // The pre-management value was captured for restore-on-destroy.
+          expect(setting.initialValue).toEqual("off");
+
+          // Out-of-band verification via the distilled API.
+          const live = yield* getSmartRouting(zoneId);
+          expect(live.value).toEqual("on");
+
+          // Update in place — same singleton, initialValue survives.
+          const updated = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
+                zoneId,
+                enabled: false,
+              });
+            }),
+          );
+          expect(updated.value).toEqual("off");
+          expect(updated.initialValue).toEqual("off");
+
+          yield* stack.destroy();
+
+          // Destroy restored the value the setting had before we managed it.
+          const restored = yield* getSmartRouting(zoneId);
+          expect(restored.value).toEqual("off");
+        }).pipe(logLevel),
+    );
+
+    // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+    // API for this per-zone setting, so `list()` enumerates every zone via
+    // `listAllZones` and reads the singleton in each, skipping zones without the
+    // paid Argo subscription (typed `NotAuthorized`, code 1015). On the standard
+    // testing account no zone is Argo-entitled, so `list()` returns an empty
+    // array without throwing; when an entitled zone id is supplied via env, its
+    // entry must be present.
+    test.provider("list enumerates Argo-entitled zones", (stack) =>
       Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+        const provider = yield* Provider.findProvider(Cloudflare.Argo.SmartRouting);
+        const all = yield* provider.list();
 
-        yield* stack.destroy();
+        expect(Array.isArray(all)).toBe(true);
+        // Every returned entry is a real, entitled zone's setting.
+        for (const row of all) {
+          expect(typeof row.zoneId).toBe("string");
+          expect(["on", "off"]).toContain(row.value);
+        }
+        if (entitledZoneId) {
+          expect(all.some((s) => s.zoneId === entitledZoneId)).toBe(true);
+        }
 
-        // The standard testing zone lacks the paid Argo subscription — the
-        // distilled call must fail with the typed entitlement tag (1015).
-        const error = yield* getSmartRouting(zoneId).pipe(Effect.flip);
-        expect(error._tag).toEqual("NotAuthorized");
-
+        // `stack` is unused here (the singleton always exists on every
+        // entitled zone); keep the destroy bookend so harness state stays clean.
         yield* stack.destroy();
       }).pipe(logLevel),
-  );
-
-  test.provider.skipIf(!entitledZoneId)(
-    "enables Smart Routing and restores the original value on destroy",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = entitledZoneId!;
-
-        yield* stack.destroy();
-        // Known baseline: smart routing off before we manage it.
-        yield* setBaseline(zoneId, "off");
-
-        const setting = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
-              zoneId,
-            });
-          }),
-        );
-
-        expect(setting.zoneId).toEqual(zoneId);
-        expect(setting.value).toEqual("on");
-        // The pre-management value was captured for restore-on-destroy.
-        expect(setting.initialValue).toEqual("off");
-
-        // Out-of-band verification via the distilled API.
-        const live = yield* getSmartRouting(zoneId);
-        expect(live.value).toEqual("on");
-
-        // Update in place — same singleton, initialValue survives.
-        const updated = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Argo.SmartRouting("SmartRouting", {
-              zoneId,
-              enabled: false,
-            });
-          }),
-        );
-        expect(updated.value).toEqual("off");
-        expect(updated.initialValue).toEqual("off");
-
-        yield* stack.destroy();
-
-        // Destroy restored the value the setting had before we managed it.
-        const restored = yield* getSmartRouting(zoneId);
-        expect(restored.value).toEqual("off");
-      }).pipe(logLevel),
-  );
-
-  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
-  // API for this per-zone setting, so `list()` enumerates every zone via
-  // `listAllZones` and reads the singleton in each, skipping zones without the
-  // paid Argo subscription (typed `NotAuthorized`, code 1015). On the standard
-  // testing account no zone is Argo-entitled, so `list()` returns an empty
-  // array without throwing; when an entitled zone id is supplied via env, its
-  // entry must be present.
-  test.provider("list enumerates Argo-entitled zones", (stack) =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Argo.SmartRouting,
-      );
-      const all = yield* provider.list();
-
-      expect(Array.isArray(all)).toBe(true);
-      // Every returned entry is a real, entitled zone's setting.
-      for (const row of all) {
-        expect(typeof row.zoneId).toBe("string");
-        expect(["on", "off"]).toContain(row.value);
-      }
-      if (entitledZoneId) {
-        expect(all.some((s) => s.zoneId === entitledZoneId)).toBe(true);
-      }
-
-      // `stack` is unused here (the singleton always exists on every
-      // entitled zone); keep the destroy bookend so harness state stays clean.
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  );
-});
+    );
+  },
+);

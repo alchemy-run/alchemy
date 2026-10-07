@@ -27,10 +27,7 @@ export interface GetRevealConfiguration extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.GetRevealConfigurationRequest,
-    ) => Effect.Effect<
-      macie2.GetRevealConfigurationResponse,
-      macie2.GetRevealConfigurationError
-    >
+    ) => Effect.Effect<macie2.GetRevealConfigurationResponse, macie2.GetRevealConfigurationError>
   >
 > {}
 export const GetRevealConfiguration = Binding.Service<GetRevealConfiguration>(

@@ -52,7 +52,6 @@ export interface DeleteWhatsAppMessageTemplate extends Binding.Service<
     >
   >
 > {}
-export const DeleteWhatsAppMessageTemplate =
-  Binding.Service<DeleteWhatsAppMessageTemplate>(
-    "AWS.SocialMessaging.DeleteWhatsAppMessageTemplate",
-  );
+export const DeleteWhatsAppMessageTemplate = Binding.Service<DeleteWhatsAppMessageTemplate>(
+  "AWS.SocialMessaging.DeleteWhatsAppMessageTemplate",
+);

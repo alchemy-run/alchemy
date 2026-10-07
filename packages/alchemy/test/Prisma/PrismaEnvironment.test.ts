@@ -1,61 +1,37 @@
-import { AuthProviders } from "@/Auth/AuthProvider";
-import { CredentialsStore } from "@/Auth/Credentials";
-import { ProfileStore } from "@/Auth/Profile";
-import * as CliKit from "@/Cli/CliKit";
-import {
-  PrismaAuth,
-  type PrismaStoredCredentials,
-} from "@/Prisma/AuthProvider";
-import { PrismaEnvironment, fromProfile } from "@/Prisma/PrismaEnvironment";
-import { describe, expect, it } from "alchemy-test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { makeFakeCredentialsStore, makeFakeProfileStore } from "./fakes.ts";
+import { AuthProviders } from "@/Auth/AuthProvider";
+import { ProfileStore } from "@/Auth/Profile";
+import * as CliKit from "@/Cli/CliKit";
+import { PrismaAuth } from "@/Prisma/AuthProvider";
+import { PrismaEnvironment, fromProfile } from "@/Prisma/PrismaEnvironment";
+import { makeFakeProfileStore } from "./fakes.ts";
 
-const makeProfile = (): ProfileStore["Service"] =>
+const makeProfile = (serviceToken: string): ProfileStore["Service"] =>
   makeFakeProfileStore({
     loadProviderConfig: <Config extends { method: string }>() =>
-      Effect.succeed({ method: "stored" } as Config),
+      Effect.succeed({ method: "stored", serviceToken } as unknown as Config),
   });
 
-const makeCredentialsStore = (
-  serviceToken?: string,
-): CredentialsStore["Service"] =>
-  makeFakeCredentialsStore(
-    serviceToken
-      ? ({ serviceToken } satisfies PrismaStoredCredentials)
-      : undefined,
-  );
-
-const testLayer = (
-  config: Record<string, string>,
-  options: {
-    storedToken?: string;
-  } = {},
-) => {
+const testLayer = (config: Record<string, string>, options: { storedToken?: string } = {}) => {
   const authProviders: AuthProviders["Service"] = {};
   return fromProfile().pipe(
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
-    Layer.provideMerge(Layer.succeed(ProfileStore, makeProfile())),
     Layer.provideMerge(
-      Layer.succeed(
-        CredentialsStore,
-        makeCredentialsStore(options.storedToken),
-      ),
+      Layer.succeed(ProfileStore, makeProfile(options.storedToken ?? "test-token")),
     ),
-    Layer.provideMerge(
-      ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
-    ),
+    Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown(config))),
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(CliKit.layer({ input: false })),
   );
 };
 
-describe("PrismaEnvironment", () => {
+describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect("resolves stored credentials and API base URL from config", () =>
     Effect.gen(function* () {
       const env = yield* PrismaEnvironment;
@@ -100,16 +76,7 @@ describe("PrismaEnvironment", () => {
       expect(env.source).toEqual({ type: "stored" });
       expect(Redacted.value(env.serviceToken)).toBe("stored-token");
       expect(env.baseUrl).toBe("https://api.prisma.io");
-    }).pipe(
-      Effect.provide(
-        testLayer(
-          {},
-          {
-            storedToken: "stored-token",
-          },
-        ),
-      ),
-    ),
+    }).pipe(Effect.provide(testLayer({}, { storedToken: "stored-token" }))),
   );
 
   it.effect("allows HTTP only for loopback Management API URLs", () =>
@@ -118,10 +85,7 @@ describe("PrismaEnvironment", () => {
       expect(env.baseUrl).toBe("http://127.0.0.1:8787");
     }).pipe(
       Effect.provide(
-        testLayer(
-          { PRISMA_API_URL: "http://127.0.0.1:8787/" },
-          { storedToken: "test-token" },
-        ),
+        testLayer({ PRISMA_API_URL: "http://127.0.0.1:8787/" }, { storedToken: "test-token" }),
       ),
     ),
   );
@@ -157,9 +121,7 @@ describe("PrismaEnvironment", () => {
       );
       expect(credentialExit._tag).toBe("Failure");
       if (credentialExit._tag === "Failure") {
-        expect(String(credentialExit.cause)).toContain(
-          "must not contain credentials",
-        );
+        expect(String(credentialExit.cause)).toContain("must not contain credentials");
       }
 
       const pathExit = yield* PrismaEnvironment.pipe(

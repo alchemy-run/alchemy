@@ -53,6 +53,74 @@ export interface BudgetNotification {
   subscribers: BudgetSubscriber[];
 }
 
+/**
+ * The types of cost included in a `COST` budget, such as tax and
+ * subscriptions. Other budget types do not have cost types. A flag left out
+ * is sent with its AWS default.
+ *
+ * AWS deprecated cost types in favor of budget metrics and filter
+ * expressions, but the Budgets API still accepts them.
+ */
+export interface BudgetCostTypes {
+  /**
+   * Whether the budget includes taxes.
+   * @default true
+   */
+  includeTax?: boolean;
+  /**
+   * Whether the budget includes subscriptions.
+   * @default true
+   */
+  includeSubscription?: boolean;
+  /**
+   * Whether the budget uses the blended rate.
+   * @default false
+   */
+  useBlended?: boolean;
+  /**
+   * Whether the budget includes refunds.
+   * @default true
+   */
+  includeRefund?: boolean;
+  /**
+   * Whether the budget includes credits.
+   * @default true
+   */
+  includeCredit?: boolean;
+  /**
+   * Whether the budget includes upfront reserved instance costs.
+   * @default true
+   */
+  includeUpfront?: boolean;
+  /**
+   * Whether the budget includes recurring fees, such as monthly reserved
+   * instance fees.
+   * @default true
+   */
+  includeRecurring?: boolean;
+  /**
+   * Whether the budget includes subscription costs other than reserved
+   * instances.
+   * @default true
+   */
+  includeOtherSubscription?: boolean;
+  /**
+   * Whether the budget includes support subscription fees.
+   * @default true
+   */
+  includeSupport?: boolean;
+  /**
+   * Whether the budget includes discounts.
+   * @default true
+   */
+  includeDiscount?: boolean;
+  /**
+   * Whether the budget uses the amortized rate.
+   * @default false
+   */
+  useAmortized?: boolean;
+}
+
 export interface BudgetProps {
   /**
    * Name of the budget. Must be unique within the account. If omitted, a
@@ -93,6 +161,12 @@ export interface BudgetProps {
    * `{ Service: ["Amazon Elastic Compute Cloud - Compute"] }`.
    */
   costFilters?: Record<string, string[]>;
+  /**
+   * The types of cost included in a `COST` budget, e.g.
+   * `{ includeCredit: false, includeRefund: false }` to track spend before
+   * credits and refunds.
+   */
+  costTypes?: BudgetCostTypes;
   /**
    * Notifications and their subscribers.
    */
@@ -162,6 +236,14 @@ export interface Budget extends Resource<
  * });
  * ```
  *
+ * **Example:** Budget that credits and refunds do not offset
+ * ```typescript
+ * const budget = yield* Budgets.Budget("GrossSpend", {
+ *   budgetLimit: { amount: "600", unit: "USD" },
+ *   costTypes: { includeCredit: false, includeRefund: false },
+ * });
+ * ```
+ *
  * @resource
  */
 export const Budget = Resource<Budget>("AWS.Budgets.Budget");
@@ -188,6 +270,20 @@ const toNotification = (n: BudgetNotification): budgets.Notification => ({
   ThresholdType: n.thresholdType ?? "PERCENTAGE",
 });
 
+const toCostTypes = (c: BudgetCostTypes): budgets.CostTypes => ({
+  IncludeTax: c.includeTax ?? true,
+  IncludeSubscription: c.includeSubscription ?? true,
+  UseBlended: c.useBlended ?? false,
+  IncludeRefund: c.includeRefund ?? true,
+  IncludeCredit: c.includeCredit ?? true,
+  IncludeUpfront: c.includeUpfront ?? true,
+  IncludeRecurring: c.includeRecurring ?? true,
+  IncludeOtherSubscription: c.includeOtherSubscription ?? true,
+  IncludeSupport: c.includeSupport ?? true,
+  IncludeDiscount: c.includeDiscount ?? true,
+  UseAmortized: c.useAmortized ?? false,
+});
+
 /**
  * Distilled marks `Subscriber.Address` sensitive, so observed subscribers
  * come back as `Redacted` — unwrap before diffing, or every observed
@@ -208,16 +304,10 @@ export const BudgetProvider = () =>
         id: string,
         props: { budgetName?: string | undefined },
       ) {
-        return (
-          props.budgetName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.budgetName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
-      const buildBudget = (
-        name: string,
-        props: BudgetProps,
-      ): budgets.Budget => ({
+      const buildBudget = (name: string, props: BudgetProps): budgets.Budget => ({
         BudgetName: name,
         BudgetType: props.budgetType ?? "COST",
         TimeUnit: props.timeUnit ?? "MONTHLY",
@@ -225,6 +315,7 @@ export const BudgetProvider = () =>
           ? { Amount: props.budgetLimit.amount, Unit: props.budgetLimit.unit }
           : undefined,
         CostFilters: props.costFilters,
+        CostTypes: props.costTypes ? toCostTypes(props.costTypes) : undefined,
       });
 
       const syncNotifications = Effect.fn(function* (
@@ -239,9 +330,7 @@ export const BudgetProvider = () =>
           })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Notifications ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Notifications ?? [])),
             Effect.catchTag("NotFoundException", () => Effect.succeed([])),
           );
         const currentKeys = new Set(current.map(notificationKey));
@@ -250,12 +339,10 @@ export const BudgetProvider = () =>
 
         for (const n of desired) {
           const notif = toNotification(n);
-          const desiredSubscribers = n.subscribers.map(
-            (s): budgets.Subscriber => ({
-              SubscriptionType: s.subscriptionType,
-              Address: s.address,
-            }),
-          );
+          const desiredSubscribers = n.subscribers.map((s): budgets.Subscriber => ({
+            SubscriptionType: s.subscriptionType,
+            Address: s.address,
+          }));
           if (!currentKeys.has(notificationKey(notif))) {
             // The notification listing is eventually consistent — right after
             // `createBudget(NotificationsWithSubscribers)` it can come back
@@ -268,9 +355,7 @@ export const BudgetProvider = () =>
                 Notification: notif,
                 Subscribers: desiredSubscribers,
               })
-              .pipe(
-                Effect.catchTag("DuplicateRecordException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("DuplicateRecordException", () => Effect.void));
             continue;
           }
           // The notification already exists — converge its subscribers by
@@ -298,9 +383,7 @@ export const BudgetProvider = () =>
                 Notification: notif,
                 Subscriber: s,
               })
-              .pipe(
-                Effect.catchTag("DuplicateRecordException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("DuplicateRecordException", () => Effect.void));
           }
           for (const s of observedSubscribers) {
             if (desiredSubKeys.has(subscriberKey(s))) continue;
@@ -326,24 +409,15 @@ export const BudgetProvider = () =>
         }
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desired: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desired: Record<string, string>) {
         // Diff against OBSERVED cloud tags (not olds/output) so adoption and
         // out-of-band drift converge correctly.
-        const observed = yield* budgets
-          .listTagsForResource({ ResourceARN: arn })
-          .pipe(
-            Effect.map((r) =>
-              Object.fromEntries(
-                (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-              ),
-            ),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed({} as Record<string, string>),
-            ),
-          );
+        const observed = yield* budgets.listTagsForResource({ ResourceARN: arn }).pipe(
+          Effect.map((r) =>
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
+          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed({} as Record<string, string>)),
+        );
         const { removed, upsert } = diffTags(observed, desired);
         if (upsert.length > 0) {
           yield* budgets.tagResource({
@@ -364,33 +438,26 @@ export const BudgetProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            return yield* budgets.describeBudgets
-              .pages({ AccountId: accountId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.Budgets ?? [])
-                    .map((b) => ({
-                      budgetName: b.BudgetName,
-                      accountId,
-                      budgetArn: budgetArn(accountId, b.BudgetName),
-                    })),
-                ),
-                Effect.catchTag("NotFoundException", () => Effect.succeed([])),
-              );
+            return yield* budgets.describeBudgets.pages({ AccountId: accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.Budgets ?? [])
+                  .map((b) => ({
+                    budgetName: b.BudgetName,
+                    accountId,
+                    budgetArn: budgetArn(accountId, b.BudgetName),
+                  })),
+              ),
+              Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+            );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const name =
-            output?.budgetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.budgetName ?? (yield* createName(id, olds ?? {}));
           const found = yield* budgets
             .describeBudget({ AccountId: accountId, BudgetName: name })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!found?.Budget) return undefined;
           return {
             budgetName: name,
@@ -415,9 +482,7 @@ export const BudgetProvider = () =>
             .describeBudget({ AccountId: accountId, BudgetName: name })
             .pipe(
               Effect.map((r) => r.Budget),
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
             );
 
           if (!live) {

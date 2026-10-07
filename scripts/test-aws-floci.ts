@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 /**
  * Run the live AWS suites for services that have a Floci local provider
  * (`flociDual` / `ProviderLayer.dual` in Providers.ts) under
@@ -10,8 +12,7 @@
  * Extra alchemy-test args are forwarded (`-t`, `--retry`, paths, …).
  */
 import { Glob } from "bun";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { preferLocalFlociImage } from "./floci-image.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const alchemyRoot = join(repoRoot, "packages/alchemy");
@@ -51,11 +52,7 @@ for (let i = 0; i < args.length; i++) {
   const arg = args[i]!;
   if (arg.startsWith("-")) {
     flags.push(arg);
-    if (
-      flagsWithValue.has(arg) &&
-      args[i + 1] &&
-      !args[i + 1]!.startsWith("-")
-    ) {
+    if (flagsWithValue.has(arg) && args[i + 1] && !args[i + 1]!.startsWith("-")) {
       flags.push(args[++i]!);
     }
     continue;
@@ -72,8 +69,7 @@ if (allowedRoots.length === 0) {
   process.exit(1);
 }
 
-const requestedRoots =
-  paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
+const requestedRoots = paths.length > 0 ? paths.map((p) => resolve(alchemyRoot, p)) : allowedRoots;
 
 const files: string[] = [];
 for (const root of requestedRoots) {
@@ -103,25 +99,7 @@ for (const root of requestedRoots) {
 
 process.env.ALCHEMY_TEST_DEV = "1";
 
-// Prefer a locally built `floci:dev` (pnpm floci:build) when it exists —
-// that's how unreleased emulator patches get exercised by this suite. When
-// it doesn't, leave the env unset so the floci package resolves the pinned
-// release image; hard-defaulting to a missing image fails every suite's
-// `docker run` before a single test can run.
-if (!process.env.ALCHEMY_FLOCI_IMAGE) {
-  const devImage = Bun.spawnSync(["docker", "image", "inspect", "floci:dev"], {
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  if (devImage.exitCode === 0) {
-    process.env.ALCHEMY_FLOCI_IMAGE = "floci:dev";
-    console.log("test:aws:floci: using locally built floci:dev image");
-  } else {
-    console.log(
-      "test:aws:floci: no local floci:dev image (pnpm floci:build) — using the pinned release image",
-    );
-  }
-}
+preferLocalFlociImage("test:aws:floci");
 
 if (!flags.includes("--profile")) {
   flags.unshift("--profile", "testing");

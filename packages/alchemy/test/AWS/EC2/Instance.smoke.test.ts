@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
 import TestInstance, { keyPair } from "./fixtures/instance.ts";
 import { assertInstanceTerminated } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -66,9 +66,7 @@ test.provider.skipIf(!!process.env.FAST)(
           Effect.flatMap((res) =>
             res.status === 200
               ? res.json
-              : Effect.fail(
-                  new Error(`${path} temporarily returned ${res.status}`),
-                ),
+              : Effect.fail(new Error(`${path} temporarily returned ${res.status}`)),
           ),
           // cloud-init/systemd can briefly restart the hosted process just
           // after the first successful health probe, especially while a full
@@ -95,5 +93,5 @@ test.provider.skipIf(!!process.env.FAST)(
       // Zero-orphan proof: the (billed) instance reached a terminal state.
       yield* assertInstanceTerminated(instanceId);
     }),
-  { timeout: 1_200_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 1_200_000 },
 );

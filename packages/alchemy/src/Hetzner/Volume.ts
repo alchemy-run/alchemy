@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type {
   GetVolumeResponseVolume,
   ListVolumesResponseVolumesItem,
@@ -44,9 +44,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * Server identity a Volume can attach to at create time. Accepts a
  * `Hetzner.Server` resource or a `{ serverId }` stub.
  */
-export type VolumeServer = {
-  readonly serverId: number;
-};
+export type VolumeServer = { readonly serverId: number };
 
 export interface VolumeProps {
   /**
@@ -174,6 +172,7 @@ export type Volume = Resource<
  * ```
  *
  * @resource
+ * @product Volume
  */
 export const Volume = Resource<Volume>("Hetzner.Volume");
 
@@ -189,13 +188,9 @@ class VolumeTimeout extends Data.TaggedError("VolumeTimeout")<{
   status: string;
 }> {}
 
-class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{
-  name: string;
-}> {}
+class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{ name: string }> {}
 
-const asFormat = (
-  format: string | null | undefined,
-): VolumeFormat | undefined =>
+const asFormat = (format: string | null | undefined): VolumeFormat | undefined =>
   format === "ext4" || format === "xfs" ? format : undefined;
 
 const userLabels = (
@@ -230,38 +225,25 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
-const createVolumeName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createVolumeName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: MAX_NAME_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: MAX_NAME_LENGTH }));
   });
 
 const getById = (id: number) =>
-  Services.volumes.getVolume({ id }).pipe(
+  Hetzner.volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const getByName = (name: string) =>
-  Services.volumes
+  Hetzner.volumes
     .listVolumes({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ volumes }) => volumes.find((item) => item.name === name)),
-    );
+    .pipe(Effect.map(({ volumes }) => volumes.find((item) => item.name === name)));
 
 const getByLabels = (labels: Record<string, string>) =>
-  Services.volumes
-    .listVolumes({
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
+  Hetzner.volumes
+    .listVolumes({ label_selector: labelSelector(labels), per_page: 50 })
     .pipe(Effect.map(({ volumes }) => volumes[0]));
 
 const observe = Effect.fn(function* ({
@@ -286,44 +268,27 @@ const observe = Effect.fn(function* ({
 });
 
 const waitUntilAvailable = (volumeId: number) =>
-  Services.volumes.getVolume({ id: volumeId }).pipe(
+  Hetzner.volumes.getVolume({ id: volumeId }).pipe(
     Effect.flatMap(({ volume }) =>
       volume.status === "available"
         ? Effect.succeed(volume)
-        : Effect.fail(
-            new VolumePending({
-              volumeId: volume.id,
-              status: volume.status,
-            }),
-          ),
+        : Effect.fail(new VolumePending({ volumeId: volume.id, status: volume.status })),
     ),
-    Effect.retry({
-      while: retryable,
-      times: 10,
-      schedule: backoff,
-    }),
+    Effect.retry({ while: retryable, times: 10, schedule: backoff }),
     Effect.catchTag(
       "VolumePending",
-      (e) =>
-        new VolumeTimeout({
-          volumeId: e.volumeId,
-          status: e.status,
-        }),
+      (e) => new VolumeTimeout({ volumeId: e.volumeId, status: e.status }),
     ),
   );
 
 const settleAction = (action: Parameters<typeof waitForAction>[0]) =>
-  waitForAction(action).pipe(
-    Effect.catchTag("ActionTimeout", () => Effect.void),
-  );
+  waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void));
 
 const settleActions = (actions: Parameters<typeof waitForActions>[0]) =>
-  waitForActions(actions).pipe(
-    Effect.catchTag("ActionTimeout", () => Effect.void),
-  );
+  waitForActions(actions).pipe(Effect.catchTag("ActionTimeout", () => Effect.void));
 
 const waitUntilGone = (volumeId: number) =>
-  Services.volumes.getVolume({ id: volumeId }).pipe(
+  Hetzner.volumes.getVolume({ id: volumeId }).pipe(
     Effect.map(() => false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
     Effect.repeat({
@@ -343,7 +308,7 @@ export const VolumeProvider = () =>
   Provider.succeed(Volume, {
     stables: ["id", "linuxDevice", "location", "locationId", "created"],
     list: Effect.fn(function* () {
-      const items = yield* Services.volumes.listVolumes
+      const items = yield* Hetzner.volumes.listVolumes
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -367,11 +332,7 @@ export const VolumeProvider = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
-      const found = yield* observe({
-        id,
-        name: olds?.name ?? output?.name,
-        outputId: output?.id,
-      });
+      const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
@@ -380,20 +341,15 @@ export const VolumeProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* createVolumeName(id, news.name, output?.name);
       const internalLabels = yield* createInternalLabels(id);
-      const desiredLabels = {
-        ...toLabels(news.labels),
-        ...internalLabels,
-      };
+      const desiredLabels = { ...toLabels(news.labels), ...internalLabels };
       const desiredServerId = serverIdOf(news.server);
       const location =
-        news.location ??
-        (desiredServerId === undefined ? DEFAULT_LOCATION : undefined);
+        news.location ?? (desiredServerId === undefined ? DEFAULT_LOCATION : undefined);
 
       // Observe by id then desired name only. Do not fall back to
       // ownership labels — a create-first replacement still has the old
       // generation live under the same logical id.
-      let current =
-        output?.id !== undefined ? yield* getById(output.id) : undefined;
+      let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {
         current = yield* getByName(name);
       }
@@ -401,7 +357,7 @@ export const VolumeProvider = () =>
       // Ensure — create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
-        const created = yield* Services.volumes
+        const created = yield* Hetzner.volumes
           .createVolume({
             name,
             size: Math.max(news.size, MIN_SIZE_GB),
@@ -409,8 +365,7 @@ export const VolumeProvider = () =>
             location,
             labels: desiredLabels,
             server: desiredServerId,
-            automount:
-              desiredServerId !== undefined ? news.automount : undefined,
+            automount: desiredServerId !== undefined ? news.automount : undefined,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
@@ -431,10 +386,9 @@ export const VolumeProvider = () =>
       // updateVolume overwrites the full label set.
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const needsMeta =
-        current.name !== name || upsert.length > 0 || removed.length > 0;
+      const needsMeta = current.name !== name || upsert.length > 0 || removed.length > 0;
       if (needsMeta) {
-        const updated = yield* Services.volumes.updateVolume({
+        const updated = yield* Hetzner.volumes.updateVolume({
           id: current.id,
           name,
           labels: desiredLabels,
@@ -444,7 +398,7 @@ export const VolumeProvider = () =>
 
       // Sync size — grow only. Shrink is a replacement (handled in diff).
       if (news.size > current.size) {
-        const { action } = yield* Services.volumeActions.resizeVolume({
+        const { action } = yield* Hetzner.volumeActions.resizeVolume({
           id: current.id,
           size: news.size,
         });
@@ -456,14 +410,12 @@ export const VolumeProvider = () =>
       const observedServerId = current.server ?? undefined;
       if (desiredServerId !== observedServerId) {
         if (observedServerId !== undefined) {
-          const { action } = yield* Services.volumeActions.detachVolume({
-            id: current.id,
-          });
+          const { action } = yield* Hetzner.volumeActions.detachVolume({ id: current.id });
           yield* settleAction(action);
           current = yield* waitUntilAvailable(current.id);
         }
         if (desiredServerId !== undefined) {
-          const { action } = yield* Services.volumeActions.attachVolume({
+          const { action } = yield* Hetzner.volumeActions.attachVolume({
             id: current.id,
             server: desiredServerId,
             automount: news.automount,
@@ -480,29 +432,24 @@ export const VolumeProvider = () =>
       if (current === undefined) return;
 
       if (current.protection.delete) {
-        const { action } = yield* Services.volumeActions.changeVolumeProtection(
-          {
-            id: current.id,
-            delete: false,
-          },
-        );
+        const { action } = yield* Hetzner.volumeActions.changeVolumeProtection({
+          id: current.id,
+          delete: false,
+        });
         yield* settleAction(action);
       }
 
       const attached = current.server;
       if (attached !== null) {
-        yield* Services.volumeActions.detachVolume({ id: current.id }).pipe(
+        yield* Hetzner.volumeActions.detachVolume({ id: current.id }).pipe(
           Effect.flatMap(({ action }) => settleAction(action)),
           // Server delete detaches the Volume first; treat that race as
           // already-detached.
-          Effect.catchTag(
-            ["NotFound", "UnprocessableEntity"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
         );
       }
 
-      yield* Services.volumes.deleteVolume({ id: current.id }).pipe(
+      yield* Hetzner.volumes.deleteVolume({ id: current.id }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: (e) => retryable(e) || e._tag === "UnprocessableEntity",

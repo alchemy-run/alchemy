@@ -7,7 +7,10 @@ An **Action** is a node in the stack's dependency graph that runs an
 arbitrary Effect during `apply`. Unlike a [Resource](/infrastructure-as-code/resource), it has
 no provider lifecycle — no replace, no read, no delete. The engine just
 diffs the resolved input against the last persisted hash and either runs
-the body or skips it.
+the body or skips it. If Outputs or the plan/persisted-state model are
+new to you, [Outputs](/infrastructure-as-code/outputs) and
+[Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) are the
+background this page builds on.
 
 Actions are useful for one-off deploy-time work that needs to be
 reproducible and dependency-aware: seeding a database, posting a
@@ -101,7 +104,8 @@ bindings and Output accessors below work here too.
 ## Binding resources
 
 An Action's body often needs to *talk to* the resources in your stack —
-seed a database, warm a cache, enqueue a job. Bindings like
+seed a database, warm a cache, enqueue a job.
+[Bindings](/infrastructure-as-effects/binding) like
 [`Cloudflare.D1.QueryDatabase`](/cloudflare/data/d1) normally resolve
 against a deployed Worker's runtime environment, which an Action doesn't
 have. Provide the binding's **`*Local`** layer instead: it talks to the
@@ -210,3 +214,12 @@ Cycles are rejected at plan time just like resource cycles.
   only when inputs change, but the body itself must tolerate retries
   on apply restart (its `running` state is persisted but not its
   side effects).
+
+## Where next
+
+- [Inputs & Outputs](/infrastructure-as-code/outputs) — the lazy values
+  Actions take as input and produce. Next page.
+- [Resource Lifecycle](/infrastructure-as-code/resource-lifecycle) — the
+  plan/apply model Actions participate in.
+- [Bindings](/infrastructure-as-effects/binding) — the runtime clients
+  Actions reuse via `*Local` layers.

@@ -16,11 +16,7 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { resolveOrgSlug } from "./Environment.ts";
-import {
-  createFlyAppName,
-  matchesAlchemyPhysicalName,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
+import { createFlyAppName, matchesAlchemyPhysicalName, sanitizeFlyAppName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DEFAULT_REDIS_REGION = "iad";
@@ -102,6 +98,11 @@ export type Redis = Resource<
     orgSlug: string | undefined;
     /** Whether eviction is enabled. */
     eviction: boolean | undefined;
+    /**
+     * Redacted Upstash connection URL. Bindings transport it to the
+     * runtime automatically. Service attachments also set `REDIS_URL`.
+     */
+    url: Redacted.Redacted<string> | undefined;
   },
   never,
   Providers
@@ -110,9 +111,9 @@ export type Redis = Resource<
 /**
  * Managed Upstash Redis in a Fly org. Bind {@link ReadRedis},
  * {@link WriteRedis}, or {@link ReadWriteRedis} on a {@link Service}.
- * Alchemy writes `REDIS_URL` as an App secret and the runtime client
- * uses it internally. Redis is not reachable from CI — drive it over
- * HTTP.
+ * Alchemy transports the redacted `url` Output to the runtime client
+ * and also writes `REDIS_URL` as an App secret for compatibility.
+ * Redis is not reachable from CI — drive it over HTTP.
  *
  * @see https://fly.io/docs/upstash/redis/
  *
@@ -158,7 +159,7 @@ export type Redis = Resource<
  *
  * **Example:** Read and write
  * ```typescript
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * const Cache = Fly.Redis("Cache");
  *
@@ -216,6 +217,7 @@ export type Redis = Resource<
  * :::
  *
  * @resource
+ * @product Redis
  */
 export const Redis = Resource<Redis>("Fly.Redis");
 
@@ -224,9 +226,7 @@ export class RedisNotCreated extends Data.TaggedError("Fly.RedisNotCreated")<{
   errorMessage?: string;
 }> {}
 
-export class RedisPlanNotFound extends Data.TaggedError(
-  "Fly.RedisPlanNotFound",
-)<{
+export class RedisPlanNotFound extends Data.TaggedError("Fly.RedisPlanNotFound")<{
   plan: string;
 }> {}
 
@@ -281,10 +281,7 @@ const pendingStatus = (status: string | null | undefined): boolean => {
   if (status == null || status.length === 0) return false;
   const value = status.toLowerCase();
   return (
-    value === "pending" ||
-    value === "provisioning" ||
-    value === "creating" ||
-    value === "launching"
+    value === "pending" || value === "provisioning" || value === "creating" || value === "launching"
   );
 };
 
@@ -295,9 +292,7 @@ const failedStatus = (status: string | null | undefined): boolean => {
 };
 
 const isLegacyPlanName = (plan: RedisPlan): boolean => {
-  const normalized = (plan.displayName ?? plan.name ?? "")
-    .toLowerCase()
-    .replaceAll(" ", "_");
+  const normalized = (plan.displayName ?? plan.name ?? "").toLowerCase().replaceAll(" ", "_");
   return (
     normalized === "pro_2k" ||
     normalized === "pro_10k" ||
@@ -306,9 +301,7 @@ const isLegacyPlanName = (plan: RedisPlan): boolean => {
   );
 };
 
-export const isFixedRedisPlan = (
-  plan: Pick<RedisPlan, "name" | "displayName">,
-): boolean => {
+export const isFixedRedisPlan = (plan: Pick<RedisPlan, "name" | "displayName">): boolean => {
   const display = (plan.displayName ?? "").toLowerCase();
   const name = (plan.name ?? "").toLowerCase();
   return display.startsWith("fixed ") || name.startsWith("flyio_fixed_");
@@ -321,8 +314,7 @@ const hasAlchemyMetadata = (metadata: unknown): boolean => {
 };
 
 const isOwnedRedis = (row: ObservedRedis): boolean =>
-  matchesAlchemyPhysicalName(row.name ?? undefined) ||
-  hasAlchemyMetadata(row.metadata);
+  matchesAlchemyPhysicalName(row.name ?? undefined) || hasAlchemyMetadata(row.metadata);
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -331,6 +323,15 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
     return yield* createFlyAppName(id);
   });
 
+const urlOf = (
+  row: ObservedRedis,
+  previous?: Redacted.Redacted<string>,
+): Redacted.Redacted<string> | undefined => {
+  const raw = unwrapSensitive(row.publicUrl);
+  if (raw !== undefined && raw.length > 0) return Redacted.make(raw);
+  return previous;
+};
+
 const toAttrs = (
   row: ObservedRedis,
   fallback: {
@@ -338,6 +339,7 @@ const toAttrs = (
     primaryRegion: string;
     orgSlug?: string;
     planId?: string;
+    url?: Redacted.Redacted<string>;
   },
 ): Redis["Attributes"] => ({
   redisId: row.id,
@@ -347,17 +349,16 @@ const toAttrs = (
   status: row.status ?? undefined,
   planId:
     "addOnPlan" in row
-      ? ((row.addOnPlan as { id?: string } | null | undefined)?.id ??
-        fallback.planId)
+      ? ((row.addOnPlan as { id?: string } | null | undefined)?.id ?? fallback.planId)
       : fallback.planId,
   planName: row.addOnPlanName ?? undefined,
   privateIp: row.privateIp ?? undefined,
   orgSlug:
     "organization" in row
-      ? ((row.organization as { slug?: string | null } | undefined)?.slug ??
-        fallback.orgSlug)
+      ? ((row.organization as { slug?: string | null } | undefined)?.slug ?? fallback.orgSlug)
       : fallback.orgSlug,
   eviction: evictionOf(row.options),
+  url: urlOf(row, fallback.url),
 });
 
 export const listRedisAddOns = Effect.fn(function* () {
@@ -422,23 +423,17 @@ const cheapestPlan = (plans: RedisPlan[]) => {
     );
   });
   const payg = ranked.find((plan) =>
-    /pay.?as.?you.?go|free/i.test(
-      `${plan.displayName ?? ""} ${plan.name ?? ""}`,
-    ),
+    /pay.?as.?you.?go|free/i.test(`${plan.displayName ?? ""} ${plan.name ?? ""}`),
   );
   return payg ?? ranked[0];
 };
 
-const resolvePlan = (
-  plan: string | undefined,
-  existingId: string | undefined,
-) =>
+const resolvePlan = (plan: string | undefined, existingId: string | undefined) =>
   Effect.gen(function* () {
     const plans = yield* listRedisPlans();
     if (plan !== undefined) {
       const found = plans.find(
-        (item) =>
-          item.id === plan || item.name === plan || item.displayName === plan,
+        (item) => item.id === plan || item.name === plan || item.displayName === plan,
       );
       if (found === undefined) {
         return yield* new RedisPlanNotFound({ plan });
@@ -483,16 +478,9 @@ const ensureTos = (orgSlug: string, organizationId: string) =>
 const waitUntilReady = (id: string, name: string) =>
   findRedisAddOn({ id, name }).pipe(
     Effect.flatMap(
-      (
-        row,
-      ): Effect.Effect<
-        AddOnsResponseEdgesItemNode,
-        RedisPending | RedisNotCreated
-      > => {
+      (row): Effect.Effect<AddOnsResponseEdgesItemNode, RedisPending | RedisNotCreated> => {
         if (row === undefined) {
-          return Effect.fail(
-            new RedisPending({ redisId: id, status: "missing" }),
-          );
+          return Effect.fail(new RedisPending({ redisId: id, status: "missing" }));
         }
         if (failedStatus(row.status)) {
           return Effect.fail(
@@ -549,16 +537,32 @@ const desiredOptions = (
   return options;
 };
 
+class RedisSecretVersionMissing extends Data.TaggedError("Fly.RedisSecretVersionMissing")<{
+  appName: string;
+}> {}
+
+const redisSecretVersion = (
+  appName: string,
+  response: machines.AppSecretsUpdateResp | machines.SetAppSecretResponse,
+) => {
+  const version = response.version ?? response.Version;
+  return version !== undefined && Number.isSafeInteger(version) && version >= 0
+    ? Effect.succeed(version)
+    : Effect.fail(new RedisSecretVersionMissing({ appName }));
+};
+
 /**
  * Write `REDIS_URL` onto an App from attached Redis add-on names.
  * Called from {@link Service} reconcile so the secret exists before
- * Machines boot.
+ * Machines boot. Returns the highest accepted secret-version floor, or
+ * `undefined` when no secret was written; this is not a vault snapshot.
  */
 export const attachRedisSecrets = Effect.fn(function* (
   appName: string,
   attached: readonly { name: string; id?: string }[],
 ) {
-  if (appName.length === 0 || attached.length === 0) return;
+  if (appName.length === 0 || attached.length === 0) return undefined;
+  const versions: number[] = [];
   for (const item of attached) {
     const name = item.name;
     const id = item.id;
@@ -581,33 +585,49 @@ export const attachRedisSecrets = Effect.fn(function* (
       }),
       Effect.catchTag("Fly.RedisPending", () => findRedisAddOn({ id, name })),
     );
-    if (row === undefined) continue;
+    if (row === undefined) {
+      return yield* new RedisPending({
+        redisId: id ?? name,
+        status: "missing",
+      });
+    }
     let url = unwrapSensitive(row.publicUrl);
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
       const detail = yield* addons
         .addOn({ id: row.id })
-        .pipe(
-          Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
       url = unwrapSensitive(detail?.publicUrl);
     }
-    if (url === undefined || url.length === 0) continue;
-    const updated = yield* Effect.result(
-      machines.updateSecrets({
-        app_name: appName,
-        values: { [REDIS_URL_ENV]: url },
-      }),
-    );
-    if (Result.isFailure(updated)) {
-      yield* machines
-        .createSecret({
-          app_name: appName,
-          secret_name: REDIS_URL_ENV,
-          value: url,
-        })
-        .pipe(Effect.catchTag("Conflict", () => Effect.void));
+    if (url === undefined || url.length === 0) {
+      return yield* new RedisPending({
+        redisId: row.id ?? id ?? name,
+        status: "credentials missing",
+      });
     }
+    const value = url;
+    const update = machines
+      .updateSecrets({
+        app_name: appName,
+        values: { [REDIS_URL_ENV]: value },
+      })
+      .pipe(Effect.flatMap((response) => redisSecretVersion(appName, response)));
+    const version = yield* update.pipe(
+      Effect.catchTag("NotFound", () =>
+        machines
+          .createSecret({
+            app_name: appName,
+            secret_name: REDIS_URL_ENV,
+            value,
+          })
+          .pipe(
+            Effect.flatMap((response) => redisSecretVersion(appName, response)),
+            Effect.catchTag("Conflict", () => update),
+          ),
+      ),
+    );
+    versions.push(version);
   }
+  return versions.length > 0 ? Math.max(...versions) : undefined;
 });
 
 export const RedisProvider = () =>
@@ -617,13 +637,11 @@ export const RedisProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
-      const desiredName =
-        news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
+      const desiredName = news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
       const nameChanged = desiredName !== output.name;
       const desiredRegion = news.primaryRegion ?? DEFAULT_REDIS_REGION;
       const regionChanged = desiredRegion !== output.primaryRegion;
-      const orgChanged =
-        news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
+      const orgChanged = news.orgSlug !== undefined && news.orgSlug !== output.orgSlug;
       if (nameChanged || regionChanged || orgChanged) {
         return {
           action: "replace" as const,
@@ -644,6 +662,7 @@ export const RedisProvider = () =>
         name,
         primaryRegion: olds?.primaryRegion ?? DEFAULT_REDIS_REGION,
         orgSlug: olds?.orgSlug ?? output?.orgSlug,
+        url: output?.url,
       });
       if (output !== undefined) return attrs;
       return isOwnedRedis(found) ? attrs : Unowned(attrs);
@@ -667,8 +686,7 @@ export const RedisProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? {};
       const name = yield* resolveName(id, props.name, output?.name);
-      const primaryRegion =
-        props.primaryRegion ?? output?.primaryRegion ?? DEFAULT_REDIS_REGION;
+      const primaryRegion = props.primaryRegion ?? output?.primaryRegion ?? DEFAULT_REDIS_REGION;
       const orgSlug = props.orgSlug ?? (yield* resolveOrgSlug());
       const org = yield* resolveOrganization(orgSlug);
       if (org === undefined) {
@@ -682,18 +700,13 @@ export const RedisProvider = () =>
               name: output.name,
             })
           : undefined;
-      if (
-        current === undefined &&
-        (output === undefined || output.name !== name)
-      ) {
+      if (current === undefined && (output === undefined || output.name !== name)) {
         current = yield* findRedisAddOn({ name });
       }
 
       const plan = yield* resolvePlan(
         props.plan,
-        current !== undefined && "addOnPlan" in current
-          ? current.addOnPlan?.id
-          : output?.planId,
+        current !== undefined && "addOnPlan" in current ? current.addOnPlan?.id : output?.planId,
       );
 
       if (current === undefined) {
@@ -736,14 +749,10 @@ export const RedisProvider = () =>
 
       const observedOptions = recordOf(current.options);
       const nextOptions = desiredOptions(props, plan, current.options);
-      const nextReadRegions = sorted(
-        props.readRegions ?? current.readRegions ?? [],
-      );
+      const nextReadRegions = sorted(props.readRegions ?? current.readRegions ?? []);
       const observedReadRegions = sorted(current.readRegions);
-      const observedPlanId =
-        "addOnPlan" in current ? current.addOnPlan?.id : output?.planId;
-      const planChanged =
-        observedPlanId !== undefined && observedPlanId !== plan.id;
+      const observedPlanId = "addOnPlan" in current ? current.addOnPlan?.id : output?.planId;
+      const planChanged = observedPlanId !== undefined && observedPlanId !== plan.id;
       const regionsChanged = !deepEqual(observedReadRegions, nextReadRegions);
       const optionsChanged = !deepEqual(observedOptions, nextOptions);
       const prodPackChanged = props.prodPack !== undefined && planChanged;
@@ -774,13 +783,17 @@ export const RedisProvider = () =>
         }
       }
 
-      const latest =
-        (yield* findRedisAddOn({ id: current.id, name })) ?? current;
+      let latest = (yield* findRedisAddOn({ id: current.id, name })) ?? current;
+      if (unwrapSensitive(latest.publicUrl) === undefined && latest.id !== undefined) {
+        const detail = yield* addons.addOn({ id: latest.id });
+        latest = { ...latest, ...detail };
+      }
       return toAttrs(latest, {
         name,
         primaryRegion,
         orgSlug,
         planId: plan.id,
+        url: output?.url,
       });
     }),
 
@@ -792,10 +805,7 @@ export const RedisProvider = () =>
       }
       const deleted = yield* Effect.result(
         addons.deleteAddOn({
-          input:
-            redisId.length > 0
-              ? { addOnId: redisId }
-              : { name, provider: REDIS_PROVIDER },
+          input: redisId.length > 0 ? { addOnId: redisId } : { name, provider: REDIS_PROVIDER },
         }),
       );
       if (Result.isFailure(deleted)) {

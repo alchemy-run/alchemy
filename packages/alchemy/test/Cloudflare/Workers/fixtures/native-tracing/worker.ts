@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /** KV namespace read by `/fanout` so each fiber emits a platform span. */
 export const Store = Cloudflare.KV.Namespace("NativeTracingStore");
@@ -129,9 +129,7 @@ export const tracedWorkerImpl = Effect.gen(function* () {
               Effect.ignore,
             );
             const sleeper = yield* Effect.forkChild(
-              Effect.sleep("30 seconds").pipe(
-                Effect.withSpan("interrupted.child"),
-              ),
+              Effect.sleep("30 seconds").pipe(Effect.withSpan("interrupted.child")),
             );
             yield* Effect.sleep("10 millis");
             yield* Fiber.interrupt(sleeper);
@@ -160,32 +158,26 @@ export const tracedWorkerImpl = Effect.gen(function* () {
       }
 
       if (url.pathname === "/sampled") {
-        const sampled = yield* Effect.gen(function* () {
-          const outer = yield* currentSampled;
-          const child = yield* currentSampled.pipe(
-            Effect.withSpan("sampled.child"),
-          );
-          return { operation: outer, child };
-        }).pipe(Effect.withSpan("operation"));
+        const sampled = yield* operation(
+          Effect.gen(function* () {
+            const outer = yield* currentSampled;
+            const child = yield* currentSampled.pipe(Effect.withSpan("sampled.child"));
+            return { operation: outer, child };
+          }),
+        );
         return yield* HttpServerResponse.json({
           marker: "native-did-sample",
           ...sampled,
         });
       }
 
-      if (
-        url.pathname === "/work" ||
-        url.pathname === "/one" ||
-        url.pathname === "/two"
-      ) {
+      if (url.pathname === "/work" || url.pathname === "/one" || url.pathname === "/two") {
         const work = Effect.gen(function* () {
           yield* Effect.annotateCurrentSpan("request.id", requestId);
           yield* Effect.annotateCurrentSpan("scalar.number", 42);
           yield* Effect.annotateCurrentSpan("scalar.boolean", true);
           yield* Effect.annotateCurrentSpan("unsupported", { nested: true });
-          yield* Effect.log("native-tracing-log").pipe(
-            Effect.withSpan("native.child"),
-          );
+          yield* Effect.log("native-tracing-log").pipe(Effect.withSpan("native.child"));
           return yield* HttpServerResponse.json({
             marker: "native-did-work",
             path: requestId,
@@ -200,15 +192,15 @@ export const tracedWorkerImpl = Effect.gen(function* () {
   Effect.provide(
     Layer.unwrap(
       Effect.gen(function* () {
-        const collectorUrl = yield* Config.string("COLLECTOR_URL").pipe(
+        const collectorUrl = yield* Config.String("COLLECTOR_URL").pipe(
           Effect.orElseSucceed(() => undefined),
         );
-        const composeOrder = yield* Config.string("COMPOSE_ORDER").pipe(
+        const composeOrder = yield* Config.String("COMPOSE_ORDER").pipe(
           Effect.orElseSucceed(() => "cf-last"),
         );
-        const headSamplingRate = yield* Config.number(
-          "HEAD_SAMPLING_RATE",
-        ).pipe(Effect.orElseSucceed(() => 1));
+        const headSamplingRate = yield* Config.Number("HEAD_SAMPLING_RATE").pipe(
+          Effect.orElseSucceed(() => 1),
+        );
         const native = Layer.mergeAll(
           Cloudflare.Telemetry({ headSamplingRate, persist: true }),
           Cloudflare.KV.ReadNamespaceBinding,
@@ -236,10 +228,7 @@ export const tracedWorkerImpl = Effect.gen(function* () {
  * Construct an Effect-native traced Worker with extra test-site props
  * (streaming tails, experimental flags). `main` is this file.
  */
-export const makeTracedWorker = (
-  id: string,
-  props: Partial<WorkerProps> = {},
-) =>
+export const makeTracedWorker = (id: string, props: Partial<WorkerProps> = {}) =>
   Cloudflare.Worker(
     id,
     {

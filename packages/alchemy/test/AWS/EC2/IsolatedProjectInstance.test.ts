@@ -1,15 +1,10 @@
-import * as AWS from "@/AWS";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  materializeIsolatedProject,
-  removeIsolatedProject,
-} from "../../IsolatedProject.ts";
-import IsolatedProjectInstance, {
-  project,
-} from "./fixtures/isolated-project-instance.ts";
+import * as AWS from "@/AWS";
+import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
+import IsolatedProjectInstance, { project } from "./fixtures/isolated-project-instance.ts";
 import { assertInstanceTerminated } from "./Gone.ts";
 import * as Test from "./VpcTest.ts";
 
@@ -65,5 +60,5 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
         yield* removeIsolatedProject(project);
       }
     }),
-  { timeout: 1_200_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 1_200_000 },
 );

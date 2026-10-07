@@ -31,17 +31,13 @@ export interface UpdateOrganizationConfiguration extends Binding.Service<
     graph: Graph,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        detective.UpdateOrganizationConfigurationRequest,
-        "GraphArn"
-      >,
+      request?: Omit<detective.UpdateOrganizationConfigurationRequest, "GraphArn">,
     ) => Effect.Effect<
       detective.UpdateOrganizationConfigurationResponse,
       detective.UpdateOrganizationConfigurationError
     >
   >
 > {}
-export const UpdateOrganizationConfiguration =
-  Binding.Service<UpdateOrganizationConfiguration>(
-    "AWS.Detective.UpdateOrganizationConfiguration",
-  );
+export const UpdateOrganizationConfiguration = Binding.Service<UpdateOrganizationConfiguration>(
+  "AWS.Detective.UpdateOrganizationConfiguration",
+);
