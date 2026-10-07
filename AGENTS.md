@@ -1015,11 +1015,11 @@ pnpm exec tsc -b
 
 This runs the TypeScript compiler in build mode, which checks all projects in the workspace (including the distilled packages, which are project references). This is critical because CI will fail if there are type errors.
 
-`@alchemy.run/cloudflare-runtime` and `@alchemy.run/frontend-frameworks` resolve their types and bundled workers from `dist/`, so they must be built before type checking, tests, or local deploys. `pnpm ensure:built` ([scripts/ensure-built.ts](./scripts/ensure-built.ts)) rebuilds them only when `dist/` is missing or a non-test file in the package or its workspace dependencies changed since the last build (tracked by `dist/.build-stamp`). It runs on every `pnpm install` (root `prepare`) and before `pnpm test` and `pnpm typecheck` (`ensure:built` + `tsc -b`). After editing those packages, run it yourself before a bare `pnpm exec tsc -b` or an `alchemy dev`.
-
-Workspace builds use pnpm's task graph (`tasks` in `pnpm-workspace.yaml`). Every package under `packages/` splits its build in two: `build:package` compiles just that package, and `build` runs `build:package` over the package and all of its workspace dependencies in order. So `pnpm build` inside `packages/alchemy` (or any other package) builds everything it depends on first. Root scripts that build several packages call `pnpm -r --filter ... run build:package` directly.
-
-`build:package` is `node scripts/build.ts` in each package. It declares the package's options and compile steps and hands them to the shared [scripts/package-build.ts](./scripts/package-build.ts). That module generates `publishConfig.exports` from the source `exports`, copies the license files, runs the steps, writes the `.build-stamp` that `ensure:built` reads, and prints per-step timings. Each build's timings are also appended to the package's `.cache/build-timings.jsonl`.
+```bash
+pnpm typecheck      # rebuild stale dist packages, then tsc -b
+pnpm ensure:built   # rebuild cloudflare-runtime / frontend-frameworks if stale
+pnpm build          # in a package: builds it and its workspace dependencies
+```
 
 ## Running tests
 
