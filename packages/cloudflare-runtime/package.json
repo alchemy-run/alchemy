@@ -716,7 +716,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "prebuild:package": "pnpm -w sync:package-files cloudflare-runtime",
+    "build:package": "tsc -b ../../submodules/distilled/packages/cloudflare/tsconfig.json && tsdown",
+    "postbuild:package": "pnpm -w build:stamp cloudflare-runtime",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",

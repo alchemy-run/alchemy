@@ -33,22 +33,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "bun": "./src/index.ts",
-      "import": "./src/index.ts"
-    },
-    "./Registry": {
-      "bun": "./src/Registry.ts",
-      "import": "./src/Registry.ts"
-    },
-    "./Manifest": {
-      "bun": "./src/Manifest.ts",
-      "import": "./src/Manifest.ts"
-    },
-    "./Protocol": {
-      "bun": "./src/Protocol.ts",
-      "import": "./src/Protocol.ts"
-    }
+    ".": "./src/index.ts",
+    "./Registry": "./src/Registry.ts",
+    "./Manifest": "./src/Manifest.ts",
+    "./Protocol": "./src/Protocol.ts"
   },
   "publishConfig": {
     "bin": {
@@ -59,31 +47,33 @@
         "types": "./dist/index.d.ts",
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
-        "import": "./dist/index.js"
+        "default": "./dist/index.js"
       },
       "./Registry": {
         "types": "./dist/Registry.d.ts",
         "bun": "./src/Registry.ts",
         "worker": "./src/Registry.ts",
-        "import": "./dist/Registry.js"
+        "default": "./dist/Registry.js"
       },
       "./Manifest": {
         "types": "./dist/Manifest.d.ts",
         "bun": "./src/Manifest.ts",
         "worker": "./src/Manifest.ts",
-        "import": "./dist/Manifest.js"
+        "default": "./dist/Manifest.js"
       },
       "./Protocol": {
         "types": "./dist/Protocol.d.ts",
         "bun": "./src/Protocol.ts",
         "worker": "./src/Protocol.ts",
-        "import": "./dist/Protocol.js"
+        "default": "./dist/Protocol.js"
       }
     },
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts pkg",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "prebuild:package": "pnpm -w sync:package-files pkg",
+    "build:package": "tsc -b",
     "test": "bun test ./test"
   },
   "dependencies": {

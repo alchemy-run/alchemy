@@ -431,7 +431,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts frontend-frameworks",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "prebuild:package": "pnpm -w sync:package-files frontend-frameworks",
+    "build:package": "tsc -b ../../submodules/distilled/packages/aws/tsconfig.json ../../submodules/distilled/packages/cloudflare/tsconfig.json && tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs",
+    "postbuild:package": "pnpm -w build:stamp frontend-frameworks",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:core": "vitest run src/core/test",

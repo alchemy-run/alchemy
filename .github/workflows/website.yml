@@ -24,7 +24,6 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.json"
-      - "turbo.json"
       - ".github/workflows/website.yml"
   pull_request:
     # Label changes create and remove previews without needing another push.
@@ -45,7 +44,6 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.json"
-      - "turbo.json"
       - ".github/workflows/website.yml"
 
 concurrency:
@@ -116,21 +114,15 @@ jobs:
             website-astro-full-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
             website-astro-full-${{ runner.os }}-main-
 
-      - name: Restore Turbo cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.repository_id }}-${{ github.sha }}-${{ github.workflow }}-${{ github.run_attempt }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ github.repository_id }}-${{ github.sha }}-
-            turbo-${{ runner.os }}-${{ github.repository_id }}-
-
       - name: Setup pnpm, Node.js, Bun and install dependencies
         uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
         with:
           cache: true
           install: true
           require-lockfile: true
+
+      - name: Build Cloudflare packages
+        run: pnpm build:cloudflare-packages
 
       - name: Check current preview state
         if: github.event_name == 'pull_request'

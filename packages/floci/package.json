@@ -30,18 +30,24 @@
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "bun": "./src/index.ts",
-      "import": "./lib/index.js"
-    },
+    ".": "./src/index.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./package.json": "./package.json"
+    },
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts floci"
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "prebuild:package": "pnpm -w sync:package-files floci",
+    "build:package": "tsc -b"
   },
   "devDependencies": {
     "@types/node": "catalog:",

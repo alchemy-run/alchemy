@@ -12,7 +12,9 @@
     "./miniflare-module": "./src/miniflare/miniflare-module.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && bun ../../scripts/copy-package-files.ts cloudflare-test-tools",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "prebuild:package": "pnpm -w sync:package-files cloudflare-test-tools",
+    "build:package": "tsc -p tsconfig.json",
     "e2e": "bun run src/e2e/Cli.ts",
     "typecheck": "bun run build"
   },

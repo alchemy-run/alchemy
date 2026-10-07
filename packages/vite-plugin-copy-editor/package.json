@@ -30,18 +30,22 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "bun": "./src/index.ts",
-      "import": "./lib/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      }
+    },
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts vite-plugin-copy-editor",
-    "prepare": "tsc -b",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "prebuild:package": "pnpm -w sync:package-files vite-plugin-copy-editor",
+    "build:package": "tsc -b",
     "test": "bun test ./test"
   },
   "dependencies": {
