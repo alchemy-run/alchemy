@@ -5,9 +5,10 @@ import type { ExpressiveCodePlugin } from "@astrojs/starlight/expressive-code";
  *
  * On main.alchemy.run and PR previews, website.yml sets `PREVIEW_PACKAGE_TAG`
  * (`<sha>` on main, `pr:<N>:<short-sha>` on PRs) and installs come from the
- * preview registry. Everywhere else they install `@latest` from npm.
+ * preview registry. Everywhere else they install `@latest` from npm. A full
+ * commit sha is shortened — the registry resolves short shas too.
  */
-const tag = process.env.PREVIEW_PACKAGE_TAG;
+const tag = process.env.PREVIEW_PACKAGE_TAG?.replace(/^([0-9a-f]{7})[0-9a-f]{33}$/, "$1");
 
 export const installSpec = (name: string) =>
   tag ? `https://pkg.alchemy.run/${name}/${tag}` : `${name}@latest`;

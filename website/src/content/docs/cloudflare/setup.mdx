@@ -3,8 +3,8 @@ title: Setup
 description: Install Alchemy, create a Cloudflare account, and connect the two — OAuth or API token, saved to a local profile. No environment variables required.
 ---
 
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 import { effectVersion } from "../../../versions";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
 
@@ -16,20 +16,7 @@ package, a Cloudflare account, and stored credentials.
 Install <code>alchemy@latest</code> and <code>effect@{effectVersion}</code>
 in your project:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add ${pkgs}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install ${pkgs}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add ${pkgs}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add ${pkgs}`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers add={pkgs} />
 
 Alchemy runs on [Bun](https://bun.sh) or Node.js 22+.
 
