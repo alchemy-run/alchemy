@@ -40,6 +40,20 @@ export interface MountGitOptions {
   readonly depth?: number;
   /** Git access inside the container. @default "none" */
   readonly access?: GitAccess;
+  /** Submodules to check out with the repository: `true` for all, or their paths. */
+  readonly submodules?: boolean | ReadonlyArray<string>;
+  /**
+   * Installs dependencies, e.g. `pnpm install --frozen-lockfile`. Runs in
+   * the checkout on the deploying machine, and again in the image so
+   * native dependencies match the image's platform.
+   */
+  readonly install?: string;
+  /**
+   * Builds the checkout, e.g. `pnpm exec tsc -b`. Runs once per commit on
+   * the deploying machine; the outputs are copied into the image (and into
+   * each local session's worktree), so heavy builds never run in Docker.
+   */
+  readonly build?: string;
 }
 
 /** What a git mount returns: where the checkout lives. */
@@ -101,6 +115,10 @@ export const mountGitRepository = (options: {
   readonly url: Input<string>;
   readonly credentials?: GitCredentialsInput;
   readonly runtimeCredentials?: GitCredentialsInput;
+  /** Source-specific tooling the mount installs (e.g. the `gh` CLI). */
+  readonly tooling?: ReadonlyArray<ImageLayer>;
+  /** Source-specific environment for the container (e.g. `GH_TOKEN`). */
+  readonly env?: Record<string, unknown>;
   readonly mount: MountGitOptions;
 }): Effect.Effect<MountedRepository> =>
   Effect.gen(function* () {
@@ -113,9 +131,12 @@ export const mountGitRepository = (options: {
     const access = mount.access ?? "none";
     const prefix = envPrefix(mount.path);
     if (globalThis.__ALCHEMY_RUNTIME__) {
-      // Bound env values travel packed; the git CLI reads raw env.
-      if (access !== "none") {
-        for (const key of [`${prefix}_USERNAME`, `${prefix}_PASSWORD`]) {
+      // Bound env values travel packed; git and the tooling read raw env.
+      {
+        for (const key of [
+          ...Object.keys(options.env ?? {}),
+          ...(access !== "none" ? [`${prefix}_USERNAME`, `${prefix}_PASSWORD`] : []),
+        ]) {
           const value = unpackEnvValue<unknown>(process.env[key]);
           if (value === undefined) continue;
           process.env[key] = Redacted.isRedacted(value)
@@ -148,14 +169,24 @@ export const mountGitRepository = (options: {
     const layer: Input<ImageLayer> = {
       id: `git-mount:${mount.path}`,
       stage: "source",
-      instructions: [`COPY ${target}/ ${mount.path}/`, `RUN ${setup.join(" && ")}`].join("\n"),
+      instructions: [
+        `COPY ${target}/ ${mount.path}/`,
+        `RUN ${setup.join(" && ")}`,
+        // Dependencies are reinstalled for the image's platform; the build
+        // outputs arrive with the checkout.
+        ...(mount.install ? [`RUN cd ${path} && CI=true ${mount.install}`] : []),
+      ].join("\n"),
       context: [
         {
           kind: "git",
           target,
+          mountPath: mount.path,
           url: options.url,
           ...(ref ? { ref } : {}),
           ...(mount.depth !== undefined ? { depth: mount.depth } : {}),
+          ...(mount.submodules ? { submodules: mount.submodules } : {}),
+          ...(mount.install ? { install: mount.install } : {}),
+          ...(mount.build ? { build: mount.build } : {}),
           ...(options.credentials ? { credentials: options.credentials } : {}),
         },
       ],
@@ -163,15 +194,21 @@ export const mountGitRepository = (options: {
     yield* bindIntoImageHost(
       `${options.kind}:${mount.path}`,
       {
-        image: [gitCliLayer, ...(access === "none" ? [] : [credentialHelperLayer]), layer],
-        ...(access !== "none" && options.runtimeCredentials
-          ? {
-              env: {
+        image: [
+          gitCliLayer,
+          ...(access === "none" ? [] : [credentialHelperLayer]),
+          ...(options.tooling ?? []),
+          layer,
+        ],
+        env: {
+          ...options.env,
+          ...(access !== "none" && options.runtimeCredentials
+            ? {
                 [`${prefix}_USERNAME`]: options.runtimeCredentials.username,
                 [`${prefix}_PASSWORD`]: options.runtimeCredentials.password,
-              },
-            }
-          : {}),
+              }
+            : {}),
+        },
       },
       options.resource,
     );

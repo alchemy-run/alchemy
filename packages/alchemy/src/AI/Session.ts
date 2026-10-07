@@ -10,8 +10,10 @@
  * Everything here is a `Schema`, so the same types travel over RPC
  * (`AI.SessionRpcs`), persist in a session store, and decode in browsers.
  */
+import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
@@ -345,6 +347,18 @@ export interface Session {
   readonly fork: () => Effect.Effect<Session, SessionError | Unsupported, RuntimeContext>;
   readonly close: () => Effect.Effect<void, SessionError, RuntimeContext>;
 }
+
+/**
+ * The harness a session host (e.g. a Durable Object) talks to, as a service:
+ * its value connects to the harness for the duration of a call. Provide it
+ * with `Cloudflare.ContainerHarness(Sandbox)` (the session's container) or
+ * `AI.LocalHarness(Sandbox)` (the same program on this machine, under
+ * `alchemy dev`), and hand it to `AI.makeSessionHandlers`.
+ */
+export const Harness = Context.Service<
+  Harness,
+  Effect.Effect<Harness, SessionError, Scope.Scope | RuntimeContext>
+>("AI.Harness");
 
 /** A harness: starts and finds sessions. */
 export interface Harness {

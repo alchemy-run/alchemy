@@ -13,8 +13,11 @@ HTTP ──▶ Worker ──▶ Agent (Durable Object, one per session) ──�
 
 ## Run it
 
+Each session works in a checkout of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy), with dependencies installed and TypeScript built. Give it a GitHub token for `git push` and the `gh` CLI:
+
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...
+export GITHUB_TOKEN=$(gh auth token)
 bun alchemy dev      # Worker + DO in workerd, the container in local Docker
 bun alchemy deploy   # Cloudflare Containers
 ```

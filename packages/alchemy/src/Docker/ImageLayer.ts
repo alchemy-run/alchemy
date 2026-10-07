@@ -34,6 +34,12 @@ export interface ImageLayer {
    * before building.
    */
   readonly context?: ReadonlyArray<ImageContextSource>;
+  /**
+   * The npm packages this layer installs, when it is an npm install — so a
+   * program run outside the image (`alchemy dev` on the host) can install
+   * the same `app` packages next to itself.
+   */
+  readonly npm?: { readonly packages: ReadonlyArray<string>; readonly into: "global" | "app" };
 }
 
 const STAGE_ORDER: Record<ImageLayerStage, number> = { setup: 0, install: 1, source: 2 };

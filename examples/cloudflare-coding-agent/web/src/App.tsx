@@ -72,7 +72,7 @@ const MODELS = [
 ];
 
 /** The repository each session's container has checked out. */
-const WORKDIR = "/workspace/hello";
+const WORKDIR = "/workspace/alchemy";
 
 //#region sessions list (persisted in the browser)
 
@@ -452,7 +452,7 @@ function Inspector({ id }: { id: string }) {
       <div className="rounded-2xl border bg-card">
         <Row icon={<CpuIcon className="size-4" />} label="Container" value={id} />
         <Row icon={<FolderGit2Icon className="size-4" />} label="Workspace" value={WORKDIR} />
-        <Row icon={<GitBranchIcon className="size-4" />} label="Branch" value="master" />
+        <Row icon={<GitBranchIcon className="size-4" />} label="Branch" value="main" />
         <div className="border-t" />
         <Row
           icon={

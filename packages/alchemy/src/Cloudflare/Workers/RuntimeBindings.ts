@@ -301,6 +301,9 @@ export const materializeRuntimeBindings = Effect.fn(function* (
   const descriptorNames = new Set(config.bindingDescriptors.map((descriptor) => descriptor.name));
   const workerBindings: BindingHook<BindingServices>[] = [
     Text.local("ALCHEMY_PHASE", "runtime"),
+    // Locally run Workers are always under `alchemy dev`, so `ALCHEMY_DEV`
+    // reads the same inside a Worker as in the CLI process.
+    Text.local("ALCHEMY_DEV", "true"),
     Text.local("ALCHEMY_WORKER_NAME", config.name),
     Text.local("ALCHEMY_STACK_NAME", options.stack.name),
     Text.local("ALCHEMY_STAGE", options.stack.stage),

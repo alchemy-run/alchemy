@@ -1,7 +1,11 @@
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import type * as Path from "effect/Path";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
@@ -11,6 +15,7 @@ import type { ImageLayer } from "../Docker/ImageLayer.ts";
 import { gitCliLayer } from "../FS/GitMount.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import { makeHarness, type HarnessDriver } from "./HarnessEngine.ts";
+import { sessionCwd } from "./LocalWorkspace.ts";
 import { SessionError, type Harness } from "./Session.ts";
 import { HarnessRpcs, serveHarness } from "./SessionRpcs.ts";
 import { MemorySessionStore } from "./SessionStore.ts";
@@ -47,6 +52,7 @@ export const npmInstallLayer = (
   const pkgs = packages.join(" ");
   return {
     id,
+    npm: { packages, into: options.into ?? "global" },
     instructions:
       options.into === "app"
         ? `RUN mkdir -p /app && cd /app && if command -v npm >/dev/null 2>&1; then npm install --no-save --no-package-lock ${pkgs}; else bun add ${pkgs}; fi`
@@ -142,10 +148,25 @@ export const makeHarnessServer = <R>(
     // The host process owns the harness for its whole life.
     const scope = yield* Scope.make();
     // A harness that can't start leaves its host nothing to serve: a defect.
-    const driver = yield* options.driver.pipe(
+    const native = yield* options.driver.pipe(
       Effect.provideService(Scope.Scope, scope),
       Effect.orDie,
     );
+    // On this machine (`AI.LocalHarness`) one process serves every session:
+    // each session's working directory maps into its own worktree. In a
+    // container the path is used as is. The bootstrap's platform services
+    // (file system, process spawning) do the work.
+    const platform = (yield* Effect.context<never>()) as Context.Context<
+      FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+    >;
+    const driver: HarnessDriver = {
+      ...native,
+      open: (session) =>
+        sessionCwd(session.cwd, session.id).pipe(
+          Effect.provideContext(platform),
+          Effect.flatMap((cwd) => native.open({ ...session, cwd })),
+        ),
+    };
     const store = yield* Layer.build(MemorySessionStore).pipe(Scope.provide(scope));
     return yield* makeHarness(driver).pipe(
       Effect.provideContext(store),

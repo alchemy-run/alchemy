@@ -23,6 +23,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import { copyTree } from "./CopyTree.ts";
 
 /** HTTP Basic credentials for a git remote. */
 export interface GitCredentials {
@@ -50,12 +51,27 @@ export interface DirectorySource {
 export interface GitSource {
   readonly kind: "git";
   readonly target: string;
+  /** Where the repository is mounted in the program's filesystem (e.g. `/workspace/app`). */
+  readonly mountPath?: string;
   /** Clone URL (credential-free). */
   readonly url: string;
   /** Branch, tag, or commit. @default the remote's default branch */
   readonly ref?: string;
   /** Shallow history depth. @default full history */
   readonly depth?: number;
+  /** Submodules to check out: `true` for all, or their paths. @default none */
+  readonly submodules?: boolean | ReadonlyArray<string>;
+  /**
+   * Shell command that installs dependencies. Runs on the deploying
+   * machine in the prepared checkout, and again in the image (where native
+   * dependencies must match the image's platform).
+   */
+  readonly install?: string;
+  /**
+   * Shell command that builds the checkout. Runs only on the deploying
+   * machine; its outputs are copied into the image.
+   */
+  readonly build?: string;
   /** Credentials for the fetch; never written to disk. */
   readonly credentials?: GitCredentials;
 }
@@ -73,55 +89,83 @@ const sha256 = (value: string | Uint8Array) =>
 /** A stable, filesystem-safe directory name for a context target. */
 export const contextTarget = (key: string) => `mounts/${sha256(key).slice(0, 16)}`;
 
+/** What materializing produced: a digest for the image hash, and prepared checkouts. */
+export interface MaterializedContext {
+  readonly digest: string;
+  /** Git sources' prepared checkouts on the deploying machine, by context target. */
+  readonly prepared: ReadonlyMap<string, string>;
+}
+
 /**
  * Materialize every source under `context` and return a digest over all of
- * them (fold it into the image hash).
+ * them (fold it into the image hash), plus where each git source's prepared
+ * checkout lives on the deploying machine.
  */
 export const materializeImageContext = (options: {
   readonly context: string;
   /** Cache directory for git fetches (reused across builds). */
   readonly cacheDir: string;
+  /** Where prepared checkouts (installed and built) live, one per commit. */
+  readonly reposDir: string;
   readonly sources: ReadonlyArray<ImageContextSource>;
 }): Effect.Effect<
-  string,
+  MaterializedContext,
   ImageContextError | PlatformError,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 > =>
   Effect.gen(function* () {
+    const prepared = new Map<string, string>();
     const digests = yield* Effect.forEach(
       options.sources,
       (source) =>
-        Effect.map(materialize(options.context, options.cacheDir, source), (digest) => [
-          source.target,
-          digest,
-        ]),
+        Effect.map(
+          materialize(options, source, (dir) => prepared.set(source.target, dir)),
+          (digest) => [source.target, digest],
+        ),
       { concurrency: 4 },
     );
-    return sha256(JSON.stringify(digests.sort(([a], [b]) => String(a).localeCompare(String(b)))));
+    return {
+      digest: sha256(
+        JSON.stringify(digests.sort(([a], [b]) => String(a).localeCompare(String(b)))),
+      ),
+      prepared,
+    };
   });
 
-const materialize = (context: string, cacheDir: string, source: ImageContextSource) =>
+const materialize = (
+  options: { readonly context: string; readonly cacheDir: string; readonly reposDir: string },
+  source: ImageContextSource,
+  onPrepared: (dir: string) => void,
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const target = path.join(context, source.target);
+    const target = path.join(options.context, source.target);
     // Digest the SOURCE first and rewrite the target only when it changed:
     // every plan materializes, and rewriting an unchanged mount would race
     // an image build reading the same context.
     const marker = `${target}.digest`;
-    const previous = yield* fs.readFileString(marker).pipe(Effect.orElseSucceed(() => ""));
     const replace = (
       digest: string,
-      write: Effect.Effect<void, PlatformError | ImageContextError>,
+      write: Effect.Effect<
+        void,
+        PlatformError | ImageContextError,
+        FileSystem.FileSystem | Path.Path
+      >,
     ) =>
-      Effect.gen(function* () {
-        if (digest === previous && (yield* fs.exists(target))) return digest;
-        yield* fs.remove(target, { recursive: true, force: true });
-        yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-        yield* write;
-        yield* fs.writeFileString(marker, digest);
-        return digest;
-      });
+      // One writer per target: concurrent plans (diff, reconcile) would
+      // otherwise delete the target while another copies into it.
+      cacheLock(target).withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* fs.readFileString(marker).pipe(Effect.orElseSucceed(() => ""));
+          if (digest === current && (yield* fs.exists(target))) return digest;
+          yield* fs.remove(target, { recursive: true, force: true });
+          yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+          yield* write;
+          yield* fs.writeFileString(marker, digest);
+          return digest;
+        }),
+      );
     switch (source.kind) {
       case "content":
         return yield* replace(sha256(source.content), fs.writeFileString(target, source.content));
@@ -133,14 +177,90 @@ const materialize = (context: string, cacheDir: string, source: ImageContextSour
         }
         return yield* replace(yield* hashTree(source.source), fs.copy(source.source, target));
       }
-      case "git":
-        // Copy under the cache lock: another mount of the same repository
-        // may check out a different ref next.
-        return yield* checkoutGit(cacheDir, source, (cache, commit) =>
-          replace(commit, fs.copy(cache, target)),
+      case "git": {
+        const prepared = yield* prepareGit(options, source);
+        onPrepared(prepared.dir);
+        // The image reinstalls dependencies for its own platform.
+        return yield* replace(
+          prepared.digest,
+          copyTree(prepared.dir, target, { exclude: (_, name) => name === "node_modules" }),
         );
+      }
     }
   });
+
+/**
+ * A git source's prepared checkout on the deploying machine: checked out
+ * (with submodules), dependencies installed and built — once per commit and
+ * command set, in `reposDir`. Image builds copy it; local harnesses make
+ * worktrees from it.
+ */
+export const prepareGit = (
+  options: { readonly cacheDir: string; readonly reposDir: string },
+  source: GitSource,
+): Effect.Effect<
+  { readonly dir: string; readonly digest: string },
+  ImageContextError | PlatformError,
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+> =>
+  // Copy out under the cache lock: another mount of the same repository may
+  // check out a different ref next.
+  checkoutGit(options.cacheDir, source, (cache, commit) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const digest = sha256(JSON.stringify([commit, source.install, source.build]));
+      const name =
+        source.url
+          .replace(/\.git$/, "")
+          .split("/")
+          .slice(-1)[0] ?? "repo";
+      const dir = path.join(options.reposDir, `${name}@${digest.slice(0, 16)}`);
+      const done = path.join(dir, ".alchemy-prepared");
+      if (yield* fs.exists(done)) return { dir, digest };
+      yield* fs.remove(dir, { recursive: true, force: true });
+      yield* copyTree(cache, dir);
+      for (const command of [source.install, source.build]) {
+        if (command) yield* shell(dir, command);
+      }
+      yield* fs.writeFileString(done, `${commit}\n`);
+      return { dir, digest };
+    }),
+  );
+
+/** Run a shell command in `cwd` on the deploying machine; fail with its output. */
+const shell = (cwd: string, command: string) =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const child = yield* spawner.spawn(
+      ChildProcess.make("sh", ["-c", command], {
+        cwd,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        extendEnv: true,
+        env: { CI: "true" },
+      }),
+    );
+    const [exitCode, stdout, stderr] = yield* Effect.all(
+      [
+        child.exitCode,
+        child.stdout.pipe(Stream.decodeText, Stream.mkString),
+        child.stderr.pipe(Stream.decodeText, Stream.mkString),
+      ],
+      { concurrency: "unbounded" },
+    );
+    if (exitCode !== 0) {
+      return yield* new ImageContextError({
+        message: `\`${command}\` failed in ${cwd} (${exitCode}):\n${(stderr || stdout).slice(-4000)}`,
+      });
+    }
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag("PlatformError", (e) =>
+      Effect.fail(new ImageContextError({ message: `${command}: ${e.message}` })),
+    ),
+  );
 
 /** Deterministic hash over a directory tree (paths + contents). */
 const hashTree = (root: string) =>
@@ -237,8 +357,23 @@ const checkoutGitLocked = (cache: string, source: GitSource) =>
       yield* git(cache, ["update-ref", `refs/remotes/origin/${branch}`, "FETCH_HEAD"]);
       yield* git(cache, ["branch", "--quiet", `--set-upstream-to=origin/${branch}`, branch]);
     }
+    if (source.submodules) {
+      yield* git(cache, [
+        ...auth,
+        "submodule",
+        "update",
+        "--init",
+        "--quiet",
+        ...depth,
+        "--",
+        ...(source.submodules === true ? [] : source.submodules),
+      ]);
+    }
     yield* git(cache, ["clean", "-fdxq"]);
-    const commit = (yield* git(cache, ["rev-parse", "HEAD"])).trim();
+    // The digest covers submodule commits too, so bumping one rebuilds.
+    const commit =
+      (yield* git(cache, ["rev-parse", "HEAD"])).trim() +
+      (source.submodules ? `+${(yield* git(cache, ["submodule", "status"])).trim()}` : "");
     return { cache, commit };
   });
 

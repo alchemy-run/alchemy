@@ -427,9 +427,10 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     news.autoInstallExternals,
   );
   // Mounted sources (files, folders, git checkouts) contributed by bindings.
-  const contextDigest = yield* materializeImageContext({
+  const materialized = yield* materializeImageContext({
     context,
     cacheDir: path.join(dotAlchemy, "git-cache"),
+    reposDir: path.join(dotAlchemy, "repos"),
     sources: (news.imageLayers ?? []).flatMap((layer) => layer.context ?? []),
   });
   const [bundle] = yield* Effect.all(
@@ -455,10 +456,14 @@ export const prepareContainerBuildContext = Effect.fn(function* (
   return {
     context,
     dockerfile: path.join(context, "Dockerfile"),
+    /** Git mounts' prepared checkouts on this machine, by context target. */
+    prepared: materialized.prepared,
     hash: yield* sha256Object({
       bundle: bundle.hash,
       dockerfileContent,
-      ...(news.imageLayers?.some((layer) => layer.context?.length) ? { contextDigest } : {}),
+      ...(news.imageLayers?.some((layer) => layer.context?.length)
+        ? { contextDigest: materialized.digest }
+        : {}),
     }),
   };
 });
