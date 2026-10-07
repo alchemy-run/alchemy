@@ -24,6 +24,11 @@ describe("toOutputFile", () => {
     const file = await run(toOutputFile("data.bin", new Uint8Array([1, 2, 3])));
     expect(Buffer.isBuffer(file.content)).toBe(true);
   });
+
+  it("names modules with `/` even when given a Windows-style path", async () => {
+    const file = await run(toOutputFile("server\\serve-neon.mjs", ""));
+    expect(file.name).toBe("server/serve-neon.mjs");
+  });
 });
 
 describe("sortServerModules", () => {

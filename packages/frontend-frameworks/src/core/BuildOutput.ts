@@ -44,13 +44,17 @@ export interface BuildOutput {
   nodeServe?: NodeServeEntryOptions | undefined;
 }
 
-/** Create an {@link OutputFile}, hashing the content with sha256. */
+/**
+ * Create an {@link OutputFile}, hashing the content with sha256. The name is
+ * normalized to `/` separators: it becomes a workerd module name or upload
+ * path, where `\` is never valid.
+ */
 export const toOutputFile = (
   name: string,
   content: string | Uint8Array,
 ): Effect.Effect<OutputFile> =>
   Effect.sync(() => ({
-    name,
+    name: name.replaceAll("\\", "/"),
     // Keep one binary representation across framework collectors.
     content: typeof content === "string" ? content : Buffer.from(content),
     hash: NodeCrypto.createHash("sha256").update(content).digest("hex"),
