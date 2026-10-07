@@ -61,7 +61,7 @@ jobs:
         name: Prepare release
         run: |
           set -euo pipefail
-          bun scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
+          node scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
 
       - name: Build release packages
         # The cold tsgo build can starve the runner without Go heap limits on
