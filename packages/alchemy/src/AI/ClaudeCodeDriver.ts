@@ -236,6 +236,23 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
         Queue.end(input).pipe(Effect.andThen(Effect.sync(() => q.close?.()))),
       );
 
+      // Output with no open turn — a steer that landed just as the turn
+      // ended is answered as its own turn — gets a turn of its own, so every
+      // answer is attributed and `result()` can wait for it.
+      const handleInTurn = (message: SDKMessage): Effect.Effect<void> =>
+        Effect.suspend(() => {
+          if (
+            turn !== undefined ||
+            (message.type !== "stream_event" && message.type !== "assistant")
+          )
+            return handle(message);
+          const turnId = crypto.randomUUID();
+          turn = { turnId, text: "" };
+          return session
+            .emit({ type: "turn.started", turnId })
+            .pipe(Effect.andThen(handle(message)));
+        });
+
       const handle = (message: SDKMessage): Effect.Effect<void> => {
         const turnId = turn?.turnId ?? "turn";
         switch (message.type) {
@@ -379,7 +396,7 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
       };
 
       yield* Stream.fromAsyncIterable(q, (cause) => cause).pipe(
-        Stream.runForEach(handle),
+        Stream.runForEach(handleInTurn),
         Effect.catchCause((cause) => {
           const message = `claude exited: ${Cause.pretty(cause)}`;
           const running = turn;

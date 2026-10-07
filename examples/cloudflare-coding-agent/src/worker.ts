@@ -13,6 +13,8 @@ const encoder = new TextEncoder();
  *   POST /agents/:id          { prompt }  start the session (idempotent) and run a turn → result
  *   POST /agents/:id/steer    { prompt }  redirect the running turn
  *   POST /agents/:id/interrupt            stop the running turn
+ *   POST /agents/:id/model    { model }   switch models mid-session
+ *   GET  /agents/:id                      session info (state, model, usage)
  *   GET  /agents/:id/events?after=N       server-sent events, resumable by cursor
  *
  * Each agent is its own Durable Object + container. For a browser, connect
@@ -27,7 +29,9 @@ export default Cloudflare.Worker(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://agents");
-        const match = /^\/agents\/([\w-]+)(?:\/(steer|interrupt|events))?$/.exec(url.pathname);
+        const match = /^\/agents\/([\w-]+)(?:\/(steer|interrupt|events|model))?$/.exec(
+          url.pathname,
+        );
         if (!match) return HttpServerResponse.text("POST /agents/:id { prompt }", { status: 404 });
         const [, id, action] = match;
 
@@ -48,8 +52,16 @@ export default Cloudflare.Worker(
           );
         }
         const agent = yield* agents.getByName(id!);
+        if (request.method === "GET" && action === undefined) {
+          return yield* HttpServerResponse.json(yield* agent.info());
+        }
         if (action === "interrupt") {
           yield* agent.interrupt();
+          return HttpServerResponse.empty({ status: 202 });
+        }
+        if (action === "model") {
+          const { model } = (yield* request.json) as { model: string };
+          yield* agent.setModel({ model });
           return HttpServerResponse.empty({ status: 202 });
         }
         const { prompt } = (yield* request.json) as { prompt: string };

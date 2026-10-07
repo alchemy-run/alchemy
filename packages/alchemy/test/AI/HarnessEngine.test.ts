@@ -135,6 +135,21 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
     expect(out.unsupported).toBe("Unsupported");
   });
 
+  test("steering an idle session runs the message as its own turn", async () => {
+    const out = await run(
+      Effect.gen(function* () {
+        const session = yield* (yield* harness).start({ id: "idle-steer" });
+        const first = yield* session.prompt("one");
+        yield* session.result(first.turnId);
+        yield* session.steer("two"); // the turn already finished
+        const second = yield* session.result();
+        return { first: first.turnId, second };
+      }),
+    );
+    expect(out.second.turnId).not.toBe(out.first);
+    expect(out.second.message).toEqual([{ type: "text", text: "echo: two" }]);
+  });
+
   test("start is idempotent by id", async () => {
     const same = await run(
       Effect.gen(function* () {

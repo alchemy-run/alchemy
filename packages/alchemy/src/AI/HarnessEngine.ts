@@ -164,8 +164,12 @@ export const makeHarness = (
         const emit = (event: SessionEventInput) =>
           Effect.gen(function* () {
             if (entry) {
-              if (event.type === "turn.started") entry.state = "running";
-              else if (event.type === "permission.requested" || event.type === "question.asked")
+              if (event.type === "turn.started") {
+                entry.state = "running";
+                // Drivers may open turns themselves (a late steer answered
+                // as its own turn); `result()` defaults to the newest.
+                entry.lastTurnId = event.turnId;
+              } else if (event.type === "permission.requested" || event.type === "question.asked")
                 entry.state = "awaiting_input";
               else if (event.type === "turn.completed") {
                 entry.state = "idle";
@@ -203,18 +207,21 @@ export const makeHarness = (
           capabilities: driver.capabilities,
           prompt: (prompt) => startTurn(promptBlocks(prompt)),
           steer: (prompt) =>
-            native.steer
-              ? native.steer(promptBlocks(prompt))
-              : Effect.gen(function* () {
-                  // Degrade: interrupt the running turn, then start the
-                  // steering message as a fresh turn.
-                  if (entry!.state === "running" || entry!.state === "awaiting_input") {
-                    const running = entry!.lastTurnId;
-                    yield* native.interrupt();
-                    yield* awaitTurn(id, running).pipe(Effect.ignore);
-                  }
-                  yield* startTurn(promptBlocks(prompt));
-                }),
+            // Nothing running to steer: the message is simply the next turn.
+            entry!.state === "idle"
+              ? startTurn(promptBlocks(prompt)).pipe(Effect.asVoid)
+              : native.steer
+                ? native.steer(promptBlocks(prompt))
+                : Effect.gen(function* () {
+                    // Degrade: interrupt the running turn, then start the
+                    // steering message as a fresh turn.
+                    if (entry!.state === "running" || entry!.state === "awaiting_input") {
+                      const running = entry!.lastTurnId;
+                      yield* native.interrupt();
+                      yield* awaitTurn(id, running).pipe(Effect.ignore);
+                    }
+                    yield* startTurn(promptBlocks(prompt));
+                  }),
           interrupt: () => native.interrupt(),
           setModel: (model) =>
             native.setModel
