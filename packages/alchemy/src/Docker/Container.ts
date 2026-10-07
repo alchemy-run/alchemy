@@ -381,10 +381,10 @@ export const ContainerProvider = () =>
 
           if (live) {
             // Plan compares props before upstream Outputs resolve, so an image
-            // that comes from an Action is an update rather than a replace.
+            // that comes from an `Action` is an update rather than a replace.
             // Recreate when the resolved create args differ from the previous
             // ones. With no previous image, compare the live image to the one
-            // this reconcile is applying.
+            // this `reconcile` is applying.
             const replace =
               olds?.image === undefined
                 ? live.Config.Image !== args.image
