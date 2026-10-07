@@ -46,13 +46,26 @@ export const normalizeRelativePath = (value: string) =>
 const splitLines = (content: string | ReadonlyArray<string>) =>
   typeof content === "string" ? content.replace(/^﻿/, "").split(/\r?\n/) : content;
 
+export interface ParseIgnoreRulesOptions {
+  /**
+   * gitignore only: the walk root's path relative to the directory the
+   * ignore file sits in (e.g. `"packages/app"` for the repository root's
+   * `.gitignore` when walking `packages/app`). Rules see full paths, but
+   * only directories below the walk root can exclude their contents, so an
+   * ignore file that excludes the walk root itself still lets it be listed.
+   * @default ""
+   */
+  readonly prefix?: string;
+}
+
 /** Parse ignore-file content (or its lines) in the given dialect. */
 export const parseIgnoreRules = (
   content: string | ReadonlyArray<string>,
   dialect: IgnoreDialect,
+  options: ParseIgnoreRulesOptions = {},
 ): IgnoreRules =>
   dialect === "gitignore"
-    ? parseGitIgnore(splitLines(content))
+    ? parseGitIgnore(splitLines(content), options.prefix ?? "")
     : parseDockerIgnore(splitLines(content));
 
 /** Rules that exclude nothing. */
@@ -66,21 +79,29 @@ export const noIgnoreRules = (dialect: IgnoreDialect): IgnoreRules => ({
 // gitignore
 // ---------------------------------------------------------------------------
 
-const parseGitIgnore = (lines: ReadonlyArray<string>): IgnoreRules => {
+const parseGitIgnore = (lines: ReadonlyArray<string>, prefix: string): IgnoreRules => {
   const matcher = createGitIgnore().add(lines);
+  const base = normalizeRelativePath(prefix).replace(/\/+$/, "");
+  const full = (path: string) => (base.length === 0 ? path : `${base}/${path}`);
+  // Git's rule: a path is excluded when a parent directory is, otherwise by
+  // the last rule matching the path itself. The parent walk starts below the
+  // walk root; directory-only patterns need the trailing slash.
+  const ignores = (relativePath: string, isDirectory?: boolean) => {
+    const segments = normalizeRelativePath(relativePath).split("/").filter(Boolean);
+    for (let index = 0; index < segments.length; index++) {
+      const path = full(segments.slice(0, index + 1).join("/"));
+      const isLast = index === segments.length - 1;
+      const result = matcher.matches(isLast && !isDirectory ? path : `${path}/`);
+      if (isLast) return result.ignored;
+      if (result.ignored) return true;
+    }
+    return false;
+  };
   return {
     dialect: "gitignore",
-    // `ignore` checks parent directories itself; a trailing slash selects
-    // directory-only patterns such as `build/`.
-    ignores: (relativePath, isDirectory) => {
-      const path = normalizeRelativePath(relativePath);
-      return path.length > 0 && matcher.ignores(isDirectory ? `${path}/` : path);
-    },
+    ignores,
     // Git cannot re-include anything below an excluded directory.
-    prunes: (relativeDirectory) => {
-      const path = normalizeRelativePath(relativeDirectory);
-      return path.length > 0 && matcher.ignores(`${path}/`);
-    },
+    prunes: (relativeDirectory) => ignores(relativeDirectory, true),
   };
 };
 
@@ -391,25 +412,16 @@ export const listFileSystemDirectory = Effect.fn(function* (root: string) {
 });
 
 /**
- * Combine rule sets that each apply below a different directory, e.g. the
- * `.gitignore` files from a working directory up to the repository root.
- * `prefix` is the walk root's path relative to the directory each rule set
- * is anchored to (`""` when they coincide). A path is excluded when any
- * scope excludes it.
+ * Combine rule sets, e.g. the `.gitignore` files from a working directory up
+ * to the repository root (each parsed with its own `prefix`). A path is
+ * excluded when any rule set excludes it.
  */
 export const combineIgnoreRules = (
   dialect: IgnoreDialect,
-  scopes: ReadonlyArray<{ readonly prefix: string; readonly rules: IgnoreRules }>,
-): IgnoreRules => {
-  const scoped = (prefix: string, path: string) => {
-    const normalized = normalizeRelativePath(prefix).replace(/\/+$/, "");
-    return normalized.length === 0 ? path : `${normalized}/${path}`;
-  };
-  return {
-    dialect,
-    ignores: (relativePath, isDirectory) =>
-      scopes.some(({ prefix, rules }) => rules.ignores(scoped(prefix, relativePath), isDirectory)),
-    prunes: (relativeDirectory) =>
-      scopes.some(({ prefix, rules }) => rules.prunes(scoped(prefix, relativeDirectory))),
-  };
-};
+  rules: ReadonlyArray<IgnoreRules>,
+): IgnoreRules => ({
+  dialect,
+  ignores: (relativePath, isDirectory) =>
+    rules.some((rule) => rule.ignores(relativePath, isDirectory)),
+  prunes: (relativeDirectory) => rules.some((rule) => rule.prunes(relativeDirectory)),
+});

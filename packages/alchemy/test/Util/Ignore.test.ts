@@ -403,11 +403,10 @@ describe("Ignore rules (in-memory trees)", { tags: ["unit", "local"] }, () => {
         // The walk root is `packages/app`; the repository root ignores
         // `/packages/app/dist` and `*.log`, the app ignores `.cache`.
         const rules = combineIgnoreRules("gitignore", [
-          {
+          parseIgnoreRules("/packages/app/dist\n*.log\n", "gitignore", {
             prefix: "packages/app",
-            rules: parseIgnoreRules("/packages/app/dist\n*.log\n", "gitignore"),
-          },
-          { prefix: "", rules: parseIgnoreRules(".cache\n", "gitignore") },
+          }),
+          parseIgnoreRules(".cache\n", "gitignore"),
         ]);
         const fileTree = tree("dist/a.js", "x.log", ".cache/y", "src/index.ts");
         const entries = yield* walkIgnoring({
@@ -418,6 +417,26 @@ describe("Ignore rules (in-memory trees)", { tags: ["unit", "local"] }, () => {
             ),
         });
         expect(entries.map((entry) => entry.path)).toEqual(["src", "src/index.ts"]);
+      }),
+    );
+
+    // A project inside an ignored folder (a staging dir, a generated
+    // workspace) still lists its own files: only directories below the
+    // walk root can exclude their contents.
+    it.effect("an ancestor rule excluding the walk root does not hide it", () =>
+      Effect.gen(function* () {
+        const rules = parseIgnoreRules(".tmp\n*.log\n", "gitignore", {
+          prefix: "packages/alchemy/.tmp/fixture-1",
+        });
+        const fileTree = tree("index.html", "src/main.ts", "debug.log");
+        const entries = yield* walkIgnoring({
+          rules,
+          list: (directory) =>
+            Effect.succeed(
+              [...fileTree.children.get(directory)!].map(([name, type]) => ({ name, type })),
+            ),
+        });
+        expect(entries.map((entry) => entry.path)).toEqual(["index.html", "src", "src/main.ts"]);
       }),
     );
   });

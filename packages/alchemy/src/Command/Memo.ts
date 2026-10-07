@@ -98,18 +98,18 @@ const Memo = Effect.gen(function* () {
 
   /**
    * Each `.gitignore` from `cwd` up to the repository root, anchored to its
-   * own directory (`prefix` is `cwd` relative to that directory).
+   * own directory. Rules that exclude `cwd` itself (a project inside an
+   * ignored folder) do not hide its files.
    */
   const readGitIgnoreScopes = Effect.fn(function* (
     cwd: string,
     directory = cwd,
-  ): Effect.fn.Return<Array<{ prefix: string; rules: IgnoreRules }>, PlatformError> {
+  ): Effect.fn.Return<Array<IgnoreRules>, PlatformError> {
     const scope = yield* fs.readFileString(path.join(directory, ".gitignore")).pipe(
       Effect.map((content) => [
-        {
+        parseIgnoreRules(content, "gitignore", {
           prefix: path.relative(directory, cwd).replaceAll("\\", "/"),
-          rules: parseIgnoreRules(content, "gitignore"),
-        },
+        }),
       ]),
       Effect.catchIf(
         (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
@@ -144,7 +144,7 @@ const Memo = Effect.gen(function* () {
       gitignore:
         options.exclude === undefined
           ? combineIgnoreRules("gitignore", [
-              { prefix: "", rules: parseIgnoreRules([".git"], "gitignore") },
+              parseIgnoreRules([".git"], "gitignore"),
               ...(yield* readGitIgnoreScopes(resolvedCwd)),
             ])
           : undefined,
