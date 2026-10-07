@@ -11,6 +11,7 @@ import {
   RewrittenMigrationHistoryError,
   type MigrationApplyError,
   type MigrationDialect,
+  type MigrationHistoryConflictError,
   type MigrationRecord,
   type SqlExecutor,
 } from "./Format.ts";
@@ -219,6 +220,20 @@ const lookupApplied = (
   return undefined;
 };
 
+const applyPending = (options: {
+  executor: SqlExecutor;
+  table: string;
+  records: ReadonlyArray<MigrationRecord>;
+  applied: Map<string, string | undefined>;
+}) =>
+  Effect.gen(function* () {
+    const { executor, table, records, applied } = options;
+    for (const record of records) {
+      if (lookupApplied(applied, record.name)) continue;
+      yield* executor.batch([...record.statements, insertSql(table, executor.dialect, record)]);
+    }
+  });
+
 /**
  * Apply pending migrations with Alchemy's bookkeeping. Idempotent: each
  * migration's statements and its bookkeeping INSERT go through
@@ -265,8 +280,23 @@ export const applyAlchemyFormat = (options: {
           "Add a new forward migration instead of editing or deleting already-applied files.",
       });
     }
-    for (const record of records) {
-      if (lookupApplied(applied, record.name)) continue;
-      yield* executor.batch([...record.statements, insertSql(table, executor.dialect, record)]);
-    }
+    yield* applyPending({ executor, table, records, applied });
+  });
+
+/**
+ * {@link applyAlchemyFormat} without the rewritten-history check: applied
+ * names are skipped regardless of their hash. For runtime appliers (Durable
+ * Object SQLite) where failing would take every instance down after a
+ * deploy that already succeeded.
+ */
+export const applyPendingAlchemyFormat = (options: {
+  executor: SqlExecutor;
+  table: string;
+  records: ReadonlyArray<MigrationRecord>;
+}): Effect.Effect<void, MigrationError | MigrationHistoryConflictError> =>
+  Effect.gen(function* () {
+    const { executor, table, records } = options;
+    yield* ensureTable({ executor, table, records });
+    const applied = yield* appliedHistory(executor, table);
+    yield* applyPending({ executor, table, records, applied });
   });
