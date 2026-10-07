@@ -1,9 +1,11 @@
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { DestroyError } from "@/Apply";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import type { StackServices } from "@/Stack";
@@ -176,10 +178,10 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.project, created.instanceName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  // Create 5–15 minutes, major version upgrade 10–20 minutes, delete a few minutes.
+  // Create 5–15 minutes, major version upgrade 33–54 minutes, delete a few minutes.
   {
     tags: ["provider:gcp", "provider:gcp:sql", "live"],
-    timeout: 3_600_000,
+    timeout: 7_200_000,
     retry: 0,
   },
 );
@@ -204,7 +206,12 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.deletionProtectionEnabled).toEqual(true);
 
       const error = yield* Effect.flip(stack.destroy());
-      expect(error).toBeInstanceOf(GCP.SQL.InstanceDeletionProtected);
+      expect(error).toBeInstanceOf(DestroyError);
+      const failures = error instanceof DestroyError ? error.failures : [];
+      expect(failures.map((failure) => failure.resourceType)).toEqual(["GCP.SQL.Instance"]);
+      expect(failures[0]?.cause.reasons.find(Cause.isFailReason)?.error).toBeInstanceOf(
+        GCP.SQL.InstanceDeletionProtected,
+      );
 
       const stillThere = yield* sqladmin.getInstances({
         project: created.project,

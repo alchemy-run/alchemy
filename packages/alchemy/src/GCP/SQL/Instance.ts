@@ -624,7 +624,9 @@ export const InstanceProvider = () =>
         const upgraded = yield* applyPatch(env.project, instanceName, {
           databaseVersion: version,
         });
-        yield* waitForOperation(env.project, upgraded);
+        // A major version upgrade outlasts the default budget even on
+        // db-f1-micro (33–54 minutes observed for POSTGRES_16 → POSTGRES_17).
+        yield* waitForSqlOperation(env.project, upgraded, { budget: "2 hours" });
         current = yield* waitUntilRunnable(env.project, instanceName);
       }
 
