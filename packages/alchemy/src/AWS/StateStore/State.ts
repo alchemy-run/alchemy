@@ -4,6 +4,8 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as LogLevel from "effect/LogLevel";
+import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
@@ -66,6 +68,19 @@ export interface S3StateOptions {
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
+
+/**
+ * Run with Debug and Trace records switched off.
+ *
+ * The AWS client logs every request payload and parsed response at Debug. For
+ * this store those are the serialized state objects, whose values include
+ * secrets Alchemy generated and keeps, so a Debug floor inherited from where
+ * the store is built (the CLI's run log sets one) must not reach them. Floors
+ * already stricter than Info are left alone.
+ */
+const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (level) =>
+  LogLevel.isLessThan(level, "Info") ? "Info" : level,
+);
 
 /**
  * State store backed by an AWS S3 bucket.
@@ -177,6 +192,8 @@ export const state = (options: S3StateOptions = {}) =>
  */
 export const makeS3State = (options: S3StateOptions = {}) =>
   Effect.gen(function* () {
+    // Captured under `withoutSdkDebugLogs` (below), so every store call runs
+    // with the raised floor.
     const context = yield* Effect.context<S3Deps | AWSEnvironment>();
 
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
@@ -346,7 +363,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         ),
     };
     return state;
-  });
+  }).pipe(withoutSdkDebugLogs);
 
 /**
  * Build the default account-regional state bucket name.
