@@ -21,12 +21,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import {
-  deepEqual,
-  havePropsChanged,
-  isResolved,
-  stripEffects,
-} from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -1954,14 +1949,12 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news: desired, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, oldBindings, newBindings }) {
           // Effect-native runtime exports remain unevaluated during planning.
           // Their identity is represented by the bundle hash, so they must not
           // prevent source changes from reaching the hash comparison below.
           const news =
-            typeof desired === "object" &&
-            desired !== null &&
-            "exports" in desired
+            typeof desired === "object" && desired !== null && "exports" in desired
               ? ({
                   ...desired,
                   exports: stripEffects(desired.exports),
@@ -2066,6 +2059,12 @@ export const FunctionProvider = () =>
             layers: (props.layers ?? []).map(layerVersionArnOf),
           });
           if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            // Bindings (env / policies from `bind`) are not props. An explicit
+            // noop would skip the engine's binding comparison, so defer to it
+            // whenever they may have changed.
+            if (!isResolved(newBindings) || !deepEqual(oldBindings, newBindings)) {
+              return undefined;
+            }
             return { action: "noop" };
           }
         }),
