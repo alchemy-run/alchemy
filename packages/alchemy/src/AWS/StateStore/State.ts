@@ -384,9 +384,9 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     /** Delete every object under `keyPrefix` in batches. Idempotent. */
     const deleteAll = (bucket: string, keyPrefix: string) =>
       Effect.gen(function* () {
-        // Leave the lease object. Releasing it here would open the stage
-        // before this delete finishes, and the store still holds the lock.
         const keys = (yield* listKeys(bucket, keyPrefix)).filter(
+          // Leave the lease object. Releasing it here would open the stage
+          // before this delete finishes, and the store still holds the lock.
           (key) => !key.endsWith(`/${LEASE_FILE}`),
         );
         for (let i = 0; i < keys.length; i += DELETE_BATCH_SIZE) {
