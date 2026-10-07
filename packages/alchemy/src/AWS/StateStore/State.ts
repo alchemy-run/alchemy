@@ -1,7 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -71,19 +70,17 @@ export interface S3StateOptions {
 type S3Deps = Credentials | HttpClient | Region;
 
 /**
- * The context the store runs its S3 calls in, with Debug and Trace records
- * switched off.
+ * Run with Debug and Trace records switched off.
  *
  * The AWS client logs every request payload and parsed response at Debug. For
  * this store those are the serialized state objects, whose values include
- * secrets Alchemy generated and keeps, so a Debug floor inherited from the
- * context the layer was built in (the CLI's run log sets one) must not reach
- * them. Floors already stricter than Info are left alone.
+ * secrets Alchemy generated and keeps, so a Debug floor inherited from where
+ * the store is built (the CLI's run log sets one) must not reach them. Floors
+ * already stricter than Info are left alone.
  */
-const withoutSdkDebugLogs = <R>(context: Context.Context<R>): Context.Context<R> =>
-  LogLevel.isLessThan(Context.get(context, References.MinimumLogLevel), "Info")
-    ? Context.add(context, References.MinimumLogLevel, "Info")
-    : context;
+const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (level) =>
+  LogLevel.isLessThan(level, "Info") ? "Info" : level,
+);
 
 /**
  * State store backed by an AWS S3 bucket.
@@ -195,7 +192,9 @@ export const state = (options: S3StateOptions = {}) =>
  */
 export const makeS3State = (options: S3StateOptions = {}) =>
   Effect.gen(function* () {
-    const context = withoutSdkDebugLogs(yield* Effect.context<S3Deps | AWSEnvironment>());
+    // Captured under `withoutSdkDebugLogs` (below), so every store call runs
+    // with the raised floor.
+    const context = yield* Effect.context<S3Deps | AWSEnvironment>();
 
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
 
@@ -364,7 +363,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         ),
     };
     return state;
-  });
+  }).pipe(withoutSdkDebugLogs);
 
 /**
  * Build the default account-regional state bucket name.
