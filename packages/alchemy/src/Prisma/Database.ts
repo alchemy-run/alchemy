@@ -6,6 +6,7 @@ import {
   deleteDatabase,
   getDatabases,
   getDatabase,
+  getProject,
   getProjectBranches,
   getProjectDatabases,
   updateDatabase,
@@ -136,7 +137,8 @@ export interface DatabaseProps {
    */
   name?: string;
   /**
-   * Region for the database.
+   * Region for the database. `"inherit"` uses the project's default region,
+   * or the default database's region when the project has none.
    *
    * @default "us-east-1"
    */
@@ -437,12 +439,16 @@ const resolveDatabaseRegion = Effect.fn(function* (
   if (region !== "inherit") {
     return (region ?? "us-east-1") as PrismaRegionId;
   }
+  const project = yield* getProject({ id: projectId });
+  if (project.data.defaultRegion !== null) {
+    return project.data.defaultRegion as PrismaRegionId;
+  }
   const database = yield* findDefaultDatabase(projectId);
   const inherited = database?.region?.id;
   if (inherited === undefined) {
     return yield* Effect.fail(
       new Error(
-        `Cannot resolve Prisma database region 'inherit' because project '${projectId}' has no default database region. Create or promote a default database first, or specify an explicit region.`,
+        `Cannot resolve Prisma database region 'inherit' because project '${projectId}' has no default region and no default database region. Create or promote a default database first, or specify an explicit region.`,
       ),
     );
   }
