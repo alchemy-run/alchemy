@@ -95,19 +95,25 @@ export const FlociTaskProvider = () =>
           // The reconcile registers the new revision; the `onReconciled`
           // hook (shared with engine-driven updates) restarts the tasks.
           Stream.runForEach(() =>
-            Effect.gen(function* () {
-              const current = yield* ctx.currentAttrs;
-              const hash = yield* imageSource.hash(taskImageInput(ctx.news));
-              // Bundle.watch emits its initial build too. Re-registering
-              // unchanged content would delete the ARN just returned by
-              // deploy before callers can launch a task with it.
-              if (hash !== undefined && hash === current.code.hash) return;
-              yield* ctx.rerunReconcile;
-            }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
+            // The staleness check runs under the per-id lock: an engine
+            // reconcile holding the lock may publish exactly this content
+            // first, and a pre-lock check against the older attrs would
+            // still re-register and reap the revision the engine recorded.
+            ctx
+              .rerunReconcileIfStale((current) =>
+                Effect.gen(function* () {
+                  const hash = yield* imageSource.hash(taskImageInput(ctx.news));
+                  // Bundle.watch emits its initial build too. Re-registering
+                  // unchanged content would delete the ARN just returned by
+                  // deploy before callers can launch a task with it.
+                  return hash === undefined || hash !== current.code.hash;
+                }),
+              )
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
+                ),
               ),
-            ),
           ),
         );
       }),
