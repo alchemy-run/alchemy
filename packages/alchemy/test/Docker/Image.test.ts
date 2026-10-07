@@ -172,6 +172,9 @@ describe(
           }),
         // Mutates `process.env.DOCKER_BUILDKIT`.
         { exclusive: true },
+      );
+    }
+
     test.provider("builds FROM a private base image with the registry credentials", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
