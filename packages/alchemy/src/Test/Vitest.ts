@@ -191,13 +191,19 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // order, and `"list"` runs it in registration order, so a second hook cannot
   // be last in both. The fallback cleanup therefore follows these teardowns
   // inside the same hook.
-  const teardowns: Array<{ effect: TestEffect<any>; timeout: number }> = [];
+  const teardowns: Array<{ effect: TestEffect<void>; timeout: number }> = [];
   const afterAll = ((eff, hookOptions) => {
-    teardowns.push({ effect: eff, timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT });
+    teardowns.push({
+      effect: Effect.asVoid(eff),
+      timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+    });
   }) as AfterAllFn;
   afterAll.skipIf = (predicate) => (eff, hookOptions) => {
     if (predicate) return;
-    teardowns.push({ effect: eff, timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT });
+    teardowns.push({
+      effect: Effect.asVoid(eff),
+      timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+    });
   };
 
   const afterEach: AfterEachFn = (eff, hookOptions) => {
