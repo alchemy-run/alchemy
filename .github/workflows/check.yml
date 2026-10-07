@@ -47,11 +47,10 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
-      - name: Build Cloudflare packages
-        run: pnpm build:cloudflare-packages
-
-      - name: Build
-        run: pnpm tsc -b
+      # Builds the dist-consumed Cloudflare packages, then `tsc -b` over the
+      # whole workspace (packages, tests and examples).
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
@@ -59,7 +58,7 @@ jobs:
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
 
-      # Must run after `tsc -b`: it reads distilled's emitted `lib/*.d.ts`,
+      # Must run after the type check: it reads distilled's emitted `lib/*.d.ts`,
       # and stale/missing declarations resolve to `any`.
       - name: Lint providers
         run: pnpm lint:providers

@@ -56,7 +56,7 @@
     "test": "pnpm ensure:built && cd ./packages/alchemy && bun alchemy-test",
     "typecheck": "pnpm ensure:built && tsc -b",
     "test:aws:floci": "bun scripts/test-aws-floci.ts",
-    "test:cloudflare-packages": "pnpm build:cloudflare-packages && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks --filter \"./packages/frontend-frameworks/fixtures/*\" run test",
+    "test:cloudflare-packages": "pnpm ensure:built && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks --filter \"./packages/frontend-frameworks/fixtures/*\" run test",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
     "test:dev": "cd ./examples/dev-stress && bun test",
     "test:examples": "bun scripts/test-examples.ts",
