@@ -1,9 +1,12 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as LogLevel from "effect/LogLevel";
+import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
@@ -66,6 +69,21 @@ export interface S3StateOptions {
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
+
+/**
+ * The context the store runs its S3 calls in, with Debug and Trace records
+ * switched off.
+ *
+ * The AWS client logs every request payload and parsed response at Debug. For
+ * this store those are the serialized state objects, whose values include
+ * secrets Alchemy generated and keeps, so a Debug floor inherited from the
+ * context the layer was built in (the CLI's run log sets one) must not reach
+ * them. Floors already stricter than Info are left alone.
+ */
+const withoutSdkDebugLogs = <R>(context: Context.Context<R>): Context.Context<R> =>
+  LogLevel.isLessThan(Context.get(context, References.MinimumLogLevel), "Info")
+    ? Context.add(context, References.MinimumLogLevel, "Info")
+    : context;
 
 /**
  * State store backed by an AWS S3 bucket.
@@ -177,7 +195,7 @@ export const state = (options: S3StateOptions = {}) =>
  */
 export const makeS3State = (options: S3StateOptions = {}) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<S3Deps | AWSEnvironment>();
+    const context = withoutSdkDebugLogs(yield* Effect.context<S3Deps | AWSEnvironment>());
 
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
 
