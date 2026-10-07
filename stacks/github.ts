@@ -17,7 +17,6 @@ const REPO = { owner: "alchemy-run", repository: "alchemy" } as const;
  * Secrets the workflows read that have no Doppler source stay hand-managed
  * in the repository settings:
  * - `ALCHEMY_VERSION_BOT_ID`, `ALCHEMY_VERSION_BOT_PRIVATE_KEY` (release.yml, website.yml)
- * - `NPM_TOKEN` (release.yml)
  */
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",

@@ -47,6 +47,10 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      # alchemy's packages, and distilled's, are each released at one version.
+      - name: Check package versions
+        run: pnpm validate:publish-packages
+
       - name: Typecheck
         run: pnpm typecheck
 
