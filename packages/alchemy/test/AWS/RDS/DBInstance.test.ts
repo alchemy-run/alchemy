@@ -482,6 +482,148 @@ const assertStorageState = Effect.fn(function* (
   expect(observed?.PendingModifiedValues?.StorageThroughput).toBeUndefined();
 });
 
+// A point-in-time restore swapped into place leaves the same identifier (and
+// props) on a different physical instance. Do exactly that against the real
+// API: restore the deployed instance to its latest restorable time under a
+// temporary identifier, carrying every source setting over, then rename the
+// original away and the restored copy into place. The redeploy must publish
+// the restored server's `dbiResourceId`; on main it plans no change and keeps
+// the old one.
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "identity: a point-in-time restore swapped into place is picked up on redeploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = `alchemy-pitr-${stack.stage.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const restoredId = `${identifier}-restored`;
+      const displacedId = `${identifier}-old`;
+
+      const describeInstance = (id: string) =>
+        rds.describeDBInstances({ DBInstanceIdentifier: id }).pipe(
+          Effect.map((r) => r.DBInstances?.[0]),
+          Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)),
+        );
+      const waitUntil = (id: string, done: (instance: rds.DBInstance | undefined) => boolean) =>
+        describeInstance(id).pipe(
+          Effect.repeat({ schedule: Schedule.spaced("20 seconds"), times: 120, until: done }),
+        );
+      const waitAvailable = (id: string) =>
+        waitUntil(id, (i) => i?.DBInstanceStatus === "available");
+      const deleteIfPresent = (id: string) =>
+        rds
+          .deleteDBInstance({
+            DBInstanceIdentifier: id,
+            SkipFinalSnapshot: true,
+            DeleteAutomatedBackups: true,
+          })
+          .pipe(
+            Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
+            Effect.andThen(waitUntil(id, (i) => i === undefined)),
+            Effect.ignore,
+          );
+
+      const program = Effect.gen(function* () {
+        const net = yield* Network("PitrNet", { cidrBlock: "10.48.0.0/16" });
+        const subnetGroup = yield* DBSubnetGroup("PitrSubnetGroup", {
+          description: "alchemy DBInstance point-in-time restore identity",
+          subnetIds: net.privateSubnetIds,
+        });
+        return yield* DBInstance("PitrInstance", {
+          dbInstanceIdentifier: identifier,
+          engine: "postgres",
+          dbInstanceClass: "db.t3.micro",
+          allocatedStorage: 20,
+          masterUsername: "alchemy",
+          masterUserPassword: Redacted.make("alchemy-pitr-test-password"),
+          backupRetentionPeriod: "1 day",
+          deletionProtection: false,
+          skipFinalSnapshot: true,
+          dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+          publiclyAccessible: false,
+        });
+      });
+
+      yield* Effect.gen(function* () {
+        const first = yield* stack.deploy(program);
+
+        // Automated backups make the instance restorable a few minutes in.
+        const source = (yield* waitUntil(
+          identifier,
+          (i) => i?.LatestRestorableTime !== undefined,
+        ))!;
+
+        yield* rds.restoreDBInstanceToPointInTime({
+          SourceDBInstanceIdentifier: identifier,
+          TargetDBInstanceIdentifier: restoredId,
+          UseLatestRestorableTime: true,
+          DBInstanceClass: source.DBInstanceClass,
+          DBSubnetGroupName: source.DBSubnetGroup?.DBSubnetGroupName,
+          VpcSecurityGroupIds: (source.VpcSecurityGroups ?? []).flatMap((g) =>
+            g.VpcSecurityGroupId ? [g.VpcSecurityGroupId] : [],
+          ),
+          DBParameterGroupName: source.DBParameterGroups?.[0]?.DBParameterGroupName,
+          OptionGroupName: source.OptionGroupMemberships?.[0]?.OptionGroupName,
+          StorageType: source.StorageType,
+          AllocatedStorage: source.AllocatedStorage,
+          MaxAllocatedStorage: source.MaxAllocatedStorage,
+          Iops: source.Iops,
+          StorageThroughput: source.StorageThroughput,
+          Port: source.Endpoint?.Port,
+          PubliclyAccessible: source.PubliclyAccessible,
+          MultiAZ: source.MultiAZ,
+          EnableIAMDatabaseAuthentication: source.IAMDatabaseAuthenticationEnabled,
+          CACertificateIdentifier: source.CACertificateIdentifier,
+          BackupRetentionPeriod: source.BackupRetentionPeriod,
+          CopyTagsToSnapshot: source.CopyTagsToSnapshot,
+          DeletionProtection: false,
+          Tags: source.TagList,
+        });
+        const restored = (yield* waitAvailable(restoredId))!;
+        expect(restored.DbiResourceId).not.toBe(first.dbiResourceId);
+
+        // Swap: original out of the way, restored copy into place.
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: identifier,
+          NewDBInstanceIdentifier: displacedId,
+          ApplyImmediately: true,
+        });
+        yield* waitAvailable(displacedId);
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: restoredId,
+          NewDBInstanceIdentifier: identifier,
+          ApplyImmediately: true,
+        });
+        const swapped = (yield* waitUntil(
+          identifier,
+          (i) => i?.DBInstanceStatus === "available" && i.DbiResourceId === restored.DbiResourceId,
+        ))!;
+        expect(swapped.DbiResourceId).toBe(restored.DbiResourceId);
+
+        // Unchanged props, new physical server: the redeploy publishes it.
+        const second = yield* stack.deploy(program);
+        expect(second.dbInstanceIdentifier).toBe(identifier);
+        expect(second.dbiResourceId).toBe(restored.DbiResourceId);
+
+        // The displaced original still sits in the stack's subnet group.
+        yield* deleteIfPresent(displacedId);
+        yield* stack.destroy();
+        yield* assertInstanceGone(identifier);
+      }).pipe(
+        // The displaced original (and a stranded restore) are not tracked by
+        // the stack; remove them whether the test passes or fails.
+        Effect.ensuring(
+          Effect.all([deleteIfPresent(displacedId), deleteIfPresent(restoredId)], {
+            concurrency: 2,
+          }),
+        ),
+      );
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: 5_400_000,
+  },
+);
+
 const assertInstanceGone = Effect.fn(function* (identifier: string) {
   const gone = yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
     Effect.as(false),

@@ -23,6 +23,8 @@ import type * as Email from "../Email/index.ts";
 import type * as FlagshipNs from "../Flagship/index.ts";
 import type * as HyperdriveNs from "../Hyperdrive/index.ts";
 import type * as ImagesNs from "../Images/index.ts";
+import type * as K2Ns from "../K2/index.ts";
+import type { K2StreamBinding } from "../K2/WriteStreamBinding.ts";
 import type * as KV from "../KV/index.ts";
 import type * as PipelinesNs from "../Pipelines/index.ts";
 import type * as Queues from "../Queues/index.ts";
@@ -149,11 +151,13 @@ export type GetBindingType<T> =
                                                                       | PipelinesNs.Stream
                                                                       | PipelinesNs.LegacyPipeline
                                                                   ? Pipeline
-                                                                  : T extends Redacted<any>
-                                                                    ? // redacteds are always stored as secret_text, so are always string
-                                                                      // we JSON.stringify when not a Redacted<string>
-                                                                      string
-                                                                    : T;
+                                                                  : T extends K2Ns.Stream
+                                                                    ? K2StreamBinding
+                                                                    : T extends Redacted<any>
+                                                                      ? // redacteds are always stored as secret_text, so are always string
+                                                                        // we JSON.stringify when not a Redacted<string>
+                                                                        string
+                                                                      : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

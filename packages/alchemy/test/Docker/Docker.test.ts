@@ -217,6 +217,62 @@ describe("Docker.image publication", (it) => {
   }
 });
 
+// How a failing `docker` command is reported, against the real CLI.
+describe("Docker.run failure output", (it) => {
+  it.effect(
+    "says so when a failing command wrote nothing",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run(["run", "--rm", "alpine:3.19", "sh", "-c", "exit 3"])
+          .pipe(Effect.flip);
+        expect(error.reason._tag).toBe("Unknown");
+        expect(error.reason.description).toContain("exited with code 3");
+        expect(error.reason.description).toContain("wrote no output");
+      }),
+    { tags: ["provider:docker", "local"], timeout: 60_000 },
+  );
+
+  it.effect(
+    "keeps stdout and stderr from a failing command",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run([
+            "run",
+            "--rm",
+            "alpine:3.19",
+            "sh",
+            "-c",
+            "echo step-log-on-stdout; echo reason-on-stderr >&2; exit 1",
+          ])
+          .pipe(Effect.flip);
+        expect(error.reason.description).toContain("step-log-on-stdout");
+        expect(error.reason.description).toContain("reason-on-stderr");
+        // The reason (stderr) comes first.
+        expect(error.reason.description!.indexOf("reason-on-stderr")).toBeLessThan(
+          error.reason.description!.indexOf("step-log-on-stdout"),
+        );
+      }),
+    { tags: ["provider:docker", "local"], timeout: 60_000 },
+  );
+
+  it.effect(
+    "still classifies a daemon NotFound from stderr",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run(["image", "inspect", "alchemy-test-no-such-image:missing"])
+          .pipe(Effect.flip);
+        expect(error.reason._tag).toBe("NotFound");
+      }),
+    { tags: ["provider:docker", "local"] },
+  );
+});
+
 describe("Docker.image", (it) => {
   it.effect(
     "builds a minimal image with content Dockerfile",

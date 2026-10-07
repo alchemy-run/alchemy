@@ -7,7 +7,7 @@ import { serveRpc, type Rpc } from "../../Rpc.ts";
 import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
 import type { Fetcher } from "../Fetcher.ts";
-import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
+import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
@@ -182,14 +182,14 @@ export const ContainerPlatform: Platform<
             ),
           setInactivityTimeout: (durationMs: number | bigint) =>
             Effect.promise(() => state.container!.setInactivityTimeout(durationMs)),
+          // workerd routes intercepted requests to the binding over RPC, so it
+          // only accepts a native Fetcher (service binding, Durable Object
+          // stub, `ctx.exports` entrypoint) and rejects the returned promise
+          // for anything else.
           interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) => state.container!.interceptOutboundHttp(addr, binding)),
-            ),
+            Effect.promise(() => state.container!.interceptOutboundHttp(addr, binding.raw)),
           interceptAllOutboundHttp: (binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) => state.container!.interceptAllOutboundHttp(binding)),
-            ),
+            Effect.promise(() => state.container!.interceptAllOutboundHttp(binding.raw)),
           monitor: () => Effect.promise(() => state.container?.monitor() ?? Promise.resolve()),
           start: (options?: ContainerStartupOptions) =>
             Effect.sync(() => state.container!.start(options)),

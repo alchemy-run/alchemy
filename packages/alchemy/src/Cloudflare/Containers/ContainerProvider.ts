@@ -5,6 +5,7 @@ import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
@@ -178,7 +179,7 @@ export const LiveContainerProvider = () =>
               namespaceId: string;
             }
           | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -306,7 +307,7 @@ export const LiveContainerProvider = () =>
         // turns out to be gone. Threaded through so the update→create fallback
         // below preserves the binding.
         durableObjects: { namespaceId: string } | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -850,8 +851,8 @@ const toAttributes = (
   applicationName: application.name,
   accountId: application.accountId,
   schedulingPolicy: application.schedulingPolicy,
-  instances: application.instances,
-  maxInstances: application.maxInstances,
+  instances: application.instances ?? undefined,
+  maxInstances: application.maxInstances ?? undefined,
   constraints: normalizeNulls(
     application.constraints as ContainerApplication.Constraints | undefined,
   ),
@@ -859,6 +860,6 @@ const toAttributes = (
   configuration: normalizeNulls(application.configuration as ContainerApplication.Configuration),
   durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
   createdAt: application.createdAt,
-  version: application.version,
+  version: application.version ?? undefined,
   dev: undefined,
 });

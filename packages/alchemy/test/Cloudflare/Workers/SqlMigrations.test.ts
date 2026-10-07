@@ -3,11 +3,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { requestWorker } from "../Utils/WorkerRequest.ts";
+import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import type { HistoryRow } from "./fixtures/sql-migrations/object.ts";
 import SqlMigrationsWorker from "./fixtures/sql-migrations/worker.ts";
 
@@ -85,23 +84,42 @@ for (const dev of [true, false]) {
           const deployed = yield* deploy(Stack);
           expect(deployed.url).toMatch(dev ? /^http:\/\/localhost:\d+/ : /^https:\/\//);
           const client = yield* HttpClient.HttpClient;
-          // Readiness never invokes a migration or repeats an application write.
-          yield* Effect.gen(function* () {
-            const response = yield* client.get(`${deployed.url}/health`);
-            const body = yield* response.text;
-            if (response.status !== 200 || body !== "sql-migrations:ready") {
-              return yield* Effect.fail(
-                new WorkerNotReady({
-                  status: response.status,
-                  message: `GET ${deployed.url}/health: ${response.status}: ${body}`,
-                }),
-              );
-            }
-          }).pipe(
-            Effect.timeout("2 seconds"),
-            Effect.tapError((error) => Effect.logWarning("SQL Worker readiness", error)),
-            Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
-            Effect.timeout("45 seconds"),
+          // Readiness never invokes a migration or repeats an application
+          // write. A new version reaches Cloudflare's hosts one at a time, so
+          // `/health` must answer ready several times in a row.
+          yield* waitUntilStable(
+            `SQL Worker at ${deployed.url}`,
+            Effect.gen(function* () {
+              const response = yield* client.get(`${deployed.url}/health`);
+              const body = yield* response.text;
+              if (response.status !== 200 || body !== "sql-migrations:ready") {
+                return yield* Effect.fail(
+                  new WorkerNotReady({
+                    status: response.status,
+                    message: `GET ${deployed.url}/health: ${response.status}: ${body}`,
+                  }),
+                );
+              }
+              return true;
+            }).pipe(
+              Effect.timeout("2 seconds"),
+              Effect.tapError((error) => Effect.logWarning("SQL Worker readiness", error)),
+              Effect.orElseSucceed(() => false),
+            ),
+            { spacing: "2 seconds", timeout: "60 seconds" },
+          );
+          // `/health` never reaches the Durable Object namespace, which a fresh
+          // deploy also rolls out host by host (first calls fail with an opaque
+          // "internal error"). Probe it through a dedicated object name: it
+          // migrates its own isolated database, so the objects the tests
+          // inspect still activate exactly once.
+          yield* waitUntilStable(
+            `SQL Durable Object namespace at ${deployed.url}`,
+            requestWorker(HttpClientRequest.get(`${deployed.url}/state?name=readiness-probe`)).pipe(
+              Effect.map((response) => response.status === 200),
+              Effect.catchTag("WorkerNotPropagated", () => Effect.succeed(false)),
+            ),
+            { timeout: "60 seconds" },
           );
           return deployed;
         }),

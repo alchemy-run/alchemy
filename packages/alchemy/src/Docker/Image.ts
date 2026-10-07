@@ -56,7 +56,10 @@ export interface ImageProps {
   name?: string;
   /** Additional local/publication tag. @deprecated Use `publish.tags` for publication aliases. */
   tag?: string;
-  /** Registry credentials. @deprecated Use `publish` instead. */
+  /**
+   * Registry credentials, also used to authenticate the build (even with
+   * `skipPush`). @deprecated Use `publish` instead.
+   */
   registry?: ImageRegistry;
   /** Suppress legacy publication. @deprecated Omit `publish` for local builds. */
   skipPush?: boolean;
@@ -127,6 +130,26 @@ export interface Image extends Resource<
  *   publish: { repository: "registry.example.com/team/web" },
  * });
  * ```
+ *
+ * ### Private Base Images
+ * **Example:** Build FROM an image in a private registry
+ * ```typescript
+ * // Dockerfile: FROM registry.example.com/team/base:v1
+ * const image = yield* Docker.Image("WebImage", {
+ *   build: { context: "./web" },
+ *   publish: {
+ *     repository: "registry.example.com/team/web",
+ *     // Authenticates the base-image pull as well as the push.
+ *     credentials: { username: "deploy", password: Config.Redacted("REGISTRY_PASSWORD") },
+ *   },
+ * });
+ * ```
+ *
+ * The build authenticates with the publish (or legacy `registry`)
+ * credentials, so private base images and `type=registry` caches in that
+ * registry resolve without a host `docker login`. Credentials already in
+ * `DOCKER_AUTH_CONFIG` for other registries are kept. This needs Buildx 0.26+
+ * (Docker Desktop 4.44+) or the legacy builder.
  *
  * ### Inline Dockerfiles
  * **Example:** Build an inline Dockerfile
@@ -334,6 +357,17 @@ const makeImageProvider = (localMode: boolean) =>
             };
           }
           yield* session.note(`Preparing local image ${inputRef}`);
+          // A local build (no publish, `skipPush`, or dev) may still pull a
+          // private base image. Credentials go to this build only and are
+          // never part of the persisted `localBuild` inputs.
+          const buildCredentials =
+            news.registry ??
+            (news.publish?.credentials
+              ? {
+                  server: parseImageReference(news.publish.repository).server,
+                  ...news.publish.credentials,
+                }
+              : undefined);
           const local = yield* ensureLocalImage(
             {
               name: target.name,
@@ -342,6 +376,7 @@ const makeImageProvider = (localMode: boolean) =>
               tag: news.tag,
             },
             build,
+            buildCredentials,
           ).pipe(Effect.provide(Layer.succeed(Docker, docker)));
           // Keep only the context the current build (and dev reloads) reference.
           yield* pruneGeneratedContexts(instanceId, build.context);

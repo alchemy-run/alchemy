@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Docker } from "./Docker.ts";
+import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { prepareImageBuild, type DockerBuildOptions } from "./ImageBuild.ts";
 import { parseCreatedAt } from "./Registry.ts";
 
@@ -15,6 +15,8 @@ export interface LocalImageBuild {
 export const ensureLocalImage = Effect.fn(function* (
   source: LocalImageBuild,
   prepared?: Effect.Success<ReturnType<typeof prepareImageBuild>>,
+  /** Registry auth for this build only (private base images); never persisted. */
+  credentials?: RegistryCredentials,
 ) {
   const docker = yield* Docker;
   const build = prepared ?? (yield* prepareImageBuild(source.build));
@@ -35,6 +37,7 @@ export const ensureLocalImage = Effect.fn(function* (
       tag: inputRef,
       "cache-from": source.build.cacheFrom,
       "cache-to": source.build.cacheTo,
+      credentials,
     });
     image = yield* docker.image.inspect(inputRef, source.dockerContext);
   }

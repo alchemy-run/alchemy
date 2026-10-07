@@ -1581,7 +1581,8 @@ describe.concurrent(
             third.app.configuration.image!,
           );
           expect(rolledOut.image).toBe(third.app.configuration.image);
-          expect(rolledOut.version).toBeGreaterThan(first.app.version);
+          expect(first.app.version).toEqual(expect.any(Number));
+          expect(rolledOut.version).toBeGreaterThan(first.app.version!);
 
           yield* scratch.destroy();
         }).pipe(logLevel),
@@ -1687,7 +1688,8 @@ describe.concurrent(
           const after = yield* live(accountId, applicationId).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
-              until: (app) => app.version > legacy.version,
+              until: (app) =>
+                app.version != null && legacy.version != null && app.version > legacy.version,
               times: 30,
             }),
           );
@@ -1762,6 +1764,7 @@ describe.concurrent(
             }),
           );
           expect(deleted).toBe(true);
+          assert(first.app.maxInstances !== undefined);
           const detached = yield* Containers.createContainerApplication({
             accountId,
             name: first.app.applicationName,

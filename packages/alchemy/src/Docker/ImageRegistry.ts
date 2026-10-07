@@ -48,7 +48,11 @@ export interface ImagePublish {
   repository: string;
   /** Additional tags. Deployments always use the immutable digest reference. */
   tags?: string[];
-  /** Explicit credentials. Otherwise use the registry integration or Docker config. */
+  /**
+   * Explicit credentials. Otherwise use the registry integration or Docker
+   * config. They also authenticate the build, so a private base image in
+   * this registry resolves without a host `docker login`.
+   */
   credentials?: {
     /** Registry authentication username. */
     username: string;
