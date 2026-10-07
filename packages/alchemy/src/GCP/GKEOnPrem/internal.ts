@@ -1,6 +1,6 @@
 import * as gkeonprem from "@distilled.cloud/gcp/gkeonprem_v1";
-import * as Data from "effect/Data";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -18,35 +18,22 @@ import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts
 export const MAX_NAME_LENGTH = 63;
 export const VMWARE_NAME_LENGTH = 40;
 
-export {
-  createInternalLabels,
-  hasAlchemyLabels,
-  stripInternalLabels,
-  toLabels,
-};
+export { createInternalLabels, hasAlchemyLabels, stripInternalLabels, toLabels };
 
-export class ResourceNotResolved extends Data.TaggedError(
-  "GCP.GKEOnPrem.ResourceNotResolved",
-)<{
+export class ResourceNotResolved extends Data.TaggedError("GCP.GKEOnPrem.ResourceNotResolved")<{
   name: string;
 }> {}
 
-export class ResourceStillExists extends Data.TaggedError(
-  "GCP.GKEOnPrem.ResourceStillExists",
-)<{
+export class ResourceStillExists extends Data.TaggedError("GCP.GKEOnPrem.ResourceStillExists")<{
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.GKEOnPrem.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.GKEOnPrem.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.GKEOnPrem.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.GKEOnPrem.ResourceFailed")<{
   name: string;
   state: string;
   details: string | undefined;
@@ -75,10 +62,8 @@ export const rfc1035 = (
   return next.slice(0, maxLength);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -104,26 +89,16 @@ export const toPhysicalId = (
     );
   });
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -152,8 +127,7 @@ export const stringMap = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(value ?? {}).filter(
-      (entry): entry is [string, string] =>
-        typeof entry[1] === "string" && entry[1].length > 0,
+      (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0,
     ),
   );
 
@@ -161,9 +135,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const encodeOwnership = (
   labels: Record<string, string>,
@@ -197,9 +170,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const isOwned = (
   annotations: Record<string, string | undefined> | null | undefined,
@@ -237,8 +208,7 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const pickDefined = (observed: unknown, desired: unknown): unknown => {
   if (desired === undefined || desired === null) return undefined;
@@ -265,9 +235,7 @@ export const differs = (observed: unknown, desired: unknown): boolean => {
 };
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -448,12 +416,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>

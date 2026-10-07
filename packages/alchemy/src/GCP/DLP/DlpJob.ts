@@ -97,9 +97,7 @@ export type DlpJob = Resource<
  */
 export const DlpJob = Resource<DlpJob>("GCP.DLP.DlpJob");
 
-export class DlpJobNotResolved extends Data.TaggedError(
-  "GCP.DLP.DlpJobNotResolved",
-)<{
+export class DlpJobNotResolved extends Data.TaggedError("GCP.DLP.DlpJobNotResolved")<{
   name: string;
 }> {}
 
@@ -180,13 +178,9 @@ export const DlpJobProvider = () =>
       if (!isResolved(news)) return undefined;
       const previous = olds?.jobId ?? output?.jobId;
       const idChanged =
-        previous !== undefined &&
-        news.jobId !== undefined &&
-        news.jobId !== previous;
-      const inspectChanged =
-        olds !== undefined && !jsonEqual(olds.inspectJob, news.inspectJob);
-      const riskChanged =
-        olds !== undefined && !jsonEqual(olds.riskJob, news.riskJob);
+        previous !== undefined && news.jobId !== undefined && news.jobId !== previous;
+      const inspectChanged = olds !== undefined && !jsonEqual(olds.inspectJob, news.inspectJob);
+      const riskChanged = olds !== undefined && !jsonEqual(olds.riskJob, news.riskJob);
       return replaceOnIdentity(idChanged || inspectChanged || riskChanged);
     }),
 
@@ -197,8 +191,7 @@ export const DlpJobProvider = () =>
         olds?.jobId !== undefined ? stripJobPrefix(olds.jobId) : undefined,
         output?.jobId !== undefined ? stripJobPrefix(output.jobId) : undefined,
       );
-      const risk =
-        olds?.riskJob !== undefined || output?.type === "RISK_ANALYSIS_JOB";
+      const risk = olds?.riskJob !== undefined || output?.type === "RISK_ANALYSIS_JOB";
       const name = output?.name ?? resourceName(env.project, jobId, risk);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -219,9 +212,7 @@ export const DlpJobProvider = () =>
           }),
           (page) => page.jobs,
         ).pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed([] as dlp.GooglePrivacyDlpV2DlpJob[]),
-          ),
+          Effect.catchTag("NotFound", () => Effect.succeed([] as dlp.GooglePrivacyDlpV2DlpJob[])),
         );
         return items
           .filter((job) => hasHybridOwnership(observedHybridLabels(job)))
@@ -260,10 +251,7 @@ export const DlpJobProvider = () =>
         return yield* new DlpJobNotResolved({ name });
       }
 
-      if (
-        inspectJob !== undefined &&
-        observedHybridLabels(current) === undefined
-      ) {
+      if (inspectJob !== undefined && observedHybridLabels(current) === undefined) {
         current = yield* getByName(current.name ?? name).pipe(
           Effect.filterOrFail(
             (job) =>
@@ -279,9 +267,7 @@ export const DlpJobProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag("GCP.DLP.DlpJobNotResolved", () =>
-            Effect.succeed(current),
-          ),
+          Effect.catchTag("GCP.DLP.DlpJobNotResolved", () => Effect.succeed(current)),
         );
       }
 

@@ -184,11 +184,7 @@ export const Plugin = Resource<Plugin>("GCP.ApiHub.Plugin");
 const resourceName = (project: string, location: string, pluginId: string) =>
   `${locationParent(project, location)}/plugins/${pluginId}`;
 
-const toAttrs = (
-  plugin: apihub.GoogleCloudApihubV1Plugin,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (plugin: apihub.GoogleCloudApihubV1Plugin, project: string, region: string) => {
   const name = plugin.name ?? "";
   const parsed = parseName(name, "plugins", region);
   const { text } = parseOwnership(plugin.description);
@@ -230,8 +226,7 @@ const listAt = (parent: string, project: string, region: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
-const actionsOf = (news: PluginProps) =>
-  news.actionsConfig ?? DEFAULT_PLUGIN_ACTIONS;
+const actionsOf = (news: PluginProps) => news.actionsConfig ?? DEFAULT_PLUGIN_ACTIONS;
 
 const categoryOf = (news: PluginProps) => news.pluginCategory ?? "API_PRODUCER";
 
@@ -259,10 +254,7 @@ export const PluginProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.pluginId ?? output?.pluginId,
         nextId: news.pluginId ?? olds?.pluginId ?? output?.pluginId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -273,41 +265,24 @@ export const PluginProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const pluginId = yield* toPhysicalId(
-        id,
-        olds?.pluginId,
-        output?.pluginId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, pluginId);
+      const pluginId = yield* toPhysicalId(id, olds?.pluginId, output?.pluginId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, pluginId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-          env.region,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project, env.region);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const pluginId = yield* toPhysicalId(id, news.pluginId, output?.pluginId);
       const name = resourceName(env.project, location, pluginId);
       const ownership = yield* ownershipLabels(id);
@@ -361,16 +336,14 @@ export const PluginProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* apihub
-        .deleteProjectsLocationsPlugins({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
+      const operation = yield* apihub.deleteProjectsLocationsPlugins({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

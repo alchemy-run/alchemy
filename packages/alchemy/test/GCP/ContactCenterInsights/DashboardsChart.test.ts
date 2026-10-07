@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   cci.getProjectsLocationsDashboardsCharts({ name }).pipe(
@@ -50,9 +47,7 @@ test.provider(
 // The testing project rejects every dashboard create with BadRequest
 // "Request contains an invalid argument." Set GCP_TEST_CCI_DASHBOARDS=1 on
 // a project where CCI dashboards are available.
-test.provider.skipIf(
-  !!process.env.FAST || !process.env.GCP_TEST_CCI_DASHBOARDS,
-)(
+test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_CCI_DASHBOARDS)(
   "create, update, and delete a dashboard chart",
   (stack) =>
     Effect.gen(function* () {
@@ -60,13 +55,10 @@ test.provider.skipIf(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const dashboard = yield* GCP.ContactCenterInsights.Dashboard(
-            "Board",
-            {
-              location: "us-central1",
-              displayName: "chart-board",
-            },
-          );
+          const dashboard = yield* GCP.ContactCenterInsights.Dashboard("Board", {
+            location: "us-central1",
+            displayName: "chart-board",
+          });
           return yield* GCP.ContactCenterInsights.DashboardsChart("Volume", {
             parent: dashboard.name,
             displayName: "volume",
@@ -90,13 +82,10 @@ test.provider.skipIf(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const dashboard = yield* GCP.ContactCenterInsights.Dashboard(
-            "Board",
-            {
-              location: "us-central1",
-              displayName: "chart-board",
-            },
-          );
+          const dashboard = yield* GCP.ContactCenterInsights.Dashboard("Board", {
+            location: "us-central1",
+            displayName: "chart-board",
+          });
           return yield* GCP.ContactCenterInsights.DashboardsChart("Volume", {
             parent: dashboard.name,
             chartId: created.chartId,

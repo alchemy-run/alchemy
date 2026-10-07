@@ -27,12 +27,7 @@ export interface DeleteBackup extends Binding.Service<
   () => Effect.Effect<
     (
       request: cloudhsm.DeleteBackupRequest,
-    ) => Effect.Effect<
-      cloudhsm.DeleteBackupResponse,
-      cloudhsm.DeleteBackupError
-    >
+    ) => Effect.Effect<cloudhsm.DeleteBackupResponse, cloudhsm.DeleteBackupError>
   >
 > {}
-export const DeleteBackup = Binding.Service<DeleteBackup>(
-  "AWS.CloudHSMV2.DeleteBackup",
-);
+export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.CloudHSMV2.DeleteBackup");

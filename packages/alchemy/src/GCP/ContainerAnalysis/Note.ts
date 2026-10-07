@@ -150,9 +150,7 @@ export type Note = Resource<
     /** Upgrade metadata. */
     upgrade: containeranalysis.UpgradeNote | undefined;
     /** Vulnerability assessment metadata. */
-    vulnerabilityAssessment:
-      | containeranalysis.VulnerabilityAssessmentNote
-      | undefined;
+    vulnerabilityAssessment: containeranalysis.VulnerabilityAssessmentNote | undefined;
     /** Secret metadata. */
     secret: containeranalysis.SecretNote | undefined;
     /** DSSE attestation metadata. */
@@ -217,15 +215,11 @@ export type Note = Resource<
  */
 export const Note = Resource<Note>("GCP.ContainerAnalysis.Note");
 
-const resourceName = (project: string, noteId: string) =>
-  expandNoteName(noteId, project);
+const resourceName = (project: string, noteId: string) => expandNoteName(noteId, project);
 
 const getByName = missingGet(containeranalysis.getProjectsNotes);
 
-const toPublicAttrs = (
-  note: containeranalysis.Note,
-  project: string,
-): Note["Attributes"] => {
+const toPublicAttrs = (note: containeranalysis.Note, project: string): Note["Attributes"] => {
   const attrs = noteAttrs(note, project);
   return {
     name: attrs.name,
@@ -267,10 +261,7 @@ export const NoteProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.noteId ?? output?.noteId,
         nextId: news.noteId,
-        extra:
-          previousKind !== undefined &&
-          nextKind !== undefined &&
-          previousKind !== nextKind,
+        extra: previousKind !== undefined && nextKind !== undefined && previousKind !== nextKind,
       });
     }),
 
@@ -333,8 +324,6 @@ export const NoteProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* ignoreGone(
-        containeranalysis.deleteProjectsNotes({ name: output.name }),
-      );
+      yield* ignoreGone(containeranalysis.deleteProjectsNotes({ name: output.name }));
     }),
   });

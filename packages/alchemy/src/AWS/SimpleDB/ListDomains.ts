@@ -31,13 +31,7 @@ export interface ListDomains extends Binding.Service<
   () => Effect.Effect<
     (
       request?: sdb.ListDomainsRequest,
-    ) => Effect.Effect<
-      sdb.ListDomainsResponse,
-      sdb.ListDomainsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sdb.ListDomainsResponse, sdb.ListDomainsError, RuntimeContext>
   >
 > {}
-export const ListDomains = Binding.Service<ListDomains>(
-  "AWS.SimpleDB.ListDomains",
-);
+export const ListDomains = Binding.Service<ListDomains>("AWS.SimpleDB.ListDomains");

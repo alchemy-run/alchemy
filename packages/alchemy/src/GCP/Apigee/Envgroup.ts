@@ -89,19 +89,14 @@ export type Envgroup = Resource<
  */
 export const Envgroup = Resource<Envgroup>("GCP.Apigee.Envgroup");
 
-export class EnvgroupNotResolved extends Data.TaggedError(
-  "GCP.Apigee.EnvgroupNotResolved",
-)<{
+export class EnvgroupNotResolved extends Data.TaggedError("GCP.Apigee.EnvgroupNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (organization: string, envgroupId: string) =>
   `${orgNameOf(organization)}/envgroups/${envgroupId}`;
 
-const toAttrs = (
-  group: apigee.GoogleCloudApigeeV1EnvironmentGroup,
-  organization: string,
-) => {
+const toAttrs = (group: apigee.GoogleCloudApigeeV1EnvironmentGroup, organization: string) => {
   const name = group.name ?? "";
   return {
     name,
@@ -117,11 +112,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvgroups({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const EnvgroupProvider = () =>
   Provider.succeed(Envgroup, {
@@ -132,9 +123,7 @@ export const EnvgroupProvider = () =>
       const previousId = olds?.envgroupId ?? output?.envgroupId;
       const previousOrg = olds?.organization ?? output?.organization;
       const idChanged =
-        previousId !== undefined &&
-        news.envgroupId !== undefined &&
-        news.envgroupId !== previousId;
+        previousId !== undefined && news.envgroupId !== undefined && news.envgroupId !== previousId;
       const orgChanged =
         previousOrg !== undefined &&
         news.organization !== undefined &&
@@ -150,16 +139,8 @@ export const EnvgroupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = defaultOrgName(
-        env.project,
-        olds?.organization ?? output?.organization,
-      );
-      const envgroupId = yield* letterPrefixedId(
-        id,
-        olds?.envgroupId,
-        output?.envgroupId,
-        63,
-      );
+      const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
+      const envgroupId = yield* letterPrefixedId(id, olds?.envgroupId, output?.envgroupId, 63);
       const name = output?.name ?? resourceName(organization, envgroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
@@ -171,12 +152,7 @@ export const EnvgroupProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organization = defaultOrgName(env.project, news.organization);
-      const envgroupId = yield* letterPrefixedId(
-        id,
-        news.envgroupId,
-        output?.envgroupId,
-        63,
-      );
+      const envgroupId = yield* letterPrefixedId(id, news.envgroupId, output?.envgroupId, 63);
       const name = resourceName(organization, envgroupId);
       const desiredHostnames = news.hostnames;
 
@@ -220,9 +196,7 @@ export const EnvgroupProvider = () =>
       const operation = yield* apigee
         .deleteOrganizationsEnvgroups({ name: output.name })
         .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -35,9 +35,7 @@ function isStableTag(tag: string): boolean {
 const tag = process.argv[2];
 const channel = process.argv[3] as Channel | undefined;
 if (!tag || !channel || !CHANNELS.includes(channel)) {
-  console.error(
-    "Usage: bun github-release.ts <tag> <release|beta|alpha|rc|tag>",
-  );
+  console.error("Usage: bun github-release.ts <tag> <release|beta|alpha|rc|tag>");
   process.exit(1);
 }
 
@@ -56,9 +54,7 @@ if (channel === "release") {
   prerelease = true;
   latest = false;
 } else {
-  const list = await $`gh release list --limit 500 --json tagName,isPrerelease`
-    .nothrow()
-    .quiet();
+  const list = await $`gh release list --limit 500 --json tagName,isPrerelease`.nothrow().quiet();
   let hasStable = false;
   if (list.exitCode === 0) {
     const raw = list.stdout.toString().trim();
@@ -80,9 +76,7 @@ if (channel === "release") {
 }
 
 if (latest) {
-  const cur = await $`gh release view --latest --json tagName,isPrerelease`
-    .nothrow()
-    .quiet();
+  const cur = await $`gh release view --latest --json tagName,isPrerelease`.nothrow().quiet();
   if (cur.exitCode === 0) {
     const raw = cur.stdout.toString().trim();
     if (raw) {
@@ -90,11 +84,7 @@ if (latest) {
         tagName: string;
         isPrerelease: boolean;
       };
-      if (
-        current.tagName !== tag &&
-        !isStableTag(current.tagName) &&
-        !current.isPrerelease
-      ) {
+      if (current.tagName !== tag && !isStableTag(current.tagName) && !current.isPrerelease) {
         console.log(
           `Demoting previous masquerading latest ${current.tagName}: prerelease=false → true`,
         );
@@ -104,14 +94,10 @@ if (latest) {
   }
 }
 
-const prev = await $`git describe --tags --abbrev=0 ${`${tag}^`}`
-  .nothrow()
-  .quiet();
+const prev = await $`git describe --tags --abbrev=0 ${`${tag}^`}`.nothrow().quiet();
 const from = prev.exitCode === 0 ? prev.stdout.toString().trim() : undefined;
 
-console.log(
-  `Generating release notes for ${tag}${from ? ` from ${from}` : ""}`,
-);
+console.log(`Generating release notes for ${tag}${from ? ` from ${from}` : ""}`);
 const { md } = await generate({
   from,
   to: tag,

@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Sse from "effect/encoding/Sse";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as Sse from "effect/encoding/Sse";
-import * as HttpClient from "effect/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { Gateway } from "./fixtures/Gateway.ts";
 import LanguageModelTestWorker from "./fixtures/LanguageModelWorker.ts";
 
@@ -22,10 +22,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AiGatewayLanguageModelStack",
@@ -44,6 +41,7 @@ const Stack = Alchemy.Stack(
 );
 
 const stack = beforeAll(deploy(Stack));
+
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 type StreamPart = {
@@ -52,10 +50,12 @@ type StreamPart = {
   name?: string;
   delta?: string;
   reason?: string;
+  params?: { city?: string };
   usage?: {
     inputTokens?: { total?: number };
     outputTokens?: { total?: number };
   };
+  metadata?: { cloudflare?: { neurons?: number } | null };
 };
 
 const parseSse = (sse: string): ReadonlyArray<StreamPart> =>
@@ -88,6 +88,7 @@ test(
         inputTokens: number | undefined;
         outputTokens: number | undefined;
       };
+      neurons: number | undefined;
     };
 
     expect(typeof body.text).toBe("string");
@@ -99,14 +100,10 @@ test(
     // Refactor invariant: a normal completion maps to `stop`, not `unknown` /
     // `other` / `error`.
     expect(body.finishReason).toBe("stop");
+    expect(body.neurons).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -127,8 +124,7 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.map(parseSse),
         Effect.flatMap((parts) =>
-          parts.some((p) => p.type === "text-delta") &&
-          parts.some((p) => p.type === "finish")
+          parts.some((p) => p.type === "text-delta") && parts.some((p) => p.type === "finish")
             ? Effect.succeed(parts)
             : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
         ),
@@ -147,14 +143,10 @@ test(
     expect(parts.length).toBeGreaterThan(0);
     expect(text.length).toBeGreaterThan(0);
     expect(finish).toBeDefined();
+    expect(finish?.metadata?.cloudflare?.neurons).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -173,8 +165,7 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.map(parseSse),
         Effect.flatMap((parts) =>
-          parts.some((p) => p.type === "text-delta") &&
-          parts.some((p) => p.type === "finish")
+          parts.some((p) => p.type === "text-delta") && parts.some((p) => p.type === "finish")
             ? Effect.succeed(parts)
             : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
         ),
@@ -184,8 +175,7 @@ test(
         }),
       );
 
-    const indexOfType = (type: string) =>
-      parts.findIndex((p) => p.type === type);
+    const indexOfType = (type: string) => parts.findIndex((p) => p.type === type);
     const lastIndexOfType = (type: string) => {
       for (let i = parts.length - 1; i >= 0; i--) {
         if (parts[i]!.type === type) return i;
@@ -212,12 +202,7 @@ test(
     expect(parts.filter((p) => p.type === "text-end")).toHaveLength(1);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -263,12 +248,7 @@ test.skipIf(!process.env.DEBUG_RAW_STREAM)(
     print("\n=== end tool stream ===\n");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -304,15 +284,229 @@ test(
     expect(["stop", "length"]).toContain(finish?.reason);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
+
+const normalize = (text: string) => text.toLowerCase().replace(/[^a-z]/g, "");
+
+// Workers AI models disagree on where a streamed fragment lives. Text can be
+// mirrored in both the native `response` field and
+// `choices[0].delta.content` of one chunk (llama, qwen3, mistral), set only
+// in the OpenAI delta (kimi, gpt-oss), or set only in `response` (qwq,
+// deepseek-r1-distill). Reasoning arrives as `reasoning_content`,
+// `reasoning`, both mirrored, or inline in the text inside `<think>` tags.
+// Each shape must yield every fragment exactly once, in the right part.
+const NON_REASONING_MODELS = [
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "@cf/mistralai/mistral-small-3.1-24b-instruct",
+];
+
+const REASONING_MODELS = [
+  // inline `<think>…</think>` in the native `response` text
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+  // inline, but the chat template pre-opens `<think>`: only `</think>` streams
+  "@cf/qwen/qwq-32b",
+  // `reasoning` and `reasoning_content` mirrored
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+  "@cf/openai/gpt-oss-120b",
+  "@cf/openai/gpt-oss-20b",
+  "@cf/zai-org/glm-4.7-flash",
+  // `reasoning_content` only
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/moonshotai/kimi-k2.5",
+  "@cf/zai-org/glm-5.3",
+  "@cf/deepseek-ai/deepseek-v4-flash-0731",
+  // `reasoning` only
+  "@cf/google/gemma-4-26b-a4b-it",
+];
+
+const TEXT_MODELS = [...NON_REASONING_MODELS, ...REASONING_MODELS];
+
+// Models that reliably make a tool call under `tool_choice: "required"`.
+const TOOL_MODELS = [
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-4-scout-17b-16e-instruct",
+  "@cf/mistralai/mistral-small-3.1-24b-instruct",
+  "@cf/qwen/qwen3-30b-a3b-fp8",
+  "@cf/openai/gpt-oss-120b",
+  "@cf/openai/gpt-oss-20b",
+  "@cf/zai-org/glm-4.7-flash",
+  "@cf/moonshotai/kimi-k2.6",
+  "@cf/deepseek-ai/deepseek-v4-flash-0731",
+  "@cf/google/gemma-4-26b-a4b-it",
+];
+
+const PONG = "Say the word 'pong' and nothing else.";
+
+const fetchParts = (path: string) =>
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    return yield* client.get(`${out.url}${path}`).pipe(
+      Effect.flatMap((res) => res.text),
+      Effect.map(parseSse),
+      Effect.flatMap((parts) =>
+        parts.some((p) => p.type === "finish")
+          ? Effect.succeed(parts)
+          : Effect.fail(new Error("AI stream not ready: unfinished")),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+  });
+
+const streamedText = (parts: ReadonlyArray<StreamPart>) =>
+  parts
+    .filter((p) => p.type === "text-delta")
+    .map((p) => p.delta ?? "")
+    .join("");
+
+const textDeltas = (parts: ReadonlyArray<StreamPart>) =>
+  parts.filter((p) => p.type === "text-delta").map((p) => p.delta ?? "");
+
+/**
+ * Assert a streamed answer to {@link PONG} was emitted exactly once. Checks
+ * the two duplication signatures rather than the exact wording, so verbose
+ * models (deepseek-r1-distill) don't flake: a fragment mirrored in two fields
+ * shows up as each delta repeated back to back, and a buffered reply
+ * re-emitted on finalize shows up as the whole text repeated.
+ */
+const expectEmittedOnce = (parts: ReadonlyArray<StreamPart>) => {
+  const deltas = textDeltas(parts);
+  const text = normalize(deltas.join(""));
+  expect(text).toContain("pong");
+  const repeats = deltas.filter((d, i) => i > 0 && d === deltas[i - 1]).length;
+  expect(repeats * 2).toBeLessThan(deltas.length);
+  expect(
+    text.length % 2 === 0 && text.slice(0, text.length / 2) === text.slice(text.length / 2),
+  ).toBe(false);
+};
+
+/** Assert reasoning was split out of the answer, with no `<think>` tags left over. */
+const expectReasoningSeparated = (reasoning: string | undefined, text: string) => {
+  expect(reasoning?.trim().length).toBeGreaterThan(0);
+  expect(reasoning).not.toContain("think>");
+  expect(text).not.toContain("think>");
+  expect(text).not.toContain(reasoning!.trim().slice(0, 40));
+  expect(normalize(text)).toContain("pong");
+};
+
+for (const model of TEXT_MODELS) {
+  test(
+    `streamed text deltas are emitted exactly once (${model})`,
+    Effect.gen(function* () {
+      const parts = yield* fetchParts(
+        `/stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
+      );
+      expectEmittedOnce(parts);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+
+  test(
+    `streamed text with tools available is emitted exactly once (${model})`,
+    Effect.gen(function* () {
+      // With tools passed, the mirrored native `response` text used to be
+      // buffered as a candidate tool call and re-emitted as a second copy
+      // of the whole reply on finalize.
+      const parts = yield* fetchParts(
+        `/tool-stream?toolChoice=auto&model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(
+          `Do not call any tools. ${PONG}`,
+        )}`,
+      );
+      expect(parts.some((p) => p.type === "tool-call")).toBe(false);
+      expectEmittedOnce(parts);
+      expect(parts.filter((p) => p.type === "text-start")).toHaveLength(1);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}
+
+for (const model of TOOL_MODELS) {
+  test(
+    `streams a resolvable tool-call part (${model})`,
+    Effect.gen(function* () {
+      const parts = yield* fetchParts(
+        `/tool-stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(
+          "What's the weather in Paris?",
+        )}`,
+      );
+      // Effect AI only sees (and resolves) a streamed tool call through a
+      // `tool-call` part.
+      const call = parts.find((p) => p.type === "tool-call");
+      expect(call?.name).toBe("get_weather");
+      expect(call?.params?.city?.toLowerCase()).toContain("paris");
+      expect(parts.some((p) => p.type === "tool-result" && p.id === call?.id)).toBe(true);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}
+
+const reasoningOf = (parts: ReadonlyArray<StreamPart>) =>
+  parts
+    .filter((p) => p.type === "reasoning-delta")
+    .map((p) => p.delta ?? "")
+    .join("");
+
+for (const model of REASONING_MODELS) {
+  test(
+    `streams reasoning separately from text (${model})`,
+    Effect.gen(function* () {
+      const parts = yield* fetchParts(
+        `/stream?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
+      );
+      expectReasoningSeparated(reasoningOf(parts), streamedText(parts));
+      // One reasoning block, closed before the text block opens.
+      expect(parts.filter((p) => p.type === "reasoning-start")).toHaveLength(1);
+      expect(parts.filter((p) => p.type === "reasoning-end")).toHaveLength(1);
+      expect(parts.findIndex((p) => p.type === "reasoning-end")).toBeLessThan(
+        parts.findIndex((p) => p.type === "text-start"),
+      );
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+
+  test(
+    `generates reasoning separately from text (${model})`,
+    Effect.gen(function* () {
+      const out = yield* stack;
+      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+      const res = yield* client
+        .get(
+          `${out.url}/generate?model=${encodeURIComponent(model)}&prompt=${encodeURIComponent(PONG)}`,
+        )
+        .pipe(
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis"),
+            times: 10,
+          }),
+        );
+      const body = (yield* res.json) as { text: string; reasoningText: string | undefined };
+      expectReasoningSeparated(body.reasoningText, body.text);
+    }).pipe(logLevel),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}
 
 test(
   "stream emits multiple text-delta chunks for a long-form response",
@@ -344,12 +538,7 @@ test(
     expect(total).toBeGreaterThan(20);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -366,9 +555,7 @@ test.skip(
     const id = `test-${Date.now()}`;
 
     const r1 = yield* client
-      .get(
-        `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`,
-      )
+      .get(`${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -399,12 +586,7 @@ test.skip(
     expect(b2.turns).toBeGreaterThanOrEqual(4);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
   },
 );
@@ -416,11 +598,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/tool?prompt=${encodeURIComponent(
-          "What's the weather in San Francisco?",
-        )}`,
-      )
+      .get(`${out.url}/tool?prompt=${encodeURIComponent("What's the weather in San Francisco?")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -462,12 +640,7 @@ test(
     expect(result.result.condition).toBe("sunny");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -479,11 +652,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/tool-stream?prompt=${encodeURIComponent(
-          "What's the weather in Seattle?",
-        )}`,
-      )
+      .get(`${out.url}/tool-stream?prompt=${encodeURIComponent("What's the weather in Seattle?")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -494,9 +663,7 @@ test(
 
     const parts = parseSse(yield* res.text);
     const toolParamsStart = parts.filter((p) => p.type === "tool-params-start");
-    const toolParamsDeltas = parts.filter(
-      (p) => p.type === "tool-params-delta",
-    );
+    const toolParamsDeltas = parts.filter((p) => p.type === "tool-params-delta");
     const toolParamsEnd = parts.filter((p) => p.type === "tool-params-end");
 
     expect(toolParamsStart.length).toBeGreaterThan(0);
@@ -527,14 +694,21 @@ test(
       }
     }
     expect(parts[parts.length - 1]?.type).toBe("finish");
+
+    // Effect AI only sees (and resolves) a streamed tool call through a
+    // `tool-call` part — `tool-params-*` parts alone are never assembled
+    // into one (#1907).
+    const toolCalls = parts.filter((p) => p.type === "tool-call");
+    expect(toolCalls.length).toBe(toolParamsStart.length);
+    for (const call of toolCalls) {
+      expect(call.name).toBe("get_weather");
+      expect(call.params?.city?.toLowerCase()).toContain("seattle");
+      expect(parts.indexOf(call)).toBeGreaterThan(indexOf("tool-params-end", call.id));
+    }
+    expect(parts.some((p) => p.type === "tool-result" && p.name === "get_weather")).toBe(true);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -546,11 +720,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/tool-stream?prompt=${encodeURIComponent(
-          "What's the weather in Portland?",
-        )}`,
-      )
+      .get(`${out.url}/tool-stream?prompt=${encodeURIComponent("What's the weather in Portland?")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -574,20 +744,13 @@ test(
     const args = yield* Effect.try({
       try: () => JSON.parse(joined) as { city?: string },
       catch: (cause) =>
-        new Error(
-          `Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`,
-        ),
+        new Error(`Invalid concatenated tool arguments ${JSON.stringify(joined)}: ${cause}`),
     });
     expect(typeof args.city).toBe("string");
     expect(args.city!.toLowerCase()).toContain("portland");
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
@@ -599,9 +762,7 @@ test(
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(
-        `${out.url}/stream?prompt=${encodeURIComponent("Write a short haiku about Effect TS.")}`,
-      )
+      .get(`${out.url}/stream?prompt=${encodeURIComponent("Write a short haiku about Effect TS.")}`)
       .pipe(
         Effect.retry({
           schedule: Schedule.exponential("500 millis"),
@@ -656,12 +817,7 @@ test(
     expect(collected.length).toBeGreaterThan(0);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:ai",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );

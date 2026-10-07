@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -135,14 +130,10 @@ export type RegistryBook = Resource<
  * @resource
  * @category CloudNumberRegistry
  */
-export const RegistryBook = Resource<RegistryBook>(
-  "GCP.CloudNumberRegistry.RegistryBook",
-);
+export const RegistryBook = Resource<RegistryBook>("GCP.CloudNumberRegistry.RegistryBook");
 
 const expandScopes = (scopes: readonly string[] | undefined, project: string) =>
-  (scopes ?? []).map((scope) =>
-    scope.includes("/") ? scope : `projects/${scope || project}`,
-  );
+  (scopes ?? []).map((scope) => (scope.includes("/") ? scope : `projects/${scope || project}`));
 
 const toAttrs = (item: cnr.RegistryBook, project: string) => {
   const name = item.name ?? "";
@@ -190,25 +181,15 @@ const listOwned = (project: string) =>
 
 export const RegistryBookProvider = () =>
   Provider.succeed(RegistryBook, {
-    stables: [
-      "name",
-      "registryBookId",
-      "project",
-      "location",
-      "isDefault",
-      "createTime",
-    ],
+    stables: ["name", "registryBookId", "project", "location", "isDefault", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       return replaceOnIdentity({
         previousId: olds?.registryBookId ?? output?.registryBookId,
-        nextId:
-          news.registryBookId ?? olds?.registryBookId ?? output?.registryBookId,
+        nextId: news.registryBookId ?? olds?.registryBookId ?? output?.registryBookId,
         previousLocation: normalizeLocation(olds?.location ?? output?.location),
-        nextLocation: normalizeLocation(
-          news.location ?? olds?.location ?? output?.location,
-        ),
+        nextLocation: normalizeLocation(news.location ?? olds?.location ?? output?.location),
       });
     }),
 
@@ -221,15 +202,11 @@ export const RegistryBookProvider = () =>
         "book",
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, registryBookId);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, registryBookId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -248,12 +225,7 @@ export const RegistryBookProvider = () =>
         "book",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        registryBookId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, registryBookId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -269,8 +241,7 @@ export const RegistryBookProvider = () =>
             registryBookId,
             body: {
               labels: desiredLabels,
-              claimedScopes:
-                claimedScopes.length > 0 ? claimedScopes : undefined,
+              claimedScopes: claimedScopes.length > 0 ? claimedScopes : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
@@ -304,10 +275,7 @@ export const RegistryBookProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

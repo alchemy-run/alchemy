@@ -154,16 +154,14 @@ const lastSegment = (value: string | undefined) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-const normalizeLocation = (location: string) =>
-  lastSegment(location).toLowerCase();
+const normalizeLocation = (location: string) => lastSegment(location).toLowerCase();
 
 const normalizeUserType = (type: string | undefined) => {
   const value = (type ?? DEFAULT_USER_TYPE).toUpperCase();
   return value === "USER_TYPE_UNSPECIFIED" ? DEFAULT_USER_TYPE : value;
 };
 
-const isIamType = (type: string | undefined) =>
-  normalizeUserType(type) === "ALLOYDB_IAM_USER";
+const isIamType = (type: string | undefined) => normalizeUserType(type) === "ALLOYDB_IAM_USER";
 
 const pgIdentifier = (name: string): string => {
   let next = name
@@ -176,12 +174,7 @@ const pgIdentifier = (name: string): string => {
   return next.length > 0 ? next : "dbuser";
 };
 
-const resourceName = (
-  project: string,
-  location: string,
-  clusterId: string,
-  userId: string,
-) =>
+const resourceName = (project: string, location: string, clusterId: string, userId: string) =>
   `projects/${project}/locations/${location}/clusters/${clusterId}/users/${userId}`;
 
 const clusterNameOf = (project: string, location: string, clusterId: string) =>
@@ -194,24 +187,14 @@ const parseName = (name: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    clusterId:
-      clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
-    userId:
-      usersAt >= 0 && parts[usersAt + 1]
-        ? parts[usersAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    clusterId: clustersAt >= 0 && parts[clustersAt + 1] ? parts[clustersAt + 1]! : "",
+    userId: usersAt >= 0 && parts[usersAt + 1] ? parts[usersAt + 1]! : lastSegment(name),
   };
 };
 
-const parseClusterRef = (
-  cluster: string,
-  fallbackProject: string,
-  fallbackLocation: string,
-) => {
+const parseClusterRef = (cluster: string, fallbackProject: string, fallbackLocation: string) => {
   const trimmed = cluster.trim();
   if (trimmed.length === 0) {
     return {
@@ -221,9 +204,7 @@ const parseClusterRef = (
     };
   }
   if (trimmed.includes("/clusters/") || trimmed.includes("projects/")) {
-    const parsed = parseName(
-      trimmed.includes("/users/") ? trimmed : `${trimmed}/users/_`,
-    );
+    const parsed = parseName(trimmed.includes("/users/") ? trimmed : `${trimmed}/users/_`);
     return {
       project: parsed.project || fallbackProject,
       location: normalizeLocation(parsed.location || fallbackLocation),
@@ -261,9 +242,7 @@ const rolesKey = (roles: string[] | undefined) =>
 const toRoles = (roles: string[] | undefined): string[] =>
   (roles ?? []).filter((role) => role.length > 0);
 
-const hasAlchemyClusterLabels = (
-  labels: Record<string, string | undefined> | null | undefined,
-) =>
+const hasAlchemyClusterLabels = (labels: Record<string, string | undefined> | null | undefined) =>
   Object.keys(labels ?? {}).some((key) => key.startsWith(ALCHEMY_LABEL_PREFIX));
 
 const isManagedUser = (user: alloydb.User) => {
@@ -286,11 +265,7 @@ const toAttrs = (user: alloydb.User, project: string) => {
     name,
     userId: parsed.userId,
     clusterId: parsed.clusterId,
-    clusterName: clusterNameOf(
-      resolvedProject,
-      parsed.location,
-      parsed.clusterId,
-    ),
+    clusterName: clusterNameOf(resolvedProject, parsed.location, parsed.clusterId),
     project: resolvedProject,
     location: parsed.location,
     userType: normalizeUserType(user.userType),
@@ -306,9 +281,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((user) =>
-      user
-        ? Effect.succeed(user)
-        : Effect.fail(new ClustersUserNotResolved({ name })),
+      user ? Effect.succeed(user) : Effect.fail(new ClustersUserNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClustersUserNotResolved",
@@ -320,9 +293,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((user) =>
-      user === undefined
-        ? Effect.void
-        : Effect.fail(new ClustersUserStillExists({ name })),
+      user === undefined ? Effect.void : Effect.fail(new ClustersUserStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClustersUserStillExists",
@@ -342,17 +313,10 @@ const toBody = (
   if (news.databaseRoles !== undefined) {
     body.databaseRoles = news.databaseRoles;
   }
-  if (
-    options?.includePassword !== false &&
-    news.password !== undefined &&
-    !isIamType(userType)
-  ) {
+  if (options?.includePassword !== false && news.password !== undefined && !isIamType(userType)) {
     body.password = news.password;
   }
-  if (
-    options?.includeKeepExtraRoles === true &&
-    news.keepExtraRoles !== undefined
-  ) {
+  if (options?.includeKeepExtraRoles === true && news.keepExtraRoles !== undefined) {
     body.keepExtraRoles = news.keepExtraRoles;
   }
   return body;
@@ -360,14 +324,7 @@ const toBody = (
 
 export const ClustersUserProvider = () =>
   Provider.succeed(ClustersUser, {
-    stables: [
-      "name",
-      "userId",
-      "clusterId",
-      "clusterName",
-      "project",
-      "location",
-    ],
+    stables: ["name", "userId", "clusterId", "clusterName", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -377,24 +334,14 @@ export const ClustersUserProvider = () =>
       const nextId = news.userId ?? previousId;
       const previousCluster = lastSegment(olds?.cluster ?? output?.clusterId);
       const nextCluster = lastSegment(news.cluster ?? previousCluster);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
-      const previousType = normalizeUserType(
-        olds?.userType ?? output?.userType,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location ?? env.region);
+      const previousType = normalizeUserType(olds?.userType ?? output?.userType);
       const nextType = normalizeUserType(news.userType ?? output?.userType);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
-        (previousCluster.length > 0 &&
-          nextCluster.length > 0 &&
-          previousCluster !== nextCluster) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
+        (previousCluster.length > 0 && nextCluster.length > 0 && previousCluster !== nextCluster) ||
         previousLocation !== nextLocation ||
         previousType !== nextType;
 
@@ -424,12 +371,7 @@ export const ClustersUserProvider = () =>
         olds?.location ?? output?.location ?? env.region,
       );
       if (ref.clusterId.length === 0) return undefined;
-      const name = resourceName(
-        ref.project,
-        ref.location,
-        ref.clusterId,
-        userId,
-      );
+      const name = resourceName(ref.project, ref.location, ref.clusterId, userId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       return toAttrs(existing, env.project);
@@ -447,8 +389,7 @@ export const ClustersUserProvider = () =>
             Stream.flatMap((page) => Stream.fromIterable(page.clusters ?? [])),
             Stream.filter(
               (cluster) =>
-                (cluster.name ?? "").length > 0 &&
-                hasAlchemyClusterLabels(cluster.labels),
+                (cluster.name ?? "").length > 0 && hasAlchemyClusterLabels(cluster.labels),
             ),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -469,9 +410,7 @@ export const ClustersUserProvider = () =>
               })
               .pipe(
                 Stream.flatMap((page) => Stream.fromIterable(page.users ?? [])),
-                Stream.filter(
-                  (user) => !isPlaceholder(user) && isManagedUser(user),
-                ),
+                Stream.filter((user) => !isPlaceholder(user) && isManagedUser(user)),
                 Stream.map((user) => toAttrs(user, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
@@ -494,16 +433,10 @@ export const ClustersUserProvider = () =>
       );
       if (ref.clusterId.length === 0) {
         return yield* new ClustersUserClusterMissing({
-          message:
-            "GCP.AlloyDB.ClustersUser requires `cluster` (cluster id or full resource name)",
+          message: "GCP.AlloyDB.ClustersUser requires `cluster` (cluster id or full resource name)",
         });
       }
-      const name = resourceName(
-        ref.project,
-        ref.location,
-        ref.clusterId,
-        userId,
-      );
+      const name = resourceName(ref.project, ref.location, ref.clusterId, userId);
       const parent = clusterNameOf(ref.project, ref.location, ref.clusterId);
 
       let current = yield* getByName(output?.name ?? name);
@@ -519,8 +452,7 @@ export const ClustersUserProvider = () =>
             }),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-        current =
-          created !== undefined ? created : yield* waitUntilExists(name);
+        current = created !== undefined ? created : yield* waitUntilExists(name);
       }
 
       if (current === undefined) {
@@ -530,9 +462,7 @@ export const ClustersUserProvider = () =>
       const passwordChanged =
         news.password !== undefined &&
         !isIamType(userType) &&
-        (olds !== undefined
-          ? news.password !== olds.password
-          : output !== undefined);
+        (olds !== undefined ? news.password !== olds.password : output !== undefined);
       const rolesChanged =
         news.databaseRoles !== undefined &&
         rolesKey(news.databaseRoles) !== rolesKey(current.databaseRoles);
@@ -564,16 +494,14 @@ export const ClustersUserProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* alloydb
-        .deleteProjectsLocationsClustersUsers({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-        );
+      yield* alloydb.deleteProjectsLocationsClustersUsers({ name: output.name }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+      );
       yield* waitUntilGone(output.name);
     }),
   });

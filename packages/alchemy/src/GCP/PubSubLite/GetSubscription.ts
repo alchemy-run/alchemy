@@ -44,6 +44,4 @@ export interface GetSubscription extends Binding.Service<
   >
 > {}
 
-export const GetSubscription = Binding.Service<GetSubscription>(
-  "GCP.PubSubLite.GetSubscription",
-);
+export const GetSubscription = Binding.Service<GetSubscription>("GCP.PubSubLite.GetSubscription");

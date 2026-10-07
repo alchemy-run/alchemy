@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +17,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_PROTOCOL = "HTTP";
 const DEFAULT_SCHEME = "INTERNAL_MANAGED";
@@ -324,14 +324,9 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 const toNetworkUrl = (project: string, network: string) =>
-  network.includes("/")
-    ? network
-    : `projects/${project}/global/networks/${network}`;
+  network.includes("/") ? network : `projects/${project}/global/networks/${network}`;
 
-const encodeDescription = (
-  user: string | undefined,
-  labels: Record<string, string>,
-): string => {
+const encodeDescription = (user: string | undefined, labels: Record<string, string>): string => {
   const packed = Object.entries(labels)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${value}`)
@@ -407,8 +402,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
     affinityCookieTtlSec: service.affinityCookieTtlSec,
     healthChecks: [...(service.healthChecks ?? [])],
     backends: (service.backends ?? []).map(toBackend),
-    connectionDrainingTimeoutSec:
-      service.connectionDraining?.drainingTimeoutSec,
+    connectionDrainingTimeoutSec: service.connectionDraining?.drainingTimeoutSec,
     compressionMode: service.compressionMode,
     customRequestHeaders: [...(service.customRequestHeaders ?? [])],
     customResponseHeaders: [...(service.customResponseHeaders ?? [])],
@@ -423,9 +417,7 @@ const toAttrs = (service: compute.BackendService, project: string) => {
 const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
-) =>
-  JSON.stringify([...(left ?? [])].sort()) ===
-  JSON.stringify([...(right ?? [])].sort());
+) => JSON.stringify([...(left ?? [])].sort()) === JSON.stringify([...(right ?? [])].sort());
 
 const backendKey = (backend: RegionBackendServiceBackend) =>
   JSON.stringify({
@@ -466,14 +458,11 @@ const waitPresent = (project: string, region: string, name: string) =>
         : Effect.succeed(service),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionBackendServiceNotResolved",
+      while: (error) => error._tag === "GCP.Compute.RegionBackendServiceNotResolved",
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.succeed(undefined)),
   );
 
 const waitGone = (project: string, region: string, name: string) =>
@@ -484,8 +473,7 @@ const waitGone = (project: string, region: string, name: string) =>
         : Effect.fail(new RegionBackendServiceStillExists({ name, region })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.RegionBackendServiceStillExists",
+      while: (error) => error._tag === "GCP.Compute.RegionBackendServiceStillExists",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -508,32 +496,18 @@ export const RegionBackendServiceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.name ?? output?.name;
       const nextName = news.name ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? previousRegion,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? previousRegion, env.region);
       const nameChanged =
-        news.name !== undefined &&
-        previousName !== undefined &&
-        news.name !== previousName;
+        news.name !== undefined && previousName !== undefined && news.name !== previousName;
       const regionChanged = previousRegion !== nextRegion;
       const previousScheme =
-        olds?.loadBalancingScheme ??
-        output?.loadBalancingScheme ??
-        DEFAULT_SCHEME;
+        olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? DEFAULT_SCHEME;
       const nextScheme = news.loadBalancingScheme ?? DEFAULT_SCHEME;
       const schemeChanged = previousScheme !== nextScheme;
-      const previousNetwork = lastSegment(
-        olds?.network ?? output?.network,
-      ).toLowerCase();
+      const previousNetwork = lastSegment(olds?.network ?? output?.network).toLowerCase();
       const nextNetwork =
-        news.network !== undefined
-          ? lastSegment(news.network).toLowerCase()
-          : previousNetwork;
+        news.network !== undefined ? lastSegment(news.network).toLowerCase() : previousNetwork;
       const networkChanged = previousNetwork !== nextNetwork;
       if (!nameChanged && !regionChanged && !schemeChanged && !networkChanged) {
         return undefined;
@@ -551,17 +525,12 @@ export const RegionBackendServiceProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const name = yield* toName(id, olds?.name, output?.name);
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -579,8 +548,7 @@ export const RegionBackendServiceProvider = () =>
             (scoped?.backendServices ?? [])
               .filter(
                 (service) =>
-                  (service.region ?? "").length > 0 &&
-                  hasOwnershipMarker(service.description),
+                  (service.region ?? "").length > 0 && hasOwnershipMarker(service.description),
               )
               .map((service) => toAttrs(service, env.project)),
           ),
@@ -595,10 +563,7 @@ export const RegionBackendServiceProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const desiredDescription = encodeDescription(
-        news.description,
-        desiredLabels,
-      );
+      const desiredDescription = encodeDescription(news.description, desiredLabels);
       const protocol = news.protocol ?? DEFAULT_PROTOCOL;
       const loadBalancingScheme = news.loadBalancingScheme ?? DEFAULT_SCHEME;
       const timeoutSec = news.timeoutSec ?? DEFAULT_TIMEOUT_SEC;
@@ -614,9 +579,7 @@ export const RegionBackendServiceProvider = () =>
         failover: backend.failover,
       }));
       const network =
-        news.network !== undefined
-          ? toNetworkUrl(env.project, news.network)
-          : undefined;
+        news.network !== undefined ? toNetworkUrl(env.project, news.network) : undefined;
 
       let current = yield* getByName(env.project, region, name);
 
@@ -635,12 +598,8 @@ export const RegionBackendServiceProvider = () =>
               enableCDN,
               sessionAffinity: news.sessionAffinity,
               affinityCookieTtlSec: news.affinityCookieTtlSec,
-              healthChecks:
-                (news.healthChecks?.length ?? 0) > 0
-                  ? news.healthChecks
-                  : undefined,
-              backends:
-                desiredBackends.length > 0 ? desiredBackends : undefined,
+              healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
+              backends: desiredBackends.length > 0 ? desiredBackends : undefined,
               connectionDraining:
                 news.connectionDrainingTimeoutSec !== undefined
                   ? {
@@ -678,51 +637,31 @@ export const RegionBackendServiceProvider = () =>
         return yield* new RegionBackendServiceNotResolved({ name, region });
       }
 
-      const timeoutChanged =
-        (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
-      const protocolChanged =
-        (current.protocol ?? DEFAULT_PROTOCOL) !== protocol;
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
+      const protocolChanged = (current.protocol ?? DEFAULT_PROTOCOL) !== protocol;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const enableCDNChanged = (current.enableCDN === true) !== enableCDN;
       const sessionAffinityChanged =
-        (current.sessionAffinity ?? "NONE") !==
-        (news.sessionAffinity ?? "NONE");
+        (current.sessionAffinity ?? "NONE") !== (news.sessionAffinity ?? "NONE");
       const affinityCookieChanged =
         news.affinityCookieTtlSec !== undefined &&
         current.affinityCookieTtlSec !== news.affinityCookieTtlSec;
-      const portNameChanged =
-        news.portName !== undefined && current.portName !== news.portName;
-      const healthChecksChanged = !sameStringList(
-        current.healthChecks,
-        news.healthChecks,
-      );
-      const backendsChanged = !sameBackends(
-        (current.backends ?? []).map(toBackend),
-        news.backends,
-      );
+      const portNameChanged = news.portName !== undefined && current.portName !== news.portName;
+      const healthChecksChanged = !sameStringList(current.healthChecks, news.healthChecks);
+      const backendsChanged = !sameBackends((current.backends ?? []).map(toBackend), news.backends);
       const drainingChanged =
         news.connectionDrainingTimeoutSec !== undefined &&
-        current.connectionDraining?.drainingTimeoutSec !==
-          news.connectionDrainingTimeoutSec;
+        current.connectionDraining?.drainingTimeoutSec !== news.connectionDrainingTimeoutSec;
       const compressionChanged =
-        news.compressionMode !== undefined &&
-        current.compressionMode !== news.compressionMode;
+        news.compressionMode !== undefined && current.compressionMode !== news.compressionMode;
       const requestHeadersChanged =
         news.customRequestHeaders !== undefined &&
-        !sameStringList(
-          current.customRequestHeaders,
-          news.customRequestHeaders,
-        );
+        !sameStringList(current.customRequestHeaders, news.customRequestHeaders);
       const responseHeadersChanged =
         news.customResponseHeaders !== undefined &&
-        !sameStringList(
-          current.customResponseHeaders,
-          news.customResponseHeaders,
-        );
+        !sameStringList(current.customResponseHeaders, news.customResponseHeaders);
       const logConfigChanged =
-        news.logConfig !== undefined &&
-        !sameLogConfig(news.logConfig, current.logConfig);
+        news.logConfig !== undefined && !sameLogConfig(news.logConfig, current.logConfig);
       const localityChanged =
         news.localityLbPolicy !== undefined &&
         (current.localityLbPolicy ?? "") !== news.localityLbPolicy;
@@ -783,9 +722,7 @@ export const RegionBackendServiceProvider = () =>
             body: patch,
           })
           .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation),
-            ),
+            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 5,

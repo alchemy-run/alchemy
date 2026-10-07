@@ -56,6 +56,4 @@ export interface ReadSecret extends Binding.Service<
   (secret: SecretBindingTarget) => Effect.Effect<ReadSecretClient>
 > {}
 
-export const ReadSecret = Binding.Service<ReadSecret>(
-  "GCP.SecretManager.ReadSecret",
-);
+export const ReadSecret = Binding.Service<ReadSecret>("GCP.SecretManager.ReadSecret");

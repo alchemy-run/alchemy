@@ -1,30 +1,22 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
-
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { HttpServerResponse } from "effect/http";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-
-import { HttpServerResponse } from "effect/http";
+import { RuntimeContext } from "../../RuntimeContext.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
   makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
-import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
-import type {
-  DurableObjectExport,
-  DurableObjectShape,
-} from "./DurableObject.ts";
-import {
-  DurableObjectState,
-  fromDurableObjectState,
-} from "./DurableObjectState.ts";
+import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
+import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
@@ -100,11 +92,7 @@ export const makeDurableObjectBridge =
                 ),
                 Effect.map((instance) => ({
                   instance,
-                  services: Context.add(
-                    services,
-                    RuntimeContext,
-                    instanceRuntimeContext,
-                  ),
+                  services: Context.add(services, RuntimeContext, instanceRuntimeContext),
                   context,
                   telemetry,
                 })),
@@ -116,42 +104,44 @@ export const makeDurableObjectBridge =
 
         return new Proxy(this, {
           get: (target, prop) => {
-            const bind = (f: any) =>
-              typeof f === "function" ? f.bind(target) : f;
+            const bind = (f: any) => (typeof f === "function" ? f.bind(target) : f);
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
-            return async (...args: any[]) =>
-              this.#execute((instance) => {
-                const method = instance[prop as keyof DurableObjectShape];
-                if (typeof method === "function") {
-                  const result = (method as any)(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.isEffect(result)
-                    ? result
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : result;
-                } else if (Effect.isEffect(method)) {
-                  return method;
-                } else {
-                  return Effect.succeed(method);
-                }
-              }, handleRpcExit);
+            return (...args: unknown[]) =>
+              this.#execute(
+                (instance) =>
+                  Effect.suspend(() => {
+                    if (!Object.hasOwn(instance, prop)) {
+                      return Effect.die(new Error(`Method "${prop}" not found on Durable Object`));
+                    }
+                    const member = instance[prop as keyof DurableObjectShape];
+                    const result =
+                      typeof member === "function"
+                        ? (member as (...args: unknown[]) => unknown)(...args)
+                        : member;
+                    // Effects (including nested-RPC values built by
+                    // `asEffectOrStream`, which are Effects branded as Streams)
+                    // run as effects; a genuine Stream is lifted into the
+                    // success channel for `handleRpcExit` to encode. The RPC
+                    // Shape constraint rejects any other member at
+                    // declaration, so anything else got past it with a cast.
+                    if (Effect.isEffect(result)) return result;
+                    if (Stream.isStream(result)) return Effect.succeed(result);
+                    return Effect.die(
+                      new Error(
+                        `Durable Object RPC member "${prop}" must return an Effect or a Stream`,
+                      ),
+                    );
+                  }),
+                handleRpcExit,
+              );
           },
         });
       }
 
       async #execute(
         fn: (instance: DurableObjectShape) => Effect.Effect<any, any, any>,
-        onExit?: (
-          exit: Exit.Exit<any, any>,
-          scope: Scope.Closeable,
-        ) => Promise<any>,
+        onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
 
@@ -161,18 +151,13 @@ export const makeDurableObjectBridge =
           .pipe(
             Effect.provide(
               Layer.mergeAll(
-                Layer.succeed(
-                  DurableObjectState,
-                  fromDurableObjectState(this.#state),
-                ),
+                Layer.succeed(DurableObjectState, fromDurableObjectState(this.#state)),
                 Layer.succeed(Scope.Scope, scope),
                 // The configured telemetry exporters, attached to the *call*
                 // scope by `buildEventTelemetry` so buffered telemetry
                 // flushes when the scope closes into `waitUntil` below (the
                 // isolate scope never finalizes on workerd).
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
-                ),
+                Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(context)),
@@ -215,10 +200,7 @@ export const makeDurableObjectBridge =
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
         return this.#execute((instance) =>
-          dispatchAlarmCallbacks(
-            this.#state,
-            instance.alarm !== undefined,
-          ).pipe(
+          dispatchAlarmCallbacks(this.#state, instance.alarm !== undefined).pipe(
             Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void),
           ),
         );
@@ -227,33 +209,21 @@ export const makeDurableObjectBridge =
       async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
         return this.#execute(
           (instance) =>
-            instance.webSocketMessage?.(fromWebSocket(ws as any), message) ??
-            Effect.void,
+            instance.webSocketMessage?.(fromWebSocket(ws as any), message) ?? Effect.void,
         );
       }
 
-      async webSocketClose(
-        ws: WebSocket,
-        code: number,
-        reason: string,
-        wasClean: boolean,
-      ) {
+      async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
         return this.#execute(
           (instance) =>
-            instance.webSocketClose?.(
-              fromWebSocket(ws as any),
-              code,
-              reason,
-              wasClean,
-            ) ?? Effect.void,
+            instance.webSocketClose?.(fromWebSocket(ws as any), code, reason, wasClean) ??
+            Effect.void,
         );
       }
 
       async webSocketError(ws: WebSocket, error: unknown) {
         return this.#execute(
-          (instance) =>
-            instance.webSocketError?.(fromWebSocket(ws as any), error) ??
-            Effect.void,
+          (instance) => instance.webSocketError?.(fromWebSocket(ws as any), error) ?? Effect.void,
         );
       }
     } as any;

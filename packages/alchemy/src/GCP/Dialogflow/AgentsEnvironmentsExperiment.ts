@@ -132,10 +132,9 @@ export type AgentsEnvironmentsExperiment = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsEnvironmentsExperiment =
-  Resource<AgentsEnvironmentsExperiment>(
-    "GCP.Dialogflow.AgentsEnvironmentsExperiment",
-  );
+export const AgentsEnvironmentsExperiment = Resource<AgentsEnvironmentsExperiment>(
+  "GCP.Dialogflow.AgentsEnvironmentsExperiment",
+);
 
 export class AgentsEnvironmentsExperimentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsExperimentNotResolved",
@@ -144,31 +143,24 @@ export class AgentsEnvironmentsExperimentNotResolved extends Data.TaggedError(
 }> {}
 
 const definitionOf = (
-  definition:
-    | dialogflow.GoogleCloudDialogflowCxV3ExperimentDefinition
-    | undefined,
+  definition: dialogflow.GoogleCloudDialogflowCxV3ExperimentDefinition | undefined,
 ): ExperimentDefinition | undefined => {
   if (definition === undefined) return undefined;
   return {
     condition: definition.condition,
     versionVariants: definition.versionVariants
       ? {
-          variants: (definition.versionVariants.variants ?? []).map(
-            (variant) => ({
-              version: variant.version ?? "",
-              trafficAllocation: variant.trafficAllocation,
-              isControlGroup: variant.isControlGroup,
-            }),
-          ),
+          variants: (definition.versionVariants.variants ?? []).map((variant) => ({
+            version: variant.version ?? "",
+            trafficAllocation: variant.trafficAllocation,
+            isControlGroup: variant.isControlGroup,
+          })),
         }
       : undefined,
   };
 };
 
-const toAttrs = (
-  experiment: dialogflow.GoogleCloudDialogflowCxV3Experiment,
-  project: string,
-) => {
+const toAttrs = (experiment: dialogflow.GoogleCloudDialogflowCxV3Experiment, project: string) => {
   const name = experiment.name ?? "";
   const parsed = parseResourceName(name, "experiments");
   return {
@@ -205,9 +197,7 @@ const findOwned = (id: string, environment: string, hinted?: string) =>
         return experiment;
       }
     }
-    return undefined as
-      | dialogflow.GoogleCloudDialogflowCxV3Experiment
-      | undefined;
+    return undefined as dialogflow.GoogleCloudDialogflowCxV3Experiment | undefined;
   });
 
 const listOwned = (project: string) =>
@@ -215,39 +205,26 @@ const listOwned = (project: string) =>
     const agents = yield* listAgents(project);
     const environments = (yield* Effect.forEach(
       agents,
-      (agent) =>
-        agent.name ? listEnvironments(agent.name) : Effect.succeed([]),
+      (agent) => (agent.name ? listEnvironments(agent.name) : Effect.succeed([])),
       { concurrency: 4 },
     )).flat();
     const experiments = (yield* Effect.forEach(
       environments,
-      (environment) =>
-        environment.name
-          ? listExperiments(environment.name)
-          : Effect.succeed([]),
+      (environment) => (environment.name ? listExperiments(environment.name) : Effect.succeed([])),
       { concurrency: 4 },
     )).flat();
     return experiments
       .filter(
         (experiment) =>
-          parseOwnership(experiment.description).labels["alchemy-id"] !==
-            undefined ||
-          parseOwnership(experiment.displayName).labels["alchemy-id"] !==
-            undefined,
+          parseOwnership(experiment.description).labels["alchemy-id"] !== undefined ||
+          parseOwnership(experiment.displayName).labels["alchemy-id"] !== undefined,
       )
       .map((experiment) => toAttrs(experiment, project));
   });
 
 export const AgentsEnvironmentsExperimentProvider = () =>
   Provider.succeed(AgentsEnvironmentsExperiment, {
-    stables: [
-      "name",
-      "experimentId",
-      "environment",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "experimentId", "environment", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -281,9 +258,7 @@ export const AgentsEnvironmentsExperimentProvider = () =>
             : undefined;
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, ownershipText(existing)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -313,53 +288,33 @@ export const AgentsEnvironmentsExperimentProvider = () =>
             parent: environment,
             body,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              findOwned(id, environment, output?.name),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwned(id, environment, output?.name)));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentsExperimentNotResolved({
-          name:
-            output?.name ??
-            `${environment}/experiments/${news.experimentId ?? "unknown"}`,
+          name: output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
         });
       }
 
       const currentName = current.name ?? output?.name ?? "";
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const definitionChanged = !sameJson(
-        definitionOf(current.definition),
-        news.definition,
-      );
-      const lengthChanged = !sameText(
-        current.experimentLength,
-        news.experimentLength,
-      );
+      const definitionChanged = !sameJson(definitionOf(current.definition), news.definition);
+      const lengthChanged = !sameText(current.experimentLength, news.experimentLength);
 
-      if (
-        displayChanged ||
-        descriptionChanged ||
-        definitionChanged ||
-        lengthChanged
-      ) {
-        current =
-          yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsExperiments(
-            {
-              name: currentName,
-              updateMask: updateMaskOf(
-                displayChanged ? "display_name" : undefined,
-                descriptionChanged ? "description" : undefined,
-                definitionChanged ? "definition" : undefined,
-                lengthChanged ? "experiment_length" : undefined,
-              ),
-              body: { ...body, name: currentName },
-            },
-          );
+      if (displayChanged || descriptionChanged || definitionChanged || lengthChanged) {
+        current = yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsExperiments({
+          name: currentName,
+          updateMask: updateMaskOf(
+            displayChanged ? "display_name" : undefined,
+            descriptionChanged ? "description" : undefined,
+            definitionChanged ? "definition" : undefined,
+            lengthChanged ? "experiment_length" : undefined,
+          ),
+          body: { ...body, name: currentName },
+        });
       }
 
       return toAttrs(current, env.project);

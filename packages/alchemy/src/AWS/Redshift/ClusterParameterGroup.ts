@@ -110,10 +110,7 @@ export const ClusterParameterGroupProvider = () =>
   Provider.effect(
     ClusterParameterGroup,
     Effect.gen(function* () {
-      const toName = (
-        id: string,
-        props: Partial<ClusterParameterGroupProps>,
-      ) =>
+      const toName = (id: string, props: Partial<ClusterParameterGroupProps>) =>
         props.clusterParameterGroupName
           ? Effect.succeed(props.clusterParameterGroupName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });
@@ -122,9 +119,7 @@ export const ClusterParameterGroupProvider = () =>
         const response = yield* redshift
           .describeClusterParameterGroups({ ParameterGroupName: name })
           .pipe(
-            Effect.catchTag("ClusterParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ClusterParameterGroupNotFoundFault", () => Effect.succeed(undefined)),
           );
         return response?.ParameterGroups?.[0];
       });
@@ -136,22 +131,17 @@ export const ClusterParameterGroupProvider = () =>
           .pipe(Stream.runCollect, Effect.map(Array.from<redshift.Parameter>));
         return Object.fromEntries(
           parameters.flatMap((parameter) =>
-            parameter.ParameterName !== undefined &&
-            parameter.ParameterValue !== undefined
+            parameter.ParameterName !== undefined && parameter.ParameterValue !== undefined
               ? [[parameter.ParameterName, parameter.ParameterValue]]
               : [],
           ),
         );
       });
 
-      const toAttrs = Effect.fn(function* (
-        group: redshift.ClusterParameterGroup,
-      ) {
+      const toAttrs = Effect.fn(function* (group: redshift.ClusterParameterGroup) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!group.ParameterGroupName) {
-          return yield* Effect.fail(
-            new Error("Cluster parameter group is missing its name"),
-          );
+          return yield* Effect.fail(new Error("Cluster parameter group is missing its name"));
         }
         return {
           clusterParameterGroupName: group.ParameterGroupName,
@@ -173,35 +163,25 @@ export const ClusterParameterGroupProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Family and description are create-only.
-          if (
-            olds?.family !== news.family ||
-            olds?.description !== news.description
-          ) {
+          if (olds?.family !== news.family || olds?.description !== news.description) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.clusterParameterGroupName ??
-            (yield* toName(id, olds ?? {}));
+          const name = output?.clusterParameterGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* readGroup(name);
           if (!group?.ParameterGroupName) return undefined;
           const attrs = yield* toAttrs(group);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.clusterParameterGroupName ?? (yield* toName(id, news));
+          const name = output?.clusterParameterGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -221,12 +201,7 @@ export const ClusterParameterGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ClusterParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ClusterParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.ParameterGroupName) {
               return yield* Effect.fail(
@@ -267,10 +242,7 @@ export const ClusterParameterGroupProvider = () =>
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "parametergroup", name);
-          const { removed, upsert } = diffTags(
-            toTagRecord(observed.Tags),
-            desiredTags,
-          );
+          const { removed, upsert } = diffTags(toTagRecord(observed.Tags), desiredTags);
           yield* applyRedshiftTagDelta({ arn, upsert, removed });
 
           yield* session.note(arn);
@@ -289,12 +261,7 @@ export const ClusterParameterGroupProvider = () =>
             .deleteClusterParameterGroup({
               ParameterGroupName: output.clusterParameterGroupName,
             })
-            .pipe(
-              Effect.catchTag(
-                "ClusterParameterGroupNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("ClusterParameterGroupNotFoundFault", () => Effect.void));
         }),
 
         list: () =>
@@ -312,9 +279,7 @@ export const ClusterParameterGroupProvider = () =>
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((group) => toAttrs(group), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((group) => toAttrs(group), { concurrency: 4 })),
           ),
       };
     }),

@@ -1,12 +1,12 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RUM from "@/AWS/RUM";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RUM from "@/AWS/RUM";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -99,9 +99,5 @@ export default RumBindingsFunction.make(
         );
       }).pipe(Effect.orDie),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(RUM.PutRumEventsHttp, RUM.GetAppMonitorDataHttp),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(RUM.PutRumEventsHttp, RUM.GetAppMonitorDataHttp))),
 );

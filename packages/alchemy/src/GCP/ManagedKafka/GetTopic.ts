@@ -33,11 +33,7 @@ export interface GetTopic extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetTopicRequest,
-    ) => Effect.Effect<
-      kafka.Topic,
-      kafka.GetProjectsLocationsClustersTopicsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<kafka.Topic, kafka.GetProjectsLocationsClustersTopicsError, RuntimeContext>
   >
 > {}
 

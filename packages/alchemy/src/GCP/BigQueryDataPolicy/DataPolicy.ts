@@ -175,9 +175,7 @@ export type DataPolicy = Resource<
  * @resource
  * @category BigQueryDataPolicy
  */
-export const DataPolicy = Resource<DataPolicy>(
-  "GCP.BigQueryDataPolicy.DataPolicy",
-);
+export const DataPolicy = Resource<DataPolicy>("GCP.BigQueryDataPolicy.DataPolicy");
 
 export class DataPolicyNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataPolicy.DataPolicyNotResolved",
@@ -185,9 +183,7 @@ export class DataPolicyNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toMasking = (
-  policy: bqdp.DataMaskingPolicy | undefined,
-): DataMaskingPolicy | undefined => {
+const toMasking = (policy: bqdp.DataMaskingPolicy | undefined): DataMaskingPolicy | undefined => {
   if (policy === undefined) return undefined;
   const next = compact({
     predefinedExpression: policy.predefinedExpression,
@@ -239,16 +235,10 @@ const listAt = (project: string, location: string) =>
       Stream.flatMap((page) => Stream.fromIterable(page.dataPolicies ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as bqdp.DataPolicy[]),
-      ),
+      Effect.catchTag("NotFound", () => Effect.succeed([] as bqdp.DataPolicy[])),
     );
 
-const findOwned = (
-  items: readonly bqdp.DataPolicy[],
-  id: string,
-  name?: string,
-) =>
+const findOwned = (items: readonly bqdp.DataPolicy[], id: string, name?: string) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const match = items.find((item) => item.name === name);
@@ -261,12 +251,7 @@ const findOwned = (
     return undefined;
   });
 
-const observe = (
-  id: string,
-  name: string | undefined,
-  project: string,
-  location: string,
-) =>
+const observe = (id: string, name: string | undefined, project: string, location: string) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const existing = yield* getByName(name);
@@ -315,14 +300,8 @@ export const DataPolicyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.dataPolicyId ?? output?.dataPolicyId;
       const nextId = yield* toDataPolicyId(id, news.dataPolicyId, previousId);
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       if (
         (previousId === undefined || nextId === previousId) &&
         previousLocation === nextLocation
@@ -337,22 +316,13 @@ export const DataPolicyProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const dataPolicyId = yield* toDataPolicyId(
-        id,
-        olds?.dataPolicyId,
-        output?.dataPolicyId,
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceNameOf(env.project, location, dataPolicyId);
+      const dataPolicyId = yield* toDataPolicyId(id, olds?.dataPolicyId, output?.dataPolicyId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceNameOf(env.project, location, dataPolicyId);
       const existing = yield* observe(id, name, env.project, location);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      const resourceId =
-        existing.dataPolicyId ?? lastSegment(existing.name ?? "");
+      const resourceId = existing.dataPolicyId ?? lastSegment(existing.name ?? "");
       return (yield* ownedByAlchemy(id, resourceId)) ? attrs : Unowned(attrs);
     }),
 
@@ -376,21 +346,11 @@ export const DataPolicyProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const dataPolicyId = yield* toDataPolicyId(
-        id,
-        news.dataPolicyId,
-        output?.dataPolicyId,
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const dataPolicyId = yield* toDataPolicyId(id, news.dataPolicyId, output?.dataPolicyId);
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = parentOf(env.project, location);
-      const name =
-        output?.name ?? resourceNameOf(env.project, location, dataPolicyId);
-      const dataPolicyType = normalizePolicyType(
-        news.dataPolicyType ?? output?.dataPolicyType,
-      );
+      const name = output?.name ?? resourceNameOf(env.project, location, dataPolicyId);
+      const dataPolicyType = normalizePolicyType(news.dataPolicyType ?? output?.dataPolicyType);
 
       let current = yield* observe(id, name, env.project, location);
 
@@ -403,11 +363,7 @@ export const DataPolicyProvider = () =>
               dataPolicy: toCreateBody(news, dataPolicyType),
             },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              observe(id, name, env.project, location),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => observe(id, name, env.project, location)));
         current = created ?? undefined;
       }
 
@@ -416,23 +372,17 @@ export const DataPolicyProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const desiredType = normalizePolicyType(
-        news.dataPolicyType ?? current.dataPolicyType,
-      );
+      const desiredType = normalizePolicyType(news.dataPolicyType ?? current.dataPolicyType);
       const observedType = normalizePolicyType(current.dataPolicyType);
       const typeChanged = !sameText(observedType, desiredType);
       const maskingChanged =
         news.dataMaskingPolicy !== undefined &&
         !sameJson(toMasking(current.dataMaskingPolicy), news.dataMaskingPolicy);
       const granteesChanged =
-        news.grantees !== undefined &&
-        !sameStringList(current.grantees, news.grantees);
+        news.grantees !== undefined && !sameStringList(current.grantees, news.grantees);
       const tagChanged =
         news.dataGovernanceTag !== undefined &&
-        !sameJson(
-          toGovernanceTag(current.dataGovernanceTag),
-          news.dataGovernanceTag,
-        );
+        !sameJson(toGovernanceTag(current.dataGovernanceTag), news.dataGovernanceTag);
 
       const updateMask = updateMaskOf(
         typeChanged ? "dataPolicyType" : undefined,
@@ -447,9 +397,7 @@ export const DataPolicyProvider = () =>
           updateMask,
           compact({
             dataPolicyType: typeChanged ? desiredType : undefined,
-            dataMaskingPolicy: maskingChanged
-              ? news.dataMaskingPolicy
-              : undefined,
+            dataMaskingPolicy: maskingChanged ? news.dataMaskingPolicy : undefined,
             grantees: granteesChanged ? news.grantees : undefined,
             dataGovernanceTag: tagChanged ? news.dataGovernanceTag : undefined,
           }),

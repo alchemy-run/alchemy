@@ -38,7 +38,6 @@ export interface GetExascaleDbStorageVault extends Binding.Service<
   >
 > {}
 
-export const GetExascaleDbStorageVault =
-  Binding.Service<GetExascaleDbStorageVault>(
-    "GCP.OracleDatabase.GetExascaleDbStorageVault",
-  );
+export const GetExascaleDbStorageVault = Binding.Service<GetExascaleDbStorageVault>(
+  "GCP.OracleDatabase.GetExascaleDbStorageVault",
+);

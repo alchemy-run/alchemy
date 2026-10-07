@@ -88,9 +88,7 @@ export type ChannelPartnerLinksChannelPartnerRepricingConfig = Resource<
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
     /** Repricing configuration. */
-    repricingConfig:
-      | cloudchannel.GoogleCloudChannelV1RepricingConfig
-      | undefined;
+    repricingConfig: cloudchannel.GoogleCloudChannelV1RepricingConfig | undefined;
   },
   never,
   Providers
@@ -159,8 +157,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousMonth = normalizeDate(
-        olds?.effectiveInvoiceMonth ??
-          output?.repricingConfig?.effectiveInvoiceMonth,
+        olds?.effectiveInvoiceMonth ?? output?.repricingConfig?.effectiveInvoiceMonth,
       );
       const nextMonth = normalizeDate(news.effectiveInvoiceMonth);
       return replaceOnIdentity({
@@ -188,14 +185,11 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
       const existing = yield* findChannelPartnerRepricing(
         parent,
         output?.name ?? name,
-        olds?.effectiveInvoiceMonth ??
-          output?.repricingConfig?.effectiveInvoiceMonth,
+        olds?.effectiveInvoiceMonth ?? output?.repricingConfig?.effectiveInvoiceMonth,
       );
       if (existing === undefined) return undefined;
       const attrs = toChannelPartnerRepricingAttrs(existing);
-      return output?.name !== undefined || olds?.configId !== undefined
-        ? attrs
-        : Unowned(attrs);
+      return output?.name !== undefined || olds?.configId !== undefined ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -203,10 +197,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
         news.parent,
         news.account ?? accountOf(output?.parent ?? news.parent),
       );
-      const month = yield* monthOf(
-        news,
-        output?.repricingConfig?.effectiveInvoiceMonth,
-      );
+      const month = yield* monthOf(news, output?.repricingConfig?.effectiveInvoiceMonth);
       const repricingConfig = desiredRepricingConfig({
         effectiveInvoiceMonth: month,
         rebillingBasis: news.rebillingBasis,
@@ -225,11 +216,7 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
         "channelPartnerRepricingConfigs",
       );
 
-      let current = yield* findChannelPartnerRepricing(
-        parent,
-        output?.name ?? name,
-        month,
-      );
+      let current = yield* findChannelPartnerRepricing(parent, output?.name ?? name, month);
 
       if (current === undefined) {
         const created = yield* cloudchannel
@@ -238,19 +225,15 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
             body: { repricingConfig },
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              findChannelPartnerRepricing(parent, name, month),
-            ),
+            Effect.catchTag("Conflict", () => findChannelPartnerRepricing(parent, name, month)),
           );
         current = created ?? undefined;
       }
 
       if (current === undefined) {
-        return yield* new ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved(
-          {
-            name: name || `${parent}/channelPartnerRepricingConfigs`,
-          },
-        );
+        return yield* new ChannelPartnerLinksChannelPartnerRepricingConfigNotResolved({
+          name: name || `${parent}/channelPartnerRepricingConfigs`,
+        });
       }
 
       const currentName = current.name ?? name;
@@ -260,26 +243,17 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
           normalizeDate(observed?.effectiveInvoiceMonth),
           normalizeDate(repricingConfig.effectiveInvoiceMonth),
         ) ||
-        (observed?.rebillingBasis ?? "") !==
-          (repricingConfig.rebillingBasis ?? "") ||
+        (observed?.rebillingBasis ?? "") !== (repricingConfig.rebillingBasis ?? "") ||
         !jsonEqual(observed?.adjustment, repricingConfig.adjustment) ||
-        !jsonEqual(
-          observed?.entitlementGranularity,
-          repricingConfig.entitlementGranularity,
-        ) ||
-        !jsonEqual(
-          observed?.conditionalOverrides,
-          repricingConfig.conditionalOverrides,
-        );
+        !jsonEqual(observed?.entitlementGranularity, repricingConfig.entitlementGranularity) ||
+        !jsonEqual(observed?.conditionalOverrides, repricingConfig.conditionalOverrides);
 
       if (changed && currentName.length > 0) {
         current =
-          yield* cloudchannel.patchAccountsChannelPartnerLinksChannelPartnerRepricingConfigs(
-            {
-              name: currentName,
-              body: { name: currentName, repricingConfig },
-            },
-          );
+          yield* cloudchannel.patchAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+            name: currentName,
+            body: { name: currentName, repricingConfig },
+          });
       }
 
       return toChannelPartnerRepricingAttrs(current);

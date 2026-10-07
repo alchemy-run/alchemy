@@ -13,10 +13,7 @@ import type { Providers } from "../Providers.ts";
 import { waitForCreate, waitForOperation } from "./internal.ts";
 
 const MAX_NAME_LENGTH = 63;
-export type TagKeyPurpose =
-  | "PURPOSE_UNSPECIFIED"
-  | "GCE_FIREWALL"
-  | "DATA_GOVERNANCE";
+export type TagKeyPurpose = "PURPOSE_UNSPECIFIED" | "GCE_FIREWALL" | "DATA_GOVERNANCE";
 
 export type TagKeyProps = {
   /**
@@ -126,15 +123,11 @@ export type TagKey = Resource<
  */
 export const TagKey = Resource<TagKey>("GCP.ResourceManager.TagKey");
 
-export class TagKeyNotResolved extends Data.TaggedError(
-  "GCP.ResourceManager.TagKeyNotResolved",
-)<{
+export class TagKeyNotResolved extends Data.TaggedError("GCP.ResourceManager.TagKeyNotResolved")<{
   name: string;
 }> {}
 
-export class TagKeyStillExists extends Data.TaggedError(
-  "GCP.ResourceManager.TagKeyStillExists",
-)<{
+export class TagKeyStillExists extends Data.TaggedError("GCP.ResourceManager.TagKeyStillExists")<{
   name: string;
 }> {}
 
@@ -169,9 +162,7 @@ const canonicalizePurpose = (purpose: string | undefined) =>
 const canonicalizeRegex = (value: string | undefined) =>
   value && value.length > 0 ? value : undefined;
 
-const purposeDataJson = (
-  data: Record<string, string | undefined> | null | undefined,
-) =>
+const purposeDataJson = (data: Record<string, string | undefined> | null | undefined) =>
   JSON.stringify(
     Object.fromEntries(
       Object.entries(data ?? {})
@@ -213,20 +204,12 @@ const toAttrs = (key: resourcemanager.TagKey) => {
 const getByName = (name: string) =>
   resourcemanager
     .getTagKeys({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "TagKeyNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)));
 
 const getByNamespaced = (name: string) =>
   resourcemanager
     .getNamespacedTagKeys({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "TagKeyNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)));
 
 const observe = (resourceName: string | undefined, namespacedName: string) =>
   Effect.gen(function* () {
@@ -237,19 +220,12 @@ const observe = (resourceName: string | undefined, namespacedName: string) =>
     return yield* getByNamespaced(namespacedName);
   });
 
-const resourceNameFromOperation = (
-  operation: resourcemanager.Operation,
-): string | undefined => {
+const resourceNameFromOperation = (operation: resourcemanager.Operation): string | undefined => {
   const name = operation.response?.name;
-  return typeof name === "string" && name.startsWith("tagKeys/")
-    ? name
-    : undefined;
+  return typeof name === "string" && name.startsWith("tagKeys/") ? name : undefined;
 };
 
-const waitUntilExists = (
-  resourceName: string | undefined,
-  namespacedName: string,
-) =>
+const waitUntilExists = (resourceName: string | undefined, namespacedName: string) =>
   observe(resourceName, namespacedName).pipe(
     Effect.filterOrFail(
       (key): key is resourcemanager.TagKey => key !== undefined,
@@ -268,9 +244,7 @@ const waitUntilExists = (
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key === undefined
-        ? Effect.void
-        : Effect.fail(new TagKeyStillExists({ name })),
+      key === undefined ? Effect.void : Effect.fail(new TagKeyStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagKeyStillExists",
@@ -290,9 +264,7 @@ const toCreateBody = (
   description,
   purpose: canonicalizePurpose(news.purpose),
   purposeData:
-    news.purposeData && Object.keys(news.purposeData).length > 0
-      ? news.purposeData
-      : undefined,
+    news.purposeData && Object.keys(news.purposeData).length > 0 ? news.purposeData : undefined,
   allowedValuesRegex: canonicalizeRegex(news.allowedValuesRegex),
 });
 
@@ -324,23 +296,17 @@ export const TagKeyProvider = () =>
         previousParent !== undefined &&
         !sameParent(news.parent, previousParent, output?.namespacedName);
 
-      const previousPurpose = canonicalizePurpose(
-        olds?.purpose ?? output?.purpose,
-      );
+      const previousPurpose = canonicalizePurpose(olds?.purpose ?? output?.purpose);
       const nextPurpose = canonicalizePurpose(news.purpose ?? previousPurpose);
       const purposeChanged = previousPurpose !== nextPurpose;
 
       const previousRegex = canonicalizeRegex(
         olds?.allowedValuesRegex ?? output?.allowedValuesRegex,
       );
-      const nextRegex = canonicalizeRegex(
-        news.allowedValuesRegex ?? previousRegex,
-      );
+      const nextRegex = canonicalizeRegex(news.allowedValuesRegex ?? previousRegex);
       const regexChanged = previousRegex !== nextRegex;
 
-      const previousData = purposeDataJson(
-        olds?.purposeData ?? output?.purposeData,
-      );
+      const previousData = purposeDataJson(olds?.purposeData ?? output?.purposeData);
       const nextData = purposeDataJson(
         news.purposeData !== undefined
           ? news.purposeData
@@ -361,11 +327,7 @@ export const TagKeyProvider = () =>
       const identitySame =
         nextShort === previousShort &&
         !parentChanged &&
-        sameParent(
-          news.parent ?? previousParent,
-          previousParent,
-          output?.namespacedName,
-        );
+        sameParent(news.parent ?? previousParent, previousParent, output?.namespacedName);
       return {
         action: "replace" as const,
         deleteFirst: identitySame,
@@ -375,10 +337,8 @@ export const TagKeyProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const shortName = yield* toId(id, olds?.shortName, output?.shortName);
-      const parent =
-        olds?.parent ?? output?.parent ?? defaultParent(env.project);
-      const namespaced =
-        output?.namespacedName ?? namespacedLookup(parent, shortName);
+      const parent = olds?.parent ?? output?.parent ?? defaultParent(env.project);
+      const namespaced = output?.namespacedName ?? namespacedLookup(parent, shortName);
       const existing = yield* observe(output?.name, namespaced);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
@@ -389,10 +349,8 @@ export const TagKeyProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const shortName = yield* toId(id, news.shortName, output?.shortName);
-      const parent =
-        news.parent ?? output?.parent ?? defaultParent(env.project);
-      const namespaced =
-        output?.namespacedName ?? namespacedLookup(parent, shortName);
+      const parent = news.parent ?? output?.parent ?? defaultParent(env.project);
+      const namespaced = output?.namespacedName ?? namespacedLookup(parent, shortName);
       const desiredDescription = news.description;
 
       let current = yield* observe(output?.name, namespaced);
@@ -406,8 +364,7 @@ export const TagKeyProvider = () =>
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
-            resourceNameFromOperation(settled) ??
-              resourceNameFromOperation(created),
+            resourceNameFromOperation(settled) ?? resourceNameFromOperation(created),
             namespaced,
           );
         } else {
@@ -438,18 +395,14 @@ export const TagKeyProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* resourcemanager
-        .deleteTagKeys({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag(["NotFound", "TagKeyNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const operation = yield* resourcemanager.deleteTagKeys({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)),
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -6,8 +6,7 @@ import type { Database } from "../Firestore/Database.ts";
 import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
 
 /** Request for {@link RunQuery}; project and database come from the bound database. */
-export type RunQueryRequest =
-  DatastoreDatabaseRequest<datastore.RunQueryProjectsRequest>;
+export type RunQueryRequest = DatastoreDatabaseRequest<datastore.RunQueryProjectsRequest>;
 
 /**
  * Runtime binding for Datastore `projects.runQuery`.
@@ -41,11 +40,7 @@ export interface RunQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RunQueryRequest,
-    ) => Effect.Effect<
-      datastore.RunQueryResponse,
-      datastore.RunQueryProjectsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<datastore.RunQueryResponse, datastore.RunQueryProjectsError, RuntimeContext>
   >
 > {}
 

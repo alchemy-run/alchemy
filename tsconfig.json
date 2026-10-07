@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/fly-io/tsconfig.json"
     },
     {
@@ -494,12 +497,10 @@
     }
   ],
   "compilerOptions": {
-    // NOTE: this is a solution config (`files: []`) and governs NO source, so a
-    // plugin here is inert for the editor and `tsc -b`. The real Effect LS
-    // config (and its on/off toggle) lives in `packages/alchemy/tsconfig.json`.
     "plugins": [
       {
-        "name": "@effect/language-service"
+        "name": "@effect/language-service",
+        "diagnostics": false
       }
     ]
   }

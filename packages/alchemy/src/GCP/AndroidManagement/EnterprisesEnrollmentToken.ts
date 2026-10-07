@@ -32,9 +32,7 @@ export type EnterprisesEnrollmentTokenProps = {
    * Whether personal usage is allowed on a device provisioned with this
    * token. Immutable — changing it replaces the token.
    */
-  allowPersonalUsage?:
-    | androidmanagement.EnrollmentTokenAllowPersonalUsageEnum
-    | (string & {});
+  allowPersonalUsage?: androidmanagement.EnrollmentTokenAllowPersonalUsageEnum | (string & {});
   /**
    * Google authentication options during enrollment. Immutable —
    * changing them replaces the token.
@@ -76,9 +74,7 @@ export type EnterprisesEnrollmentToken = Resource<
     /** Personal-usage setting. */
     allowPersonalUsage: string | undefined;
     /** Google authentication options. */
-    googleAuthenticationOptions:
-      | androidmanagement.GoogleAuthenticationOptions
-      | undefined;
+    googleAuthenticationOptions: androidmanagement.GoogleAuthenticationOptions | undefined;
     /** One-time-use flag. */
     oneTimeOnly: boolean | undefined;
     /** Requested lifetime. */
@@ -168,13 +164,7 @@ const toAttrs = (
 
 export const EnterprisesEnrollmentTokenProvider = () =>
   Provider.succeed(EnterprisesEnrollmentToken, {
-    stables: [
-      "name",
-      "enrollmentTokenId",
-      "parent",
-      "project",
-      "expirationTimestamp",
-    ],
+    stables: ["name", "enrollmentTokenId", "parent", "project", "expirationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -199,10 +189,7 @@ export const EnterprisesEnrollmentTokenProvider = () =>
             news.additionalData !== olds.additionalData) ||
           (news.googleAuthenticationOptions !== undefined &&
             olds?.googleAuthenticationOptions !== undefined &&
-            !jsonEqual(
-              news.googleAuthenticationOptions,
-              olds.googleAuthenticationOptions,
-            )),
+            !jsonEqual(news.googleAuthenticationOptions, olds.googleAuthenticationOptions)),
       });
       return identity;
     }),
@@ -216,8 +203,7 @@ export const EnterprisesEnrollmentTokenProvider = () =>
         parent,
         policyName: olds?.policyName ?? output?.policyName,
         googleAuthenticationOptions:
-          olds?.googleAuthenticationOptions ??
-          output?.googleAuthenticationOptions,
+          olds?.googleAuthenticationOptions ?? output?.googleAuthenticationOptions,
         oneTimeOnly: olds?.oneTimeOnly ?? output?.oneTimeOnly,
         duration: olds?.duration ?? output?.duration,
         additionalData: olds?.additionalData ?? output?.additionalData,
@@ -238,9 +224,7 @@ export const EnterprisesEnrollmentTokenProvider = () =>
         additionalData,
       };
 
-      let current = yield* getEnrollmentToken(
-        toEnrollmentTokenName(parent, output?.name),
-      );
+      let current = yield* getEnrollmentToken(toEnrollmentTokenName(parent, output?.name));
 
       if (current === undefined) {
         current = yield* androidmanagement.createEnterprisesEnrollmentTokens({
@@ -255,8 +239,7 @@ export const EnterprisesEnrollmentTokenProvider = () =>
         parent,
         policyName: news.policyName ?? output?.policyName,
         googleAuthenticationOptions:
-          news.googleAuthenticationOptions ??
-          output?.googleAuthenticationOptions,
+          news.googleAuthenticationOptions ?? output?.googleAuthenticationOptions,
         oneTimeOnly: news.oneTimeOnly ?? output?.oneTimeOnly,
         duration,
         additionalData,

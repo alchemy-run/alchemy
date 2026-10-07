@@ -107,10 +107,9 @@ export type AgentsEnvironmentsSessionsEntityType = Resource<
  * @resource
  * @category Dialogflow
  */
-export const AgentsEnvironmentsSessionsEntityType =
-  Resource<AgentsEnvironmentsSessionsEntityType>(
-    "GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType",
-  );
+export const AgentsEnvironmentsSessionsEntityType = Resource<AgentsEnvironmentsSessionsEntityType>(
+  "GCP.Dialogflow.AgentsEnvironmentsSessionsEntityType",
+);
 
 export class AgentsEnvironmentsSessionsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsSessionsEntityTypeNotResolved",
@@ -122,28 +121,19 @@ export class AgentsEnvironmentsSessionsEntityTypeNotResolved extends Data.Tagged
 const LEGACY_SENTINEL_PREFIX = "__alchemy__";
 
 const entitiesOf = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[]
-    | undefined,
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[] | undefined,
 ): SessionEntity[] =>
   (list ?? [])
     .filter((entity) => (entity.value ?? "").length > 0)
-    .filter(
-      (entity) => !(entity.value ?? "").startsWith(LEGACY_SENTINEL_PREFIX),
-    )
+    .filter((entity) => !(entity.value ?? "").startsWith(LEGACY_SENTINEL_PREFIX))
     .map((entity) => ({
       value: entity.value ?? "",
       synonyms: [...(entity.synonyms ?? [])],
     }));
 
 const hasLegacySentinel = (
-  list:
-    | readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[]
-    | undefined,
-) =>
-  (list ?? []).some((entity) =>
-    (entity.value ?? "").startsWith(LEGACY_SENTINEL_PREFIX),
-  );
+  list: readonly dialogflow.GoogleCloudDialogflowCxV3EntityTypeEntity[] | undefined,
+) => (list ?? []).some((entity) => (entity.value ?? "").startsWith(LEGACY_SENTINEL_PREFIX));
 
 const toAttrs = (
   sessionEntityType: dialogflow.GoogleCloudDialogflowCxV3SessionEntityType,
@@ -164,11 +154,8 @@ const toAttrs = (
   };
 };
 
-const resourceNameOf = (
-  environment: string,
-  sessionId: string,
-  entityTypeId: string,
-) => `${environment}/sessions/${sessionId}/entityTypes/${entityTypeId}`;
+const resourceNameOf = (environment: string, sessionId: string, entityTypeId: string) =>
+  `${environment}/sessions/${sessionId}/entityTypes/${entityTypeId}`;
 
 const entityTypeIdOf = (entityType: string) => lastSegment(entityType);
 
@@ -181,23 +168,13 @@ const getByName = (name: string) =>
 
 export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
   Provider.succeed(AgentsEnvironmentsSessionsEntityType, {
-    stables: [
-      "name",
-      "entityTypeId",
-      "environment",
-      "session",
-      "sessionId",
-      "project",
-      "location",
-    ],
+    stables: ["name", "entityTypeId", "environment", "session", "sessionId", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousParent = olds?.environment ?? output?.environment;
       const previousSession = olds?.sessionId ?? output?.sessionId;
-      const previousType = lastSegment(
-        olds?.entityType ?? output?.entityTypeId ?? "",
-      );
+      const previousType = lastSegment(olds?.entityType ?? output?.entityTypeId ?? "");
       const nextType = lastSegment(news.entityType);
       if (
         (previousParent !== undefined && news.environment !== previousParent) ||
@@ -218,24 +195,13 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
       const env = yield* GcpEnvironment.current;
       if (output?.name !== undefined) {
         const existing = yield* getByName(output.name);
-        return existing === undefined
-          ? undefined
-          : toAttrs(existing, env.project);
+        return existing === undefined ? undefined : toAttrs(existing, env.project);
       }
       if (olds === undefined) return undefined;
-      const generated = yield* toResourceId(
-        id,
-        undefined,
-        undefined,
-        MAX_SESSION_ID_LENGTH,
-      );
+      const generated = yield* toResourceId(id, undefined, undefined, MAX_SESSION_ID_LENGTH);
       const sessionId = olds.sessionId ?? generated;
       const found = yield* getByName(
-        resourceNameOf(
-          olds.environment,
-          sessionId,
-          entityTypeIdOf(olds.entityType),
-        ),
+        resourceNameOf(olds.environment, sessionId, entityTypeIdOf(olds.entityType)),
       );
       if (found === undefined) return undefined;
       const attrs = toAttrs(found, env.project);
@@ -254,8 +220,7 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
         MAX_SESSION_ID_LENGTH,
       );
       const name = resourceNameOf(environment, sessionId, entityTypeId);
-      const entityOverrideMode =
-        news.entityOverrideMode ?? "ENTITY_OVERRIDE_MODE_OVERRIDE";
+      const entityOverrideMode = news.entityOverrideMode ?? "ENTITY_OVERRIDE_MODE_OVERRIDE";
       const entities = news.entities.map((entity) => ({
         value: entity.value,
         synonyms: entity.synonyms,
@@ -285,26 +250,17 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
       }
 
       const currentName = current.name ?? name;
-      const modeChanged = !sameText(
-        current.entityOverrideMode,
-        entityOverrideMode,
-      );
-      const entitiesChanged = !sameJson(
-        entitiesOf(current.entities),
-        entitiesOf(news.entities),
-      );
+      const modeChanged = !sameText(current.entityOverrideMode, entityOverrideMode);
+      const entitiesChanged = !sameJson(entitiesOf(current.entities), entitiesOf(news.entities));
       const legacySentinel = hasLegacySentinel(current.entities);
 
       if (modeChanged || entitiesChanged || legacySentinel) {
-        current =
-          yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsSessionsEntityTypes(
-            {
-              // An `entities` update mask is silently ignored; the body is
-              // complete, so replace the whole resource.
-              name: currentName,
-              body: { ...body, name: currentName },
-            },
-          );
+        current = yield* dialogflow.patchProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({
+          // An `entities` update mask is silently ignored; the body is
+          // complete, so replace the whole resource.
+          name: currentName,
+          body: { ...body, name: currentName },
+        });
       }
 
       return toAttrs(current, env.project);

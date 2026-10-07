@@ -90,10 +90,7 @@ export const flociServices = () => (flociServicesLayer ??= makeFlociServices());
  * ```
  */
 export const flociDual = <R extends ResourceLike, ROut, E, RIn>(
-  cls:
-    | ResourceClassLike<R>
-    | Platform<R, any, any, any, any>
-    | { Type: R["Type"] },
+  cls: ResourceClassLike<R> | Platform<R, any, any, any, any> | { Type: R["Type"] },
   live: () => Layer.Layer<ROut, E, RIn>,
 ) =>
   ProviderLayer.dual(cls, {

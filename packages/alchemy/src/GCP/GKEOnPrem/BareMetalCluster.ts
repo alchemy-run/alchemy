@@ -317,21 +317,12 @@ export type BareMetalCluster = Resource<
  * @resource
  * @category GKEOnPrem
  */
-export const BareMetalCluster = Resource<BareMetalCluster>(
-  "GCP.GKEOnPrem.BareMetalCluster",
-);
+export const BareMetalCluster = Resource<BareMetalCluster>("GCP.GKEOnPrem.BareMetalCluster");
 
-const resourceName = (
-  project: string,
-  location: string,
-  bareMetalClusterId: string,
-) => `${parentOf(project, location)}/${COLLECTION}/${bareMetalClusterId}`;
+const resourceName = (project: string, location: string, bareMetalClusterId: string) =>
+  `${parentOf(project, location)}/${COLLECTION}/${bareMetalClusterId}`;
 
-const toAttrs = (
-  item: gkeonprem.BareMetalCluster,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkeonprem.BareMetalCluster, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
@@ -388,8 +379,7 @@ const listOwned = (project: string, region: string) =>
         pageSize: 1000,
         view: "FULL",
       }),
-      (page): readonly gkeonprem.BareMetalCluster[] | undefined =>
-        page.bareMetalClusters,
+      (page): readonly gkeonprem.BareMetalCluster[] | undefined => page.bareMetalClusters,
     ),
   ).pipe(
     Effect.map((items) =>
@@ -426,30 +416,19 @@ const toBody = (
 
 export const BareMetalClusterProvider = () =>
   Provider.succeed(BareMetalCluster, {
-    stables: [
-      "name",
-      "bareMetalClusterId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "bareMetalClusterId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousMembership =
-        olds?.adminClusterMembership ?? output?.adminClusterMembership;
+      const previousMembership = olds?.adminClusterMembership ?? output?.adminClusterMembership;
       const nextMembership = news.adminClusterMembership;
       return replaceOnIdentity({
         previousId: olds?.bareMetalClusterId ?? output?.bareMetalClusterId,
         nextId: news.bareMetalClusterId
           ? rfc1035(news.bareMetalClusterId, "baremetalcluster")
           : (olds?.bareMetalClusterId ?? output?.bareMetalClusterId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -470,12 +449,8 @@ export const BareMetalClusterProvider = () =>
         output?.bareMetalClusterId,
         "baremetalcluster",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, bareMetalClusterId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, bareMetalClusterId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
@@ -503,22 +478,12 @@ export const BareMetalClusterProvider = () =>
         output?.bareMetalClusterId,
         "baremetalcluster",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, bareMetalClusterId);
       const ownership = yield* createInternalLabels(id);
-      const annotations = desiredAnnotations(
-        ownership,
-        news.labels,
-        news.annotations,
-      );
+      const annotations = desiredAnnotations(ownership, news.labels, news.annotations);
       const description = encodeOwnership(ownership, news.description);
-      const membership = membershipName(
-        news.adminClusterMembership,
-        env.project,
-      );
+      const membership = membershipName(news.adminClusterMembership, env.project);
       const body = toBody(news, annotations, description, membership);
 
       let current = yield* getByName(output?.name ?? name);
@@ -543,46 +508,34 @@ export const BareMetalClusterProvider = () =>
 
       const mask = fieldMask([
         differs(current.annotations, annotations) && "annotations",
-        !sameText(parseOwnership(current.description).text, news.description) &&
-          "description",
-        differs(current.bareMetalVersion, news.bareMetalVersion) &&
-          "bareMetalVersion",
+        !sameText(parseOwnership(current.description).text, news.description) && "description",
+        differs(current.bareMetalVersion, news.bareMetalVersion) && "bareMetalVersion",
         differs(current.controlPlane, news.controlPlane) && "controlPlane",
         differs(current.storage, news.storage) && "storage",
         differs(current.networkConfig, news.networkConfig) && "networkConfig",
         differs(current.loadBalancer, news.loadBalancer) && "loadBalancer",
-        differs(current.securityConfig, news.securityConfig) &&
-          "securityConfig",
+        differs(current.securityConfig, news.securityConfig) && "securityConfig",
         differs(current.proxy, news.proxy) && "proxy",
         differs(current.upgradePolicy, news.upgradePolicy) && "upgradePolicy",
-        differs(current.nodeAccessConfig, news.nodeAccessConfig) &&
-          "nodeAccessConfig",
-        differs(current.maintenanceConfig, news.maintenanceConfig) &&
-          "maintenanceConfig",
-        differs(current.binaryAuthorization, news.binaryAuthorization) &&
-          "binaryAuthorization",
+        differs(current.nodeAccessConfig, news.nodeAccessConfig) && "nodeAccessConfig",
+        differs(current.maintenanceConfig, news.maintenanceConfig) && "maintenanceConfig",
+        differs(current.binaryAuthorization, news.binaryAuthorization) && "binaryAuthorization",
         differs(current.nodeConfig, news.nodeConfig) && "nodeConfig",
-        differs(current.clusterOperations, news.clusterOperations) &&
-          "clusterOperations",
-        differs(current.osEnvironmentConfig, news.osEnvironmentConfig) &&
-          "osEnvironmentConfig",
+        differs(current.clusterOperations, news.clusterOperations) && "clusterOperations",
+        differs(current.osEnvironmentConfig, news.osEnvironmentConfig) && "osEnvironmentConfig",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* gkeonprem.patchProjectsLocationsBareMetalClusters({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              ...body,
-              etag: current.etag,
-            },
-          });
+        const operation = yield* gkeonprem.patchProjectsLocationsBareMetalClusters({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            ...body,
+            etag: current.etag,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {

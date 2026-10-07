@@ -111,9 +111,7 @@ export type BigQueryExport = Resource<
  * @resource
  * @category SecurityCenter
  */
-export const BigQueryExport = Resource<BigQueryExport>(
-  "GCP.SecurityCenter.BigQueryExport",
-);
+export const BigQueryExport = Resource<BigQueryExport>("GCP.SecurityCenter.BigQueryExport");
 
 export class BigQueryExportNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.BigQueryExportNotResolved",
@@ -124,10 +122,7 @@ export class BigQueryExportNotResolved extends Data.TaggedError(
 const resourceName = (project: string, exportId: string) =>
   `projects/${project}/bigQueryExports/${exportId}`;
 
-const toAttrs = (
-  exp: scc.GoogleCloudSecuritycenterV1BigQueryExport,
-  project: string,
-) => {
+const toAttrs = (exp: scc.GoogleCloudSecuritycenterV1BigQueryExport, project: string) => {
   const name = exp.name ?? "";
   const parsed = parseOwnership(exp.description);
   return {
@@ -162,19 +157,12 @@ export const BigQueryExportProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const exportId = yield* toResourceId(
-        id,
-        olds?.exportId,
-        output?.exportId,
-        "e",
-      );
+      const exportId = yield* toResourceId(id, olds?.exportId, output?.exportId, "e");
       const name = output?.name ?? resourceName(env.project, exportId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -188,9 +176,7 @@ export const BigQueryExportProvider = () =>
           (page) => page.bigQueryExports,
         ).pipe(
           Effect.catchTag("NotFound", () =>
-            Effect.succeed(
-              [] as scc.GoogleCloudSecuritycenterV1BigQueryExport[],
-            ),
+            Effect.succeed([] as scc.GoogleCloudSecuritycenterV1BigQueryExport[]),
           ),
         );
         return items
@@ -200,12 +186,7 @@ export const BigQueryExportProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const exportId = yield* toResourceId(
-        id,
-        news.exportId,
-        output?.exportId,
-        "e",
-      );
+      const exportId = yield* toResourceId(id, news.exportId, output?.exportId, "e");
       const name = resourceName(env.project, exportId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);

@@ -40,10 +40,7 @@ export const fetchFrom = (
     );
 
 /** Fetch `url` once from inside a Machine; returns the body or wget's error. */
-export const fetchOnce = (
-  caller: { appName: string; machineId: string },
-  url: string,
-) =>
+export const fetchOnce = (caller: { appName: string; machineId: string }, url: string) =>
   machines
     .execMachine({
       app_name: caller.appName,

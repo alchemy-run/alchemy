@@ -9,7 +9,6 @@ import type { Output } from "../../Output.ts";
 // @cloudflare/workers-types, referenced above) stays reachable for
 // `Rpc.DurableObjectBranded`.
 import type { Rpc as AlchemyRpc } from "../../Rpc.ts";
-import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 // NOTE: import the service modules directly rather than `import * as Cloudflare
 // from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
 // circular re-export when the barrel does `export * from "./Workers/index.ts"`
@@ -24,6 +23,8 @@ import type * as Email from "../Email/index.ts";
 import type * as FlagshipNs from "../Flagship/index.ts";
 import type * as HyperdriveNs from "../Hyperdrive/index.ts";
 import type * as ImagesNs from "../Images/index.ts";
+import type * as K2Ns from "../K2/index.ts";
+import type { K2StreamBinding } from "../K2/WriteStreamBinding.ts";
 import type * as KV from "../KV/index.ts";
 import type * as PipelinesNs from "../Pipelines/index.ts";
 import type * as Queues from "../Queues/index.ts";
@@ -32,6 +33,7 @@ import type * as StreamNs from "../Stream/index.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
 import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type * as WorkerOnlyBinding from "./Binding.ts";
@@ -81,9 +83,7 @@ export type GetBindingType<T> =
           : // `Worker.URL` (an Effect resolving to a deferred string accessor) needs
             // no case of its own: the generic Effect unwrap below reduces it to
             // `string` via the fallthrough.
-            T extends
-                | Output<infer A, infer _Req>
-                | Effect.Effect<infer A, infer _E, infer _R>
+            T extends Output<infer A, infer _Req> | Effect.Effect<infer A, infer _E, infer _R>
             ? GetBindingType<A>
             : T extends FlagshipNs.App
               ? Flagship
@@ -136,19 +136,12 @@ export type GetBindingType<T> =
                                                         : T extends WorkerLoaderResource
                                                           ? WorkerLoader
                                                           : T extends
-                                                                | WorkflowLike<
-                                                                    infer Params
-                                                                  >
-                                                                | WorkflowBinding<
-                                                                    infer Params
-                                                                  >
+                                                                | WorkflowLike<infer Params>
+                                                                | WorkflowBinding<infer Params>
                                                             ? Workflow<Params>
                                                             : T extends DurableObjectLike
                                                               ? DurableObjectNamespace<
-                                                                  Exclude<
-                                                                    T["Shape"],
-                                                                    undefined
-                                                                  >
+                                                                  Exclude<T["Shape"], undefined>
                                                                 >
                                                               : T extends
                                                                     | VpcService
@@ -158,11 +151,13 @@ export type GetBindingType<T> =
                                                                       | PipelinesNs.Stream
                                                                       | PipelinesNs.LegacyPipeline
                                                                   ? Pipeline
-                                                                  : T extends Redacted<any>
-                                                                    ? // redacteds are always stored as secret_text, so are always string
-                                                                      // we JSON.stringify when not a Redacted<string>
-                                                                      string
-                                                                    : T;
+                                                                  : T extends K2Ns.Stream
+                                                                    ? K2StreamBinding
+                                                                    : T extends Redacted<any>
+                                                                      ? // redacteds are always stored as secret_text, so are always string
+                                                                        // we JSON.stringify when not a Redacted<string>
+                                                                        string
+                                                                      : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

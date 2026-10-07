@@ -1,15 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datacatalog from "@distilled.cloud/gcp/datacatalog_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  location,
-  logLevel,
-  currentProject,
-  runTagTemplateLifecycle,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import { location, logLevel, currentProject, runTagTemplateLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -111,9 +106,7 @@ test.provider.skipIf(!runTagTemplateLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.fields?.alchemy_ownership?.description).toContain(
-        "alchemy-id=",
-      );
+      expect(fetched.fields?.alchemy_ownership?.description).toContain("alchemy-id=");
       expect(fetched.fields?.origin?.displayName).toEqual("Origin");
 
       const updated = yield* stack.deploy(

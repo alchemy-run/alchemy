@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -36,9 +31,7 @@ import {
 
 const COLLECTION = "rollouts";
 
-export type RolloutControlAction =
-  | saasservicemgmt.RolloutControlActionEnum
-  | (string & {});
+export type RolloutControlAction = saasservicemgmt.RolloutControlActionEnum | (string & {});
 
 export type RolloutControl = {
   action?: RolloutControlAction;
@@ -253,9 +246,7 @@ const listOwned = (project: string, location: string) =>
     }),
     (page) => page.rollouts,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelKeys(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelKeys(item.labels))),
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
@@ -266,9 +257,7 @@ const listOwned = (project: string, location: string) =>
             }),
             (page) => page.rollouts,
           ).pipe(
-            Effect.map((fallback) =>
-              fallback.filter((item) => hasAlchemyLabelKeys(item.labels)),
-            ),
+            Effect.map((fallback) => fallback.filter((item) => hasAlchemyLabelKeys(item.labels))),
           ),
     ),
   );
@@ -292,46 +281,29 @@ export const RolloutProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.rolloutId ?? output?.rolloutId,
         nextId: news.rolloutId ?? olds?.rolloutId ?? output?.rolloutId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
         extra:
           (news.rolloutKind !== undefined &&
-            !sameRef(
-              olds?.rolloutKind ?? output?.rolloutKind,
-              news.rolloutKind,
-            )) ||
+            !sameRef(olds?.rolloutKind ?? output?.rolloutKind, news.rolloutKind)) ||
           (news.release !== undefined &&
             !sameRef(olds?.release ?? output?.release, news.release)) ||
           (news.flagRelease !== undefined &&
-            (olds?.flagRelease ?? output?.flagRelease ?? "") !==
-              news.flagRelease),
+            (olds?.flagRelease ?? output?.flagRelease ?? "") !== news.flagRelease),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const rolloutId = yield* toPhysicalId(
-        id,
-        olds?.rolloutId,
-        output?.rolloutId,
-        "rlo",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, rolloutId);
+      const rolloutId = yield* toPhysicalId(id, olds?.rolloutId, output?.rolloutId, "rlo");
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, rolloutId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -343,15 +315,8 @@ export const RolloutProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const rolloutId = yield* toPhysicalId(
-        id,
-        news.rolloutId,
-        output?.rolloutId,
-        "rlo",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const rolloutId = yield* toPhysicalId(id, news.rolloutId, output?.rolloutId, "rlo");
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, COLLECTION, rolloutId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -398,18 +363,14 @@ export const RolloutProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const annotationsChanged =
         annotations !== undefined &&
-        fingerprint(userAnnotations(current.annotations)) !==
-          fingerprint(annotations);
+        fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const filterChanged =
-        news.unitFilter !== undefined &&
-        (current.unitFilter ?? "") !== news.unitFilter;
+        news.unitFilter !== undefined && (current.unitFilter ?? "") !== news.unitFilter;
       const strategyChanged =
         news.rolloutOrchestrationStrategy !== undefined &&
-        (current.rolloutOrchestrationStrategy ?? "") !==
-          news.rolloutOrchestrationStrategy;
+        (current.rolloutOrchestrationStrategy ?? "") !== news.rolloutOrchestrationStrategy;
       const controlChanged =
-        news.control !== undefined &&
-        fingerprint(current.control) !== fingerprint(news.control);
+        news.control !== undefined && fingerprint(current.control) !== fingerprint(news.control);
       const mask = fieldMask([
         labelsChanged && "labels",
         annotationsChanged && "annotations",
@@ -438,16 +399,14 @@ export const RolloutProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* saasservicemgmt
-        .deleteProjectsLocationsRollouts({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* saasservicemgmt.deleteProjectsLocationsRollouts({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

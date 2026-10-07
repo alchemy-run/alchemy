@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type {
   GrpcRouteFaultInjectionPolicy,
@@ -349,17 +344,12 @@ const toStringMap = (
 ): Record<string, string> | undefined => {
   if (value === undefined) return undefined;
   return Object.fromEntries(
-    Object.entries(value).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(value).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 };
 
 const toHeaderModifier = (
-  value:
-    | HttpRouteHeaderModifier
-    | networkservices.HttpRouteHeaderModifier
-    | undefined,
+  value: HttpRouteHeaderModifier | networkservices.HttpRouteHeaderModifier | undefined,
 ): HttpRouteHeaderModifier | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -385,9 +375,7 @@ const toHeaderMatch = (
 });
 
 const toQueryMatch = (
-  value:
-    | HttpRouteQueryParameterMatch
-    | networkservices.HttpRouteQueryParameterMatch,
+  value: HttpRouteQueryParameterMatch | networkservices.HttpRouteQueryParameterMatch,
 ): HttpRouteQueryParameterMatch => ({
   exactMatch: value.exactMatch,
   regexMatch: value.regexMatch,
@@ -431,10 +419,7 @@ const toRedirect = (
 };
 
 const toFault = (
-  value:
-    | GrpcRouteFaultInjectionPolicy
-    | networkservices.GrpcRouteFaultInjectionPolicy
-    | undefined,
+  value: GrpcRouteFaultInjectionPolicy | networkservices.GrpcRouteFaultInjectionPolicy | undefined,
 ): GrpcRouteFaultInjectionPolicy | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -454,10 +439,7 @@ const toFault = (
 };
 
 const toRetry = (
-  value:
-    | HttpRouteRetryPolicy
-    | networkservices.HttpRouteRetryPolicy
-    | undefined,
+  value: HttpRouteRetryPolicy | networkservices.HttpRouteRetryPolicy | undefined,
 ): HttpRouteRetryPolicy | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -468,16 +450,11 @@ const toRetry = (
 };
 
 const toMirror = (
-  value:
-    | HttpRouteRequestMirrorPolicy
-    | networkservices.HttpRouteRequestMirrorPolicy
-    | undefined,
+  value: HttpRouteRequestMirrorPolicy | networkservices.HttpRouteRequestMirrorPolicy | undefined,
 ): HttpRouteRequestMirrorPolicy | undefined => {
   if (value === undefined) return undefined;
   return {
-    destination: value.destination
-      ? toDestination(value.destination)
-      : undefined,
+    destination: value.destination ? toDestination(value.destination) : undefined,
     mirrorPercent: value.mirrorPercent,
   };
 };
@@ -499,10 +476,7 @@ const toCors = (
 };
 
 const toDirect = (
-  value:
-    | HttpRouteHttpDirectResponse
-    | networkservices.HttpRouteHttpDirectResponse
-    | undefined,
+  value: HttpRouteHttpDirectResponse | networkservices.HttpRouteHttpDirectResponse | undefined,
 ): HttpRouteHttpDirectResponse | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -513,10 +487,7 @@ const toDirect = (
 };
 
 const toAction = (
-  value:
-    | HttpRouteRouteAction
-    | networkservices.HttpRouteRouteAction
-    | undefined,
+  value: HttpRouteRouteAction | networkservices.HttpRouteRouteAction | undefined,
 ): HttpRouteRouteAction | undefined => {
   if (value === undefined) return undefined;
   return {
@@ -577,21 +548,12 @@ const getByName = (name: string) =>
 
 export const HttpRouteProvider = () =>
   Provider.succeed(HttpRoute, {
-    stables: [
-      "name",
-      "httpRouteId",
-      "project",
-      "location",
-      "selfLink",
-      "createTime",
-    ],
+    stables: ["name", "httpRouteId", "project", "location", "selfLink", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousId = olds?.httpRouteId ?? output?.httpRouteId;
-      const nextId = news.httpRouteId
-        ? rfc1035(news.httpRouteId, "http-route")
-        : previousId;
+      const nextId = news.httpRouteId ? rfc1035(news.httpRouteId, "http-route") : previousId;
       const previousLocation = normalizeLocation(
         olds?.location ?? output?.location,
         DEFAULT_GLOBAL,
@@ -601,9 +563,7 @@ export const HttpRouteProvider = () =>
         DEFAULT_GLOBAL,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation
       ) {
         return { action: "replace" as const };
@@ -619,19 +579,12 @@ export const HttpRouteProvider = () =>
         output?.httpRouteId,
         "http-route",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, httpRouteId);
+      const location = normalizeLocation(olds?.location ?? output?.location, DEFAULT_GLOBAL);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, httpRouteId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -658,10 +611,7 @@ export const HttpRouteProvider = () =>
         output?.httpRouteId,
         "http-route",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        DEFAULT_GLOBAL,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, DEFAULT_GLOBAL);
       const name = resourceName(env.project, location, COLLECTION, httpRouteId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -705,21 +655,11 @@ export const HttpRouteProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const hostnamesChanged = !sameStringList(
-        current.hostnames,
-        desiredHostnames,
-      );
-      const rulesChanged = !sameJson(
-        (current.rules ?? []).map(toRule),
-        desiredRules,
-      );
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const hostnamesChanged = !sameStringList(current.hostnames, desiredHostnames);
+      const rulesChanged = !sameJson((current.rules ?? []).map(toRule), desiredRules);
       const meshesChanged = !sameStringList(current.meshes, desiredMeshes);
-      const gatewaysChanged = !sameStringList(
-        current.gateways,
-        desiredGateways,
-      );
+      const gatewaysChanged = !sameStringList(current.gateways, desiredGateways);
 
       const updateMask = changedFields([
         ["labels", labelsChanged],
@@ -731,25 +671,21 @@ export const HttpRouteProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsHttpRoutes({
+        const operation = yield* networkservices.patchProjectsLocationsHttpRoutes({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              hostnames: desiredHostnames,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            hostnames: desiredHostnames,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

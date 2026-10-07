@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Instance } from "./Instance.ts";
 
-export interface GetInstanceRequest extends Omit<
-  spanner.GetProjectsInstancesRequest,
-  "name"
-> {}
+export interface GetInstanceRequest extends Omit<spanner.GetProjectsInstancesRequest, "name"> {}
 
 /**
  * Runtime binding for Cloud Spanner `instances.get`.
@@ -33,14 +30,8 @@ export interface GetInstance extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetInstanceRequest,
-    ) => Effect.Effect<
-      spanner.Instance,
-      spanner.GetProjectsInstancesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<spanner.Instance, spanner.GetProjectsInstancesError, RuntimeContext>
   >
 > {}
 
-export const GetInstance = Binding.Service<GetInstance>(
-  "GCP.Spanner.GetInstance",
-);
+export const GetInstance = Binding.Service<GetInstance>("GCP.Spanner.GetInstance");

@@ -1,15 +1,13 @@
-import { expect, it } from "alchemy-test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { expect, it } from "alchemy-test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(here, "../bin/alchemy-test.ts");
 const apiUrl = pathToFileURL(resolve(here, "../src/index.ts")).href;
-const effectUrl = pathToFileURL(
-  resolve(here, "../../../node_modules/effect/dist/Effect.js"),
-).href;
+const effectUrl = pathToFileURL(resolve(here, "../../../node_modules/effect/dist/Effect.js")).href;
 
 it(
   "excludes exclusive-lock queue time from test durations",
@@ -44,9 +42,7 @@ it(
         new Response(child.stderr).text(),
       ]);
       expect(exitCode).toBe(0);
-      const duration = `${stdout}\n${stderr}`.match(
-        /queued exclusive \((\d+)ms\)/,
-      );
+      const duration = `${stdout}\n${stderr}`.match(/queued exclusive \((\d+)ms\)/);
       expect(duration).not.toBeNull();
       expect(Number(duration![1])).toBeLessThan(250);
     } finally {
@@ -85,15 +81,12 @@ it(
     `,
       );
       const run = async (args: string[]) => {
-        const child = Bun.spawn(
-          [process.execPath, cli, root, "--retry", "0", ...args],
-          {
-            cwd: root,
-            stdout: "pipe",
-            stderr: "pipe",
-            env: { ...process.env, NO_COLOR: "1" },
-          },
-        );
+        const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", ...args], {
+          cwd: root,
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, NO_COLOR: "1" },
+        });
         const [exitCode, stdout, stderr] = await Promise.all([
           child.exited,
           new Response(child.stdout).text(),
@@ -137,10 +130,7 @@ it(
       expect(only.output).toContain("0 passed");
 
       // Even an import that throws must not be reached with malformed syntax.
-      await writeFile(
-        resolve(root, "bad.test.ts"),
-        'throw new Error("IMPORTED_SENTINEL");',
-      );
+      await writeFile(resolve(root, "bad.test.ts"), 'throw new Error("IMPORTED_SENTINEL");');
       const invalid = await run(["--tags", "unit &&"]);
       expect(invalid.exitCode).not.toBe(0);
       expect(invalid.output).toContain("Invalid --tags");
@@ -186,15 +176,12 @@ it(
       `,
       );
 
-      const child = Bun.spawn(
-        [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
-        {
-          cwd: root,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: { ...process.env, NO_COLOR: "1" },
-        },
-      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "1"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
       try {
         // Poll the run log (created under the child's cwd) for the sentinel.
         // The hook sleeps 8s after logging; seeing the sentinel within ~6s
@@ -206,10 +193,7 @@ it(
           const { readdir, readFile } = await import("node:fs/promises");
           const entries = await readdir(logDir).catch(() => [] as string[]);
           for (const entry of entries) {
-            const content = await readFile(
-              resolve(logDir, entry),
-              "utf8",
-            ).catch(() => "");
+            const content = await readFile(resolve(logDir, entry), "utf8").catch(() => "");
             if (content.includes("hook-live-sentinel")) {
               streamed = true;
               break;
@@ -245,33 +229,14 @@ it(
       it(${JSON.stringify(name)}, () => {});
     `;
       await Promise.all([
-        writeFile(
-          resolve(root, "test", "Railway", "Excluded.test.ts"),
-          testFile("excluded-test"),
-        ),
-        writeFile(
-          resolve(root, "test", "Other", "Included.test.ts"),
-          testFile("included-test"),
-        ),
+        writeFile(resolve(root, "test", "Railway", "Excluded.test.ts"), testFile("excluded-test")),
+        writeFile(resolve(root, "test", "Other", "Included.test.ts"), testFile("included-test")),
       ]);
 
       const runCli = async (args: ReadonlyArray<string>) => {
         const child = Bun.spawn(
-          [
-            process.execPath,
-            cli,
-            ...args,
-            "--retry",
-            "0",
-            "--concurrency",
-            "1",
-          ],
-          {
-            cwd: root,
-            stdout: "pipe",
-            stderr: "pipe",
-            env: { ...process.env, NO_COLOR: "1" },
-          },
+          [process.execPath, cli, ...args, "--retry", "0", "--concurrency", "1"],
+          { cwd: root, stdout: "pipe", stderr: "pipe", env: { ...process.env, NO_COLOR: "1" } },
         );
         const [exitCode, stdout, stderr] = await Promise.all([
           child.exited,
@@ -288,11 +253,7 @@ it(
       expect(excluded.output).not.toContain("excluded-test");
 
       // An explicit positional root inside the excluded path overrides it.
-      const explicit = await runCli([
-        "test/Railway/Excluded.test.ts",
-        "--exclude",
-        "test/Railway",
-      ]);
+      const explicit = await runCli(["test/Railway/Excluded.test.ts", "--exclude", "test/Railway"]);
       expect(explicit.exitCode).toBe(0);
       expect(explicit.output).toContain("excluded-test");
 
@@ -329,21 +290,15 @@ it(
             'it.fails("expected body failure", () => { throw new Error("expected-body-failure"); });',
           ),
         ),
-        writeFile(
-          resolve(root, "after-all.test.ts"),
-          fixture("afterAll", 'it("body", () => {});'),
-        ),
+        writeFile(resolve(root, "after-all.test.ts"), fixture("afterAll", 'it("body", () => {});')),
       ]);
 
-      const child = Bun.spawn(
-        [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
-        {
-          cwd: root,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: { ...process.env, NO_COLOR: "1" },
-        },
-      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "1"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
       const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
@@ -393,15 +348,12 @@ it(
       `,
       );
 
-      const child = Bun.spawn(
-        [process.execPath, cli, root, "--retry", "0", "--concurrency", "1"],
-        {
-          cwd: root,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: { ...process.env, NO_COLOR: "1" },
-        },
-      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "1"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
       const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
@@ -453,26 +405,19 @@ it(
         `,
         );
       }
-      const child = Bun.spawn(
-        [process.execPath, cli, root, "--retry", "0", "--concurrency", "2"],
-        {
-          cwd: root,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: { ...process.env, NO_COLOR: "1" },
-        },
-      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--concurrency", "2"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
       const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
       ]);
-      expect(`${stdout}\n${stderr}`).toContain(
-        "first.test.ts > nested > first",
-      );
-      expect(`${stdout}\n${stderr}`).toContain(
-        "second.test.ts > nested > second",
-      );
+      expect(`${stdout}\n${stderr}`).toContain("first.test.ts > nested > first");
+      expect(`${stdout}\n${stderr}`).toContain("second.test.ts > nested > second");
       expect(exitCode).toBe(0);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -502,19 +447,12 @@ it(
     `,
       );
       const run = async (args: string[], enabled = false) => {
-        const child = Bun.spawn(
-          [process.execPath, cli, file, "--retry", "0", ...args],
-          {
-            cwd: root,
-            stdout: "pipe",
-            stderr: "pipe",
-            env: {
-              ...process.env,
-              NO_COLOR: "1",
-              EXPECT_ENABLED: enabled ? "1" : "",
-            },
-          },
-        );
+        const child = Bun.spawn([process.execPath, cli, file, "--retry", "0", ...args], {
+          cwd: root,
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, NO_COLOR: "1", EXPECT_ENABLED: enabled ? "1" : "" },
+        });
         const [code, stdout, stderr] = await Promise.all([
           child.exited,
           new Response(child.stdout).text(),
@@ -526,17 +464,11 @@ it(
       expect(await run([])).toContain("1 passed");
       expect(await run(["--tags", "*"])).toContain("1 passed");
       for (const filter of ["provider:aws", "!unit", "sl*", "!!slow"]) {
-        expect(await run(["--tags", filter, "-t", "gated"])).toContain(
-          "0 passed",
-        );
+        expect(await run(["--tags", filter, "-t", "gated"])).toContain("0 passed");
       }
       expect(await run(["-t", "gated"])).toContain("0 passed");
-      expect(await run(["--tags", "slow && provider:aws"], true)).toContain(
-        "1 passed",
-      );
-      expect(
-        await run(["--tags", "slow", "--tags", "enterprise"], true),
-      ).toContain("1 passed");
+      expect(await run(["--tags", "slow && provider:aws"], true)).toContain("1 passed");
+      expect(await run(["--tags", "slow", "--tags", "enterprise"], true)).toContain("1 passed");
       await writeFile(
         file,
         `

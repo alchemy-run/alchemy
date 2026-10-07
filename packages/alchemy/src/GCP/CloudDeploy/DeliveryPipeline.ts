@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -192,15 +187,9 @@ export type DeliveryPipeline = Resource<
  * @resource
  * @category CloudDeploy
  */
-export const DeliveryPipeline = Resource<DeliveryPipeline>(
-  "GCP.CloudDeploy.DeliveryPipeline",
-);
+export const DeliveryPipeline = Resource<DeliveryPipeline>("GCP.CloudDeploy.DeliveryPipeline");
 
-const resourceName = (
-  project: string,
-  location: string,
-  deliveryPipelineId: string,
-) =>
+const resourceName = (project: string, location: string, deliveryPipelineId: string) =>
   `projects/${project}/locations/${location}/deliveryPipelines/${deliveryPipelineId}`;
 
 const toSerialPipeline = (
@@ -268,27 +257,15 @@ const listOwned = (project: string, region: string) =>
 
 export const DeliveryPipelineProvider = () =>
   Provider.succeed(DeliveryPipeline, {
-    stables: [
-      "name",
-      "deliveryPipelineId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "deliveryPipelineId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.deliveryPipelineId ?? output?.deliveryPipelineId,
-        nextId:
-          news.deliveryPipelineId ??
-          olds?.deliveryPipelineId ??
-          output?.deliveryPipelineId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        nextId: news.deliveryPipelineId ?? olds?.deliveryPipelineId ?? output?.deliveryPipelineId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -303,17 +280,12 @@ export const DeliveryPipelineProvider = () =>
         output?.deliveryPipelineId,
         "deliverypipeline",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, deliveryPipelineId);
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, deliveryPipelineId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -331,9 +303,7 @@ export const DeliveryPipelineProvider = () =>
         output?.deliveryPipelineId,
         "deliverypipeline",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, deliveryPipelineId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -372,8 +342,8 @@ export const DeliveryPipelineProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.description, news.description) && "description",
         !sameBool(current.suspended, desiredSuspended) && "suspended",
         fingerprint(toSerialPipeline(current.serialPipeline)) !==
@@ -381,24 +351,20 @@ export const DeliveryPipelineProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* clouddeploy.patchProjectsLocationsDeliveryPipelines({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              description: news.description,
-              serialPipeline: news.serialPipeline,
-              suspended: desiredSuspended,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
-          });
+        const operation = yield* clouddeploy.patchProjectsLocationsDeliveryPipelines({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            description: news.description,
+            serialPipeline: news.serialPipeline,
+            suspended: desiredSuspended,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

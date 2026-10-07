@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { KEY_RING_ID, kmsTestId } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID, kmsTestId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloud KMS KeyRings cannot be deleted. Reuse the standing test ring.
 // Versions enter DESTROY_SCHEDULED for ≥24h, so reuse a standing key.
@@ -34,8 +31,7 @@ const waitVersionReady = (name: string) =>
   kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("500 millis"),
-      until: (version) =>
-        version.state === "ENABLED" || version.state === "DISABLED",
+      until: (version) => version.state === "ENABLED" || version.state === "DISABLED",
       times: 10,
     }),
   );
@@ -89,10 +85,9 @@ test.provider(
 
       yield* waitVersionReady(created.name);
 
-      const fetched =
-        yield* kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-          name: created.name,
-        });
+      const fetched = yield* kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.state).toEqual("ENABLED");
 
@@ -118,10 +113,9 @@ test.provider(
       expect(disabled.name).toEqual(created.name);
       expect(disabled.state).toEqual("DISABLED");
 
-      const fetchedDisabled =
-        yield* kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
-          name: created.name,
-        });
+      const fetchedDisabled = yield* kms.getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
+        name: created.name,
+      });
       expect(fetchedDisabled.state).toEqual("DISABLED");
 
       const enabled = yield* stack.deploy(
@@ -156,9 +150,7 @@ test.provider(
           Effect.map((version) => version.state ?? "found"),
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
         );
-      expect(["DESTROY_SCHEDULED", "DESTROYED", "gone"]).toContain(
-        afterDestroy,
-      );
+      expect(["DESTROY_SCHEDULED", "DESTROYED", "gone"]).toContain(afterDestroy);
 
       const gone = yield* waitUntilGone(
         `projects/${project}/locations/us-central1/keyRings/${KEY_RING_ID}/cryptoKeys/${CRYPTO_KEY_ID}/cryptoKeyVersions/999999`,

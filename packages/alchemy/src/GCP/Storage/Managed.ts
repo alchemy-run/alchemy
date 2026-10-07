@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { DeleteNotConfirmed } from "../Errors.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  listAlchemyBuckets,
-  toFolderName,
-  withTrailingSlash,
-} from "./internal.ts";
+import { listAlchemyBuckets, toFolderName, withTrailingSlash } from "./internal.ts";
 
 export type ManagedProps = {
   /**
@@ -84,9 +80,7 @@ export type Managed = Resource<
  */
 export const Managed = Resource<Managed>("GCP.Storage.Managed");
 
-export class ManagedNotResolved extends Data.TaggedError(
-  "GCP.Storage.ManagedNotResolved",
-)<{
+export class ManagedNotResolved extends Data.TaggedError("GCP.Storage.ManagedNotResolved")<{
   bucketName: string;
   managedFolderName: string;
 }> {}
@@ -113,16 +107,12 @@ const listOnBucket = (bucketName: string) =>
   storage.listManagedFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as storage.ManagedFolder[]),
-    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as storage.ManagedFolder[])),
   );
 
 const waitUntilGone = (bucketName: string, managedFolderName: string) =>
   getByName(bucketName, managedFolderName).pipe(
-    Effect.map((existing) =>
-      existing === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((existing) => (existing === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -141,13 +131,7 @@ const waitUntilGone = (bucketName: string, managedFolderName: string) =>
 
 export const ManagedProvider = () =>
   Provider.succeed(Managed, {
-    stables: [
-      "bucketName",
-      "managedFolderName",
-      "id",
-      "selfLink",
-      "createTime",
-    ],
+    stables: ["bucketName", "managedFolderName", "id", "selfLink", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -159,8 +143,7 @@ export const ManagedProvider = () =>
       if (
         news.managedFolderName !== undefined &&
         previousName !== undefined &&
-        withTrailingSlash(news.managedFolderName) !==
-          withTrailingSlash(previousName)
+        withTrailingSlash(news.managedFolderName) !== withTrailingSlash(previousName)
       ) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -189,15 +172,12 @@ export const ManagedProvider = () =>
             const bucketName = bucket.name;
             if (
               !bucketName ||
-              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled !==
-                true
+              bucket.iamConfiguration?.uniformBucketLevelAccess?.enabled !== true
             ) {
               return Effect.succeed([] as Array<Managed["Attributes"]>);
             }
             return listOnBucket(bucketName).pipe(
-              Effect.map((items) =>
-                items.map((item) => toAttrs(item, bucketName)),
-              ),
+              Effect.map((items) => items.map((item) => toAttrs(item, bucketName))),
             );
           },
           { concurrency: 8 },
@@ -221,11 +201,7 @@ export const ManagedProvider = () =>
             bucket: bucketName,
             body: { name: managedFolderName },
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              getByName(bucketName, managedFolderName),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => getByName(bucketName, managedFolderName)));
         current = created ?? undefined;
       }
 

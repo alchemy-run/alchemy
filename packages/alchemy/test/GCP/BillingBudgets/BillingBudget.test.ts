@@ -1,26 +1,21 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as billingbudgets from "@distilled.cloud/gcp/billingbudgets_v1";
 import * as cloudbilling from "@distilled.cloud/gcp/cloudbilling_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   billingbudgets.getBillingAccountsBudgets({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "BudgetNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "BudgetNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -32,18 +27,14 @@ const billingAccountId = () => {
   const fromEnv = process.env.GOOGLE_BILLING_ACCOUNT;
   if (fromEnv && fromEnv.length > 0) {
     return Effect.succeed(
-      fromEnv.startsWith("billingAccounts/")
-        ? fromEnv.slice("billingAccounts/".length)
-        : fromEnv,
+      fromEnv.startsWith("billingAccounts/") ? fromEnv.slice("billingAccounts/".length) : fromEnv,
     );
   }
   return GcpEnvironment.current.pipe(
     Effect.flatMap(({ project }) =>
       cloudbilling.getBillingInfoProjects({ name: `projects/${project}` }),
     ),
-    Effect.map(
-      (info) => (info.billingAccountName ?? "").split("/").pop() ?? "",
-    ),
+    Effect.map((info) => (info.billingAccountName ?? "").split("/").pop() ?? ""),
   );
 };
 
@@ -92,9 +83,7 @@ test.provider(
               projects: [`projects/${project}`],
               calendarPeriod: "MONTH",
             },
-            thresholdRules: [
-              { thresholdPercent: 0.5, spendBasis: "CURRENT_SPEND" },
-            ],
+            thresholdRules: [{ thresholdPercent: 0.5, spendBasis: "CURRENT_SPEND" }],
           });
         }),
       );

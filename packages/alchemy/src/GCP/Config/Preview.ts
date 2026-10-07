@@ -284,17 +284,9 @@ export const PreviewProvider = () =>
                 deployment:
                   olds.deployment === undefined
                     ? undefined
-                    : expandNamed(
-                        olds.deployment,
-                        env.project,
-                        location,
-                        "deployments",
-                      ),
+                    : expandNamed(olds.deployment, env.project, location, "deployments"),
                 previewMode: olds.previewMode,
-                serviceAccount: serviceAccountName(
-                  olds.serviceAccount,
-                  env.project,
-                ),
+                serviceAccount: serviceAccountName(olds.serviceAccount, env.project),
                 artifactsGcsBucket: olds.artifactsGcsBucket,
                 workerPool: olds.workerPool,
                 tfVersionConstraint: olds.tfVersionConstraint,
@@ -309,17 +301,9 @@ export const PreviewProvider = () =>
                 deployment:
                   news.deployment === undefined
                     ? undefined
-                    : expandNamed(
-                        news.deployment,
-                        env.project,
-                        location,
-                        "deployments",
-                      ),
+                    : expandNamed(news.deployment, env.project, location, "deployments"),
                 previewMode: news.previewMode,
-                serviceAccount: serviceAccountName(
-                  news.serviceAccount,
-                  env.project,
-                ),
+                serviceAccount: serviceAccountName(news.serviceAccount, env.project),
                 artifactsGcsBucket: news.artifactsGcsBucket,
                 workerPool: news.workerPool,
                 tfVersionConstraint: news.tfVersionConstraint,
@@ -331,10 +315,7 @@ export const PreviewProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.previewId ?? output?.previewId,
         nextId: news.previewId ?? olds?.previewId ?? output?.previewId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         extra,
       });
@@ -342,24 +323,13 @@ export const PreviewProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const previewId = yield* toPhysicalId(
-        id,
-        olds?.previewId,
-        output?.previewId,
-        "preview",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, previewId);
+      const previewId = yield* toPhysicalId(id, olds?.previewId, output?.previewId, "preview");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, previewId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -371,26 +341,15 @@ export const PreviewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const previewId = yield* toPhysicalId(
-        id,
-        news.previewId,
-        output?.previewId,
-        "preview",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const previewId = yield* toPhysicalId(id, news.previewId, output?.previewId, "preview");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, previewId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
       const desiredAnnotations = news.annotations ?? {};
-      const serviceAccount = serviceAccountName(
-        news.serviceAccount,
-        env.project,
-      );
+      const serviceAccount = serviceAccountName(news.serviceAccount, env.project);
       const deployment =
         news.deployment === undefined
           ? undefined

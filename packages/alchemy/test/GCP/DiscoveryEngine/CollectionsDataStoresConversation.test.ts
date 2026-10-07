@@ -1,39 +1,33 @@
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as GCP from "@/GCP";
-import { quotaTolerant } from "./parent.ts";
-import * as Test from "@/Test/Alchemy";
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 // Conversations need the Large Language Model add-on (BadRequest "This
 // feature is only available when Large Language Model add-on is enabled.").
 // Set GCP_TEST_DISCOVERYENGINE_LLM=1 on a project with the add-on.
-const runLlmLifecycle =
-  runLifecycle && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
+const runLlmLifecycle = runLifecycle && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
 
 const waitUntilGone = (name: string) =>
-  discoveryengine
-    .getProjectsLocationsCollectionsDataStoresConversations({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  discoveryengine.getProjectsLocationsCollectionsDataStoresConversations({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "getProjectsLocationsCollectionsDataStoresConversations on a missing conversation fails with a typed tag",
@@ -75,12 +69,10 @@ test.provider.skipIf(!runLifecycle || runLlmLifecycle)(
       );
 
       const error = yield* Effect.flip(
-        discoveryengine.createProjectsLocationsCollectionsDataStoresConversations(
-          {
-            parent: store.name,
-            body: { userPseudoId: "probe", state: "IN_PROGRESS" },
-          },
-        ),
+        discoveryengine.createProjectsLocationsCollectionsDataStoresConversations({
+          parent: store.name,
+          body: { userPseudoId: "probe", state: "IN_PROGRESS" },
+        }),
       );
       expect(error._tag).toEqual("LlmAddOnRequired");
 
@@ -100,23 +92,19 @@ test.provider.skipIf(!runLlmLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            location: "global",
+            displayName: "docs",
+            disableCmek: true,
+          });
+          const conversation = yield* GCP.DiscoveryEngine.CollectionsDataStoresConversation(
+            "Visitor",
             {
-              location: "global",
-              displayName: "docs",
-              disableCmek: true,
+              dataStore: store.name,
+              userPseudoId: "user-1",
+              state: "IN_PROGRESS",
             },
           );
-          const conversation =
-            yield* GCP.DiscoveryEngine.CollectionsDataStoresConversation(
-              "Visitor",
-              {
-                dataStore: store.name,
-                userPseudoId: "user-1",
-                state: "IN_PROGRESS",
-              },
-            );
           return { store, conversation };
         }),
       );
@@ -124,34 +112,29 @@ test.provider.skipIf(!runLlmLifecycle)(
       expect(created.conversation.name).toContain("/conversations/");
       expect(created.conversation.userPseudoId).toEqual("user-1");
 
-      const fetched =
-        yield* discoveryengine.getProjectsLocationsCollectionsDataStoresConversations(
-          { name: created.conversation.name },
-        );
+      const fetched = yield* discoveryengine.getProjectsLocationsCollectionsDataStoresConversations(
+        { name: created.conversation.name },
+      );
       expect(fetched.name).toEqual(created.conversation.name);
       expect(fetched.userPseudoId).toContain("alc-");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore(
-            "Docs",
+          const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
+            dataStoreId: created.store.dataStoreId,
+            location: "global",
+            collection: created.store.collection,
+            displayName: "docs",
+            disableCmek: true,
+          });
+          const conversation = yield* GCP.DiscoveryEngine.CollectionsDataStoresConversation(
+            "Visitor",
             {
-              dataStoreId: created.store.dataStoreId,
-              location: "global",
-              collection: created.store.collection,
-              displayName: "docs",
-              disableCmek: true,
+              dataStore: store.name,
+              userPseudoId: "user-2",
+              state: "COMPLETED",
             },
           );
-          const conversation =
-            yield* GCP.DiscoveryEngine.CollectionsDataStoresConversation(
-              "Visitor",
-              {
-                dataStore: store.name,
-                userPseudoId: "user-2",
-                state: "COMPLETED",
-              },
-            );
           return { store, conversation };
         }),
       );

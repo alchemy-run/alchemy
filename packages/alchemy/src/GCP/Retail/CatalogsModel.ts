@@ -59,11 +59,7 @@ export type CatalogsModelProps = {
    * Training state. Synced via pause/resume after create.
    * @default "PAUSED"
    */
-  trainingState?:
-    | "TRAINING_STATE_UNSPECIFIED"
-    | "PAUSED"
-    | "TRAINING"
-    | (string & {});
+  trainingState?: "TRAINING_STATE_UNSPECIFIED" | "PAUSED" | "TRAINING" | (string & {});
   /**
    * Periodic tuning state. Patchable.
    */
@@ -147,9 +143,7 @@ export type CatalogsModel = Resource<
  * @resource
  * @category Retail
  */
-export const CatalogsModel = Resource<CatalogsModel>(
-  "GCP.Retail.CatalogsModel",
-);
+export const CatalogsModel = Resource<CatalogsModel>("GCP.Retail.CatalogsModel");
 
 export class CatalogsModelNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsModelNotResolved",
@@ -179,8 +173,7 @@ const toAttrs = (model: retail.GoogleCloudRetailV2Model, project: string) => {
   };
 };
 
-const resourceName = (catalog: string, modelId: string) =>
-  `${catalog}/models/${modelId}`;
+const resourceName = (catalog: string, modelId: string) => `${catalog}/models/${modelId}`;
 
 const getByName = (name: string) =>
   name.length === 0
@@ -204,15 +197,7 @@ const refresh = (name: string) =>
 
 export const CatalogsModelProvider = () =>
   Provider.succeed(CatalogsModel, {
-    stables: [
-      "name",
-      "modelId",
-      "catalog",
-      "project",
-      "location",
-      "type",
-      "createTime",
-    ],
+    stables: ["name", "modelId", "catalog", "project", "location", "type", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -225,8 +210,7 @@ export const CatalogsModelProvider = () =>
       );
       const previousType = olds?.type ?? output?.type;
       const nextType = news.type ?? previousType;
-      const previousObjective =
-        olds?.optimizationObjective ?? output?.optimizationObjective;
+      const previousObjective = olds?.optimizationObjective ?? output?.optimizationObjective;
       const nextObjective = news.optimizationObjective ?? previousObjective;
       const identity = replaceOnIdentity({
         previousId: olds?.modelId ?? output?.modelId,
@@ -236,9 +220,7 @@ export const CatalogsModelProvider = () =>
       });
       if (
         identity !== undefined ||
-        (previousType !== undefined &&
-          nextType !== undefined &&
-          previousType !== nextType) ||
+        (previousType !== undefined && nextType !== undefined && previousType !== nextType) ||
         (previousObjective !== undefined &&
           nextObjective !== undefined &&
           previousObjective !== nextObjective)
@@ -267,11 +249,7 @@ export const CatalogsModelProvider = () =>
         output?.name ??
         (catalog !== undefined
           ? resourceName(
-              expandCatalog(
-                catalog,
-                env.project,
-                normalizeLocation(output?.location),
-              ),
+              expandCatalog(catalog, env.project, normalizeLocation(output?.location)),
               modelId,
             )
           : undefined);
@@ -332,9 +310,7 @@ export const CatalogsModelProvider = () =>
         );
         if (current === undefined) {
           current = yield* refresh(name).pipe(
-            Effect.catchTag("GCP.Retail.CatalogsModelNotResolved", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("GCP.Retail.CatalogsModelNotResolved", () => Effect.succeed(undefined)),
           );
         }
       }
@@ -345,9 +321,7 @@ export const CatalogsModelProvider = () =>
 
       const resource = current.name ?? name;
       const mask = updateMaskOf(
-        sameText(current.filteringOption, news.filteringOption)
-          ? undefined
-          : "filtering_option",
+        sameText(current.filteringOption, news.filteringOption) ? undefined : "filtering_option",
         sameText(current.periodicTuningState, news.periodicTuningState)
           ? undefined
           : "periodic_tuning_state",
@@ -370,10 +344,7 @@ export const CatalogsModelProvider = () =>
           name: resource,
           body: {},
         });
-      } else if (
-        desiredTraining === "TRAINING" &&
-        observedTraining !== "TRAINING"
-      ) {
+      } else if (desiredTraining === "TRAINING" && observedTraining !== "TRAINING") {
         current = yield* retail.resumeProjectsLocationsCatalogsModels({
           name: resource,
           body: {},

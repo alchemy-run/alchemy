@@ -1,5 +1,25 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import { toRpcAsync } from "@/Cloudflare/Workers/RpcAsync.ts";
+import type BindingTargetWorker from "./binding-target-worker.ts";
+
+type TargetBinding = Service & {
+  greet: (name: string) => Promise<string>;
+};
+
+/**
+ * Hands a `toRpcAsync` view across an `await` boundary, the way a helper or
+ * route loader that resolves the client would. If the view were a thenable,
+ * the runtime would call `then` on it as an RPC and this would never settle.
+ */
+const resolveTarget = async (env: { TARGET: TargetBinding }) =>
+  toRpcAsync<BindingTargetWorker>(env.TARGET);
+
+const timeout = (ms: number) =>
+  new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms),
+  );
+
 /**
  * Plain (non-Effect) Cloudflare Worker that calls a service-binding RPC
  * method (`env.TARGET.greet(name)`) the same way any normal Cloudflare
@@ -8,18 +28,19 @@
  * GET /?name=foo  →  responds with whatever the target returns ("hello foo"),
  * surfacing any error as a 500 with the message in the body so the test can
  * assert against it directly instead of spelunking worker logs.
+ *
+ * GET /rpc-async?name=foo  →  the same call through a `toRpcAsync` view that
+ * was returned from an `async` function.
  */
 export default {
-  async fetch(
-    request: Request,
-    env: {
-      TARGET: Service & {
-        greet: (name: string) => Promise<string>;
-      };
-    },
-  ): Promise<Response> {
-    const name = new URL(request.url).searchParams.get("name") ?? "world";
+  async fetch(request: Request, env: { TARGET: TargetBinding }): Promise<Response> {
+    const url = new URL(request.url);
+    const name = url.searchParams.get("name") ?? "world";
     try {
+      if (url.pathname === "/rpc-async") {
+        const target = await Promise.race([resolveTarget(env), timeout(5_000)]);
+        return new Response(String(await target.greet(name)));
+      }
       console.log("async caller calling target");
       const greeting = await env.TARGET.greet(name);
       console.log("async caller got greeting", greeting);

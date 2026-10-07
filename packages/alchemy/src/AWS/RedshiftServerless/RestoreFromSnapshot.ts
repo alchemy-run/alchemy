@@ -33,10 +33,7 @@ export interface RestoreFromSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<serverless.RestoreFromSnapshotRequest, "namespaceName">,
-    ) => Effect.Effect<
-      serverless.RestoreFromSnapshotResponse,
-      serverless.RestoreFromSnapshotError
-    >
+    ) => Effect.Effect<serverless.RestoreFromSnapshotResponse, serverless.RestoreFromSnapshotError>
   >
 > {}
 export const RestoreFromSnapshot = Binding.Service<RestoreFromSnapshot>(

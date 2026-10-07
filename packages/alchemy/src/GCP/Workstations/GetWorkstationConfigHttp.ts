@@ -17,7 +17,6 @@ export const GetWorkstationConfigHttp = Layer.effect(
       role: "roles/workstations.viewer",
       on: "workstations.workstationConfig",
     },
-    operation:
-      workstations.getProjectsLocationsWorkstationClustersWorkstationConfigs,
+    operation: workstations.getProjectsLocationsWorkstationClustersWorkstationConfigs,
   }),
 );

@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +18,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_ADDRESS_TYPE = "EXTERNAL";
 const DEFAULT_IP_VERSION = "IPV4";
@@ -194,16 +194,12 @@ export type Address = Resource<
  */
 export const Address = Resource<Address>("GCP.Compute.Address");
 
-export class AddressNotResolved extends Data.TaggedError(
-  "GCP.Compute.AddressNotResolved",
-)<{
+export class AddressNotResolved extends Data.TaggedError("GCP.Compute.AddressNotResolved")<{
   addressName: string;
   region: string;
 }> {}
 
-export class AddressPending extends Data.TaggedError(
-  "GCP.Compute.AddressPending",
-)<{
+export class AddressPending extends Data.TaggedError("GCP.Compute.AddressPending")<{
   addressName: string;
   status: string;
 }> {}
@@ -232,8 +228,7 @@ const addressTypeOf = (value: string | undefined) =>
 const ipVersionOf = (value: string | undefined) =>
   value && value !== "UNSPECIFIED_VERSION" ? value : DEFAULT_IP_VERSION;
 
-const networkTierOf = (value: string | undefined) =>
-  value ?? DEFAULT_NETWORK_TIER;
+const networkTierOf = (value: string | undefined) => value ?? DEFAULT_NETWORK_TIER;
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -244,9 +239,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `a${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `a${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const toAttrs = (address: compute.Address, project: string) => ({
@@ -355,62 +348,36 @@ export const AddressProvider = () =>
       const previousName = olds.addressName ?? output?.addressName;
       const nextName = news.addressName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
 
-      const previousRegion = normalizeRegion(
-        olds.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const regionChanged = previousRegion !== nextRegion;
 
-      const previousType = addressTypeOf(
-        olds.addressType ?? output?.addressType,
-      );
+      const previousType = addressTypeOf(olds.addressType ?? output?.addressType);
       const previousVersion = ipVersionOf(olds.ipVersion ?? output?.ipVersion);
-      const previousTier = networkTierOf(
-        olds.networkTier ?? output?.networkTier,
-      );
+      const previousTier = networkTierOf(olds.networkTier ?? output?.networkTier);
       const previousNetwork = resourceRefOf(olds.network ?? output?.network);
-      const previousSubnetwork = resourceRefOf(
-        olds.subnetwork ?? output?.subnetwork,
-      );
+      const previousSubnetwork = resourceRefOf(olds.subnetwork ?? output?.subnetwork);
       const previousPurpose = olds.purpose ?? output?.purpose ?? "";
       const previousDescription = olds.description ?? output?.description ?? "";
       const previousPrefix = olds.prefixLength ?? output?.prefixLength;
-      const previousIpv6 =
-        olds.ipv6EndpointType ?? output?.ipv6EndpointType ?? "";
-      const previousCollection = resourceRefOf(
-        olds.ipCollection ?? output?.ipCollection,
-      );
+      const previousIpv6 = olds.ipv6EndpointType ?? output?.ipv6EndpointType ?? "";
+      const previousCollection = resourceRefOf(olds.ipCollection ?? output?.ipCollection);
 
       const immutableChanged =
-        (news.description !== undefined &&
-          (news.description ?? "") !== previousDescription) ||
+        (news.description !== undefined && (news.description ?? "") !== previousDescription) ||
         (news.address !== undefined &&
           output?.address !== undefined &&
           news.address !== output.address) ||
-        (news.addressType !== undefined &&
-          addressTypeOf(news.addressType) !== previousType) ||
-        (news.ipVersion !== undefined &&
-          ipVersionOf(news.ipVersion) !== previousVersion) ||
-        (news.prefixLength !== undefined &&
-          news.prefixLength !== previousPrefix) ||
-        (news.purpose !== undefined &&
-          (news.purpose ?? "") !== previousPurpose) ||
-        (news.network !== undefined &&
-          resourceRefOf(news.network) !== previousNetwork) ||
-        (news.subnetwork !== undefined &&
-          resourceRefOf(news.subnetwork) !== previousSubnetwork) ||
-        (news.networkTier !== undefined &&
-          networkTierOf(news.networkTier) !== previousTier) ||
-        (news.ipv6EndpointType !== undefined &&
-          (news.ipv6EndpointType ?? "") !== previousIpv6) ||
+        (news.addressType !== undefined && addressTypeOf(news.addressType) !== previousType) ||
+        (news.ipVersion !== undefined && ipVersionOf(news.ipVersion) !== previousVersion) ||
+        (news.prefixLength !== undefined && news.prefixLength !== previousPrefix) ||
+        (news.purpose !== undefined && (news.purpose ?? "") !== previousPurpose) ||
+        (news.network !== undefined && resourceRefOf(news.network) !== previousNetwork) ||
+        (news.subnetwork !== undefined && resourceRefOf(news.subnetwork) !== previousSubnetwork) ||
+        (news.networkTier !== undefined && networkTierOf(news.networkTier) !== previousTier) ||
+        (news.ipv6EndpointType !== undefined && (news.ipv6EndpointType ?? "") !== previousIpv6) ||
         (news.ipCollection !== undefined &&
           resourceRefOf(news.ipCollection) !== previousCollection);
 
@@ -425,21 +392,12 @@ export const AddressProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const addressName = yield* toName(
-        id,
-        olds?.addressName,
-        output?.addressName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const addressName = yield* toName(id, olds?.addressName, output?.addressName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, addressName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -458,9 +416,7 @@ export const AddressProvider = () =>
             (scoped?.addresses ?? [])
               .filter((item) => item.region !== undefined)
               .filter((item) =>
-                Object.keys(item.labels ?? {}).some((key) =>
-                  key.startsWith("alchemy-"),
-                ),
+                Object.keys(item.labels ?? {}).some((key) => key.startsWith("alchemy-")),
               )
               .map((item) => toAttrs(item, env.project)),
           ),
@@ -469,11 +425,7 @@ export const AddressProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const addressName = yield* toName(
-        id,
-        news.addressName,
-        output?.addressName,
-      );
+      const addressName = yield* toName(id, news.addressName, output?.addressName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -506,15 +458,9 @@ export const AddressProvider = () =>
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }).pipe(
-                Effect.flatMap(() =>
-                  requireAddress(env.project, region, addressName),
-                ),
-              ),
+              }).pipe(Effect.flatMap(() => requireAddress(env.project, region, addressName))),
             ),
-            Effect.catchTag("Conflict", () =>
-              getByName(env.project, region, addressName),
-            ),
+            Effect.catchTag("Conflict", () => getByName(env.project, region, addressName)),
           );
         current = created ?? undefined;
       }
@@ -532,8 +478,7 @@ export const AddressProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         yield* Effect.gen(function* () {
-          const latest =
-            (yield* getByName(env.project, region, addressName)) ?? resolved;
+          const latest = (yield* getByName(env.project, region, addressName)) ?? resolved;
           yield* compute
             .setLabelsAddresses({
               project: env.project,
@@ -545,9 +490,7 @@ export const AddressProvider = () =>
               },
             })
             .pipe(
-              Effect.flatMap((operation) =>
-                waitRegionOperation(env.project, region, operation),
-              ),
+              Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
             );
         }).pipe(
           Effect.retry({
@@ -556,8 +499,7 @@ export const AddressProvider = () =>
             schedule: Schedule.spaced("1 second"),
           }),
         );
-        current =
-          (yield* getByName(env.project, region, addressName)) ?? resolved;
+        current = (yield* getByName(env.project, region, addressName)) ?? resolved;
       }
 
       return toAttrs(current ?? resolved, env.project);

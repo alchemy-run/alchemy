@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   defaultServiceAccount,
@@ -97,9 +92,7 @@ export type BackendProps = {
    * backend.
    * @default "GLOBAL_ACCESS"
    */
-  servingLocality?:
-    | firebaseapphosting.BackendServingLocalityEnum
-    | (string & {});
+  servingLocality?: firebaseapphosting.BackendServingLocalityEnum | (string & {});
   /**
    * Human-readable name. 63 character limit.
    */
@@ -225,9 +218,7 @@ export const Backend = Resource<Backend>("GCP.FirebaseAppHosting.Backend");
 const resourceName = (project: string, location: string, backendId: string) =>
   `projects/${project}/locations/${location}/backends/${backendId}`;
 
-const toCodebase = (
-  value: firebaseapphosting.Codebase | undefined,
-): Codebase | undefined =>
+const toCodebase = (value: firebaseapphosting.Codebase | undefined): Codebase | undefined =>
   value === undefined
     ? undefined
     : {
@@ -241,9 +232,7 @@ const toManagedResources = (
   value === undefined
     ? undefined
     : value.map((item) => ({
-        runService: item.runService
-          ? { service: item.runService.service }
-          : undefined,
+        runService: item.runService ? { service: item.runService.service } : undefined,
       }));
 
 const toAttrs = (item: firebaseapphosting.Backend, project: string) => {
@@ -292,15 +281,7 @@ const listOwned = (project: string) =>
 
 export const BackendProvider = () =>
   Provider.succeed(Backend, {
-    stables: [
-      "name",
-      "backendId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-      "servingLocality",
-    ],
+    stables: ["name", "backendId", "project", "location", "uid", "createTime", "servingLocality"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -309,17 +290,12 @@ export const BackendProvider = () =>
         olds?.servingLocality ?? output?.servingLocality,
       );
       const nextServing = normalizeServingLocality(
-        news.servingLocality ??
-          olds?.servingLocality ??
-          output?.servingLocality,
+        news.servingLocality ?? olds?.servingLocality ?? output?.servingLocality,
       );
       return replaceOnIdentity({
         previousId: olds?.backendId ?? output?.backendId,
         nextId: news.backendId ?? olds?.backendId ?? output?.backendId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -339,18 +315,12 @@ export const BackendProvider = () =>
         "backend",
         MAX_BACKEND_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, backendId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, backendId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -369,10 +339,7 @@ export const BackendProvider = () =>
         "backend",
         MAX_BACKEND_ID_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, backendId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -380,8 +347,7 @@ export const BackendProvider = () =>
       };
       const desiredAnnotations = news.annotations ?? {};
       const desiredServing = normalizeServingLocality(news.servingLocality);
-      const desiredServiceAccount =
-        news.serviceAccount ?? defaultServiceAccount(env.project);
+      const desiredServiceAccount = news.serviceAccount ?? defaultServiceAccount(env.project);
       const desiredLogsDisabled = news.requestLogsDisabled === true;
 
       let current = yield* getByName(output?.name ?? name);
@@ -392,8 +358,7 @@ export const BackendProvider = () =>
             parent: parentOf(env.project, location),
             backendId,
             body: {
-              servingLocality:
-                desiredServing as firebaseapphosting.BackendServingLocalityEnum,
+              servingLocality: desiredServing as firebaseapphosting.BackendServingLocalityEnum,
               serviceAccount: desiredServiceAccount,
               displayName: news.displayName,
               codebase: news.codebase,
@@ -419,41 +384,34 @@ export const BackendProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.displayName, news.displayName) && "displayName",
-        !sameText(current.serviceAccount, desiredServiceAccount) &&
-          "serviceAccount",
+        !sameText(current.serviceAccount, desiredServiceAccount) && "serviceAccount",
         !sameText(current.appId, news.appId) && "appId",
         !sameText(current.environment, news.environment) && "environment",
-        !sameBool(current.requestLogsDisabled, desiredLogsDisabled) &&
-          "requestLogsDisabled",
-        fingerprint(toCodebase(current.codebase)) !==
-          fingerprint(news.codebase) && "codebase",
+        !sameBool(current.requestLogsDisabled, desiredLogsDisabled) && "requestLogsDisabled",
+        fingerprint(toCodebase(current.codebase)) !== fingerprint(news.codebase) && "codebase",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* firebaseapphosting.patchProjectsLocationsBackends({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              displayName: news.displayName,
-              serviceAccount: desiredServiceAccount,
-              codebase: news.codebase,
-              appId: news.appId,
-              environment: news.environment,
-              requestLogsDisabled: desiredLogsDisabled,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
-          });
+        const operation = yield* firebaseapphosting.patchProjectsLocationsBackends({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            displayName: news.displayName,
+            serviceAccount: desiredServiceAccount,
+            codebase: news.codebase,
+            appId: news.appId,
+            environment: news.environment,
+            requestLogsDisabled: desiredLogsDisabled,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

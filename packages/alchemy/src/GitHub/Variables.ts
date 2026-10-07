@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-
 import type { Input } from "../Input.ts";
 import type { Environment } from "./Environment.ts";
 import { Variable } from "./Variable.ts";
@@ -51,12 +50,7 @@ export interface VariablesProps {
  * @resource
  * @product Actions
  */
-export const Variables = ({
-  owner,
-  repository,
-  environment,
-  variables,
-}: VariablesProps) =>
+export const Variables = ({ owner, repository, environment, variables }: VariablesProps) =>
   Effect.all(
     Object.entries(variables).map(([name, value]) =>
       Variable(name, {

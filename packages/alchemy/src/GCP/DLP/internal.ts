@@ -1,18 +1,14 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as dlp from "@distilled.cloud/gcp/dlp_v2";
-import * as Data from "effect/Data";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 /** Optional deploy-time setting from the ConfigProvider (env by default). */
 const optionalSetting = (key: string) =>
@@ -37,16 +33,12 @@ export class DlpNotResolved extends Data.TaggedError("GCP.DLP.NotResolved")<{
   name: string;
 }> {}
 
-export class StoredInfoTypeNotReady extends Data.TaggedError(
-  "GCP.DLP.StoredInfoTypeNotReady",
-)<{
+export class StoredInfoTypeNotReady extends Data.TaggedError("GCP.DLP.StoredInfoTypeNotReady")<{
   name: string;
   state: string | undefined;
 }> {}
 
-export class StoredInfoTypeFailed extends Data.TaggedError(
-  "GCP.DLP.StoredInfoTypeFailed",
-)<{
+export class StoredInfoTypeFailed extends Data.TaggedError("GCP.DLP.StoredInfoTypeFailed")<{
   name: string;
   state: string;
   message: string;
@@ -73,10 +65,7 @@ const storedInfoTypeFailure = (
  * pending versions remain (create and update both build a new version
  * asynchronously). Fails on a `FAILED`/`INVALID` version.
  */
-export const waitForStoredInfoTypeReady = <
-  E extends { readonly _tag: string },
-  R,
->(
+export const waitForStoredInfoTypeReady = <E extends { readonly _tag: string }, R>(
   name: string,
   get: Effect.Effect<dlp.GooglePrivacyDlpV2StoredInfoType | undefined, E, R>,
 ) =>
@@ -89,9 +78,7 @@ export const waitForStoredInfoTypeReady = <
         StoredInfoTypeNotReady | StoredInfoTypeFailed
       > => {
         if (stored === undefined) {
-          return Effect.fail(
-            new StoredInfoTypeNotReady({ name, state: undefined }),
-          );
+          return Effect.fail(new StoredInfoTypeNotReady({ name, state: undefined }));
         }
         const pending = stored.pendingVersions ?? [];
         const failed = storedInfoTypeFailure(
@@ -117,9 +104,7 @@ export const waitForStoredInfoTypeReady = <
     }),
   );
 
-export class OrganizationNotResolved extends Data.TaggedError(
-  "GCP.DLP.OrganizationNotResolved",
-)<{
+export class OrganizationNotResolved extends Data.TaggedError("GCP.DLP.OrganizationNotResolved")<{
   project: string;
 }> {}
 
@@ -136,17 +121,11 @@ export const parseName = (name: string, collection: string) => {
   const projectsAt = parts.lastIndexOf("projects");
   const orgsAt = parts.lastIndexOf("organizations");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : DEFAULT_LOCATION,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : DEFAULT_LOCATION,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -173,19 +152,15 @@ export const projectOf = (name: string) => {
 };
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const organizationIdOf = (value: string) => lastSegment(value);
 
 export const locationParent = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const organizationLocationParent = (
-  organization: string,
-  location: string,
-) => `${organizationParent(organization)}/locations/${location}`;
+export const organizationLocationParent = (organization: string, location: string) =>
+  `${organizationParent(organization)}/locations/${location}`;
 
 export const locationParentsOf = (organization: string, region: string) =>
   Array.from(new Set<string>([...LIST_LOCATIONS, region])).map((location) =>
@@ -194,10 +169,8 @@ export const locationParentsOf = (organization: string, region: string) =>
 
 export const organizationLocationParentsOf = locationParentsOf;
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback = DEFAULT_LOCATION,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback = DEFAULT_LOCATION) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const jsonEqual = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -222,9 +195,7 @@ export const toResourceId = (
       maxLength: MAX_ID_LENGTH,
       lowercase: true,
     });
-    const next = /^[a-zA-Z]/.test(generated)
-      ? generated
-      : `${prefix}${generated}`;
+    const next = /^[a-zA-Z]/.test(generated) ? generated : `${prefix}${generated}`;
     return next.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, MAX_ID_LENGTH);
   });
 
@@ -242,10 +213,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -276,9 +244,7 @@ export const encodeOwnershipLine = (
 ): string => {
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   const reserved =
-    trimmed && trimmed.length > 0
-      ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 24))
-      : 0;
+    trimmed && trimmed.length > 0 ? Math.min(trimmed.length + 1, Math.max(0, maxLength - 24)) : 0;
   const marker = fitMarker(labels, Math.max(24, maxLength - reserved));
   if (!trimmed) return marker.slice(0, maxLength);
   return `${marker} ${trimmed}`.slice(0, maxLength);
@@ -310,14 +276,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -327,38 +289,23 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
 export const hybridLabels = (labels: Record<string, string>) => {
-  const startLetter = (value: string) =>
-    /^[a-z]/.test(value) ? value : `x${value}`.slice(0, 63);
+  const startLetter = (value: string) => (/^[a-z]/.test(value) ? value : `x${value}`.slice(0, 63));
   return {
-    [alchemyLabelKeys.stack]: startLetter(
-      labels[alchemyLabelKeys.stack] ?? "x",
-    ),
-    [alchemyLabelKeys.stage]: startLetter(
-      labels[alchemyLabelKeys.stage] ?? "x",
-    ),
+    [alchemyLabelKeys.stack]: startLetter(labels[alchemyLabelKeys.stack] ?? "x"),
+    [alchemyLabelKeys.stage]: startLetter(labels[alchemyLabelKeys.stage] ?? "x"),
     [alchemyLabelKeys.id]: startLetter(labels[alchemyLabelKeys.id] ?? "x"),
   };
 };
 
-export const hasHybridOwnership = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasHybridOwnership = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const collectPages = <Page, A, E, R>(
   pages: Stream.Stream<Page, E, R>,
@@ -391,8 +338,7 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const parentOf = (name: string) =>
   name.startsWith("projects/")
@@ -421,10 +367,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);
@@ -437,14 +380,7 @@ export const resolveOrganization = (
   });
 
 export const replaceOnIdentity = (changed: boolean) =>
-  changed
-    ? ({ action: "replace" as const, deleteFirst: false } as const)
-    : undefined;
+  changed ? ({ action: "replace" as const, deleteFirst: false } as const) : undefined;
 
-export const replaceOn = (
-  previous: string | undefined,
-  next: string | undefined,
-) =>
-  replaceOnIdentity(
-    previous !== undefined && next !== undefined && previous !== next,
-  );
+export const replaceOn = (previous: string | undefined, next: string | undefined) =>
+  replaceOnIdentity(previous !== undefined && next !== undefined && previous !== next);

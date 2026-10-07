@@ -1,67 +1,28 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import type * as Schema from "effect/Schema";
 import * as EffectStream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
+import type { PropsInput } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { Resource, type ResourceClass } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  canonicalStreamFields,
+  isEffectSchema,
+  StreamSchemaUnsupported,
+  streamFieldsFromSchema,
+  type StreamFieldsSchema,
+} from "./StreamSchema.ts";
 
 const StreamTypeId = "Cloudflare.Pipelines.Stream" as const;
 type StreamTypeId = typeof StreamTypeId;
-
-/**
- * Scalar field types accepted by a structured stream schema.
- */
-export type StreamFieldType =
-  | "int32"
-  | "int64"
-  | "float32"
-  | "float64"
-  | "bool"
-  | "string"
-  | "binary"
-  | "json";
-
-/**
- * A single field of a structured stream schema. `timestamp` fields
- * additionally accept a `unit`.
- */
-export type StreamField =
-  | {
-      /** Field type. */
-      type: StreamFieldType;
-      /** Field name as it appears in ingested events. */
-      name: string;
-      /** Whether the field must be present in every event. */
-      required?: boolean;
-      /** Name to expose to SQL when it differs from `name`. */
-      sqlName?: string;
-      /** Metadata key the field is populated from instead of the event body. */
-      metadataKey?: string;
-    }
-  | {
-      /** Timestamp field type. */
-      type: "timestamp";
-      /** Field name as it appears in ingested events. */
-      name: string;
-      /** Whether the field must be present in every event. */
-      required?: boolean;
-      /** Name to expose to SQL when it differs from `name`. */
-      sqlName?: string;
-      /** Metadata key the field is populated from instead of the event body. */
-      metadataKey?: string;
-      /**
-       * Precision of the timestamp.
-       * @default "millisecond"
-       */
-      unit?: "second" | "millisecond" | "microsecond" | "nanosecond";
-    };
 
 /**
  * Input format of events ingested by the stream.
@@ -93,7 +54,7 @@ export interface StreamHttp {
   enabled?: boolean;
   /**
    * Whether requests to the HTTP endpoint must carry a Cloudflare API
-   * token.
+   * token with the `Pipelines Send` permission.
    * @default false
    */
   authentication?: boolean;
@@ -114,14 +75,17 @@ export interface StreamProps {
    */
   name?: string;
   /**
-   * Structured schema of ingested events. Immutable — changing the schema
-   * triggers a replacement. When omitted, the stream accepts unstructured
-   * JSON events.
+   * Structured schema of ingested events — either an explicit field list
+   * or an Effect Schema (`Schema.Struct` / `Schema.Class`), which is
+   * converted to the field list and also types and encodes the records
+   * sent through `WriteStream` / `StreamSink`.
+   *
+   * Immutable — changing the (derived) field list triggers a replacement,
+   * which drops buffered events and dependent pipelines. Equivalent
+   * spellings (a field list ⇄ the matching Effect Schema) are a no-op.
+   * When omitted, the stream accepts unstructured JSON events.
    */
-  schema?: {
-    /** Fields of the structured schema. */
-    fields: StreamField[];
-  };
+  schema?: StreamFieldsSchema | Schema.Top;
   /**
    * Input format configuration. Immutable — changing it triggers a
    * replacement.
@@ -130,9 +94,13 @@ export interface StreamProps {
   format?: StreamFormat;
   /**
    * HTTP ingest endpoint configuration. Mutable in place.
-   * @default { enabled: true, authentication: false }
+   *
+   * - omitted / `false` — no public HTTP endpoint (`{ enabled: false }`)
+   * - `true` — endpoint enabled, API-token authentication required
+   * - an object — explicit settings
+   * @default false
    */
-  http?: StreamHttp;
+  http?: boolean | StreamHttp;
   /**
    * Whether Workers can send events to this stream via a `pipelines`
    * binding. Mutable in place.
@@ -169,58 +137,189 @@ export interface StreamAttributes {
   modifiedAt: string;
 }
 
-export type Stream = Resource<
+/**
+ * A Pipelines stream. `A` is the record type sent through `WriteStream` /
+ * `StreamSink` — the Effect Schema's `Type` when the stream was declared
+ * with one.
+ */
+export interface Stream<A = unknown> extends Resource<
   StreamTypeId,
   StreamProps,
   StreamAttributes,
   never,
   Providers
->;
+> {
+  /**
+   * The Effect Schema the stream was declared with, if any. Used by the
+   * producer clients to encode records; never persisted.
+   */
+  readonly RecordSchema: Schema.Top | undefined;
+  /** Phantom record type. */
+  readonly "~record"?: A;
+}
+
+/**
+ * The record type a producer sends to a `Stream<A>`: the declared Effect
+ * Schema's `Type`, or an untyped JSON object.
+ */
+export type StreamRecord<A> = unknown extends A ? Record<string, unknown> : A;
+
+/**
+ * Props of a stream declared with an Effect Schema.
+ */
+export type StreamSchemaProps<S extends Schema.Top> = PropsInput<Omit<StreamProps, "schema">> & {
+  schema: S;
+};
+
+const StreamResource = Resource<Stream>(StreamTypeId);
+
+/**
+ * The Stream constructor: the plain resource constructor plus an overload
+ * that infers the record type from an Effect Schema `schema`.
+ */
+export type StreamClass = {
+  <const S extends Schema.Top>(
+    id: string,
+    props: StreamSchemaProps<S>,
+  ): Effect.Effect<Stream<S["Type"]>, never, Providers>;
+} & ResourceClass<Stream>;
+
+/**
+ * Convert an Effect Schema `schema` prop into the persisted field list and
+ * keep the schema aside for the producer clients. Dies with a clear
+ * {@link StreamSchemaUnsupported} when the schema has no stream
+ * representation — this runs while the program is constructed, before
+ * anything is planned.
+ */
+const normalizeStreamProps = (
+  props: unknown,
+): Effect.Effect<{ props: unknown; recordSchema: Schema.Top | undefined }> =>
+  Effect.suspend((): Effect.Effect<{ props: unknown; recordSchema: Schema.Top | undefined }> => {
+    const schema = (props as { schema?: unknown } | undefined)?.schema;
+    if (!isEffectSchema(schema)) {
+      return Effect.succeed({ props, recordSchema: undefined });
+    }
+    return resolveSchema(schema).pipe(
+      Effect.map((resolved) => ({
+        props: { ...(props as object), schema: resolved },
+        recordSchema: schema,
+      })),
+      Effect.catch((error) => Effect.die(error)),
+    );
+  });
+
+const constructStream = (id: string, props: unknown) =>
+  Effect.gen(function* () {
+    let recordSchema: Schema.Top | undefined;
+    const capture = (n: { props: unknown; recordSchema: Schema.Top | undefined }) => {
+      recordSchema = n.recordSchema;
+      return n.props;
+    };
+    const normalized = Effect.isEffect(props)
+      ? (props as Effect.Effect<unknown>).pipe(
+          Effect.flatMap(normalizeStreamProps),
+          Effect.map(capture),
+        )
+      : capture(yield* normalizeStreamProps(props));
+    const construct = StreamResource as unknown as (
+      id: string,
+      props: unknown,
+    ) => Effect.Effect<Stream, never, Providers>;
+    const stream = yield* construct(id, normalized);
+    (stream as { RecordSchema: Schema.Top | undefined }).RecordSchema = recordSchema;
+    return stream;
+  });
 
 /**
  * A Cloudflare Pipelines stream — the ingestion endpoint of the Pipelines
- * product. Events are sent to a stream over HTTP (and/or from Workers via
- * a binding), transformed by a SQL {@link Pipeline}, and written to a
- * {@link Sink}.
+ * product (also exported as `Cloudflare.Basin.Stream`). Events are sent to
+ * a stream from Workers (`WriteStream` / `StreamSink`) or over HTTP,
+ * transformed by a SQL {@link Pipeline}, and written to a {@link Sink}.
  *
  * The stream's `schema` and `format` are fixed at creation (changing them
- * triggers a replacement); the HTTP endpoint and Worker-binding toggles
- * are mutable in place.
+ * triggers a replacement, which drops buffered events and dependent
+ * pipelines); the HTTP endpoint and Worker-binding toggles are mutable in
+ * place.
+ *
+ * Pipelines is ingest-only — there is no event source on a stream. To
+ * process data after it lands, subscribe to the sink's bucket with
+ * `Cloudflare.R2.BucketEventNotification`.
+ *
+ * Cloudflare accepts records that violate a structured stream's schema
+ * (they are dropped later, during processing). Declare the schema as an
+ * Effect Schema to have the producer clients validate and encode every
+ * record before it is sent.
+ *
+ * :::caution
+ * A stream declared without `http` has **no** public ingest endpoint
+ * (`http: { enabled: false }`). Earlier versions sent nothing, and
+ * Cloudflare's default is a public, unauthenticated endpoint. Existing
+ * streams are updated in place on the next deploy; set `http: true`
+ * (authenticated) or `http: { enabled: true }` to keep an endpoint.
+ * :::
+ *
  * ### Creating a Stream
  * **Example:** Unstructured stream with default settings
  * ```typescript
- * const stream = yield* Cloudflare.Pipelines.Stream("events", {});
+ * const stream = yield* Cloudflare.Basin.Stream("events", {});
  * ```
  *
- * **Example:** Structured stream with a typed schema
+ * **Example:** Structured stream from an Effect Schema
  * ```typescript
- * const stream = yield* Cloudflare.Pipelines.Stream("clicks", {
+ * class PageView extends Schema.Class<PageView>("PageView")({
+ *   url: Schema.String,
+ *   at: Schema.Date,
+ *   tags: Schema.Array(Schema.String),
+ *   user: Schema.optional(Schema.Struct({ id: Schema.String })),
+ * }) {}
+ *
+ * // Stream<PageView>: WriteStream / StreamSink are typed and encode records
+ * const stream = yield* Cloudflare.Basin.Stream("PageViews", {
+ *   schema: PageView,
+ * });
+ * ```
+ *
+ * **Example:** Structured stream with an explicit field list
+ * ```typescript
+ * const stream = yield* Cloudflare.Basin.Stream("clicks", {
  *   schema: {
  *     fields: [
  *       { type: "string", name: "url", required: true },
  *       { type: "timestamp", name: "ts", unit: "millisecond" },
+ *       { type: "list", name: "tags", items: { type: "string" } },
+ *       {
+ *         type: "struct",
+ *         name: "user",
+ *         fields: [{ type: "string", name: "id" }],
+ *       },
  *     ],
  *   },
  * });
  * ```
  *
  * ### HTTP ingestion
- * **Example:** Authenticated endpoint with CORS
+ * **Example:** Authenticated endpoint
  * ```typescript
- * const stream = yield* Cloudflare.Pipelines.Stream("events", {
+ * const stream = yield* Cloudflare.Basin.Stream("events", { http: true });
+ * // POST a JSON array to stream.endpoint with a `Pipelines Send` token,
+ * // or use Cloudflare.Basin.WriteStreamHttp / WriteStreamLocal.
+ * ```
+ *
+ * **Example:** Public endpoint with CORS
+ * ```typescript
+ * const stream = yield* Cloudflare.Basin.Stream("beacons", {
  *   http: {
  *     enabled: true,
- *     authentication: true,
+ *     authentication: false,
  *     cors: { origins: ["https://app.example.com"] },
  *   },
  * });
- * // POST events to stream.endpoint with an API token
  * ```
  *
  * ### Wiring into a Pipeline
- * **Example:** Stream → SQL Pipeline → R2 Sink
+ * **Example:** Stream → SQL Pipeline → Sink
  * ```typescript
- * const pipeline = yield* Cloudflare.Pipelines.Pipeline("etl", {
+ * const pipeline = yield* Cloudflare.Basin.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
  * });
  * ```
@@ -231,7 +330,17 @@ export type Stream = Resource<
  * @product Pipelines
  * @category Storage & Databases
  */
-export const Stream = Resource<Stream>(StreamTypeId);
+export const Stream: StreamClass = Object.assign(
+  (...args: [id: string, props?: unknown] | [methods: object]) =>
+    typeof args[0] === "object"
+      ? Object.assign(Stream, args[0])
+      : constructStream(args[0], (args as [string, unknown])[1]),
+  StreamResource,
+  Effectable.Prototype({
+    label: `Resource<${StreamTypeId}>`,
+    evaluate: () => Effect.succeed((id: string, props: unknown) => constructStream(id, props)),
+  }),
+) as unknown as StreamClass;
 
 /**
  * Returns true if the given value is a Stream resource.
@@ -255,15 +364,33 @@ export const StreamProvider = () =>
       if (newName !== oldName) {
         return { action: "replace" } as const;
       }
-      // Schema and format are immutable — only http/workerBinding are
-      // patchable.
-      if (o !== undefined && !stableEquals(news.schema, o.schema)) {
+      if (o === undefined) return undefined;
+      // Schema and format are immutable. Compare CANONICAL derived values
+      // so equivalent spellings (field list ⇄ Effect Schema, omitted ⇄
+      // explicit defaults) never replace.
+      const newSchema = yield* canonicalSchema(news.schema);
+      const oldSchema = yield* canonicalSchema(o.schema);
+      if (!stableEquals(newSchema, oldSchema)) {
         return { action: "replace" } as const;
       }
-      if (o !== undefined && !stableEquals(news.format, o.format)) {
+      if (!stableEquals(canonicalFormat(news.format), canonicalFormat(o.format))) {
         return { action: "replace" } as const;
       }
-      return undefined;
+      if (output === undefined) return undefined;
+      // http/workerBinding are patchable: diff desired against the last
+      // observed state, so the secure http default reaches streams created
+      // before it existed.
+      const httpConverged = httpMatches(desiredHttp(news.http), {
+        enabled: output.httpEnabled,
+        authentication: output.httpAuthentication,
+        origins: output.corsOrigins,
+      });
+      const bindingConverged =
+        news.workerBinding === undefined ||
+        news.workerBinding.enabled === output.workerBindingEnabled;
+      return httpConverged && bindingConverged
+        ? ({ action: "noop" } as const)
+        : ({ action: "update" } as const);
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -289,6 +416,7 @@ export const StreamProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* streamName(id, news.name);
+      const http = desiredHttp(news.http);
 
       // 1. Observe — the cached streamId is a hint, not a guarantee; a
       //    missing stream falls through to a name lookup and then create.
@@ -303,21 +431,22 @@ export const StreamProvider = () =>
       //    AlreadyExists is a race (or recovery from a lost state write):
       //    fall back to the name lookup.
       if (!observed) {
+        const schema = yield* resolveSchema(news.schema);
         observed = yield* pipelines
           .createStream({
             accountId,
             name,
             format: news.format,
-            schema: news.schema,
-            http: news.http ? desiredHttp(news.http) : undefined,
+            // The distilled field union does not model nested `items` /
+            // `fields`; they pass through to the wire verbatim.
+            schema: schema as pipelines.CreateStreamRequest["schema"],
+            http,
             workerBinding: news.workerBinding,
           })
           .pipe(
             Effect.catchTag("StreamAlreadyExists", (error) =>
               findStreamByName(accountId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
+                Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
               ),
             ),
           );
@@ -331,16 +460,15 @@ export const StreamProvider = () =>
         streamId: observed.id,
       };
       let dirty = false;
-      if (news.http !== undefined) {
-        const desired = desiredHttp(news.http);
-        if (
-          desired.enabled !== observed.http.enabled ||
-          desired.authentication !== observed.http.authentication ||
-          !sameOrigins(desired.cors?.origins, observed.http.cors?.origins)
-        ) {
-          patch.http = desired;
-          dirty = true;
-        }
+      if (
+        !httpMatches(http, {
+          enabled: observed.http.enabled,
+          authentication: observed.http.authentication,
+          origins: observed.http.cors?.origins,
+        })
+      ) {
+        patch.http = http;
+        dirty = true;
       }
       if (
         news.workerBinding !== undefined &&
@@ -368,10 +496,7 @@ export const StreamProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "StreamInUse",
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
           }),
           Effect.catchTag("StreamNotFound", () => Effect.void),
           Effect.catchTag("InvalidStreamId", () => Effect.void),
@@ -447,11 +572,75 @@ const findStreamByName = (accountId: string, name: string) =>
     ),
   );
 
-const desiredHttp = (http: StreamHttp) => ({
-  enabled: http.enabled ?? true,
-  authentication: http.authentication ?? false,
-  cors: http.cors?.origins ? { origins: http.cors.origins } : undefined,
-});
+/** Resolve a `schema` prop (field list or Effect Schema) to the field-list form. */
+const resolveSchema = (
+  schema: StreamFieldsSchema | Schema.Top | undefined,
+): Effect.Effect<StreamFieldsSchema | undefined, StreamSchemaUnsupported> =>
+  isEffectSchema(schema)
+    ? Effect.try({
+        try: () => ({ fields: streamFieldsFromSchema(schema) }),
+        catch: (error) =>
+          error instanceof StreamSchemaUnsupported
+            ? error
+            : new StreamSchemaUnsupported({ path: "", message: String(error) }),
+      })
+    : Effect.succeed(schema as StreamFieldsSchema | undefined);
+
+const canonicalSchema = (schema: StreamFieldsSchema | Schema.Top | undefined) =>
+  resolveSchema(schema).pipe(
+    Effect.map((resolved) =>
+      resolved === undefined ? undefined : canonicalStreamFields(resolved.fields),
+    ),
+  );
+
+const canonicalFormat = (format: StreamFormat | undefined) => {
+  const f = format ?? { type: "json" as const };
+  return {
+    type: f.type,
+    unstructured: f.unstructured,
+    timestampFormat: f.timestampFormat ?? "rfc3339",
+    decimalEncoding: f.decimalEncoding,
+  };
+};
+
+interface DesiredHttp {
+  enabled: boolean;
+  authentication: boolean;
+  cors?: { origins: string[] };
+}
+
+/**
+ * Desired HTTP ingest settings. Omitted (or `false`) means no endpoint —
+ * Cloudflare's own default is a public, unauthenticated endpoint.
+ */
+const desiredHttp = (http: boolean | StreamHttp | undefined): DesiredHttp => {
+  if (http === undefined || http === false) {
+    return { enabled: false, authentication: false };
+  }
+  if (http === true) return { enabled: true, authentication: true };
+  return {
+    enabled: http.enabled ?? true,
+    authentication: http.authentication ?? false,
+    cors: http.cors?.origins ? { origins: http.cors.origins } : undefined,
+  };
+};
+
+const httpMatches = (
+  desired: DesiredHttp,
+  observed: {
+    enabled: boolean;
+    authentication: boolean;
+    origins: readonly string[] | null | undefined;
+  },
+) => {
+  // A disabled endpoint's auth/CORS settings are inert.
+  if (!desired.enabled) return !observed.enabled;
+  return (
+    observed.enabled &&
+    desired.authentication === observed.authentication &&
+    sameOrigins(desired.cors?.origins, observed.origins)
+  );
+};
 
 const sameOrigins = (
   desired: readonly string[] | undefined,
@@ -462,8 +651,7 @@ const sameOrigins = (
   if (desired === undefined) return true;
   const have = observed ?? [];
   return (
-    desired.length === have.length &&
-    [...desired].sort().join(",") === [...have].sort().join(",")
+    desired.length === have.length && [...desired].sort().join(",") === [...have].sort().join(",")
   );
 };
 
@@ -471,33 +659,25 @@ const sameOrigins = (
  * Key-order-insensitive structural equality for plain JSON-ish prop
  * values (schemas, formats).
  */
-const stableEquals = (a: unknown, b: unknown): boolean =>
-  stableStringify(a) === stableStringify(b);
+const stableEquals = (a: unknown, b: unknown): boolean => stableStringify(a) === stableStringify(b);
 
 const stableStringify = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
     v !== null && typeof v === "object" && !Array.isArray(v)
       ? Object.fromEntries(
-          Object.entries(v as Record<string, unknown>).sort(([x], [y]) =>
-            x.localeCompare(y),
-          ),
+          Object.entries(v as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y)),
         )
       : v,
   ) ?? "undefined";
 
-const toAttributes = (
-  observed: ObservedStream,
-  accountId: string,
-): StreamAttributes => ({
+const toAttributes = (observed: ObservedStream, accountId: string): StreamAttributes => ({
   streamId: observed.id,
   accountId,
   name: observed.name,
   endpoint: observed.endpoint ?? undefined,
   httpEnabled: observed.http.enabled,
   httpAuthentication: observed.http.authentication,
-  corsOrigins: observed.http.cors?.origins
-    ? [...observed.http.cors.origins]
-    : undefined,
+  corsOrigins: observed.http.cors?.origins ? [...observed.http.cors.origins] : undefined,
   workerBindingEnabled: observed.workerBinding.enabled,
   version: observed.version,
   createdAt: observed.createdAt,

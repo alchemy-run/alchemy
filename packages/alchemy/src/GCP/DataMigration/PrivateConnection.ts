@@ -26,9 +26,7 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type PrivateConnectionState =
-  | dm.PrivateConnectionStateEnum
-  | (string & {});
+export type PrivateConnectionState = dm.PrivateConnectionStateEnum | (string & {});
 export type VpcPeeringConfig = dm.VpcPeeringConfig;
 export type PscInterfaceConfig = dm.PscInterfaceConfig;
 type Status = dm.Status;
@@ -143,22 +141,13 @@ export type PrivateConnection = Resource<
  * @resource
  * @category DataMigration
  */
-export const PrivateConnection = Resource<PrivateConnection>(
-  "GCP.DataMigration.PrivateConnection",
-);
+export const PrivateConnection = Resource<PrivateConnection>("GCP.DataMigration.PrivateConnection");
 
-const resourceName = (
-  project: string,
-  location: string,
-  privateConnectionId: string,
-) =>
+const resourceName = (project: string, location: string, privateConnectionId: string) =>
   `${locationParent(project, location)}/privateConnections/${privateConnectionId}`;
 
 const peeringOf = (
-  value:
-    | PrivateConnectionProps["vpcPeeringConfig"]
-    | VpcPeeringConfig
-    | undefined,
+  value: PrivateConnectionProps["vpcPeeringConfig"] | VpcPeeringConfig | undefined,
   project: string,
 ) =>
   value?.vpcName === undefined && value?.subnet === undefined
@@ -168,10 +157,8 @@ const peeringOf = (
         subnet: value?.subnet,
       };
 
-const kindOf = (value: {
-  vpcPeeringConfig?: unknown;
-  pscInterfaceConfig?: unknown;
-}) => (value.vpcPeeringConfig ? "vpc" : value.pscInterfaceConfig ? "psc" : "");
+const kindOf = (value: { vpcPeeringConfig?: unknown; pscInterfaceConfig?: unknown }) =>
+  value.vpcPeeringConfig ? "vpc" : value.pscInterfaceConfig ? "psc" : "";
 
 const toAttrs = (item: dm.PrivateConnection, project: string) => {
   const name = item.name ?? "";
@@ -206,9 +193,7 @@ const listOwned = (project: string, region: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.privateConnections ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.privateConnections ?? [])),
       Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -219,62 +204,40 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.privateConnections ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.privateConnections ?? [])),
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as dm.PrivateConnection[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as dm.PrivateConnection[])),
           ),
       ),
     );
 
 export const PrivateConnectionProvider = () =>
   Provider.succeed(PrivateConnection, {
-    stables: [
-      "name",
-      "privateConnectionId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "privateConnectionId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousKind = kindOf({
         vpcPeeringConfig: olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig,
-        pscInterfaceConfig:
-          olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig,
+        pscInterfaceConfig: olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig,
       });
       const nextKind = kindOf(news) || previousKind;
-      const previousPeering = fingerprint(
-        olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig,
-      );
+      const previousPeering = fingerprint(olds?.vpcPeeringConfig ?? output?.vpcPeeringConfig);
       const nextPeering = fingerprint(news.vpcPeeringConfig);
-      const previousPsc = fingerprint(
-        olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig,
-      );
+      const previousPsc = fingerprint(olds?.pscInterfaceConfig ?? output?.pscInterfaceConfig);
       const nextPsc = fingerprint(news.pscInterfaceConfig);
       const previousDisplay = olds?.displayName ?? output?.displayName;
       const nextDisplay = news.displayName ?? previousDisplay;
       const previousLabels = fingerprint(olds?.labels ?? output?.labels);
-      const nextLabels = fingerprint(
-        news.labels ?? olds?.labels ?? output?.labels,
-      );
+      const nextLabels = fingerprint(news.labels ?? olds?.labels ?? output?.labels);
       return replaceOnIdentity({
         previousId: olds?.privateConnectionId ?? output?.privateConnectionId,
         nextId:
-          news.privateConnectionId ??
-          olds?.privateConnectionId ??
-          output?.privateConnectionId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.privateConnectionId ?? olds?.privateConnectionId ?? output?.privateConnectionId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -282,10 +245,8 @@ export const PrivateConnectionProvider = () =>
         extra:
           (olds !== undefined || output !== undefined) &&
           (previousKind !== nextKind ||
-            (news.vpcPeeringConfig !== undefined &&
-              previousPeering !== nextPeering) ||
-            (news.pscInterfaceConfig !== undefined &&
-              previousPsc !== nextPsc) ||
+            (news.vpcPeeringConfig !== undefined && previousPeering !== nextPeering) ||
+            (news.pscInterfaceConfig !== undefined && previousPsc !== nextPsc) ||
             previousDisplay !== nextDisplay ||
             previousLabels !== nextLabels),
       });
@@ -299,19 +260,12 @@ export const PrivateConnectionProvider = () =>
         output?.privateConnectionId,
         "pconn",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, privateConnectionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, privateConnectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -329,10 +283,7 @@ export const PrivateConnectionProvider = () =>
         output?.privateConnectionId,
         "pconn",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, privateConnectionId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -390,8 +341,7 @@ export const PrivateConnectionProvider = () =>
         // Tearing down the VPC peering occasionally ends with a server-side
         // DEADLINE_EXCEEDED ("Operation timed out."); a fresh delete succeeds.
         Effect.retry({
-          while: (error) =>
-            error._tag === "GCP.OperationFailed" && error.code === 4,
+          while: (error) => error._tag === "GCP.OperationFailed" && error.code === 4,
           times: 5,
           schedule: Schedule.spaced("10 seconds"),
         }),

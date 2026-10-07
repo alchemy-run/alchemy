@@ -17,11 +17,8 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  waitForOperation as waitForLongRunning,
-  type LongRunningOperation,
-} from "../Operation.ts";
 
 const LOCATION = "global";
 const MAX_NAME_LENGTH = 63;
@@ -218,15 +215,11 @@ export type Key = Resource<
  */
 export const Key = Resource<Key>("GCP.ApiKeys.Key");
 
-export class KeyNotResolved extends Data.TaggedError(
-  "GCP.ApiKeys.KeyNotResolved",
-)<{
+export class KeyNotResolved extends Data.TaggedError("GCP.ApiKeys.KeyNotResolved")<{
   name: string;
 }> {}
 
-export class KeyStillExists extends Data.TaggedError(
-  "GCP.ApiKeys.KeyStillExists",
-)<{
+export class KeyStillExists extends Data.TaggedError("GCP.ApiKeys.KeyStillExists")<{
   name: string;
 }> {}
 
@@ -253,18 +246,15 @@ const rfc1035 = (name: string): string => {
 const resourceName = (project: string, keyId: string) =>
   `projects/${project}/locations/${LOCATION}/keys/${keyId}`;
 
-const parentOf = (project: string) =>
-  `projects/${project}/locations/${LOCATION}`;
+const parentOf = (project: string) => `projects/${project}/locations/${LOCATION}`;
 
 const parseName = (name: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const keysAt = parts.lastIndexOf("keys");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    keyId:
-      keysAt >= 0 && parts[keysAt + 1] ? parts[keysAt + 1]! : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    keyId: keysAt >= 0 && parts[keysAt + 1] ? parts[keysAt + 1]! : lastSegment(name),
   };
 };
 
@@ -285,8 +275,7 @@ const toId = (id: string, keyId: string | undefined, existing?: string) =>
     );
   });
 
-const isDeleted = (key: apikeys.V2Key | undefined) =>
-  (key?.deleteTime ?? "") !== "";
+const isDeleted = (key: apikeys.V2Key | undefined) => (key?.deleteTime ?? "") !== "";
 
 const toRestrictions = (
   restrictions: apikeys.V2Restrictions | undefined,
@@ -316,9 +305,7 @@ const sorted = (values: readonly string[] | undefined) =>
 const fingerprintSha1 = (value: string | undefined) =>
   (value ?? "").replace(/:/g, "").toUpperCase();
 
-const restrictionsFingerprint = (
-  restrictions: KeyRestrictions | undefined,
-): string => {
+const restrictionsFingerprint = (restrictions: KeyRestrictions | undefined): string => {
   if (restrictions === undefined) return "";
   const apiTargets = [...(restrictions.apiTargets ?? [])]
     .map((target) => ({
@@ -326,9 +313,7 @@ const restrictionsFingerprint = (
       methods: sorted(target.methods),
     }))
     .sort((a, b) => a.service.localeCompare(b.service));
-  const android = [
-    ...(restrictions.androidKeyRestrictions?.allowedApplications ?? []),
-  ]
+  const android = [...(restrictions.androidKeyRestrictions?.allowedApplications ?? [])]
     .map((app) => ({
       packageName: app.packageName ?? "",
       sha1Fingerprint: fingerprintSha1(app.sha1Fingerprint),
@@ -338,14 +323,10 @@ const restrictionsFingerprint = (
     apiTargets,
     browser: restrictions.browserKeyRestrictions
       ? {
-          allowedReferrers: sorted(
-            restrictions.browserKeyRestrictions.allowedReferrers,
-          ),
+          allowedReferrers: sorted(restrictions.browserKeyRestrictions.allowedReferrers),
         }
       : undefined,
-    android: restrictions.androidKeyRestrictions
-      ? { allowedApplications: android }
-      : undefined,
+    android: restrictions.androidKeyRestrictions ? { allowedApplications: android } : undefined,
     server: restrictions.serverKeyRestrictions
       ? {
           allowedIps: sorted(restrictions.serverKeyRestrictions.allowedIps),
@@ -353,19 +334,13 @@ const restrictionsFingerprint = (
       : undefined,
     ios: restrictions.iosKeyRestrictions
       ? {
-          allowedBundleIds: sorted(
-            restrictions.iosKeyRestrictions.allowedBundleIds,
-          ),
+          allowedBundleIds: sorted(restrictions.iosKeyRestrictions.allowedBundleIds),
         }
       : undefined,
   });
 };
 
-const toAttrs = (
-  key: apikeys.V2Key,
-  project: string,
-  keyString?: string,
-): Key["Attributes"] => {
+const toAttrs = (key: apikeys.V2Key, project: string, keyString?: string): Key["Attributes"] => {
   const name = key.name ?? "";
   const parsed = parseName(name);
   return {
@@ -399,17 +374,14 @@ const getKeyStringValue = (name: string) =>
 const toAttrsLive = (key: apikeys.V2Key, project: string) =>
   Effect.gen(function* () {
     const name = key.name ?? "";
-    const keyString =
-      name.length > 0 ? yield* getKeyStringValue(name) : undefined;
+    const keyString = name.length > 0 ? yield* getKeyStringValue(name) : undefined;
     return toAttrs(key, project, keyString);
   });
 
 const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key && !isDeleted(key)
-        ? Effect.succeed(key)
-        : Effect.fail(new KeyNotResolved({ name })),
+      key && !isDeleted(key) ? Effect.succeed(key) : Effect.fail(new KeyNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiKeys.KeyNotResolved",
@@ -421,9 +393,7 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key === undefined || isDeleted(key)
-        ? Effect.void
-        : Effect.fail(new KeyStillExists({ name })),
+      key === undefined || isDeleted(key) ? Effect.void : Effect.fail(new KeyStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiKeys.KeyStillExists",
@@ -454,9 +424,7 @@ const listOwnedKeys = (project: string) =>
       Stream.filter(
         (key) =>
           !isDeleted(key) &&
-          Object.keys(key.annotations ?? {}).some((item) =>
-            item.startsWith("alchemy-"),
-          ),
+          Object.keys(key.annotations ?? {}).some((item) => item.startsWith("alchemy-")),
       ),
       Stream.map((key) => toAttrs(key, project)),
       Stream.runCollect,
@@ -464,10 +432,7 @@ const listOwnedKeys = (project: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
 
-const toCreateBody = (
-  news: KeyProps,
-  annotations: Record<string, string>,
-): apikeys.V2Key => ({
+const toCreateBody = (news: KeyProps, annotations: Record<string, string>): apikeys.V2Key => ({
   displayName: news.displayName,
   annotations,
   restrictions: news.restrictions,
@@ -482,20 +447,15 @@ export const KeyProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.keyId ?? output?.keyId;
       const nextId = news.keyId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
-      const previousSa =
-        olds?.serviceAccountEmail ?? output?.serviceAccountEmail ?? "";
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
+      const previousSa = olds?.serviceAccountEmail ?? output?.serviceAccountEmail ?? "";
       const nextSa = news.serviceAccountEmail ?? previousSa;
       const saChanged = previousSa !== nextSa;
 
       if (!idChanged && !saChanged) return undefined;
       return {
         action: "replace" as const,
-        deleteFirst:
-          !idChanged && previousId !== undefined && nextId === previousId,
+        deleteFirst: !idChanged && previousId !== undefined && nextId === previousId,
       };
     }),
 
@@ -558,13 +518,9 @@ export const KeyProvider = () =>
       }
 
       const observedAnnotations = tagRecord(current.annotations);
-      const { upsert, removed } = diffLabels(
-        observedAnnotations,
-        desiredAnnotations,
-      );
+      const { upsert, removed } = diffLabels(observedAnnotations, desiredAnnotations);
       const annotationsChanged = upsert.length > 0 || removed.length > 0;
-      const displayNameChanged =
-        (current.displayName ?? "") !== (news.displayName ?? "");
+      const displayNameChanged = (current.displayName ?? "") !== (news.displayName ?? "");
       const restrictionsChanged =
         restrictionsFingerprint(toRestrictions(current.restrictions)) !==
         restrictionsFingerprint(news.restrictions);
@@ -640,8 +596,7 @@ const waitForDeleteOperation = (operation: LongRunningOperation) =>
   waitForOperation(operation).pipe(
     Effect.catchIf(
       (error) =>
-        error._tag === "NotFound" ||
-        (error._tag === "GCP.OperationFailed" && error.code === 5),
+        error._tag === "NotFound" || (error._tag === "GCP.OperationFailed" && error.code === 5),
       () => Effect.succeed(operation),
     ),
   );

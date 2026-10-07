@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as firebaseapphosting from "@distilled.cloud/gcp/firebaseapphosting_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import {
   location,
   logLevel,
@@ -45,9 +45,7 @@ test.provider(
         parent: `projects/${project}/locations/-`,
         pageSize: 10,
       });
-      expect((page.backends ?? []).map((item) => item.name)).not.toContain(
-        missingBackend(),
-      );
+      expect((page.backends ?? []).map((item) => item.name)).not.toContain(missingBackend());
 
       yield* stack.destroy();
     }).pipe(logLevel),

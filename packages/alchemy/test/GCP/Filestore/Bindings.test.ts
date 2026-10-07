@@ -1,28 +1,19 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as file from "@distilled.cloud/gcp/file_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import FilestoreBindingsHost, {
-  Nfs,
-  Nightly,
-} from "./fixtures/bindings-host.ts";
-import FilestoreSnapshotBindingsHost, {
-  Snap,
-  ZonalNfs,
-} from "./fixtures/snapshot-host.ts";
+import FilestoreBindingsHost, { Nfs, Nightly } from "./fixtures/bindings-host.ts";
+import FilestoreSnapshotBindingsHost, { Snap, ZonalNfs } from "./fixtures/snapshot-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "FilestoreBindings");
-const snapshotStack = Core.scratchStack(
-  testOptions,
-  "FilestoreSnapshotBindings",
-);
+const snapshotStack = Core.scratchStack(testOptions, "FilestoreSnapshotBindings");
 
 // Filestore instances take 5–20 minutes to provision.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -51,9 +42,7 @@ const hostProjectRoles = (account: string) =>
       body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
-      .filter((binding) =>
-        (binding.members ?? []).includes(`serviceAccount:${account}`),
-      )
+      .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
       .map((binding) => ({
         role: binding.role,
         condition: binding.condition?.expression,
@@ -65,12 +54,7 @@ const expectedRoles = [{ role: "roles/file.viewer", condition: undefined }];
 describe.skipIf(!dockerAvailable || !runLifecycle)(
   "Filestore Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:filestore",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:filestore", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -104,10 +88,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
         "reads the instance as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<file.Instance>(
-              baseUrl,
-              "getInstance",
-            );
+            const out = yield* expectProbe<file.Instance>(baseUrl, "getInstance");
             const direct = yield* file.getProjectsLocationsInstances({
               name: instanceName,
             });
@@ -149,12 +130,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
 describe.skipIf(!dockerAvailable || !runSnapshot)(
   "Filestore Bindings (enterprise quota)",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:filestore",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:filestore", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -186,18 +162,13 @@ describe.skipIf(!dockerAvailable || !runSnapshot)(
         "reads the snapshot as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<file.Snapshot>(
-              snapshotBaseUrl,
-              "getInstancesSnapshot",
-            );
+            const out = yield* expectProbe<file.Snapshot>(snapshotBaseUrl, "getInstancesSnapshot");
             const direct = yield* file.getProjectsLocationsInstancesSnapshots({
               name: snapshotName,
             });
             expect(out.name).toEqual(snapshotName);
             expect(out.createTime).toEqual(direct.createTime);
-            expect(yield* hostProjectRoles(snapshotHostAccount)).toEqual(
-              expectedRoles,
-            );
+            expect(yield* hostProjectRoles(snapshotHostAccount)).toEqual(expectedRoles);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:filestore", "live"],

@@ -4,8 +4,7 @@ import type { Database } from "./Database.ts";
 import type { ReadDatabaseClient } from "./ReadDatabase.ts";
 import type { WriteDatabaseClient } from "./WriteDatabase.ts";
 
-export interface ReadWriteDatabaseClient
-  extends ReadDatabaseClient, WriteDatabaseClient {}
+export interface ReadWriteDatabaseClient extends ReadDatabaseClient, WriteDatabaseClient {}
 
 /**
  * Read and write access to a Firestore {@link Database}. Grants

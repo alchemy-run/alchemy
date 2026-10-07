@@ -6,25 +6,26 @@ import type {
   FlyStatic,
   Machine as FlyMachine,
 } from "@distilled.cloud/fly-io/machines";
+import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import { DockerLive, Docker } from "../Docker/Docker.ts";
-import {
-  Platform,
-  type Main,
-  type MainRpc,
-  type PlatformProps,
-} from "../Platform.ts";
-import * as Provider from "../Provider.ts";
 import type { Input } from "../Input.ts";
+import { Platform, type Main, type MainRpc, type PlatformProps } from "../Platform.ts";
+import * as Provider from "../Provider.ts";
+import { makeRandom } from "../Random.ts";
 import type { Resource } from "../Resource.ts";
+import { packEnvValue } from "../RuntimeContext.ts";
 import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { App, deleteApp, ensureApp } from "./App.ts";
+import { boundTargetEnvKeys } from "./BindService.ts";
+import { attachBucketSecrets } from "./Bucket.ts";
 import {
   deploymentPolicy,
   validateDeployment,
@@ -32,43 +33,7 @@ import {
   type MachineShutdown,
   type MachineCheck,
 } from "./Deployment.ts";
-import type {
-  MachineGuest,
-  MachineImageRef,
-  MachineService,
-} from "./Machine.ts";
-import {
-  ensureFlycastAddress,
-  hasPublicAddress,
-  syncOwnedAppAddresses,
-} from "./IpAssignment.ts";
-import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Redacted from "effect/Redacted";
-import { makeRandom } from "../Random.ts";
 import { resolveOrgSlug } from "./Environment.ts";
-import { bindingPortOf, findPortConflict, portsOfFly } from "./ports.ts";
-import { packEnvValue } from "../RuntimeContext.ts";
-import { boundTargetEnvKeys } from "./BindService.ts";
-import {
-  BINDING_PORT_ENV,
-  DEFAULT_BINDING_PORT,
-  RPC_ORG_ENV,
-  RPC_TOKEN_ENV,
-} from "./rpc.ts";
-import { type Region, regionList } from "./Region.ts";
-import {
-  alchemyMetadataKeys,
-  createFlyAppName,
-  createFlyResourceName,
-  diffMachineMetadata,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
-import type {
-  BoundTarget,
-  MountedDisk,
-  ServiceBinding,
-} from "./MountVolume.ts";
-import type { Providers } from "./Providers.ts";
 import {
   collectBindingState,
   createFlyHostedSupport,
@@ -80,9 +45,21 @@ import {
   type FlyHostRuntimeContext,
   type HostedProgramProps,
 } from "./hosted.ts";
-import { attachBucketSecrets } from "./Bucket.ts";
+import { ensureFlycastAddress, hasPublicAddress, syncOwnedAppAddresses } from "./IpAssignment.ts";
+import type { MachineGuest, MachineImageRef, MachineService } from "./Machine.ts";
+import {
+  alchemyMetadataKeys,
+  createFlyAppName,
+  createFlyResourceName,
+  diffMachineMetadata,
+  sanitizeFlyAppName,
+} from "./Metadata.ts";
+import type { BoundTarget, MountedDisk, ServiceBinding } from "./MountVolume.ts";
+import { bindingPortOf, findPortConflict, portsOfFly } from "./ports.ts";
 import { attachPostgresSecrets } from "./Postgres.ts";
+import type { Providers } from "./Providers.ts";
 import { attachRedisSecrets } from "./Redis.ts";
+import { type Region, regionList } from "./Region.ts";
 import {
   deleteReplicaSet,
   hasPublishedService,
@@ -96,6 +73,7 @@ import {
   type Replica,
   type ReplicaSet,
 } from "./replicas.ts";
+import { BINDING_PORT_ENV, DEFAULT_BINDING_PORT, RPC_ORG_ENV, RPC_TOKEN_ENV } from "./rpc.ts";
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -250,10 +228,7 @@ export interface ServiceProps extends PlatformProps {
    * Hashed into `code.hash` so asset changes update the image.
    * Destination is relative to `/app`.
    */
-  extraFiles?: ReadonlyArray<{
-    source: string;
-    dest: string;
-  }>;
+  extraFiles?: ReadonlyArray<{ source: string; dest: string }>;
   /**
    * Fly proxy static-file maps. Matching GET paths skip the process and
    * are served from the image (`guestPath`) or a Tigris bucket
@@ -360,9 +335,7 @@ export type Service = Resource<
     /** Every replica in the set. */
     replicas: Replica[];
     /** Content hash of the bundled program's image. */
-    code: {
-      hash: string;
-    };
+    code: { hash: string };
   },
   ServiceBinding,
   Providers
@@ -1063,53 +1036,43 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * @resource
  * @product Service
  */
-export const Service: Platform<
-  Service,
-  ServiceServices,
-  ServiceShape,
-  ServiceRuntimeContext
-> = Platform("Fly.Service", {
-  createRuntimeContext: createFlyHostRuntimeContext("Fly.Service"),
-  // `{ app: Site }` at module scope is an Effect. Yield it here so the
-  // App is registered and `news.app` is resolved attributes at
-  // reconcile (same DX as `yield* App(...)` inside Effect.gen).
-  transformProps: (id, props) =>
-    Effect.gen(function* () {
-      if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const app = Effect.isEffect(props.app)
-        ? yield* props.app as Effect.Effect<App, never, Providers>
-        : props.app;
-      // Only callers that bind this Service receive the token.
-      const rpcToken = yield* makeRandom(`${id}RpcToken`);
-      if (app !== undefined) {
-        // Report the ports this Service publishes so the App can reject
-        // two Services on the same port before either one is deployed.
-        yield* app.bind(id, {
-          service: id,
-          services: props.services,
-          bindingPort: props.bindingPort,
-        });
-      }
-      return { ...props, app, rpcToken } as typeof props;
-    }),
-});
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
+  Platform("Fly.Service", {
+    createRuntimeContext: createFlyHostRuntimeContext("Fly.Service"),
+    // `{ app: Site }` at module scope is an Effect. Yield it here so the
+    // App is registered and `news.app` is resolved attributes at
+    // reconcile (same DX as `yield* App(...)` inside Effect.gen).
+    transformProps: (id, props) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const app = Effect.isEffect(props.app)
+          ? yield* props.app as Effect.Effect<App, never, Providers>
+          : props.app;
+        // Only callers that bind this Service receive the token.
+        const rpcToken = yield* makeRandom(`${id}RpcToken`);
+        if (app !== undefined) {
+          // Report the ports this Service publishes so the App can reject
+          // two Services on the same port before either one is deployed.
+          yield* app.bind(id, {
+            service: id,
+            services: props.services,
+            bindingPort: props.bindingPort,
+          });
+        }
+        return { ...props, app, rpcToken } as typeof props;
+      }),
+  });
 
-export class ServiceNotCreated extends Data.TaggedError(
-  "Fly.ServiceNotCreated",
-)<{
+export class ServiceNotCreated extends Data.TaggedError("Fly.ServiceNotCreated")<{
   name: string;
   appName: string;
 }> {}
 
-export class InvalidServiceProps extends Data.TaggedError(
-  "Fly.InvalidServiceProps",
-)<{
+export class InvalidServiceProps extends Data.TaggedError("Fly.InvalidServiceProps")<{
   message: string;
 }> {}
 
-export class ServiceAppNotResolved extends Data.TaggedError(
-  "Fly.ServiceAppNotResolved",
-)<{
+export class ServiceAppNotResolved extends Data.TaggedError("Fly.ServiceAppNotResolved")<{
   message: string;
 }> {}
 
@@ -1130,11 +1093,7 @@ const compactRecord = (
 
 const toEnv = toEnvRecord;
 
-const resolveMachineName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveMachineName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyAppName(name);
     if (existing !== undefined) return existing;
@@ -1178,12 +1137,8 @@ const toFlyStatics = (
   return statics.map((entry) => ({
     guest_path: entry.guestPath,
     url_prefix: entry.urlPrefix,
-    ...(entry.tigrisBucket !== undefined
-      ? { tigris_bucket: entry.tigrisBucket }
-      : {}),
-    ...(entry.indexDocument !== undefined
-      ? { index_document: entry.indexDocument }
-      : {}),
+    ...(entry.tigrisBucket !== undefined ? { tigris_bucket: entry.tigrisBucket } : {}),
+    ...(entry.indexDocument !== undefined ? { index_document: entry.indexDocument } : {}),
   }));
 };
 
@@ -1202,10 +1157,7 @@ const buildConfig = (input: {
   services: input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
-  statics:
-    input.statics !== undefined && input.statics.length > 0
-      ? input.statics
-      : undefined,
+  statics: input.statics !== undefined && input.statics.length > 0 ? input.statics : undefined,
 });
 
 const sameImage = (machine: FlyMachine, image: string) => {
@@ -1222,10 +1174,7 @@ const sameImage = (machine: FlyMachine, image: string) => {
   return observedRepo === repo || observedRepo.endsWith(`/${repo}`);
 };
 
-const sameGuest = (
-  observed: FlyMachineGuest | undefined,
-  desired: FlyMachineGuest,
-) =>
+const sameGuest = (observed: FlyMachineGuest | undefined, desired: FlyMachineGuest) =>
   (observed?.cpu_kind ?? DEFAULT_CPU_KIND) === desired.cpu_kind &&
   (observed?.cpus ?? DEFAULT_CPUS) === desired.cpus &&
   (observed?.memory_mb ?? DEFAULT_MEMORY_MB) === desired.memory_mb &&
@@ -1237,12 +1186,8 @@ const sameEnv = (
   desired: Record<string, string>,
 ) => deepEqual(compactRecord(observed), desired);
 
-const sameMounts = (
-  observed: FlyMachineMount[] | undefined,
-  desired: FlyMachineMount[],
-) => {
-  const key = (mount: FlyMachineMount) =>
-    `${mount.volume ?? ""}:${mount.path ?? ""}`;
+const sameMounts = (observed: FlyMachineMount[] | undefined, desired: FlyMachineMount[]) => {
+  const key = (mount: FlyMachineMount) => `${mount.volume ?? ""}:${mount.path ?? ""}`;
   const left = [...(observed ?? [])].map(key).sort();
   const right = desired.map(key).sort();
   return deepEqual(left, right);
@@ -1252,31 +1197,18 @@ const metadataChanged = (
   observed: Record<string, string | undefined> | undefined,
   desired: Record<string, string>,
 ) => {
-  const { removed, added, updated } = diffMachineMetadata(
-    compactRecord(observed),
-    desired,
-  );
-  return (
-    removed.length > 0 ||
-    Object.keys(added).length > 0 ||
-    Object.keys(updated).length > 0
-  );
+  const { removed, added, updated } = diffMachineMetadata(compactRecord(observed), desired);
+  return removed.length > 0 || Object.keys(added).length > 0 || Object.keys(updated).length > 0;
 };
 
-const sameStatics = (
-  observed: FlyStatic[] | undefined,
-  desired: FlyStatic[] | undefined,
-) => {
+const sameStatics = (observed: FlyStatic[] | undefined, desired: FlyStatic[] | undefined) => {
   const normalize = (statics: FlyStatic[] | undefined) =>
     (statics ?? []).map((entry) => ({
       ...entry,
       // Empty and omitted index documents both disable directory indexes.
-      index_document:
-        entry.index_document === "" ? undefined : entry.index_document,
+      index_document: entry.index_document === "" ? undefined : entry.index_document,
     }));
-  return deepEqual(normalize(observed), normalize(desired), {
-    stripNullish: true,
-  });
+  return deepEqual(normalize(observed), normalize(desired), { stripNullish: true });
 };
 
 const configDrifted = (
@@ -1321,8 +1253,7 @@ const endpointListOf = (
   return (services ?? []).flatMap((service) =>
     (service.ports ?? []).flatMap((entry) => {
       const handlers = entry.handlers ?? [];
-      if (entry.port === undefined || isRedirect(handlers, entry.force_https))
-        return [];
+      if (entry.port === undefined || isRedirect(handlers, entry.force_https)) return [];
       const http = handlers.includes("http");
       const tls = handlers.includes("tls");
       const url = !http
@@ -1352,13 +1283,9 @@ const mainUrlOf = (endpoints: ServiceEndpoint[]) =>
   endpoints.find((endpoint) => endpoint.url !== undefined)?.url;
 
 /** `public` and `network` configure the Service's own App. */
-const validateOwnership = (
-  props: Partial<Pick<ServiceProps, "app" | "public" | "network">>,
-) => {
+const validateOwnership = (props: Partial<Pick<ServiceProps, "app" | "public" | "network">>) => {
   if (props.app === undefined) return Effect.void;
-  const conflicting = (["public", "network"] as const).filter(
-    (key) => props[key] !== undefined,
-  );
+  const conflicting = (["public", "network"] as const).filter((key) => props[key] !== undefined);
   return conflicting.length === 0
     ? Effect.void
     : Effect.fail(
@@ -1394,10 +1321,7 @@ interface Access {
 }
 
 /** Drop the port Alchemy added for bindings from a services list. */
-const withoutBindingPort = (
-  services: FlyMachineService[] | undefined,
-  bindingPort: number,
-) =>
+const withoutBindingPort = (services: FlyMachineService[] | undefined, bindingPort: number) =>
   (services ?? []).flatMap((service) => {
     const ports = (service.ports ?? []).filter(
       (entry) =>
@@ -1415,13 +1339,8 @@ const endpointsOf = (set: ReplicaSet, access: Access) => {
     return { url: undefined, privateUrl: undefined, endpoints: [] };
   const isPublic = !access.ownsApp || access.isPublic;
   const binding = bindingPortOf(portsOfFly(set.services), access.bindingPort);
-  const visible = binding?.added
-    ? withoutBindingPort(set.services, binding.port)
-    : set.services;
-  const endpoints = endpointListOf(
-    `${set.appName}.${isPublic ? "fly.dev" : "flycast"}`,
-    visible,
-  );
+  const visible = binding?.added ? withoutBindingPort(set.services, binding.port) : set.services;
+  const endpoints = endpointListOf(`${set.appName}.${isPublic ? "fly.dev" : "flycast"}`, visible);
   return {
     url: isPublic ? mainUrlOf(endpoints) : undefined,
     privateUrl:
@@ -1448,9 +1367,7 @@ const withBindingService = (
   // Add the port to the first TCP service so it shares that service's
   // internal port and health checks (blue/green requires checks on every
   // published service).
-  const index = services.findIndex(
-    (service) => (service.protocol ?? "tcp") === "tcp",
-  );
+  const index = services.findIndex((service) => (service.protocol ?? "tcp") === "tcp");
   if (index === -1) {
     return {
       added: true,
@@ -1470,10 +1387,7 @@ const withBindingService = (
       i === index
         ? {
             ...service,
-            ports: [
-              ...(service.ports ?? []),
-              { port: bindingPort, handlers: ["http"] },
-            ],
+            ports: [...(service.ports ?? []), { port: bindingPort, handlers: ["http"] }],
           }
         : service,
     ),
@@ -1482,16 +1396,11 @@ const withBindingService = (
 
 /** Fly reports the organization's default network as `default`. */
 const normalizeNetwork = (network: string | undefined | null) =>
-  network === undefined ||
-  network === null ||
-  network === "" ||
-  network === "default"
+  network === undefined || network === null || network === "" || network === "default"
     ? undefined
     : network;
 
-export class ServiceUnreachable extends Data.TaggedError(
-  "Fly.ServiceUnreachable",
-)<{
+export class ServiceUnreachable extends Data.TaggedError("Fly.ServiceUnreachable")<{
   service: string;
   target: string;
   network: string | undefined;
@@ -1502,9 +1411,7 @@ export class ServiceUnreachable extends Data.TaggedError(
   }
 }
 
-export class ServiceNotBindable extends Data.TaggedError(
-  "Fly.ServiceNotBindable",
-)<{
+export class ServiceNotBindable extends Data.TaggedError("Fly.ServiceNotBindable")<{
   service: string;
   target: string;
 }> {
@@ -1513,9 +1420,7 @@ export class ServiceNotBindable extends Data.TaggedError(
   }
 }
 
-export class EndpointNotPublished extends Data.TaggedError(
-  "Fly.EndpointNotPublished",
-)<{
+export class EndpointNotPublished extends Data.TaggedError("Fly.EndpointNotPublished")<{
   service: string;
   target: string;
   port: number;
@@ -1543,10 +1448,7 @@ const validateTargets = (
         });
       }
       if (target.privateUrl === undefined) {
-        return yield* new ServiceNotBindable({
-          service,
-          target: target.service,
-        });
+        return yield* new ServiceNotBindable({ service, target: target.service });
       }
       if (
         target.port !== undefined &&
@@ -1579,8 +1481,7 @@ const validateObservedPorts = (
     const others = new Map<string, FlyMachineService[] | undefined>();
     for (const machine of listed) {
       if (machine.state === "destroyed") continue;
-      const owner =
-        machine.config?.metadata?.[alchemyMetadataKeys.fqn] ?? machine.id ?? "";
+      const owner = machine.config?.metadata?.[alchemyMetadataKeys.fqn] ?? machine.id ?? "";
       if (owner === fqn || others.has(owner)) continue;
       others.set(owner, machine.config?.services);
     }
@@ -1590,19 +1491,12 @@ const validateObservedPorts = (
         { id, ports: mine },
         { id: owner, ports: portsOfFly(theirs) },
       ]);
-      if (
-        conflict !== undefined &&
-        conflict.publishers[0] !== conflict.publishers[1]
-      )
+      if (conflict !== undefined && conflict.publishers[0] !== conflict.publishers[1])
         return yield* conflict;
     }
   });
 
-const toAttrs = (
-  set: ReplicaSet,
-  codeHash: string,
-  access: Access,
-): Service["Attributes"] => ({
+const toAttrs = (set: ReplicaSet, codeHash: string, access: Access): Service["Attributes"] => ({
   appName: set.appName,
   ownsApp: access.ownsApp,
   network: normalizeNetwork(access.network),
@@ -1625,16 +1519,12 @@ const toAttrs = (
 
 const machineIdsOf = (output: Service["Attributes"] | undefined) =>
   output?.machineIds ??
-  (output?.machineId !== undefined && output.machineId.length > 0
-    ? [output.machineId]
-    : []);
+  (output?.machineId !== undefined && output.machineId.length > 0 ? [output.machineId] : []);
 
 /** The private network the Service's Machines join. */
 const networkOf = (props: ServiceProps) =>
   normalizeNetwork(
-    props.app === undefined
-      ? props.network
-      : (props.app as { network?: string }).network,
+    props.app === undefined ? props.network : (props.app as { network?: string }).network,
   );
 
 /**
@@ -1699,22 +1589,14 @@ export const ServiceProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, output }) {
           if (news === undefined) return;
-          const shape = news as Partial<
-            Pick<ServiceProps, "app" | "public" | "network">
-          >;
+          const shape = news as Partial<Pick<ServiceProps, "app" | "public" | "network">>;
           const ownsApp = shape.app === undefined;
           yield* validateOwnership(shape);
           if ("main" in news) {
             const settings: Input<
               Pick<
                 ServiceProps,
-                | "deploy"
-                | "shutdown"
-                | "checks"
-                | "services"
-                | "port"
-                | "isExternal"
-                | "public"
+                "deploy" | "shutdown" | "checks" | "services" | "port" | "isExternal" | "public"
               >
             > = {
               deploy: news.deploy,
@@ -1729,22 +1611,12 @@ export const ServiceProvider = () =>
               isResolved<
                 Pick<
                   ServiceProps,
-                  | "deploy"
-                  | "shutdown"
-                  | "checks"
-                  | "services"
-                  | "port"
-                  | "isExternal"
-                  | "public"
+                  "deploy" | "shutdown" | "checks" | "services" | "port" | "isExternal" | "public"
                 >
               >(settings)
             ) {
               yield* validateDeployment(
-                yield* deploymentPolicy(
-                  settings.deploy,
-                  settings.shutdown,
-                  !settings.isExternal,
-                ),
+                yield* deploymentPolicy(settings.deploy, settings.shutdown, !settings.isExternal),
                 {
                   services:
                     settings.services?.map(toFlyService) ??
@@ -1766,14 +1638,11 @@ export const ServiceProvider = () =>
           }
           if (ownsApp && isResolved(news)) {
             const desiredAppName =
-              news.name !== undefined
-                ? sanitizeFlyAppName(news.name)
-                : output.appName;
+              news.name !== undefined ? sanitizeFlyAppName(news.name) : output.appName;
             const nameChanged = desiredAppName !== output.appName;
             // Fly cannot move an App to another network.
             const networkChanged =
-              normalizeNetwork(news.network) !==
-              normalizeNetwork(output.network);
+              normalizeNetwork(news.network) !== normalizeNetwork(output.network);
             if (nameChanged || networkChanged) {
               return {
                 action: "replace" as const,
@@ -1784,14 +1653,12 @@ export const ServiceProvider = () =>
           }
           if (!ownsApp && isResolved(news)) {
             const desiredAppName = appNameOf(news.app);
-            const appChanged =
-              desiredAppName !== undefined && desiredAppName !== output.appName;
+            const appChanged = desiredAppName !== undefined && desiredAppName !== output.appName;
             const desiredName =
               news.name !== undefined
                 ? sanitizeFlyAppName(news.name)
                 : (output.baseName ?? output.name);
-            const nameChanged =
-              desiredName !== (output.baseName ?? output.name);
+            const nameChanged = desiredName !== (output.baseName ?? output.name);
             if (appChanged || nameChanged) {
               return {
                 action: "replace" as const,
@@ -1807,10 +1674,7 @@ export const ServiceProvider = () =>
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
-            Pick<
-              ServiceProps,
-              "main" | "build" | "image" | "port" | "extraFiles" | "isExternal"
-            >
+            Pick<ServiceProps, "main" | "build" | "image" | "port" | "extraFiles" | "isExternal">
           >;
           if (
             isResolved({
@@ -1828,14 +1692,11 @@ export const ServiceProvider = () =>
               return { action: "update" as const };
             }
           }
-          return output.rolloutPending
-            ? { action: "update" as const }
-            : undefined;
+          return output.rolloutPending ? { action: "update" as const } : undefined;
         }),
 
         read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
-          const ownsApp =
-            output?.ownsApp ?? (olds !== undefined && olds.app === undefined);
+          const ownsApp = output?.ownsApp ?? (olds !== undefined && olds.app === undefined);
           const appName = ownsApp
             ? (output?.appName ??
               (olds?.name !== undefined
@@ -1880,27 +1741,18 @@ export const ServiceProvider = () =>
           );
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          fqn,
-          instanceId,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output, bindings, session }) {
           const props = news;
-          const policy = yield* deploymentPolicy(
-            props.deploy,
-            props.shutdown,
-            !props.isExternal,
-          );
+          const policy = yield* deploymentPolicy(props.deploy, props.shutdown, !props.isExternal);
           yield* validateOwnership(props);
           const bound = collectBindingState(bindings ?? []);
           // Before creating anything: every bound Service must be reachable.
           yield* validateTargets(id, networkOf(props), bound.targets);
-          const { appName, ownsApp, isPublic, network } =
-            yield* ensureServiceApp(id, props, output);
+          const { appName, ownsApp, isPublic, network } = yield* ensureServiceApp(
+            id,
+            props,
+            output,
+          );
           const name = yield* resolveMachineName(
             id,
             ownsApp ? undefined : props.name,
@@ -1913,30 +1765,20 @@ export const ServiceProvider = () =>
           const secretVersions: number[] = [];
           const redisVersion = yield* attachRedisSecrets(appName, bound.redis);
           if (redisVersion !== undefined) secretVersions.push(redisVersion);
-          const bucketVersion = yield* attachBucketSecrets(
-            appName,
-            bound.buckets,
-            {
-              ...bound.env,
-              ...toEnv(props.env),
-            },
-          );
+          const bucketVersion = yield* attachBucketSecrets(appName, bound.buckets, {
+            ...bound.env,
+            ...toEnv(props.env),
+          });
           if (bucketVersion !== undefined) secretVersions.push(bucketVersion);
           for (const pg of bound.postgres) {
-            const version = yield* attachPostgresSecrets(
-              appName,
-              pg.clusterId,
-              pg.variableName,
-            );
+            const version = yield* attachPostgresSecrets(appName, pg.clusterId, pg.variableName);
             if (version !== undefined) secretVersions.push(version);
           }
           const minSecretsVersion =
             secretVersions.length > 0 ? Math.max(...secretVersions) : undefined;
           const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
           if (policy.shutdown && !props.isExternal) {
-            env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(
-              policy.shutdown.timeoutMs,
-            );
+            env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(policy.shutdown.timeoutMs);
           }
           const guest = toFlyGuest(props.guest);
           const published = withBindingService(
@@ -1947,17 +1789,13 @@ export const ServiceProvider = () =>
             bindingPort,
           );
           const services = published.services;
-          if (!ownsApp)
-            yield* validateObservedPorts(appName, fqn, id, services);
-          if (props.rpcToken !== undefined)
-            env[RPC_TOKEN_ENV] = Redacted.value(props.rpcToken);
+          if (!ownsApp) yield* validateObservedPorts(appName, fqn, id, services);
+          if (props.rpcToken !== undefined) env[RPC_TOKEN_ENV] = Redacted.value(props.rpcToken);
           for (const target of bound.targets) {
             const keys = boundTargetEnvKeys(target.service);
             env[keys.appName] = packEnvValue(target.appName);
-            if (target.privateUrl !== undefined)
-              env[keys.url] = packEnvValue(target.privateUrl);
-            if (target.rpcToken !== undefined)
-              env[keys.token] = packEnvValue(target.rpcToken);
+            if (target.privateUrl !== undefined) env[keys.url] = packEnvValue(target.privateUrl);
+            if (target.rpcToken !== undefined) env[keys.token] = packEnvValue(target.rpcToken);
           }
           env[RPC_ORG_ENV] = yield* resolveOrgSlug();
           if (published.added) env[BINDING_PORT_ENV] = String(bindingPort);
@@ -2000,23 +1838,10 @@ export const ServiceProvider = () =>
                 statics,
               }),
             buildConfig: ({ mounts, metadata }) =>
-              buildConfig({
-                image: imageRef,
-                guest,
-                env,
-                services,
-                mounts,
-                metadata,
-                statics,
-              }),
+              buildConfig({ image: imageRef, guest, env, services, mounts, metadata, statics }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
-              Effect.fail(
-                new ServiceNotCreated({
-                  name: error.name,
-                  appName: error.appName,
-                }),
-              ),
+              Effect.fail(new ServiceNotCreated({ name: error.name, appName: error.appName })),
             ),
           );
           return toAttrs(set, codeHash, {
@@ -2045,8 +1870,11 @@ export const ServiceProvider = () =>
           // No stub: a failed create then recovers through `read`, which
           // finds the App from the persisted props.
           if (inert) return undefined as unknown as Service["Attributes"];
-          const { appName, ownsApp, isPublic, network } =
-            yield* ensureServiceApp(id, props, undefined);
+          const { appName, ownsApp, isPublic, network } = yield* ensureServiceApp(
+            id,
+            props,
+            undefined,
+          );
           const port = props.port ?? DEFAULT_PORT;
           const count = resolveCount(props.count);
           const bindingPort = props.bindingPort ?? DEFAULT_BINDING_PORT;
@@ -2057,10 +1885,7 @@ export const ServiceProvider = () =>
             port,
             bindingPort,
           );
-          const name = yield* resolveMachineName(
-            id,
-            ownsApp ? undefined : props.name,
-          );
+          const name = yield* resolveMachineName(id, ownsApp ? undefined : props.name);
           const stub: ReplicaSet = {
             appName,
             machineId: "",
@@ -2088,14 +1913,7 @@ export const ServiceProvider = () =>
           });
         }),
 
-        delete: Effect.fn(function* ({
-          id,
-          fqn,
-          instanceId,
-          olds,
-          output,
-          force,
-        }) {
+        delete: Effect.fn(function* ({ id, fqn, instanceId, olds, output, force }) {
           const appName = output.appName || appNameOf(olds.app);
           // A precreate stub that never reached its App has nothing to delete.
           if (appName === undefined || appName.length === 0) return;

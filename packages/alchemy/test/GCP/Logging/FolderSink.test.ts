@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as logging from "@distilled.cloud/gcp/logging_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 const destinationOf = (project: string) =>
   `logging.googleapis.com/projects/${project}/locations/global/buckets/_Default`;
 
@@ -47,9 +44,7 @@ test.provider(
 
       expect(created.sinkId).toEqual(expect.any(String));
       expect(created.parent).toEqual(`projects/${project}`);
-      expect(created.name).toEqual(
-        `projects/${project}/sinks/${created.sinkId}`,
-      );
+      expect(created.name).toEqual(`projects/${project}/sinks/${created.sinkId}`);
       expect(created.destination).toEqual(destinationOf(project));
       expect(created.filter).toEqual("severity>=ERROR");
       expect(created.description).toEqual("application errors");

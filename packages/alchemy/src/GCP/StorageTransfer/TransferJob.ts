@@ -42,9 +42,7 @@ export type NotificationConfig = storagetransfer.NotificationConfig;
 export type LoggingConfig = storagetransfer.LoggingConfig;
 export type Schedule = storagetransfer.Schedule;
 export type EventStream = storagetransfer.EventStream;
-export type TransferJobStatus =
-  | storagetransfer.TransferJobStatusEnum
-  | (string & {});
+export type TransferJobStatus = storagetransfer.TransferJobStatusEnum | (string & {});
 
 export type TransferJobProps = {
   /**
@@ -202,9 +200,7 @@ export type TransferJob = Resource<
  * @resource
  * @category StorageTransfer
  */
-export const TransferJob = Resource<TransferJob>(
-  "GCP.StorageTransfer.TransferJob",
-);
+export const TransferJob = Resource<TransferJob>("GCP.StorageTransfer.TransferJob");
 
 export class TransferJobNotResolved extends Data.TaggedError(
   "GCP.StorageTransfer.TransferJobNotResolved",
@@ -250,21 +246,15 @@ const replaceOnImmutable = (
     | undefined,
 ) => {
   const previousId = previous?.jobId ?? output?.jobId;
-  const nextId =
-    news.jobId !== undefined ? sanitizeJobId(news.jobId) : previousId;
-  if (
-    previousId !== undefined &&
-    nextId !== undefined &&
-    previousId !== nextId
-  ) {
+  const nextId = news.jobId !== undefined ? sanitizeJobId(news.jobId) : previousId;
+  if (previousId !== undefined && nextId !== undefined && previousId !== nextId) {
     return { action: "replace" as const, deleteFirst: false };
   }
   if (output === undefined && previous === undefined) return undefined;
   const observedSchedule = previous?.schedule ?? output?.schedule;
   const observedStream = previous?.eventStream ?? output?.eventStream;
   const observedAccount = previous?.serviceAccount ?? output?.serviceAccount;
-  const observedReplication =
-    previous?.replicationSpec ?? output?.replicationSpec;
+  const observedReplication = previous?.replicationSpec ?? output?.replicationSpec;
   if (!sameValue(news.schedule, observedSchedule)) {
     return { action: "replace" as const, deleteFirst: false };
   }
@@ -315,9 +305,7 @@ export const TransferJobProvider = () =>
       const existing = yield* getTransferJob(name, env.project);
       if (existing === undefined || isDeletedJob(existing)) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -325,9 +313,7 @@ export const TransferJobProvider = () =>
         const env = yield* GcpEnvironment.current;
         const jobs = yield* listTransferJobs(env.project);
         return jobs
-          .filter(
-            (job) => !isDeletedJob(job) && hasOwnershipMarker(job.description),
-          )
+          .filter((job) => !isDeletedJob(job) && hasOwnershipMarker(job.description))
           .map((job) => toAttrs(job, env.project));
       }),
 
@@ -346,9 +332,7 @@ export const TransferJobProvider = () =>
           storagetransfer.createTransferJobs({
             body: toCreateBody(name, env.project, news, desiredDescription),
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () => getTransferJob(name, env.project)),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => getTransferJob(name, env.project)));
         current = created ?? undefined;
       }
 
@@ -364,9 +348,7 @@ export const TransferJobProvider = () =>
             updateTransferJobFieldMask: fieldMask([
               "description",
               news.transferSpec !== undefined ? "transfer_spec" : undefined,
-              news.notificationConfig !== undefined
-                ? "notification_config"
-                : undefined,
+              news.notificationConfig !== undefined ? "notification_config" : undefined,
               news.loggingConfig !== undefined ? "logging_config" : undefined,
               "status",
             ]),
@@ -381,23 +363,14 @@ export const TransferJobProvider = () =>
         });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const specChanged = !sameValue(current.transferSpec, news.transferSpec);
-      const notificationChanged = !sameValue(
-        current.notificationConfig,
-        news.notificationConfig,
-      );
-      const loggingChanged = !sameValue(
-        current.loggingConfig,
-        news.loggingConfig,
-      );
+      const notificationChanged = !sameValue(current.notificationConfig, news.notificationConfig);
+      const loggingChanged = !sameValue(current.loggingConfig, news.loggingConfig);
       const statusChanged = (current.status ?? "") !== desiredStatus;
       const updateMask = fieldMask([
         descriptionChanged ? "description" : undefined,
-        specChanged && news.transferSpec !== undefined
-          ? "transfer_spec"
-          : undefined,
+        specChanged && news.transferSpec !== undefined ? "transfer_spec" : undefined,
         notificationChanged ? "notification_config" : undefined,
         loggingChanged ? "logging_config" : undefined,
         statusChanged ? "status" : undefined,

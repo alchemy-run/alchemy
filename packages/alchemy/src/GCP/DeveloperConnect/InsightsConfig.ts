@@ -6,12 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   compact,
@@ -189,15 +184,9 @@ export type InsightsConfig = Resource<
  * @resource
  * @category DeveloperConnect
  */
-export const InsightsConfig = Resource<InsightsConfig>(
-  "GCP.DeveloperConnect.InsightsConfig",
-);
+export const InsightsConfig = Resource<InsightsConfig>("GCP.DeveloperConnect.InsightsConfig");
 
-const resourceName = (
-  project: string,
-  location: string,
-  insightsConfigId: string,
-) =>
+const resourceName = (project: string, location: string, insightsConfigId: string) =>
   `projects/${project}/locations/${location}/insightsConfigs/${insightsConfigId}`;
 
 const toArtifactConfigs = (
@@ -212,8 +201,7 @@ const toArtifactConfigs = (
         : undefined,
       googleArtifactRegistry: config.googleArtifactRegistry
         ? compact({
-            artifactRegistryPackage:
-              config.googleArtifactRegistry.artifactRegistryPackage,
+            artifactRegistryPackage: config.googleArtifactRegistry.artifactRegistryPackage,
             projectId: config.googleArtifactRegistry.projectId,
           })
         : undefined,
@@ -232,19 +220,14 @@ const fromArtifactConfigs = (
         : undefined,
       googleArtifactRegistry: config.googleArtifactRegistry
         ? compact({
-            artifactRegistryPackage:
-              config.googleArtifactRegistry.artifactRegistryPackage,
+            artifactRegistryPackage: config.googleArtifactRegistry.artifactRegistryPackage,
             projectId: config.googleArtifactRegistry.projectId,
           })
         : undefined,
     }),
   );
 
-const toAttrs = (
-  item: developerconnect.InsightsConfig,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: developerconnect.InsightsConfig, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "insightsConfigs", region);
   return {
@@ -253,9 +236,7 @@ const toAttrs = (
     project: parsed.project || project,
     location: parsed.location,
     appHubApplication: item.appHubApplication,
-    projects: item.projects
-      ? compact({ projectIds: item.projects.projectIds })
-      : undefined,
+    projects: item.projects ? compact({ projectIds: item.projects.projectIds }) : undefined,
     artifactConfigs: fromArtifactConfigs(item.artifactConfigs),
     labels: userLabels(item.labels),
     annotations: userAnnotations(item.annotations),
@@ -294,14 +275,8 @@ export const InsightsConfigProvider = () =>
       const env = yield* GcpEnvironment.current;
       return replaceOnIdentity({
         previousId: olds?.insightsConfigId ?? output?.insightsConfigId,
-        nextId:
-          news.insightsConfigId ??
-          olds?.insightsConfigId ??
-          output?.insightsConfigId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.insightsConfigId ?? olds?.insightsConfigId ?? output?.insightsConfigId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -324,18 +299,12 @@ export const InsightsConfigProvider = () =>
         output?.insightsConfigId,
         "insightsconfig",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, insightsConfigId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, insightsConfigId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -353,10 +322,7 @@ export const InsightsConfigProvider = () =>
         output?.insightsConfigId,
         "insightsconfig",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, insightsConfigId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -366,17 +332,10 @@ export const InsightsConfigProvider = () =>
       const appHubApplication =
         news.appHubApplication === undefined
           ? undefined
-          : expandParent(
-              news.appHubApplication,
-              env.project,
-              location,
-              "applications",
-            );
+          : expandParent(news.appHubApplication, env.project, location, "applications");
       const body = compact({
         appHubApplication,
-        projects: news.projects
-          ? compact({ projectIds: news.projects.projectIds })
-          : undefined,
+        projects: news.projects ? compact({ projectIds: news.projects.projectIds }) : undefined,
         artifactConfigs: toArtifactConfigs(news.artifactConfigs),
         labels: desiredLabels,
         annotations,
@@ -437,10 +396,7 @@ export const InsightsConfigProvider = () =>
         } else {
           yield* waitForOperation(operation);
         }
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

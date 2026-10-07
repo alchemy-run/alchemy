@@ -1,7 +1,7 @@
-import { Task } from "@/AWS/ECS/Task.ts";
-import * as Dockerfile from "@/Docker/Dockerfile.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { Task } from "@/AWS/ECS/Task.ts";
+import * as Dockerfile from "@/Docker/Dockerfile.ts";
 
 /**
  * A one-shot `AWS.ECS.Task` whose ENVIRONMENT is inline Dockerfile content
@@ -15,9 +15,7 @@ import * as FileSystem from "effect/FileSystem";
  * (the `RUN` executed during the build), and the Effect bundle was layered
  * on top of that environment (the program ran inside it).
  */
-export class InlineDockerfileTask extends Task<InlineDockerfileTask>()(
-  "EcsInlineDockerfileTask",
-) {}
+export class InlineDockerfileTask extends Task<InlineDockerfileTask>()("EcsInlineDockerfileTask") {}
 
 export default InlineDockerfileTask.make(
   {
@@ -42,9 +40,7 @@ RUN echo inline-env-artifact > /inline-artifact.txt
       run: Effect.gen(function* () {
         const artifact = yield* fs.readFileString("/inline-artifact.txt");
         if (artifact.trim() !== "inline-env-artifact") {
-          return yield* Effect.die(
-            new Error(`unexpected artifact content: ${artifact}`),
-          );
+          return yield* Effect.die(new Error(`unexpected artifact content: ${artifact}`));
         }
         yield* Effect.log("alchemy-inline-dockerfile-artifact-ok");
       }).pipe(Effect.orDie),

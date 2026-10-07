@@ -207,10 +207,7 @@ const contentOf = (value: string | undefined) => value ?? "NO_CONTENT";
 const solutionsOf = (value: readonly string[] | undefined) =>
   value && value.length > 0 ? [...value] : ["SOLUTION_TYPE_SEARCH"];
 
-const toAttrs = (
-  store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore,
-  project: string,
-) => {
+const toAttrs = (store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore, project: string) => {
   const name = store.name ?? "";
   const parsed = parseResourceName(name, "dataStores");
   return {
@@ -225,8 +222,7 @@ const toAttrs = (
     solutionTypes: [...(store.solutionTypes ?? [])],
     aclEnabled: store.aclEnabled === true,
     defaultSchemaId: store.defaultSchemaId,
-    disabledForServing:
-      store.servingConfigDataStore?.disabledForServing === true,
+    disabledForServing: store.servingConfigDataStore?.disabledForServing === true,
     createTime: store.createTime,
   };
 };
@@ -241,13 +237,10 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store
-        ? Effect.succeed(store)
-        : Effect.fail(new CollectionsDataStoreNotResolved({ name })),
+      store ? Effect.succeed(store) : Effect.fail(new CollectionsDataStoreNotResolved({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
       times: 8,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -261,8 +254,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new CollectionsDataStoreStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
+      while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
@@ -285,38 +277,24 @@ export const CollectionsDataStoreProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.dataStoreId ?? output?.dataStoreId;
       const nextId = news.dataStoreId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
-      const previousCollection = normalizeCollection(
-        olds?.collection ?? output?.collection,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
+      const previousCollection = normalizeCollection(olds?.collection ?? output?.collection);
       const nextCollection = normalizeCollection(
         news.collection ?? olds?.collection ?? output?.collection,
       );
-      const previousVertical = verticalOf(
-        olds?.industryVertical ?? output?.industryVertical,
-      );
+      const previousVertical = verticalOf(olds?.industryVertical ?? output?.industryVertical);
       const nextVertical = verticalOf(
-        news.industryVertical ??
-          olds?.industryVertical ??
-          output?.industryVertical,
+        news.industryVertical ?? olds?.industryVertical ?? output?.industryVertical,
       );
-      const previousContent = contentOf(
-        olds?.contentConfig ?? output?.contentConfig,
-      );
+      const previousContent = contentOf(olds?.contentConfig ?? output?.contentConfig);
       const nextContent = contentOf(
         news.contentConfig ?? olds?.contentConfig ?? output?.contentConfig,
       );
       const previousAcl = olds?.aclEnabled ?? output?.aclEnabled ?? false;
       const nextAcl = news.aclEnabled ?? previousAcl;
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousCollection !== nextCollection ||
         previousVertical !== nextVertical ||
@@ -335,18 +313,11 @@ export const CollectionsDataStoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const dataStoreId = yield* toResourceId(
-        id,
-        olds?.dataStoreId,
-        output?.dataStoreId,
-      );
+      const dataStoreId = yield* toResourceId(id, olds?.dataStoreId, output?.dataStoreId);
       const location = normalizeLocation(olds?.location ?? output?.location);
-      const collection = normalizeCollection(
-        olds?.collection ?? output?.collection,
-      );
+      const collection = normalizeCollection(olds?.collection ?? output?.collection);
       const existing = yield* getByName(
-        output?.name ??
-          dataStoreName(env.project, location, collection, dataStoreId),
+        output?.name ?? dataStoreName(env.project, location, collection, dataStoreId),
       );
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -357,20 +328,9 @@ export const CollectionsDataStoreProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const collection = normalizeCollection(
-        news.collection ?? output?.collection,
-      );
-      const dataStoreId = yield* toResourceId(
-        id,
-        news.dataStoreId,
-        output?.dataStoreId,
-      );
-      const name = dataStoreName(
-        env.project,
-        location,
-        collection,
-        dataStoreId,
-      );
+      const collection = normalizeCollection(news.collection ?? output?.collection);
+      const dataStoreId = yield* toResourceId(id, news.dataStoreId, output?.dataStoreId);
+      const name = dataStoreName(env.project, location, collection, dataStoreId);
       const displayName = news.displayName ?? dataStoreId;
       const industryVertical = verticalOf(news.industryVertical);
       const contentConfig = contentOf(news.contentConfig);
@@ -414,32 +374,27 @@ export const CollectionsDataStoreProvider = () =>
 
       const resource = current.name ?? name;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const observedDisabled =
-        current.servingConfigDataStore?.disabledForServing === true;
+      const observedDisabled = current.servingConfigDataStore?.disabledForServing === true;
       const servingChanged =
-        news.disabledForServing !== undefined &&
-        observedDisabled !== desiredDisabled;
+        news.disabledForServing !== undefined && observedDisabled !== desiredDisabled;
 
       if (displayNameChanged || servingChanged) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsCollectionsDataStores({
+        current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStores({
+          name: resource,
+          updateMask: [
+            displayNameChanged ? "display_name" : undefined,
+            servingChanged ? "serving_config_data_store.disabled_for_serving" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: {
             name: resource,
-            updateMask: [
-              displayNameChanged ? "display_name" : undefined,
-              servingChanged
-                ? "serving_config_data_store.disabled_for_serving"
-                : undefined,
-            ]
-              .filter((field): field is string => field !== undefined)
-              .join(","),
-            body: {
-              name: resource,
-              displayName,
-              servingConfigDataStore: servingChanged
-                ? { disabledForServing: desiredDisabled }
-                : current.servingConfigDataStore,
-            },
-          });
+            displayName,
+            servingConfigDataStore: servingChanged
+              ? { disabledForServing: desiredDisabled }
+              : current.servingConfigDataStore,
+          },
+        });
       }
 
       return toAttrs(current, env.project);

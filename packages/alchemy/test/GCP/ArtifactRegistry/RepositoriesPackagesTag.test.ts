@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { IMAGE, pushDockerVersion } from "./registry.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   artifactregistry.getProjectsLocationsRepositoriesPackagesTags({ name }).pipe(
@@ -26,17 +23,15 @@ const waitUntilGone = (name: string) =>
   );
 
 const waitForVersion = (name: string) =>
-  artifactregistry
-    .getProjectsLocationsRepositoriesPackagesVersions({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("missing" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "found",
-        times: 10,
-      }),
-    );
+  artifactregistry.getProjectsLocationsRepositoriesPackagesVersions({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("missing" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "found",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "create, update, and delete a package tag",
@@ -69,15 +64,12 @@ test.provider(
             format: "DOCKER",
             description: "tag parent",
           });
-          const tag = yield* GCP.ArtifactRegistry.RepositoriesPackagesTag(
-            "Stable",
-            {
-              repository: images.name,
-              packageId: IMAGE,
-              tagId: "stable",
-              version: v1,
-            },
-          );
+          const tag = yield* GCP.ArtifactRegistry.RepositoriesPackagesTag("Stable", {
+            repository: images.name,
+            packageId: IMAGE,
+            tagId: "stable",
+            version: v1,
+          });
           return { images, tag };
         }),
       );
@@ -87,10 +79,9 @@ test.provider(
       expect(created.tag.packageId).toEqual(IMAGE);
       expect(created.tag.version).toEqual(v1);
 
-      const fetched =
-        yield* artifactregistry.getProjectsLocationsRepositoriesPackagesTags({
-          name: created.tag.name,
-        });
+      const fetched = yield* artifactregistry.getProjectsLocationsRepositoriesPackagesTags({
+        name: created.tag.name,
+      });
       expect(fetched.name).toEqual(created.tag.name);
       expect(fetched.version).toEqual(v1);
 
@@ -102,15 +93,12 @@ test.provider(
             format: "DOCKER",
             description: "tag parent",
           });
-          const tag = yield* GCP.ArtifactRegistry.RepositoriesPackagesTag(
-            "Stable",
-            {
-              repository: images.name,
-              packageId: IMAGE,
-              tagId: "stable",
-              version: v2,
-            },
-          );
+          const tag = yield* GCP.ArtifactRegistry.RepositoriesPackagesTag("Stable", {
+            repository: images.name,
+            packageId: IMAGE,
+            tagId: "stable",
+            version: v2,
+          });
           return { images, tag };
         }),
       );
@@ -118,10 +106,9 @@ test.provider(
       expect(updated.tag.name).toEqual(created.tag.name);
       expect(updated.tag.version).toEqual(v2);
 
-      const refetched =
-        yield* artifactregistry.getProjectsLocationsRepositoriesPackagesTags({
-          name: created.tag.name,
-        });
+      const refetched = yield* artifactregistry.getProjectsLocationsRepositoriesPackagesTags({
+        name: created.tag.name,
+      });
       expect(refetched.version).toEqual(v2);
 
       yield* stack.destroy();

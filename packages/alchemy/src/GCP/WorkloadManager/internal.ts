@@ -23,16 +23,12 @@ export class ResourceStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class ResourceNotReady extends Data.TaggedError(
-  "GCP.WorkloadManager.ResourceNotReady",
-)<{
+export class ResourceNotReady extends Data.TaggedError("GCP.WorkloadManager.ResourceNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class ResourceFailed extends Data.TaggedError(
-  "GCP.WorkloadManager.ResourceFailed",
-)<{
+export class ResourceFailed extends Data.TaggedError("GCP.WorkloadManager.ResourceFailed")<{
   name: string;
   state: string;
   details: string | undefined;
@@ -57,10 +53,8 @@ export const rfc1035 = (name: string, fallback = "workloadmanager"): string => {
   return next.slice(0, MAX_NAME_LENGTH);
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${lastSegment(location).toLowerCase()}`;
@@ -113,26 +107,16 @@ export const toActuationId = (
 export const hasAlchemyActuationId = (actuationId: string) =>
   actuationId.startsWith(ACTUATION_ID_PREFIX);
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -163,9 +147,8 @@ export const stringMap = (
     ),
   );
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const canonical = (value: unknown): unknown => {
   if (value === undefined || value === null) return undefined;
@@ -188,13 +171,10 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 export const fieldMask = (fields: Array<string | false | undefined>) =>
-  fields
-    .filter((field): field is string => typeof field === "string")
-    .join(",");
+  fields.filter((field): field is string => typeof field === "string").join(",");
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -203,8 +183,7 @@ export const sameStringList = (
   left: readonly string[] | undefined,
   right: readonly string[] | undefined,
 ) =>
-  fingerprint([...(left ?? [])].slice().sort()) ===
-  fingerprint([...(right ?? [])].slice().sort());
+  fingerprint([...(left ?? [])].slice().sort()) === fingerprint([...(right ?? [])].slice().sort());
 
 export const replaceOnIdentity = (input: {
   previousId: string | undefined;
@@ -251,26 +230,14 @@ export const resourceNameFromOperation = (
   operation: workloadmanager.Operation,
 ): string | undefined => {
   const response = operation.response;
-  if (
-    response &&
-    typeof response.name === "string" &&
-    response.name.length > 0
-  ) {
+  if (response && typeof response.name === "string" && response.name.length > 0) {
     return response.name;
   }
   const metadata = operation.metadata;
-  if (
-    metadata &&
-    typeof metadata.target === "string" &&
-    metadata.target.length > 0
-  ) {
+  if (metadata && typeof metadata.target === "string" && metadata.target.length > 0) {
     return metadata.target;
   }
-  if (
-    metadata &&
-    typeof metadata.name === "string" &&
-    metadata.name.length > 0
-  ) {
+  if (metadata && typeof metadata.name === "string" && metadata.name.length > 0) {
     return metadata.name;
   }
   return undefined;
@@ -296,8 +263,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.WorkloadManager.ResourceNotResolved",
+      while: (error) => error._tag === "GCP.WorkloadManager.ResourceNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -313,8 +279,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
       () => new ResourceStillExists({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.WorkloadManager.ResourceStillExists",
+      while: (error) => error._tag === "GCP.WorkloadManager.ResourceStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -376,9 +341,7 @@ export const listAtLocation = <A, E extends { readonly _tag: string }, R>(
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-`).pipe(
-    Effect.catchIf(isNotFound, () =>
-      list(`projects/${project}/locations/${region}`),
-    ),
+    Effect.catchIf(isNotFound, () => list(`projects/${project}/locations/${region}`)),
   );
 
 export const listAtNested = <A, E extends { readonly _tag: string }, R>(
@@ -388,9 +351,7 @@ export const listAtNested = <A, E extends { readonly _tag: string }, R>(
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ) =>
   list(`projects/${project}/locations/-/${nested}`).pipe(
-    Effect.catchIf(isNotFound, () =>
-      list(`projects/${project}/locations/${region}/${nested}`),
-    ),
+    Effect.catchIf(isNotFound, () => list(`projects/${project}/locations/${region}/${nested}`)),
   );
 
 export const listLabeledPages = <Page, A, E, R>(

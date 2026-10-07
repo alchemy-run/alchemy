@@ -27,12 +27,8 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type UtilizationReportTimeFrame =
-  | vm.UtilizationReportTimeFrameEnum
-  | (string & {});
-export type UtilizationReportState =
-  | vm.UtilizationReportStateEnum
-  | (string & {});
+export type UtilizationReportTimeFrame = vm.UtilizationReportTimeFrameEnum | (string & {});
+export type UtilizationReportState = vm.UtilizationReportStateEnum | (string & {});
 export type VmUtilizationInfo = vm.VmUtilizationInfo;
 
 export type SourcesUtilizationReportProps = {
@@ -135,11 +131,7 @@ const DEFAULT_TIME_FRAME: UtilizationReportTimeFrame = "WEEK";
 const resourceName = (source: string, utilizationReportId: string) =>
   `${source}/utilizationReports/${utilizationReportId}`;
 
-const toAttrs = (
-  report: vm.UtilizationReport,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (report: vm.UtilizationReport, project: string, region: string) => {
   const name = report.name ?? "";
   const parsed = parseName(name, "utilizationReports", region);
   const ownership = parseOwnership(report.displayName);
@@ -174,29 +166,17 @@ const listChildren = (parent: string) =>
       view: "BASIC",
     }),
     (page) => page.utilizationReports,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as vm.UtilizationReport[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as vm.UtilizationReport[])));
 
 export const SourcesUtilizationReportProvider = () =>
   Provider.succeed(SourcesUtilizationReport, {
-    stables: [
-      "name",
-      "utilizationReportId",
-      "source",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "utilizationReportId", "source", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousSource = olds?.source ?? output?.source;
-      const previousFrame =
-        olds?.timeFrame ?? output?.timeFrame ?? DEFAULT_TIME_FRAME;
+      const previousFrame = olds?.timeFrame ?? output?.timeFrame ?? DEFAULT_TIME_FRAME;
       const nextFrame = news.timeFrame ?? previousFrame;
       const extra =
         previousFrame !== nextFrame ||
@@ -205,13 +185,8 @@ export const SourcesUtilizationReportProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.utilizationReportId ?? output?.utilizationReportId,
         nextId:
-          news.utilizationReportId ??
-          olds?.utilizationReportId ??
-          output?.utilizationReportId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.utilizationReportId ?? olds?.utilizationReportId ?? output?.utilizationReportId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -224,10 +199,7 @@ export const SourcesUtilizationReportProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const utilizationReportId = yield* toPhysicalId(
         id,
         olds?.utilizationReportId,
@@ -239,24 +211,17 @@ export const SourcesUtilizationReportProvider = () =>
           ? sourceOf(olds.source, env.project, location)
           : (output?.source ?? "");
       const name =
-        output?.name ??
-        (source.length > 0 ? resourceName(source, utilizationReportId) : "");
+        output?.name ?? (source.length > 0 ? resourceName(source, utilizationReportId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* forEachSource(
-          env.project,
-          listChildren,
-          env.region,
-        );
+        const items = yield* forEachSource(env.project, listChildren, env.region);
         return items
           .filter((item) => hasOwnershipMarker(item.displayName))
           .map((item) => toAttrs(item, env.project, env.region));
@@ -264,10 +229,7 @@ export const SourcesUtilizationReportProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const source = sourceOf(news.source, env.project, location);
       const utilizationReportId = yield* toPhysicalId(
         id,
@@ -277,10 +239,7 @@ export const SourcesUtilizationReportProvider = () =>
       );
       const name = resourceName(source, utilizationReportId);
       const ownership = yield* createInternalLabels(id);
-      const displayName = encodeOwnershipLine(
-        ownership,
-        news.displayName ?? utilizationReportId,
-      );
+      const displayName = encodeOwnershipLine(ownership, news.displayName ?? utilizationReportId);
       const timeFrame = news.timeFrame ?? DEFAULT_TIME_FRAME;
 
       let current = yield* getByName(output?.name ?? name);

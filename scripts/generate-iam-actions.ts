@@ -28,14 +28,10 @@
  * question in dsl-abstractions.md. The escape hatch covers the gap.
  */
 
-const SERVICES_DIR = new URL(
-  "../submodules/distilled/packages/aws/src/services/",
-  import.meta.url,
-).pathname;
-const OUT_FILE = new URL(
-  "../packages/alchemy/src/AWS/IAM/actions.generated.ts",
-  import.meta.url,
-).pathname;
+const SERVICES_DIR = new URL("../submodules/distilled/packages/aws/src/services/", import.meta.url)
+  .pathname;
+const OUT_FILE = new URL("../packages/alchemy/src/AWS/IAM/actions.generated.ts", import.meta.url)
+  .pathname;
 
 /**
  * sigv4 signing name -> IAM action service prefix, for the known cases where
@@ -55,9 +51,7 @@ const { readdir } = await import("node:fs/promises");
 const { readFileSync, writeFileSync } = await import("node:fs");
 const { join } = await import("node:path");
 
-const files = (await readdir(SERVICES_DIR)).filter(
-  (f) => f.endsWith(".ts") && f !== "index.ts",
-);
+const files = (await readdir(SERVICES_DIR)).filter((f) => f.endsWith(".ts") && f !== "index.ts");
 
 /** IAM action prefix -> operation names */
 const byPrefix = new Map<string, Set<string>>();

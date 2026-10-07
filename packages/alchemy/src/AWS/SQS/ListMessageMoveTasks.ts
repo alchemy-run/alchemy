@@ -41,10 +41,7 @@ export interface ListMessageMoveTasks extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListMessageMoveTasksRequest,
-    ) => Effect.Effect<
-      sqs.ListMessageMoveTasksResult,
-      sqs.ListMessageMoveTasksError
-    >
+    ) => Effect.Effect<sqs.ListMessageMoveTasksResult, sqs.ListMessageMoveTasksError>
   >
 > {}
 

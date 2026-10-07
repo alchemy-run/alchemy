@@ -1,10 +1,10 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { artifactFileStream, type ArtifactFile } from "./ArtifactFile.ts";
 import { PrismaUploadClient } from "./HttpClient.ts";
 
@@ -22,9 +22,7 @@ export const executeArtifactUpload = (
     // file-backed bodies); fall back to the ambient client so tests can
     // stub uploads through `HttpClient.HttpClient`.
     const uploadClient = yield* Effect.serviceOption(PrismaUploadClient);
-    const http = Option.isSome(uploadClient)
-      ? uploadClient.value
-      : yield* HttpClient.HttpClient;
+    const http = Option.isSome(uploadClient) ? uploadClient.value : yield* HttpClient.HttpClient;
     const request = HttpClientRequest.put(uploadUrl).pipe(
       artifact instanceof Uint8Array
         ? HttpClientRequest.bodyUint8Array(artifact, contentType)
@@ -35,17 +33,12 @@ export const executeArtifactUpload = (
     );
     const responseOption = yield* http.execute(request).pipe(
       Effect.mapError(
-        () =>
-          new Error(
-            "Prisma artifact upload transport failed before a response was received.",
-          ),
+        () => new Error("Prisma artifact upload transport failed before a response was received."),
       ),
       Effect.timeoutOption(ARTIFACT_UPLOAD_TIMEOUT),
     );
     if (Option.isNone(responseOption)) {
-      return yield* Effect.fail(
-        new Error("Prisma artifact upload timed out after 5 minutes."),
-      );
+      return yield* Effect.fail(new Error("Prisma artifact upload timed out after 5 minutes."));
     }
     const response = responseOption.value;
     if (response.status < 200 || response.status >= 300) {
@@ -61,9 +54,7 @@ export const executeArtifactUpload = (
         onSome: (bytes) => `diagnostic body prefix: ${bytes} bytes`,
       });
       return yield* Effect.fail(
-        new Error(
-          `Prisma artifact upload failed (HTTP ${response.status}; ${diagnostic}).`,
-        ),
+        new Error(`Prisma artifact upload failed (HTTP ${response.status}; ${diagnostic}).`),
       );
     }
   });

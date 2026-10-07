@@ -1,12 +1,12 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
-import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
 import PubSubBindingsHost, {
   EventSchema,
@@ -42,14 +42,10 @@ let names: {
   schema: string;
 };
 
-const decode = (data: string | undefined) =>
-  Buffer.from(data ?? "", "base64").toString("utf8");
+const decode = (data: string | undefined) => Buffer.from(data ?? "", "base64").toString("utf8");
 
 /** Roles `member` holds on a resource's IAM policy. */
-const rolesOf = (
-  policy: { bindings?: { role?: string; members?: string[] }[] },
-  member: string,
-) =>
+const rolesOf = (policy: { bindings?: { role?: string; members?: string[] }[] }, member: string) =>
   (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(member))
     .map((binding) => binding.role)
@@ -143,10 +139,7 @@ describe.skipIf(!dockerAvailable)(
         "publishes to the topic, granted publisher on the topic only",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{ messageIds?: string[] }>(
-              baseUrl,
-              "publish",
-            );
+            const out = yield* expectProbe<{ messageIds?: string[] }>(baseUrl, "publish");
             expect(out.messageIds).toHaveLength(1);
 
             const [message] = yield* drain(names.publishTap, 1);
@@ -172,19 +165,14 @@ describe.skipIf(!dockerAvailable)(
         (_stack) =>
           Effect.gen(function* () {
             yield* publishOutOfBand(names.pullTopic, "pull-me");
-            const texts = yield* expectProbe<string[]>(
-              baseUrl,
-              "pullAndAcknowledge",
-            );
+            const texts = yield* expectProbe<string[]>(baseUrl, "pullAndAcknowledge");
             expect(texts).toEqual(["pull-me"]);
             yield* expectNoRedelivery(names.pullInbox);
 
             const policy = yield* pubsub.getIamPolicyProjectsSubscriptions({
               resource: names.pullInbox,
             });
-            expect(rolesOf(policy, member)).toEqual([
-              "roles/pubsub.subscriber",
-            ]);
+            expect(rolesOf(policy, member)).toEqual(["roles/pubsub.subscriber"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
@@ -209,17 +197,13 @@ describe.skipIf(!dockerAvailable)(
 
             // Out of band: every message landed with its payload intact.
             const received = yield* drain(names.writeTap, 3);
-            const byId = new Map(
-              received.map((m) => [m.message?.messageId, m.message]),
-            );
+            const byId = new Map(received.map((m) => [m.message?.messageId, m.message]));
             expect(decode(byId.get(out.id)?.data)).toEqual(WRITE_PAYLOAD);
             expect(byId.get(out.id)?.attributes).toEqual({ via: "WriteTopic" });
-            expect(decode(byId.get(out.batch[0])?.data)).toEqual(
-              WRITE_BATCH_TEXT,
+            expect(decode(byId.get(out.batch[0])?.data)).toEqual(WRITE_BATCH_TEXT);
+            expect([...Buffer.from(byId.get(out.batch[1])?.data ?? "", "base64")]).toEqual(
+              WRITE_BATCH_BYTES,
             );
-            expect([
-              ...Buffer.from(byId.get(out.batch[1])?.data ?? "", "base64"),
-            ]).toEqual(WRITE_BATCH_BYTES);
 
             const policy = yield* pubsub.getIamPolicyProjectsTopics({
               resource: names.writeTopic,
@@ -248,9 +232,7 @@ describe.skipIf(!dockerAvailable)(
             const policy = yield* pubsub.getIamPolicyProjectsSubscriptions({
               resource: names.readInbox,
             });
-            expect(rolesOf(policy, member)).toEqual([
-              "roles/pubsub.subscriber",
-            ]);
+            expect(rolesOf(policy, member)).toEqual(["roles/pubsub.subscriber"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
@@ -264,10 +246,7 @@ describe.skipIf(!dockerAvailable)(
         "reads the schema, granted viewer on the schema",
         (_stack) =>
           Effect.gen(function* () {
-            const live = yield* expectProbe<pubsub.Pubsub_Schema>(
-              baseUrl,
-              "getSchema",
-            );
+            const live = yield* expectProbe<pubsub.Pubsub_Schema>(baseUrl, "getSchema");
             expect(live.name).toEqual(names.schema);
             expect(live.type).toEqual("AVRO");
             expect(JSON.parse(live.definition ?? "{}")).toMatchObject({
@@ -295,9 +274,7 @@ describe.skipIf(!dockerAvailable)(
             expect(valid).toEqual({});
 
             const invalid = yield* callProbe(baseUrl, "validateInvalid");
-            expect(invalid.ok ? "ok" : invalid.error._tag).toEqual(
-              "BadRequest",
-            );
+            expect(invalid.ok ? "ok" : invalid.error._tag).toEqual("BadRequest");
 
             const { project } = yield* GcpEnvironment.current;
             const policy = yield* resourcemanager.getIamPolicyProjects({

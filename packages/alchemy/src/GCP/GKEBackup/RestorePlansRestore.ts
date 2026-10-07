@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -132,9 +127,7 @@ export type RestorePlansRestore = Resource<
     /** Resource filter applied to this Restore. */
     filter: RestoreFilter | undefined;
     /** Volume policy overrides. */
-    volumeDataRestorePolicyOverrides:
-      | VolumeDataRestorePolicyOverride[]
-      | undefined;
+    volumeDataRestorePolicyOverrides: VolumeDataRestorePolicyOverride[] | undefined;
     /** Human-readable description. */
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
@@ -210,8 +203,7 @@ export const RestorePlansRestore = Resource<RestorePlansRestore>(
   "GCP.GKEBackup.RestorePlansRestore",
 );
 
-const resourceName = (plan: string, restoreId: string) =>
-  `${plan}/restores/${restoreId}`;
+const resourceName = (plan: string, restoreId: string) => `${plan}/restores/${restoreId}`;
 
 const toSelector = (item: gkebackup.ResourceSelector): ResourceSelector => ({
   groupKind: item.groupKind,
@@ -227,9 +219,7 @@ const toSelector = (item: gkebackup.ResourceSelector): ResourceSelector => ({
   name: item.name,
 });
 
-const toFilter = (
-  filter: gkebackup.Filter | undefined,
-): RestoreFilter | undefined =>
+const toFilter = (filter: gkebackup.Filter | undefined): RestoreFilter | undefined =>
   filter === undefined
     ? undefined
     : {
@@ -247,9 +237,7 @@ const toOverrides = (
         selectedPvcs: item.selectedPvcs,
       }));
 
-const toRestoreConfig = (
-  config: gkebackup.RestoreConfig | undefined,
-): RestoreConfig | undefined =>
+const toRestoreConfig = (config: gkebackup.RestoreConfig | undefined): RestoreConfig | undefined =>
   config === undefined
     ? undefined
     : {
@@ -281,9 +269,7 @@ const toAttrs = (item: gkebackup.Restore, project: string, region: string) => {
     cluster: item.cluster,
     restoreConfig: toRestoreConfig(item.restoreConfig),
     filter: toFilter(item.filter),
-    volumeDataRestorePolicyOverrides: toOverrides(
-      item.volumeDataRestorePolicyOverrides,
-    ),
+    volumeDataRestorePolicyOverrides: toOverrides(item.volumeDataRestorePolicyOverrides),
     description: item.description,
     labels: userLabels(item.labels),
     state: item.state,
@@ -330,15 +316,7 @@ const expandBackup = (value: string, restorePlan: string) => {
 
 export const RestorePlansRestoreProvider = () =>
   Provider.succeed(RestorePlansRestore, {
-    stables: [
-      "name",
-      "restoreId",
-      "restorePlan",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "restoreId", "restorePlan", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -347,10 +325,7 @@ export const RestorePlansRestoreProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.restoreId ?? output?.restoreId,
         nextId: news.restoreId ?? olds?.restoreId ?? output?.restoreId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -367,16 +342,8 @@ export const RestorePlansRestoreProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const restoreId = yield* toPhysicalId(
-        id,
-        olds?.restoreId,
-        output?.restoreId,
-        "restore",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const restoreId = yield* toPhysicalId(id, olds?.restoreId, output?.restoreId, "restore");
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const plan = expandParent(
         olds?.restorePlan ?? output?.restorePlan ?? "",
         env.project,
@@ -387,9 +354,7 @@ export const RestorePlansRestoreProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -401,22 +366,9 @@ export const RestorePlansRestoreProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const restoreId = yield* toPhysicalId(
-        id,
-        news.restoreId,
-        output?.restoreId,
-        "restore",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const plan = expandParent(
-        news.restorePlan,
-        env.project,
-        location,
-        "restorePlans",
-      );
+      const restoreId = yield* toPhysicalId(id, news.restoreId, output?.restoreId, "restore");
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const plan = expandParent(news.restorePlan, env.project, location, "restorePlans");
       const name = resourceName(plan, restoreId);
       const backup = news.backup.includes("/")
         ? news.backup.replace(/\/+$/, "")
@@ -436,8 +388,7 @@ export const RestorePlansRestoreProvider = () =>
             body: {
               backup,
               filter: news.filter,
-              volumeDataRestorePolicyOverrides:
-                news.volumeDataRestorePolicyOverrides,
+              volumeDataRestorePolicyOverrides: news.volumeDataRestorePolicyOverrides,
               description: news.description,
               labels: desiredLabels,
             },
@@ -461,21 +412,17 @@ export const RestorePlansRestoreProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* gkebackup.patchProjectsLocationsRestorePlansRestores({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+        const operation = yield* gkebackup.patchProjectsLocationsRestorePlansRestores({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

@@ -15,12 +15,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  lastSegment,
-  orgParent,
-  resolveOrgId,
-  toPhysicalId,
-} from "./operations.ts";
+import { lastSegment, orgParent, resolveOrgId, toPhysicalId } from "./operations.ts";
 
 const MAX_NAME_LENGTH = 255;
 
@@ -104,9 +99,7 @@ export type Api = Resource<
  */
 export const Api = Resource<Api>("GCP.Apigee.Api");
 
-export class ApiNotResolved extends Data.TaggedError(
-  "GCP.Apigee.ApiNotResolved",
-)<{
+export class ApiNotResolved extends Data.TaggedError("GCP.Apigee.ApiNotResolved")<{
   name: string;
 }> {}
 
@@ -142,11 +135,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApis({ name })
-    .pipe(
-      Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
 
 export const ApiProvider = () =>
   Provider.succeed(Api, {
@@ -157,9 +146,7 @@ export const ApiProvider = () =>
       const previousId = olds?.apiId ?? output?.apiId;
       const previousOrg = olds?.organizationId ?? output?.organizationId;
       if (
-        (previousId !== undefined &&
-          news.apiId !== undefined &&
-          news.apiId !== previousId) ||
+        (previousId !== undefined && news.apiId !== undefined && news.apiId !== previousId) ||
         (previousOrg !== undefined &&
           news.organizationId !== undefined &&
           news.organizationId !== previousOrg)
@@ -172,22 +159,13 @@ export const ApiProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        olds?.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
-      const apiId = yield* toPhysicalId(
-        id,
-        olds?.apiId,
-        output?.apiId,
-        MAX_NAME_LENGTH,
-      );
+        olds?.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
+      const apiId = yield* toPhysicalId(id, olds?.apiId, output?.apiId, MAX_NAME_LENGTH);
       const name = output?.name ?? resourceName(organizationId, apiId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, organizationId);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -206,9 +184,7 @@ export const ApiProvider = () =>
           );
         return (page.proxies ?? [])
           .filter((proxy) =>
-            Object.keys(proxy.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
-            ),
+            Object.keys(proxy.labels ?? {}).some((key) => key.startsWith("alchemy-")),
           )
           .map((proxy) => toAttrs(proxy, env.project, organizationId));
       }),
@@ -216,15 +192,8 @@ export const ApiProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const organizationId =
-        news.organizationId ??
-        output?.organizationId ??
-        (yield* resolveOrgId(env.project));
-      const apiId = yield* toPhysicalId(
-        id,
-        news.apiId,
-        output?.apiId,
-        MAX_NAME_LENGTH,
-      );
+        news.organizationId ?? output?.organizationId ?? (yield* resolveOrgId(env.project));
+      const apiId = yield* toPhysicalId(id, news.apiId, output?.apiId, MAX_NAME_LENGTH);
       const name = resourceName(organizationId, apiId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -268,11 +237,6 @@ export const ApiProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* apigee
         .deleteOrganizationsApis({ name: output.name })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "ApigeeResourceNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.void));
     }),
   });

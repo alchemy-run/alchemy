@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import * as Test from "@/Test/Alchemy";
 import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 // The Rapid Migration Assessment API is disabled on the testing project
 // (every call fails with ServiceDisabled). Set GCP_TEST_RMA=1 on a project
 // with the API enabled.
@@ -38,9 +35,7 @@ test.provider.skipIf(runLifecycle)(
       const missingName = `${parent}/collectors/alchemy-missing-collector`;
       yield* stack.destroy();
 
-      const error = yield* Effect.flip(
-        rma.getProjectsLocationsCollectors({ name: missingName }),
-      );
+      const error = yield* Effect.flip(rma.getProjectsLocationsCollectors({ name: missingName }));
       expect(error._tag).toEqual("ServiceDisabled");
 
       yield* stack.destroy();
@@ -107,9 +102,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.collectorId).toEqual(expect.any(String));
-      expect(created.name).toEqual(
-        `${parent}/collectors/${created.collectorId}`,
-      );
+      expect(created.name).toEqual(`${parent}/collectors/${created.collectorId}`);
       expect(created.project).toEqual(project);
       expect(created.location).toEqual("us-central1");
       expect(created.displayName).toEqual("on-prem collector");

@@ -1,5 +1,5 @@
-import * as Fly from "@/Fly";
 import type * as Effect from "effect/Effect";
+import * as Fly from "@/Fly";
 
 export interface Named {
   name: () => Effect.Effect<string>;

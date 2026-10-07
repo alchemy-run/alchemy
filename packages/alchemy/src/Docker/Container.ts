@@ -9,8 +9,11 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
+import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
+
+const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -66,15 +69,8 @@ export interface ContainerProps {
 }
 
 export declare namespace Container {
-  type Status =
-    | "created"
-    | "running"
-    | "paused"
-    | "restarting"
-    | "removing"
-    | "exited"
-    | "dead";
-  type Image = string | { imageRef: string };
+  type Status = "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead";
+  type Image = string | { imageRef: string; imageId?: string };
   interface PortMapping {
     /** External port on the host. */
     external: number | string;
@@ -280,12 +276,8 @@ export const inspectContainer = (
   context?: Docker.ContextRef,
 ): Effect.Effect<Container["Attributes"], PlatformError, Docker> =>
   Docker.pipe(
-    Effect.flatMap((docker) =>
-      docker.container.inspect(name, dockerContextName(context)),
-    ),
-    Effect.map((container) =>
-      toContainerAttributes(container, container.Config.Image),
-    ),
+    Effect.flatMap((docker) => docker.container.inspect(name, dockerContextName(context))),
+    Effect.map((container) => toContainerAttributes(container, container.Config.Image)),
   );
 
 export const ContainerProvider = () =>
@@ -306,9 +298,7 @@ export const ContainerProvider = () =>
           const entry = live.NetworkSettings.Networks?.[network.name];
           if (!entry) {
             connect.set(network.name, network);
-          } else if (
-            !Equal.equals(entry.Aliases ?? [], network.aliases ?? [])
-          ) {
+          } else if (!Equal.equals(entry.Aliases ?? [], network.aliases ?? [])) {
             connect.set(network.name, network);
             disconnect.add(network.name);
           }
@@ -320,17 +310,13 @@ export const ContainerProvider = () =>
         // compose file, or another tool had attached out of band (#1386).
         const desired = new Set((news.networks ?? []).map((n) => n.name));
         for (const network of olds?.networks ?? []) {
-          if (
-            !desired.has(network.name) &&
-            live.NetworkSettings.Networks?.[network.name]
-          ) {
+          if (!desired.has(network.name) && live.NetworkSettings.Networks?.[network.name]) {
             disconnect.add(network.name);
           }
         }
         yield* Effect.forEach(
           disconnect,
-          (network) =>
-            docker.network.disconnect({ network, container: live.Id, context }),
+          (network) => docker.network.disconnect({ network, container: live.Id, context }),
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
@@ -346,37 +332,35 @@ export const ContainerProvider = () =>
         );
       });
 
+      const inspect = (name: string, context?: string) =>
+        docker.container
+          .inspect(name, context)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+
+      const remove = (name: string, context?: string) =>
+        docker.container.stop(name, context).pipe(
+          Effect.andThen(docker.container.remove(name, true, context)),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+        );
+
       return Container.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
-          const info = yield* docker.container
-            .inspect(name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+          const info = yield* inspect(name, context);
           if (!info) return undefined;
           // `olds.image` may be `undefined` when a `creating` row was
           // persisted before upstream Outputs resolved — fall back to the
           // live container's actual image.
           const attrs = toContainerAttributes(
             info,
-            olds.image !== undefined
-              ? normalizeImageRef(olds.image)
-              : info.Config.Image,
+            olds.image !== undefined ? normalizeImageRef(olds.image) : info.Config.Image,
           );
           if (output) return attrs;
           // Without prior state, only adopt a container that carries our
           // branding; anything else is foreign and gated behind `--adopt`.
-          const owned = yield* hasAlchemyTags(
-            id,
-            info.Config.Labels ?? undefined,
-          );
+          const owned = yield* hasAlchemyTags(id, info.Config.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
@@ -385,9 +369,7 @@ export const ContainerProvider = () =>
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
           if (olds.image === undefined) return undefined;
-          if (
-            dockerContextName(olds.context) !== dockerContextName(news.context)
-          ) {
+          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
             return { action: "replace" as const, deleteFirst: true };
           }
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
@@ -402,73 +384,90 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const live = yield* docker.container
-            .inspect(args.name, context)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
-
-          if (live) {
-            yield* reconcileNetworks(live, news, olds);
-            if (news.start && live.State.Status !== "running") {
-              yield* docker.container.start(live.Id, context);
-            } else if (!news.start && live.State.Status === "running") {
-              yield* docker.container.stop(live.Id, context);
-            }
-            return yield* docker.container
-              .inspect(live.Id, context)
-              .pipe(
-                Effect.map((info) => toContainerAttributes(info, args.image)),
-              );
-          }
-
-          const internalTags = yield* createInternalTags(id);
-          const { stdout: containerId } = yield* docker.container.create({
+          const configHash = yield* sha256Object({
             ...args,
-            context,
-            label: { ...args.label, ...internalTags },
+            imageId: normalizeImageId(news.image),
           });
-          yield* Effect.forEach(
-            news.networks ?? [],
-            (network) =>
-              docker.network.connect({
-                network: network.name,
-                container: containerId,
-                alias: network.aliases,
-                context,
-              }),
-            { concurrency: "unbounded" },
-          );
-          if (news.start) {
-            yield* docker.container.start(containerId, context);
+          // Adoption has output but no olds. In that case the observed
+          // container already lives in the desired context.
+          const oldContext = olds ? dockerContextName(olds.context) : context;
+          const desiredLive = yield* inspect(args.name, context);
+          const previous =
+            output && (output.name !== args.name || oldContext !== context)
+              ? yield* inspect(output.name, oldContext)
+              : undefined;
+          if (previous) {
+            yield* remove(previous.Id, oldContext);
           }
-          const info = yield* docker.container.inspect(containerId, context);
-          return toContainerAttributes(info, args.image);
+          const live = desiredLive?.Id === previous?.Id ? undefined : desiredLive;
+
+          const oldArgs =
+            live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined && olds !== undefined
+              ? yield* makeCreateArgs(
+                  id,
+                  {
+                    ...olds,
+                    image: olds.image ?? output?.imageRef ?? news.image,
+                  },
+                  instanceId,
+                )
+              : undefined;
+          const recreate =
+            live !== undefined &&
+            (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
+              ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
+                normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
+                !matchesLegacyConfig(live, args, news.image)
+              : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
+          if (recreate) {
+            yield* remove(live.Id, context);
+          }
+
+          const current = recreate ? undefined : live;
+          if (!current) {
+            const internalTags = yield* createInternalTags(id);
+            const { stdout: containerId } = yield* docker.container.create({
+              ...args,
+              context,
+              label: {
+                ...args.label,
+                ...internalTags,
+                [CREATE_CONFIG_HASH_LABEL]: configHash,
+              },
+            });
+            yield* Effect.forEach(
+              news.networks ?? [],
+              (network) =>
+                docker.network.connect({
+                  network: network.name,
+                  container: containerId,
+                  alias: network.aliases,
+                  context,
+                }),
+              { concurrency: "unbounded" },
+            );
+            if (news.start) {
+              yield* docker.container.start(containerId, context);
+            }
+            const info = yield* docker.container.inspect(containerId, context);
+            return toContainerAttributes(info, args.image);
+          }
+
+          yield* reconcileNetworks(current, news, olds);
+          if (news.start && current.State.Status !== "running") {
+            yield* docker.container.start(current.Id, context);
+          } else if (!news.start && current.State.Status === "running") {
+            yield* docker.container.stop(current.Id, context);
+          }
+          return yield* docker.container
+            .inspect(current.Id, context)
+            .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
         }),
         delete: Effect.fn(({ olds, output }) =>
-          docker.container
-            .stop(output.name, dockerContextName(olds.context))
-            .pipe(
-              Effect.andThen(
-                docker.container.remove(
-                  output.name,
-                  true,
-                  dockerContextName(olds.context),
-                ),
-              ),
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            ),
+          remove(output.name, dockerContextName(olds.context)),
         ),
       });
     }),
@@ -477,57 +476,66 @@ export const ContainerProvider = () =>
 const normalizeImageRef = (image: Container.Image): string =>
   typeof image === "string" ? image : image.imageRef;
 
+const normalizeImageId = (image: Container.Image | undefined) =>
+  typeof image === "string" ? undefined : image?.imageId;
+
+type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
+
+// Containers created before config hashes were introduced are compared using
+// the fields Docker reports without image-default normalization. A subsequent
+// create stamps the complete resolved configuration hash.
+const matchesLegacyConfig = (live: Docker.Container, desired: CreateArgs, image: Container.Image) =>
+  (normalizeImageId(image)
+    ? live.Image === normalizeImageId(image)
+    : live.Config.Image === desired.image) &&
+  (desired.command === undefined || Equal.equals(live.Config.Cmd, desired.command)) &&
+  Object.entries(desired.env ?? {}).every(([key, value]) =>
+    live.Config.Env?.includes(`${key}=${value}`),
+  );
+
 const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
   dockerPhysicalName(id, news, instanceId).pipe(
-    Effect.map(
-      (name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
-        name,
-        image: normalizeImageRef(news.image),
-        command: news.command,
-        env: normalizeEnvironment(news.environment),
-        volume: news.volumes?.map(
-          (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
-        ),
-        p: news.ports?.map((port) => {
-          const target = `${port.internal}/${port.protocol ?? "tcp"}`;
-          // `external: 0` means "any free host port". Docker spells that as a
-          // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
-          // host port 0 literally, which the daemon accepts and then reports
-          // back as 0.
-          return isRandomHostPort(port.external)
-            ? target
-            : `${port.external}:${target}`;
-        }),
-        "add-host": news.extraHosts,
-        restart: news.restart ?? "no",
-        label: news.labels,
-        "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
-        rm: news.removeOnExit ?? false,
-        ...(news.healthcheck
-          ? {
-              "health-cmd": Array.isArray(news.healthcheck.cmd)
-                ? news.healthcheck.cmd.join(" ")
-                : news.healthcheck.cmd,
-              "health-interval": normalizeDuration(news.healthcheck.interval),
-              "health-timeout": normalizeDuration(news.healthcheck.timeout),
-              "health-retries": news.healthcheck.retries ?? 0,
-              "health-start-period": normalizeDuration(
-                news.healthcheck.startPeriod,
-              ),
-              "health-start-interval": normalizeDuration(
-                news.healthcheck.startInterval,
-              ),
-            }
-          : {
-              "health-cmd": undefined,
-              "health-interval": undefined,
-              "health-timeout": undefined,
-              "health-retries": undefined,
-              "health-start-period": undefined,
-              "health-start-interval": undefined,
-            }),
+    Effect.map((name): Parameters<Docker["Service"]["container"]["create"]>[0] => ({
+      name,
+      image: normalizeImageRef(news.image),
+      command: news.command,
+      env: normalizeEnvironment(news.environment),
+      volume: news.volumes?.map(
+        (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
+      ),
+      p: news.ports?.map((port) => {
+        const target = `${port.internal}/${port.protocol ?? "tcp"}`;
+        // `external: 0` means "any free host port". Docker spells that as a
+        // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
+        // host port 0 literally, which the daemon accepts and then reports
+        // back as 0.
+        return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
       }),
-    ),
+      "add-host": news.extraHosts,
+      restart: news.restart ?? "no",
+      label: news.labels,
+      "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
+      rm: news.removeOnExit ?? false,
+      ...(news.healthcheck
+        ? {
+            "health-cmd": Array.isArray(news.healthcheck.cmd)
+              ? news.healthcheck.cmd.join(" ")
+              : news.healthcheck.cmd,
+            "health-interval": normalizeDuration(news.healthcheck.interval),
+            "health-timeout": normalizeDuration(news.healthcheck.timeout),
+            "health-retries": news.healthcheck.retries ?? 0,
+            "health-start-period": normalizeDuration(news.healthcheck.startPeriod),
+            "health-start-interval": normalizeDuration(news.healthcheck.startInterval),
+          }
+        : {
+            "health-cmd": undefined,
+            "health-interval": undefined,
+            "health-timeout": undefined,
+            "health-retries": undefined,
+            "health-start-period": undefined,
+            "health-start-interval": undefined,
+          }),
+    })),
   );
 
 const toContainerAttributes = (
@@ -565,15 +573,11 @@ const boundHostPort = (
  */
 const toPortAttributes = (info: Docker.Container): Record<string, number> => {
   const ports: Record<string, number> = {};
-  for (const [internal, bindings] of Object.entries(
-    info.HostConfig.PortBindings ?? {},
-  )) {
+  for (const [internal, bindings] of Object.entries(info.HostConfig.PortBindings ?? {})) {
     const port = boundHostPort(bindings);
     if (port !== undefined) ports[internal] = port;
   }
-  for (const [internal, bindings] of Object.entries(
-    info.NetworkSettings.Ports ?? {},
-  )) {
+  for (const [internal, bindings] of Object.entries(info.NetworkSettings.Ports ?? {})) {
     const port = boundHostPort(bindings);
     if (port !== undefined) ports[internal] = port;
   }
@@ -594,9 +598,7 @@ const normalizeEnvironment = (
     ]),
   );
 
-const normalizeDuration = (
-  input: Duration.Input | undefined,
-): string | undefined => {
+const normalizeDuration = (input: Duration.Input | undefined): string | undefined => {
   if (!input) return undefined;
   const duration = Duration.fromInputUnsafe(input);
   // Docker parses `--health-*` durations with Go's `time.ParseDuration`, which
