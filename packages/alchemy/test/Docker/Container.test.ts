@@ -413,6 +413,57 @@ describe(
       }),
     );
 
+    test.provider("replaces the container when an env file's contents change", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const { base } = yield* writeEnvFiles;
+        const deploy = () =>
+          stack.deploy(
+            Docker.Container("env-file-content-container", {
+              image: "nginx:alpine",
+              command: printEnv,
+              envFiles: [base],
+              start: true,
+            }),
+          );
+
+        const first = yield* deploy();
+        expect(yield* readPrintedEnv(first.name)).toBe("base base base");
+        // Unchanged contents: the digest is stable, so nothing rolls.
+        expect((yield* deploy()).id).toBe(first.id);
+
+        // Same path, new contents: the next deploy replaces the container.
+        yield* fs.writeFileString(base, "FROM_BASE=base\nLAYERED=edited-secret-value\n");
+        const edited = Docker.Container("env-file-content-container", {
+          image: "nginx:alpine",
+          command: printEnv,
+          envFiles: [base],
+          start: true,
+        });
+        const plan = yield* stack.plan(edited);
+        expect(plan.resources["env-file-content-container"]?.action).toBe("update");
+        const second = yield* stack.deploy(edited);
+        expect(second.id).not.toBe(first.id);
+        expect(yield* readPrintedEnv(second.name)).toBe("base edited-secret-value");
+
+        // Only the container's own label carries the digest; Alchemy state
+        // holds neither the values nor the digest.
+        const label = (yield* docker.container.inspect(second.name)).Config.Labels?.[
+          "alchemy::container-config"
+        ];
+        expect(label).toBeDefined();
+        const state = yield* yield* State;
+        const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state.get({ stack: stack.name, stage: stack.stage, fqn }),
+        );
+        const persisted = yield* Effect.sync(() => JSON.stringify(rows));
+        expect(persisted).not.toContain("edited-secret-value");
+        expect(persisted).not.toContain(label!);
+      }),
+    );
+
     test.provider(
       "does not replace the container when env files go from empty to omitted",
       (stack) =>
