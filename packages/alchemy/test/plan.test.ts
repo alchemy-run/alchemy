@@ -2513,7 +2513,7 @@ describe("diff.stables overrides provider.stables", { tags: ["unit", "local"] },
 
       expect(plan.resources.A!.action).toBe("update");
       expect(plan.resources.B!.action).toBe("update");
-      const bProps = plan.resources.B!.props as any;
+      const bProps = (plan.resources.B as any).props;
       // The noop diff's `diffStable` resolves to the persisted value...
       expect(bProps.string).toBe("diff-A");
       // ...while `providerStable` (omitted by the diff's stables) is left
