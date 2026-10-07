@@ -139,11 +139,6 @@ jobs:
           install: true
           require-lockfile: true
 
-      # Deploy and destroy both evaluate the stack, which loads the
-      # dist-consumed Cloudflare packages.
-      - name: Build Cloudflare packages
-        run: pnpm ensure:built
-
       # Main/prod use the production account; PR stages use the test account.
       - name: Deploy
         if: steps.mode.outputs.mode == 'deploy'

@@ -64,7 +64,7 @@
     "validate:publish-packages": "bun scripts/validate-publish-packages.ts",
     "prepare:hooks": "husky",
     "prepare:patch": "effect-tsgo patch --oxlint --no-typescript",
-    "prepare": "pnpm prepare:hooks && pnpm prepare:patch",
+    "prepare": "pnpm prepare:hooks && pnpm prepare:patch && pnpm ensure:built",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint -c oxlint.config.ts"

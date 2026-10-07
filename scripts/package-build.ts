@@ -15,8 +15,9 @@
 //    `<outDir>/.build-stamp`, which `ensure-built.ts` compares against the
 //    sources to decide whether a rebuild is needed.
 //
-// Every phase is timed. The timings are printed when the build finishes and
-// appended to the package's `.cache/build-timings.jsonl`.
+// Every phase is timed. Each timing is printed as it finishes, prefixed with
+// the package name, and the build's timings are appended to the package's
+// `.cache/build-timings.jsonl`.
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Console from "effect/Console";
@@ -61,6 +62,9 @@ const workspaceRoot = Effect.gen(function* () {
   const path = yield* Path.Path;
   return path.resolve(import.meta.dirname, "..");
 });
+
+/** Give a step a readable name for the timing logs. */
+export const named = (name: string, step: Step): Step => ({ ...step, name });
 
 /** Run a command; fails when it exits non-zero. */
 export const exec = (command: string, ...args: Array<string>): Step => ({
@@ -201,25 +205,22 @@ export const build = (scriptsDirectory: string, options: BuildOptions) =>
         : []),
     ];
 
-    yield* Console.log(`Building ${name}@${version}`);
+    // Each line names its package: several packages build in parallel and
+    // their output interleaves.
+    const log = (message: string) => Console.log(`[build ${name}] ${message}`);
+
+    yield* log(`start (v${version})`);
     const startedAt = yield* now;
     const timings: Array<{ name: string; ms: number }> = [];
     for (const phase of phases) {
       const phaseStartedAt = yield* now;
       yield* phase.run(packageDirectory);
-      timings.push({ name: phase.name, ms: (yield* now) - phaseStartedAt });
+      const ms = (yield* now) - phaseStartedAt;
+      timings.push({ name: phase.name, ms });
+      yield* log(`${phase.name}: ${formatSeconds(ms)}`);
     }
     const total = (yield* now) - startedAt;
-
-    const width = Math.max(...timings.map((timing) => timing.name.length));
-    yield* Console.log(
-      [
-        `Built ${name} in ${formatSeconds(total)}`,
-        ...timings.map(
-          (timing) => `  ${timing.name.padEnd(width)}  ${formatSeconds(timing.ms).padStart(8)}`,
-        ),
-      ].join("\n"),
-    );
+    yield* log(`done in ${formatSeconds(total)}`);
 
     const cacheDirectory = path.join(packageDirectory, ".cache");
     yield* fs.makeDirectory(cacheDirectory, { recursive: true });
