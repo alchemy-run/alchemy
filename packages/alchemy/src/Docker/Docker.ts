@@ -554,7 +554,8 @@ const makeDocker = (options: DockerOptions) =>
           systemError({
             _tag: "Unknown",
             args,
-            description: "The command failed unexpectedly.",
+            // Name the CLI: a misconfigured `bin` / DOCKER_BIN fails here.
+            description: `Failed to run \`${bin}\`; is it installed and on PATH?`,
             cause: error.reason,
           }),
         ),
