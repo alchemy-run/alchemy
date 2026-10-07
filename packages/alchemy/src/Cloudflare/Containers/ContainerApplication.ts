@@ -741,13 +741,14 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     schedulingPolicy: ContainerApplication.SchedulingPolicy;
     /**
-     * The current desired number of instances.
+     * The current desired number of instances. Unset for Durable Object-managed applications.
      */
-    instances: number;
+    instances: number | undefined;
     /**
      * The maximum number of instances the application may scale to.
+     * Unset for Durable Object-managed applications.
      */
-    maxInstances: number;
+    maxInstances: number | undefined;
     /**
      * Resource constraints applied to the application, if any.
      */
@@ -776,8 +777,9 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     createdAt: string;
     /**
      * The application's configuration version, incremented on each update.
+     * Unset for Durable Object-managed applications.
      */
-    version: number;
+    version: number | undefined;
     /**
      * Internal hashes of the built image and desired application
      * configuration, used to skip unchanged builds and updates.

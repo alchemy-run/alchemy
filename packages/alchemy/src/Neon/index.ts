@@ -17,6 +17,7 @@ export * from "./Branch.ts";
 export * from "./Connect.ts";
 export * from "./BranchScope.ts";
 export * from "./Credential.ts";
+export * from "./Role.ts";
 export * from "./Bucket.ts";
 export * from "./Object.ts";
 export * from "./ReadBucket.ts";

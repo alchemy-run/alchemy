@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { Action } from "@/Action";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
@@ -433,6 +434,123 @@ describe(
           expect(second.id).toBe(first.id);
         }),
     );
+    // Runtime options are checked inside the running container, not on the
+    // `docker container create` arguments.
+    const sleeper = { image: "alpine:3.19", command: ["sleep", "300"], start: true };
+    const exec = (name: string, ...command: string[]) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        return (yield* docker.run(["exec", name, ...command])).stdout.trim();
+      });
+
+    test.provider("shares a donor container's network namespace", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const { donor, sidecar } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const donor = yield* Docker.Container("namespace-donor", {
+              image: "nginx:alpine",
+              start: true,
+            });
+            const sidecar = yield* Docker.Container("namespace-sidecar", {
+              ...sleeper,
+              networkMode: { container: donor.id },
+            });
+            return { donor, sidecar };
+          }),
+        );
+
+        const info = yield* docker.container.inspect(sidecar.name);
+        expect(info.HostConfig.NetworkMode).toBe(`container:${donor.id}`);
+        // The sidecar reaches the donor's nginx on its own loopback.
+        const page = yield* exec(sidecar.name, "wget", "-qO-", "http://127.0.0.1").pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 20 }),
+        );
+        expect(page).toContain("nginx");
+      }),
+    );
+
+    test.provider("adds capabilities and exposes host devices", (stack) =>
+      Effect.gen(function* () {
+        const deploy = (capAdd: string[]) =>
+          stack.deploy(
+            Docker.Container("runtime-options-container", {
+              ...sleeper,
+              capAdd,
+              devices: [{ hostPath: "/dev/zero", containerPath: "/dev/alchemy-zero" }],
+            }),
+          );
+
+        // `ip link add` needs NET_ADMIN, which Docker does not grant by default.
+        const first = yield* deploy(["NET_ADMIN"]);
+        yield* exec(first.name, "ip", "link", "add", "alchemy0", "type", "dummy");
+        expect(yield* exec(first.name, "sh", "-c", "head -c 4 /dev/alchemy-zero | wc -c")).toBe(
+          "4",
+        );
+
+        // Duplicates and order normalize away: same container.
+        const same = yield* deploy([" NET_ADMIN", "NET_ADMIN"]);
+        expect(same.id).toBe(first.id);
+
+        // A different capability set replaces the container.
+        const replaced = yield* deploy(["SYS_TIME"]);
+        expect(replaced.id).not.toBe(first.id);
+        const denied = yield* exec(
+          replaced.name,
+          "ip",
+          "link",
+          "add",
+          "alchemy0",
+          "type",
+          "dummy",
+        ).pipe(Effect.flip);
+        expect(denied._tag).toBe("PlatformError");
+      }),
+    );
+
+    const invalidOptions: Array<[string, Partial<Docker.ContainerProps>]> = [
+      [
+        "ports",
+        {
+          networkMode: { container: "alchemy-missing-donor" },
+          ports: [{ external: 0, internal: 80 }],
+        },
+      ],
+      [
+        "networks",
+        { networkMode: "container:alchemy-missing-donor", networks: [{ name: "bridge" }] },
+      ],
+      [
+        "conflicting device targets",
+        {
+          devices: [
+            { hostPath: "/dev/zero", containerPath: "/dev/alchemy" },
+            { hostPath: "/dev/null", containerPath: "/dev/alchemy" },
+          ],
+        },
+      ],
+    ];
+    for (const [name, props] of invalidOptions) {
+      test.provider(`rejects ${name} that cannot be combined before calling Docker`, (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const error = yield* stack
+            .deploy(Docker.Container("invalid-runtime-options", { ...sleeper, ...props }))
+            .pipe(Effect.flip);
+          const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
+          expect(report).toContain("InvalidContainerOptions");
+          const listed = yield* docker.run([
+            "ps",
+            "--all",
+            "--filter",
+            "name=invalid-runtime-options",
+            "--format",
+            "{{.Names}}",
+          ]);
+          expect(listed.stdout.trim()).toBe("");
+        }),
+      );
+    }
 
     test.provider("applies a healthcheck with unit-suffixed durations", (stack) =>
       Effect.gen(function* () {
@@ -550,6 +668,200 @@ describe(
           expect(attached).toContain("bridge");
         }),
       { tags: ["provider:docker:network"], timeout: 240_000 },
+    );
+
+    test.provider(
+      "recreates a container when an Action-backed environment value changes",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const Environment = Action("ContainerEnvironment", (input: { value: string }) =>
+            Effect.succeed(input.value),
+          );
+          const deployWithEnvironment = (value: string) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const environment = yield* Environment({ value });
+                return yield* Docker.Container("action-env-container", {
+                  image: "nginx:alpine",
+                  environment: { VALUE: environment },
+                  start: false,
+                });
+              }),
+            );
+
+          const first = yield* deployWithEnvironment("first");
+          const second = yield* deployWithEnvironment("second");
+
+          expect(second.id).not.toBe(first.id);
+          const info = yield* docker.container.inspect(second.name);
+          expect(info.Config.Env).toContain("VALUE=second");
+          expect(info.Config.Env).not.toContain("VALUE=first");
+        }),
+    );
+
+    test.provider(
+      "recreates a container when a Docker image is rebuilt with the same ref",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const docker = yield* Docker.Docker;
+          const root = yield* fs.makeTempDirectoryScoped({
+            prefix: "alchemy-container-image-",
+          });
+          const deploy = () =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const image = yield* Docker.Image("container-image", {
+                  build: { context: root },
+                });
+                const container = yield* Docker.Container("rebuilt-image-container", {
+                  image,
+                  start: false,
+                });
+                return { container, image };
+              }),
+            );
+
+          yield* fs.writeFileString(
+            path.join(root, "Dockerfile"),
+            "FROM nginx:alpine\nLABEL alchemy.generation=first\n",
+          );
+          const first = yield* deploy();
+          yield* fs.writeFileString(
+            path.join(root, "Dockerfile"),
+            "FROM nginx:alpine\nLABEL alchemy.generation=second\n",
+          );
+          const second = yield* deploy();
+
+          expect(second.image.imageRef).toBe(first.image.imageRef);
+          expect(second.image.imageId).not.toBe(first.image.imageId);
+          expect(second.container.id).not.toBe(first.container.id);
+          const info = yield* docker.container.inspect(second.container.name);
+          expect(info.Image).toBe(second.image.imageId);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider("adopts a container from a named context without removing it", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const context = "alchemy-test-container-adoption";
+        const name = "alchemy-test-adopted-container";
+        const { stdout: host } = yield* docker.run([
+          "context",
+          "inspect",
+          "--format",
+          "{{.Endpoints.docker.Host}}",
+        ]);
+
+        yield* docker.context.remove(context, true).pipe(Effect.ignore);
+        yield* docker.context.create({
+          name: context,
+          docker: `host=${host.trim()}`,
+        });
+        yield* Effect.addFinalizer(() => docker.context.remove(context, true).pipe(Effect.ignore));
+        yield* docker.container.remove(name, true, context).pipe(Effect.ignore);
+        const { stdout: id } = yield* docker.run([
+          "--context",
+          context,
+          "container",
+          "create",
+          "--name",
+          name,
+          "nginx:alpine",
+        ]);
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(name, true, context).pipe(Effect.ignore),
+        );
+
+        const adopted = yield* stack.deploy(
+          Docker.Container("adopted-container", {
+            name,
+            image: "nginx:alpine",
+            context,
+          }),
+        );
+
+        expect(adopted.id).toBe(id);
+      }),
+    );
+
+    test.provider("updates start state without replacing the container", (stack) =>
+      Effect.gen(function* () {
+        const first = yield* stack.deploy(
+          Docker.Container("started-container", {
+            image: "nginx:alpine",
+            start: false,
+          }),
+        );
+        const second = yield* stack.deploy(
+          Docker.Container("started-container", {
+            image: "nginx:alpine",
+            start: true,
+          }),
+        );
+
+        expect(second.id).toBe(first.id);
+        expect(second.status).toBe("running");
+      }),
+    );
+
+    test.provider(
+      "updates networks without replacing a container with a host-bound port",
+      (stack) =>
+        Effect.gen(function* () {
+          const hostPort = yield* findAvailablePort();
+          const deployWithAlias = (alias: string) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                const network = yield* Docker.Network("host-port-network");
+                const container = yield* Docker.Container("host-port-container", {
+                  image: "nginx:alpine",
+                  ports: [
+                    {
+                      external: `127.0.0.1:${hostPort}`,
+                      internal: 80,
+                    },
+                  ],
+                  networks: [{ name: network.name, aliases: [alias] }],
+                });
+                return { container, network };
+              }),
+            );
+
+          const first = yield* deployWithAlias("old-alias");
+          const second = yield* deployWithAlias("new-alias");
+
+          expect(second.container.id).toBe(first.container.id);
+        }),
+    );
+
+    test.provider(
+      "reconciles removed environment after a creating-state image prop is lost",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const first = yield* stack.deploy(
+            Docker.Container("lost-image-env-container", {
+              image: "nginx:alpine",
+              environment: { OLD_VALUE: "present" },
+            }),
+          );
+
+          yield* wedgeContainerRow(stack);
+
+          const second = yield* stack.deploy(
+            Docker.Container("lost-image-env-container", {
+              image: "nginx:alpine",
+            }),
+          );
+          const info = yield* docker.container.inspect(second.name);
+
+          expect(second.id).not.toBe(first.id);
+          expect(info.Config.Env).not.toContain("OLD_VALUE=present");
+        }),
     );
   },
 );

@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
-import { requestWorker } from "../Utils/WorkerRequest.ts";
+import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import AttachmentWorker from "./fixtures/hibernating-websocket/worker.ts";
 
 class HandshakeFailed extends Data.TaggedError("HandshakeFailed")<{ readonly message: string }> {}
@@ -98,13 +98,26 @@ describe.concurrent.each([
       Effect.gen(function* () {
         yield* destroy(Stack);
         const output = yield* deploy(Stack);
-        const response = yield* requestWorker(HttpClientRequest.get(`${output.url}/ready`));
-        expect(response.status).toBe(200);
-        expect(yield* response.text).toBe("ready");
-        yield* connect(`${output.url}/socket/ready`).pipe(Effect.scoped);
+        // A new version reaches Cloudflare's hosts one at a time: require the
+        // HTTP route and a WebSocket handshake to succeed several times in a
+        // row before the tests open sockets that may land on any host.
+        yield* waitUntilStable(
+          `WebSocket worker at ${output.url}`,
+          Effect.gen(function* () {
+            const response = yield* requestWorker(HttpClientRequest.get(`${output.url}/ready`));
+            expect(response.status).toBe(200);
+            expect(yield* response.text).toBe("ready");
+            yield* connect(`${output.url}/socket/ready`).pipe(Effect.scoped);
+            return true;
+          }).pipe(
+            Effect.catchTag(["WorkerNotPropagated", "HandshakeFailed"], () =>
+              Effect.succeed(false),
+            ),
+          ),
+        );
         return output;
       }),
-      { timeout: 120_000 },
+      { timeout: 180_000 },
     );
     afterAll(destroy(Stack), { timeout: 30_000 });
 

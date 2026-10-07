@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -184,6 +185,91 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 120_000 },
+    );
+
+    // #1827: drift repair rebuilds the bundle from the `main` stored in
+    // state. Deploy from one checkout with an absolute `main`
+    // (`import.meta.url`), delete that checkout, then repair drift from
+    // another checkout of the same code.
+    test.provider(
+      "drift repair rebuilds a Worker after the checkout that deployed it is gone",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          // Real path: on macOS the temp dir is a symlink, and `cwd` is real.
+          const tempRoot = yield* fs.realPath(
+            yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-moved-checkout-" }),
+          );
+          const writeCheckout = (dir: string) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(pathe.join(dir, "src"), { recursive: true });
+              yield* fs.writeFileString(
+                pathe.join(dir, "package.json"),
+                JSON.stringify({ name: "moved-checkout", private: true, type: "module" }),
+              );
+              yield* fs.writeFileString(
+                pathe.join(dir, "src", "worker.ts"),
+                `export default { fetch() { return new Response("moved-checkout"); } };\n`,
+              );
+            });
+          const checkoutA = pathe.join(tempRoot, "checkout-a");
+          const checkoutB = pathe.join(tempRoot, "checkout-b");
+          yield* writeCheckout(checkoutA);
+          const mainUrl = yield* Effect.sync(
+            () => pathToFileURL(pathe.join(checkoutA, "src", "worker.ts")).href,
+          );
+          const originalCwd = yield* Effect.sync(() => process.cwd());
+
+          yield* stack.destroy();
+
+          const workerName = yield* Effect.gen(function* () {
+            yield* Effect.sync(() => process.chdir(checkoutA));
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("MovedCheckoutWorker", { main: mainUrl, workersDev: true }),
+            );
+
+            // State keeps `main` relative to the deploying checkout.
+            const row = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "MovedCheckoutWorker",
+              });
+            }).pipe(Effect.provide(stack.state));
+            expect((row as { props?: { main?: unknown } } | undefined)?.props?.main).toEqual(
+              pathe.join("src", "worker.ts"),
+            );
+
+            // The deploying checkout is gone; another checkout repairs.
+            yield* writeCheckout(checkoutB);
+            yield* fs.remove(checkoutA, { recursive: true });
+            yield* Effect.sync(() => process.chdir(checkoutB));
+
+            yield* workers.createScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+              enabled: false,
+              previewsEnabled: false,
+            });
+            const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+              Effect.provide(stack.state),
+            );
+            expect(repaired.resources.MovedCheckoutWorker).toMatchObject({ action: "repaired" });
+            const subdomain = yield* workers.getScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(subdomain.enabled).toBe(true);
+            return worker.workerName;
+          }).pipe(Effect.ensuring(Effect.sync(() => process.chdir(originalCwd))));
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(workerName, accountId);
+        }).pipe(Effect.scoped, logLevel),
+      // mutates process-global cwd
+      { tags: ["live"], timeout: 180_000, exclusive: true },
     );
 
     test.provider(
