@@ -380,7 +380,7 @@ export const ContainerProvider = () =>
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
           if (live) {
-            // Plan compares props before upstream Outputs resolve, so an image
+            // Plan compares props before upstream `Output` values resolve, so an image
             // that comes from an `Action` is an update rather than a replace.
             // Recreate when the resolved create args differ from the previous
             // ones. With no previous image, compare the live image to the one
