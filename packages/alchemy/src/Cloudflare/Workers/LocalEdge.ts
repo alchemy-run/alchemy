@@ -84,17 +84,42 @@ interface RouterConfig {
   readonly domains: Record<string, string>;
 }
 
+/**
+ * How long a routed request waits for its target Worker to register with
+ * the dev registry — the same budget a Worker's own dev proxy parks
+ * requests for while it starts.
+ */
+const TARGET_WAIT_MS = 120_000;
+
 const routerScript = (config: RouterConfig) => `
 const CONFIG = ${JSON.stringify(config)};
 const HOSTS = Object.values(CONFIG.ports);
 ${routeMatcherSource()}
+// The registry proxy answers 503 with this message while the target
+// script has not registered yet (it is still starting). Wait for it, like
+// a request to the Worker's own dev URL does.
+const NOT_REGISTERED = /^Worker ".*" not found\. Make sure the worker is running locally\.$/;
+async function forward(target, request) {
+  const deadline = Date.now() + ${TARGET_WAIT_MS};
+  for (let delay = 50; ; delay = Math.min(delay * 2, 1000)) {
+    const response = await target.fetch(request.clone());
+    if (
+      response.status !== 503 ||
+      Date.now() > deadline ||
+      !NOT_REGISTERED.test(await response.clone().text())
+    ) {
+      return response;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const host = CONFIG.ports[url.port] ?? (HOSTS.length === 1 ? HOSTS[0] : url.hostname);
     const route = matchRoute(CONFIG.routes, host, url.pathname);
     const binding = route?.binding ?? CONFIG.domains[host];
-    if (binding) return env[binding].fetch(request);
+    if (binding) return forward(env[binding], request);
     const message = route
       ? "Workers are disabled for " + host + url.pathname + " by route '" + route.pattern + "', and alchemy dev has no origin to fall back to."
       : "No Worker route matches " + host + url.pathname + ". Routes: " + CONFIG.routes.map((r) => r.pattern).join(", ");
