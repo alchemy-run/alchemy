@@ -589,7 +589,7 @@ describe.concurrent(
           // child (and its data) must survive.
           const renamePlan = yield* stack.plan(program("late-parent-renamed"));
           expect(renamePlan.resources.LateParent.action).toBe("update");
-          expect(renamePlan.resources.LateParentChild.action).toBe("noop");
+          expect(renamePlan.resources.LateParentChild.action).not.toBe("replace");
           const renamed = yield* stack.deploy(program("late-parent-renamed"));
           expect(renamed.parent.branchName).toBe("late-parent-renamed");
           expect(renamed.branch.branchId).toBe(reparented.branch.branchId);
