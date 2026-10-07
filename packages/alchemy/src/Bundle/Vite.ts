@@ -51,6 +51,9 @@ interface EnvironmentLike {
   };
 }
 
+/**
+ * @returns the specified directory, when it exists and is not empty; undefined, otherwise
+ */
 const nonEmptyDirectory = (
   fs: FileSystem.FileSystem,
   directory: string | undefined,
