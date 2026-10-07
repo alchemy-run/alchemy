@@ -73,7 +73,8 @@ Alchemy.Telemetry.layerOtlp({
 
 Vendor layers wrap this. [`Axiom.Telemetry`](/axiom) takes an ingest
 `ApiToken` and a `Dataset` per signal, and composes the endpoints and
-`Authorization`/`X-Axiom-Dataset` headers for you — see
+`Authorization` and dataset (`X-Axiom-Dataset`, or `X-Axiom-Metrics-Dataset`
+for metrics) headers for you — see
 [Tutorial Part 6](/cloudflare/tutorial/part-6) for the end-to-end
 walkthrough.
 
