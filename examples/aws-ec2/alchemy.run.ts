@@ -2,7 +2,6 @@ import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { NetworkLive } from "./src/Network.ts";
 import Server from "./src/Server.ts";
 
 export default Alchemy.Stack(
@@ -17,8 +16,12 @@ export default Alchemy.Stack(
     return {
       instanceId: instance.instanceId,
       publicIpAddress: instance.publicIpAddress,
-      instanceUrl: Output.interpolate`http://${instance.publicIpAddress}:3000`,
-      enqueueExample: Output.interpolate`http://${instance.publicIpAddress}:3000/enqueue?message=hello`,
+      // Service-derived URL, not `http://${publicIpAddress}:3000`: in
+      // `alchemy dev` the emulator stuffs a host-routed DNS name into
+      // the public address fields, and `url` is the only attribute that
+      // also carries the process port.
+      url: instance.url,
+      enqueueUrl: Output.interpolate`${instance.url}/enqueue?message=hello`,
     };
-  }).pipe(Effect.provide(NetworkLive)),
+  }),
 );
