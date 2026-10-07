@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link SendConnectorEvent}.
  */
-export interface SendConnectorEventRequest
-  extends mi.SendConnectorEventRequest {}
+export interface SendConnectorEventRequest extends mi.SendConnectorEventRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:SendConnectorEvent`
@@ -43,10 +42,7 @@ export interface SendConnectorEvent extends Binding.Service<
   () => Effect.Effect<
     (
       request: SendConnectorEventRequest,
-    ) => Effect.Effect<
-      mi.SendConnectorEventResponse,
-      mi.SendConnectorEventError
-    >
+    ) => Effect.Effect<mi.SendConnectorEventResponse, mi.SendConnectorEventError>
   >
 > {}
 export const SendConnectorEvent = Binding.Service<SendConnectorEvent>(

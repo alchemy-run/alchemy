@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "create, update, delete vpc service",
@@ -32,10 +29,7 @@ test.provider(
           });
           const service = yield* Cloudflare.VpcService.VpcService("VpcSvc", {
             httpPort: 8080,
-            host: {
-              hostname: "localhost",
-              resolverNetwork: { tunnelId: tunnel.tunnelId },
-            },
+            host: { hostname: "localhost", resolverNetwork: { tunnelId: tunnel.tunnelId } },
             adopt: true,
           });
           return { tunnel, service };
@@ -66,10 +60,7 @@ test.provider(
           return yield* Cloudflare.VpcService.VpcService("VpcSvc", {
             httpPort: 3000,
             httpsPort: 3001,
-            host: {
-              hostname: "localhost",
-              resolverNetwork: { tunnelId: tunnel.tunnelId },
-            },
+            host: { hostname: "localhost", resolverNetwork: { tunnelId: tunnel.tunnelId } },
             adopt: true,
           });
         }),
@@ -117,18 +108,13 @@ test.provider(
           });
           return yield* Cloudflare.VpcService.VpcService("Ipv4Svc", {
             httpPort: 8080,
-            host: {
-              ipv4: "192.168.1.100",
-              network: { tunnelId: tunnel.tunnelId },
-            },
+            host: { ipv4: "192.168.1.100", network: { tunnelId: tunnel.tunnelId } },
             adopt: true,
           });
         }),
       );
 
-      expect(service.host).toMatchObject({
-        ipv4: "192.168.1.100",
-      });
+      expect(service.host).toMatchObject({ ipv4: "192.168.1.100" });
       expect("ipv6" in service.host).toBe(false);
 
       const fetched = yield* connectivity.getDirectoryService({
@@ -181,10 +167,7 @@ test.provider.skip(
         }),
       );
 
-      expect(service.host).toMatchObject({
-        ipv4: "192.168.1.101",
-        ipv6: "2001:db8::1",
-      });
+      expect(service.host).toMatchObject({ ipv4: "192.168.1.101", ipv6: "2001:db8::1" });
 
       yield* stack.destroy();
       yield* waitForServiceToBeDeleted(service.serviceId, accountId);
@@ -216,18 +199,13 @@ test.provider(
           });
           return yield* Cloudflare.VpcService.VpcService("ListSvc", {
             httpPort: 8080,
-            host: {
-              hostname: "localhost",
-              resolverNetwork: { tunnelId: tunnel.tunnelId },
-            },
+            host: { hostname: "localhost", resolverNetwork: { tunnelId: tunnel.tunnelId } },
             adopt: true,
           });
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.VpcService.VpcService,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.VpcService.VpcService);
       const all = yield* provider.list();
 
       const found = all.find((s) => s.serviceId === service.serviceId);
@@ -249,15 +227,11 @@ test.provider(
   },
 );
 
-const waitForServiceToBeDeleted = Effect.fn(function* (
-  serviceId: string,
-  accountId: string,
-) {
+const waitForServiceToBeDeleted = Effect.fn(function* (serviceId: string, accountId: string) {
   yield* connectivity.getDirectoryService({ accountId, serviceId }).pipe(
     Effect.flatMap(() => Effect.fail(new VpcServiceStillExists())),
     Effect.retry({
-      while: (e): e is VpcServiceStillExists =>
-        e instanceof VpcServiceStillExists,
+      while: (e): e is VpcServiceStillExists => e instanceof VpcServiceStillExists,
       schedule: Schedule.exponential(100),
     }),
     Effect.catch(() => Effect.void),

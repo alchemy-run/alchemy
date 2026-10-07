@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  decodeDefinition,
-  encodeDefinition,
-  syncAmpTags,
-  toTagRecord,
-} from "./internal.ts";
+import { decodeDefinition, encodeDefinition, syncAmpTags, toTagRecord } from "./internal.ts";
 
 export interface RuleGroupsNamespaceProps {
   /**
@@ -71,9 +66,7 @@ export interface RuleGroupsNamespace extends Resource<
  *
  * @resource
  */
-export const RuleGroupsNamespace = Resource<RuleGroupsNamespace>(
-  "AWS.AMP.RuleGroupsNamespace",
-);
+export const RuleGroupsNamespace = Resource<RuleGroupsNamespace>("AWS.AMP.RuleGroupsNamespace");
 
 export const RuleGroupsNamespaceProvider = () =>
   Provider.effect(
@@ -90,11 +83,7 @@ export const RuleGroupsNamespaceProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string, name: string) {
         const response = yield* amp
           .describeRuleGroupsNamespace({ workspaceId, name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.ruleGroupsNamespace;
       });
 
@@ -107,22 +96,14 @@ export const RuleGroupsNamespaceProvider = () =>
        * window so deployments tolerate that documented asynchronous
        * lifecycle without creating an unbounded wait.
        */
-      const waitActive = Effect.fn(function* (
-        workspaceId: string,
-        name: string,
-      ) {
-        const ns = yield* amp
-          .describeRuleGroupsNamespace({ workspaceId, name })
-          .pipe(
-            Effect.map((r) => r.ruleGroupsNamespace),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("12 seconds"),
-                Schedule.recurs(10),
-              ]),
-              until: (n) => n.status.statusCode === "ACTIVE",
-            }),
-          );
+      const waitActive = Effect.fn(function* (workspaceId: string, name: string) {
+        const ns = yield* amp.describeRuleGroupsNamespace({ workspaceId, name }).pipe(
+          Effect.map((r) => r.ruleGroupsNamespace),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("12 seconds"), Schedule.recurs(10)]),
+            until: (n) => n.status.statusCode === "ACTIVE",
+          }),
+        );
         if (ns.status.statusCode !== "ACTIVE") {
           return yield* Effect.fail(
             new Error(
@@ -138,10 +119,7 @@ export const RuleGroupsNamespaceProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds?.workspaceId !== news.workspaceId ||
-            olds?.name !== news.name
-          ) {
+          if (olds?.workspaceId !== news.workspaceId || olds?.name !== news.name) {
             return { action: "replace" } as const;
           }
         }),
@@ -179,9 +157,7 @@ export const RuleGroupsNamespaceProvider = () =>
             // 3. Sync definition — put only when the YAML drifts. `data` is
             // present once the namespace is ACTIVE (omitted while CREATING).
             const currentDefinition =
-              ns.data !== undefined
-                ? yield* decodeDefinition(ns.data)
-                : undefined;
+              ns.data !== undefined ? yield* decodeDefinition(ns.data) : undefined;
             if (currentDefinition !== news!.definition) {
               yield* amp.putRuleGroupsNamespace({
                 workspaceId,
@@ -211,10 +187,7 @@ export const RuleGroupsNamespaceProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
               }),
             );
         }),

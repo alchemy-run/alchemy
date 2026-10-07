@@ -43,6 +43,12 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "GCP",
+    href: "/gcp",
+    prefixes: ["/gcp", "/providers/gcp"],
+    slot: "primary",
+  },
+  {
     label: "Hetzner",
     href: "/hetzner",
     prefixes: ["/hetzner", "/providers/hetzner"],
@@ -127,6 +133,14 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "images · containers · networks",
   },
   {
+    label: "Kubernetes",
+    href: "/kubernetes",
+    prefixes: ["/kubernetes", "/providers/kubernetes"],
+    slot: "more",
+    category: "Containers",
+    hint: "deployments · jobs · manifests · helm",
+  },
+  {
     label: "SQL",
     href: "/sql",
     prefixes: ["/sql", "/drizzle", "/providers/drizzle", "/providers/sql"],
@@ -160,6 +174,8 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "end",
   },
   { label: "Blog", href: "/blog", prefixes: ["/blog"], slot: "end" },
+  // A marketing page, so it never becomes the active tab.
+  { label: "Compare", href: "/compare", prefixes: ["/compare"], slot: "end" },
 ];
 
 const matches = (pathname: string, prefix: string) =>

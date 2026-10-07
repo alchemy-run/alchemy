@@ -27,6 +27,4 @@ export interface DeleteBuildBatch extends Binding.Service<
     ) => Effect.Effect<SVC.DeleteBuildBatchOutput, SVC.DeleteBuildBatchError>
   >
 > {}
-export const DeleteBuildBatch = Binding.Service<DeleteBuildBatch>(
-  "AWS.CodeBuild.DeleteBuildBatch",
-);
+export const DeleteBuildBatch = Binding.Service<DeleteBuildBatch>("AWS.CodeBuild.DeleteBuildBatch");

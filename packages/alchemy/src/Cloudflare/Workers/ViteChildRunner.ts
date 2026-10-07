@@ -1,23 +1,17 @@
-import {
-  layerRuntime,
-  registerHttpServer,
-} from "@alchemy.run/cloudflare-runtime/core";
+import * as NodeV8 from "node:v8";
+import { layerRuntime, registerHttpServer } from "@alchemy.run/cloudflare-runtime/core";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as NodeV8 from "node:v8";
-import {
-  Artifacts,
-  createArtifactStore,
-  makeScopedArtifacts,
-} from "../../Artifacts.ts";
-import { CloudflareAuth } from "../Auth/AuthProvider.ts";
-import * as Credentials from "../Credentials.ts";
+import { Artifacts, createArtifactStore, makeScopedArtifacts } from "../../Artifacts.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
+import { CloudflareAuth } from "../Auth/AuthProvider.ts";
+import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
+import * as Credentials from "../Credentials.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError } from "./Source.ts";
 import * as Vite from "./Sources/Vite.ts";
@@ -47,15 +41,18 @@ const program = Effect.scoped(
   Effect.gen(function* () {
     const config = yield* readConfig;
     const credentials = Credentials.fromAuthProvider().pipe(
+      Layer.provideMerge(CloudflareEnvironment.fromProfile()),
       Layer.provide(CloudflareAuth),
     );
-    const runtimeContext = yield* layerRuntime({
-      api: { accountId: config.accountId },
-      storage: { directory: config.storageDirectory },
-    }).pipe(
-      Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)),
-      Layer.build,
-    );
+    const runtimeContext = yield* Layer.unwrap(
+      Effect.gen(function* () {
+        const environment = yield* CloudflareEnvironment.CloudflareEnvironment;
+        return layerRuntime({
+          api: { accountId: Effect.map(environment, (env) => env.accountId) },
+          storage: { directory: config.storageDirectory },
+        });
+      }),
+    ).pipe(Layer.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)), Layer.build);
     // The non-runtime fields are consumed here; everything else in
     // `config.worker` is the runtime worker shape `viteDev` expects, so new
     // runtime fields flow through without being re-listed.
@@ -78,11 +75,7 @@ const program = Effect.scoped(
         devRemote,
         devAccess,
       },
-      {
-        accountId: config.accountId,
-        selfUrl: config.publicUrl,
-        stack: config.stack,
-      },
+      { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
     );
     const source = config.source;
     const viteHost = "127.0.0.1";
@@ -96,10 +89,7 @@ const program = Effect.scoped(
           // (which includes the per-run Artifacts cache the live provider
           // supplies); the dev child has no run-scoped cache, so hand the
           // module a fresh one.
-          Effect.provideService(
-            Artifacts,
-            makeScopedArtifacts(createArtifactStore(), source.fqn),
-          ),
+          Effect.provideService(Artifacts, makeScopedArtifacts(createArtifactStore(), source.fqn)),
           Effect.flatMap((provider) =>
             provider.dev({
               id: source.id,
@@ -155,19 +145,13 @@ const program = Effect.scoped(
             worker: { ...runtimeWorker, bindings },
             context: runtimeContext,
           },
-          {
-            host: viteHost,
-            port: vitePort,
-            strictPort: false,
-          },
+          { host: viteHost, port: vitePort, strictPort: false },
         ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");
     }
     yield* Effect.sync(() => {
-      process.stdout.write(
-        `${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`,
-      );
+      process.stdout.write(`${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`);
     });
     return yield* Effect.never;
   }),
@@ -175,8 +159,6 @@ const program = Effect.scoped(
 
 runMain(
   program.pipe(
-    Effect.provide(
-      RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices)),
-    ),
+    Effect.provide(RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices))),
   ),
 );

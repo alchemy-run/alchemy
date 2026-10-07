@@ -23,45 +23,36 @@ export const ReEncryptHttp = Layer.effect(
           ? Effect.succeed<string>(destination)
           : yield* destination.keyId;
       const SourceKeyId =
-        typeof from === "string"
-          ? Effect.succeed<string>(from)
-          : yield* from.keyId;
+        typeof from === "string" ? Effect.succeed<string>(from) : yield* from.keyId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.KMS.ReEncrypt(${destination}, ${from}))`(
-            {
-              policyStatements:
-                source === undefined
-                  ? [
-                      keyPolicyStatement(
-                        ["kms:ReEncryptFrom", "kms:ReEncryptTo"],
-                        destination,
-                      ),
-                    ]
-                  : [
-                      keyPolicyStatement("kms:ReEncryptTo", destination),
-                      keyPolicyStatement("kms:ReEncryptFrom", from),
-                    ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.KMS.ReEncrypt(${destination}, ${from}))`({
+            policyStatements:
+              source === undefined
+                ? [keyPolicyStatement(["kms:ReEncryptFrom", "kms:ReEncryptTo"], destination)]
+                : [
+                    keyPolicyStatement("kms:ReEncryptTo", destination),
+                    keyPolicyStatement("kms:ReEncryptFrom", from),
+                  ],
+          });
         }
       }
-      return Effect.fn(`AWS.KMS.ReEncrypt(${keyLabel(destination)})`)(
-        function* (request: ReEncryptRequest) {
-          const destinationKeyId = yield* DestinationKeyId;
-          // Always pin the source key (AWS best practice for symmetric
-          // ciphertexts) — and required for alias-bound IAM, where the
-          // `kms:RequestAlias` condition only matches when the alias appears
-          // in the request.
-          const sourceKeyId = yield* SourceKeyId;
-          return yield* reEncrypt({
-            ...request,
-            SourceKeyId: sourceKeyId,
-            DestinationKeyId: destinationKeyId,
-          });
-        },
-      );
+      return Effect.fn(`AWS.KMS.ReEncrypt(${keyLabel(destination)})`)(function* (
+        request: ReEncryptRequest,
+      ) {
+        const destinationKeyId = yield* DestinationKeyId;
+        // Always pin the source key (AWS best practice for symmetric
+        // ciphertexts) — and required for alias-bound IAM, where the
+        // `kms:RequestAlias` condition only matches when the alias appears
+        // in the request.
+        const sourceKeyId = yield* SourceKeyId;
+        return yield* reEncrypt({
+          ...request,
+          SourceKeyId: sourceKeyId,
+          DestinationKeyId: destinationKeyId,
+        });
+      });
     });
   }),
 );

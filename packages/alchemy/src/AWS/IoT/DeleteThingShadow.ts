@@ -33,13 +33,8 @@ export interface DeleteThingShadow extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DeleteThingShadowRequest,
-    ) => Effect.Effect<
-      iotdata.DeleteThingShadowResponse,
-      iotdata.DeleteThingShadowError
-    >
+    ) => Effect.Effect<iotdata.DeleteThingShadowResponse, iotdata.DeleteThingShadowError>
   >
 > {}
 
-export const DeleteThingShadow = Binding.Service<DeleteThingShadow>(
-  "AWS.IoT.DeleteThingShadow",
-);
+export const DeleteThingShadow = Binding.Service<DeleteThingShadow>("AWS.IoT.DeleteThingShadow");

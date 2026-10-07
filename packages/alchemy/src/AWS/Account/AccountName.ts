@@ -115,8 +115,7 @@ export const AccountNameProvider = () =>
             : { ...observed, accountName: news.accountName };
         }),
         // Account-global singleton: the one name always exists.
-        list: () =>
-          observe(undefined).pipe(Effect.map((observed) => [observed])),
+        list: () => observe(undefined).pipe(Effect.map((observed) => [observed])),
         // An AWS account always has a name — there is nothing to delete.
         // Destroy just stops managing it, mirroring the console behavior.
         delete: Effect.fn(function* () {}),

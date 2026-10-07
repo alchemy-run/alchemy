@@ -32,7 +32,6 @@ export interface GetEvidenceFileUploadUrl extends Binding.Service<
   >
 > {}
 
-export const GetEvidenceFileUploadUrl =
-  Binding.Service<GetEvidenceFileUploadUrl>(
-    "AWS.AuditManager.GetEvidenceFileUploadUrl",
-  );
+export const GetEvidenceFileUploadUrl = Binding.Service<GetEvidenceFileUploadUrl>(
+  "AWS.AuditManager.GetEvidenceFileUploadUrl",
+);

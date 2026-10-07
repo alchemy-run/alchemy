@@ -3,11 +3,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  stripNullFields,
-  stripUndefinedFields,
-  unwrapRedacted,
-} from "../../Util/data.ts";
+import { stripNullFields, stripUndefinedFields, unwrapRedacted } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
@@ -218,16 +214,13 @@ export const ConfigProvider = () =>
             // (missing permission / code-10000 auth blip surfaced as
             // Unauthorized, or a 403/404) must be skipped, not fail the whole
             // enumeration.
-            Effect.catchTag(
-              ["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"],
-              () => Effect.succeed(undefined),
+            Effect.catchTag(["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"], () =>
+              Effect.succeed(undefined),
             ),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is Config["Attributes"] => row !== undefined,
-      );
+      return rows.filter((row): row is Config["Attributes"] => row !== undefined);
     }),
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!output) return undefined;
@@ -244,10 +237,7 @@ export const ConfigProvider = () =>
       const desiredWorkflow = news.workflow ?? output.workflow;
       if (
         desiredWorkflow !== output.workflow ||
-        !deepEqual(
-          comparableConfig(comparableOutput),
-          comparableConfig(desired),
-        )
+        !deepEqual(comparableConfig(comparableOutput), comparableConfig(desired))
       ) {
         return { action: "update" } as const;
       }
@@ -256,8 +246,7 @@ export const ConfigProvider = () =>
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
         // before upstream Outputs resolved — report "not found" then.
-        output?.zoneId ??
-        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
+        output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       return yield* observe(zoneId);
     }),
@@ -268,10 +257,7 @@ export const ConfigProvider = () =>
       const desired = desiredConfig(observedConfig, news);
       const desiredWorkflow = news.workflow ?? observed.workflow;
 
-      const updatedConfig = deepEqual(
-        comparableConfig(observedConfig),
-        comparableConfig(desired),
-      )
+      const updatedConfig = deepEqual(comparableConfig(observedConfig), comparableConfig(desired))
         ? observedConfig
         : yield* zaraz.putConfig(toPutConfig(zoneId, desired));
       const updatedWorkflow =
@@ -310,16 +296,9 @@ const observe = (zoneId: string) =>
   Effect.all({
     config: zaraz.getConfig({ zoneId }),
     workflow: zaraz.getWorkflow({ zoneId }),
-  }).pipe(
-    Effect.map(({ config, workflow }) =>
-      toAttributes(zoneId, config, workflow),
-    ),
-  );
+  }).pipe(Effect.map(({ config, workflow }) => toAttributes(zoneId, config, workflow)));
 
-type ConfigResponse =
-  | zaraz.GetConfigResponse
-  | zaraz.PutConfigResponse
-  | zaraz.GetDefaultResponse;
+type ConfigResponse = zaraz.GetConfigResponse | zaraz.PutConfigResponse | zaraz.GetDefaultResponse;
 
 const toAttributes = (
   zoneId: string,
@@ -353,10 +332,7 @@ const fromAttributes = (attrs: ConfigAttributes): ConfigResponse => ({
   historyChange: attrs.historyChange,
 });
 
-const desiredConfig = (
-  observed: ConfigResponse,
-  props: ConfigProps,
-): ConfigResponse => ({
+const desiredConfig = (observed: ConfigResponse, props: ConfigProps): ConfigResponse => ({
   dataLayer: props.dataLayer ?? observed.dataLayer,
   debugKey: props.debugKey ?? observed.debugKey,
   settings: {
@@ -368,18 +344,12 @@ const desiredConfig = (
   variables: props.variables ?? observed.variables,
   zarazVersion: observed.zarazVersion,
   analytics:
-    props.analytics ??
-    (observed.analytics ? stripNullFields(observed.analytics) : undefined),
-  consent:
-    props.consent ??
-    (observed.consent ? stripNullFields(observed.consent) : undefined),
+    props.analytics ?? (observed.analytics ? stripNullFields(observed.analytics) : undefined),
+  consent: props.consent ?? (observed.consent ? stripNullFields(observed.consent) : undefined),
   historyChange: props.historyChange ?? observed.historyChange,
 });
 
-const toPutConfig = (
-  zoneId: string,
-  config: ConfigResponse,
-): zaraz.PutConfigRequest =>
+const toPutConfig = (zoneId: string, config: ConfigResponse): zaraz.PutConfigRequest =>
   stripUndefinedFields({
     zoneId,
     dataLayer: config.dataLayer,
@@ -389,12 +359,8 @@ const toPutConfig = (
     triggers: unwrapRedacted(config.triggers) as Record<string, unknown>,
     variables: unwrapRedacted(config.variables) as Record<string, unknown>,
     zarazVersion: config.zarazVersion,
-    analytics: config.analytics
-      ? (stripNullFields(config.analytics) as Analytics)
-      : undefined,
-    consent: config.consent
-      ? (stripNullFields(config.consent) as Consent)
-      : undefined,
+    analytics: config.analytics ? (stripNullFields(config.analytics) as Analytics) : undefined,
+    consent: config.consent ? (stripNullFields(config.consent) as Consent) : undefined,
     historyChange: config.historyChange ?? undefined,
   }) as zaraz.PutConfigRequest;
 

@@ -1,16 +1,7 @@
-import { adopt } from "@/AdoptPolicy";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as R2 from "@/Cloudflare/R2";
-import * as Command from "@/Command/index.ts";
-import * as Provider from "@/Provider";
-import * as Output from "@/Output";
-import { Stack } from "@/Stack";
-import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
-import { initialCwd } from "@/Util/Node.ts";
+import { pathToFileURL } from "node:url";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -18,6 +9,18 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import { adopt } from "@/AdoptPolicy";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as R2 from "@/Cloudflare/R2";
+import * as Command from "@/Command/index.ts";
+import * as Drift from "@/Drift";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import { Stack } from "@/Stack";
+import { State } from "@/State";
+import * as Test from "@/Test/Alchemy";
+import { initialCwd } from "@/Util/Node.ts";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -29,24 +32,16 @@ import {
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
+import InitConfigWorker from "./fixtures/init-config-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
-const { test: devTest } = Test.make({
-  providers: Cloudflare.providers(),
-  dev: true,
-});
+const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
-const doMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/do-counter-worker.ts",
-);
+const doMain = pathe.resolve(import.meta.dirname, "fixtures/do-counter-worker.ts");
 
 describe.concurrent(
   "Cloudflare.Worker",
@@ -63,17 +58,12 @@ describe.concurrent(
 
           const worker = yield* stack.deploy(
             Effect.gen(function* () {
-              yield* R2.Bucket("Bucket", {
-                forceDestroy: true,
-                storageClass: "Standard",
-              });
+              yield* R2.Bucket("Bucket", { forceDestroy: true, storageClass: "Standard" });
 
               const worker = yield* Cloudflare.Worker("TestWorker", {
                 main,
                 workersDev: true,
-                compatibility: {
-                  date: "2024-01-01",
-                },
+                compatibility: { date: "2024-01-01" },
               });
 
               return worker;
@@ -99,10 +89,7 @@ describe.concurrent(
             accountId,
             scriptName: worker.workerName,
           });
-          expect(initialSubdomain).toEqual({
-            enabled: true,
-            previewsEnabled: true,
-          });
+          expect(initialSubdomain).toEqual({ enabled: true, previewsEnabled: true });
 
           // Update the worker
           const updatedWorker = yield* stack.deploy(
@@ -110,34 +97,179 @@ describe.concurrent(
               return yield* Cloudflare.Worker("TestWorker", {
                 main,
                 workersDev: true,
-                compatibility: {
-                  date: "2024-01-01",
-                },
+                compatibility: { date: "2024-01-01" },
               });
             }),
           );
 
-          const actualUpdatedWorker = yield* findWorker(
-            updatedWorker.workerName,
-            accountId,
-          );
-          expect(actualUpdatedWorker?.scriptName).toEqual(
-            updatedWorker.workerName,
-          );
+          const actualUpdatedWorker = yield* findWorker(updatedWorker.workerName, accountId);
+          expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
           const actualUpdatedSubdomain = yield* workers.getScriptSubdomain({
             accountId,
             scriptName: updatedWorker.workerName,
           });
-          expect(actualUpdatedSubdomain).toEqual({
-            enabled: true,
-            previewsEnabled: true,
-          });
+          expect(actualUpdatedSubdomain).toEqual({ enabled: true, previewsEnabled: true });
 
           yield* stack.destroy();
 
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "live"] },
+    );
+
+    test.provider(
+      "zero-traffic upload receipts do not cause drift or hide live changes",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (marker: string, traffic?: number) =>
+            Cloudflare.Worker("ReceiptWorker", {
+              script: `export default { fetch() { return new Response(${JSON.stringify(marker)}); } };`,
+              workersDev: false,
+              version: traffic === undefined ? undefined : { traffic },
+            });
+
+          // Establish a compatible live deployment before uploading the
+          // candidate; a greenfield gradual rollout takes 100% of traffic.
+          const stable = yield* stack.deploy(program("stable"));
+          const beforeUpload = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: stable.workerName,
+          });
+          expect(beforeUpload.deployments[0]).toBeDefined();
+
+          const candidate = yield* stack.deploy(program("candidate", 0));
+          expect(candidate.workerName).toEqual(stable.workerName);
+          expect(candidate.versionId).toBeDefined();
+          expect(candidate.deploymentId).toBeUndefined();
+          const uploaded = yield* workers.getScriptVersion({
+            accountId,
+            scriptName: candidate.workerName,
+            versionId: candidate.versionId!,
+          });
+          expect(uploaded.id).toEqual(candidate.versionId);
+
+          const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+          const unchanged = yield* detectDrift();
+          expect(unchanged.resources.ReceiptWorker?.action).toBe("unchanged");
+          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+
+          const afterRead = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: candidate.workerName,
+          });
+          expect(afterRead.deployments[0]).toEqual(beforeUpload.deployments[0]);
+          expect(
+            afterRead.deployments[0]?.versions.some(
+              (version) => version.versionId === candidate.versionId,
+            ),
+          ).toBe(false);
+
+          // Change real script settings outside Alchemy. Keeping the upload
+          // receipt must not mask genuine drift in the live configuration.
+          yield* workers.createScriptSubdomain({
+            accountId,
+            scriptName: candidate.workerName,
+            enabled: true,
+            previewsEnabled: false,
+          });
+          const changed = yield* detectDrift();
+          expect(changed.resources.ReceiptWorker?.action).toBe("drifted");
+          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+          expect(changed.resources.ReceiptWorker?.attr.url).toBeDefined();
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
+    // #1827: drift repair rebuilds the bundle from the `main` stored in
+    // state. Deploy from one checkout with an absolute `main`
+    // (`import.meta.url`), delete that checkout, then repair drift from
+    // another checkout of the same code.
+    test.provider(
+      "drift repair rebuilds a Worker after the checkout that deployed it is gone",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          // Real path: on macOS the temp dir is a symlink, and `cwd` is real.
+          const tempRoot = yield* fs.realPath(
+            yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-moved-checkout-" }),
+          );
+          const writeCheckout = (dir: string) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(pathe.join(dir, "src"), { recursive: true });
+              yield* fs.writeFileString(
+                pathe.join(dir, "package.json"),
+                JSON.stringify({ name: "moved-checkout", private: true, type: "module" }),
+              );
+              yield* fs.writeFileString(
+                pathe.join(dir, "src", "worker.ts"),
+                `export default { fetch() { return new Response("moved-checkout"); } };\n`,
+              );
+            });
+          const checkoutA = pathe.join(tempRoot, "checkout-a");
+          const checkoutB = pathe.join(tempRoot, "checkout-b");
+          yield* writeCheckout(checkoutA);
+          const mainUrl = yield* Effect.sync(
+            () => pathToFileURL(pathe.join(checkoutA, "src", "worker.ts")).href,
+          );
+          const originalCwd = yield* Effect.sync(() => process.cwd());
+
+          yield* stack.destroy();
+
+          const workerName = yield* Effect.gen(function* () {
+            yield* Effect.sync(() => process.chdir(checkoutA));
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("MovedCheckoutWorker", { main: mainUrl, workersDev: true }),
+            );
+
+            // State keeps `main` relative to the deploying checkout.
+            const row = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "MovedCheckoutWorker",
+              });
+            }).pipe(Effect.provide(stack.state));
+            expect((row as { props?: { main?: unknown } } | undefined)?.props?.main).toEqual(
+              pathe.join("src", "worker.ts"),
+            );
+
+            // The deploying checkout is gone; another checkout repairs.
+            yield* writeCheckout(checkoutB);
+            yield* fs.remove(checkoutA, { recursive: true });
+            yield* Effect.sync(() => process.chdir(checkoutB));
+
+            yield* workers.createScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+              enabled: false,
+              previewsEnabled: false,
+            });
+            const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+              Effect.provide(stack.state),
+            );
+            expect(repaired.resources.MovedCheckoutWorker).toMatchObject({ action: "repaired" });
+            const subdomain = yield* workers.getScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(subdomain.enabled).toBe(true);
+            return worker.workerName;
+          }).pipe(Effect.ensuring(Effect.sync(() => process.chdir(originalCwd))));
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(workerName, accountId);
+        }).pipe(Effect.scoped, logLevel),
+      // mutates process-global cwd
+      { tags: ["live"], timeout: 180_000, exclusive: true },
     );
 
     test.provider(
@@ -155,9 +287,7 @@ describe.concurrent(
                 main,
                 assets: pathe.resolve(import.meta.dirname, "assets"),
                 workersDev: true,
-                compatibility: {
-                  date: "2024-01-01",
-                },
+                compatibility: { date: "2024-01-01" },
               });
             }),
           );
@@ -184,10 +314,7 @@ describe.concurrent(
             accountId,
             scriptName: worker.workerName,
           });
-          expect(assetsWorkerSubdomain).toEqual({
-            enabled: true,
-            previewsEnabled: true,
-          });
+          expect(assetsWorkerSubdomain).toEqual({ enabled: true, previewsEnabled: true });
 
           // Update the worker
           const updatedWorker = yield* stack.deploy(
@@ -196,20 +323,13 @@ describe.concurrent(
                 main,
                 assets: pathe.resolve(import.meta.dirname, "assets"),
                 workersDev: true,
-                compatibility: {
-                  date: "2024-01-01",
-                },
+                compatibility: { date: "2024-01-01" },
               });
             }),
           );
 
-          const actualUpdatedWorker = yield* findWorker(
-            updatedWorker.workerName,
-            accountId,
-          );
-          expect(actualUpdatedWorker?.scriptName).toEqual(
-            updatedWorker.workerName,
-          );
+          const actualUpdatedWorker = yield* findWorker(updatedWorker.workerName, accountId);
+          expect(actualUpdatedWorker?.scriptName).toEqual(updatedWorker.workerName);
           expect(updatedWorker.hash?.assets).toBeDefined();
 
           // Final update
@@ -219,9 +339,7 @@ describe.concurrent(
                 main,
                 workersDev: true,
                 assets: pathe.resolve(import.meta.dirname, "assets"),
-                compatibility: {
-                  date: "2024-01-01",
-                },
+                compatibility: { date: "2024-01-01" },
               });
             }),
           );
@@ -286,14 +404,10 @@ describe.concurrent(
           const v1 = yield* deploy(dirA);
           expect(v1.hash?.assets).toBeDefined();
           yield* expectWorkerExists(v1.workerName, accountId);
-          yield* expectUrlContains(
-            `${v1.url!}/index.html`,
-            "Hello from Worker",
-            {
-              timeout: "120 seconds",
-              label: "v1 served",
-            },
-          );
+          yield* expectUrlContains(`${v1.url!}/index.html`, "Hello from Worker", {
+            timeout: "120 seconds",
+            label: "v1 served",
+          });
 
           // Wipe dirA before the second deploy. If anything in the apply
           // path still tries to read the previously-recorded directory,
@@ -305,14 +419,10 @@ describe.concurrent(
           // Identical bytes ⇒ identical asset hash ⇒ keepAssets path.
           expect(v2.hash?.assets).toEqual(v1.hash?.assets);
           // The script binding stayed live; the URL keeps serving.
-          yield* expectUrlContains(
-            `${v2.url!}/index.html`,
-            "Hello from Worker",
-            {
-              timeout: "60 seconds",
-              label: "v2 served",
-            },
-          );
+          yield* expectUrlContains(`${v2.url!}/index.html`, "Hello from Worker", {
+            timeout: "60 seconds",
+            label: "v2 served",
+          });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
@@ -433,14 +543,10 @@ describe.concurrent(
           // the keepAssets branch must keep the manifest live.
           expect(v2.hash?.bundle).not.toEqual(v1.hash?.bundle);
           expect(v2.hash?.assets).toEqual(v1.hash?.assets);
-          yield* expectUrlContains(
-            `${v2.url!}/index.html`,
-            "Hello from Worker",
-            {
-              timeout: "60 seconds",
-              label: "assets still served after bundle-only change",
-            },
-          );
+          yield* expectUrlContains(`${v2.url!}/index.html`, "Hello from Worker", {
+            timeout: "60 seconds",
+            label: "assets still served after bundle-only change",
+          });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
@@ -541,11 +647,7 @@ describe.concurrent(
           // fresh state store that has never seen this resource.
           yield* Effect.gen(function* () {
             const state = yield* yield* State;
-            yield* state.delete({
-              stack: stack.name,
-              stage: stack.stage,
-              fqn: "AdoptableWorker",
-            });
+            yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "AdoptableWorker" });
           }).pipe(Effect.provide(stack.state));
 
           // Phase 3: redeploy *without* `adopt(true)`. The engine calls
@@ -575,9 +677,7 @@ describe.concurrent(
           }).pipe(Effect.provide(stack.state));
 
           expect(persisted?.status).toBeDefined();
-          expect((persisted as any)?.attr).toMatchObject({
-            workerName: physicalName,
-          });
+          expect((persisted as any)?.attr).toMatchObject({ workerName: physicalName });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(physicalName, accountId);
@@ -608,21 +708,13 @@ describe.concurrent(
             }),
           );
           const physicalName = original.workerName;
-          expect(
-            yield* findWorker(original.workerName, accountId),
-          ).toBeDefined();
-          expect(yield* getWorkerTags(physicalName, accountId)).toContain(
-            "alchemy:id:Original",
-          );
+          expect(yield* findWorker(original.workerName, accountId)).toBeDefined();
+          expect(yield* getWorkerTags(physicalName, accountId)).toContain("alchemy:id:Original");
 
           // Wipe state for the "Original" entry; the worker stays on Cloudflare.
           yield* Effect.gen(function* () {
             const state = yield* yield* State;
-            yield* state.delete({
-              stack: stack.name,
-              stage: stack.stage,
-              fqn: "Original",
-            });
+            yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Original" });
           }).pipe(Effect.provide(stack.state));
 
           // Phase 2: redeploy under a *different* logical id with the same
@@ -795,9 +887,7 @@ describe.concurrent(
           // The preview URL is version-scoped: an 8-char version prefix in
           // front of the worker name.
           expect(worker.url).toMatch(
-            new RegExp(
-              `^https://[0-9a-f]{8}-${worker.workerName}\\..*\\.workers\\.dev$`,
-            ),
+            new RegExp(`^https://[0-9a-f]{8}-${worker.workerName}\\..*\\.workers\\.dev$`),
           );
           expect(worker.urls).toEqual([worker.url]);
           expect(worker.domain).toBeUndefined();
@@ -859,10 +949,7 @@ describe.concurrent(
           // Deploy with different compatibility dates to force the update.
           const deploy = (date: string) =>
             stack.deploy(
-              Cloudflare.Worker("SubdomainPreviewsDriftWorker", {
-                main,
-                compatibility: { date },
-              }),
+              Cloudflare.Worker("SubdomainPreviewsDriftWorker", { main, compatibility: { date } }),
             );
 
           const v1 = yield* deploy("2026-01-01");
@@ -922,9 +1009,7 @@ describe.concurrent(
                 main,
                 compatibility: { date: "2024-01-01", flags: opts.flags },
                 observability: { enabled: opts.observability },
-                env: {
-                  WORKER_SECRET: Redacted.make("metadata-hash-stability"),
-                },
+                env: { WORKER_SECRET: Redacted.make("metadata-hash-stability") },
               });
             });
 
@@ -933,14 +1018,10 @@ describe.concurrent(
               (node: any) => node.resource.LogicalId === logicalId,
             )?.action;
 
-          const v1 = yield* stack.deploy(
-            program({ flags: [], observability: false }),
-          );
+          const v1 = yield* stack.deploy(program({ flags: [], observability: false }));
 
           // Identical props → noop.
-          const stablePlan = yield* stack.plan(
-            program({ flags: [], observability: false }),
-          );
+          const stablePlan = yield* stack.plan(program({ flags: [], observability: false }));
           expect(actionOf(stablePlan, "MetadataOnlyWorker")).toBe("noop");
 
           // A compatibility-flag-only change must plan as an update ...
@@ -950,9 +1031,7 @@ describe.concurrent(
           expect(actionOf(flagPlan, "MetadataOnlyWorker")).toBe("update");
 
           // ... and the deploy must apply it to the live script settings.
-          const v2 = yield* stack.deploy(
-            program({ flags: ["nodejs_als"], observability: false }),
-          );
+          const v2 = yield* stack.deploy(program({ flags: ["nodejs_als"], observability: false }));
           expect(v2.workerName).toEqual(v1.workerName);
           const flagSettings = yield* workers.getScriptScriptAndVersionSetting({
             accountId,
@@ -963,15 +1042,12 @@ describe.concurrent(
           // Same for an observability-only change. The bundle hash must not
           // move — proof the update decision came from the metadata hash alone,
           // not from an incidental rebuild.
-          const v3 = yield* stack.deploy(
-            program({ flags: ["nodejs_als"], observability: true }),
-          );
+          const v3 = yield* stack.deploy(program({ flags: ["nodejs_als"], observability: true }));
           expect(v3.hash?.bundle).toEqual(v2.hash?.bundle);
-          const observabilitySettings =
-            yield* workers.getScriptScriptAndVersionSetting({
-              accountId,
-              scriptName: v3.workerName,
-            });
+          const observabilitySettings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: v3.workerName,
+          });
           expect(observabilitySettings.observability?.enabled).toBe(true);
 
           // The applied props are now the stored state → back to noop.
@@ -984,6 +1060,116 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
+    );
+
+    test.provider(
+      "Issues survive code redeploys and can be disabled or removed",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+
+          const observability = {
+            enabled: true,
+            headSamplingRate: 0.5,
+            logs: { enabled: true, invocationLogs: true, headSamplingRate: 0, persist: false },
+            traces: { enabled: false, headSamplingRate: 0.1, persist: false },
+          };
+          let original: workers.GetScriptScriptAndVersionSettingResponse | undefined;
+          let scriptName = "";
+          let tailName = "";
+          for (const [issues, version] of [
+            [true, "v1"],
+            [true, "v2"],
+            [false, "v2"],
+            [true, "v2"],
+            [undefined, "v2"],
+          ] as const) {
+            const { worker, tail } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const tail = yield* Cloudflare.Worker("IssuesTail", {
+                  script: "export default { tail() {} };",
+                  bundle: false,
+                });
+                const worker = yield* Cloudflare.Worker("IssuesWorker", {
+                  script: `export default { fetch() { return new Response("${version}"); } };`,
+                  bundle: false,
+                  logpush: true,
+                  tags: ["issues-preservation"],
+                  tailConsumers: [tail],
+                  compatibility: { date: "2024-01-01", flags: ["nodejs_als"] },
+                  limits: { cpuMs: 50 },
+                  env: { PRESERVED: "issues-preservation" },
+                  observability: {
+                    ...observability,
+                    issues: issues === undefined ? undefined : { enabled: issues },
+                  },
+                });
+                return { worker, tail };
+              }),
+            );
+            tailName = tail.workerName;
+            if (scriptName) expect(worker.workerName).toBe(scriptName);
+            scriptName = worker.workerName;
+
+            const settings = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName,
+            });
+            expect(settings.observability?.issues?.enabled ?? false).toBe(issues ?? false);
+            expect(settings.observability?.enabled).toBe(true);
+            expect(settings.observability?.headSamplingRate).toBe(0.5);
+            expect(settings.observability?.logs).toMatchObject(observability.logs);
+            expect(settings.observability?.traces).toMatchObject(observability.traces);
+            expect(settings.logpush).toBe(true);
+            expect(settings.tags).toContain("issues-preservation");
+            expect(settings.tailConsumers).toEqual([{ service: tailName }]);
+            expect(settings.compatibilityDate).toBe("2024-01-01");
+            expect(settings.compatibilityFlags).toEqual(["nodejs_als"]);
+            expect(settings.limits).toMatchObject({ cpuMs: 50 });
+            expect(settings.bindings).toContainEqual({
+              type: "plain_text",
+              name: "PRESERVED",
+              text: "issues-preservation",
+            });
+            const unchanged = {
+              ...settings,
+              observability: { ...settings.observability!, issues: undefined },
+            };
+            if (original) expect(unchanged).toEqual(original);
+            else original = unchanged;
+            yield* expectUrlContains(worker.url!, version, { timeout: "30 seconds" });
+          }
+          // Exercise PATCH explicitly: a successful upload can make the fallback unnecessary.
+          for (const enabled of [true, false]) {
+            yield* workers.patchScriptSetting({
+              accountId,
+              scriptName,
+              observability: {
+                ...observability,
+                redactQueryString: true,
+                issues: { enabled },
+              },
+            });
+            const patched = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName,
+            });
+            expect(patched.observability?.issues?.enabled).toBe(enabled);
+            expect({
+              ...patched,
+              observability: { ...patched.observability, issues: undefined },
+            }).toEqual({
+              ...original,
+              observability: { ...original!.observability, redactQueryString: true },
+            });
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(scriptName, accountId);
+          yield* waitForWorkerToBeDeleted(tailName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
     );
 
     // #874 regression: binding a tagged Worker identity (an Effect class) in
@@ -1005,31 +1191,21 @@ describe.concurrent(
 
           yield* stack.destroy();
 
-          class EnvTagTarget extends Cloudflare.Worker<EnvTagTarget, {}>()(
-            "EnvTagTargetWorker",
-          ) {}
-          class EnvTagCaller extends Cloudflare.Worker<EnvTagCaller, {}>()(
-            "EnvTagCallerWorker",
-          ) {}
+          class EnvTagTarget extends Cloudflare.Worker<EnvTagTarget, {}>()("EnvTagTargetWorker") {}
+          class EnvTagCaller extends Cloudflare.Worker<EnvTagCaller, {}>()("EnvTagCallerWorker") {}
 
           // The caller's entry lives in a temp dir so the test can edit its
           // contents mid-flight without touching the shared checked-in fixture.
           const callerScript = (marker: string) =>
             `export default { fetch: async () => new Response(${JSON.stringify(marker)}) };\n`;
-          const tempDir = yield* fs.makeTempDirectory({
-            prefix: "alchemy-env-tag-worker",
-          });
+          const tempDir = yield* fs.makeTempDirectory({ prefix: "alchemy-env-tag-worker" });
           const callerMain = path.join(tempDir, "worker.ts");
           yield* fs.writeFileString(callerMain, callerScript("v1"));
 
           const layers = Layer.mergeAll(
             EnvTagTarget.make({ main, isExternal: true }, Effect.succeed({})),
             EnvTagCaller.make(
-              {
-                main: callerMain,
-                isExternal: true,
-                env: { TARGET: EnvTagTarget },
-              },
+              { main: callerMain, isExternal: true, env: { TARGET: EnvTagTarget } },
               Effect.succeed({}),
             ),
           );
@@ -1074,14 +1250,8 @@ describe.concurrent(
           expect(actionOf(codeChangePlan, "EnvTagCallerWorker")).toBe("update");
 
           yield* stack.destroy();
-          yield* waitForWorkerToBeDeleted(
-            deployed.caller.workerName,
-            accountId,
-          );
-          yield* waitForWorkerToBeDeleted(
-            deployed.target.workerName,
-            accountId,
-          );
+          yield* waitForWorkerToBeDeleted(deployed.caller.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(deployed.target.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
     );
@@ -1103,9 +1273,7 @@ describe.concurrent(
 
           const program = (selected: "A" | "B") =>
             Effect.gen(function* () {
-              const targetB = yield* Cloudflare.Worker("YieldedEnvTargetB", {
-                main,
-              });
+              const targetB = yield* Cloudflare.Worker("YieldedEnvTargetB", { main });
               const targetA = yield* Cloudflare.Worker("YieldedEnvTargetA", {
                 main,
                 env: { UPSTREAM: targetB },
@@ -1129,8 +1297,7 @@ describe.concurrent(
               scriptName: callerName,
             });
             return settings.bindings?.find(
-              (binding) =>
-                binding.type === "service" && binding.name === "TARGET",
+              (binding) => binding.type === "service" && binding.name === "TARGET",
             );
           });
           expect(yield* bindingTarget(deployedA.caller.workerName)).toEqual(
@@ -1178,6 +1345,85 @@ describe.concurrent(
       { tags: ["live"], timeout: 360_000 },
     );
 
+    // Precreate publishes the URLs known before the first upload, so a cycle
+    // of Workers binding each other's `url` resolves on the first deploy.
+    // Worker A serves only on a custom domain (`workersDev: false`): its
+    // precreate `url` must be the domain, not `undefined`.
+    const circularUrlZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
+    test.provider.skipIf(!circularUrlZone)(
+      "circular Worker URL bindings resolve custom-domain and workers.dev URLs on the first deploy",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const domainA = `alchemy-circular-url-${suffix}.${circularUrlZone}`;
+
+          yield* stack.destroy();
+
+          const program = () =>
+            Effect.gen(function* () {
+              const a = yield* Cloudflare.Worker("CircularUrlA", {
+                main,
+                workersDev: false,
+                domain: domainA,
+              });
+              const b = yield* Cloudflare.Worker("CircularUrlB", { main });
+              yield* a.bind`B_URL`({
+                bindings: [
+                  {
+                    type: "plain_text",
+                    name: "B_URL",
+                    text: b.url.as<string>(),
+                  },
+                ],
+              });
+              yield* b.bind`A_URL`({
+                bindings: [
+                  {
+                    type: "plain_text",
+                    name: "A_URL",
+                    text: a.url.as<string>(),
+                  },
+                ],
+              });
+              return { a, b };
+            });
+
+          const deployed = yield* stack.deploy(program());
+          expect(deployed.a.url).toEqual(`https://${domainA}`);
+          expect(deployed.b.url).toMatch(/^https:\/\/.*\.workers\.dev$/);
+          for (const [worker, name, peerUrl] of [
+            [deployed.a, "B_URL", deployed.b.url],
+            [deployed.b, "A_URL", deployed.a.url],
+          ] as const) {
+            const settings = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(settings.bindings).toContainEqual(
+              expect.objectContaining({
+                type: "plain_text",
+                name,
+                text: peerUrl,
+              }),
+            );
+          }
+
+          const settled = yield* stack.plan(program());
+          for (const logicalId of ["CircularUrlA", "CircularUrlB"]) {
+            const node = (Object.values(settled.resources) as any[]).find(
+              (candidate) => candidate.resource.LogicalId === logicalId,
+            );
+            expect(node?.action).toBe("noop");
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(deployed.a.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(deployed.b.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 360_000 },
+    );
+
     // The full circular case from the #874 report: A and B each bind the
     // OTHER's tag in env. The tags keep the dependency on the binding channel
     // (precreate stubs + converge pass) — a cycle the props channel cannot
@@ -1190,22 +1436,12 @@ describe.concurrent(
 
           yield* stack.destroy();
 
-          class CircTagA extends Cloudflare.Worker<CircTagA, {}>()(
-            "CircTagAWorker",
-          ) {}
-          class CircTagB extends Cloudflare.Worker<CircTagB, {}>()(
-            "CircTagBWorker",
-          ) {}
+          class CircTagA extends Cloudflare.Worker<CircTagA, {}>()("CircTagAWorker") {}
+          class CircTagB extends Cloudflare.Worker<CircTagB, {}>()("CircTagBWorker") {}
 
           const layers = Layer.mergeAll(
-            CircTagA.make(
-              { main, isExternal: true, env: { PEER: CircTagB } },
-              Effect.succeed({}),
-            ),
-            CircTagB.make(
-              { main, isExternal: true, env: { PEER: CircTagA } },
-              Effect.succeed({}),
-            ),
+            CircTagA.make({ main, isExternal: true, env: { PEER: CircTagB } }, Effect.succeed({})),
+            CircTagB.make({ main, isExternal: true, env: { PEER: CircTagA } }, Effect.succeed({})),
           );
 
           const program = () =>
@@ -1232,11 +1468,7 @@ describe.concurrent(
               scriptName: self.workerName,
             });
             expect(settings.bindings).toContainEqual(
-              expect.objectContaining({
-                type: "service",
-                name: "PEER",
-                service: peer.workerName,
-              }),
+              expect.objectContaining({ type: "service", name: "PEER", service: peer.workerName }),
             );
           }
 
@@ -1267,18 +1499,12 @@ describe.concurrent(
 
           const program = () =>
             Effect.gen(function* () {
-              const source = yield* Cloudflare.Worker("BindTextSource", {
-                main,
-              });
-              const host = yield* Cloudflare.Worker("BindTextHost", {
-                main,
-              });
+              const source = yield* Cloudflare.Worker("BindTextSource", { main });
+              const host = yield* Cloudflare.Worker("BindTextHost", { main });
               // `source.workerName` is an Output<string> at plan time — the
               // same shape as an Action-produced value bound as plain_text.
               yield* host.bind`REV`({
-                bindings: [
-                  { type: "plain_text", name: "REV", text: source.workerName },
-                ],
+                bindings: [{ type: "plain_text", name: "REV", text: source.workerName }],
               });
               return { source, host };
             });
@@ -1309,10 +1535,7 @@ describe.concurrent(
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(deployed.host.workerName, accountId);
-          yield* waitForWorkerToBeDeleted(
-            deployed.source.workerName,
-            accountId,
-          );
+          yield* waitForWorkerToBeDeleted(deployed.source.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
     );
@@ -1356,11 +1579,7 @@ describe.concurrent(
             scriptName: deployed.workerName,
           });
           expect(settings.bindings).toContainEqual(
-            expect.objectContaining({
-              type: "plain_text",
-              name: "VALUE",
-              text: "v1",
-            }),
+            expect.objectContaining({ type: "plain_text", name: "VALUE", text: "v1" }),
           );
 
           // Same value → noop; changed value → update.
@@ -1371,20 +1590,74 @@ describe.concurrent(
 
           // The changed value must actually deploy — and then converge.
           const redeployed = yield* stack.deploy(program("v2"));
-          const updatedSettings =
-            yield* workers.getScriptScriptAndVersionSetting({
-              accountId,
-              scriptName: redeployed.workerName,
-            });
+          const updatedSettings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: redeployed.workerName,
+          });
           expect(updatedSettings.bindings).toContainEqual(
-            expect.objectContaining({
-              type: "plain_text",
-              name: "VALUE",
-              text: "v2",
-            }),
+            expect.objectContaining({ type: "plain_text", name: "VALUE", text: "v2" }),
           );
           const resettled = yield* stack.plan(program("v2"));
           expect(actionOf(resettled, "EffectEnvValueWorker")).toBe("noop");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 360_000 },
+    );
+
+    // #1831 regression: a `Config` value read in an Effect-native Worker's
+    // Init lands in `props.env` only, which the Worker diff does not compare;
+    // the planner compares Init-captured values itself. Changing the value
+    // must plan an update and reach the deployed Worker; an unchanged value
+    // must stay a noop.
+    test.provider(
+      "changing a Config value read in Init plans an update",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          // Layer the value over the ambient provider: the harness snapshots
+          // `process.env` when the test starts.
+          const program = (mode: string) =>
+            Effect.gen(function* () {
+              const ambient = yield* ConfigProvider.ConfigProvider;
+              return yield* InitConfigWorker.pipe(
+                Effect.provideService(
+                  ConfigProvider.ConfigProvider,
+                  ConfigProvider.orElse(
+                    ConfigProvider.fromUnknown({ INIT_CONFIG_WORKER_MODE: mode }),
+                    ambient,
+                  ),
+                ),
+              );
+            });
+
+          const actionOf = (plan: any, logicalId: string) =>
+            (Object.values(plan.resources) as any[]).find(
+              (node: any) => node.resource.LogicalId === logicalId,
+            )?.action;
+
+          const deployed = yield* stack.deploy(program("init-config-v1"));
+          yield* expectUrlContains(deployed.url!, "init-config-v1", {
+            timeout: "60 seconds",
+            label: "initial Init config value",
+          });
+
+          const samePlan = yield* stack.plan(program("init-config-v1"));
+          expect(actionOf(samePlan, "InitConfigWorker")).toBe("noop");
+          const changedPlan = yield* stack.plan(program("init-config-v2"));
+          expect(actionOf(changedPlan, "InitConfigWorker")).toBe("update");
+
+          const redeployed = yield* stack.deploy(program("init-config-v2"));
+          yield* expectUrlContains(redeployed.url!, "init-config-v2", {
+            timeout: "60 seconds",
+            label: "updated Init config value",
+          });
+          const resettled = yield* stack.plan(program("init-config-v2"));
+          expect(actionOf(resettled, "InitConfigWorker")).toBe("noop");
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(deployed.workerName, accountId);
@@ -1434,24 +1707,19 @@ describe.concurrent(
     // Ordering contract: the canonical custom domain leads `urls` (it is the
     // most significant URL), aliases follow in declared order, and the
     // workers.dev URL comes last. Swapping name and alias moves `url`.
-    const customDomainZone =
-      process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
+    const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
     test.provider.skipIf(!customDomainZone)(
       "custom domain outranks workers.dev in urls and selects url",
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix =
-            process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
           const domainA = `alchemy-worker-a-${suffix}.${customDomainZone}`;
           const domainB = `alchemy-worker-b-${suffix}.${customDomainZone}`;
 
           yield* stack.destroy();
 
-          const deploy = (
-            workersDev: boolean,
-            domain: { name: string; aliases?: string[] },
-          ) =>
+          const deploy = (workersDev: boolean, domain: { name: string; aliases?: string[] }) =>
             stack.deploy(
               Effect.gen(function* () {
                 return yield* Cloudflare.Worker("CustomDomainWorker", {
@@ -1465,51 +1733,25 @@ describe.concurrent(
 
           // workers.dev enabled: the canonical domain still leads `urls`,
           // the alias follows, and the workers.dev URL comes last.
-          const worker = yield* deploy(true, {
-            name: domainA,
-            aliases: [domainB],
-          });
+          const worker = yield* deploy(true, { name: domainA, aliases: [domainB] });
           expect(worker.urls).toHaveLength(3);
-          expect(worker.urls.slice(0, 2)).toEqual([
-            `https://${domainA}`,
-            `https://${domainB}`,
-          ]);
+          expect(worker.urls.slice(0, 2)).toEqual([`https://${domainA}`, `https://${domainB}`]);
           expect(worker.urls[2]).toMatch(
             new RegExp(`^https://${worker.workerName}\\..*\\.workers\\.dev$`),
           );
           expect(worker.url).toEqual(`https://${domainA}`);
-          expect(worker.domain).toEqual({
-            name: domainA,
-            aliases: [domainB],
-            redirects: [],
-          });
+          expect(worker.domain).toEqual({ name: domainA, aliases: [domainB], redirects: [] });
 
           // Domain only (no workers.dev): urls is just the domain + alias.
-          const domainOnly = yield* deploy(false, {
-            name: domainA,
-            aliases: [domainB],
-          });
-          expect(domainOnly.urls).toEqual([
-            `https://${domainA}`,
-            `https://${domainB}`,
-          ]);
+          const domainOnly = yield* deploy(false, { name: domainA, aliases: [domainB] });
+          expect(domainOnly.urls).toEqual([`https://${domainA}`, `https://${domainB}`]);
           expect(domainOnly.url).toEqual(`https://${domainA}`);
 
           // Swap name and alias — `url` follows the canonical name.
-          const swapped = yield* deploy(false, {
-            name: domainB,
-            aliases: [domainA],
-          });
-          expect(swapped.urls).toEqual([
-            `https://${domainB}`,
-            `https://${domainA}`,
-          ]);
+          const swapped = yield* deploy(false, { name: domainB, aliases: [domainA] });
+          expect(swapped.urls).toEqual([`https://${domainB}`, `https://${domainA}`]);
           expect(swapped.url).toEqual(`https://${domainB}`);
-          expect(swapped.domain).toEqual({
-            name: domainB,
-            aliases: [domainA],
-            redirects: [],
-          });
+          expect(swapped.domain).toEqual({ name: domainB, aliases: [domainA], redirects: [] });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
@@ -1557,18 +1799,10 @@ describe.concurrent(
           }) =>
             Effect.gen(function* () {
               const state = yield* yield* State;
-              const key = {
-                stack: stack.name,
-                stage: stack.stage,
-                fqn: "LegacyStateWorker",
-              };
+              const key = { stack: stack.name, stage: stack.stage, fqn: "LegacyStateWorker" };
               const current = yield* state.get(key);
               expect(current).toBeDefined();
-              const attr = {
-                ...(current as any).attr,
-                url: legacy.url,
-                domains: legacy.domains,
-              };
+              const attr = { ...(current as any).attr, url: legacy.url, domains: legacy.domains };
               delete attr.urls;
               delete attr.domain;
               yield* state.set({
@@ -1597,13 +1831,8 @@ describe.concurrent(
           // diff's `olds` carries the pre-redesign prop shape too.
           yield* writeLegacyRecord({
             url: undefined,
-            domains: [
-              { id: "legacy", hostname: "app.example.com", zoneId: "z" },
-            ],
-            legacyProps: {
-              url: true,
-              subdomain: { enabled: true, previewsEnabled: true },
-            },
+            domains: [{ id: "legacy", hostname: "app.example.com", zoneId: "z" }],
+            legacyProps: { url: true, subdomain: { enabled: true, previewsEnabled: true } },
           });
 
           const v3 = yield* deploy("2024-01-03");
@@ -1658,11 +1887,7 @@ describe.concurrent(
           // surface (any value the new code can't reproduce).
           yield* Effect.gen(function* () {
             const state = yield* yield* State;
-            const key = {
-              stack: stack.name,
-              stage: stack.stage,
-              fqn: "BareUpstream",
-            };
+            const key = { stack: stack.name, stage: stack.stage, fqn: "BareUpstream" };
             const current = yield* state.get(key);
             expect(current).toBeDefined();
             const attr = {
@@ -1722,9 +1947,7 @@ describe.concurrent(
           const provider = yield* Provider.findProvider(Cloudflare.Worker);
           const all = yield* provider.list();
 
-          expect(all.some((w) => w.workerName === worker.workerName)).toBe(
-            true,
-          );
+          expect(all.some((w) => w.workerName === worker.workerName)).toBe(true);
           const found = all.find((w) => w.workerName === worker.workerName);
           expect(found?.workerId).toEqual(worker.workerId);
           expect(found?.accountId).toEqual(accountId);
@@ -1774,9 +1997,8 @@ describe.concurrent(
           const plan = yield* stack.plan(program(["*/10 * * * *"]));
 
           const actionOf = (logicalId: string) =>
-            Object.values(plan.resources).find(
-              (node) => node.resource.LogicalId === logicalId,
-            )?.action;
+            Object.values(plan.resources).find((node) => node.resource.LogicalId === logicalId)
+              ?.action;
 
           expect(actionOf("Upstream")).toBe("update");
           expect(actionOf("Hook")).toBe("noop");
@@ -1863,17 +2085,11 @@ describe.concurrent(
           expect(actionOf(addFirstDoPlan, "Upstream")).toBe("update");
           expect(actionOf(addFirstDoPlan, "Hook")).toBe("create");
 
-          yield* stack.deploy(
-            program({ crons: [], dos: ["Counter"], hookRef: "Counter" }),
-          );
+          yield* stack.deploy(program({ crons: [], dos: ["Counter"], hookRef: "Counter" }));
 
           // ── Worker-only change, same DO set → hook noop ──
           const workerOnlyPlan = yield* stack.plan(
-            program({
-              crons: ["*/10 * * * *"],
-              dos: ["Counter"],
-              hookRef: "Counter",
-            }),
+            program({ crons: ["*/10 * * * *"], dos: ["Counter"], hookRef: "Counter" }),
           );
           expect(actionOf(workerOnlyPlan, "Upstream")).toBe("update");
           expect(actionOf(workerOnlyPlan, "Hook")).toBe("noop");
@@ -1882,42 +2098,26 @@ describe.concurrent(
           // namespace id is unchanged, so the hook is a noop even though the
           // worker must update to register the new class ──
           const addDoPlan = yield* stack.plan(
-            program({
-              crons: ["*/10 * * * *"],
-              dos: ["Counter", "Meter"],
-              hookRef: "Counter",
-            }),
+            program({ crons: ["*/10 * * * *"], dos: ["Counter", "Meter"], hookRef: "Counter" }),
           );
           expect(actionOf(addDoPlan, "Upstream")).toBe("update");
           expect(actionOf(addDoPlan, "Hook")).toBe("noop");
 
           yield* stack.deploy(
-            program({
-              crons: ["*/10 * * * *"],
-              dos: ["Counter", "Meter"],
-              hookRef: "Counter",
-            }),
+            program({ crons: ["*/10 * * * *"], dos: ["Counter", "Meter"], hookRef: "Counter" }),
           );
 
           // ── Remove a DO class (Meter) while hook still refs Counter → DO set
           // changed, so the hook must re-plan even though Counter's id is
           // unchanged in the cloud ──
           const removeDoPlan = yield* stack.plan(
-            program({
-              crons: ["*/10 * * * *"],
-              dos: ["Counter"],
-              hookRef: "Counter",
-            }),
+            program({ crons: ["*/10 * * * *"], dos: ["Counter"], hookRef: "Counter" }),
           );
           expect(actionOf(removeDoPlan, "Upstream")).toBe("update");
           expect(actionOf(removeDoPlan, "Hook")).toBe("update");
 
           yield* stack.deploy(
-            program({
-              crons: ["*/10 * * * *"],
-              dos: ["Counter"],
-              hookRef: "Counter",
-            }),
+            program({ crons: ["*/10 * * * *"], dos: ["Counter"], hookRef: "Counter" }),
           );
 
           // ── Same DO set restored → hook noop on another worker-only change ──
@@ -1931,22 +2131,12 @@ describe.concurrent(
           // Counter. The worker must update; the hook plans as noop because the
           // persisted Counter namespace id is still carried in state until apply ──
           const swapDoPlan = yield* stack.plan(
-            program({
-              crons: [],
-              dos: ["Meter"],
-              hookRef: "Counter",
-            }),
+            program({ crons: [], dos: ["Meter"], hookRef: "Counter" }),
           );
           expect(actionOf(swapDoPlan, "Upstream")).toBe("update");
           expect(actionOf(swapDoPlan, "Hook")).toBe("noop");
 
-          yield* stack.deploy(
-            program({
-              crons: [],
-              dos: ["Meter"],
-              hookRef: "Meter",
-            }),
-          );
+          yield* stack.deploy(program({ crons: [], dos: ["Meter"], hookRef: "Meter" }));
 
           // ── No further changes → noop ──
           const hookFollowsDoPlan = yield* stack.plan(
@@ -1983,9 +2173,7 @@ describe.concurrent(
           // default `nodejs_compat` must reach both the bundler (so `node:*`
           // stays external instead of warning) and the upload metadata (so
           // Cloudflare doesn't reject with `No such module "node:crypto"`).
-          const workerDir = yield* fs.makeTempDirectory({
-            prefix: "alchemy-worker-node-compat-",
-          });
+          const workerDir = yield* fs.makeTempDirectory({ prefix: "alchemy-worker-node-compat-" });
           const workerPath = path.join(workerDir, "worker.ts");
           yield* fs.writeFileString(
             workerPath,
@@ -2033,9 +2221,7 @@ export default {
           // The entry module only exists after the build command runs, so the
           // Worker cannot know its `main` path until `build.outdir` resolves.
           const marker = "alchemy-output-main-e2e-ok-7c31";
-          const tempDir = yield* fs.makeTempDirectory({
-            prefix: "alchemy-output-main-",
-          });
+          const tempDir = yield* fs.makeTempDirectory({ prefix: "alchemy-output-main-" });
           yield* fs.writeFileString(
             path.join(tempDir, "worker.src.mjs"),
             `export default { fetch: () => new Response(${JSON.stringify(marker)}) };\n`,

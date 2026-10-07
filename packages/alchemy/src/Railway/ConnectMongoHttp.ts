@@ -10,12 +10,8 @@ import {
   connectEnvKeys,
   type ConnectMongoClient,
 } from "./ConnectMongo.ts";
+import { MONGO_URL_SECRET, MONGO_PUBLIC_URL_SECRET, type Mongo } from "./Mongo.ts";
 import { isRailwayHost } from "./MountVolume.ts";
-import {
-  MONGO_URL_SECRET,
-  MONGO_PUBLIC_URL_SECRET,
-  type Mongo,
-} from "./Mongo.ts";
 
 const runtimeOutput = <A>(
   key: string,

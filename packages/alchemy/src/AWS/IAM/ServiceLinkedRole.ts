@@ -102,9 +102,7 @@ export interface ServiceLinkedRole extends Resource<
  *
  * @resource
  */
-export const ServiceLinkedRole = Resource<ServiceLinkedRole>(
-  "AWS.IAM.ServiceLinkedRole",
-);
+export const ServiceLinkedRole = Resource<ServiceLinkedRole>("AWS.IAM.ServiceLinkedRole");
 
 /**
  * Derive the custom suffix back out of an `AWSServiceRoleFor..._suffix`
@@ -116,10 +114,7 @@ const suffixFromRoleName = (roleName: string): string | undefined => {
   return index === -1 ? undefined : roleName.slice(index + 1);
 };
 
-const toAttributes = (
-  role: iam.Role,
-  awsServiceName: string,
-): ServiceLinkedRole["Attributes"] => ({
+const toAttributes = (role: iam.Role, awsServiceName: string): ServiceLinkedRole["Attributes"] => ({
   roleName: role.RoleName,
   roleArn: role.Arn,
   roleId: role.RoleId,
@@ -145,9 +140,7 @@ export const ServiceLinkedRoleProvider = () =>
           .pages({ PathPrefix: `/aws-service-role/${props.awsServiceName}/` })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Roles ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Roles ?? [])),
           );
         return roles.find((role) =>
           props.customSuffix
@@ -159,11 +152,7 @@ export const ServiceLinkedRoleProvider = () =>
       const getRole = Effect.fn(function* (roleName: string) {
         const response = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         return response?.Role;
       });
 
@@ -171,16 +160,10 @@ export const ServiceLinkedRoleProvider = () =>
         return yield* iam.deleteServiceLinkedRole({ RoleName: roleName }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "LimitExceededException" ||
-              error._tag === "ServiceFailureException",
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(6),
-            ]),
+              error._tag === "LimitExceededException" || error._tag === "ServiceFailureException",
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
           }),
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -222,9 +205,7 @@ export const ServiceLinkedRoleProvider = () =>
                 Effect.catchTag("NoSuchEntityException", () =>
                   Effect.succeed("TASK_NOT_FOUND" as const),
                 ),
-                Effect.catchTag("ServiceFailureException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ServiceFailureException", () => Effect.succeed(undefined)),
               );
             if (status === "TASK_NOT_FOUND") {
               lastStatus = status;
@@ -235,9 +216,7 @@ export const ServiceLinkedRoleProvider = () =>
                 const usage = (status.Reason?.RoleUsageList ?? [])
                   .flatMap((entry) => entry.Resources ?? [])
                   .join(", ");
-                lastReason = [status.Reason?.Reason, usage]
-                  .filter((part) => part)
-                  .join(" — ");
+                lastReason = [status.Reason?.Reason, usage].filter((part) => part).join(" — ");
                 // AWS documents that a new request must be submitted after a
                 // failed deletion task. The next bounded iteration does so.
                 deletionTaskId = undefined;
@@ -258,27 +237,16 @@ export const ServiceLinkedRoleProvider = () =>
       });
 
       return {
-        stables: [
-          "roleName",
-          "roleArn",
-          "roleId",
-          "path",
-          "awsServiceName",
-          "customSuffix",
-        ],
+        stables: ["roleName", "roleArn", "roleId", "path", "awsServiceName", "customSuffix"],
         list: () =>
           Effect.gen(function* () {
             // IAM is global; every service-linked role lives under the
             // `/aws-service-role/` path, with the linked service name as
             // the next path segment.
-            const roles = yield* iam.listRoles
-              .pages({ PathPrefix: "/aws-service-role/" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Roles ?? []),
-                ),
-              );
+            const roles = yield* iam.listRoles.pages({ PathPrefix: "/aws-service-role/" }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Roles ?? [])),
+            );
             return roles.flatMap((role) => {
               const awsServiceName = role.Path.split("/")[2];
               return awsServiceName ? [toAttributes(role, awsServiceName)] : [];
@@ -291,10 +259,7 @@ export const ServiceLinkedRoleProvider = () =>
           if (olds.awsServiceName !== news.awsServiceName) {
             return { action: "replace" } as const;
           }
-          if (
-            (olds.customSuffix ?? undefined) !==
-            (news.customSuffix ?? undefined)
-          ) {
+          if ((olds.customSuffix ?? undefined) !== (news.customSuffix ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -312,18 +277,13 @@ export const ServiceLinkedRoleProvider = () =>
             return undefined;
           }
           const awsServiceName =
-            olds?.awsServiceName ??
-            output?.awsServiceName ??
-            role.Path.split("/")[2] ??
-            "";
+            olds?.awsServiceName ?? output?.awsServiceName ?? role.Path.split("/")[2] ?? "";
           return toAttributes(role, awsServiceName);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           // Observe — prefer the cached role name; fall back to searching
           // the service's deterministic path.
-          let observed = output?.roleName
-            ? yield* getRole(output.roleName)
-            : undefined;
+          let observed = output?.roleName ? yield* getRole(output.roleName) : undefined;
           if (!observed) {
             observed = yield* findRole(news);
           }
@@ -343,9 +303,7 @@ export const ServiceLinkedRoleProvider = () =>
                 Effect.catchTag("InvalidInputException", (error) =>
                   findRole(news).pipe(
                     Effect.flatMap((existing) =>
-                      existing
-                        ? Effect.succeed({ Role: existing })
-                        : Effect.fail(error),
+                      existing ? Effect.succeed({ Role: existing }) : Effect.fail(error),
                     ),
                   ),
                 ),
@@ -363,10 +321,7 @@ export const ServiceLinkedRoleProvider = () =>
           // Sync description — the only aspect IAM lets us edit on a
           // service-linked role. Only converge when the user declared one;
           // an omitted prop leaves the service's default description alone.
-          if (
-            news.description !== undefined &&
-            observed.Description !== news.description
-          ) {
+          if (news.description !== undefined && observed.Description !== news.description) {
             yield* iam
               .updateRole({
                 RoleName: observed.RoleName,
@@ -375,10 +330,7 @@ export const ServiceLinkedRoleProvider = () =>
               .pipe(
                 // A few linked services lock the role entirely — treat the
                 // description as service-managed rather than failing.
-                Effect.catchTag(
-                  "UnmodifiableEntityException",
-                  () => Effect.void,
-                ),
+                Effect.catchTag("UnmodifiableEntityException", () => Effect.void),
               );
           }
 

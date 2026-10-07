@@ -54,9 +54,7 @@ export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {
                 Effect: "Allow",
                 Action: [...options.actions],
                 Resource:
-                  options.resource === "*"
-                    ? ["*"]
-                    : [Output.interpolate`${instance.instanceArn}`],
+                  options.resource === "*" ? ["*"] : [Output.interpolate`${instance.instanceArn}`],
               },
             ],
           });
@@ -68,8 +66,7 @@ export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {
         const id = yield* instanceId;
         return yield* op({
           ...request,
-          [options.requestKey]:
-            options.requestKey === "InstanceIds" ? [id] : id,
+          [options.requestKey]: options.requestKey === "InstanceIds" ? [id] : id,
         } as I);
       });
     });
@@ -81,12 +78,7 @@ export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {
  * `GroupId` and the deploy-time half grants `actions` on the security group
  * ARN.
  */
-export const makeSecurityGroupHttpBinding = <
-  I extends object,
-  A,
-  E,
-  R,
->(options: {
+export const makeSecurityGroupHttpBinding = <I extends object, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.EC2.AuthorizeSecurityGroupIngress`. */
   tag: string;
   /** The distilled operation; `GroupId` is injected from the group. */

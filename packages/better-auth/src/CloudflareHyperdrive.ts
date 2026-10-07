@@ -5,11 +5,7 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { Database } from "./Database.ts";
 import { makeMySQLService, type MySQLOptions } from "./MySQL.ts";
-import {
-  makePostgresService,
-  type MigrateSource,
-  type PostgresOptions,
-} from "./Postgres.ts";
+import { makePostgresService, type MigrateSource, type PostgresOptions } from "./Postgres.ts";
 
 export interface CloudflareHyperdriveOptions {
   /**

@@ -1,9 +1,9 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Neon from "@/Neon/index.ts";
 import * as Prisma from "@/Prisma/index.ts";
-import * as Effect from "effect/Effect";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 /**
  * Neon + Prisma wiring for the Prisma ORM Worker E2E test: the contract
@@ -16,11 +16,7 @@ export const Db = Effect.gen(function* () {
   // Resolved inside the effect (not at module scope) so it only runs at
   // deploy time — `import.meta.url` is undefined in the bundled worker.
   const configPath = yield* Effect.sync(() =>
-    path.join(
-      import.meta.url ? fileURLToPath(import.meta.url) : ".",
-      "..",
-      "prisma.config.ts",
-    ),
+    path.join(import.meta.url ? fileURLToPath(import.meta.url) : ".", "..", "prisma.config.ts"),
   );
 
   const contract = yield* Prisma.Contract("PrismaOrmContract", {

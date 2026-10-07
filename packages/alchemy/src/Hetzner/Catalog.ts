@@ -2,16 +2,9 @@ import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
-export type CatalogKind =
-  | "location"
-  | "serverType"
-  | "image"
-  | "iso"
-  | "loadBalancerType";
+export type CatalogKind = "location" | "serverType" | "image" | "iso" | "loadBalancerType";
 
-export class CatalogNotFound extends Data.TaggedError(
-  "Hetzner.CatalogNotFound",
-)<{
+export class CatalogNotFound extends Data.TaggedError("Hetzner.CatalogNotFound")<{
   kind: CatalogKind;
   ref: string;
 }> {}
@@ -32,11 +25,7 @@ export const findLocation = (ref: string | number) =>
     if (id !== undefined) {
       const { location } = yield* Hetzner.locations
         .getLocation({ id })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.fail(notFound("location", ref)),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.fail(notFound("location", ref))));
       return location;
     }
     const { locations } = yield* Hetzner.locations.listLocations({
@@ -59,11 +48,7 @@ export const findServerType = (ref: string | number) =>
     if (id !== undefined) {
       const { server_type } = yield* Hetzner.serverTypes
         .getServerType({ id })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.fail(notFound("serverType", ref)),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.fail(notFound("serverType", ref))));
       return server_type;
     }
     const { server_types } = yield* Hetzner.serverTypes.listServerTypes({
@@ -86,11 +71,7 @@ export const findImage = (ref: string | number) =>
     if (id !== undefined) {
       const { image } = yield* Hetzner.images
         .getImage({ id })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.fail(notFound("image", ref)),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.fail(notFound("image", ref))));
       return image;
     }
     const { images } = yield* Hetzner.images.listImages({
@@ -114,15 +95,10 @@ export const findIso = (ref: string | number) =>
     if (id !== undefined) {
       const { iso } = yield* Hetzner.isos
         .getIso({ id })
-        .pipe(
-          Effect.catchTag("NotFound", () => Effect.fail(notFound("iso", ref))),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.fail(notFound("iso", ref))));
       return iso;
     }
-    const { isos } = yield* Hetzner.isos.listIsos({
-      name: String(ref),
-      per_page: 50,
-    });
+    const { isos } = yield* Hetzner.isos.listIsos({ name: String(ref), per_page: 50 });
     const found = isos.find((item) => item.name === ref);
     if (found === undefined) {
       return yield* notFound("iso", ref);
@@ -140,18 +116,13 @@ export const findLoadBalancerType = (ref: string | number) =>
     if (id !== undefined) {
       const { load_balancer_type } = yield* Hetzner.loadBalancerTypes
         .getLoadBalancerType({ id })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.fail(notFound("loadBalancerType", ref)),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.fail(notFound("loadBalancerType", ref))));
       return load_balancer_type;
     }
-    const { load_balancer_types } =
-      yield* Hetzner.loadBalancerTypes.listLoadBalancerTypes({
-        name: String(ref),
-        per_page: 50,
-      });
+    const { load_balancer_types } = yield* Hetzner.loadBalancerTypes.listLoadBalancerTypes({
+      name: String(ref),
+      per_page: 50,
+    });
     const found = load_balancer_types.find((item) => item.name === ref);
     if (found === undefined) {
       return yield* notFound("loadBalancerType", ref);

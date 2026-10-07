@@ -36,6 +36,4 @@ export interface DeleteIndex extends Binding.Service<
     ) => Effect.Effect<aoss.DeleteIndexResponse, aoss.DeleteIndexError>
   >
 > {}
-export const DeleteIndex = Binding.Service<DeleteIndex>(
-  "AWS.OpenSearchServerless.DeleteIndex",
-);
+export const DeleteIndex = Binding.Service<DeleteIndex>("AWS.OpenSearchServerless.DeleteIndex");

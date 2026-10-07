@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -18,13 +18,7 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "vite-app");
 // hoisted node_modules (the fixture has no node_modules).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "index.html",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "index.html", "src", "public"];
 
 describe(
   "AWS.Website.Vite local",
@@ -47,9 +41,7 @@ describe(
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
-              const site = yield* AWS.Website.Vite("ViteSite", {
-                rootDir,
-              });
+              const site = yield* AWS.Website.Vite("ViteSite", { rootDir });
               return { site };
             }),
           );
@@ -58,9 +50,7 @@ describe(
           // rows at all (proof no AWS call ran — and specifically NOT a
           // *.cloudfront.net URL).
           const url = deployed.site.url! as string;
-          expect(url).toMatch(
-            /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
-          );
+          expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
           expect(deployed.site.distribution).toBeUndefined();
           expect(deployed.site.server).toBeUndefined();
           expect(deployed.site.bucket).toBeUndefined();
@@ -73,11 +63,9 @@ describe(
             label: "dev index page",
           });
           // Source modules serve straight from src/ (no build ran).
-          yield* expectUrlContains(
-            `${url}/src/main.ts`,
-            "VITE_AWS_MODULE_MARKER",
-            { label: "dev module source" },
-          );
+          yield* expectUrlContains(`${url}/src/main.ts`, "VITE_AWS_MODULE_MARKER", {
+            label: "dev module source",
+          });
 
           // ── HMR surface: edit index.html in place. The stack is NOT
           // re-applied — Vite's dev server serves the transformed html per

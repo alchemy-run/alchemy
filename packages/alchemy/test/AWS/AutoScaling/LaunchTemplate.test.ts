@@ -1,11 +1,11 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { LaunchTemplate } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -39,32 +39,19 @@ test.provider(
       const provider = yield* Provider.findProvider(LaunchTemplate);
       const all = yield* provider.list();
 
-      expect(
-        all.some((t) => t.launchTemplateId === template.launchTemplateId),
-      ).toBe(true);
+      expect(all.some((t) => t.launchTemplateId === template.launchTemplateId)).toBe(true);
 
       yield* stack.destroy();
 
       // Out-of-band proof the template is gone: describing the deleted name
       // raises the typed `InvalidLaunchTemplateName.NotFoundException`.
       const remaining = yield* ec2
-        .describeLaunchTemplates({
-          LaunchTemplateNames: ["alchemy-test-lt-list"],
-        } as any)
+        .describeLaunchTemplates({ LaunchTemplateNames: ["alchemy-test-lt-list"] } as any)
         .pipe(
           Effect.map((r) => (r.LaunchTemplates ?? []).length),
-          Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () =>
-            Effect.succeed(0),
-          ),
+          Effect.catchTag("InvalidLaunchTemplateName.NotFoundException", () => Effect.succeed(0)),
         );
       expect(remaining).toBe(0);
     }),
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:autoscaling",
-      "provider:aws:ec2",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ec2", "live"] },
 );

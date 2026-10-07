@@ -75,9 +75,7 @@ export interface RootPolicyType extends Resource<
  *
  * @resource
  */
-export const RootPolicyType = Resource<RootPolicyType>(
-  "AWS.Organizations.RootPolicyType",
-);
+export const RootPolicyType = Resource<RootPolicyType>("AWS.Organizations.RootPolicyType");
 
 export const RootPolicyTypeProvider = () =>
   Provider.effect(
@@ -87,10 +85,7 @@ export const RootPolicyTypeProvider = () =>
         stables: ["rootId", "rootArn", "policyType"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            olds?.rootId !== news.rootId ||
-            olds?.policyType !== news.policyType
-          ) {
+          if (olds?.rootId !== news.rootId || olds?.policyType !== news.policyType) {
             return { action: "replace" } as const;
           }
         }),
@@ -143,8 +138,7 @@ export const RootPolicyTypeProvider = () =>
             Effect.catchTags({
               AWSOrganizationsNotInUseException: () =>
                 Effect.succeed<RootPolicyType["Attributes"][]>([]),
-              AccessDeniedException: () =>
-                Effect.succeed<RootPolicyType["Attributes"][]>([]),
+              AccessDeniedException: () => Effect.succeed<RootPolicyType["Attributes"][]>([]),
             }),
           ),
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -164,12 +158,7 @@ export const RootPolicyTypeProvider = () =>
                   RootId: news.rootId,
                   PolicyType: news.policyType,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "PolicyTypeAlreadyEnabledException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("PolicyTypeAlreadyEnabledException", () => Effect.void)),
             );
 
             state = yield* readRootPolicyType(news);
@@ -214,10 +203,7 @@ const readRoot = (rootId: string) =>
     Effect.map((roots) => roots.find((root) => root.Id === rootId)),
   );
 
-const readRootPolicyType = Effect.fn(function* ({
-  rootId,
-  policyType,
-}: RootPolicyTypeProps) {
+const readRootPolicyType = Effect.fn(function* ({ rootId, policyType }: RootPolicyTypeProps) {
   const root = yield* readRoot(rootId);
   const summary = root?.PolicyTypes?.find((item) => item.Type === policyType);
   return summary

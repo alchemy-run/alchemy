@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Ride out 403 blips (`Forbidden`) while the harness-minted token
 // propagates across Cloudflare's edge.
@@ -34,10 +31,7 @@ const expectGone = (accountId: string, proxyEndpointId: string) =>
     Effect.catchTag("ProxyEndpointNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "EndpointNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -120,10 +114,7 @@ test.provider(
       if (outcome._tag === "Created") {
         // Enterprise account — clean up the endpoint we just made.
         yield* zeroTrust
-          .deleteGatewayProxyEndpoint({
-            accountId,
-            proxyEndpointId: outcome.created.id ?? "",
-          })
+          .deleteGatewayProxyEndpoint({ accountId, proxyEndpointId: outcome.created.id ?? "" })
           .pipe(Effect.catchTag("ProxyEndpointNotFound", () => Effect.void));
         expect(outcome.created.name).toEqual("alchemy-zt-proxy-ip");
       } else {
@@ -144,19 +135,14 @@ test.provider(
       // Self-heal: remove any same-named endpoint left orphaned in the cloud by a
       // previously-interrupted run so the deploy below doesn't trip the
       // "OwnedBySomeoneElse" adoption guard.
-      const orphans = yield* zeroTrust.listGatewayProxyEndpoints
-        .items({ accountId })
-        .pipe(
-          Stream.filter((e) => e.name === "alchemy-zt-proxy-list"),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+      const orphans = yield* zeroTrust.listGatewayProxyEndpoints.items({ accountId }).pipe(
+        Stream.filter((e) => e.name === "alchemy-zt-proxy-list"),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
       yield* Effect.forEach(orphans, (o) =>
         zeroTrust
-          .deleteGatewayProxyEndpoint({
-            accountId,
-            proxyEndpointId: o.id ?? "",
-          })
+          .deleteGatewayProxyEndpoint({ accountId, proxyEndpointId: o.id ?? "" })
           .pipe(Effect.catchTag("ProxyEndpointNotFound", () => Effect.void)),
       );
 
@@ -169,14 +155,10 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Gateway.ProxyEndpoint,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Gateway.ProxyEndpoint);
       const all = yield* provider.list();
 
-      const match = all.find(
-        (x) => x.proxyEndpointId === endpoint.proxyEndpointId,
-      );
+      const match = all.find((x) => x.proxyEndpointId === endpoint.proxyEndpointId);
       expect(match).toBeDefined();
       expect(match?.accountId).toEqual(accountId);
       expect(match?.name).toEqual("alchemy-zt-proxy-list");

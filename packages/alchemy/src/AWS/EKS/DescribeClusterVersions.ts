@@ -29,10 +29,7 @@ export interface DescribeClusterVersions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: eks.DescribeClusterVersionsRequest,
-    ) => Effect.Effect<
-      eks.DescribeClusterVersionsResponse,
-      eks.DescribeClusterVersionsError
-    >
+    ) => Effect.Effect<eks.DescribeClusterVersionsResponse, eks.DescribeClusterVersionsError>
   >
 > {}
 export const DescribeClusterVersions = Binding.Service<DescribeClusterVersions>(

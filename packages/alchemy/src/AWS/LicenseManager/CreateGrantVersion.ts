@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link CreateGrantVersion}.
  */
-export interface CreateGrantVersionRequest
-  extends licensemanager.CreateGrantVersionRequest {}
+export interface CreateGrantVersionRequest extends licensemanager.CreateGrantVersionRequest {}
 
 /**
  * Runtime binding for `license-manager:CreateGrantVersion` — publish a new

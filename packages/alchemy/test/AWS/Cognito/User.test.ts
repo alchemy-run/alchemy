@@ -1,28 +1,20 @@
-import * as AWS from "@/AWS";
-import { User, UserPool } from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import { User, UserPool } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const PASSWORD = "Alchemy-User-Passw0rd1";
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
-const attributeValue = (
-  attributes: cip.AttributeType[] | undefined,
-  name: string,
-) => plain(attributes?.find((attribute) => attribute.Name === name)?.Value);
+const attributeValue = (attributes: cip.AttributeType[] | undefined, name: string) =>
+  plain(attributes?.find((attribute) => attribute.Name === name)?.Value);
 
 test.provider(
   "create confirmed user, update attributes/enabled, rename (replace), delete",
@@ -60,12 +52,8 @@ test.provider(
       });
       expect(created.Enabled).toBe(true);
       expect(created.UserStatus).toBe("CONFIRMED");
-      expect(attributeValue(created.UserAttributes, "email")).toBe(
-        "admin@example.com",
-      );
-      expect(attributeValue(created.UserAttributes, "email_verified")).toBe(
-        "true",
-      );
+      expect(attributeValue(created.UserAttributes, "email")).toBe("admin@example.com");
+      expect(attributeValue(created.UserAttributes, "email_verified")).toBe("true");
 
       // attributes and enabled mutate in place
       const updated = yield* stack.deploy(
@@ -93,9 +81,7 @@ test.provider(
         Username: outputs.user.username,
       });
       expect(afterUpdate.Enabled).toBe(false);
-      expect(attributeValue(afterUpdate.UserAttributes, "email")).toBe(
-        "admin2@example.com",
-      );
+      expect(attributeValue(afterUpdate.UserAttributes, "email")).toBe("admin2@example.com");
 
       // an explicit username replaces the user
       const renamed = yield* stack.deploy(
@@ -139,9 +125,8 @@ test.provider(
           Effect.map(() => false),
           // the pool is destroyed with the stack, so the pool itself being
           // gone also proves the user is gone
-          Effect.catchTag(
-            ["UserNotFoundException", "ResourceNotFoundException"],
-            () => Effect.succeed(true),
+          Effect.catchTag(["UserNotFoundException", "ResourceNotFoundException"], () =>
+            Effect.succeed(true),
           ),
         );
       expect(gone).toBe(true);

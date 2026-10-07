@@ -40,10 +40,7 @@ export interface DescribeStreamConsumer extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeStreamConsumerRequest,
-    ) => Effect.Effect<
-      Kinesis.DescribeStreamConsumerOutput,
-      Kinesis.DescribeStreamConsumerError
-    >
+    ) => Effect.Effect<Kinesis.DescribeStreamConsumerOutput, Kinesis.DescribeStreamConsumerError>
   >
 > {}
 

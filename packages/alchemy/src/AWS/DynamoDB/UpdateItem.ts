@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface UpdateItemRequest extends Omit<
-  DynamoDB.UpdateItemInput,
-  "TableName"
-> {}
+export interface UpdateItemRequest extends Omit<DynamoDB.UpdateItemInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:UpdateItem`.
@@ -45,6 +42,4 @@ export interface UpdateItem extends Binding.Service<
     ) => Effect.Effect<DynamoDB.UpdateItemOutput, DynamoDB.UpdateItemError>
   >
 > {}
-export const UpdateItem = Binding.Service<UpdateItem>(
-  "AWS.DynamoDB.UpdateItem",
-);
+export const UpdateItem = Binding.Service<UpdateItem>("AWS.DynamoDB.UpdateItem");

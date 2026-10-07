@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { Alias, Key } from "@/AWS/PaymentCryptography";
-import * as Test from "@/Test/Alchemy";
 import * as paymentcryptography from "@distilled.cloud/aws/payment-cryptography";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Alias, Key } from "@/AWS/PaymentCryptography";
+import * as Test from "@/Test/Alchemy";
 import { reapLeakedKeys } from "./reapKeys.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -56,12 +56,7 @@ const dataKeyAttributes = {
   keyAlgorithm: "AES_128",
   keyClass: "SYMMETRIC_KEY",
   keyUsage: "TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY",
-  keyModesOfUse: {
-    encrypt: true,
-    decrypt: true,
-    wrap: true,
-    unwrap: true,
-  },
+  keyModesOfUse: { encrypt: true, decrypt: true, wrap: true, unwrap: true },
 } as const;
 
 // Keys bill monthly while they exist, so the live lifecycle is gated behind
@@ -93,15 +88,11 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
       expect(deployed.alias.keyArn).toBe(deployed.key.keyArn);
 
       // Out-of-band verification via distilled.
-      const observed = yield* paymentcryptography.getKey({
-        KeyIdentifier: deployed.key.keyArn,
-      });
+      const observed = yield* paymentcryptography.getKey({ KeyIdentifier: deployed.key.keyArn });
       expect(observed.Key.KeyState).toBe("CREATE_COMPLETE");
       expect(observed.Key.Enabled).toBe(true);
       expect(observed.Key.KeyAttributes.KeyAlgorithm).toBe("AES_128");
-      expect(observed.Key.KeyAttributes.KeyUsage).toBe(
-        "TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY",
-      );
+      expect(observed.Key.KeyAttributes.KeyUsage).toBe("TR31_D0_SYMMETRIC_DATA_ENCRYPTION_KEY");
       const observedAlias = yield* paymentcryptography.getAlias({
         AliasName: deployed.alias.aliasName,
       });
@@ -133,17 +124,11 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
         .getKey({ KeyIdentifier: deployed.key.keyArn })
         .pipe(
           Effect.map((r) => r.Key.KeyState),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
         );
-      expect(["DELETE_PENDING", "DELETE_COMPLETE", "gone"]).toContain(
-        stateAfter,
-      );
+      expect(["DELETE_PENDING", "DELETE_COMPLETE", "gone"]).toContain(stateAfter);
       const aliasError = yield* Effect.flip(
-        paymentcryptography.getAlias({
-          AliasName: deployed.alias.aliasName,
-        }),
+        paymentcryptography.getAlias({ AliasName: deployed.alias.aliasName }),
       );
       expect(aliasError._tag).toBe("ResourceNotFoundException");
     }).pipe(
@@ -154,8 +139,5 @@ test.provider.skipIf(!process.env.AWS_TEST_PAYMENTCRYPTO)(
       // window is mandatory). Idempotent: a no-op when destroy already ran.
       Effect.ensuring(reapLeakedKeys([stack.name])),
     ),
-  {
-    tags: ["provider:aws", "provider:aws:paymentcryptography", "live"],
-    timeout: 120_000,
-  },
+  { tags: ["provider:aws", "provider:aws:paymentcryptography", "live"], timeout: 120_000 },
 );

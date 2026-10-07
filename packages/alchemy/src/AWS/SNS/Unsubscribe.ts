@@ -23,9 +23,7 @@ export interface Unsubscribe extends Binding.Service<
   Unsubscribe,
   "AWS.SNS.Unsubscribe",
   () => Effect.Effect<
-    (
-      request: UnsubscribeRequest,
-    ) => Effect.Effect<sns.UnsubscribeResponse, sns.UnsubscribeError>
+    (request: UnsubscribeRequest) => Effect.Effect<sns.UnsubscribeResponse, sns.UnsubscribeError>
   >
 > {}
 

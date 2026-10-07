@@ -27,9 +27,7 @@ export const sameStringSet = (
 ): boolean => {
   const left = [...new Set(a ?? [])].sort();
   const right = [...new Set(b ?? [])].sort();
-  return (
-    left.length === right.length && left.every((value, i) => value === right[i])
-  );
+  return left.length === right.length && left.every((value, i) => value === right[i]);
 };
 
 export const tagsToWire = (tags: Record<string, string>) =>

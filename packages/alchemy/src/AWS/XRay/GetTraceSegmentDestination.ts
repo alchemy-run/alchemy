@@ -2,8 +2,7 @@ import type * as xray from "@distilled.cloud/aws/xray";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetTraceSegmentDestinationRequest
-  extends xray.GetTraceSegmentDestinationRequest {}
+export interface GetTraceSegmentDestinationRequest extends xray.GetTraceSegmentDestinationRequest {}
 
 /**
  * Retrieve the current destination (X-Ray or CloudWatch Logs) of data
@@ -36,13 +35,9 @@ export interface GetTraceSegmentDestination extends Binding.Service<
   () => Effect.Effect<
     (
       request?: GetTraceSegmentDestinationRequest,
-    ) => Effect.Effect<
-      xray.GetTraceSegmentDestinationResult,
-      xray.GetTraceSegmentDestinationError
-    >
+    ) => Effect.Effect<xray.GetTraceSegmentDestinationResult, xray.GetTraceSegmentDestinationError>
   >
 > {}
-export const GetTraceSegmentDestination =
-  Binding.Service<GetTraceSegmentDestination>(
-    "AWS.XRay.GetTraceSegmentDestination",
-  );
+export const GetTraceSegmentDestination = Binding.Service<GetTraceSegmentDestination>(
+  "AWS.XRay.GetTraceSegmentDestination",
+);

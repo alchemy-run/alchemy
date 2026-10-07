@@ -1,38 +1,28 @@
-import * as AWS from "@/AWS";
-import { EventBus } from "@/AWS/EventBridge";
-import { Discoverer } from "@/AWS/Schemas";
-import * as Test from "@/Test/Alchemy";
 import * as schemas from "@distilled.cloud/aws/schemas";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EventBus } from "@/AWS/EventBridge";
+import { Discoverer } from "@/AWS/Schemas";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const assertDiscovererGone = (discovererId: string) =>
   schemas.describeDiscoverer({ DiscovererId: discovererId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`discoverer ${discovererId} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`discoverer ${discovererId} still exists`))),
     Effect.catchTag("NotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
 describe(
   "AWS.Schemas.Discoverer",
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:eventbridge",
-      "provider:aws:schemas",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:eventbridge", "provider:aws:schemas", "live"],
   },
   () => {
     test.provider(
@@ -67,9 +57,7 @@ describe(
           expect(observed.DiscovererArn).toEqual(created.discovererArn);
           expect(observed.SourceArn).toEqual(created.eventBusArn);
           expect(observed.State).toEqual("STARTED");
-          expect(observed.Description).toEqual(
-            "alchemy schemas discoverer test",
-          );
+          expect(observed.Description).toEqual("alchemy schemas discoverer test");
           expect(observed.Tags?.purpose).toEqual("alchemy-test");
           expect(observed.Tags?.["alchemy::id"]).toEqual("BusDiscoverer");
 

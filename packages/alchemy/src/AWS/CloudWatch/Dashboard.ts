@@ -9,8 +9,7 @@ import type { Providers } from "../Providers.ts";
 import { createName, retryConcurrent } from "./common.ts";
 
 export type DashboardName = string;
-export type DashboardArn =
-  `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
+export type DashboardArn = `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
 
 export type DashboardPeriodOverride = "inherit" | "auto";
 export type DashboardMetricRow = (string | number | boolean | null)[];
@@ -224,11 +223,7 @@ export const DashboardProvider = () =>
           .getDashboard({
             DashboardName: dashboardName,
           })
-          .pipe(
-            Effect.catchTag("DashboardNotFoundError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.succeed(undefined)));
 
         if (!output?.DashboardName) {
           return undefined;
@@ -244,11 +239,7 @@ export const DashboardProvider = () =>
 
       return {
         stables: ["dashboardName", "dashboardArn"],
-        diff: Effect.fn(function* ({
-          id,
-          olds = {},
-          news = {} as DashboardProps,
-        }) {
+        diff: Effect.fn(function* ({ id, olds = {}, news = {} as DashboardProps }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createDashboardName(id, olds);
           const newName = yield* createDashboardName(id, news);
@@ -258,17 +249,14 @@ export const DashboardProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.dashboardName ??
-            (yield* createDashboardName(id, olds ?? {}));
+          const name = output?.dashboardName ?? (yield* createDashboardName(id, olds ?? {}));
           return yield* readDashboard(name);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Observe — pin the physical name from `output` if present so we
           // never rename an existing dashboard; otherwise derive from
           // desired props.
-          const name =
-            output?.dashboardName ?? (yield* createDashboardName(id, news));
+          const name = output?.dashboardName ?? (yield* createDashboardName(id, news));
 
           // Ensure — `putDashboard` is a pure upsert. The CloudWatch
           // dashboard API has no separate update path, so we always send
@@ -284,9 +272,7 @@ export const DashboardProvider = () =>
 
           const state = yield* readDashboard(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled dashboard '${name}'`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled dashboard '${name}'`));
           }
 
           // Dashboards do not support the generic CloudWatch tagging APIs,
@@ -322,15 +308,12 @@ export const DashboardProvider = () =>
               ),
             );
 
-            const states = yield* Effect.forEach(
-              names,
-              (name) => readDashboard(name),
-              { concurrency: 10 },
-            );
+            const states = yield* Effect.forEach(names, (name) => readDashboard(name), {
+              concurrency: 10,
+            });
 
             return states.filter(
-              (state): state is NonNullable<typeof state> =>
-                state !== undefined,
+              (state): state is NonNullable<typeof state> => state !== undefined,
             );
           }),
       };
