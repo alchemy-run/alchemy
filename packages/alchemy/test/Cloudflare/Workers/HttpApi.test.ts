@@ -121,6 +121,26 @@ test(
     if (missing._tag === "TaskNotFound") {
       expect(missing.id).toBe("does-not-exist");
     }
+
+    // The Durable Object-backed route must surface the same domain 404:
+    // the DO's `getTask` fails with `TaskNotFound` for a missing key (it
+    // used to fail schema decoding and die with a 500), and the Worker
+    // forwards it.
+    const missingDO = yield* client.Tasks.getTaskDO({
+      params: { id: "does-not-exist" },
+    }).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.retry({
+        while: (e) => e._tag !== "TaskNotFound",
+        schedule: readinessRetry.schedule,
+        times: readinessRetry.times,
+      }),
+      Effect.flip,
+    );
+    expect(missingDO._tag).toBe("TaskNotFound");
+    if (missingDO._tag === "TaskNotFound") {
+      expect(missingDO.id).toBe("does-not-exist");
+    }
   }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],

@@ -156,6 +156,32 @@ export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Provide
  * });
  * ```
  *
+ * ### Binding to a Worker
+ * **Example:** Present a leaf certificate on subrequests
+ * ```typescript
+ * const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("origin-client-cert", {
+ *   ca: false,
+ *   certificates: leafPem,
+ *   privateKey: yield* Config.Redacted("ORIGIN_CLIENT_KEY"),
+ * });
+ *
+ * // `env.ORIGIN_CERT` is a `Fetcher`: `env.ORIGIN_CERT.fetch(url)` presents
+ * // the certificate to the origin.
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { ORIGIN_CERT: cert },
+ * });
+ * ```
+ *
+ * **Example:** Present a leaf certificate from an Effect Worker
+ * ```typescript
+ * // Inside the Worker's Effect; provide `Cloudflare.MtlsCertificate.FetchBinding`.
+ * const fetchOrigin = yield* Cloudflare.MtlsCertificate.Fetch(cert);
+ * const response = yield* fetchOrigin(
+ *   HttpClientRequest.get("https://origin.example.com/"),
+ * );
+ * ```
+ *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  *
  * @resource
