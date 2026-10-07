@@ -398,8 +398,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "prebuild:package": "pnpm -w sync:package-files alchemy",
-    "build:package": "tsc -b",
+    "build:package": "node scripts/build.ts",
     "clear:state": "cd ../../ && bun clear:state",
     "pretest": "pnpm -w ensure:built",
     "test": "alchemy-test --exclude test/Railway",

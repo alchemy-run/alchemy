@@ -1019,6 +1019,8 @@ This runs the TypeScript compiler in build mode, which checks all projects in th
 
 Workspace builds use pnpm's task graph (`tasks` in `pnpm-workspace.yaml`). Every package under `packages/` splits its build in two: `build:package` compiles just that package, and `build` runs `build:package` over the package and all of its workspace dependencies in order. So `pnpm build` inside `packages/alchemy` (or any other package) builds everything it depends on first. Root scripts that build several packages call `pnpm -r --filter ... run build:package` directly.
 
+`build:package` is `node scripts/build.ts` in each package. It declares the package's options and compile steps and hands them to the shared [scripts/package-build.ts](./scripts/package-build.ts). That module generates `publishConfig.exports` from the source `exports`, copies the license files, runs the steps, writes the `.build-stamp` that `ensure:built` reads, and prints per-step timings. Each build's timings are also appended to the package's `.cache/build-timings.jsonl`.
+
 ## Running tests
 
 `packages/alchemy/test` runs on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.

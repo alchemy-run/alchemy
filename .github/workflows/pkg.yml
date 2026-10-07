@@ -77,7 +77,7 @@ jobs:
         run: >-
           pnpm exec pkg pack
           ${{ contains(github.event.pull_request.labels.*.name, 'force-ci') && '--all' || '' }}
-          --rebuild-all-path 'scripts/sync-package-files.ts'
+          --rebuild-all-path 'scripts/package-build.ts'
           --group 'alchemy=./packages/alchemy'
           --group '@alchemy.run[Collapsed]=./packages/{better-auth,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
 

@@ -7,15 +7,12 @@
 // no-op unless a package or one of its workspace dependencies changed since
 // its last build.
 //
-// Every successful `build:package` of these packages runs `stamp`
-// (`postbuild:package`), recording the build in `<outDir>/.build-stamp`.
-// A package is stale when that stamp is missing or older than any tracked or
-// untracked-but-not-ignored file of the package or its workspace
-// dependencies, test files excepted.
+// Every successful build of these packages records itself in
+// `<outDir>/.build-stamp` (see package-build.ts). A package is stale when
+// that stamp is missing or older than any tracked or untracked-but-not-ignored
+// file of the package or its workspace dependencies, test files excepted.
 //
-// Usage:
-//   pnpm -w ensure:built                 # rebuild stale packages
-//   pnpm -w build:stamp <package>        # from a package's postbuild:package
+// Usage: pnpm -w ensure:built [package...]
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command } from "effect/cli";
@@ -25,6 +22,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import { stampFile } from "./package-build.ts";
 
 /** Packages consumed from their build output, by directory name under packages/. */
 const packages = {
@@ -34,8 +32,6 @@ const packages = {
 
 type PackageName = keyof typeof packages;
 const packageNames = Object.keys(packages) as Array<PackageName>;
-
-const stampFile = ".build-stamp";
 
 /** Changes to tests never affect build output. */
 const isTestFile = (file: string) =>
@@ -103,8 +99,8 @@ const isStale = Effect.fn(function* (root: string, name: PackageName) {
   return Math.max(...newest) > stamp.value;
 });
 
-const ensure = Command.make(
-  "ensure",
+const command = Command.make(
+  "ensure-built",
   {
     packages: Argument.Literals("package", packageNames).pipe(
       Argument.withDescription("Packages to check (defaults to all output-consumed packages)"),
@@ -139,28 +135,6 @@ const ensure = Command.make(
     }
   }),
 ).pipe(Command.withDescription("Rebuild packages whose build output is missing or stale"));
-
-const stamp = Command.make(
-  "stamp",
-  {
-    package: Argument.Literals("package", packageNames).pipe(
-      Argument.withDescription("Package whose build just finished"),
-    ),
-  },
-  Effect.fn(function* ({ package: name }) {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const root = yield* workspaceRoot;
-    const outDir = path.join(root, "packages", name, packages[name].outDir);
-    yield* fs.makeDirectory(outDir, { recursive: true });
-    yield* fs.writeFileString(path.join(outDir, stampFile), `${new Date().toISOString()}\n`);
-  }),
-).pipe(Command.withDescription("Record a successful build of a package"));
-
-const command = Command.make("ensure-built").pipe(
-  Command.withDescription("Keep build-output-consumed workspace packages up to date"),
-  Command.withSubcommands([ensure, stamp]),
-);
 
 Command.run(command, { version: "0.0.0" }).pipe(
   Effect.provide(NodeServices.layer),

@@ -61,8 +61,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "prebuild:package": "pnpm -w sync:package-files node-utils",
-    "build:package": "tsc -b",
+    "build:package": "node scripts/build.ts",
     "test": "bun test ./test"
   },
   "dependencies": {

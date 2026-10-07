@@ -13,8 +13,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "prebuild:package": "pnpm -w sync:package-files cloudflare-test-tools",
-    "build:package": "tsc -p tsconfig.json",
+    "build:package": "node scripts/build.ts",
     "e2e": "bun run src/e2e/Cli.ts",
     "typecheck": "bun run build"
   },

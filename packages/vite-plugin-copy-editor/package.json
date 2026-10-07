@@ -44,8 +44,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "prebuild:package": "pnpm -w sync:package-files vite-plugin-copy-editor",
-    "build:package": "tsc -b",
+    "build:package": "node scripts/build.ts",
     "test": "bun test ./test"
   },
   "dependencies": {
