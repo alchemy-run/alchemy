@@ -27,6 +27,7 @@ const replay = (
   root: unknown,
   ops: ReadonlyArray<Op>,
   cached: Effect.Effect<unknown, any, any>,
+  seen: WeakMap<object, unknown> = new WeakMap(),
 ): unknown => {
   let cur: any = root;
   let receiver: any = root;
@@ -35,7 +36,7 @@ const replay = (
       receiver = cur;
       cur = cur[op.prop];
     } else {
-      cur = cur.apply(receiver, replayArgs(root, op.args, cached));
+      cur = cur.apply(receiver, replayArgs(root, op.args, cached, seen));
       receiver = cur;
     }
   }
@@ -46,18 +47,21 @@ const replay = (
  * Resolve nested chain proxies inside a call's arguments. Only proxies over
  * the *same* `cached` effect can be replayed synchronously (the root is
  * already resolved); proxies over a different effect pass through untouched.
- * Returns the original array when nothing needed resolving, so identity-
- * sensitive values (e.g. a `TemplateStringsArray` with its `raw` property)
- * are preserved.
+ * Arrays and object fields are walked, because a Drizzle `sql` chunk or
+ * `eq(...)` condition stores the proxy inside an object rather than as the
+ * argument itself. The original value is returned when nothing changed, so
+ * identity-sensitive values (e.g. a `TemplateStringsArray` with its `raw`
+ * property) are preserved.
  */
 const replayArgs = (
   root: unknown,
   args: ReadonlyArray<unknown>,
   cached: Effect.Effect<unknown, any, any>,
+  seen: WeakMap<object, unknown>,
 ): ReadonlyArray<unknown> => {
   let out: unknown[] | undefined;
   for (let i = 0; i < args.length; i++) {
-    const resolved = replayArg(root, args[i], cached);
+    const resolved = replayArg(root, args[i], cached, seen);
     if (resolved !== args[i]) {
       out ??= [...args];
       out[i] = resolved;
@@ -70,19 +74,67 @@ const replayArg = (
   root: unknown,
   arg: unknown,
   cached: Effect.Effect<unknown, any, any>,
+  seen: WeakMap<object, unknown>,
 ): unknown => {
   if (arg === null || (typeof arg !== "object" && typeof arg !== "function")) {
     return arg;
   }
   const state = chainStates.get(arg);
-  if (state?.cached === cached) {
-    return replay(root, state.ops, cached);
+  if (state) {
+    // A proxy over some other effect cannot be replayed against this root.
+    if (state.cached !== cached) return arg;
+    return replay(root, state.ops, cached, seen);
   }
   // Fragments may arrive wrapped in arrays (e.g. `sql.and([a, b])`).
   if (Array.isArray(arg)) {
-    return replayArgs(root, arg, cached);
+    return replayArgs(root, arg, cached, seen);
   }
-  return arg;
+  // Chain proxies are functions and were handled above. Other functions stay
+  // as-is: copying one would drop its call behavior.
+  if (typeof arg === "function") return arg;
+  return replayFields(root, arg, cached, seen);
+};
+
+/**
+ * Copy an object only when a nested same-cache proxy was resolved. The copy
+ * keeps the original prototype so class methods (`SQL.getSQL`, and the like)
+ * still run. Accessors are copied without being invoked.
+ */
+const replayFields = (
+  root: unknown,
+  value: object,
+  cached: Effect.Effect<unknown, any, any>,
+  seen: WeakMap<object, unknown>,
+): unknown => {
+  const seenValue = seen.get(value);
+  if (seenValue !== undefined) return seenValue;
+  seen.set(value, value);
+
+  const keys = Reflect.ownKeys(value);
+  const fields: Array<{ key: PropertyKey; descriptor: PropertyDescriptor }> = [];
+  let changed = false;
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) continue;
+    if (!("value" in descriptor)) {
+      fields.push({ key, descriptor });
+      continue;
+    }
+    const next = replayArg(root, descriptor.value, cached, seen);
+    if (next !== descriptor.value) changed = true;
+    fields.push({
+      key,
+      descriptor: next === descriptor.value ? descriptor : { ...descriptor, value: next },
+    });
+  }
+  if (!changed) return value;
+
+  const copy: object = Object.create(Object.getPrototypeOf(value));
+  seen.set(value, copy);
+  for (const field of fields) {
+    Object.defineProperty(copy, field.key, field.descriptor);
+  }
+  return copy;
 };
 
 /**
@@ -116,6 +168,8 @@ const replayArg = (
  * e.g. `` sql`INSERT INTO users ${sql.insert(row)}` ``, where `sql.insert(row)`
  * is itself a deferred proxy — is replayed against the same resolved root
  * before the outer call runs, so synchronous fragment helpers compose.
+ * Object fields are walked too, so a proxy stored inside a Drizzle SQL
+ * chunk (`` sql`count(${cte.id})` ``, `eq(cte.parent, id)`) resolves the same way.
  */
 export const proxyChain = <T>(cached: Effect.Effect<T, any, any>): T => chain(cached) as T;
 
