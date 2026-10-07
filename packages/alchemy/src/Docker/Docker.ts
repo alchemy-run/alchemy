@@ -492,15 +492,27 @@ export interface CommandOutput {
   stderr: string;
 }
 
-const DockerBin = Config.String("DOCKER_BIN").pipe(Effect.orElseSucceed(() => "docker"));
+export interface DockerOptions {
+  /**
+   * The Docker-compatible CLI to run, e.g. `"podman"`. The `DOCKER_BIN`
+   * environment variable, when set, overrides it (per machine or CI).
+   * @default "docker"
+   */
+  bin?: string;
+}
 
-export const DockerLive = Layer.effect(
-  Docker,
+/** The Docker CLI client, running `options.bin` (`DOCKER_BIN` overrides). */
+export const dockerLive = (options: DockerOptions = {}) =>
+  Layer.effect(Docker, makeDocker(options));
+
+const makeDocker = (options: DockerOptions) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const bin = yield* DockerBin;
+    const bin = yield* Config.String("DOCKER_BIN").pipe(
+      Effect.orElseSucceed(() => options.bin ?? "docker"),
+    );
 
     const run = (
       args: Array<string>,
@@ -894,8 +906,10 @@ export const DockerLive = Layer.effect(
         remove: (id, context) => run([...formatArgs({ context }), "service", "rm", id]),
       },
     });
-  }),
-);
+  });
+
+/** The Docker CLI client, running `docker` (or `DOCKER_BIN`). */
+export const DockerLive = dockerLive();
 
 export const dockerContextName = (context: Docker.ContextRef | undefined): string | undefined => {
   const value = typeof context === "string" ? context : context?.name;

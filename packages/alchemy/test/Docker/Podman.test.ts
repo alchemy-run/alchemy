@@ -1,10 +1,8 @@
 import { describe, expect } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Docker from "@/Docker";
 import { inMemoryState } from "@/State";
@@ -12,29 +10,21 @@ import * as Test from "@/Test/Alchemy";
 import { authenticatedRegistry } from "./Runtime.ts";
 
 /**
- * The Docker resources against a real Podman (`DOCKER_BIN=podman`). Set
- * `ALCHEMY_TEST_PODMAN_BIN` to a `podman` executable to run them; Podman must
- * treat `localhost` registries as insecure (plain HTTP).
+ * The Docker resources against a real Podman, declared in code with
+ * `Docker.providers({ bin })`. Set `ALCHEMY_TEST_PODMAN_BIN` to a `podman`
+ * executable to run them; Podman must treat `localhost` registries as
+ * insecure (plain HTTP).
  */
 const podman = process.env.ALCHEMY_TEST_PODMAN_BIN;
 
 const { test } = Test.make({
-  providers: Docker.providers().pipe(
-    Layer.provide(
-      ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_BIN: podman ?? "podman" })),
-    ),
-  ),
+  providers: Docker.providers({ bin: podman ?? "podman" }),
   state: inMemoryState(),
 });
 
-// The registry runs on the host's Docker (the default `docker` binary): its
-// published port is reachable from the test and from Podman alike.
-// `fresh`: the test runtime already memoized a Podman-backed DockerLive.
-const hostDocker = Layer.provide(
-  Layer.fresh(Docker.DockerLive),
-  ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_BIN: "docker" })),
-);
-const hostRegistry = () => authenticatedRegistry().pipe(Effect.provide(hostDocker));
+// The registry runs on the host's Docker: its published port is reachable
+// from the test and from Podman alike.
+const hostRegistry = () => authenticatedRegistry().pipe(Effect.provide(Docker.DockerLive));
 
 /** The digest the registry serves for `repository:tag`. */
 const registryDigest = (host: string, repository: string, tag: string) =>
