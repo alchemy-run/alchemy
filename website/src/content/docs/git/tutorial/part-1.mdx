@@ -4,6 +4,7 @@ description: Deploy a Git host, push a commit, and clone it back. Add storage an
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Start with a Git remote you can push to. This part deploys a Worker backed by
 Durable Objects and R2, then sends a real commit through it and clones it back.
@@ -20,6 +21,13 @@ You need Bun or Node.js 22+, Git, and a Cloudflare account with Workers, Durable
 Complete [Cloudflare setup](/cloudflare/setup) to connect your account.
 
 <Tabs syncKey="pkgManager">
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`mkdir git-tutorial
+cd git-tutorial
+pnpm init
+pnpm add alchemy effect
+mkdir src`} lang="sh" />
+  </TabItem>
   <TabItem label="bun" icon="bun">
     <Code code={`mkdir git-tutorial
 cd git-tutorial
@@ -32,13 +40,6 @@ mkdir src`} lang="sh" />
 cd git-tutorial
 npm init -y
 npm install alchemy effect
-mkdir src`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`mkdir git-tutorial
-cd git-tutorial
-pnpm init
-pnpm add alchemy effect
 mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
@@ -195,20 +196,7 @@ stack. The output gives you the URL clients will use.
 
 ## Deploy
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun alchemy deploy`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npx alchemy deploy`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm alchemy deploy`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn alchemy deploy`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers run="alchemy deploy" />
 
 Copy the printed URL, including `https://`, without a trailing slash:
 
@@ -269,17 +257,4 @@ objects. You now have a working Git remote.
 Continue to [Part 2: Control access](/git/tutorial/part-2). If you stop here,
 remove the open learning deployment:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun alchemy destroy`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npx alchemy destroy`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm alchemy destroy`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn alchemy destroy`} lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers run="alchemy destroy" />
