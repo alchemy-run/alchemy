@@ -1413,6 +1413,10 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * name at upload, and local dev serves it with the runtime's in-process
  * self service.
  *
+ * `Self` targets the Worker's default export. To bind one of its named
+ * `WorkerEntrypoint` classes instead, pass it to `Cloudflare.WorkerEntrypoint`:
+ * `Cloudflare.WorkerEntrypoint(Cloudflare.Workers.Self, "McpEntrypoint")`.
+ *
  * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
  * revalidation queue re-fetches the worker through it):
  *
@@ -1579,6 +1583,8 @@ export const isSelf = (value: unknown): value is Self =>
  *   main: "./src/caller.ts",
  *   env: {
  *     API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
+ *     // one of this Worker's own entrypoints
+ *     MCP: Cloudflare.WorkerEntrypoint(Cloudflare.Workers.Self, "McpEntrypoint"),
  *   },
  * });
  * ```

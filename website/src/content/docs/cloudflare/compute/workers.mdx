@@ -471,6 +471,35 @@ yet, so `props` are dropped at upload. The binding itself deploys
 correctly either way.
 :::
 
+### Bind the Worker's own entrypoint
+
+Pass `Cloudflare.Workers.Self` as the target to bind a named entrypoint of
+the same Worker:
+
+```typescript
+import type { McpEntrypoint } from "./src/worker.ts";
+
+const api = yield* Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  env: {
+    MCP: Cloudflare.WorkerEntrypoint<McpEntrypoint>(
+      Cloudflare.Workers.Self,
+      "McpEntrypoint",
+    ),
+  },
+});
+```
+
+The entrypoint class extends `WorkerEntrypoint<WorkerEnv>`, so declare
+`WorkerEnv` as an interface. A type alias here is a circular type:
+
+```typescript
+export interface WorkerEnv extends Cloudflare.InferEnv<typeof api> {}
+```
+
+Leave out the type argument and `env.MCP` is a plain `Fetcher`, which
+works with either form of `WorkerEnv`.
+
 ## Configure the Worker
 
 Compatibility flags and the compatibility date go on `compatibility`.
