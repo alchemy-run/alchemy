@@ -11,6 +11,16 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
+// New accounts read inconsistently for a few seconds after create.
+const getAccount = (name: string) =>
+  iam.getProjectsServiceAccounts({ name }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      schedule: Schedule.exponential("500 millis"),
+      times: 8,
+    }),
+  );
+
 const waitUntilGone = (name: string) =>
   iam.getProjectsServiceAccounts({ name }).pipe(
     Effect.as("found" as const),
@@ -44,7 +54,7 @@ test.provider(
       expect(created.description).toEqual("test account");
       expect(created.uniqueId).toEqual(expect.any(String));
 
-      const fetched = yield* iam.getProjectsServiceAccounts({ name: created.name });
+      const fetched = yield* getAccount(created.name);
       expect(fetched.email).toEqual(created.email);
       expect(fetched.displayName).toEqual("Alchemy worker");
       expect(fetched.description).toMatch(/^\[alchemy .*alchemy-id=\S*worker\]\ntest account$/);
@@ -63,7 +73,13 @@ test.provider(
       expect(updated.displayName).toEqual("Alchemy worker (prod)");
       expect(updated.description).toEqual("updated account");
 
-      const fetchedUpdate = yield* iam.getProjectsServiceAccounts({ name: created.name });
+      const fetchedUpdate = yield* getAccount(created.name).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (account) => account.displayName === "Alchemy worker (prod)",
+          times: 10,
+        }),
+      );
       expect(fetchedUpdate.displayName).toEqual("Alchemy worker (prod)");
       expect(fetchedUpdate.description).toMatch(/\nupdated account$/);
 

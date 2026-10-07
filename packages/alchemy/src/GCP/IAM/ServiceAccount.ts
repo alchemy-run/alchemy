@@ -265,6 +265,20 @@ export const ServiceAccountProvider = () =>
       if (current === undefined) {
         return yield* new ServiceAccountNotResolved({ name });
       }
+      // A new account is eventually consistent: reads (and IAM bindings that
+      // name it) fail with NotFound for a few seconds after create.
+      current = yield* getByName(current.name ?? name).pipe(
+        Effect.flatMap((account) =>
+          account === undefined
+            ? Effect.fail(new ServiceAccountNotResolved({ name }))
+            : Effect.succeed(account),
+        ),
+        Effect.retry({
+          while: (error) => error._tag === "GCP.IAM.ServiceAccountNotResolved",
+          schedule: Schedule.exponential("500 millis"),
+          times: 8,
+        }),
+      );
 
       // Sync display name and description against observed state.
       const updateMask = [
@@ -272,7 +286,7 @@ export const ServiceAccountProvider = () =>
         (current.description ?? "") !== desiredDescription ? "description" : undefined,
       ].filter((field): field is string => field !== undefined);
       if (updateMask.length > 0) {
-        yield* iam.patchProjectsServiceAccounts({
+        const patched = yield* iam.patchProjectsServiceAccounts({
           name: current.name ?? name,
           body: {
             updateMask: updateMask.join(","),
@@ -282,9 +296,13 @@ export const ServiceAccountProvider = () =>
             },
           },
         });
-        // The patch response only echoes the masked fields; re-read so the
-        // attributes carry uniqueId and the rest of the account.
-        current = (yield* getByName(current.name ?? name)) ?? current;
+        // The patch response only echoes the masked fields, and a re-read can
+        // still return the previous values, so the patched fields win.
+        current = {
+          ...current,
+          displayName: patched.displayName ?? news.displayName,
+          description: patched.description ?? desiredDescription,
+        };
       }
       return toAttrs(current, project);
     }),
