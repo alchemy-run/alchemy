@@ -14,6 +14,7 @@ import { poll } from "@/Util/poll.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import { CA_CERT_1, CA_CERT_2, LEAF_CERT, LEAF_KEY } from "./fixtures/certs.ts";
+import MtlsFetchWorker, { FetchCert } from "./fixtures/fetch-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -179,6 +180,49 @@ describe.sequential(
           yield* expectUrlContains(worker.url!, "cert-fetch:function", {
             timeout: "60 seconds",
             label: "mtls_certificate binding is a Fetcher",
+          });
+
+          yield* stack.destroy();
+
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+          yield* waitForDelete(accountId, cert.mtlsCertificateId);
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    // `Cloudflare.MtlsCertificate.Fetch` binds the certificate from an Effect
+    // Worker and sends requests through it.
+    test.provider(
+      "an Effect Worker sends requests through the Fetch binding",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const { cert, worker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const worker = yield* MtlsFetchWorker;
+              const cert = yield* FetchCert;
+              return { cert, worker };
+            }),
+          );
+
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: worker.workerName,
+          });
+          expect(
+            (settings.bindings ?? []).some(
+              (b) =>
+                b.type === "mtls_certificate" &&
+                b.name === "FetchCert" &&
+                b.certificateId === cert.mtlsCertificateId,
+            ),
+          ).toBe(true);
+          yield* expectUrlContains(worker.url!, "origin-status:200", {
+            timeout: "60 seconds",
+            label: "request sent through the mTLS Fetch binding",
           });
 
           yield* stack.destroy();

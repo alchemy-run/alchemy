@@ -173,6 +173,15 @@ export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Provide
  * });
  * ```
  *
+ * **Example:** Present a leaf certificate from an Effect Worker
+ * ```typescript
+ * // Inside the Worker's Effect; provide `Cloudflare.MtlsCertificate.FetchBinding`.
+ * const fetchOrigin = yield* Cloudflare.MtlsCertificate.Fetch(cert);
+ * const response = yield* fetchOrigin(
+ *   HttpClientRequest.get("https://origin.example.com/"),
+ * );
+ * ```
+ *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
  *
  * @resource
