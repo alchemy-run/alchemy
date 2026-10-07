@@ -171,19 +171,13 @@ same physical route in place. Changing `zoneId` triggers a replacement.
 
 ## Split one hostname across Workers
 
-Serve one API from several Workers without a gateway Worker in front.
-Give one Worker the hostname as its `domain`, and let the others claim
-paths with `routes`:
+Routes win over custom domains, so one Worker can own a hostname while
+others claim paths under it:
 
 ```typescript
-const home = yield* Cloudflare.Worker("Home", {
+yield* Cloudflare.Worker("Home", {
   main: "./src/home.ts",
   domain: "api.example.com",
-});
-
-yield* Cloudflare.Worker("Products", {
-  main: "./src/products.ts",
-  routes: [{ pattern: "api.example.com/products*" }],
 });
 
 yield* Cloudflare.Worker("Orders", {
@@ -192,45 +186,9 @@ yield* Cloudflare.Worker("Orders", {
 });
 ```
 
-Routes win over custom domains, so `/products/1` runs `Products`,
-`/orders/1` runs `Orders`, and every other path runs `Home`. The
-custom domain provides the DNS record and certificate, so you don't
-need a placeholder record. When several patterns match, the most
-specific one wins.
-
-Each Worker binds only the resources its own paths use:
-
-```typescript
-// src/products.ts — reads the catalog, nothing else
-const catalog = yield* Cloudflare.KV.ReadNamespace(Catalog);
-```
-
-### Run it locally
-
-`alchemy dev` applies the same routes locally. Requests to `home.url`
-reach `Products`, `Orders`, and `Home` exactly as they do on
-`api.example.com`:
-
-```sh
-curl http://localhost:1337/orders/1   # runs the local Orders Worker
-```
-
-A hostname with routes but no `domain` Worker gets its own local URL.
-Read it from the route's `url`:
-
-```typescript
-const products = yield* Cloudflare.Worker("Products", {
-  main: "./src/products.ts",
-  routes: [{ pattern: "api.example.com/products*" }],
-});
-// deployed: "https://api.example.com", dev: "http://localhost:<port>"
-products.routes[0].url;
-```
-
-:::note
-The [federated API example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-federated-api)
-serves one Effect `HttpApi` from four least-privilege Workers.
-:::
+`alchemy dev` applies the same routing locally. See
+[Federated APIs](/cloudflare/networking/federated-apis) for the full
+pattern.
 
 ## DNS records for non-Worker targets
 
