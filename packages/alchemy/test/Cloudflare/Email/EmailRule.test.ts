@@ -124,19 +124,11 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
         const rule = yield* stack.deploy(
           Effect.gen(function* () {
-            const routing = yield* Cloudflare.Email.Routing("Routing", {
-              zone: zoneName,
-            });
+            const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
             return yield* Cloudflare.Email.Rule("ListRule", {
               zone: { zoneId: routing.zoneId },
               name: "alchemy list test",
-              matchers: [
-                {
-                  type: "literal",
-                  field: "to",
-                  value: "list@alchemy-test-2.us",
-                },
-              ],
+              matchers: [{ type: "literal", field: "to", value: "list@alchemy-test-2.us" }],
               actions: [{ type: "drop" }],
             });
           }),
