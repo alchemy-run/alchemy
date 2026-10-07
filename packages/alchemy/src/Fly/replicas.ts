@@ -119,19 +119,23 @@ export const getMachineById = (appName: string, machineId: string) =>
   );
 
 /**
- * Reads a Machine we just leased. Fly's Machines API is not read-after-write
- * consistent: a freshly created Machine can accept a lease (201) and then
- * answer `GET /machines/{id}` with 404 for a few seconds. Holding the lease
- * blocks other writers, so a 404 here is lag rather than deletion; retry it
- * (bounded) before treating the Machine as gone.
+ * Reads a Machine we hold a lease on. Fly's Machines API is not
+ * read-after-write consistent: a freshly created Machine can accept a lease
+ * (201) and then answer `GET /machines/{id}` with 404 for several seconds.
+ * Holding the lease blocks other writers, so a 404 here is lag rather than
+ * deletion; retry it (bounded) before surfacing `NotFound`.
  */
-const getLeasedMachineById = (appName: string, machineId: string) =>
+const getLeasedMachine = (appName: string, machineId: string) =>
   machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
     Effect.retry({
       times: 10,
       schedule: Schedule.spaced("1 second"),
       while: (error) => error._tag === "NotFound",
     }),
+  );
+
+const getLeasedMachineById = (appName: string, machineId: string) =>
+  getLeasedMachine(appName, machineId).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
@@ -442,7 +446,7 @@ const ensureLeasedStarted = Effect.fn(function* (
   yield* leases.acquire([machineId]);
   const started = yield* Effect.gen(function* () {
     // Create/update responses can lag Fly's automatic launch.
-    const current = yield* machines.getMachine({ app_name: appName, machine_id: machineId });
+    const current = yield* getLeasedMachine(appName, machineId);
     if (!sameOwnership(current, machine)) {
       return yield* new ReplicaOwnershipChanged({ appName, machineId });
     }
@@ -466,7 +470,7 @@ const ensureLeasedStarted = Effect.fn(function* (
         timeout: WAIT_TIMEOUT_SECONDS,
       })
       .pipe(Retry.none);
-    return yield* machines.getMachine({ app_name: appName, machine_id: machineId });
+    return yield* getLeasedMachine(appName, machineId);
   }).pipe(
     Effect.retry({
       times: 6,
