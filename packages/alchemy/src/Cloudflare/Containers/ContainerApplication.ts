@@ -202,7 +202,8 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * account's registry (`registry.cloudflare.com/<account-id>/web` with the
    * default `registryId`); fully qualified destinations are used as-is. When
    * omitted, each application publishes to its own repository, named
-   * `<stack>-<id>-<stage>`. Name the same `repository` on several
+   * `<stack>-<id>-<stage>` (long names keep the id and stage and are
+   * shortened with a hash). Name the same `repository` on several
    * applications to share images between them.
    *
    * Builds publish a content-hash tag plus an inline layer cache at a

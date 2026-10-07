@@ -61,8 +61,9 @@ const defaultRepositoryName = Effect.fn(function* (id: string) {
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "");
   if (name.length <= MAX_REPOSITORY_NAME) return name;
+  // Trim the stack prefix first: the id and stage identify the application.
   const hash = (yield* sha256Object({ name })).slice(0, 12);
-  return `${name.slice(0, MAX_REPOSITORY_NAME - hash.length - 1).replace(/-+$/, "")}-${hash}`;
+  return `${name.slice(-(MAX_REPOSITORY_NAME - hash.length - 1)).replace(/^-+/, "")}-${hash}`;
 });
 
 /** Compose image resources while registering the container, before planning. */

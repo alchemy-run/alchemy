@@ -101,17 +101,22 @@ export const sharedApplication = (context: string, repository?: string) =>
 
 export const historyApplications = (converge = false) =>
   Effect.gen(function* () {
+    // Mirrors share one repository so converged applications reference one image.
+    const publish = { repository: "alchemy-publication-history" };
     const target = converge
       ? yield* Cloudflare.Container("HistoryTarget", {
           image: "docker.io/alpine:3.19",
+          publish,
         }).Application
       : undefined;
     const image = target?.configuration.pipe(Output.map((configuration) => configuration.image));
     const first = yield* Cloudflare.Container("HistoryFirst", {
       image: image ?? "alpine:3.19",
+      publish,
     }).Application;
     const second = yield* Cloudflare.Container("HistorySecond", {
       image: image ?? "alpine:3.20",
+      publish,
     }).Application;
     return { first, second, target };
   });
