@@ -28,6 +28,22 @@ function firstHeaderValue(value: string | Array<string> | undefined): string | u
   return first ? first : undefined;
 }
 
+/**
+ * Headers that describe one hop's connection rather than the message. Copying
+ * `transfer-encoding: chunked` onto an already de-chunked body would corrupt
+ * the relayed response, so the whole hop-by-hop set is dropped.
+ */
+export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
 /** Sign the client-facing URL for the runtime entry worker, including TLS termination. */
 export function proxyRequestHeaders(
   request: IncomingMessage,

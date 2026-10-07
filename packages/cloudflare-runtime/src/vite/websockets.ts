@@ -2,7 +2,7 @@ import * as NodeHttp from "node:http";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
-import { proxyRequestHeaders, resolveForwardedHost } from "./forwarded-host.ts";
+import { HOP_BY_HOP_HEADERS, proxyRequestHeaders, resolveForwardedHost } from "./forwarded-host.ts";
 
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the
@@ -144,22 +144,6 @@ export function handleWebSocket(
     sockets.clear();
   };
 }
-
-/**
- * Headers that describe one hop's connection rather than the message. Copying
- * `transfer-encoding: chunked` onto an already de-chunked body would corrupt
- * the relayed response, so the whole hop-by-hop set is dropped.
- */
-const HOP_BY_HOP_HEADERS = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-connection",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-]);
 
 /**
  * Matches the origin of a Sandbox SDK preview URL.
