@@ -67,6 +67,21 @@ describe(
   "Docker.Network",
   { tags: ["provider:docker", "provider:docker:network", "local"], concurrent: false },
   () => {
+    // Every prop is optional: `Docker.Network("app")` must plan, deploy,
+    // redeploy in place, and destroy without a props object.
+    test.provider("deploys a network declared without props", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Docker.Network("bare-network"));
+        const second = yield* stack.deploy(Docker.Network("bare-network"));
+        expect(second.id).toBe(first.id);
+        yield* stack.destroy();
+        const gone = yield* docker.network.inspect(first.id).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
     test.provider("creates a bridge network", (stack) =>
       Effect.gen(function* () {
         const network = yield* stack.deploy(

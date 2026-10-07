@@ -1,7 +1,9 @@
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
@@ -187,6 +189,63 @@ describe.concurrent(
           yield* stack.destroy();
         }),
       { timeout: 360_000 },
+    );
+
+    // `.assetsignore` excludes a folder the deploying user cannot read (e.g.
+    // a root-owned cache). Its files must not be uploaded, and the walk must
+    // not read it at all — reading it used to fail the deploy with EACCES.
+    test.provider(
+      "excludes .assetsignore'd folders without reading them",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const client = yield* HttpClient.HttpClient;
+
+          yield* stack.destroy();
+
+          const dir = yield* cloneFixture(assetsFixture, { prefix: "alchemy-assets-ignore-" });
+          yield* fs.writeFileString(path.join(dir, ".assetsignore"), "private/\n*.map\n");
+          yield* fs.writeFileString(path.join(dir, "app.js.map"), "{}");
+          const locked = path.join(dir, "private", "cache");
+          yield* fs.makeDirectory(locked, { recursive: true });
+          yield* fs.writeFileString(path.join(dir, "private", "secret.txt"), "secret");
+          yield* Effect.acquireRelease(fs.chmod(locked, 0o000), () =>
+            fs.chmod(locked, 0o755).pipe(Effect.ignore),
+          );
+
+          const worker = yield* stack.deploy(
+            Cloudflare.Worker("AssetsIgnoreWorker", {
+              assets: { directory: dir, notFoundHandling: "404-page" },
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
+
+          const status = (pathname: string) =>
+            client.get(new URL(pathname, worker.url).href).pipe(
+              Effect.map((response) => response.status),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (code) => code !== 503 && code !== 522,
+                times: 30,
+              }),
+            );
+          // The served index proves the Worker is live before asserting 404s.
+          expect(
+            yield* status("/index.html").pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (code) => code === 200,
+                times: 30,
+              }),
+            ),
+          ).toBe(200);
+          expect(yield* status("/private/secret.txt")).toBe(404);
+          expect(yield* status("/app.js.map")).toBe(404);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 180_000 },
     );
   },
 );
