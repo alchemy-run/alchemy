@@ -2192,6 +2192,7 @@ export const LiveWorkerProvider = () =>
             ? readPrebuiltWorkerBundle({ main: props.main!, rules: props.rules })
             : bundler.build({
                 id,
+                fqn,
                 main: props.main!,
                 compatibility: getCompatibility(props),
                 entry: props.isExternal

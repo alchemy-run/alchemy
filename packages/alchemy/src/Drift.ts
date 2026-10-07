@@ -24,6 +24,7 @@ import {
   type ScopedPlanStatusSession,
 } from "./Report.ts";
 import type { ResourceLike } from "./Resource.ts";
+import { ResourceFqn } from "./ResourceFqn.ts";
 import {
   isActionState,
   State,
@@ -428,6 +429,7 @@ const instrumentLifecycle =
         effect.pipe(
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
+          Effect.provideService(ResourceFqn, fqn),
           Effect.catchCause((cause): Effect.Effect<never, E | DriftResourceError> =>
             Cause.hasInterruptsOnly(cause)
               ? Effect.failCause(cause)

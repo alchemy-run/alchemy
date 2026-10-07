@@ -52,6 +52,7 @@ import {
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
+import { ResourceFqn } from "./ResourceFqn.ts";
 import {
   InvalidResourceSelection,
   UnsafeSelectionBoundary,
@@ -2309,6 +2310,7 @@ const providePlanScope =
           failCredentialsRequired(fqn),
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
+          Effect.provideService(ResourceFqn, fqn),
         ),
       ),
     );

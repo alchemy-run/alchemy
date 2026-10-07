@@ -3,9 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import path from "pathe";
 import type * as rolldown from "rolldown";
-import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
@@ -38,6 +36,8 @@ export interface WorkerBuildOptions extends Bundle.BundleConfig {
 
 export interface WorkerBundleOptions {
   id: string;
+  /** Namespace-qualified id; keys the Worker's bundle directory. */
+  fqn: string;
   main: string;
   compatibility: {
     date: string;
@@ -131,7 +131,6 @@ const configureCloudflarePlugins = (
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-  const dotAlchemy = yield* dotAlchemyDirectory;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
@@ -222,7 +221,16 @@ export const WorkerBundle = Effect.gen(function* () {
       // modules so evaluation follows ESM semantics regardless of how the
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
-      dir: path.join(dotAlchemy, "bundles", options.id),
+      ...(Bundle.hasOutputLocation(options.extraOptions?.output)
+        ? {}
+        : {
+            dir: yield* Bundle.outputDirectory({
+              stack: options.stack.name,
+              stage: options.stack.stage,
+              fqn: options.fqn,
+            }).pipe(Effect.provide(context)),
+            cleanDir: true,
+          }),
       ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
@@ -325,6 +333,7 @@ ${[
 export const makeRolldownSource = (options: { main: string }): SourceProvider => {
   const bundleOptions = (ctx: SourceContext): WorkerBundleOptions => ({
     id: ctx.id,
+    fqn: ctx.fqn,
     main: options.main,
     compatibility: ctx.compatibility,
     entry: ctx.entry,

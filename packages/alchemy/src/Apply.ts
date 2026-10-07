@@ -46,6 +46,7 @@ import {
 } from "./Report.ts";
 import type { ApplyStatus } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { ResourceFqn } from "./ResourceFqn.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -99,6 +100,7 @@ const provideLifecycleScope =
           failCredentialsRequired(fqn),
           Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
           Effect.provideService(InstanceId, instanceId),
+          Effect.provideService(ResourceFqn, fqn),
         ),
       ),
     );

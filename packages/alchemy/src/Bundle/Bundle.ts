@@ -1,10 +1,15 @@
 import assert from "node:assert";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
+import { dotAlchemyDirectory } from "../AlchemyContext.ts";
+import { encodeFqn } from "../FQN.ts";
+import { ResourceFqn } from "../ResourceFqn.ts";
+import { StackContext } from "../StackContext.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
@@ -58,8 +63,8 @@ export interface BundleExtraOptions {
   /**
    * Configures the {@link bundleAnalyzerPlugin} which emits a bundle analysis
    * report alongside the bundle output, describing chunks, modules, and the
-   * import graph reachable from each entry point. The report is written to
-   * disk only when the bundle is (see {@link BundleConfig.output}).
+   * import graph reachable from each entry point. The report is written next
+   * to the bundle (see {@link BundleConfig.output}).
    *
    * - `undefined` / `false` (default): plugin is disabled.
    * - `true`: plugin is enabled with default options.
@@ -88,9 +93,10 @@ export interface BundleConfig extends BundleExtraOptions {
   /**
    * Rolldown output options overrides.
    *
-   * The bundle stays in memory unless `dir` or `file` is set, in which case
-   * it is also written there (e.g. to inspect what ships, or for plugins
-   * that hook `writeBundle`).
+   * The bundle is written to `.alchemy/bundles/<stack>/<stage>/<resource>`,
+   * which is cleared before every build, so you can inspect exactly what
+   * ships. Set `dir` or `file` to write it somewhere else; Alchemy never
+   * clears a directory you choose.
    */
   readonly output?: Partial<rolldown.OutputOptions>;
 }
@@ -204,14 +210,62 @@ const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.Output
   minify: outputOptions?.minify ?? "dce-only",
 });
 
-/**
- * Write the bundle to disk only when the caller names a location. Every
- * caller consumes the output in memory, and rolldown's default `dir`
- * (`dist`, resolved against `cwd`) would otherwise leave an unused copy in
- * the user's package on every build.
- */
-const hasOutputLocation = (outputOptions?: rolldown.OutputOptions): boolean =>
+/** Whether the caller chose where the bundle is written (`dir` or `file`). */
+export const hasOutputLocation = (outputOptions?: Partial<rolldown.OutputOptions>): boolean =>
   outputOptions?.dir !== undefined || outputOptions?.file !== undefined;
+
+/**
+ * The directory a resource's bundle is written to when its `output` sets
+ * neither `dir` nor `file`: `.alchemy/bundles/<stack>/<stage>/<fqn>`. Every
+ * resource gets its own directory, so concurrent stages never share one and
+ * the directory can be cleared before each build.
+ */
+export const outputDirectory = (resource: {
+  readonly stack: string;
+  readonly stage: string;
+  readonly fqn: string;
+}) =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const dotAlchemy = yield* dotAlchemyDirectory;
+    return path.resolve(
+      dotAlchemy,
+      "bundles",
+      resource.stack,
+      resource.stage,
+      encodeFqn(resource.fqn),
+    );
+  });
+
+/**
+ * Resolve where a bundle is written:
+ *
+ * - `dir` or `file` set by the caller: rolldown writes there, as configured.
+ * - Otherwise, inside a resource lifecycle operation (the engine provides
+ *   {@link ResourceFqn} and the stack): the resource's
+ *   {@link outputDirectory}, cleared before each build so stale hashed
+ *   chunks never pile up.
+ * - Otherwise: the bundle stays in memory. Rolldown's default `dir` (`dist`,
+ *   resolved against `cwd`) would leave an unused copy in the user's package.
+ *
+ * Callers always consume the bundle from memory; the copy on disk is for
+ * inspecting what ships, the bundle analyzer report, and `writeBundle` hooks.
+ */
+const resolveOutputOptions = (outputOptions?: rolldown.OutputOptions) =>
+  Effect.gen(function* () {
+    const options = withDceDefault(outputOptions);
+    if (hasOutputLocation(options)) return options;
+    const fqn = yield* Effect.serviceOption(ResourceFqn);
+    const stack = yield* Effect.serviceOption(StackContext);
+    const path = yield* Effect.serviceOption(Path.Path);
+    if (Option.isNone(fqn) || Option.isNone(stack) || Option.isNone(path)) return options;
+    const dir = yield* outputDirectory({
+      stack: stack.value.name,
+      stage: stack.value.stage,
+      fqn: fqn.value,
+    }).pipe(Effect.provideService(Path.Path, path.value));
+    return { ...options, dir, cleanDir: true } satisfies rolldown.OutputOptions;
+  });
 
 /**
  * Build a bundle using rolldown from the given input options and output options.
@@ -224,28 +278,30 @@ export const build = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  Effect.tryPromise({
-    try: async () => {
-      const rolldown = await loadRolldown();
-      const bundle = await rolldown.rolldown({
-        ...withAlchemyDefine(inputOptions),
-        plugins: [inputOptions.plugins, await builtInPlugins(extra)],
-        optimization: inputOptions.optimization ?? {
-          inlineConst: {
-            mode: "smart",
-            pass: 3,
-          },
+  resolveOutputOptions(outputOptions).pipe(
+    Effect.flatMap((options) =>
+      Effect.tryPromise({
+        try: async () => {
+          const rolldown = await loadRolldown();
+          const bundle = await rolldown.rolldown({
+            ...withAlchemyDefine(inputOptions),
+            plugins: [inputOptions.plugins, await builtInPlugins(extra)],
+            optimization: inputOptions.optimization ?? {
+              inlineConst: {
+                mode: "smart",
+                pass: 3,
+              },
+            },
+          });
+          const result = hasOutputLocation(options)
+            ? await bundle.write(options)
+            : await bundle.generate(options);
+          await bundle.close();
+          return result.output;
         },
-      });
-      const options = withDceDefault(outputOptions);
-      const result = hasOutputLocation(options)
-        ? await bundle.write(options)
-        : await bundle.generate(options);
-      await bundle.close();
-      return result.output;
-    },
-    catch: bundleErrorFromUnknown,
-  }).pipe(
+        catch: bundleErrorFromUnknown,
+      }),
+    ),
     Effect.flatMap(Effect.forEach(bundleFileFromOutputChunk)),
     Effect.flatMap(bundleOutputFromFiles),
   );
@@ -261,88 +317,95 @@ export const watch = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Stream.Stream<BundleWatchEvent> =>
-  Stream.callback<
-    | BundleWatchEvent.Start
-    | BundleWatchEvent.Error
-    | {
-        readonly _tag: "Success";
-        readonly output: rolldown.OutputBundle;
-      }
-  >((queue) =>
-    Effect.acquireRelease(
-      Effect.promise(async () => {
-        const rolldown = await loadRolldown();
-        const watcher = rolldown.watch({
-          ...withAlchemyDefine(inputOptions),
-          plugins: [
-            inputOptions.plugins,
-            await builtInPlugins(extra),
-            // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
-            {
-              name: "alchemy:watch-bundle",
-              watchChange() {
-                Queue.offerUnsafe(queue, {
-                  _tag: "Start",
-                });
-              },
-              generateBundle(_outputOptions, bundle) {
-                Queue.offerUnsafe(queue, {
-                  _tag: "Success",
-                  output: bundle,
-                });
-              },
-            },
-          ],
-          watch: {
-            // Watching the full module graph of an Effect worker (all of
-            // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
-            // of OS watch handles *per worker*; with several Effect workers
-            // this exhausts the process fd table and the next `posix_spawn`
-            // (workerd / docker) fails with `spawn EBADF`. Workspace packages
-            // resolve to their real source paths (outside `node_modules`), so
-            // they stay watched and local HMR is unaffected.
-            exclude: ["**/node_modules/**"],
-            // `generateBundle` still fires, so the output is captured either way.
-            skipWrite: !hasOutputLocation(outputOptions),
-          },
-          output: withDceDefault(outputOptions),
-        });
-        watcher.on("event", (event) => {
-          if (event.code === "ERROR") {
-            Queue.offerUnsafe(queue, {
-              _tag: "Error",
-              error: bundleErrorFromUnknown(event.error),
-            });
-          } else if (event.code === "BUNDLE_END") {
-            // This must be called to avoid resource leaks.
-            event.result.close().catch(() => {});
-          }
-        });
-        return watcher;
-      }),
-      (watcher) => Effect.promise(() => watcher.close()),
-    ),
-  ).pipe(
-    Stream.mapEffect((event) =>
-      Effect.gen(function* () {
-        if (event._tag !== "Success") {
-          return event;
-        }
-        return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
-          Effect.map((output): BundleWatchEvent.Success => ({
-            _tag: "Success",
-            output,
-          })),
-          Effect.catch((error) =>
-            Effect.succeed<BundleWatchEvent.Error>({
-              _tag: "Error",
-              error: bundleErrorFromUnknown(error),
-            }),
-          ),
-        );
-      }),
-    ),
+  Stream.unwrap(
+    Effect.map(resolveOutputOptions(outputOptions), watchResolved(inputOptions, extra)),
   );
+
+const watchResolved =
+  (inputOptions: rolldown.InputOptions, extra: BundleExtraOptions | undefined) =>
+  (outputOptions: rolldown.OutputOptions): Stream.Stream<BundleWatchEvent> =>
+    Stream.callback<
+      | BundleWatchEvent.Start
+      | BundleWatchEvent.Error
+      | {
+          readonly _tag: "Success";
+          readonly output: rolldown.OutputBundle;
+        }
+    >((queue) =>
+      Effect.acquireRelease(
+        Effect.promise(async () => {
+          const rolldown = await loadRolldown();
+          const watcher = rolldown.watch({
+            ...withAlchemyDefine(inputOptions),
+            plugins: [
+              inputOptions.plugins,
+              await builtInPlugins(extra),
+              // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
+              {
+                name: "alchemy:watch-bundle",
+                watchChange() {
+                  Queue.offerUnsafe(queue, {
+                    _tag: "Start",
+                  });
+                },
+                generateBundle(_outputOptions, bundle) {
+                  Queue.offerUnsafe(queue, {
+                    _tag: "Success",
+                    output: bundle,
+                  });
+                },
+              },
+            ],
+            watch: {
+              // Watching the full module graph of an Effect worker (all of
+              // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
+              // of OS watch handles *per worker*; with several Effect workers
+              // this exhausts the process fd table and the next `posix_spawn`
+              // (workerd / docker) fails with `spawn EBADF`. Workspace packages
+              // resolve to their real source paths (outside `node_modules`), so
+              // they stay watched and local HMR is unaffected.
+              exclude: ["**/node_modules/**"],
+              // `generateBundle` still fires, so the output is captured either way.
+              skipWrite: !hasOutputLocation(outputOptions),
+            },
+            output: outputOptions,
+          });
+          watcher.on("event", (event) => {
+            if (event.code === "ERROR") {
+              Queue.offerUnsafe(queue, {
+                _tag: "Error",
+                error: bundleErrorFromUnknown(event.error),
+              });
+            } else if (event.code === "BUNDLE_END") {
+              // This must be called to avoid resource leaks.
+              event.result.close().catch(() => {});
+            }
+          });
+          return watcher;
+        }),
+        (watcher) => Effect.promise(() => watcher.close()),
+      ),
+    ).pipe(
+      Stream.mapEffect((event) =>
+        Effect.gen(function* () {
+          if (event._tag !== "Success") {
+            return event;
+          }
+          return yield* bundleOutputFromRolldownOutputBundle(event.output).pipe(
+            Effect.map((output): BundleWatchEvent.Success => ({
+              _tag: "Success",
+              output,
+            })),
+            Effect.catch((error) =>
+              Effect.succeed<BundleWatchEvent.Error>({
+                _tag: "Error",
+                error: bundleErrorFromUnknown(error),
+              }),
+            ),
+          );
+        }),
+      ),
+    );
 
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
 // oxlint-disable-next-line no-control-regex
