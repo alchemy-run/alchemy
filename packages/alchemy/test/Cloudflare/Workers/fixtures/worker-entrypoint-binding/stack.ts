@@ -7,6 +7,17 @@ import type { Api } from "./entrypoint-target-worker.ts";
 const targetMain = pathe.resolve(import.meta.dirname, "entrypoint-target-worker.ts");
 const callerMain = pathe.resolve(import.meta.dirname, "entrypoint-caller-worker.ts");
 
+export const Target = () =>
+  Cloudflare.Worker("EntrypointTarget", {
+    main: targetMain,
+    env: {
+      SELF: Cloudflare.WorkerEntrypoint<Api>(Cloudflare.Workers.Self, {
+        entrypoint: "Api",
+        props: { tenant: "self" },
+      }),
+    },
+  });
+
 export const Caller = (target: Cloudflare.Worker) =>
   Cloudflare.Worker("EntrypointCaller", {
     main: callerMain,
@@ -24,7 +35,8 @@ export type CallerEnv = Cloudflare.InferEnv<ReturnType<typeof Caller>>;
  * Stack with two plain Workers:
  *
  * - `EntrypointTarget` — exports a named `Api` entrypoint (greet + a
- *   ctx.props echo) alongside its default handler.
+ *   ctx.props echo) alongside its default handler, and binds its own `Api`
+ *   via `Cloudflare.WorkerEntrypoint(Cloudflare.Workers.Self, ...)`.
  * - `EntrypointCaller` — binds the target's `Api` entrypoint via
  *   `Cloudflare.WorkerEntrypoint(target, { entrypoint: "Api", props })`.
  */
@@ -35,9 +47,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const target = yield* Cloudflare.Worker("EntrypointTarget", {
-      main: targetMain,
-    });
+    const target = yield* Target();
 
     const caller = yield* Caller(target);
 

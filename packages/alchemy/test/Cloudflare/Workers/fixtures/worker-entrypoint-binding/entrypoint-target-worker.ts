@@ -20,8 +20,27 @@ export class Api extends WorkerEntrypoint<unknown, Record<string, unknown>> {
   }
 }
 
+/**
+ * `SELF` is `Cloudflare.WorkerEntrypoint<Api>(Cloudflare.Workers.Self, ...)`:
+ * this Worker's own `Api` entrypoint, bound by name.
+ *
+ * GET /self-greet?name=foo  →  `Api.greet(name)` through the self binding
+ * GET /self-props           →  JSON of `Api`'s `ctx.props` via the self binding
+ */
 export default {
-  async fetch(): Promise<Response> {
-    return new Response("hello from EntrypointTargetWorker");
+  async fetch(request: Request, env: { SELF: Service<Api> }): Promise<Response> {
+    const url = new URL(request.url);
+    try {
+      if (url.pathname === "/self-greet") {
+        return new Response(await env.SELF.greet(url.searchParams.get("name") ?? "world"));
+      }
+      if (url.pathname === "/self-props") {
+        return Response.json(await env.SELF.getProps());
+      }
+      return new Response("hello from EntrypointTargetWorker");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(`target failed: ${message}`, { status: 500 });
+    }
   },
 };
