@@ -1,17 +1,11 @@
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import * as Docker from "@/Docker";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { findAvailablePort } from "./Runtime.ts";
-
-// bcrypt htpasswd entry for alchemy:alchemy-test-password (`htpasswd -Bbn`).
-const REGISTRY_HTPASSWD = "alchemy:$2y$05$7OoaHcebvt.2oLcNt7oRsOOALGNXUWi8IHUxTMRu9BWyXWDgM/3BK";
+import { authenticatedRegistry } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
@@ -132,52 +126,15 @@ describe(
     test.provider("builds FROM a private base image with the registry credentials", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const client = yield* HttpClient.HttpClient;
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const port = yield* findAvailablePort();
-        const host = `localhost:${port}`;
-        const registryName = "alchemy-test-auth-registry";
+        // Anonymous pulls get 401, and nothing on the host holds a
+        // `docker login` for this ephemeral port.
+        const { host, credentials: registry } = yield* authenticatedRegistry();
         const baseRef = `${host}/alchemy-base:v1`;
-        const registry = {
-          server: host,
-          username: "alchemy",
-          password: Redacted.make("alchemy-test-password"),
-        };
-
         yield* Effect.addFinalizer(() =>
-          Effect.all([
-            docker.run(["rm", "-f", registryName]),
-            docker.image.remove([baseRef, `${host}/alchemy-app:v1`], true),
-          ]).pipe(Effect.ignore),
+          docker.image.remove([baseRef, `${host}/alchemy-app:v1`], true).pipe(Effect.ignore),
         );
-
-        // An htpasswd-protected registry: anonymous pulls fail with 401, and
-        // nothing on the host holds a `docker login` for this ephemeral port.
-        yield* docker.run([
-          "run",
-          "-d",
-          "--name",
-          registryName,
-          "-p",
-          `${port}:5000`,
-          "-e",
-          `HTPASSWD=${REGISTRY_HTPASSWD}`,
-          "-e",
-          "REGISTRY_AUTH=htpasswd",
-          "-e",
-          "REGISTRY_AUTH_HTPASSWD_REALM=alchemy-test",
-          "-e",
-          "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
-          "--entrypoint",
-          "/bin/sh",
-          "registry:2",
-          "-c",
-          'mkdir -p /auth && echo "$HTPASSWD" > /auth/htpasswd && exec registry serve /etc/docker/registry/config.yml',
-        ]);
-        yield* client
-          .get(`http://${host}/v2/`)
-          .pipe(Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 20 }));
 
         // Publish the private base image, then drop the local copy so the
         // build below has to pull it from the authenticated registry.
