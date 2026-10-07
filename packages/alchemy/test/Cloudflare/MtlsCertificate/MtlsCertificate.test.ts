@@ -1,4 +1,5 @@
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -9,6 +10,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
+import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import { CA_CERT_1, CA_CERT_2, LEAF_CERT, LEAF_KEY } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -125,6 +127,54 @@ describe.sequential(
 
         yield* waitForDelete(accountId, replaced.mtlsCertificateId);
       }).pipe(logLevel),
+    );
+
+    // #2080: right after a Worker bound to the certificate is deleted,
+    // Cloudflare still rejects the certificate delete with "Certificate
+    // cannot be deleted while in use." Destroy must ride that out.
+    test.provider(
+      "destroys a certificate a Worker was bound to",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const { cert, worker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("BoundCert", {
+                ca: false,
+                certificates: LEAF_CERT,
+                privateKey: Redacted.make(LEAF_KEY),
+              });
+              const worker = yield* Cloudflare.Worker("MtlsBoundWorker", {
+                script: `export default { fetch: () => new Response("ok") };`,
+              });
+              yield* worker.bind`CERT`({
+                bindings: [
+                  { type: "mtls_certificate", name: "CERT", certificateId: cert.mtlsCertificateId },
+                ],
+              });
+              return { cert, worker };
+            }),
+          );
+
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: worker.workerName,
+          });
+          expect(
+            (settings.bindings ?? []).some(
+              (b) => b.type === "mtls_certificate" && b.certificateId === cert.mtlsCertificateId,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+          yield* waitForDelete(accountId, cert.mtlsCertificateId);
+        }).pipe(logLevel),
+      { timeout: 180_000 },
     );
 
     test.provider("list enumerates the deployed mTLS certificate", (stack) =>
