@@ -48,7 +48,8 @@ jobs:
         run: pnpm format:check
 
       # Builds the dist-consumed Cloudflare packages, then `tsc -b` over the
-      # whole workspace (packages, tests and examples).
+      # whole workspace (packages, tests and examples) plus frontend-frameworks'
+      # tests, which aren't part of the root solution.
       - name: Typecheck
         run: pnpm typecheck
 

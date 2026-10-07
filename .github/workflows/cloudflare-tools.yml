@@ -73,9 +73,8 @@ jobs:
           install: true
           require-lockfile: true
 
-      - name: Typecheck
-        run: pnpm typecheck:cloudflare-packages
-
+      # Type checking is OS-independent and runs once in check.yml
+      # (`pnpm typecheck`). Test builds what it needs via ensure:built.
       - name: Test
         run: pnpm test:cloudflare-packages
         env:
