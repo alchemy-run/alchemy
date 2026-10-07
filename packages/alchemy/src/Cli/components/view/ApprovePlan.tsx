@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";

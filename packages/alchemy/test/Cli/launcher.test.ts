@@ -19,8 +19,6 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
     const bin = path.join(installed, "bin");
     yield* fs.makeDirectory(bin, { recursive: true });
     yield* fs.copyFile(path.join(packageDir, "bin", "cli.js"), path.join(bin, "cli.js"));
-    const config = path.join(packageDir, "bin", "tsconfig.json");
-    yield* fs.copyFile(config, path.join(bin, "tsconfig.json"));
     yield* fs.writeFileString(
       path.join(installed, "package.json"),
       JSON.stringify({ type: "module", bin: { alchemy: "./bin/cli.js" } }),
