@@ -5,8 +5,8 @@ import { DEFAULT_CWD, makeHarnessServer, type HarnessServerOptions } from "./Har
 
 export interface AcpServerProps {
   /**
-   * Directory sessions work in by default — usually an environment's
-   * `workdir` (`cwd: app.workdir`). Sessions can override it on `start`.
+   * Directory sessions work in by default — usually a mounted repository
+   * (`cwd: app.path`). Sessions can override it on `start`.
    * @default "/workspace"
    */
   cwd?: string;

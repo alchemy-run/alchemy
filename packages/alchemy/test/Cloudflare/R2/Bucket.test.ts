@@ -1129,6 +1129,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
         queues: MutableHashMap.empty(),
         queueConsumers: MutableHashMap.empty(),
         workerRestarts: MutableHashMap.empty(),
+        containerHosts: MutableHashMap.empty(),
       }),
     ),
     Layer.succeed(Stack, testStack),

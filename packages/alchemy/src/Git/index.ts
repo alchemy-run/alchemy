@@ -63,3 +63,16 @@ export {
 } from "./RegistryObject.ts";
 
 export { Hasher, HasherInline, HasherSelf, HASHER_BINDING } from "./Hasher/Hasher.ts";
+
+export {
+  Repository,
+  RepositoryProvider,
+  RepositoryNotReady,
+  cloneCredentials,
+  type RepositoryCredentials,
+  type RepositoryImport,
+  type RepositoryProps,
+} from "./Repository.ts";
+export { Providers, providers, type ProviderRequirements } from "./Providers.ts";
+
+export { MountRepository, type MountRepositoryOptions } from "./MountRepository.ts";

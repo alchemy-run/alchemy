@@ -7,6 +7,7 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
+import { materializeImageContext } from "../../Docker/ImageContext.ts";
 import { dedupeImageLayers, renderImageLayers, type ImageLayer } from "../../Docker/ImageLayer.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -425,6 +426,12 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     news.external,
     news.autoInstallExternals,
   );
+  // Mounted sources (files, folders, git checkouts) contributed by bindings.
+  const contextDigest = yield* materializeImageContext({
+    context,
+    cacheDir: path.join(dotAlchemy, "git-cache"),
+    sources: (news.imageLayers ?? []).flatMap((layer) => layer.context ?? []),
+  });
   const [bundle] = yield* Effect.all(
     [
       bundleContainerProgram({
@@ -451,6 +458,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     hash: yield* sha256Object({
       bundle: bundle.hash,
       dockerfileContent,
+      ...(news.imageLayers?.some((layer) => layer.context?.length) ? { contextDigest } : {}),
     }),
   };
 });

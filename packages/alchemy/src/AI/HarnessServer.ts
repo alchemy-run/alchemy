@@ -6,10 +6,11 @@ import * as Redacted from "effect/Redacted";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Scope from "effect/Scope";
+import { bindIntoImageHost } from "../Docker/ImageHost.ts";
 import type { ImageLayer } from "../Docker/ImageLayer.ts";
+import { gitCliLayer } from "../FS/GitMount.ts";
 import { unpackEnvValue, type RuntimeContext } from "../RuntimeContext.ts";
 import { makeHarness, type HarnessDriver } from "./HarnessEngine.ts";
-import { bindIntoImageHost } from "./ImageHost.ts";
 import { SessionError, type Harness } from "./Session.ts";
 import { HarnessRpcs, serveHarness } from "./SessionRpcs.ts";
 import { MemorySessionStore } from "./SessionStore.ts";
@@ -67,13 +68,6 @@ export const systemPackagesLayer = (id: string, packages: ReadonlyArray<string>)
   };
 };
 
-/**
- * What every harness needs from its box: CA certificates (the Rust and Go
- * CLIs verify TLS against the system store — slim images ship none) and
- * `git` (agents diff, commit and inspect history).
- */
-const harnessEssentials = systemPackagesLayer("harness-essentials", ["ca-certificates", "git"]);
-
 const unavailable = (name: string) =>
   Effect.die(
     new Error(
@@ -117,7 +111,7 @@ export const makeHarnessServer = <R>(
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       yield* bindIntoImageHost(`harness:${options.id}`, {
         image: [
-          harnessEssentials,
+          gitCliLayer,
           ...(options.cwd
             ? [
                 {

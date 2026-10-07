@@ -4,14 +4,10 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as AI from "@/AI/index.ts";
 import * as Anthropic from "@/Anthropic/index.ts";
+import * as GitHub from "@/GitHub/index.ts";
 import * as OpenAI from "@/OpenAI/index.ts";
 import * as OpenCode from "@/OpenCode/index.ts";
 import { Sandbox } from "./sandbox.ts";
-
-/** A tiny public repository, checked out into the image at build time. */
-export const Repo = AI.Environment("Repo", {
-  source: AI.GitSource({ repo: "octocat/Hello-World" }),
-});
 
 /**
  * One image with an environment and three harnesses installed, each served
@@ -25,22 +21,25 @@ export default Sandbox.make(
     instanceType: "standard-1",
   },
   Effect.gen(function* () {
-    const repo = yield* Repo;
+    // A tiny public repository, checked out into the image at build time.
+    const repo = yield* GitHub.MountRepository("octocat/Hello-World", {
+      path: "/workspace/hello",
+    });
     const anthropicKey = yield* Config.Redacted("ANTHROPIC_API_KEY");
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
       apiKey: anthropicKey,
       model: "claude-haiku-4-5-20251001",
-      cwd: repo.workdir,
+      cwd: repo.path,
     });
     const codex = yield* OpenAI.CodexServer("Codex", {
       apiKey: yield* Config.Redacted("OPENAI_API_KEY"),
       model: "gpt-5-nano",
-      cwd: repo.workdir,
+      cwd: repo.path,
     });
     const opencode = yield* OpenCode.Server("OpenCode", {
       env: { ANTHROPIC_API_KEY: anthropicKey },
       model: "anthropic/claude-haiku-4-5",
-      cwd: repo.workdir,
+      cwd: repo.path,
     });
     const routes: Record<
       string,

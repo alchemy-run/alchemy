@@ -75,6 +75,7 @@ const env = Layer.mergeAll(
       queues: MutableHashMap.empty(),
       queueConsumers: MutableHashMap.empty(),
       workerRestarts: MutableHashMap.empty(),
+      containerHosts: MutableHashMap.empty(),
     }),
   ),
   NodeServices.layer,

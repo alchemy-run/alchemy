@@ -257,7 +257,7 @@ export type SessionEventInput = SessionEvent extends infer E
 export const StartSession = Schema.Struct({
   /** Session id; generated when omitted. Use a stable id to make `start` idempotent. */
   id: Schema.optional(Schema.String),
-  /** Working directory. @default the environment's workdir */
+  /** Working directory. @default the harness server's `cwd` */
   cwd: Schema.optional(Schema.String),
   /** Check out a ref (optionally onto a new branch) before the first turn. */
   checkout: Schema.optional(

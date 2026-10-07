@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../../Artifacts.ts";
@@ -11,7 +13,7 @@ import type { ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { localAccountId } from "../LocalAccount.ts";
-import { generateLocalId, LOCAL_PROVIDERS_URL } from "../LocalRuntime.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type {
   AnyContainerApplicationProps,
   ContainerApplication,
@@ -229,6 +231,24 @@ export const LocalContainerProvider = () =>
         } satisfies ContainerApplication["Attributes"];
       });
 
+      const restartHosts = (dev: DevContainerImage | undefined) =>
+        Effect.gen(function* () {
+          if (dev === undefined || !("dockerfile" in dev)) return;
+          const state = yield* Effect.serviceOption(LocalRuntimeState);
+          if (state._tag === "None") return;
+          const context = path.resolve(process.cwd(), dev.context ?? ".");
+          const hosts = MutableHashMap.get(state.value.containerHosts, context);
+          if (hosts._tag === "None") return;
+          yield* Effect.forEach(
+            hosts.value,
+            (name) =>
+              MutableHashMap.get(state.value.workerRestarts, name).pipe(
+                Option.match({ onNone: () => Effect.void, onSome: (restart) => restart }),
+              ),
+            { discard: true },
+          );
+        });
+
       return {
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output, newBindings }) {
@@ -280,7 +300,15 @@ export const LocalContainerProvider = () =>
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings, output }) {
-          return yield* makeAttributes({ id, news, bindings, output });
+          const attrs = yield* makeAttributes({ id, news, bindings, output });
+          // `precreate` built this image without its bindings' layers, and a
+          // Worker may already have started (and built its container image)
+          // from that. When the image changed, restart the Workers hosting
+          // this build context so they rebuild from the final one.
+          if (output?.hash?.image !== undefined && output.hash.image !== attrs.hash.image) {
+            yield* restartHosts(attrs.dev);
+          }
+          return attrs;
         }),
         delete: Effect.fn(function* () {
           // Nothing to tear down: the build context lives under `.alchemy/tmp`

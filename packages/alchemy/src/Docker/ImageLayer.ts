@@ -15,6 +15,8 @@
  * installs above them). Within a stage, layers keep binding order.
  */
 
+import type { ImageContextSource } from "./ImageContext.ts";
+
 /** Where a layer sits in the image, for build caching. */
 export type ImageLayerStage = "setup" | "install" | "source";
 
@@ -26,6 +28,12 @@ export interface ImageLayer {
   readonly instructions: string;
   /** @default "install" */
   readonly stage?: ImageLayerStage;
+  /**
+   * Files the layer's instructions `COPY` from the build context (inline
+   * files, host directories, git checkouts). The host materializes them
+   * before building.
+   */
+  readonly context?: ReadonlyArray<ImageContextSource>;
 }
 
 const STAGE_ORDER: Record<ImageLayerStage, number> = { setup: 0, install: 1, source: 2 };

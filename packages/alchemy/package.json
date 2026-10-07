@@ -51,6 +51,7 @@
     "./Bundle": "./src/Bundle/index.ts",
     "./Docker": "./src/Docker/index.ts",
     "./Doppler": "./src/Doppler/index.ts",
+    "./FS": "./src/FS/index.ts",
     "./Git": "./src/Git/index.ts",
     "./Git/Hasher": "./src/Git/Hasher/index.ts",
     "./Http": "./src/Http/index.ts",
@@ -200,6 +201,11 @@
         "types": "./lib/Doppler/index.d.ts",
         "bun": "./src/Doppler/index.ts",
         "default": "./lib/Doppler/index.js"
+      },
+      "./FS": {
+        "types": "./lib/FS/index.d.ts",
+        "bun": "./src/FS/index.ts",
+        "default": "./lib/FS/index.js"
       },
       "./Git": {
         "types": "./lib/Git/index.d.ts",

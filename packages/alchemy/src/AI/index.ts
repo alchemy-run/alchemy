@@ -1,6 +1,5 @@
 export * from "./AcpServer.ts";
 export * from "./Agent.ts";
-export * from "./Environment.ts";
 export * from "./HarnessEngine.ts";
 export {
   makeHarnessServer,

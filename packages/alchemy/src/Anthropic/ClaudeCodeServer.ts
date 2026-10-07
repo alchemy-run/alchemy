@@ -14,8 +14,8 @@ const accountEnvKey = (name: string) =>
 
 export interface ClaudeCodeServerProps {
   /**
-   * Directory sessions work in by default — usually an environment's
-   * `workdir` (`cwd: app.workdir`). Sessions can override it on `start`.
+   * Directory sessions work in by default — usually a mounted repository
+   * (`cwd: app.path`). Sessions can override it on `start`.
    * @default "/workspace"
    */
   cwd?: string;
@@ -71,10 +71,10 @@ export interface ClaudeCodeServerProps {
  * export default Sandbox.make(
  *   { main: import.meta.url, runtime: "node", image: "node:22-bookworm" },
  *   Effect.gen(function* () {
- *     const app = yield* App; // an AI.Environment
+ *     const app = yield* GitHub.MountRepository("acme/app", { path: "/workspace/app" });
  *     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
  *       apiKey: yield* Config.Redacted("ANTHROPIC_API_KEY"),
- *       cwd: app.workdir,
+ *       cwd: app.path,
  *     });
  *     return { fetch: yield* AI.serveHarnessHttp(claude) };
  *   }),

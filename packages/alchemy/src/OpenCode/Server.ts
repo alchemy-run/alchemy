@@ -12,8 +12,8 @@ export const OPENCODE_VERSION = "1.18.18";
 
 export interface ServerProps {
   /**
-   * Directory sessions work in by default — usually an environment's
-   * `workdir` (`cwd: app.workdir`). Sessions can override it on `start`.
+   * Directory sessions work in by default — usually a mounted repository
+   * (`cwd: app.path`). Sessions can override it on `start`.
    * @default "/workspace"
    */
   cwd?: string;

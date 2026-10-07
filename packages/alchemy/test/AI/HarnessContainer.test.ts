@@ -76,7 +76,7 @@ describe.each([
     Effect.gen(function* () {
       const { info, result } = yield* run("claude", "readme", README_PROMPT);
       expect(info.harness).toBe("claude-code");
-      expect(info.cwd).toBe("/workspaces/Repo");
+      expect(info.cwd).toBe("/workspace/hello");
       expect(result.status).toBe("completed");
       expect(JSON.stringify(result.message).toLowerCase()).toContain("hello world");
     }),
@@ -88,7 +88,7 @@ describe.each([
     Effect.gen(function* () {
       const { info, result } = yield* run("opencode", "readme", README_PROMPT);
       expect(info.harness).toBe("opencode");
-      expect(info.cwd).toBe("/workspaces/Repo");
+      expect(info.cwd).toBe("/workspace/hello");
       expect(result.status).toBe("completed");
       expect(JSON.stringify(result.message).toLowerCase()).toContain("hello world");
     }),
@@ -100,7 +100,7 @@ describe.each([
     Effect.gen(function* () {
       const { info, result } = yield* run("codex", "readme", README_PROMPT);
       expect(info.harness).toBe("codex");
-      expect(info.cwd).toBe("/workspaces/Repo");
+      expect(info.cwd).toBe("/workspace/hello");
       // A funded key completes; an unfunded one fails the turn with a quota
       // error — either way the turn lifecycle round-trips through the box.
       expect(["completed", "failed"]).toContain(result.status);

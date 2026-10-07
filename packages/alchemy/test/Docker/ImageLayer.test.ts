@@ -1,13 +1,10 @@
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { environmentLayers } from "@/AI/Environment.ts";
-import * as AI from "@/AI/index.ts";
 import {
   buildFinalDockerfile,
   containerEnvPreamble,
   withImageLayers,
 } from "@/Cloudflare/Containers/ContainerBundle.ts";
-import * as Dockerfile from "@/Docker/Dockerfile.ts";
 import { dedupeImageLayers, renderImageLayers } from "@/Docker/ImageLayer.ts";
 
 const claudeLayer = {
@@ -49,49 +46,17 @@ describe("ImageLayer", { tags: ["unit", "local"] }, () => {
   });
 });
 
-describe("AI.Environment", { tags: ["unit", "local"] }, () => {
-  test("contributes a setup layer and a source checkout into its own workdir", () => {
-    const [setup, source] = environmentLayers("App", {
-      env: { CI: "1" },
-      setup: Dockerfile.inline`RUN corepack enable`,
-      source: AI.GitSource({ repo: "alchemy-run/alchemy", ref: "main" }),
-    });
-    expect(setup).toMatchObject({ stage: "setup" });
-    expect(setup!.instructions).toBe('ENV CI="1"\nRUN corepack enable');
-    expect(source).toMatchObject({
-      stage: "source",
-      instructions:
-        "ADD --keep-git-dir=true https://github.com/alchemy-run/alchemy.git#main /workspaces/App",
-    });
-  });
-
-  test("full git URLs pass through; no source just creates the workdir", () => {
-    expect(
-      environmentLayers("B", {
-        source: AI.GitSource({ repo: "https://gitlab.com/a/b.git", keepGitDir: false }),
-        workdir: "/src",
-      })[0]!.instructions,
-    ).toBe("ADD https://gitlab.com/a/b.git /src");
-    expect(environmentLayers("Empty", {})).toEqual([
-      {
-        id: "environment:Empty:source",
-        stage: "source",
-        instructions: 'RUN mkdir -p "/workspaces/Empty"',
-      },
-    ]);
-  });
-
-  test("returns its workdir (no host: binding is a no-op)", async () => {
-    const env = await Effect.runPromise(AI.Environment("App", { workdir: "/app-src" }));
-    expect(env).toEqual({ id: "App", workdir: "/app-src" });
-  });
-});
-
 describe("Cloudflare.Container binding image layers", { tags: ["unit", "local"] }, () => {
-  test("two environments and a harness fold into one generated Dockerfile", async () => {
+  test("setup, harness and source layers fold into one generated Dockerfile", async () => {
     const props = withImageLayers({ main: "file:///app/main.ts", image: "node:22-bookworm" }, [
-      { data: { image: environmentLayers("App", { setup: "RUN corepack enable" }) } },
-      { data: { image: environmentLayers("Docs", { source: AI.GitSource({ repo: "a/docs" }) }) } },
+      {
+        data: {
+          image: [
+            { id: "src-app", stage: "source", instructions: "COPY mounts/a/ /workspace/app/" },
+          ],
+        },
+      },
+      { data: { image: [{ id: "setup", stage: "setup", instructions: "RUN corepack enable" }] } },
       { data: { image: [claudeLayer] } },
       { data: { env: { X: "1" } } },
       { data: { image: [claudeLayer] } },
@@ -102,9 +67,8 @@ describe("Cloudflare.Container binding image layers", { tags: ["unit", "local"] 
     const at = (s: string) => dockerfile.indexOf(s);
     expect(at("RUN corepack enable")).toBeLessThan(at("# layer: claude-code"));
     expect(dockerfile.split("# layer: claude-code").length).toBe(2);
-    expect(at("# layer: claude-code")).toBeLessThan(at('RUN mkdir -p "/workspaces/App"'));
-    expect(at("# layer: claude-code")).toBeLessThan(at("ADD --keep-git-dir=true"));
-    expect(at("ADD --keep-git-dir=true")).toBeLessThan(at("WORKDIR /app"));
+    expect(at("# layer: claude-code")).toBeLessThan(at("COPY mounts/a/ /workspace/app/"));
+    expect(at("COPY mounts/a/")).toBeLessThan(at("WORKDIR /app"));
     expect(dockerfile).toContain('ENTRYPOINT ["node", "/app/index.mjs"]');
   });
 

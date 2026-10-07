@@ -30,6 +30,7 @@ import * as Alerting from "./Alerting/index.ts";
 import * as ApiShield from "./ApiShield/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Argo from "./Argo/index.ts";
+import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as BotManagement from "./BotManagement/index.ts";
 import * as Cache from "./Cache/index.ts";
@@ -176,6 +177,8 @@ export const providers = () =>
       ApiToken.UserApiToken,
       Argo.SmartRouting,
       Argo.TieredCaching,
+      Artifacts.Repository,
+      Artifacts.RepositoryToken,
       Bookmark.Bookmark,
       BotManagement.BotManagement,
       Cache.OriginCloudRegion,
@@ -426,6 +429,8 @@ export const providers = () =>
         ApiToken.UserApiTokenProvider(),
         Argo.SmartRoutingProvider(),
         Argo.TieredCachingProvider(),
+        Artifacts.RepositoryProvider(),
+        Artifacts.RepositoryTokenProvider(),
         Bookmark.BookmarkProvider(),
         BotManagement.BotManagementProvider(),
         Cache.OriginCloudRegionProvider(),
