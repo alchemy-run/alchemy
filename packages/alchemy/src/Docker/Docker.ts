@@ -804,7 +804,9 @@ const makeDocker = (options: DockerOptions) =>
               tap,
             );
           }
-          const mode = yield* publication;
+          // Podman is not BuildKit: it rejects BuildKit cache backends such as
+          // `--cache-to type=inline`, so it builds like the legacy builder.
+          const mode = (yield* isPodman) ? ("legacy" as const) : yield* publication;
           if (mode === "export") {
             // Export straight from BuildKit to the registry; the image never
             // round-trips through the local image store.

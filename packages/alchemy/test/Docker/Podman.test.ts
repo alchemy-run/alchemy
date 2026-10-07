@@ -63,7 +63,7 @@ describe.skipIf(!podman)(
         const image = yield* stack.deploy(
           Docker.Image("podman-local-image", { tag: "v1", build: { context: root } }),
         );
-        expect(image.imageId.length).toBeGreaterThan(0);
+        expect(image.imageId).toMatch(/^(sha256:)?[a-f0-9]{12,}/);
         yield* stack.destroy();
       }),
     );
