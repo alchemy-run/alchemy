@@ -113,95 +113,98 @@ describe
         }).pipe(logLevel),
       );
 
-      test.provider("create, update, and delete database", (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
+      test.provider(
+        "create, update, and delete database",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
 
-          const { database } = yield* stack.deploy(
-            Effect.gen(function* () {
-              const database = yield* Planetscale.MySQLDatabase("MySQLDatabaseCRUD", {
-                region: { slug: "us-east" },
-                clusterSize: "PS_10",
-                defaultBranch: "main",
-                allowDataBranching: true,
-                automaticMigrations: true,
-                requireApprovalForDeploy: false,
-                restrictBranchRegion: true,
-                insightsRawQueries: true,
-                productionBranchWebConsole: true,
-                migrationFramework: "rails",
-                migrationTableName: "schema_migrations",
-              });
+            const { database } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const database = yield* Planetscale.MySQLDatabase("MySQLDatabaseCRUD", {
+                  region: { slug: "us-east" },
+                  clusterSize: "PS_10",
+                  defaultBranch: "main",
+                  allowDataBranching: true,
+                  automaticMigrations: true,
+                  requireApprovalForDeploy: false,
+                  restrictBranchRegion: true,
+                  insightsRawQueries: true,
+                  productionBranchWebConsole: true,
+                  migrationFramework: "rails",
+                  migrationTableName: "schema_migrations",
+                });
 
-              return { database };
-            }),
-          );
+                return { database };
+              }),
+            );
 
-          expect(database).toMatchObject({
-            id: expect.any(String),
-            name: expect.any(String),
-            organization: expect.any(String),
-            state: expect.any(String),
-            plan: expect.any(String),
-            createdAt: expect.any(String),
-            updatedAt: expect.any(String),
-            htmlUrl: expect.any(String),
-            region: { slug: expect.any(String) },
-            clusterSize: "PS_10",
-            defaultBranch: "main",
-            allowDataBranching: true,
-            automaticMigrations: true,
-            requireApprovalForDeploy: false,
-            restrictBranchRegion: true,
-            insightsRawQueries: true,
-            productionBranchWebConsole: true,
-            migrationFramework: "rails",
-            migrationTableName: "schema_migrations",
-          });
+            expect(database).toMatchObject({
+              id: expect.any(String),
+              name: expect.any(String),
+              organization: expect.any(String),
+              state: expect.any(String),
+              plan: expect.any(String),
+              createdAt: expect.any(String),
+              updatedAt: expect.any(String),
+              htmlUrl: expect.any(String),
+              region: { slug: expect.any(String) },
+              clusterSize: "PS_10",
+              defaultBranch: "main",
+              allowDataBranching: true,
+              automaticMigrations: true,
+              requireApprovalForDeploy: false,
+              restrictBranchRegion: true,
+              insightsRawQueries: true,
+              productionBranchWebConsole: true,
+              migrationFramework: "rails",
+              migrationTableName: "schema_migrations",
+            });
 
-          const { updatedDatabase } = yield* stack.deploy(
-            Effect.gen(function* () {
-              const updatedDatabase = yield* Planetscale.MySQLDatabase("MySQLDatabaseCRUD", {
-                clusterSize: "PS_20",
-                allowDataBranching: false,
-                automaticMigrations: true,
-                requireApprovalForDeploy: true,
-                restrictBranchRegion: false,
-                insightsRawQueries: false,
-                productionBranchWebConsole: false,
-                defaultBranch: "main",
-                migrationFramework: "django",
-                migrationTableName: "django_migrations",
-              });
+            const { updatedDatabase } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const updatedDatabase = yield* Planetscale.MySQLDatabase("MySQLDatabaseCRUD", {
+                  clusterSize: "PS_20",
+                  allowDataBranching: false,
+                  automaticMigrations: true,
+                  requireApprovalForDeploy: true,
+                  restrictBranchRegion: false,
+                  insightsRawQueries: false,
+                  productionBranchWebConsole: false,
+                  defaultBranch: "main",
+                  migrationFramework: "django",
+                  migrationTableName: "django_migrations",
+                });
 
-              return { updatedDatabase };
-            }),
-          );
+                return { updatedDatabase };
+              }),
+            );
 
-          expect(updatedDatabase).toMatchObject({
-            allowDataBranching: false,
-            automaticMigrations: true,
-            requireApprovalForDeploy: true,
-            restrictBranchRegion: false,
-            insightsRawQueries: false,
-            productionBranchWebConsole: false,
-            defaultBranch: "main",
-            migrationFramework: "django",
-            migrationTableName: "django_migrations",
-          });
+            expect(updatedDatabase).toMatchObject({
+              allowDataBranching: false,
+              automaticMigrations: true,
+              requireApprovalForDeploy: true,
+              restrictBranchRegion: false,
+              insightsRawQueries: false,
+              productionBranchWebConsole: false,
+              defaultBranch: "main",
+              migrationFramework: "django",
+              migrationTableName: "django_migrations",
+            });
 
-          const branch = yield* Planetscale.waitForBranchReady(
-            database.organization,
-            database.name,
-            "main",
-          );
+            const branch = yield* Planetscale.waitForBranchReady(
+              database.organization,
+              database.name,
+              "main",
+            );
 
-          expect(branch.cluster_name).toEqual("PS_20");
+            expect(branch.cluster_name).toEqual("PS_20");
 
-          yield* stack.destroy();
+            yield* stack.destroy();
 
-          yield* waitForDatabaseToBeDeleted(database.name, database.organization);
-        }).pipe(logLevel),
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+          }).pipe(logLevel),
+        5_000_000,
       );
 
       test.provider(
