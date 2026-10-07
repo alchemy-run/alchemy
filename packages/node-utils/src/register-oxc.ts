@@ -122,31 +122,13 @@ const scheduleCompileCacheFlush = (() => {
 const isForeignSpecifier = (specifier: string) =>
   /^(?:node:|data:|[a-z][a-z\d+.-]*:\/\/)/i.test(specifier) && !specifier.startsWith("file:");
 
-/** A `require()` reaching the hooks: Node's CommonJS resolver wants paths, not URLs. */
-const isRequireContext = (context: ResolveHookContext) =>
-  context.conditions?.includes("require") === true && !context.conditions.includes("import");
-
-const resolveWithCandidate = (
-  candidate: string,
-  metadata: string,
-  context: ResolveHookContext,
-  nextResolve: NextResolve,
-): ResolveFnOutput | undefined => {
-  const specifier = isRequireContext(context)
-    ? candidate + metadata
-    : pathToFileURL(candidate).href + metadata;
-  try {
-    return nextResolve(specifier, context);
-  } catch {
-    return undefined;
-  }
-};
-
 /**
- * tsx-compatible resolution. Node's resolver decides in the end; Oxc's
- * resolver supplies the TypeScript-aware candidate (tsconfig `paths`,
- * `.js` → `.ts` substitution, extensionless and directory imports) that
- * Node would not find on its own.
+ * tsx-compatible resolution. Oxc's resolver handles project code the way
+ * TypeScript does (tsconfig `paths`, `.js` → `.ts` substitution,
+ * extensionless and directory imports); a file it finds is final, as in
+ * nub, rather than handed back to Node to resolve a second time. Packages
+ * and everything Oxc cannot place stay with Node, which also reports the
+ * canonical errors. The format is left to the load step.
  */
 const resolveSpecifier = (
   resolver: SpecifierResolver,
@@ -165,12 +147,27 @@ const resolveSpecifier = (
   if (parentPath !== undefined && isProjectPath(parentPath)) {
     const candidate = resolver.resolve(parentPath, clean, conditions);
     if (candidate !== undefined) {
-      const resolved = resolveWithCandidate(candidate, metadata, context, nextResolve);
-      if (resolved !== undefined) return resolved;
+      return { url: pathToFileURL(candidate).href + metadata, shortCircuit: true };
     }
   }
 
   return nextResolve(specifier, context);
+};
+
+/**
+ * Key for memoizing a resolution, or `undefined` when it must not be. The
+ * result of resolving a specifier depends on the importing module's
+ * directory, not the module itself (node_modules lookup, package scope,
+ * tsconfig discovery and relative paths are all per directory), and on the
+ * conditions. A graph of thousands of modules repeats the same handful of
+ * specifiers per directory, so each is resolved once.
+ */
+const resolutionKey = (specifier: string, context: ResolveHookContext) => {
+  const { parentURL } = context;
+  if (parentURL === undefined || isForeignSpecifier(specifier)) return undefined;
+  const queryIndex = parentURL.search(/[?#]/);
+  const parent = queryIndex === -1 ? parentURL : parentURL.slice(0, queryIndex);
+  return `${parent.slice(0, parent.lastIndexOf("/") + 1)}\0${specifier}\0${context.conditions.join(",")}`;
 };
 
 /**
@@ -212,6 +209,9 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
     tsconfig: options.tsconfig ?? true,
   });
   const shouldInvalidate = options.shouldInvalidate ?? (() => true);
+  // Per registration: a reloaded graph registers afresh, so files added or
+  // removed between generations are seen.
+  const resolutions = new Map<string, ResolveFnOutput>();
 
   // Transformed sources reference their source maps (see transform-source);
   // Node only reads and applies them to stack traces once source-map support
@@ -239,7 +239,14 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
               ...context,
               conditions: [...new Set([...options.conditions, ...context.conditions])],
             };
-      const resolved = resolveSpecifier(resolver, specifier, resolutionContext, nextResolve);
+      const key = resolutionKey(specifier, resolutionContext);
+      let resolved = key === undefined ? undefined : resolutions.get(key);
+      if (resolved === undefined) {
+        resolved = resolveSpecifier(resolver, specifier, resolutionContext, nextResolve);
+        // A memoized result skips the rest of the hook chain, which Node
+        // only accepts when it says so.
+        if (key !== undefined) resolutions.set(key, { ...resolved, shortCircuit: true });
+      }
       if (
         namespace !== undefined &&
         resolved.url.startsWith("file:") &&

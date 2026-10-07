@@ -30,27 +30,36 @@ const nodeFormat = (format: string | null | undefined): ModuleFormat | undefined
   }
 };
 
-/** Fallback for older Nodes that pass no format: extension, then package type. */
+/**
+ * Format of a module Node gave no format for — resolved by our own
+ * resolver, so Node never looked at it: the extension, then the nearest
+ * `package.json#type`, memoized per directory.
+ */
+const packageTypes = new Map<string, ModuleFormat>();
+const packageType = (directory: string): ModuleFormat => {
+  let format = packageTypes.get(directory);
+  if (format !== undefined) return format;
+  const packageJson = path.join(directory, "package.json");
+  const parent = path.dirname(directory);
+  if (existsSync(packageJson)) {
+    try {
+      format =
+        JSON.parse(readFileSync(packageJson, "utf8")).type === "module" ? "module" : "commonjs";
+    } catch {
+      format = "commonjs";
+    }
+  } else {
+    format = parent === directory ? "commonjs" : packageType(parent);
+  }
+  packageTypes.set(directory, format);
+  return format;
+};
+
 const inferFormat = (filePath: string): ModuleFormat => {
   const extension = path.extname(filePath);
   if (extension === ".mts" || extension === ".mjs") return "module";
   if (extension === ".cts" || extension === ".cjs") return "commonjs";
-  let directory = path.dirname(filePath);
-  while (true) {
-    const packageJson = path.join(directory, "package.json");
-    if (existsSync(packageJson)) {
-      try {
-        return JSON.parse(readFileSync(packageJson, "utf8")).type === "module"
-          ? "module"
-          : "commonjs";
-      } catch {
-        return "commonjs";
-      }
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) return "commonjs";
-    directory = parent;
-  }
+  return packageType(path.dirname(filePath));
 };
 
 const language = (filePath: string): TransformOptions["lang"] => {
@@ -137,6 +146,13 @@ export class SourceTransformer {
   readonly #options: OxcLoaderOptions;
   readonly #tsconfigCache = new TsconfigCache();
   readonly #cache: TransformCache | undefined;
+  /**
+   * Serialized merged tsconfig per discovered config chain. Discovery runs
+   * per file (a solution-style tsconfig assigns files of one directory to
+   * different referenced projects), but thousands of files share a chain
+   * and the serialization is the expensive part of the key.
+   */
+  readonly #tsconfigKeys = new Map<string, string>();
 
   constructor(options: OxcLoaderOptions) {
     this.#options = options;
@@ -162,10 +178,19 @@ export class SourceTransformer {
     } catch {
       return undefined;
     }
-    let tsconfig: unknown = null;
+    let tsconfig = "null";
     try {
       if (options.tsconfig === true) {
-        tsconfig = resolveTsconfig(filePath, this.#tsconfigCache)?.tsconfig;
+        const resolved = resolveTsconfig(filePath, this.#tsconfigCache);
+        if (resolved != null) {
+          const chain = resolved.tsconfigFilePaths.join("\0");
+          let serialized = this.#tsconfigKeys.get(chain);
+          if (serialized === undefined) {
+            serialized = JSON.stringify(resolved.tsconfig);
+            this.#tsconfigKeys.set(chain, serialized);
+          }
+          tsconfig = serialized;
+        }
       } else if (typeof options.tsconfig === "string") {
         tsconfig = readFileSync(options.tsconfig, "utf8");
       }
@@ -177,7 +202,7 @@ export class SourceTransformer {
       filePath,
       `${stat.size}:${stat.mtimeNs}`,
       JSON.stringify(options),
-      JSON.stringify(tsconfig ?? null),
+      tsconfig,
       format,
     ]);
   }

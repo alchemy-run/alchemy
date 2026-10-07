@@ -276,26 +276,15 @@ describe("transform cache", () => {
     expect(first.status, first.stderr).toBe(0);
     expect(first.stdout.trim()).toBe("sub");
     const entries = readdirSync(cache)
-      .filter((name) => name.endsWith(".json"))
+      .filter((name) => name.endsWith(".code"))
       .map((name) => path.join(cache, name));
     expect(entries.length).toBeGreaterThan(0);
     // The only proof a second process READ the entry rather than
     // transforming again: make the cached code say something the source
     // does not.
-    const entry = entries.find((file) =>
-      (JSON.parse(readFileSync(file, "utf8")) as { code: string }).code.includes('"sub"'),
-    );
+    const entry = entries.find((file) => readFileSync(file, "utf8").includes('"sub"'));
     expect(entry).toBeDefined();
-    const cached = JSON.parse(readFileSync(entry!, "utf8")) as {
-      code: string;
-    };
-    writeFileSync(
-      entry!,
-      JSON.stringify({
-        ...cached,
-        code: cached.code.replace('"sub"', '"from-cache"'),
-      }),
-    );
+    writeFileSync(entry!, readFileSync(entry!, "utf8").replace('"sub"', '"from-cache"'));
     const second = runNode(root, importSub(`{ cache: ${JSON.stringify(cache)} }`));
     expect(second.status, second.stderr).toBe(0);
     expect(second.stdout.trim()).toBe("from-cache");
