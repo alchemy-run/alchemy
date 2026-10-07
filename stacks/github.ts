@@ -1,5 +1,4 @@
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Output from "alchemy/Output";
@@ -11,10 +10,9 @@ import * as Redacted from "effect/Redacted";
 const REPO = { owner: "alchemy-run", repository: "alchemy" } as const;
 
 /**
- * Repository secrets consumed by `.github/workflows`, plus the AWS OIDC trust
- * behind `AWS_ROLE_ARN`. Inputs come from Doppler: `pnpm deploy:github` runs
- * under `doppler run -c prod`. Cloudflare API tokens are minted here rather
- * than copied.
+ * Repository secrets consumed by `.github/workflows`. Inputs come from
+ * Doppler: `pnpm deploy:github` runs under `doppler run -c prod`. Cloudflare
+ * API tokens are minted here rather than copied.
  *
  * Secrets the workflows read that have no Doppler source stay hand-managed
  * in the repository settings:
@@ -24,14 +22,13 @@ const REPO = { owner: "alchemy-run", repository: "alchemy" } as const;
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
   {
-    providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers(), GitHub.providers()),
+    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const CLOUDFLARE_API_TOKEN = yield* Config.Redacted("CLOUDFLARE_API_TOKEN");
     const TEST_CLOUDFLARE_ACCOUNT_ID = yield* Config.String("TEST_CLOUDFLARE_ACCOUNT_ID");
     const PROD_CLOUDFLARE_ACCOUNT_ID = yield* Config.String("PROD_CLOUDFLARE_ACCOUNT_ID");
-    const ANTHROPIC_API_KEY = yield* Config.Redacted("ANTHROPIC_API_KEY");
     const DISCORD_WEBHOOK_URL = yield* Config.Redacted("DISCORD_WEBHOOK_URL");
 
     // The prod account token is minted with the admin token from Doppler; the
@@ -54,46 +51,6 @@ export default Alchemy.Stack(
       accountId: TEST_CLOUDFLARE_ACCOUNT_ID,
     });
 
-    // GitHub OIDC trust for AWS — lets workflows assume an IAM role via
-    // `aws-actions/configure-aws-credentials` with no long-lived AWS keys.
-    const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
-      url: "https://token.actions.githubusercontent.com",
-      clientIDList: ["sts.amazonaws.com"],
-      // GitHub's well-known OIDC thumbprint. AWS auto-discovers thumbprints
-      // for github.com, but the thumbprint sync still requires a non-empty
-      // list when comparing against the cloud-observed value.
-      thumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"],
-    });
-
-    const role = yield* AWS.IAM.Role("GitHubActionsRole", {
-      roleName: "alchemy-github-actions",
-      assumeRolePolicyDocument: {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: {
-              Federated: oidc.openIDConnectProviderArn,
-            },
-            Action: ["sts:AssumeRoleWithWebIdentity"],
-            Condition: {
-              StringEquals: {
-                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-              },
-              // Any branch / PR / tag inside this repo. Tighten to
-              // `repo:.../environment:prod` once GitHub Environments are used.
-              StringLike: {
-                "token.actions.githubusercontent.com:sub": `repo:${REPO.owner}/${REPO.repository}:*`,
-              },
-            },
-          },
-        ],
-      },
-      // The smoke suite deploys real Lambdas, S3 buckets, DynamoDB tables,
-      // etc., so it needs broad access.
-      managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
-    });
-
     yield* GitHub.Secrets({
       ...REPO,
       secrets: {
@@ -103,9 +60,6 @@ export default Alchemy.Stack(
         // website.yml production deploy
         PROD_CLOUDFLARE_ACCOUNT_ID,
         PROD_CLOUDFLARE_API_TOKEN: PROD_CLOUDFLARE_API_TOKEN.value,
-        // claude.yml
-        AWS_ROLE_ARN: role.roleArn,
-        ANTHROPIC_API_KEY,
         // release.yml
         DISCORD_WEBHOOK_URL,
       },
@@ -116,7 +70,6 @@ export default Alchemy.Stack(
       TEST_CLOUDFLARE_API_TOKEN: TEST_CLOUDFLARE_API_TOKEN.value.pipe(Output.map(Redacted.value)),
       PROD_CLOUDFLARE_ACCOUNT_ID,
       PROD_CLOUDFLARE_API_TOKEN: PROD_CLOUDFLARE_API_TOKEN.value.pipe(Output.map(Redacted.value)),
-      AWS_ROLE_ARN: role.roleArn,
     };
   }).pipe(Effect.orDie),
 );
