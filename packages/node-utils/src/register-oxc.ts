@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import * as NodeModule from "node:module";
 import {
   registerHooks,
@@ -204,6 +205,20 @@ const withJsonAttribute = (url: string, context: LoadHookContext) => {
 };
 
 /**
+ * `import text from "./x.txt" with { type: "text" }` — the TC39 Import Text
+ * proposal (stage 3), which Bun and Deno already implement. The module's
+ * default export is the file decoded as UTF-8 exactly as `TextDecoder`
+ * does it (BOM stripped, invalid sequences replaced). Node keys its module
+ * map by attributes too, so the same file imported as text and as code are
+ * two modules.
+ */
+const textModule = (filePath: string): LoadFnOutput => ({
+  format: "module",
+  source: `export default ${JSON.stringify(new TextDecoder().decode(readFileSync(filePath)))};`,
+  shortCircuit: true,
+});
+
+/**
  * Registers synchronous Node module hooks that transpile TypeScript with
  * Rolldown's Oxc transformer and resolve it the way TypeScript (and tsx)
  * does. A namespaced registration also provides a scoped import whose
@@ -292,6 +307,9 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
       const filePath = filePathOfUrl(cleanUrl);
       if (filePath === undefined) return nextLoad(cleanUrl, context);
       options.onImport?.(cleanUrl);
+
+      // An attribute, not a transpile: applies to any file, filtered or not.
+      if (context.importAttributes?.type === "text") return textModule(filePath);
 
       if (options.filter !== undefined && !options.filter(filePath)) {
         return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));

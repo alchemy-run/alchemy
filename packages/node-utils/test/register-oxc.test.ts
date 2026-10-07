@@ -207,6 +207,42 @@ describe("registerOxc", () => {
     }
   });
 
+  it("imports files as text with the type: text attribute", () => {
+    const root = makeProject();
+    write(path.join(root, "src/notes.txt"), "\uFEFFhéllo\n`${not code}`\n");
+    write(path.join(root, "node_modules/textdep/data.txt"), "from a dependency");
+    write(
+      path.join(root, "src/texts.ts"),
+      [
+        'import notes from "./notes.txt" with { type: "text" };',
+        'import source from "./sub.ts" with { type: "text" };',
+        'import { sub } from "./sub.ts";',
+        'import dependency from "textdep/data.txt" with { type: "text" };',
+        "export const texts = { notes, source, sub, dependency };",
+      ].join("\n"),
+    );
+    const result = runNode(
+      root,
+      `
+      const { registerOxc } = await import(${JSON.stringify(registerUrl)});
+      registerOxc({ filter: (path) => !path.includes("/node_modules/") });
+      const { texts } = await import("./src/texts.ts");
+      console.log(JSON.stringify(texts));
+      `,
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout.trim())).toEqual({
+      // UTF-8 decoded like TextDecoder: BOM stripped, nothing evaluated
+      notes: "héllo\n`${not code}`\n",
+      // TypeScript imported as text is its untranspiled source, a module
+      // distinct from the same file imported as code
+      source: 'export const sub = "sub";\n',
+      sub: "sub",
+      // the node_modules filter only limits transpiling
+      dependency: "from a dependency",
+    });
+  });
+
   it("adds configured package export conditions to project resolution", () => {
     const root = makeProject();
     write(path.join(root, "src/conditional.ts"), 'export { selected } from "conditional";\n');
