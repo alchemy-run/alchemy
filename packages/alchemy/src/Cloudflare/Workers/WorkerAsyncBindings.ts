@@ -651,6 +651,7 @@ const toBinding = (
     return {
       type: "self_service",
       name: bindingName,
+      ...(binding.entrypoint !== undefined && { entrypoint: binding.entrypoint }),
     };
   } else if (isWorkerLoader(binding)) {
     return {

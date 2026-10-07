@@ -20,6 +20,7 @@ import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
 import { getToolingCompatibility } from "./Compatibility.ts";
+import { getEffectExports } from "./Exports.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
@@ -391,7 +392,7 @@ export const makeSourceContext = (params: {
   compatibility: getToolingCompatibility(params.compatibility, params.props.main),
   entry: params.props.isExternal
     ? { kind: "external" }
-    : { kind: "effect", exports: params.props.exports ?? {} },
+    : { kind: "effect", exports: getEffectExports(params.props.exports) },
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
   extraOptions: params.props.build,

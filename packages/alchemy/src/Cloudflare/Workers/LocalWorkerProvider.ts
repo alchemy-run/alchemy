@@ -60,6 +60,7 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { getEffectExports } from "./Exports.ts";
 import { LocalEdge } from "./LocalEdge.ts";
 import { routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
@@ -514,7 +515,7 @@ export const LocalWorkerProvider = () =>
               ? { kind: "external" as const }
               : {
                   kind: "effect" as const,
-                  exports: props.exports ?? {},
+                  exports: getEffectExports(props.exports),
                 },
             stack: { name: stack.name, stage: stack.stage },
             extraOptions: props.build,

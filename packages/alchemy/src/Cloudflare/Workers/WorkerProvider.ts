@@ -41,6 +41,7 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
+import { getEffectExports } from "./Exports.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
@@ -2196,7 +2197,7 @@ export const LiveWorkerProvider = () =>
                 compatibility: getCompatibility(props),
                 entry: props.isExternal
                   ? { kind: "external" }
-                  : { kind: "effect", exports: props.exports ?? {} },
+                  : { kind: "effect", exports: getEffectExports(props.exports) },
                 stack: { name: stack.name, stage: stack.stage },
                 extraOptions: props.build,
               })
@@ -2682,7 +2683,7 @@ export const LiveWorkerProvider = () =>
         // migrations, which the versions API can't carry — and which would
         // mutate the parent's namespaces.
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
-        const exportedClasses = Object.keys(news.exports ?? {});
+        const exportedClasses = Object.keys(getEffectExports(news.exports));
         if (hostedClasses.length > 0 || exportedClasses.length > 0) {
           return yield* Effect.fail(
             new WorkerVersionConfigError({
@@ -2780,7 +2781,12 @@ export const LiveWorkerProvider = () =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
               : item.type === "self_service"
-                ? { type: "service" as const, name: item.name, service: parentName }
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                    ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                  }
                 : item,
           ),
         );
@@ -3133,7 +3139,12 @@ export const LiveWorkerProvider = () =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
               : item.type === "self_service"
-                ? { type: "service" as const, name: item.name, service: parentName }
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                    ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                  }
                 : item,
           ),
         );
@@ -3330,7 +3341,12 @@ export const LiveWorkerProvider = () =>
             // Lower the `Worker.Self` sentinel into a service
             // binding targeting this Worker's own physical name.
             if (item.type === "self_service") {
-              return { type: "service", name: item.name, service: name };
+              return {
+                type: "service",
+                name: item.name,
+                service: name,
+                ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+              };
             }
             if (item.type === "durable_object_namespace" && item.transferredFrom !== undefined) {
               const { transferredFrom: _, ...rest } = item;
@@ -4715,7 +4731,7 @@ export const LiveWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          const exportMap = news.exports ?? {};
+          const exportMap = getEffectExports(news.exports);
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
           // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
