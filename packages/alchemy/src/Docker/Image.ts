@@ -52,10 +52,13 @@ export interface ImageProps {
   /** Image tag. @default "latest" */
   tag?: string;
   /**
-   * Registry credentials. The image is pushed to this registry, and the
-   * build itself authenticates with them, so private base images and
-   * `type=registry` caches hosted there resolve without a host
-   * `docker login`.
+   * Registry credentials. The image is pushed to this registry (unless
+   * `skipPush`), and the build itself authenticates with them, so private
+   * base images and `type=registry` caches hosted there resolve without a
+   * host `docker login`. Credentials already in `DOCKER_AUTH_CONFIG` for
+   * other registries are kept. Build-time authentication needs Buildx 0.26+
+   * (Docker Desktop 4.44+) or the legacy builder; older Buildx plugins ignore
+   * it, so a private base image there still needs `docker login`.
    */
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */

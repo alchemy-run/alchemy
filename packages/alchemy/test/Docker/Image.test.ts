@@ -1,11 +1,13 @@
 import { describe, expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Docker from "@/Docker";
-import { inMemoryState } from "@/State";
+import { inMemoryState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { authenticatedRegistry } from "./Runtime.ts";
+import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
@@ -167,5 +169,173 @@ describe(
         expect(image.repoDigest).toContain(`${host}/alchemy-app@sha256:`);
       }),
     );
+
+    // Publish `busybox` as a private base image, then drop the local copy so
+    // a build has to pull it back through the registry's auth.
+    const publishPrivateBase = (
+      host: string,
+      credentials: Docker.RegistryCredentials,
+      repository: string,
+    ) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const ref = `${host}/${repository}:v1`;
+        yield* docker.image.pull("busybox:latest");
+        yield* docker.image.tag("busybox:latest", ref);
+        yield* docker.image.push(ref, credentials);
+        yield* docker.image.remove(ref, true);
+        yield* Effect.addFinalizer(() => docker.image.remove(ref, true).pipe(Effect.ignore));
+        return ref;
+      });
+
+    const dockerfileContext = (dockerfile: string) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-build-auth-" });
+        yield* fs.writeFileString(path.join(root, "Dockerfile"), dockerfile);
+        return root;
+      });
+
+    test.provider("authenticates the build but does not push when skipPush is set", (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* authenticatedRegistry();
+        const baseRef = yield* publishPrivateBase(registry.host, registry.credentials, "skip-base");
+        const root = yield* dockerfileContext(`FROM ${baseRef}\nLABEL alchemy.test=skip-push\n`);
+
+        yield* stack.deploy(
+          Docker.Image("skip-push-app", {
+            name: `${registry.host}/skip-push-app`,
+            tag: "v1",
+            registry: registry.credentials,
+            skipPush: true,
+            build: { context: root },
+          }),
+        );
+        expect(yield* registry.hasManifest("skip-push-app", "v1")).toBe(false);
+      }),
+    );
+
+    test.provider("fails the build with 401 when the registry credentials are wrong", (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* authenticatedRegistry();
+        const baseRef = yield* publishPrivateBase(
+          registry.host,
+          registry.credentials,
+          "wrong-base",
+        );
+        const root = yield* dockerfileContext(`FROM ${baseRef}\n`);
+
+        const error = yield* stack
+          .deploy(
+            Docker.Image("wrong-credentials-app", {
+              name: `${registry.host}/wrong-credentials-app`,
+              tag: "v1",
+              registry: { ...registry.credentials, password: Redacted.make("not-the-password") },
+              build: { context: root },
+            }),
+          )
+          .pipe(Effect.flip);
+        const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
+        expect(report).toMatch(/401|unauthorized/i);
+        expect(report).not.toContain("not-the-password");
+        expect(yield* registry.hasManifest("wrong-credentials-app", "v1")).toBe(false);
+      }),
+    );
+
+    test.provider("keeps existing DOCKER_AUTH_CONFIG credentials for other registries", (stack) =>
+      Effect.gen(function* () {
+        // Base A lives behind credentials the user already has in
+        // DOCKER_AUTH_CONFIG; base B behind the Image's own `registry`.
+        const a = yield* authenticatedRegistry();
+        const b = yield* authenticatedRegistry();
+        const baseA = yield* publishPrivateBase(a.host, a.credentials, "base-a");
+        const baseB = yield* publishPrivateBase(b.host, b.credentials, "base-b");
+        const auth = yield* Effect.sync(() =>
+          Buffer.from("alchemy:alchemy-test-password").toString("base64"),
+        );
+        const root = yield* dockerfileContext(
+          `FROM ${baseA} AS a\nFROM ${baseB}\nCOPY --from=a /bin/busybox /from-a\n`,
+        );
+
+        // As if exported before starting Alchemy.
+        const image = yield* stack
+          .deploy(
+            Docker.Image("two-registries-app", {
+              name: `${b.host}/two-registries-app`,
+              tag: "v1",
+              registry: b.credentials,
+              build: { context: root },
+            }),
+          )
+          .pipe(
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({
+                  DOCKER_AUTH_CONFIG: JSON.stringify({ auths: { [a.host]: { auth } } }),
+                }),
+              ),
+            ),
+          );
+        expect(image.repoDigest).toContain(`${b.host}/two-registries-app@sha256:`);
+      }),
+    );
+
+    test.provider("never writes the registry password to state", (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* authenticatedRegistry();
+        const baseRef = yield* publishPrivateBase(
+          registry.host,
+          registry.credentials,
+          "state-base",
+        );
+        const root = yield* dockerfileContext(`FROM ${baseRef}\n`);
+        yield* stack.deploy(
+          Docker.Image("state-app", {
+            name: `${registry.host}/state-app`,
+            tag: "v1",
+            registry: registry.credentials,
+            build: { context: root },
+          }),
+        );
+        const state = yield* yield* State;
+        const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
+        const rows = yield* Effect.forEach(fqns, (fqn) =>
+          state.get({ stack: stack.name, stage: stack.stage, fqn }),
+        );
+        const persisted = yield* Effect.sync(() => JSON.stringify(rows));
+        expect(persisted).not.toContain("alchemy-test-password");
+      }),
+    );
+
+    // The legacy builder (no Buildx plugin) also honors DOCKER_AUTH_CONFIG.
+    // Buildx < 0.26 does not; that limit is documented on `registry`.
+    for (const [builder, version] of [["without a Buildx plugin", undefined]] as const) {
+      test.provider(
+        `builds FROM a private base image ${builder}`,
+        (stack) =>
+          Effect.gen(function* () {
+            const registry = yield* authenticatedRegistry();
+            const baseRef = yield* publishPrivateBase(
+              registry.host,
+              registry.credentials,
+              `builder-base-${version ?? "legacy"}`,
+            );
+            yield* scopedBuildx(version);
+            const root = yield* dockerfileContext(`FROM ${baseRef}\n`);
+            const image = yield* stack.deploy(
+              Docker.Image(`builder-app-${version ?? "legacy"}`, {
+                name: `${registry.host}/builder-app`,
+                tag: version ?? "legacy",
+                registry: registry.credentials,
+                build: { context: root },
+              }),
+            );
+            expect(image.repoDigest).toContain(`${registry.host}/builder-app@sha256:`);
+          }),
+        // Mutates `process.env.DOCKER_CONFIG` / `DOCKER_HOST`.
+        { exclusive: true, timeout: 180_000 },
+      );
+    }
   },
 );
