@@ -6,8 +6,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export const VITE_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vite";
 
 /** The AWS deploy target for the Vite build. */
-export const VITE_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/vite/aws";
+export const VITE_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/vite/aws";
 
 /**
  * Serializable Vite build overrides merged OVER the project's own
@@ -37,6 +36,12 @@ export interface ViteProps extends Omit<
   // Assets-only: a plain Vite site never creates a server function.
   "env" | "memorySize" | "timeout" | "architecture" | "runtime"
 > {
+  /**
+   * Environment variables for the production build. Vite inlines
+   * `VITE_*` variables into the client bundle (`import.meta.env`), so
+   * values can come from other resources' `Output`s.
+   */
+  env?: Record<string, any>;
   /**
    * Deploy-time Vite overrides merged over your `vite.config.*`. The
    * config file is the primary home for Vite configuration (it loads
@@ -168,6 +173,14 @@ export const viteFrameworkOptions = (
  * ```typescript
  * const site = yield* AWS.Website.Vite("Web", {
  *   config: "vite.deploy.config.ts",
+ * });
+ * ```
+ *
+ * **Example:** Build-Time Environment
+ * ```typescript
+ * // Inlined into the bundle as `import.meta.env.VITE_API_URL`.
+ * const site = yield* AWS.Website.Vite("Web", {
+ *   env: { VITE_API_URL: api.url },
  * });
  * ```
  *

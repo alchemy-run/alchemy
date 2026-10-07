@@ -32,6 +32,4 @@ export interface CopyDBSnapshot extends Binding.Service<
     ) => Effect.Effect<rds.CopyDBSnapshotResult, rds.CopyDBSnapshotError>
   >
 > {}
-export const CopyDBSnapshot = Binding.Service<CopyDBSnapshot>(
-  "AWS.RDS.CopyDBSnapshot",
-);
+export const CopyDBSnapshot = Binding.Service<CopyDBSnapshot>("AWS.RDS.CopyDBSnapshot");

@@ -40,10 +40,7 @@ export interface ListMultipartUploads extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListMultipartUploadsRequest,
-    ) => Effect.Effect<
-      glacier.ListMultipartUploadsOutput,
-      glacier.ListMultipartUploadsError
-    >
+    ) => Effect.Effect<glacier.ListMultipartUploadsOutput, glacier.ListMultipartUploadsError>
   >
 > {}
 export const ListMultipartUploads = Binding.Service<ListMultipartUploads>(

@@ -1,11 +1,11 @@
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-  projectBuckets as fetchProjectBuckets,
-  projectGroups as fetchProjectGroups,
-  environmentVolumes,
-} from "./GraphQL.ts";
-import * as railway from "@distilled.cloud/railway";
+  Railway,
+  type Bucket as RailwayBucket,
+  type Group as RailwayGroup,
+  type Service as RailwayService,
+  type VolumeInstance as RailwayVolumeInstance,
+} from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -14,95 +14,86 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import {
+  waitUntilDeleted,
+  projectServices as fetchProjectServices,
+  projectBuckets as fetchProjectBuckets,
+  projectGroups as fetchProjectGroups,
+  environmentVolumes,
+} from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { ownedProjects, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 
-const selection = {
-  deletedAt: true,
-  services: {
-    where: {},
-    select: { edges: { node: { id: true, groupId: true, deletedAt: true } } },
-  },
-  buckets: {
-    where: {},
-    select: { edges: { node: { id: true, groupId: true } } },
-  },
-  groups: {
-    where: {},
-    select: {
-      edges: {
-        node: {
-          id: true,
-          name: true,
-          color: true,
-          icon: true,
-          isCollapsed: true,
-        },
-      },
-    },
-  },
-} as const satisfies railway.Selection<"Project">;
-const environmentSelection = {
-  deletedAt: true,
-  config: true,
-  canvasGroupRefs: true,
-  volumeInstances: {
-    where: {},
-    select: {
-      edges: {
-        node: {
-          id: true,
-          volumeId: true,
-          deletedAt: true,
-          state: true,
-          volume: { id: true },
-        },
-      },
-    },
-  },
-} as const satisfies railway.Selection<"Environment">;
-const groupSelection = {
-  id: true,
-  name: true,
-  color: true,
-  icon: true,
-  isCollapsed: true,
-} as const satisfies railway.Selection<"Group">;
-const serviceSelection = {
-  id: true,
-  groupId: true,
-  deletedAt: true,
-} as const satisfies railway.Selection<"Service">;
-const bucketSelection = {
-  id: true,
-  groupId: true,
-} as const satisfies railway.Selection<"Bucket">;
-const volumeSelection = {
-  id: true,
-  volumeId: true,
-  deletedAt: true,
-  state: true,
-  volume: { id: true },
-} as const satisfies railway.Selection<"VolumeInstance">;
-type EnvironmentResponse = railway.Result<
-  "Environment!",
-  typeof environmentSelection
->;
-type ProjectResponse = railway.Result<"Project!", typeof selection>;
-type ProjectResponseBucketsEdgesItemNode = railway.Result<
-  "Bucket!",
-  typeof bucketSelection
->;
-type ProjectResponseGroupsEdgesItemNode = railway.Result<
-  "Group!",
-  typeof groupSelection
->;
-type ProjectResponseServicesEdgesItemNode = railway.Result<
-  "Service!",
-  typeof serviceSelection
->;
+const groupSelection = (group: Query<RailwayGroup>) => ({
+  id: group.id,
+  name: group.name,
+  color: group.color,
+  icon: group.icon,
+  isCollapsed: group.isCollapsed,
+});
+const serviceSelection = (service: Query<RailwayService>) => ({
+  id: service.id,
+  groupId: service.groupId,
+  deletedAt: service.deletedAt,
+});
+const bucketSelection = (bucket: Query<RailwayBucket>) => ({
+  id: bucket.id,
+  groupId: bucket.groupId,
+});
+const volumeSelection = (volume: Query<RailwayVolumeInstance>) => ({
+  id: volume.id,
+  volumeId: volume.volumeId,
+  deletedAt: volume.deletedAt,
+  state: volume.state,
+  volume: { id: volume.volume.id },
+});
+type ProjectResponseBucketsEdgesItemNode = UnwrapPlan<ReturnType<typeof bucketSelection>>;
+type ProjectResponseGroupsEdgesItemNode = UnwrapPlan<ReturnType<typeof groupSelection>>;
+type ProjectResponseServicesEdgesItemNode = UnwrapPlan<ReturnType<typeof serviceSelection>>;
+type EnvironmentVolumeNode = UnwrapPlan<ReturnType<typeof volumeSelection>>;
+type ProjectResponse = {
+  readonly deletedAt: string | null;
+  readonly services: readonly ProjectResponseServicesEdgesItemNode[];
+  readonly buckets: readonly ProjectResponseBucketsEdgesItemNode[];
+  readonly groups: readonly ProjectResponseGroupsEdgesItemNode[];
+};
+type EnvironmentResponse = {
+  readonly deletedAt: string | null;
+  readonly config: unknown;
+  readonly canvasGroupRefs: unknown;
+  readonly volumeInstances: readonly EnvironmentVolumeNode[];
+};
+
+const readProjectDeletedAt = Query.fn((id: string) => ({
+  deletedAt: Railway.project({ id }).deletedAt,
+}));
+
+const readEnvironment = Query.fn((id: string, projectId: string) => {
+  const environment = Railway.environment({ id, projectId });
+  return {
+    deletedAt: environment.deletedAt,
+    config: environment.config,
+    canvasGroupRefs: environment.canvasGroupRefs,
+  };
+});
+
+const environmentPatchCommit = Query.fn(
+  (input: { environmentId: string; commitMessage: string; patch: unknown }) =>
+    Railway.environmentPatchCommit(input),
+);
+
+const canvasViewMergePreview = Query.fn(
+  (sourceEnvironmentId: string, targetEnvironmentId: string) => ({
+    mutations: Railway.canvasViewMergePreview({ sourceEnvironmentId, targetEnvironmentId })
+      .mutations,
+  }),
+);
+
+const canvasViewMerge = Query.fn((sourceEnvironmentId: string, targetEnvironmentId: string) =>
+  Railway.canvasViewMerge({ sourceEnvironmentId, targetEnvironmentId }),
+);
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces
@@ -115,9 +106,7 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  * (its primary environment), a `Railway.Environment`, or an
  * `{ environmentId }` stub.
  */
-export type GroupEnvironment = {
-  readonly environmentId: string;
-};
+export type GroupEnvironment = { readonly environmentId: string };
 
 /**
  * A canvas-group member. Accepts a `Railway.Service` / Postgres / Redis /
@@ -211,11 +200,7 @@ const resolveGroupProps = (
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              GroupEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<GroupEnvironment, never, Providers>
           : resolved.environment;
     const resources = yield* Effect.forEach(resolved.resources, (item) =>
       Effect.isEffect(item)
@@ -322,22 +307,16 @@ const GroupResource = Resource<Group>("Railway.Group");
  * @product Project
  */
 export const Group: typeof GroupResource = Object.assign(
-  (
-    id: string,
-    props: GroupProps | Effect.Effect<GroupProps, never, Providers>,
-  ) => GroupResource(id, resolveGroupProps(props)),
+  (id: string, props: GroupProps | Effect.Effect<GroupProps, never, Providers>) =>
+    GroupResource(id, resolveGroupProps(props)),
   GroupResource,
 );
 
-export class GroupProjectRequired extends Data.TaggedError(
-  "Railway.GroupProjectRequired",
-)<{
+export class GroupProjectRequired extends Data.TaggedError("Railway.GroupProjectRequired")<{
   message: string;
 }> {}
 
-export class GroupEnvironmentRequired extends Data.TaggedError(
-  "Railway.GroupEnvironmentRequired",
-)<{
+export class GroupEnvironmentRequired extends Data.TaggedError("Railway.GroupEnvironmentRequired")<{
   message: string;
 }> {}
 
@@ -356,15 +335,9 @@ type GroupConfig = {
   groupId?: string | null;
 };
 
-type ServiceConfig = {
-  groupId?: string | null;
-  isDeleted?: boolean | null;
-};
+type ServiceConfig = { groupId?: string | null; isDeleted?: boolean | null };
 
-type BucketConfig = {
-  groupId?: string | null;
-  isDeleted?: boolean | null;
-};
+type BucketConfig = { groupId?: string | null; isDeleted?: boolean | null };
 
 type EnvironmentConfigShape = {
   groups?: Record<string, GroupConfig | null> | null;
@@ -386,9 +359,7 @@ type CloudGroup = {
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -443,9 +414,7 @@ const membersOf = (resources: readonly GroupMember[] | undefined) => {
   };
 };
 
-const parseRecord = <T>(
-  value: unknown,
-): Record<string, T | null> | undefined =>
+const parseRecord = <T>(value: unknown): Record<string, T | null> | undefined =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, T | null>)
     : undefined;
@@ -454,11 +423,7 @@ const parseEnvironmentConfig = (value: unknown): EnvironmentConfigShape => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
-  const rec = value as {
-    groups?: unknown;
-    services?: unknown;
-    buckets?: unknown;
-  };
+  const rec = value as { groups?: unknown; services?: unknown; buckets?: unknown };
   return {
     groups: parseRecord<GroupConfig>(rec.groups),
     services: parseRecord<ServiceConfig>(rec.services),
@@ -490,10 +455,7 @@ const parseCanvasGroupRefs = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const idsForGroup = (
-  refs: Record<string, string>,
-  groupId: string,
-): string[] => {
+const idsForGroup = (refs: Record<string, string>, groupId: string): string[] => {
   const ids: string[] = [];
   for (const [resourceId, assigned] of Object.entries(refs)) {
     if (assigned === groupId) ids.push(resourceId);
@@ -501,10 +463,7 @@ const idsForGroup = (
   return uniqueSorted(ids);
 };
 
-const groupRow = (
-  config: EnvironmentConfigShape,
-  groupId: string,
-): GroupConfig | undefined => {
+const groupRow = (config: EnvironmentConfigShape, groupId: string): GroupConfig | undefined => {
   const row = config.groups?.[groupId];
   if (row === undefined || row === null || row.isDeleted === true) {
     return undefined;
@@ -512,10 +471,7 @@ const groupRow = (
   return row;
 };
 
-const servicesForGroup = (
-  config: EnvironmentConfigShape,
-  groupId: string,
-): string[] => {
+const servicesForGroup = (config: EnvironmentConfigShape, groupId: string): string[] => {
   const services = config.services;
   if (services === undefined || services === null) return [];
   const ids: string[] = [];
@@ -526,10 +482,7 @@ const servicesForGroup = (
   return uniqueSorted(ids);
 };
 
-const bucketsForGroup = (
-  config: EnvironmentConfigShape,
-  groupId: string,
-): string[] => {
+const bucketsForGroup = (config: EnvironmentConfigShape, groupId: string): string[] => {
   const buckets = config.buckets;
   if (buckets === undefined || buckets === null) return [];
   const ids: string[] = [];
@@ -546,9 +499,7 @@ const liveServicesForGroup = (
 ): string[] =>
   uniqueSorted(
     services
-      .filter(
-        (service) => service.deletedAt == null && service.groupId === groupId,
-      )
+      .filter((service) => service.deletedAt == null && service.groupId === groupId)
       .map((service) => service.id),
   );
 
@@ -556,11 +507,7 @@ const liveBucketsForGroup = (
   buckets: readonly ProjectResponseBucketsEdgesItemNode[],
   groupId: string,
 ): string[] =>
-  uniqueSorted(
-    buckets
-      .filter((bucket) => bucket.groupId === groupId)
-      .map((bucket) => bucket.id),
-  );
+  uniqueSorted(buckets.filter((bucket) => bucket.groupId === groupId).map((bucket) => bucket.id));
 
 const optionalString = (value: string | null | undefined) =>
   value !== null && value !== undefined && value.length > 0 ? value : undefined;
@@ -568,8 +515,7 @@ const optionalString = (value: string | null | undefined) =>
 const volumeIdsOf = (env: EnvironmentResponse | undefined): string[] => {
   if (env === undefined) return [];
   const ids: string[] = [];
-  for (const edge of env.volumeInstances.edges) {
-    const node = edge.node;
+  for (const node of env.volumeInstances) {
     if (node.deletedAt != null || node.state === "DELETED") continue;
     ids.push(node.volumeId, node.volume.id, node.id);
   }
@@ -601,80 +547,52 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 
 const getProject = (projectId: string) =>
   Effect.gen(function* () {
-    const project = yield* railway.project(
-      { id: projectId },
-      { deletedAt: true },
-    );
+    const project = yield* readProjectDeletedAt(projectId);
     const services = yield* fetchProjectServices(projectId, serviceSelection);
     const buckets = yield* fetchProjectBuckets(projectId, bucketSelection);
     const groups = yield* fetchProjectGroups(projectId, groupSelection);
-    return {
-      ...project,
-      services: { edges: services.map((node) => ({ node })) },
-      buckets: { edges: buckets.map((node) => ({ node })) },
-      groups: { edges: groups.map((node) => ({ node })) },
-    };
+    return { deletedAt: project.deletedAt, services, buckets, groups } satisfies ProjectResponse;
   }).pipe(
     Effect.map((project) => (project.deletedAt != null ? undefined : project)),
-    railway.catchTags(["RailwayNotFound"], () =>
+    Effect.catchTag("RailwayNotFound", () =>
       Effect.succeed(undefined as ProjectResponse | undefined),
     ),
   );
 
 const getEnvironment = (environmentId: string, projectId: string) =>
   Effect.gen(function* () {
-    const environment = yield* railway.environment(
-      { id: environmentId, projectId },
-      { deletedAt: true, config: true, canvasGroupRefs: true },
-    );
-    const volumes = yield* environmentVolumes(
-      environmentId,
-      projectId,
-      volumeSelection,
-    );
-    return {
-      ...environment,
-      volumeInstances: { edges: volumes.map((node) => ({ node })) },
-    };
-  }).pipe(
-    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
-  );
+    const environment = yield* readEnvironment(environmentId, projectId);
+    const volumes = yield* environmentVolumes(environmentId, projectId, volumeSelection);
+    return { ...environment, volumeInstances: volumes } satisfies EnvironmentResponse;
+  }).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
 
-const getEnvironmentConfig = (environmentId: string, projectId: string) =>
+const _getEnvironmentConfig = (environmentId: string, projectId: string) =>
   getEnvironment(environmentId, projectId).pipe(
     Effect.map((env) =>
-      env === undefined
-        ? ({} as EnvironmentConfigShape)
-        : parseEnvironmentConfig(env.config),
+      env === undefined ? ({} as EnvironmentConfigShape) : parseEnvironmentConfig(env.config),
     ),
   );
 
-const listEnvironmentIds = (project: {
-  projectId: string;
-  environmentId: string;
-}) =>
-  railway.environments
-    .items(
-      { projectId: project.projectId, first: 50 },
-      { id: true, deletedAt: true },
-    )
-    .pipe(
-      Stream.filter((env) => env.deletedAt == null),
-      Stream.map((env) => env.id),
-      Stream.runCollect,
-      Effect.map((ids) => {
-        const set = new Set(Array.from(ids));
-        if (project.environmentId.length > 0) {
-          set.add(project.environmentId);
-        }
-        return Array.from(set);
-      }),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed(
-          project.environmentId.length > 0 ? [project.environmentId] : [],
-        ),
-      ),
-    );
+const _listEnvironmentIds = (project: { projectId: string; environmentId: string }) =>
+  Query.items(
+    Railway.environments({ projectId: project.projectId, first: 50 }).pipe(
+      Query.map((env) => ({ id: env.id, deletedAt: env.deletedAt })),
+    ),
+  ).pipe(
+    Stream.filter((env) => env.deletedAt == null),
+    Stream.map((env) => env.id),
+    Stream.runCollect,
+    Effect.map((ids) => {
+      const set = new Set(Array.from(ids));
+      if (project.environmentId.length > 0) {
+        set.add(project.environmentId);
+      }
+      return Array.from(set);
+    }),
+    Effect.catchTag("RailwayNotFound", () =>
+      Effect.succeed(project.environmentId.length > 0 ? [project.environmentId] : []),
+    ),
+  );
 
 const commitPatch = (input: {
   environmentId: string;
@@ -683,57 +601,34 @@ const commitPatch = (input: {
 }) =>
   withEnvironmentConfigLock(
     input.environmentId,
-    railway.environmentPatchCommit({
+    environmentPatchCommit({
       environmentId: input.environmentId,
       commitMessage: input.commitMessage,
       patch: input.patch,
     }),
   ).pipe(
-    railway.catchTags(["RailwayValidationError", "RailwayInternalError"], () =>
-      Effect.succeed(""),
-    ),
+    Effect.catchTag(["RailwayValidationError", "RailwayInternalError"], () => Effect.succeed("")),
   );
 
 const previewCanvas = (environmentId: string) =>
-  railway
-    .previewCanvasViewMerge(
-      {
-        sourceEnvironmentId: environmentId,
-        targetEnvironmentId: environmentId,
-      },
-      { mutations: true },
-    )
-    .pipe(
-      railway.catchTags(
-        ["RailwayNotFound", "RailwayValidationError", "RailwayInternalError"],
-        () => Effect.succeed(undefined),
-      ),
-    );
+  canvasViewMergePreview(environmentId, environmentId).pipe(
+    Effect.catchTag(["RailwayNotFound", "RailwayValidationError", "RailwayInternalError"], () =>
+      Effect.succeed(undefined),
+    ),
+  );
 
-const mergeCanvas = (
-  sourceEnvironmentId: string,
-  targetEnvironmentId: string,
-) =>
-  railway
-    .mergeCanvasView({
-      sourceEnvironmentId,
-      targetEnvironmentId,
-    })
-    .pipe(
-      railway.catchTags(
-        ["RailwayNotFound", "RailwayValidationError", "RailwayInternalError"],
-        () => Effect.succeed(false),
-      ),
-    );
+const mergeCanvas = (sourceEnvironmentId: string, targetEnvironmentId: string) =>
+  canvasViewMerge(sourceEnvironmentId, targetEnvironmentId).pipe(
+    Effect.catchTag(["RailwayNotFound", "RailwayValidationError", "RailwayInternalError"], () =>
+      Effect.succeed(false),
+    ),
+  );
 
-const projectGroups = (project: ProjectResponse | undefined) =>
-  project?.groups.edges.map((edge) => edge.node) ?? [];
+const projectGroups = (project: ProjectResponse | undefined) => project?.groups ?? [];
 
-const projectServices = (project: ProjectResponse | undefined) =>
-  project?.services.edges.map((edge) => edge.node) ?? [];
+const projectServices = (project: ProjectResponse | undefined) => project?.services ?? [];
 
-const projectBuckets = (project: ProjectResponse | undefined) =>
-  project?.buckets.edges.map((edge) => edge.node) ?? [];
+const projectBuckets = (project: ProjectResponse | undefined) => project?.buckets ?? [];
 
 const matchProjectGroup = (
   groups: readonly ProjectResponseGroupsEdgesItemNode[],
@@ -789,10 +684,7 @@ const observe = Effect.fn(function* (input: {
   const fromCanvas = idsForGroup(canvasRefs, groupId);
   const knownServices = projectServices(project);
   const knownBuckets = projectBuckets(project);
-  const knownVolumeIds = new Set([
-    ...volumeIdsOf(env),
-    ...(input.volumeIds ?? []),
-  ]);
+  const knownVolumeIds = new Set([...volumeIdsOf(env), ...(input.volumeIds ?? [])]);
   const knownServiceIds = new Set(knownServices.map((service) => service.id));
   const knownBucketIds = new Set(knownBuckets.map((bucket) => bucket.id));
 
@@ -809,20 +701,13 @@ const observe = Effect.fn(function* (input: {
   const volumeIds = uniqueSorted([
     ...(input.volumeIds ?? []).filter((id) => canvasRefs[id] === groupId),
     ...fromCanvas.filter(
-      (id) =>
-        knownVolumeIds.has(id) ||
-        (!knownServiceIds.has(id) && !knownBucketIds.has(id)),
+      (id) => knownVolumeIds.has(id) || (!knownServiceIds.has(id) && !knownBucketIds.has(id)),
     ),
   ]);
 
-  const name =
-    optionalString(row?.name ?? fromProject?.name) ?? input.name ?? "";
+  const name = optionalString(row?.name ?? fromProject?.name) ?? input.name ?? "";
   if (fromConfig === undefined && fromProject === undefined) {
-    if (
-      serviceIds.length === 0 &&
-      bucketIds.length === 0 &&
-      volumeIds.length === 0
-    ) {
+    if (serviceIds.length === 0 && bucketIds.length === 0 && volumeIds.length === 0) {
       return undefined;
     }
   }
@@ -855,9 +740,7 @@ const waitUntilPresent = (input: {
   }).pipe(
     Effect.flatMap((group) => {
       if (group === undefined) {
-        return Effect.fail(
-          new GroupPending({ groupId: input.groupId, state: "creating" }),
-        );
+        return Effect.fail(new GroupPending({ groupId: input.groupId, state: "creating" }));
       }
       return Effect.succeed(group);
     }),
@@ -946,9 +829,7 @@ const membershipPatch = (input: {
   services?: ReadonlyArray<{ serviceId: string; groupId: string | null }>;
   buckets?: ReadonlyArray<{ bucketId: string; groupId: string | null }>;
 }): Record<string, unknown> => {
-  const patch: Record<string, unknown> = {
-    groups: groupPatch(input),
-  };
+  const patch: Record<string, unknown> = { groups: groupPatch(input) };
   if (input.services !== undefined && input.services.length > 0) {
     patch.services = servicePatch(input.services);
   }
@@ -987,11 +868,9 @@ export const GroupProvider = () =>
       if (news === undefined || !isResolved(news)) return undefined;
       if (output === undefined) return undefined;
       const nextProject = projectIdOf(news.project);
-      const projectChanged =
-        nextProject !== undefined && nextProject !== output.projectId;
+      const projectChanged = nextProject !== undefined && nextProject !== output.projectId;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
       if (projectChanged || environmentChanged) {
         return { action: "replace" as const };
       }
@@ -1000,8 +879,7 @@ export const GroupProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const environmentId =
         output?.environmentId ??
         (olds !== undefined
@@ -1011,9 +889,7 @@ export const GroupProvider = () =>
         return undefined;
       }
       const name = yield* resolveName(id, olds?.name, output?.name);
-      const desired = membersOf(
-        (olds?.resources as readonly GroupMember[] | undefined) ?? [],
-      );
+      const desired = membersOf((olds?.resources as readonly GroupMember[] | undefined) ?? []);
       const found = yield* observe({
         projectId,
         environmentId,
@@ -1047,17 +923,12 @@ export const GroupProvider = () =>
                     volumeIds: [] as string[],
                     bucketIds: [] as string[],
                   },
-                  {
-                    projectId: project.projectId,
-                    environmentId: project.environmentId,
-                  },
+                  { projectId: project.projectId, environmentId: project.environmentId },
                 ),
               ];
             }),
           ),
-          railway.catchTags(["RailwayNotFound"], () =>
-            Effect.succeed([] as Group["Attributes"][]),
-          ),
+          Effect.catchTag("RailwayNotFound", () => Effect.succeed([] as Group["Attributes"][])),
         ),
       );
       const seen = new Set<string>();
@@ -1117,10 +988,7 @@ export const GroupProvider = () =>
             icon: props.icon,
             collapsed,
             create: true,
-            services: desired.serviceIds.map((serviceId) => ({
-              serviceId,
-              groupId,
-            })),
+            services: desired.serviceIds.map((serviceId) => ({ serviceId, groupId })),
           }),
         });
         if (desired.bucketIds.length > 0) {
@@ -1128,12 +996,7 @@ export const GroupProvider = () =>
             environmentId,
             commitMessage: `Alchemy: assign buckets to group ${name}`,
             patch: {
-              buckets: bucketPatch(
-                desired.bucketIds.map((bucketId) => ({
-                  bucketId,
-                  groupId,
-                })),
-              ),
+              buckets: bucketPatch(desired.bucketIds.map((bucketId) => ({ bucketId, groupId }))),
             },
           });
         }
@@ -1149,16 +1012,10 @@ export const GroupProvider = () =>
 
       if (current !== undefined) {
         const nameChanged = current.name !== name;
-        const colorChanged =
-          props.color !== undefined && props.color !== current.color;
-        const iconChanged =
-          props.icon !== undefined && props.icon !== current.icon;
-        const collapsedChanged =
-          props.collapsed !== undefined && collapsed !== current.collapsed;
-        const servicesChanged = !sameIds(
-          current.serviceIds,
-          desired.serviceIds,
-        );
+        const colorChanged = props.color !== undefined && props.color !== current.color;
+        const iconChanged = props.icon !== undefined && props.icon !== current.icon;
+        const collapsedChanged = props.collapsed !== undefined && collapsed !== current.collapsed;
+        const servicesChanged = !sameIds(current.serviceIds, desired.serviceIds);
         const bucketsChanged = !sameIds(current.bucketIds, desired.bucketIds);
         if (
           nameChanged ||
@@ -1171,30 +1028,18 @@ export const GroupProvider = () =>
           const services = [
             ...desired.serviceIds
               .filter((serviceId) => !current!.serviceIds.includes(serviceId))
-              .map((serviceId) => ({
-                serviceId,
-                groupId: current!.groupId,
-              })),
+              .map((serviceId) => ({ serviceId, groupId: current!.groupId })),
             ...current.serviceIds
               .filter((serviceId) => !desired.serviceIds.includes(serviceId))
-              .map((serviceId) => ({
-                serviceId,
-                groupId: null,
-              })),
+              .map((serviceId) => ({ serviceId, groupId: null })),
           ];
           const buckets = [
             ...desired.bucketIds
               .filter((bucketId) => !current!.bucketIds.includes(bucketId))
-              .map((bucketId) => ({
-                bucketId,
-                groupId: current!.groupId,
-              })),
+              .map((bucketId) => ({ bucketId, groupId: current!.groupId })),
             ...current.bucketIds
               .filter((bucketId) => !desired.bucketIds.includes(bucketId))
-              .map((bucketId) => ({
-                bucketId,
-                groupId: null,
-              })),
+              .map((bucketId) => ({ bucketId, groupId: null })),
           ];
           yield* commitPatch({
             environmentId,
@@ -1246,14 +1091,8 @@ export const GroupProvider = () =>
             resolved !== undefined && resolved.serviceIds.length > 0
               ? resolved.serviceIds
               : desired.serviceIds,
-          volumeIds: uniqueSorted([
-            ...(resolved?.volumeIds ?? []),
-            ...desired.volumeIds,
-          ]),
-          bucketIds: uniqueSorted([
-            ...(resolved?.bucketIds ?? []),
-            ...desired.bucketIds,
-          ]),
+          volumeIds: uniqueSorted([...(resolved?.volumeIds ?? []), ...desired.volumeIds]),
+          bucketIds: uniqueSorted([...(resolved?.bucketIds ?? []), ...desired.bucketIds]),
         }),
         { projectId, environmentId },
       );
@@ -1281,23 +1120,12 @@ export const GroupProvider = () =>
           collapsed: false,
           create: false,
           remove: true,
-          services: current.serviceIds.map((serviceId) => ({
-            serviceId,
-            groupId: null,
-          })),
-          buckets: current.bucketIds.map((bucketId) => ({
-            bucketId,
-            groupId: null,
-          })),
+          services: current.serviceIds.map((serviceId) => ({ serviceId, groupId: null })),
+          buckets: current.bucketIds.map((bucketId) => ({ bucketId, groupId: null })),
         }),
-      }).pipe(railway.catchTags(["RailwayNotFound"], () => Effect.succeed("")));
+      }).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed("")));
       if (projectId.length > 0) {
-        yield* waitUntilGone({
-          projectId,
-          environmentId,
-          groupId,
-          name: output.name,
-        });
+        yield* waitUntilGone({ projectId, environmentId, groupId, name: output.name });
       }
     }),
   });

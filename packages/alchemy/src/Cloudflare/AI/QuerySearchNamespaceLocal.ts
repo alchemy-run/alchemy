@@ -1,13 +1,10 @@
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Credentials } from "../Credentials.ts";
 import { QuerySearchNamespace } from "./QuerySearchNamespace.ts";
-import {
-  makeLocalSearchNamespaceClient,
-  type SearchAuth,
-} from "./SearchHttpClient.ts";
+import { makeLocalSearchNamespaceClient, type SearchAuth } from "./SearchHttpClient.ts";
 import type { SearchNamespace } from "./SearchNamespace.ts";
 
 /**
@@ -42,9 +39,7 @@ export const QuerySearchNamespaceLocal = Layer.effect(
   QuerySearchNamespace,
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     const auth: SearchAuth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),

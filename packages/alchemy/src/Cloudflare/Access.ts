@@ -2,19 +2,16 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { cachedFunction } from "../Util/cached-function.ts";
 
-export class AccessError extends Schema.TaggedError<AccessError>()(
-  "AccessError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {}
+export class AccessError extends Schema.TaggedError<AccessError>()("AccessError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}
 
 export class Access extends Context.Service<
   Access,
@@ -30,16 +27,11 @@ export const AccessLive = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const domainUsesAccess = yield* cachedFunction((domain: string) =>
-      Effect.promise((signal) =>
-        fetch(`https://${domain}`, { redirect: "manual", signal }),
-      ).pipe(
+      Effect.promise((signal) => fetch(`https://${domain}`, { redirect: "manual", signal })).pipe(
         Effect.map(
           (response) =>
             response.status === 302 &&
-            (response.headers
-              .get("location")
-              ?.includes("cloudflareaccess.com") ??
-              false),
+            (response.headers.get("location")?.includes("cloudflareaccess.com") ?? false),
         ),
         Effect.timeout(1000),
         Effect.catch(() => Effect.succeed(false)),
@@ -59,9 +51,7 @@ export const AccessLive = Layer.effect(
             }),
         ),
         Effect.flatMap((stdout) => {
-          const matches = stdout
-            .toString()
-            .match(/fetched your token:\n\n(.*)/m);
+          const matches = stdout.toString().match(/fetched your token:\n\n(.*)/m);
           return matches && matches.length >= 2
             ? Effect.succeed({ Cookie: `CF_Authorization=${matches[1]}` })
             : Effect.fail(

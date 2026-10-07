@@ -1,7 +1,4 @@
-import {
-  defineCloudflareConfig,
-  type OpenNextConfig,
-} from "@opennextjs/cloudflare";
+import { defineCloudflareConfig, type OpenNextConfig } from "@opennextjs/cloudflare";
 import staticAssetsCache from "@opennextjs/cloudflare/overrides/incremental-cache/static-assets-incremental-cache";
 
 const handlerPaths = ["/api/config"];
@@ -17,9 +14,7 @@ const config: OpenNextConfig = {
   buildCommand,
   dangerous: {
     headersAndCookiesPriority: (event) =>
-      handlerPaths.some((prefix) => event.rawPath.startsWith(prefix))
-        ? "handler"
-        : "middleware",
+      handlerPaths.some((prefix) => event.rawPath.startsWith(prefix)) ? "handler" : "middleware",
   },
 };
 

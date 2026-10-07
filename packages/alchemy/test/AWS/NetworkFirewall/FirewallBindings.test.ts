@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import NetworkFirewallFirewallBindingsFunctionLive, {
   NetworkFirewallFirewallBindingsFunction,
 } from "./firewall-handler";
@@ -17,15 +17,9 @@ const gated = !process.env.AWS_TEST_NETWORKFIREWALL;
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "NetworkFirewallFirewallBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "NetworkFirewallFirewallBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -59,9 +53,7 @@ describe.sequential(
             const attrs = yield* sharedStack.deploy(
               Effect.gen(function* () {
                 return yield* NetworkFirewallFirewallBindingsFunction;
-              }).pipe(
-                Effect.provide(NetworkFirewallFirewallBindingsFunctionLive),
-              ),
+              }).pipe(Effect.provide(NetworkFirewallFirewallBindingsFunctionLive)),
             );
 
             expect(attrs.functionUrl).toBeTruthy();
@@ -71,9 +63,7 @@ describe.sequential(
               Effect.flatMap((response) =>
                 response.status === 200
                   ? Effect.succeed(response)
-                  : Effect.fail(
-                      new Error(`Function not ready: ${response.status}`),
-                    ),
+                  : Effect.fail(new Error(`Function not ready: ${response.status}`)),
               ),
               Effect.retry({ schedule: readinessPolicy }),
             );
@@ -93,9 +83,7 @@ describe.sequential(
         "all 9 firewall-scoped capabilities initialize in the runtime",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* getJson("/bindings")) as {
-              bound: string[];
-            };
+            const response = (yield* getJson("/bindings")) as { bound: string[] };
             expect(response.bound).toHaveLength(9);
             expect(response.bound).toContain("describeFirewall");
             expect(response.bound).toContain("startFlowCapture");
@@ -105,17 +93,15 @@ describe.sequential(
     });
 
     describe("DescribeFirewall", () => {
-      test.provider.skipIf(gated)(
-        "reads the bound firewall's status (ARN injected)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const response = (yield* getJson("/firewall")) as {
-              status: string;
-              endpointCount: number;
-            };
-            expect(response.status).toBe("READY");
-            expect(response.endpointCount).toBeGreaterThanOrEqual(1);
-          }),
+      test.provider.skipIf(gated)("reads the bound firewall's status (ARN injected)", (_stack) =>
+        Effect.gen(function* () {
+          const response = (yield* getJson("/firewall")) as {
+            status: string;
+            endpointCount: number;
+          };
+          expect(response.status).toBe("READY");
+          expect(response.endpointCount).toBeGreaterThanOrEqual(1);
+        }),
       );
     });
 
@@ -144,14 +130,10 @@ describe.sequential(
                 times: 10,
               }),
             );
-            yield* Effect.logInfo(
-              `/flow response: ${JSON.stringify(response)}`,
-            );
+            yield* Effect.logInfo(`/flow response: ${JSON.stringify(response)}`);
             expect(response).toMatchObject({ step: "ok" });
             expect(response.flowOperationId).toBeTruthy();
-            expect(["COMPLETED", "COMPLETED_WITH_ERRORS", "FAILED"]).toContain(
-              response.status,
-            );
+            expect(["COMPLETED", "COMPLETED_WITH_ERRORS", "FAILED"]).toContain(response.status);
             expect(response.operations).toBeGreaterThanOrEqual(1);
             expect(response.flows).toBeGreaterThanOrEqual(0);
           }),

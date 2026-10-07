@@ -1,31 +1,24 @@
-import * as AWS from "@/AWS";
-import { DhcpOptions, Vpc } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { DhcpOptions, Vpc } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-class DhcpOptionsStillExists extends Data.TaggedError(
-  "DhcpOptionsStillExists",
-) {}
+class DhcpOptionsStillExists extends Data.TaggedError("DhcpOptionsStillExists") {}
 
 const assertDeleted = Effect.fn(function* (dhcpOptionsId: string) {
   yield* EC2.describeDhcpOptions({ DhcpOptionsIds: [dhcpOptionsId] }).pipe(
     Effect.flatMap((r) =>
-      (r.DhcpOptions?.length ?? 0) === 0
-        ? Effect.void
-        : Effect.fail(new DhcpOptionsStillExists()),
+      (r.DhcpOptions?.length ?? 0) === 0 ? Effect.void : Effect.fail(new DhcpOptionsStillExists()),
     ),
     Effect.retry({
       while: (e) => e instanceof DhcpOptionsStillExists,
@@ -64,9 +57,7 @@ test.provider(
       });
       const opts = described.DhcpOptions?.[0];
       expect(opts?.DhcpOptionsId).toEqual(dhcp.dhcpOptionsId);
-      const domainNameConfig = opts?.DhcpConfigurations?.find(
-        (c) => c.Key === "domain-name",
-      );
+      const domainNameConfig = opts?.DhcpConfigurations?.find((c) => c.Key === "domain-name");
       expect(domainNameConfig?.Values?.[0]?.Value).toEqual("corp.internal");
 
       // Verify the VPC points at the options set.
@@ -96,9 +87,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(DhcpOptions);
       const all = yield* provider.list();
-      expect(all.some((x) => x.dhcpOptionsId === dhcp.dhcpOptionsId)).toBe(
-        true,
-      );
+      expect(all.some((x) => x.dhcpOptionsId === dhcp.dhcpOptionsId)).toBe(true);
 
       yield* stack.destroy();
       yield* assertDeleted(dhcp.dhcpOptionsId);

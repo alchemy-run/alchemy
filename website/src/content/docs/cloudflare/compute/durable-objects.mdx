@@ -143,7 +143,7 @@ namespace handle:
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
@@ -174,8 +174,8 @@ by calling `getByName(...)` to obtain a typed stub, then invoking
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
@@ -225,7 +225,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
@@ -306,8 +306,8 @@ Forward the stream from the Worker's `fetch` handler. Use
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import Counter from "./counter.ts";
 
 export default Cloudflare.Worker(
@@ -353,7 +353,7 @@ import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
@@ -465,6 +465,19 @@ Cloudflare places the instance in the nearest location it can to the
 hinted region, which may not be inside it. Under `alchemy dev` there is
 only one location to place anything in, so hints are accepted and
 ignored — placement is only observable once deployed.
+
+## Keep an instance inside a jurisdiction
+
+A `locationHint` is best-effort. When data must stay inside a region for
+compliance, address the object through `jurisdiction()` instead:
+
+```typescript
+const room = rooms.jurisdiction("eu").getByName(roomId);
+```
+
+Cloudflare creates and stores that object only inside the jurisdiction.
+The same name addresses a different object than it does without
+`jurisdiction()`, so pick one form per name and keep using it.
 
 ## Call scope vs isolate scope
 

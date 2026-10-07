@@ -39,13 +39,8 @@ export interface UpdateQAppSession extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateQAppSessionRequest,
-    ) => Effect.Effect<
-      qapps.UpdateQAppSessionOutput,
-      qapps.UpdateQAppSessionError
-    >
+    ) => Effect.Effect<qapps.UpdateQAppSessionOutput, qapps.UpdateQAppSessionError>
   >
 > {}
 
-export const UpdateQAppSession = Binding.Service<UpdateQAppSession>(
-  "AWS.QApps.UpdateQAppSession",
-);
+export const UpdateQAppSession = Binding.Service<UpdateQAppSession>("AWS.QApps.UpdateQAppSession");

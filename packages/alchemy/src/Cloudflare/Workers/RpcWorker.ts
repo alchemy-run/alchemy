@@ -1,16 +1,11 @@
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import {
-  type Rpc,
-  RpcClient,
-  type RpcGroup,
-  RpcSerialization,
-} from "effect/unstable/rpc";
-import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
+import { type Rpc, RpcClient, type RpcGroup, RpcSerialization } from "effect/rpc";
+import type * as RpcClientError from "effect/rpc/RpcClientError";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
@@ -77,11 +72,7 @@ export interface RpcWorkerYieldable<
  * works identically and the resulting worker is `Rpc<Self>`-typed for
  * binding consumers.
  */
-export interface RpcWorkerClass extends Effect.Effect<
-  Worker,
-  never,
-  RpcWorkerScope
-> {
+export interface RpcWorkerClass extends Effect.Effect<Worker, never, RpcWorkerScope> {
   /**
    * Class-based form: `class X extends RpcWorker<X>()(name, props, impl)`.
    *
@@ -110,27 +101,14 @@ export interface RpcWorkerClass extends Effect.Effect<
       new (_: never): Named<Id>;
       make<InnerR = never, InitReq = never>(
         props: InputProps<WorkerProps>,
-        impl: Effect.Effect<
-          Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
-          ConfigError,
-          InitReq
-        >,
+        impl: Effect.Effect<Effect.Effect<HttpEffect<InnerR>, never, InnerR>, ConfigError, InitReq>,
       ): Layer.Layer<Self, never, Exclude<InitReq | InnerR, never>>;
     };
     /** Inline-impl form. */
-    <
-      const Id extends string,
-      Rpcs extends Rpc.Any,
-      InnerR = never,
-      InitReq = never,
-    >(
+    <const Id extends string, Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
       id: Id,
       props: RpcWorkerProps<Rpcs> & InputProps<WorkerProps>,
-      impl: Effect.Effect<
-        Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
-        ConfigError,
-        InitReq
-      >,
+      impl: Effect.Effect<Effect.Effect<HttpEffect<InnerR>, never, InnerR>, ConfigError, InitReq>,
     ): RpcWorkerYieldable<Self, Rpcs, Deps, Id> & {
       // Phantom — `class X extends RpcWorker<X>()(...)` carries `X`
       // through the result type via `Rpc<Self>` on the binding side;
@@ -182,14 +160,12 @@ const bind = <Self, Rpcs extends Rpc.Any>(
   Worker
 > =>
   Effect.gen(function* () {
-    const schema = (workerEff as unknown as Record<symbol, unknown>)[
-      SchemaSymbol
-    ] as RpcGroup.RpcGroup<Rpcs> | undefined;
+    const schema = (workerEff as unknown as Record<symbol, unknown>)[SchemaSymbol] as
+      | RpcGroup.RpcGroup<Rpcs>
+      | undefined;
     if (!schema) {
       return yield* Effect.die(
-        new Error(
-          "RpcWorker.bind: passed value isn't an RpcWorker class — no schema attached.",
-        ),
+        new Error("RpcWorker.bind: passed value isn't an RpcWorker class — no schema attached."),
       );
     }
     const worker = (yield* workerEff) as Worker;
@@ -199,13 +175,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
     // workerd surfaces the stub on `env` at request time.
     const self = yield* WorkerCtor;
     yield* self.bind`${worker}`({
-      bindings: [
-        {
-          type: "service",
-          name: worker.LogicalId,
-          service: worker.workerName,
-        },
-      ],
+      bindings: [{ type: "service", name: worker.LogicalId, service: worker.workerName }],
     });
 
     // Build a per-call factory that wraps the Cloudflare service-
@@ -215,9 +185,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
     // stub.fetch body) that were created on a previous request.
     const makeFreshClient = Effect.gen(function* () {
       const env = yield* WorkerEnvironment;
-      const stub = (env as Record<string, { fetch: typeof fetch }>)[
-        worker.LogicalId
-      ];
+      const stub = (env as Record<string, { fetch: typeof fetch }>)[worker.LogicalId];
       const httpClient = HttpClient.make((req) =>
         Effect.promise((signal) =>
           stub.fetch(
@@ -230,9 +198,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
           ),
         ).pipe(Effect.map((res) => HttpClientResponse.fromWeb(req, res))),
       );
-      const protocol = RpcClient.layerProtocolHttp({
-        url: "http://alchemy-rpc-worker/",
-      }).pipe(
+      const protocol = RpcClient.layerProtocolHttp({ url: "http://alchemy-rpc-worker/" }).pipe(
         Layer.provide(RpcSerialization.layerNdjson),
         Layer.provide(Layer.succeed(HttpClient.HttpClient, httpClient)),
       );
@@ -266,8 +232,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
             }).pipe(Effect.scoped);
         },
       },
-    ) as RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError> &
-      RpcShape<Self>;
+    ) as RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError> & RpcShape<Self>;
   });
 
 /**
@@ -294,7 +259,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * `RpcDurableObject`) import the same value.
  * ```typescript
  * import * as Schema from "effect/Schema";
- * import { Rpc, RpcGroup } from "effect/unstable/rpc";
+ * import { Rpc, RpcGroup } from "effect/rpc";
  *
  * export class TaskNotFound extends Schema.TaggedClass<TaskNotFound>()(
  *   "TaskNotFound",
@@ -320,7 +285,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
- * import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+ * import { RpcSerialization, RpcServer } from "effect/rpc";
  * import { TaskRpcs } from "./rpcs.ts";
  *
  * export default class Worker extends Cloudflare.RpcWorker<Worker>()(
@@ -435,9 +400,9 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import * as Schedule from "effect/Schedule";
- * import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
- * import * as RpcClient from "effect/unstable/rpc/RpcClient";
- * import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+ * import * as FetchHttpClient from "effect/http/FetchHttpClient";
+ * import * as RpcClient from "effect/rpc/RpcClient";
+ * import * as RpcSerialization from "effect/rpc/RpcSerialization";
  * import Stack from "../alchemy.run.ts";
  * import { TaskRpcs } from "../src/rpcs.ts";
  *
@@ -520,10 +485,7 @@ export const RpcWorker: RpcWorkerClass = (() => {
 const wrapImpl = (impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>) =>
   // The user's inner Effect resolves to `HttpEffect`; the underlying
   // `Cloudflare.Worker` expects `{ fetch: HttpEffect }`. Box it.
-  Effect.map(
-    impl,
-    (fetch) => ({ fetch }) as unknown as { fetch: HttpEffect<any> },
-  );
+  Effect.map(impl, (fetch) => ({ fetch }) as unknown as { fetch: HttpEffect<any> });
 
 // `effectClass` does not copy statics from the underlying Worker.
 const stampLogicalId = (
@@ -531,8 +493,7 @@ const stampLogicalId = (
   source: { LogicalId?: unknown },
   id: string,
 ) => {
-  klass.LogicalId =
-    typeof source.LogicalId === "string" ? source.LogicalId : id;
+  klass.LogicalId = typeof source.LogicalId === "string" ? source.LogicalId : id;
   return klass;
 };
 
@@ -580,9 +541,10 @@ const build = (
   // on the class for `RpcWorker.bind` to recover later. (Re-using
   // `effectClass` here means `class X extends RpcWorker<X>()(...)`
   // still works.) `underlying` is already an Effect, so pass it directly.
-  const klass = effectClass(
-    underlying as Effect.Effect<Worker>,
-  ) as unknown as Record<symbol | string, unknown>;
+  const klass = effectClass(underlying as Effect.Effect<Worker>) as unknown as Record<
+    symbol | string,
+    unknown
+  >;
   klass[SchemaSymbol] = schema;
   return stampLogicalId(klass, underlying, id);
 };

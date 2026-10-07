@@ -1,11 +1,11 @@
-import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
-import { Stack, type StackSpec } from "@/Stack";
-import * as Core from "@/Test/Core.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import { RpcProviderProxy } from "@/Local/RpcProviderProxy";
+import { Stack, type StackSpec } from "@/Stack";
+import * as Core from "@/Test/Core.ts";
 
 /**
  * The process-wide sidecar HTTP server must outlive the test file whose
@@ -20,10 +20,7 @@ const options = {
   dev: true,
 };
 
-const COMMAND_LOCAL = import.meta.resolve(
-  "../../src/Command/Local.ts",
-  import.meta.url,
-);
+const COMMAND_LOCAL = import.meta.resolve("../../src/Command/Local.ts", import.meta.url);
 
 type StackShape = Omit<StackSpec, "output">;
 
@@ -42,9 +39,7 @@ const runAsFile = <A, E, R>(
 ) => {
   const sharedScope = Scope.makeUnsafe("sequential");
   return Core.toEffect(
-    body.pipe(
-      Effect.provideService(Stack, dummyStack(stackName)),
-    ) as Core.TestEffect<A>,
+    body.pipe(Effect.provideService(Stack, dummyStack(stackName))) as Core.TestEffect<A>,
     options,
     sharedScope,
     handle,

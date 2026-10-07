@@ -34,7 +34,6 @@ export interface GetDiscoveredResourceCounts extends Binding.Service<
   >
 > {}
 
-export const GetDiscoveredResourceCounts =
-  Binding.Service<GetDiscoveredResourceCounts>(
-    "AWS.Config.GetDiscoveredResourceCounts",
-  );
+export const GetDiscoveredResourceCounts = Binding.Service<GetDiscoveredResourceCounts>(
+  "AWS.Config.GetDiscoveredResourceCounts",
+);

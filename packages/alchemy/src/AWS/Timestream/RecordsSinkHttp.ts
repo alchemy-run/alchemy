@@ -5,11 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { makeBatchedSink } from "../internal/BatchedSink.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  RecordsSink,
-  type RecordsSinkProps,
-  type RecordsSinkRecord,
-} from "./RecordsSink.ts";
+import { RecordsSink, type RecordsSinkProps, type RecordsSinkRecord } from "./RecordsSink.ts";
 import type { Table } from "./Table.ts";
 import { WriteRecords } from "./WriteRecords.ts";
 
@@ -37,25 +33,23 @@ export const RecordsSinkHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.Timestream.RecordsSink(${table}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["timestream:WriteRecords"],
-                  Resource: [Output.interpolate`${table.tableArn}`],
-                },
-                // Timestream requires endpoint discovery; the ingest endpoint
-                // is resolved at runtime via DescribeEndpoints, which is not
-                // scoped to a resource.
-                {
-                  Effect: "Allow",
-                  Action: ["timestream:DescribeEndpoints"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.Timestream.RecordsSink(${table}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["timestream:WriteRecords"],
+                Resource: [Output.interpolate`${table.tableArn}`],
+              },
+              // Timestream requires endpoint discovery; the ingest endpoint
+              // is resolved at runtime via DescribeEndpoints, which is not
+              // scoped to a resource.
+              {
+                Effect: "Allow",
+                Action: ["timestream:DescribeEndpoints"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
       const write = yield* writeRecords(table);
@@ -65,9 +59,7 @@ export const RecordsSinkHttp = Layer.effect(
         send: (batch) =>
           write({
             Records: [...batch],
-            ...(commonAttributes === undefined
-              ? {}
-              : { CommonAttributes: commonAttributes }),
+            ...(commonAttributes === undefined ? {} : { CommonAttributes: commonAttributes }),
           }).pipe(
             Effect.map(() => noRejections),
             // Timestream ingests the valid subset and reports invalid records
@@ -77,11 +69,8 @@ export const RecordsSinkHttp = Layer.effect(
             Effect.catchTag("RejectedRecordsException", (error) =>
               Effect.succeed<WriteOutcome>({
                 rejectedIndices: new Set(
-                  (error.RejectedRecords ?? []).flatMap(
-                    (rejected: TSW.RejectedRecord) =>
-                      rejected.RecordIndex === undefined
-                        ? []
-                        : [rejected.RecordIndex],
+                  (error.RejectedRecords ?? []).flatMap((rejected: TSW.RejectedRecord) =>
+                    rejected.RecordIndex === undefined ? [] : [rejected.RecordIndex],
                   ),
                 ),
               }),

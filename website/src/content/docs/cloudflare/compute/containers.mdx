@@ -49,7 +49,7 @@ implementation second:
 ```typescript
 // src/Sandbox.runtime.ts
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Sandbox } from "./Sandbox.ts";
 
 export default Sandbox.make(
@@ -361,7 +361,7 @@ export const Connection = Effect.gen(function* () {
 import * as Prisma from "alchemy/Prisma";
 import * as SQL from "alchemy/SQL/Postgres";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Api } from "./Api.ts";
 import { Connection } from "./Db.ts";
 
@@ -456,18 +456,18 @@ Alchemy does not go that way:
 2. A unix socket on the host forwards to that port.
 3. The workerd `<name>-proxy` sidecar bind-mounts the socket and maps
    `host.docker.localhost` to `127.0.0.1` in the shared netns.
-4. A listener in that netns accepts `127.0.0.1:<port>` and forwards
-   through the socket.
+4. A Docker-managed helper shares that network namespace, accepts
+   `127.0.0.1:<port>`, and forwards through the socket. Alchemy waits
+   for its listeners before completing container startup and removes
+   the helper when the container is deleted or the dev runtime stops.
 
 The container talks to itself. The socket crosses the boundary. UFW
 never sees a SYN to `172.17.0.1`.
 
-If the unix-socket path cannot attach (missing `nsenter`, EPERM),
-Alchemy logs this UFW hole — do not set `DEFAULT_INPUT_POLICY=ACCEPT`:
-
-```
-sudo ufw allow from 172.16.0.0/12 to any port <prisma-or-dev-ports> proto tcp
-```
+The helper uses `node:22-alpine`, which Docker downloads on first use.
+Normal Docker access is sufficient; Alchemy does not require host-side
+`nsenter` permissions. If the helper fails to start, container startup
+reports the error.
 
 Neon and PlanetScale have no local emulator: even under `alchemy
 dev` the URL is a cloud host (`*.neon.tech`, `*.psdb.cloud`) and the

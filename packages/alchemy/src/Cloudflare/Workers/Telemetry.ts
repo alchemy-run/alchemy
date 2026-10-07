@@ -8,8 +8,8 @@ import * as Layer from "effect/Layer";
 import * as Namespace from "../../Namespace.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import * as AlchemyTelemetry from "../../Telemetry.ts";
-import { getCompatibility } from "./Compatibility.ts";
 import { layer as cloudflareTracerLayer } from "./CloudflareTracer.ts";
+import { getCompatibility } from "./Compatibility.ts";
 import { Worker, type WorkerProps } from "./Worker.ts";
 
 /**
@@ -57,9 +57,7 @@ export interface CloudflareTelemetryProps {
 
 const tracesFromProps = (props: CloudflareTelemetryProps) => ({
   enabled: props.enabled ?? true,
-  ...(props.headSamplingRate !== undefined
-    ? { headSamplingRate: props.headSamplingRate }
-    : {}),
+  ...(props.headSamplingRate !== undefined ? { headSamplingRate: props.headSamplingRate } : {}),
   ...(props.persist !== undefined ? { persist: props.persist } : {}),
 });
 

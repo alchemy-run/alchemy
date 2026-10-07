@@ -1,4 +1,3 @@
-import { makeNodeServeEntrySource } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -8,6 +7,7 @@ import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { initialCwd } from "../../Util/Node.ts";
+import { loadFrontendCore } from "../../Website/FrontendCore.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 import {
   deployWebsite,
@@ -76,14 +76,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const local = context.dev && remote !== true;
     const cwd = props.cwd ?? props.rootDir;
     if (props.project !== undefined && props.branch !== undefined) {
-      return yield* Effect.die(
-        new Error("Specify branch or project, never both."),
-      );
+      return yield* Effect.die(new Error("Specify branch or project, never both."));
     }
     if (props.spa && props.errorPage !== undefined) {
-      return yield* Effect.die(
-        new Error("StaticSite spa and errorPage are mutually exclusive."),
-      );
+      return yield* Effect.die(new Error("StaticSite spa and errorPage are mutually exclusive."));
     }
     if (local && props.dev !== undefined) {
       const dev = yield* Command.Dev("Dev", {
@@ -122,6 +118,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       errorPage: props.errorPage,
     };
     if (local) {
+      const { makeNodeServeEntrySource } = yield* loadFrontendCore;
       const path = yield* Path.Path;
       const runtime = yield* Effect.sync(() => process.execPath);
       const command = Output.map(build.outdir, (outdir) => {

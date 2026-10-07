@@ -34,7 +34,6 @@ export interface GetComplianceSummaryByConfigRule extends Binding.Service<
   >
 > {}
 
-export const GetComplianceSummaryByConfigRule =
-  Binding.Service<GetComplianceSummaryByConfigRule>(
-    "AWS.Config.GetComplianceSummaryByConfigRule",
-  );
+export const GetComplianceSummaryByConfigRule = Binding.Service<GetComplianceSummaryByConfigRule>(
+  "AWS.Config.GetComplianceSummaryByConfigRule",
+);
