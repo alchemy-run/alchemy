@@ -234,3 +234,57 @@ test.provider(
     }),
   { tags: ["unit", "local"], timeout: 60000 },
 );
+
+test.provider(
+  "default memo honors .gitignore files from the repository root down",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      yield* stack.destroy();
+
+      // A repository whose root `.gitignore` anchors `/app/generated/` to the
+      // root and ignores logs except `keep.log`, and whose app ignores a
+      // `data/` folder it cannot read.
+      const repo = yield* fs.makeTempDirectoryScoped();
+      const appDir = pathe.join(repo, "app");
+      yield* fs.makeDirectory(pathe.join(repo, ".git"));
+      yield* fs.writeFileString(
+        pathe.join(repo, ".gitignore"),
+        "/app/generated/\n*.log\n!keep.log\n",
+      );
+      yield* fs.copy(FIXTURE_DIR, appDir);
+      yield* fs.writeFileString(pathe.join(appDir, ".gitignore"), "data/\n");
+      const locked = pathe.join(appDir, "data", "postgres");
+      yield* fs.makeDirectory(locked, { recursive: true });
+      yield* Effect.acquireRelease(fs.chmod(locked, 0o000), () =>
+        fs.chmod(locked, 0o755).pipe(Effect.ignore),
+      );
+
+      const deploy = () =>
+        stack.deploy(
+          Command.Build("test-build", { command: "bash build.sh", cwd: appDir, outdir: "dist" }),
+        );
+      const outputFile = pathe.join(appDir, "dist", "output.txt");
+
+      const build1 = yield* deploy();
+      const firstOutput = yield* fs.readFileString(outputFile);
+
+      // Ignored files change: none are hashed, so the build memoizes.
+      yield* Effect.sleep(1100);
+      yield* fs.writeFileString(pathe.join(appDir, "debug.log"), "noise");
+      yield* fs.makeDirectory(pathe.join(appDir, "generated"));
+      yield* fs.writeFileString(pathe.join(appDir, "generated", "types.ts"), "noise");
+      const build2 = yield* deploy();
+      expect(build2.hash.input).toBe(build1.hash.input);
+      expect(yield* fs.readFileString(outputFile)).toBe(firstOutput);
+
+      // A re-included file is hashed: changing it rebuilds.
+      yield* fs.writeFileString(pathe.join(appDir, "keep.log"), "kept");
+      const build3 = yield* deploy();
+      expect(build3.hash.input).not.toBe(build1.hash.input);
+      expect(yield* fs.readFileString(outputFile)).not.toBe(firstOutput);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"], timeout: 60000 },
+);

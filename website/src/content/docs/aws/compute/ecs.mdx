@@ -50,6 +50,11 @@ Alchemy provisions the **task and execution IAM roles**, a
 holding the image, then registers a Fargate task definition. Each
 deploy registers a new immutable revision.
 
+The log group keeps events forever by default. Set
+`logging: { retention: "2 weeks" }` on a `Task` or `Service` to
+expire them; the duration is rounded up to the nearest value
+CloudWatch Logs supports, and `"forever"` clears an existing policy.
+
 ## Three image sources
 
 The image comes from exactly one of three sources, flat on the
