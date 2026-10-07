@@ -248,7 +248,10 @@ test.provider(
       const repo = yield* fs.makeTempDirectoryScoped();
       const appDir = pathe.join(repo, "app");
       yield* fs.makeDirectory(pathe.join(repo, ".git"));
-      yield* fs.writeFileString(pathe.join(repo, ".gitignore"), "/app/generated/\n*.log\n!keep.log\n");
+      yield* fs.writeFileString(
+        pathe.join(repo, ".gitignore"),
+        "/app/generated/\n*.log\n!keep.log\n",
+      );
       yield* fs.copy(FIXTURE_DIR, appDir);
       yield* fs.writeFileString(pathe.join(appDir, ".gitignore"), "data/\n");
       const locked = pathe.join(appDir, "data", "postgres");
