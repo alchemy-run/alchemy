@@ -121,8 +121,12 @@ describe("event telemetry configuration", { tags: ["unit", "local"] }, () => {
       const requests: HttpClientRequest.HttpClientRequest[] = [];
       yield* runEvent(provider, recordingClient(requests));
 
-      const contentType = (path: string) =>
-        requests.find((request) => request.url === `https://otlp.example${path}`)?.body.contentType;
+      const contentType = (path: string) => {
+        const body = requests.find(
+          (request) => request.url === `https://otlp.example${path}`,
+        )?.body;
+        return body?._tag === "Uint8Array" ? body.contentType : undefined;
+      };
       // OTLP/HTTP receivers must accept protobuf; Axiom rejects JSON metrics (415).
       expect(contentType("/v1/metrics")).toBe("application/x-protobuf");
       expect(contentType("/v1/traces")).toBe("application/json");
