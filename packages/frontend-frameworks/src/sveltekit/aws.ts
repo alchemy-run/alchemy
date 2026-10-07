@@ -286,6 +286,7 @@ export const makeAwsTarget = (config: SvelteKitAwsTargetConfig = {}): SvelteKitT
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "sveltekit",
       config: {
         rootDir: context.root,

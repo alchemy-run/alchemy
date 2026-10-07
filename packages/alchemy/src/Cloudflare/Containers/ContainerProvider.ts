@@ -1525,8 +1525,8 @@ const toAttributes = (
   applicationName: application.name,
   accountId: application.accountId,
   schedulingPolicy: application.schedulingPolicy,
-  instances: application.instances,
-  maxInstances: application.maxInstances,
+  instances: application.instances ?? undefined,
+  maxInstances: application.maxInstances ?? undefined,
   constraints: normalizeNulls(
     application.constraints as ContainerApplication.Constraints | undefined,
   ),
@@ -1534,6 +1534,6 @@ const toAttributes = (
   configuration: normalizeNulls(application.configuration as ContainerApplication.Configuration),
   durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
   createdAt: application.createdAt,
-  version: application.version,
+  version: application.version ?? undefined,
   dev: undefined,
 });

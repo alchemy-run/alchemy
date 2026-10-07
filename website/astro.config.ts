@@ -634,12 +634,15 @@ export default defineConfig({
                   link: "/cloudflare/data/branch-from-shared-database",
                 },
                 { label: "Artifacts", link: "/cloudflare/data/artifacts" },
+                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
+                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
               ],
             },
             {
               label: "Messaging & events",
               items: [
                 { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
                 { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
                 {
                   label: "GitHub events",

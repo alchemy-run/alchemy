@@ -30,8 +30,8 @@ smoke
 *.tgz
 *.js
 *.d.ts
-!examples/prisma-tanstack-start/migrations/**/start-contract.d.ts
-!examples/prisma-tanstack-start/migrations/**/end-contract.d.ts
+# Emitted by `prisma contract emit` (the example's prepare script).
+examples/prisma-tanstack-start/src/prisma/contract.json
 # Emitted Prisma ORM v8 contract types: imported by the fixtures/example that
 # consume them, so a clean checkout must typecheck without running a deploy.
 !examples/cloudflare-neon-prisma/src/prisma/generated/contract.d.ts

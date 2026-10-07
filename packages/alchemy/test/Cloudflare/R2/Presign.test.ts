@@ -1,8 +1,14 @@
-import { expect } from "alchemy-test";
+import { expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import { s3CredentialsPolicy } from "@/Cloudflare/R2/S3CredentialsBinding.ts";
 import * as Test from "@/Test/Alchemy";
 import PresignRemoteWorker, { PresignRemoteBucket } from "./fixtures/presign/remote-worker.ts";
 import { presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
@@ -12,6 +18,53 @@ const { test } = Test.make({
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+class OtherBucketNotReady extends Data.TaggedError("OtherBucketNotReady")<{
+  status: number;
+  body: string;
+}> {}
+
+/**
+ * Seed `key` in the other bucket through the Worker's native binding, then
+ * presign a GET for it with the first bucket's S3 credentials and fetch it.
+ * The token is bucket-scoped, so R2 must answer 403.
+ */
+const expectOtherBucketDenied = (workerUrl: string, otherBucket: string, key: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const okText = (request: HttpClientRequest.HttpClientRequest) =>
+      client.execute(request).pipe(
+        Effect.flatMap((res) =>
+          res.text.pipe(
+            Effect.flatMap((body) =>
+              res.status === 200
+                ? Effect.succeed(body)
+                : Effect.fail(new OtherBucketNotReady({ status: res.status, body })),
+            ),
+          ),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
+      );
+
+    yield* okText(
+      HttpClientRequest.post(`${workerUrl}/write-other?key=${encodeURIComponent(key)}`).pipe(
+        HttpClientRequest.setBody(HttpBody.text("other bucket secret")),
+      ),
+    );
+    const { url } = JSON.parse(
+      yield* okText(
+        HttpClientRequest.get(
+          `${workerUrl}/presign-other-bucket?bucket=${encodeURIComponent(otherBucket)}&key=${encodeURIComponent(key)}`,
+        ),
+      ),
+    ) as { url: string };
+    expect(new URL(url).pathname.startsWith(`/${otherBucket}/`)).toBe(true);
+
+    const res = yield* client.execute(HttpClientRequest.get(url));
+    const body = yield* res.text;
+    expect(body).not.toContain("other bucket secret");
+    expect(res.status).toBe(403);
+  });
 
 /**
  * Deployed: the Worker mints presigned URLs with S3 credentials derived from
@@ -65,16 +118,22 @@ test.provider(
           const bucket = yield* Cloudflare.R2.Bucket("PresignAsyncBucket", {
             forceDestroy: true,
           });
+          // A second bucket in the same account that the credentials must
+          // NOT reach. The Worker binds it natively only to seed an object.
+          const otherBucket = yield* Cloudflare.R2.Bucket("PresignAsyncOtherBucket", {
+            forceDestroy: true,
+          });
           const worker = yield* Cloudflare.Worker("PresignAsyncWorker", {
             main: pathe.resolve(import.meta.dirname, "fixtures/presign/async-worker.ts"),
             env: {
               BUCKET: bucket,
+              OTHER_BUCKET: otherBucket,
               BUCKET_S3: Cloudflare.R2.S3Credentials(bucket, {
                 access: "read-write",
               }),
             },
           });
-          return { bucket, worker };
+          return { bucket, otherBucket, worker };
         }),
       );
 
@@ -84,10 +143,34 @@ test.provider(
       );
       expect(new URL(putUrl).hostname).toMatch(/\.r2\.cloudflarestorage\.com$/);
 
+      // The token behind the credentials is scoped to BUCKET: an object in
+      // another bucket of the same account is not readable with them.
+      const otherKey = "secret.txt";
+      yield* expectOtherBucketDenied(
+        deployed.worker.url!,
+        deployed.otherBucket.bucketName,
+        otherKey,
+      );
+
       yield* stack.destroy();
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker"],
     timeout: 180_000,
   },
+);
+
+// A jurisdictional bucket's token resource carries its jurisdiction; the live
+// tests above only deploy `default`-jurisdiction buckets.
+it(
+  "S3Credentials scopes a jurisdictional bucket's token to that jurisdiction",
+  () => {
+    expect(s3CredentialsPolicy("acct", "uploads", "eu", "read").resources).toEqual({
+      "com.cloudflare.edge.r2.bucket.acct_eu_uploads": "*",
+    });
+    expect(s3CredentialsPolicy("acct", "gov", "fedramp", "write").resources).toEqual({
+      "com.cloudflare.edge.r2.bucket.acct_fedramp_gov": "*",
+    });
+  },
+  { tags: ["unit", "provider:cloudflare"] },
 );

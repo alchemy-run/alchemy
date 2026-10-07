@@ -56,6 +56,26 @@ const runBuildApp = async (
 };
 
 describe("options plugin", () => {
+  it("preserves dependency discovery settings for each Worker environment", async () => {
+    const plugin = optionsPlugin.vite({
+      viteEnvironments: { entry: "rsc", children: ["ssr"] },
+    });
+    const result = await callViteConfig(plugin, {
+      optimizeDeps: { noDiscovery: true },
+      environments: { ssr: { optimizeDeps: { noDiscovery: false } } },
+    });
+    expect(result.environments?.rsc?.optimizeDeps?.noDiscovery).toBe(true);
+    expect(result.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(false);
+
+    const explicit = await callViteConfig(optionsPlugin.vite({}), {
+      environments: { ssr: { optimizeDeps: { noDiscovery: true } } },
+    });
+    expect(explicit.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(true);
+
+    const defaults = await callViteConfig(optionsPlugin.vite({}), {});
+    expect(defaults.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(false);
+  });
+
   it("applies the Cloudflare defaults", () => {
     const plugin = optionsPlugin.rolldown({});
     const input = {};
