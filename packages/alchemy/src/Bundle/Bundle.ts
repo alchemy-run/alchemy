@@ -228,7 +228,9 @@ export const outputDirectory = (resource: {
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const dotAlchemy = yield* dotAlchemyDirectory;
-    return path.resolve(
+    // A relative `.alchemy` (standalone callers) stays relative, so rolldown
+    // resolves it against the bundle `cwd` like any other output `dir`.
+    return path.join(
       dotAlchemy,
       "bundles",
       resource.stack,

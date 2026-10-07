@@ -117,13 +117,14 @@ layer(PlatformServices)("runtime directory", (it) => {
         for (const override of [undefined, path.join(root, "explicit")]) {
           const bundle = yield* bundler.build({
             id: "test",
+            fqn: "test",
             main,
             compatibility: { date: "2026-03-17", flags: [] },
             entry: { kind: "external" },
             stack: { name: "test", stage: "test" },
             extraOptions: override ? { output: { dir: override } } : undefined,
           });
-          const directory = override ?? path.join(runtime, "bundles/test");
+          const directory = override ?? path.join(runtime, "bundles/test/test/test");
           expect(bundle.files.length).toBeGreaterThan(0);
           expect((yield* fs.readDirectory(directory)).length).toBeGreaterThan(0);
         }
@@ -154,6 +155,7 @@ layer(PlatformServices)("runtime directory", (it) => {
               );
           yield* bundler.build({
             id: "relative",
+            fqn: "relative",
             main,
             compatibility: { date: "2026-03-17", flags: [] },
             entry: { kind: "external" },
@@ -161,8 +163,9 @@ layer(PlatformServices)("runtime directory", (it) => {
             extraOptions: undefined,
           });
           expect(
-            (yield* fs.readDirectory(path.join(root, configured ?? ".alchemy", "bundles/relative")))
-              .length,
+            (yield* fs.readDirectory(
+              path.join(root, configured ?? ".alchemy", "bundles/test/test/relative"),
+            )).length,
           ).toBeGreaterThan(0);
         }
       }),
