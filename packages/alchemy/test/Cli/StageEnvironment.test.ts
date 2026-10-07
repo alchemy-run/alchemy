@@ -165,6 +165,25 @@ describe("default stages", { tags: ["unit", "local"] }, () => {
       expect(yield* userStage("test")).toBe("test_sam");
     }).pipe(Effect.provide(TestEnv)),
   );
+
+  test.effect("replaces characters a stage can't hold in $USER", () =>
+    Effect.gen(function* () {
+      const cases = {
+        "first.last": "live_first-last",
+        "John Smith": "live_John-Smith",
+        "DOMAIN\\user": "live_DOMAIN-user",
+        "dev_user-1": "live_dev_user-1",
+        "...": "live_unknown",
+      };
+      for (const [user, expected] of Object.entries(cases)) {
+        const selected = yield* userStage("live").pipe(Effect.provide(envLayer({ USER: user })));
+        expect(selected).toBe(expected);
+        // The default must be a stage `--stage` itself would accept.
+        const [, parsed] = yield* stage.parse({ arguments: [], flags: { stage: [selected] } });
+        expect(parsed).toBe(selected);
+      }
+    }).pipe(Effect.provide(TestEnv)),
+  );
 });
 
 const parseEnvFile = (path: string) =>

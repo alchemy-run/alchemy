@@ -17,10 +17,17 @@ export const USER = Config.String("USER").pipe(
   Config.withDefault("unknown"),
 );
 
-/** `live_$USER`, `dev_$USER`, or `test_$USER` (falls back to `*_unknown`). */
+/**
+ * `live_$USER`, `dev_$USER`, or `test_$USER` (falls back to `*_unknown`).
+ * Characters a stage can't hold (`first.last`, `John Smith`) become `-`, so
+ * the default always passes the `--stage` pattern and works in physical names.
+ */
 export const userStage = (kind: "live" | "dev" | "test") =>
   USER.pipe(
-    Effect.map((user) => `${kind}_${user}`),
+    Effect.map((user) => {
+      const safe = user.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+      return `${kind}_${safe || "unknown"}`;
+    }),
     Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
   );
 
