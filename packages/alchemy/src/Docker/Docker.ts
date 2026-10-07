@@ -411,7 +411,11 @@ export declare namespace Docker {
     Id: string;
     Image: string;
     Name?: string;
-    State: { Status: ContainerStatus };
+    State: {
+      Status: ContainerStatus;
+      /** Present when the container has a healthcheck. */
+      Health?: { Status: "starting" | "healthy" | "unhealthy" };
+    };
     Created: string;
     Config: {
       Image: string;
