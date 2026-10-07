@@ -2,9 +2,13 @@ import { describe, expect, it } from "alchemy-test";
 import {
   parseCreatedAt,
   parseRepoDigest,
+  publishedRepoDigest,
   repositoryFromImageRef,
   withRegistryHost,
 } from "@/Docker/Registry";
+
+const digest = `sha256:${"a".repeat(64)}`;
+const other = `sha256:${"b".repeat(64)}`;
 
 describe(
   "repositoryFromImageRef",
@@ -81,6 +85,55 @@ describe(
 
     it("returns undefined when no digest is present", () => {
       expect(parseRepoDigest("app:latest", "Pushed without a digest")).toBe(undefined);
+    });
+  },
+);
+
+describe(
+  "publishedRepoDigest",
+  { tags: ["unit", "provider:docker", "provider:docker:registry", "local"] },
+  () => {
+    it("reads RepoDigests when push output has no digest line", () => {
+      expect(
+        publishedRepoDigest(
+          "localhost:5055/app:latest",
+          {
+            stdout: "",
+            stderr:
+              "Getting image source signatures\nCopying blob sha256:74d97c42\nWriting manifest to image destination\n",
+          },
+          [`localhost:5055/app@${digest}`, `ghcr.io/acme/app@${other}`],
+        ),
+      ).toBe(`localhost:5055/app@${digest}`);
+    });
+
+    it("prefers a digest line from push output", () => {
+      expect(
+        publishedRepoDigest(
+          "localhost:5055/app:latest",
+          { stdout: `latest: digest: ${digest} size: 123`, stderr: "" },
+          [`localhost:5055/app@${other}`],
+        ),
+      ).toBe(`localhost:5055/app@${digest}`);
+    });
+
+    it("uses the registry-qualified RepoDigests entry", () => {
+      expect(
+        publishedRepoDigest(
+          "app:latest",
+          { stdout: "", stderr: "" },
+          [`ghcr.io/acme/app@${digest}`],
+          "ghcr.io/acme/app:latest",
+        ),
+      ).toBe(`ghcr.io/acme/app@${digest}`);
+    });
+
+    it("returns undefined when neither output nor RepoDigests match", () => {
+      expect(
+        publishedRepoDigest("app:latest", { stdout: "", stderr: "Writing manifest\n" }, [
+          `ghcr.io/acme/other@${digest}`,
+        ]),
+      ).toBe(undefined);
     });
   },
 );

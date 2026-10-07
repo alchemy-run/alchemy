@@ -539,7 +539,8 @@ export const DockerLive = Layer.effect(
         Effect.tap((result) => {
           if (result.exitCode === 0) return Effect.void;
           const stderr = result.stderr.replace(/^Error response from daemon: /, "");
-          if (stderr.match(/no such/i) || stderr.match(/not found/i)) {
+          // Podman reports a missing image as "image not known".
+          if (/no such|not found|not known/i.test(stderr)) {
             return systemError({ _tag: "NotFound", args, description: stderr });
           }
           if (stderr.match(/already exists/i)) {
