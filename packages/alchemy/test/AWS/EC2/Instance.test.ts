@@ -150,7 +150,10 @@ describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "li
               cidrBlock: "10.0.1.0/24",
             });
             // Toggling `fifo` replaces the queue, so its URL is unknown at plan time.
-            const queue = yield* Queue("UpstreamUserDataQueue", { fifo });
+            const queue = yield* Queue(
+              "UpstreamUserDataQueue",
+              fifo ? { fifo: true } : { fifo: false },
+            );
             const instance = yield* Instance("UpstreamUserDataInstance", {
               imageId: amazonLinux2023(),
               instanceType: "t3.micro",
