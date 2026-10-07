@@ -10,11 +10,22 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Command } from "effect/cli";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { publishablePackages, type WorkspacePackage } from "./package-manifest.ts";
 
-type Manifest = Record<string, unknown>;
+export class MissingPublishMetadata extends Data.TaggedError("MissingPublishMetadata")<{
+  readonly message: string;
+  readonly dir: string;
+  readonly fields: ReadonlyArray<string>;
+}> {}
+
+export class VersionMismatch extends Data.TaggedError("VersionMismatch")<{
+  readonly message: string;
+  readonly group: string;
+  readonly specs: ReadonlyArray<string>;
+}> {}
 
 const REQUIRED = [
   "name",
@@ -30,63 +41,33 @@ const REQUIRED = [
   "exports",
 ] as const;
 
-/** Non-private package manifests directly under `directory`. */
-const publishable = Effect.fn(function* (root: string, directory: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const entries = yield* fs.readDirectory(path.join(root, directory));
-  const manifests = yield* Effect.forEach(entries.sort(), (entry) => {
-    const manifestPath = path.join(root, directory, entry, "package.json");
-    return fs
-      .exists(manifestPath)
-      .pipe(
-        Effect.flatMap((exists) =>
-          exists
-            ? fs
-                .readFileString(manifestPath)
-                .pipe(
-                  Effect.map((text) => ({ dir: entry, manifest: JSON.parse(text) as Manifest })),
-                )
-            : Effect.succeed(undefined),
-        ),
-      );
-  });
-  return manifests.filter(
-    (entry) => entry !== undefined && entry.manifest.private !== true,
-  ) as Array<{
-    dir: string;
-    manifest: Manifest;
-  }>;
-});
-
-const assertMetadata = Effect.fn(function* (
-  packages: ReadonlyArray<{ dir: string; manifest: Manifest }>,
-) {
-  for (const { dir, manifest } of packages) {
-    const missing: Array<string> = REQUIRED.filter((field) => manifest[field] == null);
-    const publishConfig = manifest.publishConfig as { access?: unknown } | undefined;
-    if (publishConfig?.access !== "public") missing.push("publishConfig.access=public");
-    if (missing.length > 0) {
-      return yield* Effect.fail(
-        new Error(`${dir}: missing publish metadata: ${missing.join(", ")}`),
-      );
+const assertMetadata = Effect.fn(function* (packages: ReadonlyArray<WorkspacePackage>) {
+  for (const { dir, raw } of packages) {
+    const fields: Array<string> = REQUIRED.filter((field) => raw[field] == null);
+    const publishConfig = raw.publishConfig as { access?: unknown } | undefined;
+    if (publishConfig?.access !== "public") fields.push("publishConfig.access=public");
+    if (fields.length > 0) {
+      return yield* new MissingPublishMetadata({
+        message: `${dir}: missing publish metadata: ${fields.join(", ")}`,
+        dir,
+        fields,
+      });
     }
   }
 });
 
 const assertOneVersion = Effect.fn(function* (
   group: string,
-  packages: ReadonlyArray<{ manifest: Manifest }>,
+  packages: ReadonlyArray<WorkspacePackage>,
 ) {
   const versions = new Set(packages.map(({ manifest }) => manifest.version));
   if (versions.size !== 1) {
-    return yield* Effect.fail(
-      new Error(
-        `${group} packages must share one version: ${packages
-          .map(({ manifest }) => `${manifest.name}@${manifest.version}`)
-          .join(", ")}`,
-      ),
-    );
+    const specs = packages.map(({ manifest }) => `${manifest.name}@${manifest.version}`);
+    return yield* new VersionMismatch({
+      message: `${group} packages must share one version: ${specs.join(", ")}`,
+      group,
+      specs,
+    });
   }
   yield* Console.log(`Validated ${packages.length} ${group} packages at ${[...versions][0]}`);
 });
@@ -98,10 +79,13 @@ const command = Command.make(
     const path = yield* Path.Path;
     const root = path.resolve(import.meta.dirname, "..");
 
-    const alchemy = yield* publishable(root, "packages");
+    const alchemy = yield* publishablePackages(root, "packages");
     yield* assertMetadata(alchemy);
     yield* assertOneVersion("alchemy", alchemy);
-    yield* assertOneVersion("distilled", yield* publishable(root, "submodules/distilled/packages"));
+    yield* assertOneVersion(
+      "distilled",
+      yield* publishablePackages(root, "submodules/distilled/packages"),
+    );
   }),
 ).pipe(Command.withDescription("Check publish metadata and lockstep versions"));
 

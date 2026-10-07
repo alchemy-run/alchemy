@@ -71,6 +71,7 @@
   },
   "devDependencies": {
     "@alchemy.run/pkg": "workspace:*",
+    "@alchemy.run/vite-plugin-copy-editor": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -78,6 +79,7 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
     "changelogithub": "catalog:",
     "effect": "catalog:",
     "husky": "catalog:",

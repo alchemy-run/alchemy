@@ -19,6 +19,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Cause from "effect/Cause";
 import { Argument, Command } from "effect/cli";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -28,14 +29,33 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { publishablePackages, type WorkspacePackage } from "../package-manifest.ts";
 
 type Channel = "release" | "beta" | "alpha" | "rc" | "tag";
 
-interface Package {
-  readonly dir: string;
-  readonly manifest: Record<string, unknown> & { name: string; version: string };
-}
+export class InvalidReleaseSpec extends Data.TaggedError("InvalidReleaseSpec")<{
+  readonly message: string;
+  readonly spec: string;
+}> {}
+
+export class NoStableVersion extends Data.TaggedError("NoStableVersion")<{
+  readonly message: string;
+  readonly name: string;
+}> {}
+
+export class CommandFailed extends Data.TaggedError("CommandFailed")<{
+  readonly message: string;
+  readonly command: string;
+  readonly exitCode: number;
+}> {}
+
+/** The part of an npm packument the release reads. */
+const Packument = Schema.Struct({
+  versions: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+});
+const decodePackument = Schema.decodeUnknownEffect(Packument);
 
 /** Runs a command; stdout is captured (and echoed to stderr), stderr inherited. */
 const run = Effect.fn(function* (command: string, args: ReadonlyArray<string>, cwd: string) {
@@ -58,9 +78,12 @@ const runOrFail = Effect.fn(function* (command: string, args: ReadonlyArray<stri
   const result = yield* run(command, args, cwd);
   if (result.stdout) yield* Console.error(result.stdout);
   if (result.exitCode !== 0) {
-    return yield* Effect.fail(
-      new Error(`${command} ${args.join(" ")} exited with code ${result.exitCode}`),
-    );
+    const line = [command, ...args].join(" ");
+    return yield* new CommandFailed({
+      message: `${line} exited with code ${result.exitCode}`,
+      command: line,
+      exitCode: result.exitCode,
+    });
   }
 });
 
@@ -68,8 +91,8 @@ const runOrFail = Effect.fn(function* (command: string, args: ReadonlyArray<stri
 const npmVersions = Effect.fn(function* (name: string) {
   const response = yield* HttpClient.get(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
   if (response.status !== 200) return [];
-  const json = (yield* response.json) as { versions?: Record<string, unknown> };
-  return Object.keys(json.versions ?? {});
+  const packument = yield* decodePackument(yield* response.json);
+  return Object.keys(packument.versions ?? {});
 });
 
 const compare = (a: string, b: string) => {
@@ -81,7 +104,7 @@ const compare = (a: string, b: string) => {
 /** The next `2.0.0-<channel>.N`, retrying an incomplete previous candidate. */
 const nextPrerelease = Effect.fn(function* (
   root: string,
-  packages: ReadonlyArray<Package>,
+  packages: ReadonlyArray<WorkspacePackage>,
   channel: Channel,
 ) {
   const matcher = new RegExp(`^2\\.0\\.0-${channel}\\.(\\d+)$`);
@@ -109,7 +132,7 @@ const nextPrerelease = Effect.fn(function* (
 
 const resolveVersion = Effect.fn(function* (
   root: string,
-  packages: ReadonlyArray<Package>,
+  packages: ReadonlyArray<WorkspacePackage>,
   spec: string,
 ) {
   const prerelease = spec.match(/^(beta|alpha|rc)(?:\.(\d+))?$/);
@@ -128,9 +151,11 @@ const resolveVersion = Effect.fn(function* (
       .sort(compare)
       .at(-1);
     if (!stable) {
-      return yield* Effect.fail(
-        new Error("Cannot calculate a stable bump without a published stable version"),
-      );
+      const name = packages[0]!.manifest.name;
+      return yield* new NoStableVersion({
+        message: `Cannot ${spec}-bump: ${name} has no stable version on npm`,
+        name,
+      });
     }
     let [major, minor, patch] = stable.split(".").map(Number) as [number, number, number];
     if (spec === "major") [major, minor, patch] = [major + 1, 0, 0];
@@ -139,7 +164,7 @@ const resolveVersion = Effect.fn(function* (
     return { channel: "release" as Channel, version: `${major}.${minor}.${patch}` };
   }
   if (!/^[A-Za-z][A-Za-z0-9.-]*$/.test(spec)) {
-    return yield* Effect.fail(new Error(`Invalid release spec: ${spec}`));
+    return yield* new InvalidReleaseSpec({ message: `Invalid release spec: ${spec}`, spec });
   }
   return { channel: "tag" as Channel, version: `0.0.0-${spec}` };
 });
@@ -157,22 +182,7 @@ const command = Command.make(
     const path = yield* Path.Path;
     const root = path.resolve(import.meta.dirname, "../..");
 
-    const entries = (yield* fs.readDirectory(path.join(root, "packages"))).sort();
-    const packages = (yield* Effect.forEach(entries, (entry) => {
-      const manifestPath = path.join(root, "packages", entry, "package.json");
-      return fs.exists(manifestPath).pipe(
-        Effect.flatMap((exists) =>
-          exists
-            ? fs.readFileString(manifestPath).pipe(
-                Effect.map((text) => ({
-                  dir: `packages/${entry}`,
-                  manifest: JSON.parse(text) as Package["manifest"],
-                })),
-              )
-            : Effect.succeed(undefined),
-        ),
-      );
-    })).filter((pkg): pkg is Package => pkg !== undefined && pkg.manifest.private !== true);
+    const packages = yield* publishablePackages(root, "packages");
 
     const { channel, version } = yield* resolveVersion(
       root,
@@ -184,7 +194,7 @@ const command = Command.make(
     yield* Effect.forEach(packages, (pkg) =>
       fs.writeFileString(
         path.join(root, pkg.dir, "package.json"),
-        `${JSON.stringify({ ...pkg.manifest, version }, null, 2)}\n`,
+        `${JSON.stringify({ ...pkg.raw, version }, null, 2)}\n`,
       ),
     );
     yield* fs.writeFileString(

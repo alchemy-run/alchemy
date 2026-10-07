@@ -743,6 +743,9 @@ importers:
       '@alchemy.run/pkg':
         specifier: workspace:*
         version: link:packages/pkg
+      '@alchemy.run/vite-plugin-copy-editor':
+        specifier: workspace:*
+        version: link:packages/vite-plugin-copy-editor
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:submodules/distilled/packages/aws
@@ -764,6 +767,9 @@ importers:
       alchemy:
         specifier: workspace:*
         version: link:packages/alchemy
+      alchemy-test:
+        specifier: workspace:*
+        version: link:packages/alchemy-test
       changelogithub:
         specifier: 'catalog:'
         version: 13.16.1

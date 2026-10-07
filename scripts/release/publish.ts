@@ -12,12 +12,29 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import { decodePackageJson } from "../package-manifest.ts";
+
+export class NoTarballs extends Data.TaggedError("NoTarballs")<{
+  readonly message: string;
+  readonly dir: string;
+}> {}
+
+export class UnreadableTarball extends Data.TaggedError("UnreadableTarball")<{
+  readonly message: string;
+  readonly tarball: string;
+}> {}
+
+export class PublishFailed extends Data.TaggedError("PublishFailed")<{
+  readonly message: string;
+  readonly specs: ReadonlyArray<string>;
+}> {}
 import * as Stream from "effect/Stream";
 
 type Outcome = "published" | "skipped" | "failed";
@@ -61,9 +78,12 @@ const run = Effect.fn(function* (
 const specOf = Effect.fn(function* (tarball: string) {
   const { exitCode, stdout } = yield* run("tar", ["-xOzf", tarball, "package/package.json"]);
   if (exitCode !== 0) {
-    return yield* Effect.fail(new Error(`${tarball}: cannot read package/package.json`));
+    return yield* new UnreadableTarball({
+      message: `${tarball}: cannot read package/package.json`,
+      tarball,
+    });
   }
-  const { name, version } = JSON.parse(stdout) as { name: string; version: string };
+  const { name, version } = yield* decodePackageJson(stdout);
   return `${name}@${version}`;
 });
 
@@ -141,18 +161,19 @@ const command = Command.make(
       .sort()
       .map((file) => path.join(dir, file));
     if (tarballs.length === 0) {
-      return yield* Effect.fail(new Error(`No tarballs in ${dir}`));
+      return yield* new NoTarballs({ message: `No tarballs in ${dir}`, dir });
     }
     yield* Console.log(`Publishing ${tarballs.length} tarball(s) from ${dir}:`);
 
     const results = yield* Effect.forEach(tarballs, publishOne);
     yield* summarize(results);
 
-    const failed = results.filter((result) => result.outcome === "failed");
+    const failed = results.filter((result) => result.outcome === "failed").map((r) => r.spec);
     if (failed.length > 0) {
-      return yield* Effect.fail(
-        new Error(`Failed to publish: ${failed.map((result) => result.spec).join(", ")}`),
-      );
+      return yield* new PublishFailed({
+        message: `Failed to publish: ${failed.join(", ")}`,
+        specs: failed,
+      });
     }
   }),
 ).pipe(Command.withDescription("Publish the release tarballs to npm under latest"));
