@@ -42,8 +42,7 @@ if (!webhook) {
 
 const REPO = repo();
 const repoSlug = REPO.split("/")[1]!;
-const capitalize = (s: string) =>
-  s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
+const capitalize = (s: string) => (s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1));
 // "alchemy-effect" -> "Alchemy-Effect"
 const fullRepoName = repoSlug.split("-").map(capitalize).join("-");
 // "alchemy-effect" -> "Alchemy"
@@ -69,12 +68,10 @@ const footer = `\n\n[Full release notes →](${releaseUrl})`;
 // a notice line so the reader knows there's more on GitHub. We cut at
 // the last newline before the budget so we never slice mid-bullet, then
 // fall back to a hard slice if no newline lands in range.
-const truncationNotice =
-  "_Release notes truncated — see the full changelog on GitHub._\n\n";
+const truncationNotice = "_Release notes truncated — see the full changelog on GitHub._\n\n";
 let description = `${body}${footer}`;
 if (description.length > EMBED_DESCRIPTION_LIMIT) {
-  const budget =
-    EMBED_DESCRIPTION_LIMIT - footer.length - truncationNotice.length;
+  const budget = EMBED_DESCRIPTION_LIMIT - footer.length - truncationNotice.length;
   let cut = body.lastIndexOf("\n", budget);
   if (cut < budget / 2) cut = budget; // no convenient newline — hard cut
   const truncated = body.slice(0, cut).trimEnd();

@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
 import * as path from "pathe";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
 import type { AsyncEchoObject } from "./worker.ts";
 
 /**
@@ -30,11 +30,12 @@ export const AsyncContainerWorker = Cloudflare.Worker("AsyncContainerWorker", {
   },
 });
 
-export default Alchemy.Stack(
-  "AsyncContainerStack",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
-  Effect.gen(function* () {
-    const worker = yield* AsyncContainerWorker;
-    return { url: worker.url.as<string>() };
-  }),
-);
+export default (state = Cloudflare.state()) =>
+  Alchemy.Stack(
+    "AsyncContainerStack",
+    { providers: Cloudflare.providers(), state },
+    Effect.gen(function* () {
+      const worker = yield* AsyncContainerWorker;
+      return { url: worker.url.as<string>() };
+    }),
+  );

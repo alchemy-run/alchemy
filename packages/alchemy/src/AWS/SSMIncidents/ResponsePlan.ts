@@ -106,9 +106,7 @@ export interface ResponsePlan extends Resource<
  * });
  * ```
  */
-const ResponsePlanResource = Resource<ResponsePlan>(
-  "AWS.SSMIncidents.ResponsePlan",
-);
+const ResponsePlanResource = Resource<ResponsePlan>("AWS.SSMIncidents.ResponsePlan");
 
 export { ResponsePlanResource as ResponsePlan };
 
@@ -133,15 +131,10 @@ export const ResponsePlanProvider = () =>
   Provider.effect(
     ResponsePlanResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
         // Response plan names can't contain spaces; physical names are
         // DNS-safe already.
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 200 }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 200 }));
       });
 
       const findArnByName = (name: string) =>
@@ -155,16 +148,9 @@ export const ResponsePlanProvider = () =>
       const getPlan = (arn: string) =>
         incidents
           .getResponsePlan({ arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
-      const observe = Effect.fn(function* (
-        name: string,
-        arn: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, arn: string | undefined) {
         if (arn !== undefined) {
           const byArn = yield* getPlan(arn);
           if (byArn !== undefined) return byArn;
@@ -178,9 +164,7 @@ export const ResponsePlanProvider = () =>
           Effect.map(
             (r) =>
               Object.fromEntries(
-                Object.entries(r.tags).filter(
-                  (e): e is [string, string] => e[1] !== undefined,
-                ),
+                Object.entries(r.tags).filter((e): e is [string, string] => e[1] !== undefined),
               ) as Record<string, string>,
           ),
           Effect.catch(() => Effect.succeed<Record<string, string>>({})),
@@ -259,8 +243,7 @@ export const ResponsePlanProvider = () =>
               impact: news.incidentTemplate.impact,
               summary: news.incidentTemplate.summary ?? "",
               dedupeString: news.incidentTemplate.dedupeString ?? "",
-              notificationTargets:
-                news.incidentTemplate.notificationTargets ?? [],
+              notificationTargets: news.incidentTemplate.notificationTargets ?? [],
               incidentTags: news.incidentTemplate.incidentTags ?? {},
             },
             engagements: [...(news.engagements ?? [])].sort(),
@@ -274,8 +257,7 @@ export const ResponsePlanProvider = () =>
               impact: plan.incidentTemplate.impact,
               summary: plan.incidentTemplate.summary ?? "",
               dedupeString: plan.incidentTemplate.dedupeString ?? "",
-              notificationTargets:
-                plan.incidentTemplate.notificationTargets ?? [],
+              notificationTargets: plan.incidentTemplate.notificationTargets ?? [],
               incidentTags: plan.incidentTemplate.incidentTags ?? {},
             },
             engagements: [...(plan.engagements ?? [])].sort(),
@@ -283,8 +265,7 @@ export const ResponsePlanProvider = () =>
             integrations: plan.integrations ?? [],
           };
           const chatChannelDelta =
-            news.chatChannel !== undefined &&
-            !same(plan.chatChannel, news.chatChannel);
+            news.chatChannel !== undefined && !same(plan.chatChannel, news.chatChannel);
           if (!same(desired, observed) || chatChannelDelta) {
             yield* incidents.updateResponsePlan({
               arn,
@@ -292,10 +273,8 @@ export const ResponsePlanProvider = () =>
               incidentTemplateTitle: desired.incidentTemplate.title,
               incidentTemplateImpact: desired.incidentTemplate.impact,
               incidentTemplateSummary: desired.incidentTemplate.summary,
-              incidentTemplateDedupeString:
-                desired.incidentTemplate.dedupeString,
-              incidentTemplateNotificationTargets:
-                desired.incidentTemplate.notificationTargets,
+              incidentTemplateDedupeString: desired.incidentTemplate.dedupeString,
+              incidentTemplateNotificationTargets: desired.incidentTemplate.notificationTargets,
               incidentTemplateTags: desired.incidentTemplate.incidentTags,
               chatChannel: news.chatChannel,
               engagements: desired.engagements,
@@ -327,9 +306,7 @@ export const ResponsePlanProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // deleteResponsePlan is idempotent for missing plans; tolerate the
           // typed not-found in case AWS starts returning it.
-          yield* incidents
-            .deleteResponsePlan({ arn: output.arn })
-            .pipe(Effect.asVoid);
+          yield* incidents.deleteResponsePlan({ arn: output.arn }).pipe(Effect.asVoid);
         }),
       });
     }),

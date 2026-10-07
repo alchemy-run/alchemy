@@ -690,6 +690,24 @@ reconcile: Effect.fn(function* ({ id, news, output, session }) {
 
 9. Implement the test cases in `packages/alchemy/test/{Cloud}/{Service}/{Resource}.test.ts`.
 
+### Resource and runtime testing conventions
+
+Choose the deployment-based pattern that fits the behavior under test:
+
+- **Resource lifecycle and reconciliation:** use `test.provider` and `stack.deploy` for create, update, replacement, and deletion scenarios.
+- **Bindings and runtime behavior:** prefer a deployed Worker/Function fixture that exposes the behaviors under test. Share its deployment with `beforeAll`/`afterAll` and exercise it over HTTP or the relevant event source. Follow [Test Fixtures for Effect-Native Workers / Functions](#test-fixtures-for-effect-native-workers--functions).
+- **Lifecycle changes that affect runtime behavior:** a `test.provider` case can deploy a fixture and exercise it between updates.
+
+Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
+
+- Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
+- Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
+- Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
+- For a partial-update regression, configure non-default neighboring settings, exercise the update, and verify that unrelated settings remain unchanged. Ensure the relevant update path actually runs.
+- Keep production logic in its natural resource/provider location. Do not extract one-off reconciliation functions or modules solely to make them directly testable.
+
+Pure utility and engine unit tests remain appropriate for their own behavior; they do not replace live resource lifecycle coverage.
+
 Read through the established test cases before continuing so that you understand the pattern and structure of the test cases.
 
 - [S3 Bucket Test Cases](./test/AWS/S3/Bucket.test.ts)
@@ -813,7 +831,7 @@ Engine semantics (never re-implement these per provider):
 
 ## `LocalProvider.make` — long-running local providers
 
-A local provider whose physical resource is a **running process** (dev server, workerd instance) MUST be built with `LocalProvider.make(cls, serverEntryUrl, spec)` — do not hand-roll FiberMap/instance-registry/hash machinery in the provider:
+A local provider whose physical resource is a **running process** (dev server, workerd instance) MUST be built with `LocalProvider.make(cls, providersUrl, spec)` — do not hand-roll FiberMap/instance-registry/hash machinery in the provider:
 
 - **`resolveConfig(ctx)`** — the restart surface. Plain, canonically-hashable data only (no closures or runtime objects: derive plain *descriptors* here and materialize `BindingHook`s etc. inside `start` — see the descriptor/hook split in [LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts)). Must be cheap and side-effect-free — it runs inside `diff` on every plan. Its canonical hash decides noop-vs-restart AND the same value is handed to `start`, so "what changed?" and "what starts?" can never drift. Deliberately EXCLUDE runtime wiring observed at start time (e.g. queue consumers read from `LocalRuntimeState`) — sibling reconciles drive those via restart hooks, not config.
 - **`start(ctx)`** — boot ONE instance in the ambient `Scope` and return Attributes at *readiness*; the process keeps running until the runner closes the scope on restart/delete. For processes that can die on their own, fork `ctx.invalidate` after the exit so the next plan reports `update`.
@@ -857,8 +875,8 @@ Resolve the bindings, expose one route per behavior, default-export the class so
 // fixtures/worker.ts
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Gateway } from "./gateway.ts";
 
 export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
@@ -895,7 +913,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import TestWorker from "./fixtures/worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

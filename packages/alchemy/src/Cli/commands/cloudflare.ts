@@ -1,3 +1,4 @@
+import { Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -5,15 +6,13 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { Command, Flag } from "effect/unstable/cli";
-
 import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
 import type { CreatedToken } from "../../Alchemist/routes/cloudflareToken.ts";
-import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
-import { formatLocalTimestamp } from "../Format.ts";
+import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { formatLocalTimestamp } from "../Format.ts";
 import { confirmOrDecline } from "./confirm.ts";
 import { envFile, parseSince, profile, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
@@ -25,29 +24,23 @@ const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
   "com.cloudflare.edge.r2.bucket": "r2",
 };
 
-export const formatCreatedCloudflareToken = (
-  result: CreatedToken,
-  token: string,
-) =>
+export const formatCreatedCloudflareToken = (result: CreatedToken, token: string) =>
   [
     "",
     `Created Cloudflare API token "${result.name}" (${result.id}).`,
     `Granted ${result.grantedPermissionGroups} permission group(s) across ${result.policies.length} policy(ies)${
-      result.verificationStatus
-        ? `; token status: ${result.verificationStatus}.`
-        : "."
+      result.verificationStatus ? `; token status: ${result.verificationStatus}.` : "."
     }`,
     "",
     token,
     "",
     "Store this value now — Cloudflare only shows it once. Use it as CLOUDFLARE_API_TOKEN.",
     ...result.diagnostics.map(
-      (diagnostic) =>
-        `${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`,
+      (diagnostic) => `${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`,
     ),
   ].join("\n");
 
-const cloudflareForce = Flag.boolean("force").pipe(
+const cloudflareForce = Flag.Boolean("force").pipe(
   Flag.withDescription(
     "Force a full redeploy even if the state-store worker already exists. " +
       "Without this flag, an existing worker is adopted and only its credentials are refreshed.",
@@ -55,7 +48,7 @@ const cloudflareForce = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
-const cloudflareWorkerName = Flag.string("worker-name").pipe(
+const cloudflareWorkerName = Flag.String("worker-name").pipe(
   Flag.withDescription(
     "Override the default state-store worker name (advanced; only needed for multiple state stores per account).",
   ),
@@ -73,11 +66,7 @@ const bootstrapCommand = Command.make(
   },
   instrumentCommand(
     "provider.cloudflare.bootstrap",
-    (a: {
-      profile: string | undefined;
-      force: boolean;
-      workerName: string | undefined;
-    }) => ({
+    (a: { profile: string | undefined; force: boolean; workerName: string | undefined }) => ({
       "alchemy.profile": a.profile ?? "",
       "alchemy.force": a.force,
       "alchemy.worker_name": a.workerName ?? "",
@@ -92,11 +81,7 @@ const bootstrapCommand = Command.make(
       });
     }),
   ),
-).pipe(
-  Command.withDescription(
-    "Provision Cloudflare account prerequisites for deployments",
-  ),
-);
+).pipe(Command.withDescription("Provision Cloudflare account prerequisites for deployments"));
 
 const teardownCommand = Command.make(
   "teardown",
@@ -116,8 +101,7 @@ const teardownCommand = Command.make(
     Effect.fn(function* ({ envFile, profile, workerName, yes: approved }) {
       yield* confirmOrDecline({
         yes: approved,
-        message:
-          "Tear down the Cloudflare state store and its backing resources?",
+        message: "Tear down the Cloudflare state store and its backing resources?",
         confirmLabel: "Destroy",
         cancelLabel: "Cancel",
       });
@@ -128,11 +112,8 @@ const teardownCommand = Command.make(
       });
     }),
   ),
-).pipe(
-  Command.withDescription("Tear down the Cloudflare state store"),
-  Command.unlisted,
-);
-const allPermissionsFlag = Flag.boolean("all-permissions").pipe(
+).pipe(Command.withDescription("Tear down the Cloudflare state store"), Command.unlisted);
+const allPermissionsFlag = Flag.Boolean("all-permissions").pipe(
   Flag.withDescription(
     "Grant the token EVERY Cloudflare permission group (a 'god token'). " +
       "Use with care — it has full access to your account.",
@@ -140,7 +121,7 @@ const allPermissionsFlag = Flag.boolean("all-permissions").pipe(
   Flag.withDefault(false),
 );
 
-const tokenNameFlag = Flag.string("name").pipe(
+const tokenNameFlag = Flag.String("name").pipe(
   Flag.withDescription(
     "Name for the API token. Defaults to 'alchemy' (or 'alchemy-all-permissions').",
   ),
@@ -148,7 +129,7 @@ const tokenNameFlag = Flag.string("name").pipe(
   Flag.map(Option.getOrUndefined),
 );
 
-const tokenAccountIdFlag = Flag.string("account-id").pipe(
+const tokenAccountIdFlag = Flag.String("account-id").pipe(
   Flag.withDescription(
     "Cloudflare account ID(s) to scope the token to (comma-separated for " +
       "multiple). If omitted, you'll be prompted to select from your accounts.",
@@ -195,19 +176,10 @@ const createTokenCommand = Command.make(
     accountId: tokenAccountIdFlag,
     yes,
   },
-  instrumentCommand(
-    "cloudflare.create-token",
-    (a: { allPermissions: boolean }) => ({
-      "alchemy.all_permissions": a.allPermissions,
-    }),
-  )(
-    Effect.fn(function* ({
-      envFile,
-      allPermissions,
-      name,
-      accountId,
-      yes: approved,
-    }) {
+  instrumentCommand("cloudflare.create-token", (a: { allPermissions: boolean }) => ({
+    "alchemy.all_permissions": a.allPermissions,
+  }))(
+    Effect.fn(function* ({ envFile, allPermissions, name, accountId, yes: approved }) {
       const prompt = yield* CliKit.CliKit;
       const provider = yield* loadConfigProvider(envFile);
       const read = <A>(config: Config.Config<Option.Option<A>>) =>
@@ -216,21 +188,17 @@ const createTokenCommand = Command.make(
           Effect.map(Option.getOrUndefined),
         );
       const apiKey =
-        (yield* read(
-          Config.string("CLOUDFLARE_API_KEY").pipe(Config.option),
-        )) ??
+        (yield* read(Config.String("CLOUDFLARE_API_KEY").pipe(Config.option))) ??
         (yield* prompt.prompt.password({
           message:
             "Paste your Global API Key (see bottom of https://dash.cloudflare.com/profile/api-tokens)",
-          validate: (value) =>
-            value.trim().length === 0 ? "Required" : undefined,
+          validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
         }));
       const email =
-        (yield* read(Config.string("CLOUDFLARE_EMAIL").pipe(Config.option))) ??
+        (yield* read(Config.String("CLOUDFLARE_EMAIL").pipe(Config.option))) ??
         (yield* prompt.prompt.text({
           message: "Cloudflare account email",
-          validate: (value) =>
-            value.trim().length === 0 ? "Required" : undefined,
+          validate: (value) => (value.trim().length === 0 ? "Required" : undefined),
         }));
       const credentials = { email, apiKey: Redacted.make(apiKey) };
       const catalog = yield* CloudflareToken.catalog(credentials);
@@ -253,8 +221,7 @@ const createTokenCommand = Command.make(
         (yield* prompt.prompt.text({
           message: "Token name",
           placeholder: allPermissions ? "alchemy-superuser" : "alchemy",
-          validate: (value) =>
-            value.trim().length === 0 ? "Token name is required" : undefined,
+          validate: (value) => (value.trim().length === 0 ? "Token name is required" : undefined),
         }));
       const permissionGroupIds = allPermissions
         ? ("all" as const)
@@ -271,8 +238,7 @@ const createTokenCommand = Command.make(
               .map((group) => ({
                 value: group.id,
                 label: group.name,
-                description:
-                  SELECTABLE_SCOPE_LABELS[group.scopes[0]!] ?? group.scopes[0],
+                description: SELECTABLE_SCOPE_LABELS[group.scopes[0]!] ?? group.scopes[0],
               })),
             required: true,
           });
@@ -300,14 +266,12 @@ const createTokenCommand = Command.make(
         credentials,
         plan,
       });
-      yield* Console.log(
-        formatCreatedCloudflareToken(result, Redacted.value(result.value)),
-      );
+      yield* Console.log(formatCreatedCloudflareToken(result, Redacted.value(result.value)));
     }),
   ),
 ).pipe(Command.withDescription("Create a scoped Cloudflare API token"));
 
-const tailFlag = Flag.boolean("tail").pipe(
+const tailFlag = Flag.Boolean("tail").pipe(
   Flag.withAlias("t"),
   Flag.withDescription(
     "Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries.",
@@ -315,15 +279,13 @@ const tailFlag = Flag.boolean("tail").pipe(
   Flag.withDefault(false),
 );
 
-const limitFlag = Flag.integer("limit").pipe(
+const limitFlag = Flag.Int("limit").pipe(
   Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
   Flag.withDefault(100),
 );
 
-const sinceFlag = Flag.string("since").pipe(
-  Flag.withDescription(
-    "Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')",
-  ),
+const sinceFlag = Flag.String("since").pipe(
+  Flag.withDescription("Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );
@@ -385,9 +347,7 @@ const stateLogsCommand = Command.make(
       for (const line of lines) yield* Console.log(formatLine(line));
     }),
   ),
-).pipe(
-  Command.withDescription("Stream or fetch logs from the state-store worker"),
-);
+).pipe(Command.withDescription("Stream or fetch logs from the state-store worker"));
 
 const stateCommand = Command.make("state", {}).pipe(
   Command.withDescription("Manage the Cloudflare-hosted state store"),
@@ -396,10 +356,5 @@ const stateCommand = Command.make("state", {}).pipe(
 
 export const cloudflareCommand = Command.make("cloudflare", {}).pipe(
   Command.withDescription("Manage Cloudflare provider prerequisites"),
-  Command.withSubcommands([
-    bootstrapCommand,
-    teardownCommand,
-    createTokenCommand,
-    stateCommand,
-  ]),
+  Command.withSubcommands([bootstrapCommand, teardownCommand, createTokenCommand, stateCommand]),
 );

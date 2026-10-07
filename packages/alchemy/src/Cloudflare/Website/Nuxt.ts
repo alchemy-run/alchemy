@@ -19,9 +19,7 @@ import {
  */
 const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
-export interface NuxtProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface NuxtProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -134,7 +132,7 @@ export interface NuxtProps<
  * ```typescript
  * const site = yield* Cloudflare.Website.Nuxt("Website", {
  *   env: {
- *     API_KEY: Config.redacted("API_KEY"),
+ *     API_KEY: Config.Redacted("API_KEY"),
  *   },
  * });
  *
@@ -282,9 +280,10 @@ export const Nuxt: {
         | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -295,40 +294,48 @@ export const Nuxt: {
       | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?:
+    | InputProps<NuxtProps<Bindings>>
+    | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Nuxt(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?:
+          | InputProps<NuxtProps<Bindings>>
+          | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
+      ) => effectClass(Nuxt(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // The server build uses nitro's hybrid workerd node-compat
-            // (`cloudflare.nodeCompat: true`), which relies on workerd's
-            // native `node:*` modules — `getCompatibility` already adds
-            // `nodejs_compat` to every non-python Worker.
-            // `main` is the source provider's user-entry seam (nitro's
-            // entry), not the Worker's own bundling entry.
-            main: undefined!,
-            source: {
-              provider: NUXT_SOURCE_PROVIDER,
-              devMode: "server",
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // The server build uses nitro's hybrid workerd node-compat
+          // (`cloudflare.nodeCompat: true`), which relies on workerd's
+          // native `node:*` modules — `getCompatibility` already adds
+          // `nodejs_compat` to every non-python Worker.
+          // `main` is the source provider's user-entry seam (nitro's
+          // entry), not the Worker's own bundling entry.
+          main: undefined!,
+          source: {
+            provider: NUXT_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: {
               rootDir: props?.rootDir,
-              options: {
-                rootDir: props?.rootDir,
-                main: props?.main,
-                memo: props?.memo,
-                nuxt: props?.nuxt,
-              },
+              main: props?.main,
+              memo: props?.memo,
+              nuxt: props?.nuxt,
             },
-          }),
-        ),
+          },
+        })),
       )) as any;

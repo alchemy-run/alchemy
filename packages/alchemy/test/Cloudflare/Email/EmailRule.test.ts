@@ -1,10 +1,3 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { CatchAllRuleNotSupported } from "@/Cloudflare/Email/Rule.ts";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -13,24 +6,25 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { CatchAllRuleNotSupported } from "@/Cloudflare/Email/Rule.ts";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { emailRoutingScoped } from "./scope.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -42,9 +36,7 @@ const resolveZoneId = Effect.gen(function* () {
 // the email-routing enable operation's error union via distilled patches).
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const rideOutAuth = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const rideOutAuth = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
@@ -55,11 +47,9 @@ const rideOutAuth = <A, E extends { _tag: string }, R>(
 
 // Email Routing must be enabled on the zone for rules to be created and
 // visible to `list()`.
-const enableRouting = (zoneId: string) =>
-  rideOutAuth(emailRouting.enableEmailRouting({ zoneId }));
+const enableRouting = (zoneId: string) => rideOutAuth(emailRouting.enableEmailRouting({ zoneId }));
 
-const getCatchAll = (zoneId: string) =>
-  rideOutAuth(emailRouting.getRuleCatchAll({ zoneId }));
+const getCatchAll = (zoneId: string) => rideOutAuth(emailRouting.getRuleCatchAll({ zoneId }));
 
 const ADOPT_TO = `adopt-413@${zoneName}`;
 
@@ -110,20 +100,22 @@ const findOwnedError = findCauseError(
 );
 
 const findCatchAllError = findCauseError(
-  (value): value is CatchAllRuleNotSupported =>
-    value instanceof CatchAllRuleNotSupported,
+  (value): value is CatchAllRuleNotSupported => value instanceof CatchAllRuleNotSupported,
 );
 
-describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
-  // Canonical `list()` test (zone-scoped collection): email routing rules live
-  // under `/zones/{id}/email/routing/rules` with no account-wide enumeration
-  // API, so `list()` enumerates every zone via `listAllZones` and exhaustively
-  // paginates each zone's rules (skipping zones without Email Routing enabled).
-  // Deploy a rule on the standing test zone, then assert it appears in the
-  // exhaustively-paginated result.
-  test.provider(
-    "list enumerates the deployed email rule across all zones",
-    (stack) =>
+describe.sequential.skipIf(!emailRoutingScoped)(
+  "EmailRule",
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:email", "provider:cloudflare:zone", "live"],
+  },
+  () => {
+    // Canonical `list()` test (zone-scoped collection): email routing rules live
+    // under `/zones/{id}/email/routing/rules` with no account-wide enumeration
+    // API, so `list()` enumerates every zone via `listAllZones` and exhaustively
+    // paginates each zone's rules (skipping zones without Email Routing enabled).
+    // Deploy a rule on the standing test zone, then assert it appears in the
+    // exhaustively-paginated result.
+    test.provider("list enumerates the deployed email rule across all zones", (stack) =>
       Effect.gen(function* () {
         const zoneId = yield* resolveZoneId;
 
@@ -175,121 +167,116 @@ describe.sequential.skipIf(!emailRoutingScoped)("EmailRule", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-  );
+    );
 
-  // #413: a sole `{ type: "all" }` matcher is the zone catch-all, which
-  // already exists once Email Routing is enabled. Creating it as an
-  // Email.Rule 409s ("Invalid rule operation"). Fail fast with a typed
-  // error pointing at Email.CatchAll — that error is the proof no write
-  // happened. Sibling EmailCatchAll / WorkerTarget files PUT the same
-  // zone singleton concurrently, so do not snapshot enabled/name/actions
-  // (those race); the catch-all id is stable and proves we did not mint
-  // a second rule.
-  test.provider(
-    "refuses a sole { type: 'all' } matcher and leaves the catch-all untouched (#413)",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+    // #413: a sole `{ type: "all" }` matcher is the zone catch-all, which
+    // already exists once Email Routing is enabled. Creating it as an
+    // Email.Rule 409s ("Invalid rule operation"). Fail fast with a typed
+    // error pointing at Email.CatchAll — that error is the proof no write
+    // happened. Sibling EmailCatchAll / WorkerTarget files PUT the same
+    // zone singleton concurrently, so do not snapshot enabled/name/actions
+    // (those race); the catch-all id is stable and proves we did not mint
+    // a second rule.
+    test.provider(
+      "refuses a sole { type: 'all' } matcher and leaves the catch-all untouched (#413)",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        yield* enableRouting(zoneId);
+          yield* stack.destroy();
+          yield* enableRouting(zoneId);
 
-        const before = yield* getCatchAll(zoneId);
+          const before = yield* getCatchAll(zoneId);
 
-        const error = yield* stack
-          .deploy(
-            Cloudflare.Email.Rule("CatchAll", {
-              zone: zoneName,
-              matchers: [{ type: "all" }],
-              actions: [{ type: "drop" }],
-            }),
-          )
-          .pipe(
-            Effect.as(undefined),
-            Effect.catchCause((cause) =>
-              Effect.succeed(findCatchAllError(cause)),
-            ),
-          );
-        expect(error).toBeInstanceOf(CatchAllRuleNotSupported);
-        expect(String(error)).toContain("Cloudflare.Email.CatchAll");
+          const error = yield* stack
+            .deploy(
+              Cloudflare.Email.Rule("CatchAll", {
+                zone: zoneName,
+                matchers: [{ type: "all" }],
+                actions: [{ type: "drop" }],
+              }),
+            )
+            .pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findCatchAllError(cause))),
+            );
+          expect(error).toBeInstanceOf(CatchAllRuleNotSupported);
+          expect(String(error)).toContain("Cloudflare.Email.CatchAll");
 
-        const after = yield* getCatchAll(zoneId);
-        expect(after.id).toEqual(before.id);
+          const after = yield* getCatchAll(zoneId);
+          expect(after.id).toEqual(before.id);
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
-  );
+          yield* stack.destroy();
+        }).pipe(logLevel),
+    );
 
-  // A pre-existing non-catch-all rule with identical matchers must be
-  // adopted (same physical id) rather than duplicated on first deploy.
-  test.provider(
-    "adopts a pre-existing non-catch-all rule with identical matchers",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+    // A pre-existing non-catch-all rule with identical matchers must be
+    // adopted (same physical id) rather than duplicated on first deploy.
+    test.provider(
+      "adopts a pre-existing non-catch-all rule with identical matchers",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        yield* enableRouting(zoneId);
-        yield* purgeRuleByTo(zoneId, ADOPT_TO);
-        yield* Effect.addFinalizer(() =>
-          purgeRuleByTo(zoneId, ADOPT_TO).pipe(Effect.ignore),
-        );
+          yield* stack.destroy();
+          yield* enableRouting(zoneId);
+          yield* purgeRuleByTo(zoneId, ADOPT_TO);
+          yield* Effect.addFinalizer(() => purgeRuleByTo(zoneId, ADOPT_TO).pipe(Effect.ignore));
 
-        const pre = yield* rideOutAuth(
-          emailRouting.createRule({
-            zoneId,
-            name: "alchemy adopt 413",
-            matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
-            actions: [{ type: "drop" }],
-            enabled: true,
-            priority: 0,
-          }),
-        );
-        expect(pre.id).toBeTruthy();
-
-        const error = yield* stack
-          .deploy(
-            Cloudflare.Email.Rule("AdoptRule", {
-              zone: zoneName,
+          const pre = yield* rideOutAuth(
+            emailRouting.createRule({
+              zoneId,
               name: "alchemy adopt 413",
               matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
               actions: [{ type: "drop" }],
+              enabled: true,
+              priority: 0,
             }),
-          )
-          .pipe(
-            Effect.as(undefined),
-            Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
           );
-        expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+          expect(pre.id).toBeTruthy();
 
-        const adopted = yield* stack.deploy(
-          Cloudflare.Email.Rule("AdoptRule", {
-            zone: zoneName,
-            name: "alchemy adopt 413 v2",
-            matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
-            actions: [{ type: "drop" }],
-          }).pipe(adopt(true)),
-        );
-        expect(adopted.ruleId).toEqual(pre.id);
-        expect(adopted.name).toEqual("alchemy adopt 413 v2");
-        expect(adopted.matchers).toEqual([
-          { type: "literal", field: "to", value: ADOPT_TO },
-        ]);
+          const error = yield* stack
+            .deploy(
+              Cloudflare.Email.Rule("AdoptRule", {
+                zone: zoneName,
+                name: "alchemy adopt 413",
+                matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
+                actions: [{ type: "drop" }],
+              }),
+            )
+            .pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+            );
+          expect(error).toBeInstanceOf(OwnedBySomeoneElse);
 
-        const live = yield* rideOutAuth(
-          emailRouting.getRule({
-            zoneId,
-            ruleIdentifier: adopted.ruleId,
-          }),
-        );
-        expect(live.id).toEqual(pre.id);
-        expect(live.name).toEqual("alchemy adopt 413 v2");
+          const adopted = yield* stack.deploy(
+            Cloudflare.Email.Rule("AdoptRule", {
+              zone: zoneName,
+              name: "alchemy adopt 413 v2",
+              matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
+              actions: [{ type: "drop" }],
+            }).pipe(adopt(true)),
+          );
+          expect(adopted.ruleId).toEqual(pre.id);
+          expect(adopted.name).toEqual("alchemy adopt 413 v2");
+          expect(adopted.matchers).toEqual([{ type: "literal", field: "to", value: ADOPT_TO }]);
 
-        yield* stack.destroy();
+          const live = yield* rideOutAuth(
+            emailRouting.getRule({
+              zoneId,
+              ruleIdentifier: adopted.ruleId,
+            }),
+          );
+          expect(live.id).toEqual(pre.id);
+          expect(live.name).toEqual("alchemy adopt 413 v2");
 
-        const gone = yield* findRuleByTo(zoneId, ADOPT_TO);
-        expect(gone).toBeUndefined();
-      }).pipe(logLevel),
-    { timeout: 180_000 },
-  );
-});
+          yield* stack.destroy();
+
+          const gone = yield* findRuleByTo(zoneId, ADOPT_TO);
+          expect(gone).toBeUndefined();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+  },
+);

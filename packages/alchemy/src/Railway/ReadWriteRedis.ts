@@ -20,6 +20,7 @@ import type { WriteRedisClient } from "./WriteRedis.ts";
  * ```
  *
  * @binding
+ * @product Redis
  */
 export interface ReadWriteRedis extends Binding.Service<
   ReadWriteRedis,
@@ -27,9 +28,6 @@ export interface ReadWriteRedis extends Binding.Service<
   (redis: Redis) => Effect.Effect<ReadWriteRedisClient>
 > {}
 
-export const ReadWriteRedis = Binding.Service<ReadWriteRedis>(
-  "Railway.ReadWriteRedis",
-);
+export const ReadWriteRedis = Binding.Service<ReadWriteRedis>("Railway.ReadWriteRedis");
 
-export interface ReadWriteRedisClient
-  extends ReadRedisClient, WriteRedisClient {}
+export interface ReadWriteRedisClient extends ReadRedisClient, WriteRedisClient {}

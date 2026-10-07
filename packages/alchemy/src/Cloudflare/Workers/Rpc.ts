@@ -1,16 +1,16 @@
 import type * as cf from "@cloudflare/workers-types";
-
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { RpcClient, RpcSerialization, type Rpc, type RpcGroup } from "effect/rpc";
+import type * as RpcClientError from "effect/rpc/RpcClientError";
 import {
-  RpcClient,
-  RpcSerialization,
-  type Rpc,
-  type RpcGroup,
-} from "effect/unstable/rpc";
-import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
-import { asEffectOrStream, decodeRpcResult, RpcCallError } from "../../Rpc.ts";
+  asEffectOrStream,
+  decodeRpcResult,
+  makeRpcErrorReviver,
+  RpcCallError,
+  type RpcErrorClass,
+} from "../../Rpc.ts";
 import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 
@@ -34,12 +34,19 @@ export * from "../../Rpc.ts";
  */
 export const makeRpcStub = <Shape>(
   stubSource: unknown | Effect.Effect<unknown, never, never>,
+  options?: {
+    /**
+     * Declared error classes (see {@link RpcErrorClass}): failed method
+     * results whose `_tag` matches one are reconstructed as real class
+     * instances instead of the plain objects RPC serialization produces.
+     */
+    readonly errors?: ReadonlyArray<RpcErrorClass> | undefined;
+  },
 ): Shape => {
   const isLazy = isYieldableEffect(stubSource);
-  const eagerFetcher = isLazy
-    ? undefined
-    : fromCloudflareFetcher(stubSource as cf.Fetcher);
+  const eagerFetcher = isLazy ? undefined : fromCloudflareFetcher(stubSource as cf.Fetcher);
   const proxyTarget: object = eagerFetcher ?? {};
+  const revive = makeRpcErrorReviver(options?.errors);
 
   return new Proxy(proxyTarget, {
     get: (target: any, prop) => {
@@ -50,14 +57,11 @@ export const makeRpcStub = <Shape>(
       return (...args: any[]) =>
         asEffectOrStream(
           Effect.gen(function* () {
-            const stub = isLazy
-              ? yield* stubSource as Effect.Effect<any>
-              : stubSource;
+            const stub = isLazy ? yield* stubSource as Effect.Effect<any> : stubSource;
             return yield* Effect.tryPromise({
               try: () => (stub as any)[prop](...args),
-              catch: (cause) =>
-                new RpcCallError({ method: String(prop), cause }),
-            }).pipe(Effect.flatMap(decodeRpcResult));
+              catch: (cause) => new RpcCallError({ method: String(prop), cause }),
+            }).pipe(Effect.flatMap((value) => decodeRpcResult(value, revive)));
           }),
         );
     },
@@ -106,9 +110,10 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
           return HttpClient.make((request) => stub.fetch(request));
         }),
       );
-      const protocol = RpcClient.layerProtocolHttp({
-        url: "http://alchemy-rpc/",
-      }).pipe(Layer.provide(serialization), Layer.provide(httpClient));
+      const protocol = RpcClient.layerProtocolHttp({ url: "http://alchemy-rpc/" }).pipe(
+        Layer.provide(serialization),
+        Layer.provide(httpClient),
+      );
       return yield* RpcClient.make(group).pipe(Effect.provide(protocol));
     }) as any,
   };

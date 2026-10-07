@@ -1,9 +1,33 @@
-export {};
+import { preferLocalFlociImage } from "./floci-image.ts";
+
+// `bun test:examples --profile testing` — the example suites read the
+// profile from `ALCHEMY_PROFILE` (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`),
+// so translate the flag into the env every spawned `bun test` inherits.
+// Without this the flag was silently ignored and every suite ran against
+// the `default` profile, which only works when the shell already exports
+// `ALCHEMY_PROFILE`.
+{
+  const argv = process.argv.slice(2);
+  const index = argv.findIndex((arg) => arg === "--profile" || arg.startsWith("--profile="));
+  if (index !== -1) {
+    const arg = argv[index]!;
+    const profile = arg.includes("=") ? arg.slice("--profile=".length) : argv[index + 1];
+    if (profile === undefined || profile.startsWith("-")) {
+      console.error("--profile requires a value, e.g. --profile testing");
+      process.exit(2);
+    }
+    process.env.ALCHEMY_PROFILE = profile;
+  }
+}
+
+// The AWS examples run against the floci emulator: use the locally built
+// image when there is one so an emulator fix is testable before its
+// release image lands on GHCR.
+preferLocalFlociImage("test:examples");
 
 const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
-  "./examples/cloudflare-pr-package",
   "./examples/cloudflare-worker-async",
   "./examples/cloudflare-website-tanstack-start",
   "./examples/cloudflare-tanstack-start-solid",
@@ -19,7 +43,9 @@ const examples = [
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-react-router",
   "./examples/cloudflare-website-sveltekit",
+  "./examples/cloudflare-website-service-bindings",
   "./examples/cloudflare-website-vite",
+  "./examples/cloudflare-website-vinext",
   "./examples/cloudflare-website-waku",
   "./examples/cloudflare-website-vocs",
   "./examples/aws-dev",
@@ -35,6 +61,7 @@ const examples = [
   // "./examples/aws-website-sveltekit",
   // "./examples/aws-website-tanstack-start",
   // "./examples/aws-website-vite",
+  // "./examples/aws-website-vinext",
   // "./examples/aws-website-waku",
   "./examples/fly-app",
   "./examples/fly-service",
@@ -60,6 +87,7 @@ const examples = [
   // "./examples/fly-website-solidstart",
   // "./examples/fly-website-sveltekit",
   // "./examples/fly-website-tanstack-start",
+  // "./examples/fly-website-vinext",
   // "./examples/fly-website-waku",
   // "./examples/fly-website-vocs",
   // "./examples/hetzner-website-astro",
@@ -70,6 +98,7 @@ const examples = [
   // "./examples/hetzner-website-solidstart",
   // "./examples/hetzner-website-sveltekit",
   // "./examples/hetzner-website-tanstack-start",
+  // "./examples/hetzner-website-vinext",
   // "./examples/hetzner-website-waku",
   // "./examples/hetzner-website-vocs",
   // "./examples/railway-website-astro",
@@ -80,6 +109,7 @@ const examples = [
   // "./examples/railway-website-solidstart",
   // "./examples/railway-website-sveltekit",
   // "./examples/railway-website-tanstack-start",
+  // "./examples/railway-website-vinext",
   // "./examples/railway-website-waku",
   // "./examples/railway-website-vocs",
   "./examples/fly-sprite",
@@ -87,6 +117,13 @@ const examples = [
   "./examples/fly-bucket",
   "./examples/fly-postgres",
 ] as const;
+
+// The AWS examples share one floci emulator container (`alchemy-floci`):
+// two `alchemy dev` sessions ensuring it at the same time race to recreate
+// it on an image bump and hot-swap each other's Lambda code, so they run
+// one at a time. Everything else stays concurrent.
+const serialGroup = (example: string): string | undefined =>
+  example.startsWith("./examples/aws-") ? "floci" : undefined;
 
 type CommandResult = {
   label: string;
@@ -96,19 +133,23 @@ type CommandResult = {
   stderr: string;
 };
 
-type TaskState = {
+type Task = {
   label: string;
   command: readonly string[];
   cwd?: string;
+  /** Tasks sharing a key run one at a time, in list order. */
+  serial?: string;
+};
+
+type TaskState = Task & {
   status: "pending" | "running" | "ok" | "failed";
   startedAt?: number;
   endedAt?: number;
   exitCode?: number | null;
 };
 
-const readStream = async (
-  stream: ReadableStream<Uint8Array>,
-): Promise<string> => new Response(stream).text();
+const readStream = async (stream: ReadableStream<Uint8Array>): Promise<string> =>
+  new Response(stream).text();
 
 const elapsedSeconds = (state: TaskState): string => {
   if (state.startedAt === undefined) {
@@ -118,17 +159,12 @@ const elapsedSeconds = (state: TaskState): string => {
   return `${Math.round((endedAt - state.startedAt) / 1000)}s`;
 };
 
-const makeStatusRenderer = (states: readonly TaskState[]) => {
+const makeStatusRenderer = (title: string, states: readonly TaskState[]) => {
   const interactive = process.stdout.isTTY === true;
   let renderedRows = 0;
 
   const taskLine = (state: TaskState) => {
-    const icon =
-      state.status === "ok"
-        ? "ok"
-        : state.status === "failed"
-          ? "failed"
-          : state.status;
+    const icon = state.status === "ok" ? "ok" : state.status === "failed" ? "failed" : state.status;
     const exit =
       state.exitCode === undefined || state.exitCode === 0
         ? ""
@@ -144,7 +180,7 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
   const rowsForAll = (output: readonly string[]) =>
     output.reduce((total, line) => total + rowsFor(line), 0);
 
-  const fullLines = () => ["Example tests", ...states.map(taskLine)];
+  const fullLines = () => [title, ...states.map(taskLine)];
 
   // The in-place repaint moves the cursor up with `\x1b[NF`, which cannot
   // climb above the top of the viewport: if a paint is taller than the
@@ -160,26 +196,19 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
     }
     const done = states.filter((state) => state.status === "ok").length;
     const active = states.filter((state) => state.status !== "ok");
-    const header = `Example tests (${done}/${states.length} ok)`;
+    const header = `${title} (${done}/${states.length} ok)`;
     const activeLines = active.map(taskLine);
     let shown = activeLines.length;
     const fits = (count: number) => {
       const overflow = count < activeLines.length ? 1 : 0;
-      return (
-        rowsForAll([header, ...activeLines.slice(0, count)]) + overflow + 1 <=
-        rows
-      );
+      return rowsForAll([header, ...activeLines.slice(0, count)]) + overflow + 1 <= rows;
     };
     while (shown > 0 && !fits(shown)) {
       shown--;
     }
     return shown === activeLines.length
       ? [header, ...activeLines]
-      : [
-          header,
-          ...activeLines.slice(0, shown),
-          `  … ${activeLines.length - shown} more`,
-        ];
+      : [header, ...activeLines.slice(0, shown), `  … ${activeLines.length - shown} more`];
   };
 
   return {
@@ -224,10 +253,7 @@ const makeStatusRenderer = (states: readonly TaskState[]) => {
   };
 };
 
-const run = async (
-  state: TaskState,
-  render: () => void,
-): Promise<CommandResult> => {
+const run = async (state: TaskState, render: () => void): Promise<CommandResult> => {
   state.status = "running";
   state.startedAt = performance.now();
   render();
@@ -263,26 +289,57 @@ const run = async (
 };
 
 const runParallel = async (
-  tasks: readonly {
-    label: string;
-    command: readonly string[];
-    cwd?: string;
-  }[],
+  title: string,
+  tasks: readonly Task[],
+  options?: { readonly concurrency?: number },
 ): Promise<readonly CommandResult[]> => {
   const states = tasks.map((task): TaskState => ({
     ...task,
     status: "pending",
   }));
-  const renderer = makeStatusRenderer(states);
+  const renderer = makeStatusRenderer(title, states);
   renderer.render();
   const interval = setInterval(() => renderer.render(), 1000);
+  const chains = new Map<string, Promise<unknown>>();
+
+  // At most `concurrency` tasks run at once; the rest wait for a slot.
+  const limit = options?.concurrency ?? Infinity;
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  const acquire = () =>
+    new Promise<void>((resolve) => {
+      if (active < limit) {
+        active++;
+        resolve();
+      } else {
+        waiting.push(() => {
+          active++;
+          resolve();
+        });
+      }
+    });
+  const release = () => {
+    active--;
+    waiting.shift()?.();
+  };
 
   try {
     return await Promise.all(
-      states.map(async (state) => {
-        const result = await run(state, () => renderer.render());
-        if (result.exitCode !== 0) renderer.failure(result);
-        return result;
+      states.map((state) => {
+        const start = async () => {
+          await acquire();
+          try {
+            const result = await run(state, () => renderer.render());
+            if (result.exitCode !== 0) renderer.failure(result);
+            return result;
+          } finally {
+            release();
+          }
+        };
+        if (state.serial === undefined) return start();
+        const next = (chains.get(state.serial) ?? Promise.resolve()).then(start, start);
+        chains.set(state.serial, next);
+        return next;
       }),
     );
   } finally {
@@ -292,6 +349,7 @@ const runParallel = async (
 };
 
 const testResults = await runParallel(
+  "Example tests",
   examples.map((example) => ({
     label: example,
     // Run `bun test` IN the example directory. Concurrent
@@ -300,6 +358,7 @@ const testResults = await runParallel(
     // ever spawn the actual test process.
     command: ["bun", "test"] as const,
     cwd: example,
+    serial: serialGroup(example),
   })),
 );
 const failedTests = testResults.filter((result) => result.exitCode !== 0);
@@ -308,19 +367,23 @@ if (failedTests.length > 0) {
   console.error("\nFailed example tests:");
   for (const failure of failedTests) {
     const exit = failure.exitCode === null ? "signal" : failure.exitCode;
-    console.error(
-      `- ${failure.label} (exit ${exit}): ${failure.command.join(" ")}`,
-    );
+    console.error(`- ${failure.label} (exit ${exit}): ${failure.command.join(" ")}`);
   }
 
   process.exit(1);
 }
 
 const cliResults = await runParallel(
+  "Example CLI lifecycle",
   examples.map((example) => ({
     label: `${example} CLI lifecycle`,
     command: ["bun", "scripts/test-example-cli.ts", example],
+    serial: serialGroup(example),
   })),
+  // Each `alchemy dev` session is a CLI, an exec child, sidecars, workerd
+  // and a bundler watch loop; 30 at once starve each other past the
+  // 4-minute readiness timeout.
+  { concurrency: 8 },
 );
 const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
 
@@ -333,7 +396,7 @@ if (failedCliTests.length > 0) {
   process.exit(1);
 }
 
-const [formatFailure] = await runParallel([
+const [formatFailure] = await runParallel("Format", [
   { label: "format", command: ["bun", "run", "format"] },
 ]);
 if (formatFailure.exitCode !== 0) {

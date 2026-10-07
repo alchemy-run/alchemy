@@ -34,7 +34,6 @@ export interface GetEc2DeepInspectionConfiguration extends Binding.Service<
     >
   >
 > {}
-export const GetEc2DeepInspectionConfiguration =
-  Binding.Service<GetEc2DeepInspectionConfiguration>(
-    "AWS.Inspector2.GetEc2DeepInspectionConfiguration",
-  );
+export const GetEc2DeepInspectionConfiguration = Binding.Service<GetEc2DeepInspectionConfiguration>(
+  "AWS.Inspector2.GetEc2DeepInspectionConfiguration",
+);

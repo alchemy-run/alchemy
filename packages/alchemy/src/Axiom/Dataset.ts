@@ -7,6 +7,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
+import { otelDatasetHeader } from "./OtelHeaders.ts";
 import type { Providers } from "./Providers.ts";
 
 export type DatasetKind =
@@ -72,7 +73,9 @@ export type Dataset = Resource<
     /** OTLP/HTTP metrics endpoint. */
     otelMetricsEndpoint: string;
     /**
-     * Headers required for OTLP shipping aside from the bearer token.
+     * Headers required for OTLP shipping aside from the bearer token:
+     * `X-Axiom-Dataset`, or `X-Axiom-Metrics-Dataset` for an
+     * `otel:metrics:v1` dataset.
      * Add `Authorization: Bearer <AXIOM_TOKEN>` separately at runtime so the
      * secret is never persisted in resource state.
      */
@@ -130,6 +133,7 @@ export type Dataset = Resource<
  * ```
  *
  * @resource
+ * @product Dataset
  */
 export const Dataset = Resource<Dataset>("Axiom.Dataset");
 
@@ -145,16 +149,12 @@ const MARKER_RE = /\s*\[alchemy:stack=([^;]+);stage=([^;]+);id=([^\]]+)\]\s*$/;
 const buildMarker = (stack: string, stage: string, id: string) =>
   `[alchemy:stack=${stack};stage=${stage};id=${id}]`;
 
-const augmentDescription = (
-  description: string | undefined,
-  marker: string,
-) => {
+const augmentDescription = (description: string | undefined, marker: string) => {
   const base = stripMarker(description ?? "");
   return base.length > 0 ? `${base}\n${marker}` : marker;
 };
 
-const stripMarker = (description: string): string =>
-  description.replace(MARKER_RE, "").trimEnd();
+const stripMarker = (description: string): string => description.replace(MARKER_RE, "").trimEnd();
 
 const parseMarker = (
   description: string | undefined,
@@ -179,9 +179,7 @@ export const DatasetProvider = () =>
       const toAttrs = Effect.fn(function* (dataset: Axiom.Dataset) {
         if (!dataset.edgeDeployment || !dataset.edgeDeploymentUrl) {
           return yield* Effect.fail(
-            new Error(
-              `Axiom dataset "${dataset.name}" is missing its edge deployment metadata`,
-            ),
+            new Error(`Axiom dataset "${dataset.name}" is missing its edge deployment metadata`),
           );
         }
         const apiRoot = apiBaseUrl.replace(/\/$/, "");
@@ -200,7 +198,7 @@ export const DatasetProvider = () =>
           otelLogsEndpoint: `${otelRoot}/v1/logs`,
           otelMetricsEndpoint: `${otelRoot}/v1/metrics`,
           otelHeaders: {
-            "X-Axiom-Dataset": dataset.name,
+            [otelDatasetHeader(dataset.kind === "otel:metrics:v1")]: dataset.name,
           } as Record<string, string>,
         };
       });
@@ -224,11 +222,7 @@ export const DatasetProvider = () =>
           if (news.kind && output && news.kind !== output.kind) {
             return { action: "replace" } as const;
           }
-          if (
-            news.edgeDeployment &&
-            output &&
-            news.edgeDeployment !== output.edgeDeployment
-          ) {
+          if (news.edgeDeployment && output && news.edgeDeployment !== output.edgeDeployment) {
             return { action: "replace" } as const;
           }
           if (
@@ -268,16 +262,10 @@ export const DatasetProvider = () =>
                 kind: news.kind,
                 retentionDays: news.retentionDays,
                 useRetentionPeriod: news.useRetentionPeriod,
-              }) as Effect.Effect<
-                Axiom.Dataset,
-                { readonly _tag: string },
-                never
-              >
+              }) as Effect.Effect<Axiom.Dataset, { readonly _tag: string }, never>
             ).pipe(
               Effect.catchIf(
-                (
-                  e,
-                ): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
+                (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
                   e._tag === "Conflict" || e._tag === "UnprocessableEntity",
                 () =>
                   update({
@@ -294,10 +282,7 @@ export const DatasetProvider = () =>
           // Sync — the dataset exists. Apply mutable aspects (description,
           // retentionDays, useRetentionPeriod) via PATCH. `kind` and `name`
           // are stable and replacement-only via diff above.
-          const desiredDescription = augmentDescription(
-            news.description,
-            marker,
-          );
+          const desiredDescription = augmentDescription(news.description, marker);
           const needsSync =
             current.description !== desiredDescription ||
             current.retentionDays !== news.retentionDays ||

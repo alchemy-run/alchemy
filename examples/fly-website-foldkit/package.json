@@ -2,6 +2,11 @@
   "name": "fly-website-foldkit",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/fly-website-foldkit"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -10,26 +15,21 @@
     "test": "bun test"
   },
   "dependencies": {
-    "effect": "catalog:effect",
-    "foldkit": "catalog:frontend"
+    "effect": "catalog:",
+    "foldkit": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
-    "@effect/platform-node": "catalog:effect",
-    "@foldkit/vite-plugin": "catalog:frontend",
-    "@tailwindcss/vite": "catalog:frontend",
+    "@effect/platform-node": "catalog:",
+    "@foldkit/vite-plugin": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
-    "tailwindcss": "catalog:frontend",
-    "typescript": "catalog:build",
-    "vite": "catalog:build"
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/fly-website-foldkit"
   }
 }

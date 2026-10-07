@@ -41,13 +41,8 @@ export interface UploadLayerPart extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UploadLayerPartRequest,
-    ) => Effect.Effect<
-      ecrpublic.UploadLayerPartResponse,
-      ecrpublic.UploadLayerPartError
-    >
+    ) => Effect.Effect<ecrpublic.UploadLayerPartResponse, ecrpublic.UploadLayerPartError>
   >
 > {}
 
-export const UploadLayerPart = Binding.Service<UploadLayerPart>(
-  "AWS.ECRPublic.UploadLayerPart",
-);
+export const UploadLayerPart = Binding.Service<UploadLayerPart>("AWS.ECRPublic.UploadLayerPart");

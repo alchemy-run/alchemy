@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -13,6 +13,15 @@ import * as NodeNet from "node:net";
  * the state tree the same way, for the same reason.)
  */
 export const initialCwd: string = process.cwd();
+
+/**
+ * The extension of alchemy's own modules next to `importMetaUrl`: `.ts`
+ * when running from `src/` (Bun, or Node under the dev loader), `.js`
+ * from the compiled `lib/`. The dev loader namespaces file URLs with a
+ * query, so only the pathname is consulted.
+ */
+export const moduleExtension = (importMetaUrl: string) =>
+  new URL(importMetaUrl).pathname.endsWith(".ts") ? ".ts" : ".js";
 
 /**
  * Opt out of cross-spawn's temporary `process.chdir` dance.
@@ -61,9 +70,7 @@ export const disableCrossSpawnChdir = (): void => {
 export const nodeLoaderArgs = (entry: string): string[] => [
   "--import",
   import.meta.resolve(
-    /\.[cm]?tsx?$/.test(entry)
-      ? "../../bin/register-dev-mode.js"
-      : "../../bin/register-oxc.js",
+    /\.[cm]?tsx?$/.test(entry) ? "../../bin/register-dev-mode.js" : "../../bin/register-oxc.js",
   ),
 ];
 
@@ -77,13 +84,9 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * `bin/cli.js` mirrors this predicate inline — it must run under plain node
  * before any `.ts` can load. Keep the two in sync.
  */
-export const isRegisterHooksSupported = (
-  version = process.versions.node,
-): boolean => {
+export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
   const [major = 0, minor = 0] = version.split(".").map(Number);
-  return (
-    (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24
-  );
+  return (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
 };
 
 /**
@@ -100,19 +103,14 @@ export const findAvailablePort = (host = "127.0.0.1") =>
     server.once("error", (error) => resume(Effect.fail(error)));
     server.listen(0, host, () => {
       const address = server.address();
-      const port =
-        typeof address === "object" && address !== null
-          ? address.port
-          : undefined;
+      const port = typeof address === "object" && address !== null ? address.port : undefined;
       server.close((error) => {
         if (error) {
           resume(Effect.fail(error));
         } else if (port !== undefined) {
           resume(Effect.succeed(port));
         } else {
-          resume(
-            Effect.fail(new Error("Failed to allocate an available port")),
-          );
+          resume(Effect.fail(new Error("Failed to allocate an available port")));
         }
       });
     });

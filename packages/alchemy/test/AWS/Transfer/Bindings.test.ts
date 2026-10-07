@@ -1,28 +1,23 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as transfer from "@distilled.cloud/aws/transfer";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import TransferTestFunctionLive, { TransferTestFunction } from "./handler";
-import TransferWorkflowTestFunctionLive, {
-  TransferWorkflowTestFunction,
-} from "./workflow-handler";
+import TransferWorkflowTestFunctionLive, { TransferWorkflowTestFunction } from "./workflow-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 const probeReady = (readinessUrl: string) =>
   HttpClient.get(readinessUrl).pipe(
@@ -36,16 +31,12 @@ const probeReady = (readinessUrl: string) =>
 
 // Ungated typed-error probes: prove the distilled error unions carry the
 // tags the bindings and providers depend on, at near-zero cost.
-describe("typed-error probes", () => {
-  test.provider(
-    "startServer on a nonexistent server fails with ResourceNotFoundException",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          transfer.startServer({ ServerId: "s-00000000000000000" }),
-        );
-        expect(error._tag).toBe("ResourceNotFoundException");
-      }),
+describe("typed-error probes", { tags: ["provider:aws", "provider:aws:transfer", "live"] }, () => {
+  test.provider("startServer on a nonexistent server fails with ResourceNotFoundException", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(transfer.startServer({ ServerId: "s-00000000000000000" }));
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
   );
 
   test.provider(
@@ -78,82 +69,73 @@ describe("typed-error probes", () => {
       }),
   );
 
-  test.provider(
-    "sendWorkflowStepState on a nonexistent workflow fails with a typed tag",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          transfer.sendWorkflowStepState({
-            WorkflowId: "w-1234567890abcdef0",
-            ExecutionId: "00000000-0000-0000-0000-000000000000",
-            Token: "MA==",
-            Status: "SUCCESS",
-          }),
-        );
-        // Transfer rejects the nonexistent workflow with the typed
-        // ValidationException (from the shared CommonErrors union).
-        expect([
-          "ResourceNotFoundException",
-          "InvalidRequestException",
-          "ValidationException",
-        ]).toContain(error._tag);
-      }),
+  test.provider("sendWorkflowStepState on a nonexistent workflow fails with a typed tag", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        transfer.sendWorkflowStepState({
+          WorkflowId: "w-1234567890abcdef0",
+          ExecutionId: "00000000-0000-0000-0000-000000000000",
+          Token: "MA==",
+          Status: "SUCCESS",
+        }),
+      );
+      // Transfer rejects the nonexistent workflow with the typed
+      // ValidationException (from the shared CommonErrors union).
+      expect([
+        "ResourceNotFoundException",
+        "InvalidRequestException",
+        "ValidationException",
+      ]).toContain(error._tag);
+    }),
   );
 });
 
 // Ungated Lambda fixture: exercises the account-level binding + the
 // EventBridge event source without provisioning a Transfer server.
-describe.sequential("Transfer workflow binding", () => {
-  const workflowStack = Core.scratchStack(
-    testOptions,
-    "TransferWorkflowBindings",
-  );
+describe.sequential(
+  "Transfer workflow binding",
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:transfer", "live"] },
+  () => {
+    const workflowStack = Core.scratchStack(testOptions, "TransferWorkflowBindings");
 
-  let baseUrl: string;
-  let functionArn: string;
+    let baseUrl: string;
+    let functionArn: string;
 
-  beforeAll(
-    Effect.gen(function* () {
-      yield* workflowStack.destroy();
+    beforeAll(
+      Effect.gen(function* () {
+        yield* workflowStack.destroy();
 
-      const attrs = yield* workflowStack.deploy(
-        Effect.gen(function* () {
-          return yield* TransferWorkflowTestFunction;
-        }).pipe(Effect.provide(TransferWorkflowTestFunctionLive)),
-      );
+        const attrs = yield* workflowStack.deploy(
+          Effect.gen(function* () {
+            return yield* TransferWorkflowTestFunction;
+          }).pipe(Effect.provide(TransferWorkflowTestFunctionLive)),
+        );
 
-      expect(attrs.functionUrl).toBeTruthy();
-      baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
-      functionArn = attrs.functionArn;
+        expect(attrs.functionUrl).toBeTruthy();
+        baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
+        functionArn = attrs.functionArn;
 
-      yield* probeReady(`${baseUrl}/bindings`);
-    }),
-    { timeout: 300_000 },
-  );
+        yield* probeReady(`${baseUrl}/bindings`);
+      }),
+      { timeout: 300_000 },
+    );
 
-  afterAll(workflowStack.destroy(), { timeout: 180_000 });
+    afterAll(workflowStack.destroy(), { timeout: 180_000 });
 
-  test.provider("the capability initializes in the runtime", (_stack) =>
-    Effect.gen(function* () {
-      const response = yield* HttpClient.get(`${baseUrl}/bindings`).pipe(
-        Effect.flatMap((r) => r.json),
-      );
-      expect((response as { bound: string[] }).bound).toContain(
-        "sendWorkflowStepState",
-      );
-    }),
-  );
+    test.provider("the capability initializes in the runtime", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get(`${baseUrl}/bindings`).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        expect((response as { bound: string[] }).bound).toContain("sendWorkflowStepState");
+      }),
+    );
 
-  test.provider(
-    "SendWorkflowStepState round-trips and rejects with a typed tag",
-    (_stack) =>
+    test.provider("SendWorkflowStepState round-trips and rejects with a typed tag", (_stack) =>
       Effect.gen(function* () {
         const response = (yield* HttpClient.execute(
           HttpClientRequest.post(`${baseUrl}/workflow-step`),
-        ).pipe(Effect.flatMap((r) => r.json))) as {
-          ok: boolean;
-          tag?: string;
-        };
+        ).pipe(Effect.flatMap((r) => r.json))) as { ok: boolean; tag?: string };
         // The workflow does not exist — the call must surface the typed
         // rejection (not an untyped catch-all, not an IAM denial).
         expect(response.ok).toBe(false);
@@ -163,22 +145,24 @@ describe.sequential("Transfer workflow binding", () => {
           "ValidationException",
         ]).toContain(response.tag);
       }),
-  );
+    );
 
-  test.provider(
-    "consumeFileTransferEvents created an EventBridge rule targeting the function",
-    (_stack) =>
-      Effect.gen(function* () {
-        // Out-of-band via distilled: the fixture's consumeFileTransferEvents
-        // must have materialized as a rule on the default bus with the
-        // Lambda as target.
-        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-          TargetArn: functionArn,
-        });
-        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-      }),
-  );
-});
+    test.provider(
+      "consumeFileTransferEvents created an EventBridge rule targeting the function",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeFileTransferEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      { tags: ["provider:aws:eventbridge"] },
+    );
+  },
+);
 
 // A running Transfer server is billed hourly and takes minutes to reach
 // ONLINE, so the server/user-scoped binding lifecycle is gated behind
@@ -186,6 +170,15 @@ describe.sequential("Transfer workflow binding", () => {
 // created.
 describe.runIf(!!process.env.AWS_TEST_SLOW)(
   "Transfer server bindings (slow)",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:iam",
+      "provider:aws:lambda",
+      "provider:aws:transfer",
+      "live",
+    ],
+  },
   () => {
     const serverStack = Core.scratchStack(testOptions, "TransferBindings");
 
@@ -221,30 +214,23 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
 
     afterAll(serverStack.destroy(), { timeout: 90_000 });
 
-    test.provider(
-      "all eight capabilities initialize in the runtime",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/bindings")) as { bound: string[] };
-          expect(response.bound).toHaveLength(8);
-          expect(response.bound).toContain("describeServer");
-          expect(response.bound).toContain("importSshPublicKey");
-        }),
+    test.provider("all eight capabilities initialize in the runtime", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/bindings")) as { bound: string[] };
+        expect(response.bound).toHaveLength(8);
+        expect(response.bound).toContain("describeServer");
+        expect(response.bound).toContain("importSshPublicKey");
+      }),
     );
 
-    test.provider(
-      "reads the bound server and lists its users (injected ServerId)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const server = (yield* getJson("/server")) as {
-            serverId: string;
-            state: string;
-          };
-          expect(server.serverId).toMatch(/^s-/);
+    test.provider("reads the bound server and lists its users (injected ServerId)", (_stack) =>
+      Effect.gen(function* () {
+        const server = (yield* getJson("/server")) as { serverId: string; state: string };
+        expect(server.serverId).toMatch(/^s-/);
 
-          const users = (yield* getJson("/users")) as { userNames: string[] };
-          expect(users.userNames).toContain("alice");
-        }),
+        const users = (yield* getJson("/users")) as { userNames: string[] };
+        expect(users.userNames).toContain("alice");
+      }),
     );
 
     test.provider(
@@ -259,17 +245,13 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
           expect(imported.ok).toBe(true);
           const keyId = imported.keyId!;
 
-          const user = (yield* getJson("/user")) as {
-            userName: string;
-            keyIds: string[];
-          };
+          const user = (yield* getJson("/user")) as { userName: string; keyIds: string[] };
           expect(user.userName).toBe("alice");
           expect(user.keyIds).toContain(keyId);
 
-          const deleted = (yield* send(
-            "DELETE",
-            `/key?id=${encodeURIComponent(keyId)}`,
-          )) as { ok: boolean };
+          const deleted = (yield* send("DELETE", `/key?id=${encodeURIComponent(keyId)}`)) as {
+            ok: boolean;
+          };
           expect(deleted.ok).toBe(true);
         }),
       { timeout: 120_000 },
@@ -279,10 +261,7 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
       "TestIdentityProvider on a SERVICE_MANAGED server rejects with the typed tag",
       (_stack) =>
         Effect.gen(function* () {
-          const tested = (yield* send("POST", "/test-idp")) as {
-            ok: boolean;
-            tag?: string;
-          };
+          const tested = (yield* send("POST", "/test-idp")) as { ok: boolean; tag?: string };
           expect(tested.ok).toBe(false);
           expect(tested.tag).toBe("InvalidRequestException");
         }),
@@ -295,27 +274,20 @@ describe.runIf(!!process.env.AWS_TEST_SLOW)(
       "stops and restarts the bound server (extra slow)",
       (_stack) =>
         Effect.gen(function* () {
-          const stopped = (yield* send("POST", "/stop")) as {
-            ok: boolean;
-            tag?: string;
-          };
+          const stopped = (yield* send("POST", "/stop")) as { ok: boolean; tag?: string };
           expect(stopped.ok).toBe(true);
 
           // The server parks in STOPPING before OFFLINE.
           const offline = (yield* getJson("/server").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("10 seconds"),
-              until: (r): boolean =>
-                (r as { state: string }).state === "OFFLINE",
+              until: (r): boolean => (r as { state: string }).state === "OFFLINE",
               times: 8,
             }),
           )) as { state: string };
           expect(offline.state).toBe("OFFLINE");
 
-          const started = (yield* send("POST", "/start")) as {
-            ok: boolean;
-            tag?: string;
-          };
+          const started = (yield* send("POST", "/start")) as { ok: boolean; tag?: string };
           expect(started.ok).toBe(true);
         }),
       { timeout: 120_000 },

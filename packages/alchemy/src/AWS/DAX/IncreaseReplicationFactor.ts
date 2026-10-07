@@ -33,13 +33,9 @@ export interface IncreaseReplicationFactor extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<dax.IncreaseReplicationFactorRequest, "ClusterName">,
-    ) => Effect.Effect<
-      dax.IncreaseReplicationFactorResponse,
-      dax.IncreaseReplicationFactorError
-    >
+    ) => Effect.Effect<dax.IncreaseReplicationFactorResponse, dax.IncreaseReplicationFactorError>
   >
 > {}
-export const IncreaseReplicationFactor =
-  Binding.Service<IncreaseReplicationFactor>(
-    "AWS.DAX.IncreaseReplicationFactor",
-  );
+export const IncreaseReplicationFactor = Binding.Service<IncreaseReplicationFactor>(
+  "AWS.DAX.IncreaseReplicationFactor",
+);

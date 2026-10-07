@@ -14,14 +14,7 @@ import { waitlist } from "./schema/waitlist.ts";
 
 export default {
   async fetch() {
-    const tables = [
-      users,
-      sessions,
-      waitlist,
-      invitations,
-      workspaces,
-      workspaceInvites,
-    ];
+    const tables = [users, sessions, waitlist, invitations, workspaces, workspaceInvites];
     return Response.json({
       ok: true,
       count: tables.length,

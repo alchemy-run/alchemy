@@ -13,9 +13,7 @@ import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 import { retryWorkerScriptNotFound } from "./retry.ts";
 
-export type Matcher =
-  | { type: "all" }
-  | { type: "literal"; field: "to"; value: string };
+export type Matcher = { type: "all" } | { type: "literal"; field: "to"; value: string };
 
 export type Action =
   | { type: "drop" }
@@ -81,9 +79,7 @@ export type Rule = Resource<
  * and rejects creating a second one through the ordinary rule endpoint
  * (`Conflict: Invalid rule operation`). Use `Cloudflare.Email.CatchAll`.
  */
-export class CatchAllRuleNotSupported extends Data.TaggedError(
-  "CatchAllRuleNotSupported",
-)<{
+export class CatchAllRuleNotSupported extends Data.TaggedError("CatchAllRuleNotSupported")<{
   message: string;
 }> {}
 
@@ -177,8 +173,7 @@ export const RuleProvider = () =>
     }),
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId =
-        output?.zoneId ??
-        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
+        output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
 
       // Owned path: refresh by our persisted rule id. A catch-all id is
@@ -219,9 +214,7 @@ export const RuleProvider = () =>
 
       // 1. Observe — cached id is a hint, not a guarantee the rule still
       //    exists. A missing id falls through to the matcher scan.
-      let observed = output?.ruleId
-        ? yield* observeById(zoneId, output.ruleId)
-        : undefined;
+      let observed = output?.ruleId ? yield* observeById(zoneId, output.ruleId) : undefined;
 
       // 2. Fall back to scanning the zone for the same matchers.
       //    `read` brands an existing match `Unowned` so the engine can
@@ -292,9 +285,7 @@ export const RuleProvider = () =>
  * via `/rules/catch_all` (the `CatchAll` resource), so it must be
  * excluded from the deletable `Rule` enumeration.
  */
-const isCatchAllRule = (rule: {
-  matchers?: { type: string }[] | null;
-}): boolean =>
+const isCatchAllRule = (rule: { matchers?: { type: string }[] | null }): boolean =>
   (rule.matchers ?? []).length === 1 && rule.matchers?.[0]?.type === "all";
 
 const isCatchAllMatchers = (matchers: Matcher[]): boolean =>
@@ -315,16 +306,12 @@ type RuleAttributes = {
   actions: Action[];
 };
 
-const toDesired = (
-  news: RuleProps,
-): Omit<RuleAttributes, "ruleId" | "zoneId"> => ({
+const toDesired = (news: RuleProps): Omit<RuleAttributes, "ruleId" | "zoneId"> => ({
   name: news.name ?? "",
   enabled: news.enabled ?? true,
   priority: news.priority ?? 0,
   matchers: news.matchers.map((m): Matcher =>
-    m.type === "all"
-      ? { type: "all" }
-      : { type: "literal", field: "to", value: m.value },
+    m.type === "all" ? { type: "all" } : { type: "literal", field: "to", value: m.value },
   ),
   actions: news.actions.map((a): Action =>
     a.type === "drop"
@@ -397,9 +384,7 @@ const normalize = (
   enabled: rule.enabled ?? true,
   priority: rule.priority ?? 0,
   matchers: (rule.matchers ?? []).map((m): Matcher =>
-    m.type === "all"
-      ? { type: "all" }
-      : { type: "literal", field: "to", value: m.value ?? "" },
+    m.type === "all" ? { type: "all" } : { type: "literal", field: "to", value: m.value ?? "" },
   ),
   actions: (rule.actions ?? []).map((a): Action =>
     a.type === "drop"
@@ -412,12 +397,8 @@ const normalize = (
 
 const observeById = (zoneId: string, ruleId: string) =>
   emailRouting.getRule({ zoneId, ruleIdentifier: ruleId }).pipe(
-    Effect.map((rule) =>
-      isCatchAllRule(rule) ? undefined : normalize(rule, zoneId),
-    ),
-    Effect.catchTag(["EmailRoutingRuleNotFound", "Forbidden"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.map((rule) => (isCatchAllRule(rule) ? undefined : normalize(rule, zoneId))),
+    Effect.catchTag(["EmailRoutingRuleNotFound", "Forbidden"], () => Effect.succeed(undefined)),
   );
 
 /**
@@ -428,9 +409,7 @@ const observeById = (zoneId: string, ruleId: string) =>
 const findByMatchers = (zoneId: string, matchers: Matcher[]) =>
   emailRouting.listRules.items({ zoneId }).pipe(
     Stream.filter(
-      (rule) =>
-        !isCatchAllRule(rule) &&
-        matchersEqual(normalize(rule, zoneId).matchers, matchers),
+      (rule) => !isCatchAllRule(rule) && matchersEqual(normalize(rule, zoneId).matchers, matchers),
     ),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),

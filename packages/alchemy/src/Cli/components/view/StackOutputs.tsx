@@ -1,6 +1,6 @@
-/** @jsxImportSource react */
-import { AnsiText } from "@alchemy.run/sigil";
+/** @jsxImportSource @alchemy.run/sigil */
 import { inspect } from "node:util";
+import { AnsiText } from "@alchemy.run/sigil";
 import type { ReactNode } from "react";
 import { Box, useCliEnvironment } from "../ui/index.ts";
 
@@ -33,6 +33,4 @@ export function StackOutputs({
 export const stackOutputLineCount = (value: unknown): number =>
   inspect(value, { colors: false }).split("\n").length;
 
-export const stackOutputsView = (value: unknown): ReactNode => (
-  <StackOutputs value={value} />
-);
+export const stackOutputsView = (value: unknown): ReactNode => <StackOutputs value={value} />;

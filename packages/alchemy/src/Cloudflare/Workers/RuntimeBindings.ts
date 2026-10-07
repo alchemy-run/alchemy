@@ -1,7 +1,4 @@
-import type {
-  BindingHook,
-  BindingServices,
-} from "@alchemy.run/cloudflare-runtime/core";
+import type { BindingHook, BindingServices } from "@alchemy.run/cloudflare-runtime/core";
 import {
   Ai,
   AiSearch,
@@ -40,6 +37,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { isLocalId } from "../LocalRuntime.ts";
+import { LOCAL_R2_S3_CREDENTIALS, LOCAL_R2_S3_PATH } from "../R2/LocalS3.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
@@ -83,9 +81,7 @@ export const toRuntimeBinding = Effect.fn(function* (
       // Local emulation launches a real headless Chrome on this machine and
       // proxies the Browser Rendering session protocol to its CDP endpoint;
       // `Alchemy.remote()` opts into the real service instead.
-      return devRemote?.[b.name]
-        ? Browser.remote(b.name)
-        : Browser.local({ binding: b.name });
+      return devRemote?.[b.name] ? Browser.remote(b.name) : Browser.local({ binding: b.name });
     case "d1":
       // A `dev:` id belongs to a locally-emulated database (local D1
       // provider); a real id is a live database the dev worker proxies to
@@ -105,9 +101,7 @@ export const toRuntimeBinding = Effect.fn(function* (
         binding: b.name,
         className: b.className,
         scriptName: b.scriptName,
-        uniqueKey:
-          b.namespaceId ??
-          encodeURIComponent(`${b.scriptName!}-${b.className}`),
+        uniqueKey: b.namespaceId ?? encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "flagship":
       return Flagship.remote(b.name, b.appId);
@@ -117,13 +111,18 @@ export const toRuntimeBinding = Effect.fn(function* (
       // Local emulation runs transforms via Sharp on this machine and stores
       // hosted images in a local KV-backed store; `Alchemy.remote()`
       // opts into the real Images service instead.
-      return devRemote?.[b.name]
-        ? Images.remote(b.name)
-        : Images.local({ binding: b.name });
+      return devRemote?.[b.name] ? Images.remote(b.name) : Images.local({ binding: b.name });
     case "inherit":
       return yield* unsupported();
     case "json":
       return Json.local(b.name, b.json);
+    case "k2":
+      // Miniflare has no K2 simulation and no remote proxy for it yet.
+      return yield* new WorkerValidationError({
+        message: `K2 binding "${b.name}" is not supported in local mode: K2 has no local simulation.`,
+        hint: "Run K2 producers against a deployed Worker (alchemy deploy).",
+        value: b,
+      });
     case "kv_namespace":
       // A `dev:` id belongs to a locally-emulated namespace; a real id is
       // a live namespace the dev worker proxies to.
@@ -173,9 +172,15 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "r2_bucket":
       // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
       // (R2 has no opaque id — the name is the identity); a real name is a
-      // live bucket the dev worker proxies to.
+      // live bucket the dev worker proxies to. Local buckets are also served
+      // on the Worker's local S3 endpoint, so presigned URLs and S3 clients
+      // work in dev without extra configuration.
       return isLocalId(b.bucketName)
-        ? R2Bucket.local({ binding: b.name, id: b.bucketName })
+        ? R2Bucket.local({
+            binding: b.name,
+            id: b.bucketName,
+            s3Credentials: LOCAL_R2_S3_CREDENTIALS,
+          })
         : R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
       return RateLimit.local({
@@ -235,9 +240,7 @@ export const toRuntimeBinding = Effect.fn(function* (
       // no signed URLs) and serves each video's `preview` URL at
       // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `Alchemy.remote()`
       // opts into the real Stream service instead.
-      return devRemote?.[b.name]
-        ? StreamSim.remote(b.name)
-        : StreamSim.local({ binding: b.name });
+      return devRemote?.[b.name] ? StreamSim.remote(b.name) : StreamSim.local({ binding: b.name });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
@@ -302,9 +305,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
   // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
   // represented by their binding descriptor (same name) — don't ALSO
   // serialize the resolved attributes as a duplicate json binding.
-  const descriptorNames = new Set(
-    config.bindingDescriptors.map((descriptor) => descriptor.name),
-  );
+  const descriptorNames = new Set(config.bindingDescriptors.map((descriptor) => descriptor.name));
   const workerBindings: BindingHook<BindingServices>[] = [
     Text.local("ALCHEMY_PHASE", "runtime"),
     Text.local("ALCHEMY_WORKER_NAME", config.name),
@@ -314,23 +315,42 @@ export const materializeRuntimeBindings = Effect.fn(function* (
     ...Object.entries(config.env ?? {})
       .filter(([key]) => !descriptorNames.has(key))
       .map(([key, value]) => {
-        const unredacted = Redacted.isRedacted(value)
-          ? Redacted.value(value)
-          : value;
+        const unredacted = Redacted.isRedacted(value) ? Redacted.value(value) : value;
         return typeof unredacted === "string"
           ? Text.local(key, unredacted)
           : Json.local(key, unredacted);
       }),
     ...(config.hasAssets ? [Assets.local("ASSETS")] : []),
-    ...(config.devAccess !== undefined
-      ? [Json.local("ALCHEMY_DEV_ACCESS", config.devAccess)]
-      : []),
+    ...(config.devAccess !== undefined ? [Json.local("ALCHEMY_DEV_ACCESS", config.devAccess)] : []),
   ];
   for (const descriptor of config.bindingDescriptors) {
     if (descriptor.type === "self_url") {
       // Lowered here rather than in `toRuntimeBinding` — only the caller
       // knows the worker's own dev-proxy URL.
       workerBindings.push(Text.local(descriptor.name, options.selfUrl!));
+      continue;
+    }
+    if (descriptor.type === "r2_s3_credentials") {
+      // `Cloudflare.R2.S3Credentials` over a `dev:` bucket: credentials for
+      // this Worker's local S3 endpoint (the dev-proxy URL, known only
+      // here), plus a bucket binding so the runtime serves the bucket on
+      // that endpoint.
+      workerBindings.push(
+        Text.local(
+          descriptor.name,
+          JSON.stringify({
+            endpoint: `${options.selfUrl!}${LOCAL_R2_S3_PATH}`,
+            bucketName: descriptor.bucketName,
+            region: "auto",
+            ...LOCAL_R2_S3_CREDENTIALS,
+          }),
+        ),
+        R2Bucket.local({
+          binding: `${descriptor.name}__BUCKET`,
+          id: descriptor.bucketName,
+          s3Credentials: LOCAL_R2_S3_CREDENTIALS,
+        }),
+      );
       continue;
     }
     workerBindings.push(yield* toRuntimeBinding(descriptor, config.devRemote));

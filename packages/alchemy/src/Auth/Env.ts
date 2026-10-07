@@ -5,7 +5,7 @@ import * as Interaction from "../Interaction.ts";
 import { AuthError } from "./AuthProvider.ts";
 
 export const getEnv = (key: string) =>
-  Config.option(Config.string(key)).pipe(
+  Config.option(Config.String(key)).pipe(
     Effect.map(Option.getOrUndefined),
     Effect.mapError(
       (cause) =>
@@ -17,15 +17,12 @@ export const getEnv = (key: string) =>
   );
 
 export const getEnvRequired = (key: string) =>
-  Config.string(key).pipe(
-    Effect.mapError(
-      (cause) =>
-        new AuthError({ message: `Missing required env: ${key}`, cause }),
-    ),
+  Config.String(key).pipe(
+    Effect.mapError((cause) => new AuthError({ message: `Missing required env: ${key}`, cause })),
   );
 
 export const getEnvRedacted = (key: string) =>
-  Config.option(Config.redacted(key)).pipe(
+  Config.option(Config.Redacted(key)).pipe(
     Effect.map(Option.getOrUndefined),
     Effect.mapError(
       (cause) =>
@@ -37,11 +34,8 @@ export const getEnvRedacted = (key: string) =>
   );
 
 export const getEnvRedactedRequired = (key: string) =>
-  Config.redacted(key).pipe(
-    Effect.mapError(
-      (cause) =>
-        new AuthError({ message: `Missing required env: ${key}`, cause }),
-    ),
+  Config.Redacted(key).pipe(
+    Effect.mapError((cause) => new AuthError({ message: `Missing required env: ${key}`, cause })),
   );
 
 export const mapPromptCancellation = <A, R>(
@@ -51,10 +45,7 @@ export const mapPromptCancellation = <A, R>(
     Effect.mapError(
       (cause) =>
         new AuthError({
-          message:
-            cause._tag === "TerminalCancelled"
-              ? "User cancelled prompt"
-              : cause.message,
+          message: cause._tag === "TerminalCancelled" ? "User cancelled prompt" : cause.message,
           cause,
         }),
     ),

@@ -36,12 +36,7 @@ export interface ListRecords extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListRecordsRequest,
-    ) => Effect.Effect<
-      featurestore.ListRecordsResponse,
-      featurestore.ListRecordsError
-    >
+    ) => Effect.Effect<featurestore.ListRecordsResponse, featurestore.ListRecordsError>
   >
 > {}
-export const ListRecords = Binding.Service<ListRecords>(
-  "AWS.SageMaker.ListRecords",
-);
+export const ListRecords = Binding.Service<ListRecords>("AWS.SageMaker.ListRecords");

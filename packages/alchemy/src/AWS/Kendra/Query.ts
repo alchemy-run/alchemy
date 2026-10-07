@@ -37,9 +37,7 @@ export interface Query extends Binding.Service<
   (
     index: Index,
   ) => Effect.Effect<
-    (
-      request?: QueryRequest,
-    ) => Effect.Effect<kendra.QueryResult, kendra.QueryError>
+    (request?: QueryRequest) => Effect.Effect<kendra.QueryResult, kendra.QueryError>
   >
 > {}
 export const Query = Binding.Service<Query>("AWS.Kendra.Query");

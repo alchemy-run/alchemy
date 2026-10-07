@@ -12,9 +12,7 @@ import {
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface FoldkitProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -75,6 +73,13 @@ export interface FoldkitProps<
    */
   assets?: AssetsConfig;
 }
+
+// These options are inspected while constructing the Worker. Resolve them in
+// the outer props Effect; pass-through properties can remain deferred Inputs.
+type FoldkitInput<Bindings extends WorkerBindingProps> = InputProps<
+  FoldkitProps<Bindings>,
+  "assets"
+>;
 
 /**
  * A Cloudflare Worker deployed from a [Foldkit](https://foldkit.dev) app.
@@ -179,53 +184,54 @@ export const Foldkit: {
   <Self>(): {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
-      propsEff?:
-        | InputProps<FoldkitProps<Bindings>>
-        | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
+      propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
-    propsEff?:
-      | InputProps<FoldkitProps<Bindings>>
-      | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
+    propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = (<const Bindings extends WorkerBindingProps = {}, Req = never>(
+  id?: string,
+  propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Foldkit(id, propsEff))
+    ? <const Bindings extends WorkerBindingProps = {}, Req = never>(
+        id: string,
+        propsEff?: FoldkitInput<Bindings> | Effect.Effect<FoldkitInput<Bindings>, never, Req>,
+      ) => effectClass(Foldkit(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // Foldkit routes on the client; serve index.html for unmatched
-            // paths so deep links boot the app instead of 404ing. An
-            // explicit `assets.notFoundHandling` wins over the default.
-            assets: {
-              notFoundHandling: "single-page-application" as const,
-              ...props?.assets,
-            },
-            main: undefined!,
-            vite: {
-              main: props?.main,
-              rootDir: props?.rootDir,
-              memo: props?.memo,
-            },
-          }),
-        ),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // Foldkit routes on the client; serve index.html for unmatched
+          // paths so deep links boot the app instead of 404ing. An
+          // explicit `assets.notFoundHandling` wins over the default.
+          assets: {
+            notFoundHandling: "single-page-application" as const,
+            ...props?.assets,
+          },
+          main: undefined!,
+          vite: {
+            main: props?.main,
+            rootDir: props?.rootDir,
+            memo: props?.memo,
+          },
+        })),
       )) as any;

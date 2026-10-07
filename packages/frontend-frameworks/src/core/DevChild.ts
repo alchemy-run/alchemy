@@ -1,3 +1,5 @@
+import * as NodeChildProcess from "node:child_process";
+import { fileURLToPath } from "node:url";
 /**
  * Child-process isolation for framework DEV servers.
  *
@@ -29,10 +31,9 @@
  *   {@link DEV_CHILD_ENV_KEY} so the integration's `dev` takes its
  *   in-process path inside the child instead of recursing.
  */
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import * as NodeChildProcess from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**
@@ -43,8 +44,7 @@ import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 export const DEV_CHILD_ENV_KEY = "ALCHEMY_FRAMEWORK_DEV_CHILD";
 
 /** `true` when this process IS a spawned dev child (or one of its children). */
-export const isInsideDevChild = (): boolean =>
-  process.env[DEV_CHILD_ENV_KEY] === "1";
+export const isInsideDevChild = (): boolean => process.env[DEV_CHILD_ENV_KEY] === "1";
 
 /** The runner's `argv[2]` payload (JSON). */
 export interface DevChildPayload {
@@ -65,8 +65,7 @@ export interface DevChildPayload {
 }
 
 /** Marker line the child prints once the dev server is listening. */
-export const DEV_CHILD_URL_REGEX =
-  /<ALCHEMY_DEV_CHILD_URL>(.+)<\/ALCHEMY_DEV_CHILD_URL>/;
+export const DEV_CHILD_URL_REGEX = /<ALCHEMY_DEV_CHILD_URL>(.+)<\/ALCHEMY_DEV_CHILD_URL>/;
 
 export const devChildUrlMarker = (url: string) =>
   `<ALCHEMY_DEV_CHILD_URL>${url}</ALCHEMY_DEV_CHILD_URL>`;
@@ -119,6 +118,8 @@ const transformTypesFlags = (): Array<string> => {
 };
 
 export interface DevChildOptions {
+  /** Use Node from PATH for toolchains that cannot run under Bun. Requires native TypeScript support when running source modules. */
+  readonly runtime?: "node" | undefined;
   /** Framework name for error attribution (e.g. "solidstart", "waku"). */
   readonly framework: string;
   /** Bare module specifier the runner imports (see {@link DevChildPayload}). */
@@ -157,11 +158,7 @@ export const runDevChild = (
     const fail =
       (message: string) =>
       (cause?: unknown): FrameworkError =>
-        new FrameworkError({
-          framework: options.framework,
-          message,
-          cause,
-        });
+        new FrameworkError({ framework: options.framework, message, cause });
 
     const entry = fileURLToPath(
       new URL(
@@ -171,40 +168,49 @@ export const runDevChild = (
         options.callerUrl,
       ),
     );
-    const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+    const isBun =
+      options.runtime !== "node" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+    const executable = options.runtime === "node" ? "node" : process.execPath;
     const payload: DevChildPayload = {
       module: options.module,
       makeOptions: options.makeOptions,
       devOptions: options.devOptions,
     };
     const args = [
-      ...(isBun ? ["run"] : entry.endsWith(".ts") ? transformTypesFlags() : []),
+      ...(isBun
+        ? ["run"]
+        : entry.endsWith(".ts") && options.runtime !== "node"
+          ? transformTypesFlags()
+          : []),
       entry,
       JSON.stringify(payload),
     ];
 
+    const spawnFailure = fail(`Failed to spawn the ${options.framework} dev child (${executable})`);
+    const spawnError = yield* Deferred.make<never, FrameworkError>();
     const handle = yield* Effect.acquireRelease(
       Effect.try({
         try: (): DevChildHandle => {
-          const child = NodeChildProcess.spawn(process.execPath, args, {
+          const child = NodeChildProcess.spawn(executable, args, {
             cwd: options.rootDir,
             stdio: ["ignore", "pipe", "pipe"],
             detached: false,
             env: { ...process.env, [DEV_CHILD_ENV_KEY]: "1" },
           });
           const handle: DevChildHandle = { child, exited: false, output: "" };
+          child.on("error", (cause) => {
+            Deferred.doneUnsafe(spawnError, Effect.fail(spawnFailure(cause)));
+          });
           child.once("exit", () => {
             handle.exited = true;
           });
           return handle;
         },
-        catch: fail(
-          `Failed to spawn the ${options.framework} dev child (${process.execPath})`,
-        ),
+        catch: spawnFailure,
       }),
-      ({ child }) =>
+      ({ child, exited }) =>
         Effect.callback<void>((resume) => {
-          if (child.exitCode !== null) {
+          if (child.pid === undefined || exited || child.exitCode !== null) {
             resume(Effect.void);
             return;
           }
@@ -266,7 +272,7 @@ export const runDevChild = (
           );
         }
       });
-    });
+    }).pipe(Effect.raceFirst(Deferred.await(spawnError)));
 
     return { url };
   });

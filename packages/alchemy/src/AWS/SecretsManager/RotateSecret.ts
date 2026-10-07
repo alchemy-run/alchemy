@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Secret } from "./Secret.ts";
 
-export interface RotateSecretRequest extends Omit<
-  secretsmanager.RotateSecretRequest,
-  "SecretId"
-> {}
+export interface RotateSecretRequest extends Omit<secretsmanager.RotateSecretRequest, "SecretId"> {}
 
 /**
  * Runtime binding for `secretsmanager:RotateSecret`.
@@ -36,13 +33,8 @@ export interface RotateSecret extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RotateSecretRequest,
-    ) => Effect.Effect<
-      secretsmanager.RotateSecretResponse,
-      secretsmanager.RotateSecretError
-    >
+    ) => Effect.Effect<secretsmanager.RotateSecretResponse, secretsmanager.RotateSecretError>
   >
 > {}
 
-export const RotateSecret = Binding.Service<RotateSecret>(
-  "AWS.SecretsManager.RotateSecret",
-);
+export const RotateSecret = Binding.Service<RotateSecret>("AWS.SecretsManager.RotateSecret");

@@ -93,9 +93,7 @@ export const PublicKeyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getPublicKeyConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)));
         if (!config?.PublicKeyConfig) return undefined;
         return { config: config.PublicKeyConfig, etag: config.ETag };
       });
@@ -110,9 +108,7 @@ export const PublicKeyProvider = () =>
         );
         if (!summary?.Id) return undefined;
         return yield* getById(summary.Id).pipe(
-          Effect.map((found) =>
-            found ? { id: summary.Id, ...found } : undefined,
-          ),
+          Effect.map((found) => (found ? { id: summary.Id, ...found } : undefined)),
         );
       });
 
@@ -160,9 +156,7 @@ export const PublicKeyProvider = () =>
               (publicKeyId) =>
                 getById(publicKeyId).pipe(
                   Effect.map((found) =>
-                    found
-                      ? toAttrs(publicKeyId, found.config, found.etag)
-                      : undefined,
+                    found ? toAttrs(publicKeyId, found.config, found.etag) : undefined,
                   ),
                 ),
               { concurrency: 10 },
@@ -171,10 +165,7 @@ export const PublicKeyProvider = () =>
           }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
           // Compare only when the old key is known — an Output-valued
@@ -191,8 +182,7 @@ export const PublicKeyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.publicKeyId) {
             const found = yield* getById(output.publicKeyId);
-            if (found)
-              return toAttrs(output.publicKeyId, found.config, found.etag);
+            if (found) return toAttrs(output.publicKeyId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);
@@ -206,9 +196,7 @@ export const PublicKeyProvider = () =>
           // or by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.publicKeyId
             ? yield* getById(output.publicKeyId).pipe(
-                Effect.map((found) =>
-                  found ? { id: output.publicKeyId, ...found } : undefined,
-                ),
+                Effect.map((found) => (found ? { id: output.publicKeyId, ...found } : undefined)),
               )
             : undefined;
           if (!observed) {
@@ -247,16 +235,10 @@ export const PublicKeyProvider = () =>
                 ),
               );
             if (!created.PublicKey?.Id) {
-              return yield* Effect.fail(
-                new Error("createPublicKey returned no identifier"),
-              );
+              return yield* Effect.fail(new Error("createPublicKey returned no identifier"));
             }
             yield* session.note(created.PublicKey.Id);
-            return toAttrs(
-              created.PublicKey.Id,
-              created.PublicKey.PublicKeyConfig,
-              created.ETag,
-            );
+            return toAttrs(created.PublicKey.Id, created.PublicKey.PublicKeyConfig, created.ETag);
           }
 
           // Sync — patch the comment via `updatePublicKey`. The key body
@@ -274,16 +256,10 @@ export const PublicKeyProvider = () =>
             ),
           });
           if (!updated.PublicKey?.Id) {
-            return yield* Effect.fail(
-              new Error("updatePublicKey returned no identifier"),
-            );
+            return yield* Effect.fail(new Error("updatePublicKey returned no identifier"));
           }
           yield* session.note(observed.id);
-          return toAttrs(
-            updated.PublicKey.Id,
-            updated.PublicKey.PublicKeyConfig,
-            updated.ETag,
-          );
+          return toAttrs(updated.PublicKey.Id, updated.PublicKey.PublicKeyConfig, updated.ETag);
         }),
         delete: Effect.fn(function* ({ output }) {
           const current = yield* getById(output.publicKeyId);
@@ -303,10 +279,7 @@ export const PublicKeyProvider = () =>
               // every other error immediately visible.
               Effect.retry({
                 while: (error) => error._tag === "PublicKeyInUse",
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
               }),
             );
         }),

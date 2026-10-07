@@ -15,16 +15,13 @@ import {
   type WebsiteNotFoundHandling,
 } from "../../Website/assets.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
-import {
-  Server as FrameworkServer,
-  type ServerDevProps,
-} from "../../Website/Server.ts";
+import { Server as FrameworkServer, type ServerDevProps } from "../../Website/Server.ts";
 import { App } from "../App.ts";
 import { Bucket } from "../Bucket.ts";
 import { Certificate } from "../Certificate.ts";
 import { IpAssignment } from "../IpAssignment.ts";
 import type { Providers } from "../Providers.ts";
-import { Service } from "../Service.ts";
+import { Service, type ServiceProps } from "../Service.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 
 /**
@@ -40,6 +37,14 @@ export { staticConfigFromAssets };
  * Props shared by every Fly framework website composite.
  */
 export interface FrameworkSiteProps {
+  /** Deployment strategy forwarded to the hosted Fly Service. */
+  deploy?: ServiceProps["deploy"];
+  /** Process shutdown policy. The framework server must handle the signal. */
+  shutdown?: ServiceProps["shutdown"];
+  /** Named Machine readiness checks. */
+  checks?: ServiceProps["checks"];
+  /** Override proxy services and their routing health checks. */
+  services?: ServiceProps["services"];
   /**
    * Project root directory (the directory containing `package.json`).
    * @default "."
@@ -60,10 +65,7 @@ export interface FrameworkSiteProps {
    * bindings — values become Machine env vars. Accepts `Output`s
    * (e.g. `VITE_API_URL: api.url`).
    */
-  env?: Record<
-    string,
-    string | Redacted.Redacted<string> | Output.Output<string | undefined>
-  >;
+  env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /**
    * Static-asset routing (`notFoundHandling`, `htmlHandling`). Hashed
    * client files are uploaded to Tigris regardless of this bag.
@@ -150,10 +152,7 @@ const resolveRef = <T>(ref: Ref<T>): Effect.Effect<T, never, Providers> =>
 
 const envRecord = (
   env:
-    | Record<
-        string,
-        string | Redacted.Redacted<string> | Output.Output<string | undefined>
-      >
+    | Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>
     | undefined,
 ): Record<string, string | Output.Output<string | undefined>> | undefined => {
   if (env === undefined) return undefined;
@@ -231,16 +230,11 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
   );
   const main = Output.map(buildOut, (out) => out.main);
 
-  const extraFiles = Output.mapEffect(
-    (out: { distDir: string; main: string }) =>
-      packSiteExtraFiles(
-        out.distDir,
-        config.skipClientAssets === true ? "next" : "client",
-      ),
+  const extraFiles = Output.mapEffect((out: { distDir: string; main: string }) =>
+    packSiteExtraFiles(out.distDir, config.skipClientAssets === true ? "next" : "client"),
   )(buildOut);
 
-  const app =
-    props.app !== undefined ? yield* resolveRef(props.app) : yield* App("App");
+  const app = props.app !== undefined ? yield* resolveRef(props.app) : yield* App("App");
 
   const ip = yield* IpAssignment("Shared", {
     app,
@@ -284,9 +278,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     statics = Output.mapEffect(([clientDir, bucketName]: [string, string]) =>
       Effect.gen(function* () {
         const assetsDir = path.join(clientDir, "assets");
-        const exists = yield* fs
-          .exists(assetsDir)
-          .pipe(Effect.orElseSucceed(() => false));
+        const exists = yield* fs.exists(assetsDir).pipe(Effect.orElseSucceed(() => false));
         return exists
           ? [
               {
@@ -307,6 +299,10 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
 
   const service = yield* Service("Service", {
     app,
+    deploy: props.deploy,
+    shutdown: props.shutdown,
+    checks: props.checks,
+    services: props.services,
     main: main as unknown as string,
     port: DEFAULT_PORT,
     // Node + nitro SSR needs more than the Machine default 256MB.
@@ -363,8 +359,5 @@ export const makeFrameworkSite = (
 ) => runFrameworkSite(id, props, config).pipe(Effect.orDie);
 
 /** Push {@link id} then run {@link makeFrameworkSite}. */
-export const frameworkSite = (
-  id: string,
-  props: FrameworkSiteProps,
-  config: FrameworkSiteConfig,
-) => makeFrameworkSite(id, props, config).pipe(Namespace.push(id));
+export const frameworkSite = (id: string, props: FrameworkSiteProps, config: FrameworkSiteConfig) =>
+  makeFrameworkSite(id, props, config).pipe(Namespace.push(id));
