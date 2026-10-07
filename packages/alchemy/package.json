@@ -433,8 +433,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun scripts/build.ts",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
     "clear:state": "cd ../../ && bun clear:state",
+    "pretest": "pnpm -w ensure:built",
     "test": "alchemy-test --exclude test/Railway",
     "nuke": "cd ../../ && bun nuke"
   },
@@ -455,6 +457,7 @@
     "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
+    "@distilled.cloud/iceberg": "workspace:*",
     "@distilled.cloud/infisical": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/openai": "workspace:*",

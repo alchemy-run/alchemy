@@ -3,17 +3,57 @@ import { assert, expect, layer } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { PlatformError, SystemError } from "effect/PlatformError";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
-import * as Sink from "effect/Sink";
-import * as Stream from "effect/Stream";
-import { Docker, DockerLive } from "@/Docker";
+import * as TestClock from "effect/testing/TestClock";
+import { Docker, DockerLive, dockerLive } from "@/Docker";
+import type { RegistryCredentials } from "@/Docker/Docker.ts";
 import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
+import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
 
-const describe = layer(Layer.provideMerge(DockerLive, NodeServices.layer));
+const describe = layer(
+  Layer.provideMerge(DockerLive, Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
+);
+
+// Which CLI the client runs: declared in code, overridable by DOCKER_BIN.
+describe("Docker CLI binary", (it) => {
+  const version = (layer: Layer.Layer<Docker, never, any>) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      return (yield* docker.run(["--version"])).stdout;
+    }).pipe(Effect.provide(layer));
+
+  it.effect(
+    "runs the bin declared in code",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* version(dockerLive({ bin: "alchemy-test-no-such-cli" })).pipe(
+          Effect.flip,
+        );
+        expect(String(error)).toContain("alchemy-test-no-such-cli");
+        expect(yield* version(dockerLive({ bin: "docker" }))).toMatch(/^Docker version/);
+      }).pipe(
+        // Ignore any DOCKER_BIN in the host environment for this case.
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      ),
+    { tags: ["provider:docker", "local"] },
+  );
+
+  it.effect(
+    "lets DOCKER_BIN override the bin declared in code",
+    () =>
+      Effect.gen(function* () {
+        const output = yield* version(dockerLive({ bin: "alchemy-test-no-such-cli" }));
+        expect(output).toMatch(/^Docker version/);
+      }).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_BIN: "docker" }))),
+      ),
+    { tags: ["provider:docker", "local"] },
+  );
+});
 
 describe("Docker.materialize", (it) => {
   it.effect(
@@ -110,184 +150,63 @@ describe("Docker registry errors", (it) => {
   }
 });
 
-/**
- * A `docker` CLI stand-in that answers `buildx version` with the given
- * plugin version (or fails it like a missing plugin when `undefined`),
- * records every other invocation (args + env), and exits 0.
- */
-const fakeDocker = (buildxVersion: string | undefined) => {
-  const calls: Array<{ args: ReadonlyArray<string>; env: Record<string, string | undefined> }> = [];
-  const encode = (text: string) => new TextEncoder().encode(text);
-  const spawner = ChildProcessSpawner.make((command) =>
-    Effect.gen(function* () {
-      assert(command._tag === "StandardCommand");
-      const probe = command.args[0] === "buildx" && command.args[1] === "version";
-      if (!probe) {
-        calls.push({ args: command.args, env: command.options.env ?? {} });
-      }
-      const missing = probe && buildxVersion === undefined;
-      const stdout =
-        probe && !missing
-          ? `github.com/docker/buildx ${buildxVersion} 503f948aadbddb6de3ec5581f766e1d27f6975a1\n`
-          : "";
-      const stderr = missing ? "docker: 'buildx' is not a docker command.\n" : "";
-      return ChildProcessSpawner.makeHandle({
-        pid: ChildProcessSpawner.ProcessId(1),
-        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(missing ? 1 : 0)),
-        isRunning: Effect.succeed(false),
-        kill: () => Effect.void,
-        stdin: Sink.drain,
-        stdout: Stream.make(encode(stdout)),
-        stderr: Stream.make(encode(stderr)),
-        all: Stream.make(encode(stdout + stderr)),
-        getInputFd: () => Sink.drain,
-        getOutputFd: () => Stream.empty,
-        unref: Effect.succeed(Effect.void),
-      });
-    }),
+const buildScratchImage = Effect.fn(function* (
+  label: string,
+  tag: string | [string, ...Array<string>],
+  credentials: RegistryCredentials,
+  platform?: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-publish-" });
+  yield* fs.writeFileString(
+    path.join(root, "Dockerfile"),
+    `FROM scratch\nLABEL alchemy.test=${label}\n`,
   );
-  return {
-    calls,
-    // `fresh` sidesteps the describe-level memoized `DockerLive` so the
-    // fake spawner is actually wired in.
-    layer: Layer.fresh(DockerLive).pipe(
-      Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
-    ),
-  };
-};
+  // A fresh service re-probes the Buildx plugin pinned by `scopedBuildx`.
+  return yield* Effect.gen(function* () {
+    const docker = yield* Docker;
+    return yield* docker.image.build({ context: root, tag, platform }, undefined, credentials);
+  }).pipe(Effect.provide(Layer.fresh(DockerLive)));
+});
 
-const registry = {
-  server: "registry.invalid",
-  username: "publisher",
-  password: Redacted.make("DESTINATION_SECRET_SENTINEL"),
-};
-
-describe("Docker.image", (it) => {
-  it.effect(
-    "exports straight to the registry on Buildx >= 0.26",
-    () =>
-      Effect.gen(function* () {
-        const fake = fakeDocker("v0.26.1");
-        yield* Effect.gen(function* () {
-          const docker = yield* Docker;
-          yield* docker.image.build(
-            {
-              context: "/ctx",
-              tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
-              platform: "linux/amd64",
-            },
-            undefined,
-            registry,
-          );
-        }).pipe(Effect.provide(fake.layer));
-        expect(fake.calls).toHaveLength(1);
-        const [build] = fake.calls;
-        expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--push"]);
-        expect(build!.args).toContain("/ctx");
-        expect(build!.args).toContain("registry.invalid/app:1");
-        expect(build!.args).toContain("registry.invalid/app:buildcache");
-        expect(build!.args.filter((arg) => arg === "--tag")).toHaveLength(2);
-        expect(build!.env.DOCKER_CONFIG).toBeUndefined();
-        const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
-          auths: Record<string, { auth: string }>;
-        };
-        expect(auth.auths["registry.invalid"]!.auth).toBe(
-          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString("base64"),
-        );
-      }),
-    { tags: ["unit", "provider:docker", "local"] },
-  );
-
-  for (const version of ["v0.23.0-desktop.1", "v0.25.0"]) {
+describe("Docker.image publication", (it) => {
+  for (const [name, version, platform] of [
+    ["exports straight to the registry on Buildx >= 0.26", "v0.26.1", "linux/amd64"],
+    ["builds with --load then pushes on Buildx < 0.26", "v0.25.0", "linux/amd64"],
+    ["builds then pushes without a Buildx plugin", undefined, undefined],
+  ] as const) {
     it.effect(
-      `builds locally then pushes on Buildx ${version}`,
+      name,
       () =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const fake = fakeDocker(version);
-          yield* Effect.gen(function* () {
-            const docker = yield* Docker;
-            yield* docker.image.build(
-              {
-                context: "/ctx",
-                tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
-                platform: "linux/amd64",
-              },
-              undefined,
-              registry,
-            );
-          }).pipe(Effect.provide(fake.layer));
-          expect(fake.calls).toHaveLength(3);
-          const [build, push, cachePush] = fake.calls;
-          // `--load` so non-loading (docker-container) builders still land the
-          // image in the local store for the follow-up push.
-          expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--load"]);
-          expect(build!.args).toContain("/ctx");
-          expect(build!.args).toContain("--platform");
-          expect(build!.args).not.toContain("--push");
-          expect(build!.env.DOCKER_AUTH_CONFIG).toBeUndefined();
-          expect(build!.env.DOCKER_CONFIG).toBeUndefined();
-          expect(push!.args).toEqual([
-            "push",
-            "--platform",
-            "linux/amd64",
-            "registry.invalid/app:1",
-          ]);
-          expect(push!.env.DOCKER_AUTH_CONFIG).toBeUndefined();
-          expect(cachePush!.args).toEqual([
-            "push",
-            "--platform",
-            "linux/amd64",
-            "registry.invalid/app:buildcache",
-          ]);
-          // The isolated config is written under a temp dir for the push only
-          // and removed once the push scope closes.
-          const dir = push!.env.DOCKER_CONFIG;
-          assert(dir !== undefined);
-          expect(path.basename(dir)).toMatch(/^alchemy-docker-/);
-          expect(yield* fs.exists(dir)).toBe(false);
-        }),
-      { tags: ["unit", "provider:docker", "local"] },
+          const docker = yield* Docker;
+          const registry = yield* authenticatedRegistry();
+          const tags: [string, string] = [
+            `${registry.host}/app:1`,
+            `${registry.host}/app:buildcache`,
+          ];
+          yield* Effect.addFinalizer(() => docker.image.remove(tags, true).pipe(Effect.ignore));
+          const { config } = yield* scopedBuildx(version);
+
+          yield* buildScratchImage(version ?? "legacy", tags, registry.credentials, platform);
+
+          expect(yield* registry.hasManifest("app", "1")).toBe(true);
+          expect(yield* registry.hasManifest("app", "buildcache")).toBe(true);
+          // Credentials ride per-invocation env/temp config, never the CLI's own.
+          const cliConfig = path.join(config, "config.json");
+          if (yield* fs.exists(cliConfig)) {
+            expect(yield* fs.readFileString(cliConfig)).not.toContain(registry.host);
+          }
+        }).pipe(
+          // Registry readiness and the Buildx download retry on real time.
+          TestClock.withLive,
+        ),
+      { tags: ["provider:docker", "local"], exclusive: true, timeout: 180_000 },
     );
   }
-
-  it.effect(
-    "falls back to build + push when Buildx is not installed",
-    () =>
-      Effect.gen(function* () {
-        const fake = fakeDocker(undefined);
-        yield* Effect.gen(function* () {
-          const docker = yield* Docker;
-          yield* docker.image.build(
-            { context: "/ctx", tag: "registry.invalid/app:1" },
-            undefined,
-            registry,
-          );
-        }).pipe(Effect.provide(fake.layer));
-        expect(fake.calls.map((call) => call.args.slice(0, 2))).toEqual([
-          ["image", "build"],
-          ["push", "registry.invalid/app:1"],
-        ]);
-      }),
-    { tags: ["unit", "provider:docker", "local"] },
-  );
-
-  it.effect(
-    "builds without registry credentials via image build",
-    () =>
-      Effect.gen(function* () {
-        const fake = fakeDocker("v0.26.1");
-        yield* Effect.gen(function* () {
-          const docker = yield* Docker;
-          yield* docker.image.build({ context: "/ctx", tag: "local/app:1" });
-        }).pipe(Effect.provide(fake.layer));
-        expect(fake.calls).toHaveLength(1);
-        expect(fake.calls[0]!.args.slice(0, 2)).toEqual(["image", "build"]);
-        expect(fake.calls[0]!.env.DOCKER_AUTH_CONFIG).toBeUndefined();
-      }),
-    { tags: ["unit", "provider:docker", "local"] },
-  );
 
   for (const [name, auth] of [
     ["invalid JSON", '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL"}},'],
@@ -298,37 +217,100 @@ describe("Docker.image", (it) => {
     ],
   ]) {
     it.effect(
-      `rejects ${name} without exposing registry credentials`,
+      `rejects ${name} DOCKER_AUTH_CONFIG without exposing registry credentials`,
       () =>
         Effect.gen(function* () {
-          const fake = fakeDocker("v0.26.1");
-          const result = yield* Effect.gen(function* () {
-            const docker = yield* Docker;
-            return yield* docker.image
-              .build(
-                { context: "/ctx", tag: "registry.invalid/invalid-auth:latest" },
-                undefined,
-                registry,
-              )
-              .pipe(Effect.flip);
-          }).pipe(Effect.provide(fake.layer));
+          const registry = yield* authenticatedRegistry();
+          yield* scopedBuildx("v0.26.1");
+
+          const result = yield* buildScratchImage(
+            "invalid-auth",
+            `${registry.host}/invalid-auth:1`,
+            {
+              ...registry.credentials,
+              password: Redacted.make("DESTINATION_SECRET_SENTINEL"),
+            },
+          ).pipe(
+            Effect.flip,
+            Effect.provide(
+              ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_AUTH_CONFIG: auth })),
+            ),
+          );
           assert(result._tag === "PlatformError");
           expect(result.reason._tag).toBe("InvalidData");
           expect(result.reason.description).toContain("DOCKER_AUTH_CONFIG");
-          expect(fake.calls).toHaveLength(0);
           const serialized = yield* Effect.sync(() => JSON.stringify(result));
           expect(serialized).not.toContain("AUTH_SECRET_SENTINEL");
           expect(serialized).not.toContain("QVVUSF9TRUNSRVRfU0VOVElORUw=");
           expect(serialized).not.toContain("DESTINATION_SECRET_SENTINEL");
+          // Rejected before anything was built or published.
+          expect(yield* registry.hasManifest("invalid-auth", "1")).toBe(false);
         }).pipe(
-          Effect.provide(
-            ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_AUTH_CONFIG: auth })),
-          ),
+          // Registry readiness and the Buildx download retry on real time.
+          TestClock.withLive,
         ),
-      { tags: ["unit", "provider:docker", "local"] },
+      { tags: ["provider:docker", "local"], exclusive: true, timeout: 180_000 },
     );
   }
+});
 
+// How a failing `docker` command is reported, against the real CLI.
+describe("Docker.run failure output", (it) => {
+  it.effect(
+    "says so when a failing command wrote nothing",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run(["run", "--rm", "alpine:3.19", "sh", "-c", "exit 3"])
+          .pipe(Effect.flip);
+        expect(error.reason._tag).toBe("Unknown");
+        expect(error.reason.description).toContain("exited with code 3");
+        expect(error.reason.description).toContain("wrote no output");
+      }),
+    { tags: ["provider:docker", "local"], timeout: 60_000 },
+  );
+
+  it.effect(
+    "keeps stdout and stderr from a failing command",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run([
+            "run",
+            "--rm",
+            "alpine:3.19",
+            "sh",
+            "-c",
+            "echo step-log-on-stdout; echo reason-on-stderr >&2; exit 1",
+          ])
+          .pipe(Effect.flip);
+        expect(error.reason.description).toContain("step-log-on-stdout");
+        expect(error.reason.description).toContain("reason-on-stderr");
+        // The reason (stderr) comes first.
+        expect(error.reason.description!.indexOf("reason-on-stderr")).toBeLessThan(
+          error.reason.description!.indexOf("step-log-on-stdout"),
+        );
+      }),
+    { tags: ["provider:docker", "local"], timeout: 60_000 },
+  );
+
+  it.effect(
+    "still classifies a daemon NotFound from stderr",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run(["image", "inspect", "alchemy-test-no-such-image:missing"])
+          .pipe(Effect.flip);
+        expect(error.reason._tag).toBe("NotFound");
+      }),
+    { tags: ["provider:docker", "local"] },
+  );
+});
+
+describe("Docker.image", (it) => {
   it.effect(
     "builds a minimal image with content Dockerfile",
     () =>

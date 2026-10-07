@@ -67,6 +67,8 @@ export interface DurableObjectLike<Shape = any> {
 
 export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape> {
   Type: TypeId;
+  /** The namespace's logical id. */
+  LogicalId: string;
   name: string;
   namespaceId: Output.Output<string>;
   getByName: (
@@ -80,6 +82,16 @@ export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape>
     id: DurableObjectId,
     options?: DurableObjectGetDurableObjectOptions,
   ) => DurableObjectStub<Shape>;
+  /**
+   * A view of this namespace whose objects are created and stored only inside
+   * the given jurisdiction (e.g. `"eu"`). The same name addresses a different
+   * object than it does in the unrestricted namespace.
+   *
+   * @example
+   * ```typescript
+   * const room = rooms.jurisdiction("eu").getByName(roomId);
+   * ```
+   */
   jurisdiction: (jurisdiction: DurableObjectJurisdiction) => DurableObject<Shape>;
 }
 
@@ -1238,7 +1250,16 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }),
         );
 
-        return {
+        // `undefined` at plan time; every method is only called at runtime.
+        // A function because `jurisdiction` wraps the sub-namespace it returns.
+        // The return annotation checks the value against the interface, so a
+        // method missing here is a compile error.
+        const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): DurableObject<any> => ({
+          // `kind` + `scriptName`/`transferredFrom` let a namespace passed in
+          // a Worker's `env` bind as the `durable_object_namespace` it is.
+          kind: TypeId,
+          scriptName,
+          transferredFrom,
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
@@ -1246,17 +1267,17 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             Output.map((durableObjectNamespaces) => durableObjectNamespaces?.[namespace]),
           ),
           getByName: (name: string, options?: DurableObjectGetDurableObjectOptions) =>
-            makeRpcStub(binding.getByName(name, options), { errors }),
-          // newUniqueId: () => use((ns) => ns.newUniqueId()),
-          // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
-          // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
-          // get: (
-          //   id: cf.DurableObjectId,
-          //   options?: cf.DurableObjectNamespaceGetDurableObjectOptions,
-          // ) => use((ns) => makeRpcStub(ns.get(id, options))),
-          // jurisdiction: (jurisdiction: cf.DurableObjectJurisdiction) =>
-          //   use((ns) => ns.jurisdiction(jurisdiction) as any),
-        };
+            makeRpcStub(ns!.getByName(name, options), { errors }),
+          newUniqueId: () => ns!.newUniqueId(),
+          idFromName: (name: string) => ns!.idFromName(name),
+          idFromString: (id: string) => ns!.idFromString(id),
+          get: (id: DurableObjectId, options?: DurableObjectGetDurableObjectOptions) =>
+            makeRpcStub(ns!.get(id, options), { errors }),
+          jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
+            makeNamespace(ns?.jurisdiction(jurisdiction)),
+        });
+
+        return makeNamespace(binding);
       });
 
     // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can

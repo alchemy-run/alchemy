@@ -30,10 +30,7 @@ export const messageSize = (body: unknown): number => {
   } catch {
     json = undefined;
   }
-  return (
-    (json === undefined ? 0 : encoder.encode(json).length) +
-    MESSAGE_OVERHEAD_BYTES
-  );
+  return (json === undefined ? 0 : encoder.encode(json).length) + MESSAGE_OVERHEAD_BYTES;
 };
 
 /**

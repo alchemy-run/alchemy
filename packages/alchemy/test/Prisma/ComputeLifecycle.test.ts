@@ -253,6 +253,39 @@ describe(
       }).pipe(provide(client));
     });
 
+    it.live("waits for a deployment that is already stopping before deleting it", () => {
+      const calls: string[] = [];
+      let observed = 0;
+      const client = {
+        getDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(`get:${id}`);
+            return deployment(id, observed++ < 2 ? "stopping" : "stopped");
+          }),
+        deleteDeployment: (id: string) =>
+          Effect.sync(() => {
+            calls.push(`delete:${id}`);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const result = yield* destroyDeployment("deployment-1", {
+          pollIntervalMs: 1,
+        });
+        expect(result).toMatchObject({
+          previousStatus: "stopping",
+          stopped: false,
+          deleted: true,
+        });
+        expect(calls).toEqual([
+          "get:deployment-1",
+          "get:deployment-1",
+          "get:deployment-1",
+          "delete:deployment-1",
+        ]);
+      }).pipe(provide(client));
+    });
+
     it.effect("reports only the canonical deployment cleanup route", () => {
       const client = {
         getDeployment: () => Effect.succeed(deployment("deployment-1", "stopped")),

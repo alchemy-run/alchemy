@@ -160,6 +160,32 @@ test.provider(
       expect(recovered.version!.version).toBe(current.version);
       expect((yield* numberedVersions(v1.functionName)).length).toBe(countCurrent);
 
+      // --- crash before the Function reference resolved ---
+      // An interrupted first create persists the Function reference as
+      // missing (it was still an unresolved Output at checkpoint time). The
+      // recovery read finds nothing to recover instead of crashing (#2002),
+      // and the re-driven create reuses the published version.
+      yield* state.set({
+        stack: stack.name,
+        stage,
+        fqn: versionRow.fqn,
+        value: {
+          ...versionRow.row,
+          props: { ...versionRow.row.props, function: undefined },
+          status: "creating",
+          attr: undefined,
+        },
+      });
+      const strippedRecovery = yield* stack.deploy(
+        program({
+          handlerPath: handlerV2Path,
+          envVersion: "two",
+          reservedConcurrentExecutions: 0,
+        }),
+      );
+      expect(strippedRecovery.version!.version).toBe(current.version);
+      expect((yield* numberedVersions(v1.functionName)).length).toBe(countCurrent);
+
       // --- retain on removal and recover on re-add ---
       yield* stack.deploy(
         program({

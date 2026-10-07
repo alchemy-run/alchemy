@@ -42,6 +42,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { routePatternUrl } from "./RoutePattern.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
 import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
@@ -928,6 +929,26 @@ export const shouldObserveWorkerRoutes = (
   output: Pick<Worker["Attributes"], "routes"> | undefined,
 ): boolean => olds?.routes !== undefined || (output?.routes?.length ?? 0) > 0;
 
+const routeKey = (route: { pattern: string; zoneId: string }) => `${route.zoneId}:${route.pattern}`;
+
+/**
+ * Order observed zone routes the way state records them. `listRoutes`
+ * returns routes in Cloudflare's order while `reconcile` records them in
+ * declared order, and drift compares attributes positionally, so the same
+ * routes in another order would read as drift. Routes missing from state
+ * keep their listing order after the known ones.
+ *
+ * @internal exported for unit testing.
+ */
+export const orderObservedWorkerRoutes = <Route extends { pattern: string; zoneId: string }>(
+  observed: readonly Route[],
+  known: readonly { pattern: string; zoneId: string }[] | undefined,
+): Route[] => {
+  const position = new Map((known ?? []).map((route, index) => [routeKey(route), index]));
+  const rank = (route: Route) => position.get(routeKey(route)) ?? position.size;
+  return [...observed].sort((a, b) => rank(a) - rank(b));
+};
+
 /**
  * Cron triggers Alchemy is responsible for on this Worker. Used by `read` to
  * skip `getScriptSchedule` when the surface is unmanaged (#926). Effect-native
@@ -1458,6 +1479,27 @@ export const LiveWorkerProvider = () =>
         return `https://${version.versionId.slice(0, 8)}-${scriptName}.${accountSubdomain}.workers.dev`;
       });
 
+      const computeStableWorkerUrls = Effect.fn(function* (params: {
+        scriptName: string;
+        workersDev: ResolvedWorkersDev;
+        domain: ResolvedWorkerDomain | undefined;
+      }) {
+        const { workersDev, domain, scriptName } = params;
+        const urls: string[] = [];
+        if (domain) {
+          urls.push(
+            `https://${domain.name}`,
+            ...domain.aliases.map((hostname) => `https://${hostname}`),
+          );
+        }
+        if (workersDev.enabled) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const accountSubdomain = yield* getAccountSubdomain(accountId);
+          urls.push(`https://${scriptName}.${accountSubdomain}.workers.dev`);
+        }
+        return urls;
+      });
+
       /**
        * Assemble every URL a deployed, script-owning Worker serves at, most
        * significant first — the first entry becomes the `url` attribute:
@@ -1482,34 +1524,23 @@ export const LiveWorkerProvider = () =>
         /** user-provided `version.alias` attached to the uploaded version */
         uploadedVersionAlias?: string;
       }) {
-        const { workersDev, domain, scriptName } = params;
-        const urls: string[] = [];
-        if (domain) {
-          urls.push(
-            `https://${domain.name}`,
-            ...domain.aliases.map((hostname) => `https://${hostname}`),
-          );
-        }
-        if (workersDev.enabled || workersDev.previewsEnabled) {
+        const { workersDev, scriptName } = params;
+        const urls = yield* computeStableWorkerUrls(params);
+        if (workersDev.previewsEnabled) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const accountSubdomain = yield* getAccountSubdomain(accountId);
-          if (workersDev.enabled) {
-            urls.push(`https://${scriptName}.${accountSubdomain}.workers.dev`);
-          }
-          if (workersDev.previewsEnabled) {
-            if (params.uploadedVersionId !== undefined) {
-              if (params.uploadedVersionAlias !== undefined) {
-                urls.push(
-                  `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
-                );
-              }
+          if (params.uploadedVersionId !== undefined) {
+            if (params.uploadedVersionAlias !== undefined) {
               urls.push(
-                `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+                `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
               );
-            } else if (!workersDev.enabled) {
-              const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
-              if (previewUrl) urls.push(previewUrl);
             }
+            urls.push(
+              `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+            );
+          } else if (!workersDev.enabled) {
+            const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
+            if (previewUrl) urls.push(previewUrl);
           }
         }
         return urls;
@@ -1706,9 +1737,6 @@ export const LiveWorkerProvider = () =>
 
       type NormalizedWorkerRoute = { pattern: string; zoneId: string };
 
-      const routeKey = (route: { pattern: string; zoneId: string }) =>
-        `${route.zoneId}:${route.pattern}`;
-
       // Derive a concrete hostname inside the zone from a route pattern so
       // zone inference can walk the DNS label hierarchy. A wildcard label
       // (`*.example.com/*`) is replaced with a stand-in label — only the
@@ -1762,10 +1790,17 @@ export const LiveWorkerProvider = () =>
         const routesByZone = Effect.all(
           uniqueZoneIds.map((zoneId) =>
             workers.listRoutes({ zoneId }).pipe(
-              Effect.map((response) =>
+              Effect.map((response): Worker["Attributes"]["routes"] =>
                 (response.result ?? []).flatMap((route) =>
                   route.id && route.pattern && route.script === scriptName
-                    ? [{ id: route.id, pattern: route.pattern, zoneId }]
+                    ? [
+                        {
+                          id: route.id,
+                          pattern: route.pattern,
+                          zoneId,
+                          url: routePatternUrl(route.pattern),
+                        },
+                      ]
                     : [],
                 ),
               ),
@@ -1804,7 +1839,7 @@ export const LiveWorkerProvider = () =>
         listWorkerRoutesInZones(
           scriptName,
           (knownRoutes ?? []).map((route) => route.zoneId),
-        );
+        ).pipe(Effect.map((routes) => orderObservedWorkerRoutes(routes, knownRoutes)));
 
       // Converge the zone routes attached to `scriptName` to `desired`.
       // Observed cloud state (not `previous`) is the diff baseline —
@@ -1895,7 +1930,12 @@ export const LiveWorkerProvider = () =>
                   }),
                 ),
               );
-            return { id: created.id, pattern: created.pattern, zoneId: route.zoneId };
+            return {
+              id: created.id,
+              pattern: created.pattern,
+              zoneId: route.zoneId,
+              url: routePatternUrl(created.pattern),
+            };
           });
 
           return yield* Effect.all(desired.map(attachRoute), { concurrency: "unbounded" });
@@ -2023,6 +2063,23 @@ export const LiveWorkerProvider = () =>
                 schedule: Schedule.spaced("2 seconds"),
                 times: 5,
               }),
+              // The `alchemy:dos:` tag alone is stale on a *former* host: after
+              // a `transferred_classes` migration Cloudflare rewrites the old
+              // host's local binding to a className-less reference to the moved
+              // namespace (left dangling once the new host is deleted), but the
+              // former host's tags are only rewritten on its next deploy. Such a
+              // script no longer hosts the class — it is not a transfer source.
+              Effect.catchTag("MissingDurableObjects", (error) =>
+                localBinding === undefined &&
+                settings.bindings?.some(
+                  (binding) =>
+                    binding.type === "durable_object_namespace" &&
+                    !binding.className &&
+                    (binding.scriptName == null || binding.scriptName === script),
+                )
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+              ),
             );
           }
           if (namespace?.script === script && namespace.class === params.className) {
@@ -4802,19 +4859,24 @@ export const LiveWorkerProvider = () =>
           }
 
           /**
-           * Precreate publishes the stable `https://{name}.{subdomain}.workers.dev`
-           * URL when `workersDev` is enabled (the default). Cycle peers that
-           * interpolate `worker.url` (e.g. Stripe.WebhookEndpoint) need a
-           * valid HTTPS URL here — the previous `url: undefined` stub made
-           * Stripe reject `"undefined/webhooks/stripe"`. Custom domains and
-           * version/preview URLs are still unresolved; reconcile overwrites
-           * `url` with the final value. `workersDev: false` keeps `url`
-           * undefined.
+           * Precreate publishes the URLs that are known before the first
+           * upload, so cycle peers that interpolate `worker.url` (e.g. a
+           * Website reading its API's URL while the API allows the Website's
+           * origin, or Stripe.WebhookEndpoint) get a valid HTTPS URL instead of
+           * `undefined`: the custom domain and its aliases when `domain` is
+           * already resolved, then the stable workers.dev URL when
+           * `workersDev` is enabled (the default). Version/preview URLs are
+           * still unresolved; reconcile overwrites `url`/`urls` with the
+           * final values.
            */
-          const workersDevUrl = resolveWorkersDev(news.workersDev as WorkerProps["workersDev"])
-            .enabled
-            ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+          const domain = isResolved(news.domain)
+            ? yield* resolveWorkerDomain(news.domain)
             : undefined;
+          const urls = yield* computeStableWorkerUrls({
+            scriptName: name,
+            workersDev: resolveWorkersDev(news.workersDev as WorkerProps["workersDev"]),
+            domain,
+          });
 
           return {
             // The placeholder upload's tag (or, when adopting an existing
@@ -4824,12 +4886,12 @@ export const LiveWorkerProvider = () =>
             workerName: name,
             namespace: dispatchNamespace,
             logpush: existingSettings?.logpush ?? undefined,
-            url: workersDevUrl,
+            url: urls[0],
             tags: existingSettings?.tags ?? tags,
             durableObjectNamespaces,
             accountId,
-            urls: workersDevUrl !== undefined ? [workersDevUrl] : [],
-            domain: undefined,
+            urls,
+            domain,
             routes: [],
             crons: [],
           } satisfies Worker["Attributes"];
@@ -4951,6 +5013,20 @@ export const LiveWorkerProvider = () =>
             // with this Worker — see readWorkerRoutes. Empty-array props
             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
             // can detect drift and converge deletions.
+            // This is the last gradual-rollout upload receipt, not the active
+            // traffic deployment. Preserve it only while that version exists.
+            const uploadedVersionId = output?.versionId
+              ? yield* workers
+                  .getScriptVersion({
+                    accountId,
+                    scriptName: workerName,
+                    versionId: output.versionId,
+                  })
+                  .pipe(
+                    Effect.map(() => output.versionId),
+                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                  )
+              : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
             const observeCrons = shouldObserveWorkerCrons(olds, output);
@@ -5036,6 +5112,7 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              versionId: uploadedVersionId,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
@@ -5099,10 +5176,23 @@ export const LiveWorkerProvider = () =>
           ).pipe(
             // After a pre-create stub (or under a busy account right after
             // the first upload) the settings read can race the script
-            // registry and 404 with "has no versions". Treat it as "no
-            // existing settings" so reconcile proceeds to upload/converge.
-            // The dispatch-namespace endpoints raise
+            // registry and 404 with "has no versions" (or the script itself as
+            // not-yet-found, as the version-settings read after the first
+            // upload also sees). If we already hold attributes for this script,
+            // wait briefly for the registry: planning the stub's Durable Object
+            // classes as new again is rejected by Cloudflare. A worker that
+            // really is gone still falls through to the upsert below.
+            // Dispatch-namespace precreate returns a stub without uploading,
+            // so a missing dispatch script or namespace is expected on its
+            // first reconcile, not this race, and is not retried; the
+            // dispatch-namespace endpoints raise
             // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
+            Effect.retry({
+              while: (error) =>
+                output !== undefined &&
+                (error._tag === "WorkerNotFound" || error._tag === "WorkerHasNoVersions"),
+              schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
+            }),
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
             Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(undefined)),
             Effect.catchTag("DispatchNamespaceScriptNotFound", () => Effect.succeed(undefined)),

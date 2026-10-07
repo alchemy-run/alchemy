@@ -58,7 +58,7 @@ export interface SvelteKitAwsTargetConfig extends SvelteKitTargetConfig {
 }
 
 /** The entry module name the finishing pass writes (`dist/server/index.mjs`). */
-export const SERVER_ENTRY_NAME = NodePath.join("server", "index.mjs");
+export const SERVER_ENTRY_NAME = "server/index.mjs";
 
 /**
  * The generated (unbundled) Lambda entry: kit's pre-built server instance
@@ -286,6 +286,7 @@ export const makeAwsTarget = (config: SvelteKitAwsTargetConfig = {}): SvelteKitT
     runBuildChild({
       module: import.meta.url,
       rootDir: context.root,
+      env: context.env,
       framework: "sveltekit",
       config: {
         rootDir: context.root,

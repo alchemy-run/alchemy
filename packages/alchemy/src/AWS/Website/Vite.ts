@@ -37,6 +37,12 @@ export interface ViteProps extends Omit<
   "env" | "memorySize" | "timeout" | "architecture" | "runtime"
 > {
   /**
+   * Environment variables for the production build. Vite inlines
+   * `VITE_*` variables into the client bundle (`import.meta.env`), so
+   * values can come from other resources' `Output`s.
+   */
+  env?: Record<string, any>;
+  /**
    * Deploy-time Vite overrides merged over your `vite.config.*`. The
    * config file is the primary home for Vite configuration (it loads
    * natively, plugins included) — reach for this bag when a value is
@@ -167,6 +173,14 @@ export const viteFrameworkOptions = (
  * ```typescript
  * const site = yield* AWS.Website.Vite("Web", {
  *   config: "vite.deploy.config.ts",
+ * });
+ * ```
+ *
+ * **Example:** Build-Time Environment
+ * ```typescript
+ * // Inlined into the bundle as `import.meta.env.VITE_API_URL`.
+ * const site = yield* AWS.Website.Vite("Web", {
+ *   env: { VITE_API_URL: api.url },
  * });
  * ```
  *

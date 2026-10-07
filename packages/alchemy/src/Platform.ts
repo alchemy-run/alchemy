@@ -297,9 +297,10 @@ export const Platform = <
 
   // Apply the optional `transformProps` hook to a (possibly Effect-valued)
   // props argument. Returns the props untouched when no hook is installed so
-  // the plain-object fast paths below keep working.
+  // the plain-object fast paths below keep working, and leaves `undefined`
+  // props (a bare-tag forward reference) for `Plan.make` to report.
   const applyTransformProps = (id: string, props: any): any =>
-    hooks.transformProps === undefined
+    hooks.transformProps === undefined || props === undefined
       ? props
       : Effect.flatMap(
           Effect.isEffect(props) ? (props as Effect.Effect<any>) : Effect.succeed(props ?? {}),
@@ -504,7 +505,7 @@ export const Platform = <
                       const phase = yield* ALCHEMY_PHASE;
 
                       return ConfigProvider.make(
-                        Effect.fn(function* (path) {
+                        Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before

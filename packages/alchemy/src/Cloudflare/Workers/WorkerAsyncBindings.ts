@@ -22,10 +22,12 @@ import type { ContainerApplication } from "../Containers/ContainerApplication.ts
 import { isDatabase } from "../D1/Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isApp } from "../Flagship/App.ts";
-import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
+import { getHyperdriveDevOriginForHost } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
+import { isStream as isK2Stream } from "../K2/Stream.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isMtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
@@ -263,7 +265,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         yield* resource.bind`${bindingName}`({
           bindings: [resolvedBindingMeta],
           hyperdrives: isHyperdriveConnection(binding)
-            ? getHyperdriveDevOrigin(binding)
+            ? yield* getHyperdriveDevOriginForHost(binding, resource)
             : undefined,
           // Dev-only local-emulation opt-out channel (like `hyperdrives`):
           // worker-only bindings and `SendEmail` descriptors piped through
@@ -524,6 +526,13 @@ const toBinding = (
       name: bindingName,
       serviceId: binding.serviceId,
     };
+  } else if (isMtlsCertificate(binding)) {
+    // `env.NAME` is a Fetcher whose subrequests present the certificate.
+    return {
+      type: "mtls_certificate",
+      name: bindingName,
+      certificateId: binding.mtlsCertificateId,
+    };
   } else if (isDatabase(binding)) {
     return {
       type: "d1",
@@ -659,6 +668,12 @@ const toBinding = (
       type: "pipelines",
       name: bindingName,
       pipeline: binding.name,
+    };
+  } else if (isK2Stream(binding)) {
+    return {
+      type: "k2",
+      name: bindingName,
+      stream: binding.streamId,
     };
   } else if (Output.isOutput(binding)) {
     return Output.map(binding, (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { applyAlchemyFormat } from "../../SQL/Migrations/AlchemyFormat.ts";
+import { applyPendingAlchemyFormat } from "../../SQL/Migrations/AlchemyFormat.ts";
 import {
   MigrationError,
   type MigrationHistoryConflictError,
@@ -44,7 +44,7 @@ export const applySqlMigrations: (
           }),
       }),
   };
-  yield* applyAlchemyFormat({
+  yield* applyPendingAlchemyFormat({
     executor,
     table: migrations.table,
     records: migrations.records,

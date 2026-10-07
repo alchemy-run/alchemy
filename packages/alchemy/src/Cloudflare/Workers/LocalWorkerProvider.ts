@@ -60,6 +60,8 @@ import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { LocalEdge } from "./LocalEdge.ts";
+import { routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
 import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
@@ -151,6 +153,7 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const edge = yield* LocalEdge;
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;
 
@@ -528,6 +531,26 @@ export const LocalWorkerProvider = () =>
           // list into workerd's `streamingTails` designators, which deliver
           // the producer's events live via the consumer's `tailStream()`.
           streamingTailConsumers: resolveTailConsumers(props.streamingTailConsumers),
+          /**
+           * Zone routes, emulated by the local edge (see `LocalEdge`). The
+           * zone is never resolved in dev — `zoneId` is the declared id or
+           * a `dev:`-marked stand-in.
+           */
+          routes: (props.routes ?? []).map((route) => {
+            const pattern = route.pattern.trim();
+            const zone =
+              route.zoneName ??
+              (typeof route.zone === "string" ? route.zone : route.zone?.zoneId) ??
+              routePatternHost(pattern) ??
+              pattern;
+            return { id: `dev:${pattern}`, pattern, zoneId: route.zoneId ?? `dev:${zone}` };
+          }),
+          /**
+           * The custom-domain hostname. In dev the Worker's own URL serves
+           * it, with zone routes for the hostname applied in front.
+           */
+          edgeDomain:
+            typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
         };
       });
 
@@ -744,6 +767,39 @@ export const LocalWorkerProvider = () =>
           containerWatchers.set(worker.fqn, { key, fiber });
         });
 
+      // Custom-domain hostnames handed to the local edge, per worker FQN.
+      const edgeDomains = new Map<string, { host: string; script: string }>();
+
+      const releaseEdgeDomain = Effect.fn(function* (fqn: string) {
+        const previous = edgeDomains.get(fqn);
+        if (previous) {
+          edgeDomains.delete(fqn);
+          yield* edge.removeDomain(previous.host, previous.script);
+        }
+      });
+
+      /**
+       * Point the worker's stable proxy at a freshly served workerd. A
+       * custom-domain worker is handed to the local edge instead, which
+       * fronts it with the zone-route router whenever routes match its
+       * hostname (Cloudflare's routes-over-custom-domain precedence).
+       */
+      const exposeWorker = Effect.fn(function* (
+        worker: RunnableWorkerConfig,
+        proxy: WorkerProxy.WorkerProxyInstance,
+        url: URL,
+      ) {
+        const previous = edgeDomains.get(worker.fqn);
+        if (previous && (previous.host !== worker.edgeDomain || previous.script !== worker.name)) {
+          yield* releaseEdgeDomain(worker.fqn);
+        }
+        if (worker.edgeDomain === undefined) {
+          return yield* proxy.set(url);
+        }
+        edgeDomains.set(worker.fqn, { host: worker.edgeDomain, script: worker.name });
+        yield* edge.serveDomain(worker.edgeDomain, { script: worker.name, proxy, upstream: url });
+      });
+
       const serveWith = (
         worker: RunnableWorkerConfig,
         bundle: Bundle.BundleOutput,
@@ -886,7 +942,7 @@ export const LocalWorkerProvider = () =>
                 }
                 break;
               }
-              yield* proxy.set(url);
+              yield* exposeWorker(worker, proxy, url);
               // Only now tear the replaced instances down: `previous` kept
               // serving — and stayed registered in the dev registry — until
               // the cutover above. The registry's entry removal is
@@ -1415,6 +1471,8 @@ export const LocalWorkerProvider = () =>
           if (config.dev.mode === "external") {
             dropServeState(fqn);
             yield* closeWorkerd(fqn);
+            yield* edge.removeRoutes(fqn);
+            yield* releaseEdgeDomain(fqn);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
               workerId: `dev:${config.name}`,
@@ -1464,6 +1522,17 @@ export const LocalWorkerProvider = () =>
             dev: config.dev,
             workerBindings,
           };
+          // Zone routes target this script through the local edge's router.
+          yield* edge.setRoutes(
+            fqn,
+            config.routes.map((route) => ({ pattern: route.pattern, script: config.name })),
+          );
+          // Only workerd-served workers can sit behind the edge router (it
+          // reaches them over service bindings); dev-server modes keep
+          // their proxy pointed at the dev server.
+          if (config.vite || config.source?.devMode === "server") {
+            yield* releaseEdgeDomain(fqn);
+          }
           const serverUrl = yield* config.source
             ? config.source.devMode === "server"
               ? runVite(worker, config.source.rootDir, invalidate, {
@@ -1497,7 +1566,13 @@ export const LocalWorkerProvider = () =>
                 namespace.uniqueKey,
               ]),
             ),
-            routes: [],
+            // Each route reports the edge listener serving its hostname.
+            routes: yield* Effect.forEach(config.routes, (route) => {
+              const host = routePatternHost(route.pattern);
+              return host === undefined
+                ? Effect.succeed(route)
+                : edge.url(host).pipe(Effect.map((url) => ({ ...route, url: url?.origin })));
+            }),
             crons: config.crons,
             tailConsumers: config.tailConsumers,
             streamingTailConsumers: config.streamingTailConsumers,
@@ -1511,6 +1586,8 @@ export const LocalWorkerProvider = () =>
           // and the URL proxy live outside instance scopes and are only
           // reclaimed on a real delete.
           dropServeState(fqn);
+          yield* edge.removeRoutes(fqn);
+          yield* releaseEdgeDomain(fqn);
           yield* closeWorkerd(fqn);
           yield* stopProxy(fqn);
         }),

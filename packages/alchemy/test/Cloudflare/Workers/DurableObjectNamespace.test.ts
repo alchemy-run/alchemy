@@ -71,6 +71,100 @@ test(
   },
 );
 
+test(
+  "jurisdiction() addresses objects inside that jurisdiction",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+    const name = "jurisdiction-probe";
+
+    const res = yield* client.get(`${url}/jurisdiction?name=${name}`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as { global: string; eu: string; euAgain: string };
+
+    // A jurisdiction-restricted id is a different object from the global one
+    // with the same name, and is stable across lookups.
+    expect(body.eu).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.eu).not.toBe(body.global);
+    expect(body.euAgain).toBe(body.eu);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
+test(
+  "get, idFromName, idFromString and newUniqueId address the expected instance",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/addressing?name=addressing-probe`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as {
+      idFromName: string;
+      byName: string;
+      byId: string;
+      byIdString: string;
+      uniqueId: string;
+      unique: string;
+      otherUnique: string;
+    };
+
+    // `get(idFromName(name))` and the string round-trip reach the same
+    // instance as `getByName(name)`.
+    expect(body.byName).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.idFromName).toBe(body.byName);
+    expect(body.byId).toBe(body.byName);
+    expect(body.byIdString).toBe(body.byName);
+    // `newUniqueId()` addresses a fresh instance each time.
+    expect(body.unique).toBe(body.uniqueId);
+    expect(body.unique).not.toBe(body.byName);
+    expect(body.otherUnique).not.toBe(body.unique);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
+test(
+  "calling an undefined durable object RPC method fails",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const res = yield* client.get(`${url}/unknown-rpc`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+    const body = (yield* res.json) as { missing: string };
+
+    expect(body.missing).toContain('Method "missing" not found on Durable Object');
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
+);
+
 class DurableObjectLocationNotReady extends Data.TaggedError("DurableObjectLocationNotReady")<{
   readonly message: string;
 }> {}
@@ -918,6 +1012,75 @@ export default { async fetch() { return new Response("v4"); } };
           expect(error._tag).toBe("DurableObjectTransferRequired");
           expect((yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value).toBe(1);
           expect((yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value).toBe(0);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // A former host keeps its `alchemy:dos:` tag until its next deploy, while
+    // Cloudflare rewrites its binding to a className-less reference to the
+    // moved namespace (dangling once the new host is deleted). Naming that
+    // former host again — e.g. a host history `[b, a]` after b is gone — must
+    // treat it as not hosting the class and create a fresh namespace, not fail
+    // trying to locate a namespace that no longer exists.
+    test.provider(
+      "a former host with a stale class tag is not a transfer source",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+
+          const hostA = Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: { Counter: Cloudflare.DurableObject("Counter") },
+          });
+
+          // v1 — worker-b takes worker-a's namespace; worker-a is untouched.
+          const v1 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              const a = yield* hostA;
+              const b = yield* Cloudflare.Worker("worker-b", {
+                script: hostWorkerScript,
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: a }) },
+              });
+              return { a, b };
+            }),
+          );
+          const movedNamespaceId = v1.b.durableObjectNamespaces.Counter;
+          expect(movedNamespaceId).toBe(v1.a.durableObjectNamespaces.Counter);
+
+          // v2 — worker-b (and with it the moved namespace) is deleted.
+          yield* scratch.deploy(
+            Effect.gen(function* () {
+              return { a: yield* hostA };
+            }),
+          );
+
+          // v3 — worker-d names worker-a as its former host: worker-a no
+          // longer hosts Counter, so worker-d creates a fresh namespace.
+          const v3 = yield* scratch.deploy(
+            Effect.gen(function* () {
+              const a = yield* hostA;
+              const d = yield* Cloudflare.Worker("worker-d", {
+                script: hostWorkerScript,
+                env: { Counter: Cloudflare.DurableObject("Counter", { transferredFrom: a }) },
+              });
+              return { a, d };
+            }),
+          );
+          const freshNamespaceId = v3.d.durableObjectNamespaces.Counter;
+          expect(freshNamespaceId).toBeDefined();
+          expect(freshNamespaceId).not.toBe(movedNamespaceId);
+
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespaces = yield* durableObjects.listNamespaces
+            .items({ accountId })
+            .pipe(Stream.runCollect);
+          expect(namespaces.find((ns) => ns.id === freshNamespaceId)).toMatchObject({
+            script: v3.d.workerName,
+            class: "Counter",
+          });
+          expect(namespaces.some((ns) => ns.id === movedNamespaceId)).toBe(false);
 
           yield* scratch.destroy();
         }).pipe(logLevel),

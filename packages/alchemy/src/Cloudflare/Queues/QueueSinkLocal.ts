@@ -29,6 +29,4 @@ import { WriteQueueLocal } from "./WriteQueueLocal.ts";
  * @product Queues
  * @category Storage & Databases
  */
-export const QueueSinkLocal = QueueSinkFromWriteQueue.pipe(
-  Layer.provide(WriteQueueLocal),
-);
+export const QueueSinkLocal = QueueSinkFromWriteQueue.pipe(Layer.provide(WriteQueueLocal));

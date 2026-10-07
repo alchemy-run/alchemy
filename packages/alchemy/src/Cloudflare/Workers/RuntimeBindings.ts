@@ -116,6 +116,13 @@ export const toRuntimeBinding = Effect.fn(function* (
       return yield* unsupported();
     case "json":
       return Json.local(b.name, b.json);
+    case "k2":
+      // Miniflare has no K2 simulation and no remote proxy for it yet.
+      return yield* new WorkerValidationError({
+        message: `K2 binding "${b.name}" is not supported in local mode: K2 has no local simulation.`,
+        hint: "Run K2 producers against a deployed Worker (alchemy deploy).",
+        value: b,
+      });
     case "kv_namespace":
       // A `dev:` id belongs to a locally-emulated namespace; a real id is
       // a live namespace the dev worker proxies to.

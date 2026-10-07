@@ -40,7 +40,7 @@ afterAll(
   { timeout: clientVpnTestTimeout },
 );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "creates, lists, replaces, and deletes authorization rules without a subnet association",
   (stack) =>
     Effect.gen(function* () {
@@ -144,7 +144,7 @@ test.provider(
   },
 );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "recreates an authorization rule revoked out of band",
   (stack) =>
     Effect.gen(function* () {
@@ -190,7 +190,7 @@ test.provider(
   },
 );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "discovers an authorization rule by natural key without prior state and deletes it",
   (stack) =>
     Effect.gen(function* () {
