@@ -5,36 +5,19 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import { Network, NetworkLive } from "./Network.ts";
 
 export default class Server extends AWS.EC2.Instance<Server>()(
   "ServerInstance",
   Effect.gen(function* () {
-    // Props are re-executed inside the deployed bundle. Yield the network
-    // resources directly so runtime sees references, not a Context.Service
-    // that would have to be provided (and would try to create a VPC).
-    const network = yield* AWS.EC2.Network("Network", {
-      cidrBlock: "10.42.0.0/16",
-      availabilityZones: 1,
-    });
-    const appSecurityGroup = yield* AWS.EC2.SecurityGroup("AppSecurityGroup", {
-      vpcId: network.vpcId,
-      description: "Security group for the EC2 application instance",
-      ingress: [
-        {
-          ipProtocol: "tcp",
-          fromPort: 3000,
-          toPort: 3000,
-          cidrIpv4: "0.0.0.0/0",
-        },
-      ],
-    });
+    const network = yield* Network;
 
     return {
       main: import.meta.url,
       imageId: AWS.EC2.amazonLinux(),
       instanceType: "t3.small",
       subnetId: network.publicSubnetIds[0],
-      securityGroupIds: [appSecurityGroup.groupId],
+      securityGroupIds: [network.appSecurityGroupId],
       associatePublicIpAddress: true,
       port: 3000,
     };
@@ -91,7 +74,7 @@ export default class Server extends AWS.EC2.Instance<Server>()(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        SQSQueueEventSource,
+        Layer.mergeAll(NetworkLive, SQSQueueEventSource),
         Layer.mergeAll(
           AWS.SQS.DeleteMessageBatchHttp,
           AWS.SQS.ReceiveMessageHttp,

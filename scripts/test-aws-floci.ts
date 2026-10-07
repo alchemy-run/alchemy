@@ -83,16 +83,7 @@ for (const root of requestedRoots) {
   }
   const glob = new Glob("**/*.test.ts");
   for await (const file of glob.scan(root)) {
-    // Dedicated `*.local.test.ts` files already set `dev: true` and some
-    // mix `Alchemy.remote()` (live out-of-band checks). Include the EC2
-    // hosted-instance fetch test: it is the emulator counterpart of the
-    // live smoke suite and is how we prove `instance.url` is reachable.
-    if (
-      file.endsWith(".local.test.ts") &&
-      !file.replaceAll("\\", "/").endsWith("EC2/Instance.local.test.ts")
-    ) {
-      continue;
-    }
+    if (file.endsWith(".local.test.ts")) continue;
     files.push(relative(alchemyRoot, join(root, file)));
   }
 }

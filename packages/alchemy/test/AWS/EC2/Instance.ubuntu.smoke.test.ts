@@ -10,13 +10,13 @@ import * as Test from "./VpcTest.ts";
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ubuntu 24.04 end-to-end for the hosted bootstrap (issues #1027 + #1028):
-// Ubuntu AMIs ship without `unzip`, `dnf`, `yum`, or the AWS CLI. A served
-// HTTP response proves the bootstrap extracted the bundle with python,
-// installed the AWS CLI without the package manager, synced from S3, and
-// the systemd unit's `bun --no-install` start ran the self-contained bundle.
+// Ubuntu AMIs ship without `unzip`, `dnf`, or `yum`, so a served HTTP response
+// proves the bootstrap's `apt-get` branch installed `unzip`, the AWS CLI
+// install and S3 bundle sync succeeded, and the systemd unit's
+// `bun --no-install` start ran the self-contained bundle.
 //
-// Heavy (instance boot + AWS CLI install + bun install + S3 sync), so
-// skipped under `FAST=1`.
+// Heavy (instance boot + apt-get + AWS CLI install + bun install + S3 sync),
+// so skipped under `FAST=1`.
 test.provider.skipIf(!!process.env.FAST)(
   "deploys a hosted Ubuntu 24.04 instance that serves HTTP",
   (stack) =>
