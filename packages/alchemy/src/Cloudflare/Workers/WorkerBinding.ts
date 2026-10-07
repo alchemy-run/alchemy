@@ -17,7 +17,9 @@ import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
+import type { Stream as K2Stream } from "../K2/Stream.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { MtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import type { Stream as PipelinesStream } from "../Pipelines/Stream.ts";
 import type { Queue } from "../Queues/Queue.ts";
@@ -31,15 +33,15 @@ import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
-import type { AnyBindingEffect } from "./Binding.ts";
 import type { Assets } from "./Assets.ts";
-import type { URLEffect } from "./Worker.ts";
+import type { AnyBindingEffect } from "./Binding.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
+import type { URLEffect } from "./Worker.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
@@ -112,10 +114,7 @@ export interface R2S3CredentialsWorkerBinding {
  * (real id → remote-proxied producer). Stripped from the binding before
  * the script upload — Cloudflare never sees it.
  */
-export type QueueWorkerBinding = Extract<
-  DistilledWorkerBinding,
-  { type: "queue" }
-> & {
+export type QueueWorkerBinding = Extract<DistilledWorkerBinding, { type: "queue" }> & {
   queueId?: string;
   /**
    * Alchemy-only (stripped before upload): dev-mode remote-producer shim
@@ -132,6 +131,12 @@ export type QueueWorkerBinding = Extract<
 };
 
 /**
+ * The `k2` metadata binding: produce-only access to a K2 stream, by stream
+ * id (`Cloudflare.K2.WriteStreamBinding`, or a `K2.Stream` in `env`).
+ */
+export type K2WorkerBinding = Extract<DistilledWorkerBinding, { type: "k2" }>;
+
+/**
  * The `service` metadata binding extended with workerd's `ctx.props`.
  * `props` is what a `Cloudflare.WorkerEntrypoint(worker, { props })` env
  * entry lowers to; the local runtime delivers it to the target entrypoint.
@@ -139,10 +144,7 @@ export type QueueWorkerBinding = Extract<
  * live uploads it is dropped at encode until the distilled `workers`
  * service adds it.
  */
-export type ServiceWorkerBinding = Extract<
-  DistilledWorkerBinding,
-  { type: "service" }
-> & {
+export type ServiceWorkerBinding = Extract<DistilledWorkerBinding, { type: "service" }> & {
   props?: Record<string, unknown>;
 };
 
@@ -158,9 +160,7 @@ export type WireWorkerBinding = Exclude<
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      | { type: "durable_object_namespace" }
-      | { type: "queue" }
-      | { type: "service" }
+      { type: "durable_object_namespace" } | { type: "queue" } | { type: "service" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
@@ -222,6 +222,7 @@ export type WorkerBindingResource =
   | StreamBinding
   | PipelinesStream
   | LegacyPipeline
+  | K2Stream
   | Hyperdrive
   | VectorizeIndex
   | Secret
@@ -238,6 +239,8 @@ export type WorkerBindingResource =
   | WorkflowLike<any>
   | VpcService
   | VpcServiceLookup
+  // An account-level mTLS certificate becomes an `mtls_certificate` binding.
+  | MtlsCertificate
   // A Container bound directly in `env` declares a container-backed Durable
   // Object class (DO namespace binding + ContainerApplication in one).
   | Container.Decl.Any;
@@ -247,9 +250,7 @@ export type WorkerBindings = {
 };
 
 export const bindWorker = Effect.fn(function* <Shape, Req = never>(
-  workerEff:
-    | (Worker & Rpc<Shape>)
-    | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
+  workerEff: (Worker & Rpc<Shape>) | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
 ) {
   // Worker classes and regular Effects are both yieldable here.
   const worker = isYieldableEffectLike(workerEff)

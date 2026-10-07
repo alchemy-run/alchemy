@@ -1,18 +1,20 @@
-import * as Planetscale from "@/Planetscale";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const branchOutput = (
   overrides: Partial<Planetscale.PostgresBranchAttributes> = {},
@@ -71,11 +73,7 @@ test.provider(
         news: props(3),
         oldBindings: [],
         newBindings: [],
-        output: branchOutput({
-          desiredReplicas: 2,
-          hasReplicas: true,
-          hasReadOnlyReplicas: false,
-        }),
+        output: branchOutput({ desiredReplicas: 2, hasReplicas: true, hasReadOnlyReplicas: false }),
       });
       // A non-renaming update advertises `name` as stable so downstream
       // consumers keep resolving `branch.name` at plan time.
@@ -107,15 +105,12 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
             yield* deleteBranchIfExists(dbName, branchName, organization);
 
             const program = Effect.gen(function* () {
-              const branch = yield* Planetscale.PostgresBranch(
-                "ReplicaBranch",
-                {
-                  name: branchName,
-                  database: dbName,
-                  parentBranch: "main",
-                  replicas: 0,
-                },
-              );
+              const branch = yield* Planetscale.PostgresBranch("ReplicaBranch", {
+                name: branchName,
+                database: dbName,
+                parentBranch: "main",
+                replicas: 0,
+              });
 
               return { branch };
             });
@@ -140,17 +135,127 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
             expect(live.has_read_only_replicas).toBe(false);
 
             const plan = yield* stack.plan(program);
-            expect(plan.resources.ReplicaBranch).toMatchObject({
-              action: "noop",
-            });
+            expect(plan.resources.ReplicaBranch).toMatchObject({ action: "noop" });
 
             yield* stack.destroy();
             yield* waitForBranchToBeDeleted(dbName, branchName, organization);
-          }).pipe(
-            Effect.ensuring(
-              deleteBranchIfExists(dbName, branchName, organization),
-            ),
+          }).pipe(Effect.ensuring(deleteBranchIfExists(dbName, branchName, organization)));
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    test.provider(
+      "Postgres branch off an ARM parent expands a short cluster size to an ARM SKU",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, branch } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ArmParentDatabase", {
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const branch = yield* Planetscale.PostgresBranch("ArmChildBranch", {
+                database,
+                parentBranch: "main",
+                clusterSize: "PS_DEV",
+              });
+
+              return { database, branch };
+            }),
           );
+
+          const live = yield* ps.getBranch({
+            organization: database.organization,
+            database: database.name,
+            branch: branch.name,
+          });
+
+          expect(live.cluster_architecture).toEqual("aarch64");
+          expect(live.cluster_name).toEqual("PS_DEV_AWS_ARM");
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    // #1389: an edited already-applied migration used to plan as an
+    // in-place update; the runner skipped it by name and persisted the new
+    // hash, silently accepting rewritten history.
+    test.provider(
+      "rewritten migration history replaces a development branch and fails on production",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = path.join(import.meta.dirname, "../../.tmp", `ps-rewrite-${stack.stage}`);
+          const databaseDir = path.join(root, "database");
+          const branchDir = path.join(root, "branch");
+          yield* fs.remove(root, { recursive: true, force: true });
+          yield* fs.makeDirectory(databaseDir, { recursive: true });
+          yield* fs.makeDirectory(branchDir, { recursive: true });
+          const init = "CREATE TABLE users (id int);";
+          yield* fs.writeFileString(path.join(databaseDir, "0001_init.sql"), init);
+          yield* fs.writeFileString(path.join(branchDir, "0001_init.sql"), init);
+          // Applied only on the development branch, never on main.
+          yield* fs.writeFileString(
+            path.join(branchDir, "0002_posts.sql"),
+            "CREATE TABLE posts (id int);",
+          );
+
+          const program = Effect.gen(function* () {
+            const database = yield* Planetscale.PostgresDatabase("RewriteDatabase", {
+              clusterSize: "PS_5",
+              migrations: databaseDir,
+            });
+            const branch = yield* Planetscale.PostgresBranch("RewriteBranch", {
+              database,
+              parentBranch: "main",
+              migrations: branchDir,
+            });
+            return { database, branch };
+          });
+
+          yield* stack.destroy();
+
+          const first = yield* stack.deploy(program);
+          expect(first.branch.production).toBe(false);
+
+          // Rewrite the branch-only migration: the branch re-forks from main
+          // (which never ran it) and applies the new version.
+          yield* fs.writeFileString(
+            path.join(branchDir, "0002_posts.sql"),
+            "CREATE TABLE posts (id int, title text);",
+          );
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.RewriteBranch).toMatchObject({ action: "replace" });
+
+          const second = yield* stack.deploy(program);
+          expect(second.branch.name).not.toEqual(first.branch.name);
+          expect(second.branch.migrationsHashes).toEqual(yield* hashMigrations(branchDir));
+          yield* waitForBranchToBeDeleted(
+            first.database.name,
+            first.branch.name,
+            first.database.organization,
+          );
+
+          // Rewrite a migration main (a production branch) already ran: no
+          // replacement is possible, so the deploy fails and keeps the
+          // recorded history.
+          yield* fs.writeFileString(
+            path.join(databaseDir, "0001_init.sql"),
+            "CREATE TABLE users (id int, name text);",
+          );
+          const rewrite = yield* Effect.exit(stack.deploy(program));
+          expect(Exit.isFailure(rewrite)).toBe(true);
+          if (Exit.isFailure(rewrite)) {
+            expect(Cause.pretty(rewrite.cause)).toContain("forward migration");
+          }
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(first.database.name, first.database.organization);
         }).pipe(logLevel),
       { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
     );
@@ -187,9 +292,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
             }),
           );
 
-          const provider = yield* Provider.findProvider(
-            Planetscale.MySQLBranch,
-          );
+          const provider = yield* Provider.findProvider(Planetscale.MySQLBranch);
           const all = yield* provider.list();
 
           const found = all.find(
@@ -214,9 +317,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
 
           // Every item is hydrated into the exact `read` Attributes shape — the
           // org's `main` branch is enumerated too, only as MySQL kind.
-          expect(
-            all.every((b) => b.organization === database.organization),
-          ).toBe(true);
+          expect(all.every((b) => b.organization === database.organization)).toBe(true);
 
           yield* stack.destroy();
           yield* waitForDatabaseToBeDeleted(dbName, database.organization);
@@ -226,24 +327,15 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
   },
 );
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
-  yield* ps
-    .getDatabase({
-      organization,
-      database,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
-      Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
+  yield* ps.getDatabase({ organization, database }).pipe(
+    Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
+    Effect.retry({
+      while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 });
 
 const waitForBranchToBeDeleted = Effect.fn(function* (
@@ -251,32 +343,20 @@ const waitForBranchToBeDeleted = Effect.fn(function* (
   branch: string,
   organization: string,
 ) {
-  yield* ps
-    .getBranch({
-      organization,
-      database,
-      branch,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new BranchStillExists())),
-      Effect.retry({
-        while: (e): e is BranchStillExists => e instanceof BranchStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+  yield* ps.getBranch({ organization, database, branch }).pipe(
+    Effect.flatMap(() => Effect.fail(new BranchStillExists())),
+    Effect.retry({
+      while: (e): e is BranchStillExists => e instanceof BranchStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
 });
 
-const deleteBranchIfExists = (
-  database: string,
-  branch: string,
-  organization: string,
-) =>
+const deleteBranchIfExists = (database: string, branch: string, organization: string) =>
   ps.deleteBranch({ organization, database, branch }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
-    Effect.flatMap(() =>
-      waitForBranchToBeDeleted(database, branch, organization),
-    ),
+    Effect.flatMap(() => waitForBranchToBeDeleted(database, branch, organization)),
     Effect.ignore,
   );
 

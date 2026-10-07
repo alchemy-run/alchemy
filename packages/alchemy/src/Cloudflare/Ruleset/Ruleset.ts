@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 import type { Attributes, Zone } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-export type Phase = rulesets.CreateRulesetForZoneRequest["phase"];
+export type Phase = NonNullable<rulesets.CreateRulesetForZoneRequest["phase"]>;
 export type Rule = NonNullable<rulesets.PutPhasForZoneRequest["rules"]>[number];
 export type OutputRule = Omit<
   NonNullable<rulesets.GetPhasResponse["rules"]>[number],
@@ -144,9 +144,7 @@ export const RulesetProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(news.zone);
       if (zoneId === undefined) {
-        return yield* Effect.fail(
-          new Error("Cloudflare Ruleset: zone id is not resolved"),
-        );
+        return yield* Effect.fail(new Error("Cloudflare Ruleset: zone id is not resolved"));
       }
       const name = yield* createRulesetName(id, news.name ?? output?.name);
       const ruleset = yield* rulesets.putPhasForZone({
@@ -166,15 +164,11 @@ export const RulesetProvider = () =>
           zoneId: output.zoneId,
           rulesetPhase: output.phase ?? olds.phase,
         })
-        .pipe(
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
       if (entrypoint === undefined) return;
       const owned = new Set(output.rules.map((rule) => rule.id));
       yield* Effect.forEach(
-        (entrypoint.rules ?? []).filter(
-          (rule) => rule.id != null && owned.has(rule.id),
-        ),
+        (entrypoint.rules ?? []).filter((rule) => rule.id != null && owned.has(rule.id)),
         (rule) =>
           rulesets.deleteRuleForZone({
             zoneId: output.zoneId,
@@ -225,9 +219,7 @@ export const RulesetProvider = () =>
                       rulesetPhase: entry.phase,
                     })
                     .pipe(
-                      Effect.map((ruleset) =>
-                        toRulesetAttributes(zone.id, ruleset),
-                      ),
+                      Effect.map((ruleset) => toRulesetAttributes(zone.id, ruleset)),
                       // Per-item not-found / plan-gated entrypoints are
                       // skipped rather than failing the whole enumeration.
                       Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>

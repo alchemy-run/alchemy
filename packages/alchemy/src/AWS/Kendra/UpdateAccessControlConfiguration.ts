@@ -48,7 +48,6 @@ export interface UpdateAccessControlConfiguration extends Binding.Service<
     >
   >
 > {}
-export const UpdateAccessControlConfiguration =
-  Binding.Service<UpdateAccessControlConfiguration>(
-    "AWS.Kendra.UpdateAccessControlConfiguration",
-  );
+export const UpdateAccessControlConfiguration = Binding.Service<UpdateAccessControlConfiguration>(
+  "AWS.Kendra.UpdateAccessControlConfiguration",
+);

@@ -43,7 +43,6 @@ export interface StartViewerSessionRevocation extends Binding.Service<
     >
   >
 > {}
-export const StartViewerSessionRevocation =
-  Binding.Service<StartViewerSessionRevocation>(
-    "AWS.IVS.StartViewerSessionRevocation",
-  );
+export const StartViewerSessionRevocation = Binding.Service<StartViewerSessionRevocation>(
+  "AWS.IVS.StartViewerSessionRevocation",
+);

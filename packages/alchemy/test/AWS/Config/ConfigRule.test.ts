@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ConfigRule } from "@/AWS/Config";
-import * as Test from "@/Test/Alchemy";
 import * as config from "@distilled.cloud/aws/config-service";
 import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ConfigRule } from "@/AWS/Config";
+import * as Test from "@/Test/Alchemy";
 import { makeConfigTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -38,9 +38,7 @@ test.provider(
 const findRule = (ruleName: string) =>
   config.describeConfigRules({ ConfigRuleNames: [ruleName] }).pipe(
     Effect.map((r) => (r.ConfigRules ?? []).at(0)),
-    Effect.catchTag("NoSuchConfigRuleException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("NoSuchConfigRuleException", () => Effect.succeed(undefined)),
   );
 
 class RuleStillExists extends Data.TaggedError("RuleStillExists")<{
@@ -93,9 +91,7 @@ const ensureRecorder = Effect.gen(function* () {
   }
   yield* iam
     .createServiceLinkedRole({ AWSServiceName: "config.amazonaws.com" })
-    .pipe(
-      Effect.catchTag("InvalidInputException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("InvalidInputException", () => Effect.succeed(undefined)));
   const role = yield* iam.getRole({ RoleName: "AWSServiceRoleForConfig" });
   // A freshly-created service-linked role can be transiently rejected until
   // IAM propagates.
@@ -110,10 +106,7 @@ const ensureRecorder = Effect.gen(function* () {
     .pipe(
       Effect.retry({
         while: (e) => e._tag === "InvalidRoleException",
-        schedule: Schedule.max([
-          Schedule.fixed("2 seconds"),
-          Schedule.recurs(15),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
       }),
     );
   return true;
@@ -127,10 +120,7 @@ const removeRecorderIfCreated = (created: boolean) =>
           ConfigurationRecorderName: TEST_RECORDER_NAME,
         })
         .pipe(
-          Effect.catchTag(
-            "NoSuchConfigurationRecorderException",
-            () => Effect.void,
-          ),
+          Effect.catchTag("NoSuchConfigurationRecorderException", () => Effect.void),
           Effect.orDie,
         )
     : Effect.void;
@@ -144,9 +134,7 @@ test.provider(
       // success, failure, AND interruption; the deterministic name +
       // reclaim in ensureRecorder means a re-run converges on any orphan
       // from a previously-killed run.
-      yield* Effect.acquireRelease(ensureRecorder, (created) =>
-        removeRecorderIfCreated(created),
-      );
+      yield* Effect.acquireRelease(ensureRecorder, (created) => removeRecorderIfCreated(created));
 
       yield* Effect.gen(function* () {
         const rule = yield* stack.deploy(
@@ -170,22 +158,12 @@ test.provider(
         // Out-of-band verification via distilled.
         const created = yield* findRule(rule.configRuleName);
         expect(created?.Source.Owner).toBe("AWS");
-        expect(created?.Source.SourceIdentifier).toBe(
-          "S3_BUCKET_VERSIONING_ENABLED",
-        );
-        expect(created?.Description).toBe(
-          "buckets must have versioning enabled",
-        );
-        expect(created?.Scope?.ComplianceResourceTypes).toEqual([
-          "AWS::S3::Bucket",
-        ]);
+        expect(created?.Source.SourceIdentifier).toBe("S3_BUCKET_VERSIONING_ENABLED");
+        expect(created?.Description).toBe("buckets must have versioning enabled");
+        expect(created?.Scope?.ComplianceResourceTypes).toEqual(["AWS::S3::Bucket"]);
         const tags = yield* config
           .listTagsForResource({ ResourceArn: rule.configRuleArn })
-          .pipe(
-            Effect.map((r) =>
-              Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-            ),
-          );
+          .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
         expect(tags.Environment).toBe("test");
         expect(tags["alchemy::id"]).toBe("VersioningRule");
 
@@ -207,16 +185,10 @@ test.provider(
         expect(updated.configRuleArn).toBe(rule.configRuleArn);
 
         const afterUpdate = yield* findRule(rule.configRuleName);
-        expect(afterUpdate?.Description).toBe(
-          "buckets must have versioning enabled (v2)",
-        );
+        expect(afterUpdate?.Description).toBe("buckets must have versioning enabled (v2)");
         const updatedTags = yield* config
           .listTagsForResource({ ResourceArn: rule.configRuleArn })
-          .pipe(
-            Effect.map((r) =>
-              Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-            ),
-          );
+          .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
         expect(updatedTags.Environment).toBe("prod");
 
         // Renaming replaces the rule.

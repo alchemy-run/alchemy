@@ -12,13 +12,9 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
 import type { Function as LambdaFunction } from "../../AWS/Lambda/Function.ts";
-import {
-  hashBounds,
-  resolveDeltas,
-  scanPart,
-} from "../Protocol/PartialScan.ts";
+import { InvokeFunction } from "../../AWS/Lambda/InvokeFunction.ts";
+import { hashBounds, resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
 import { Hasher, HashError, type HasherShape } from "./Hasher.ts";
 import {
   decodeHashResponse,
@@ -35,14 +31,9 @@ export const HasherLambda = (
     Effect.gen(function* () {
       // A class-style declaration (`HasherFunction`) is yielded here — at
       // deploy that registers the function, at runtime it resolves it.
-      const func = Effect.isEffect(fn)
-        ? yield* fn as Effect.Effect<LambdaFunction>
-        : fn;
+      const func = Effect.isEffect(fn) ? yield* fn as Effect.Effect<LambdaFunction> : fn;
       const invoke = yield* InvokeFunction(func);
-      const remote = (
-        payload: Uint8Array,
-        options: Parameters<HasherShape["hashPart"]>[1],
-      ) =>
+      const remote = (payload: Uint8Array, options: Parameters<HasherShape["hashPart"]>[1]) =>
         Effect.gen(function* () {
           const response = yield* invoke({
             Payload: JSON.stringify(encodeHashEvent(payload, options)),
@@ -71,9 +62,7 @@ export const HasherLambda = (
                 ),
               )
             : [];
-          const text = new TextDecoder().decode(
-            chunks.length === 1 ? chunks[0] : concat(chunks),
-          );
+          const text = new TextDecoder().decode(chunks.length === 1 ? chunks[0] : concat(chunks));
           const parsed = yield* Effect.try({
             try: () => JSON.parse(text) as HashResponse,
             catch: () => new HashError({ reason: `lambda response: not JSON` }),
@@ -99,18 +88,13 @@ export const HasherLambda = (
                 console.warn(`[hasher] ${error.reason}; hashing inline`);
               }
               const skip = options.skip ?? 0;
-              return scanPart(
-                skip > 0 ? payload.subarray(skip) : payload,
-                options,
-              );
+              return scanPart(skip > 0 ? payload.subarray(skip) : payload, options);
             }),
           ),
         // Delta batches stay on the receiver for now: a batch would need the
         // same base64 event budget as a chunk.
-        resolveDeltas: (bases, jobs, options) =>
-          resolveDeltas(bases, jobs, options),
-        hashBoundsPart: (payload, bounds, options) =>
-          hashBounds(payload, bounds, options),
+        resolveDeltas: (bases, jobs, options) => resolveDeltas(bases, jobs, options),
+        hashBoundsPart: (payload, bounds, options) => hashBounds(payload, bounds, options),
       } satisfies HasherShape;
     }),
   );

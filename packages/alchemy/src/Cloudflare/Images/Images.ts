@@ -28,7 +28,7 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  * ### Effect-style Worker (recommended)
  * **Example:** Read image format and dimensions from the request body
  * ```typescript
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import { HttpServerRequest } from "effect/http/HttpServerRequest";
  *
  * Cloudflare.Worker("ImageWorker", { main: import.meta.url },
  *   Effect.gen(function* () {
@@ -144,7 +144,5 @@ export interface ImageTransformer {
     image: Stream.Stream<Uint8Array, E, R> | ImageTransformer,
     options?: cf.ImageDrawOptions,
   ): Effect.Effect<ImageTransformer, never, R>;
-  output(
-    options: cf.ImageOutputOptions,
-  ): Effect.Effect<ImageTransformationResult, ImagesError>;
+  output(options: cf.ImageOutputOptions): Effect.Effect<ImageTransformationResult, ImagesError>;
 }

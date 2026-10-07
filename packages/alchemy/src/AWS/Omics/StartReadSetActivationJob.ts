@@ -41,7 +41,6 @@ export interface StartReadSetActivationJob extends Binding.Service<
   >
 > {}
 
-export const StartReadSetActivationJob =
-  Binding.Service<StartReadSetActivationJob>(
-    "AWS.Omics.StartReadSetActivationJob",
-  );
+export const StartReadSetActivationJob = Binding.Service<StartReadSetActivationJob>(
+  "AWS.Omics.StartReadSetActivationJob",
+);

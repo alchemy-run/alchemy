@@ -7,8 +7,7 @@ const name = process.env.CONTAINER_NAME;
 const version = process.env.VERSION;
 const machine = process.env.FLY_MACHINE_ID;
 const held = new Set<http.ServerResponse>();
-const receipt = (signal: string) =>
-  JSON.stringify({ machine, name, version, signal });
+const receipt = (signal: string) => JSON.stringify({ machine, name, version, signal });
 const server = http.createServer((request, response) => {
   response.setHeader("cache-control", "no-store");
   if (request.url === "/health") {

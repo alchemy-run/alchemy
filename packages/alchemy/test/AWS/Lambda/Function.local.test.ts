@@ -1,3 +1,17 @@
+import { fileURLToPath } from "node:url";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as SQS from "@distilled.cloud/aws/sqs";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 /**
  * `AWS.Lambda.Function` under `alchemy dev`: the dualized provider deploys
  * the function INTO the floci emulator (RPC-sidecar-hosted
@@ -20,7 +34,8 @@
  *   - a dualized Queue + a `bundle: false` Function + a distilled
  *     event-source mapping pump SQS messages through the containerized
  *     function into a dualized Bucket;
- *   - after destroy the function is gone from the emulator.
+ *   - after destroy the function and its `/aws/lambda/<name>` log group
+ *     are gone from the emulator.
  *
  * Requires Docker (floci + the Lambda runtime container); skipped when the
  * daemon is unavailable.
@@ -29,34 +44,13 @@ import * as AWS from "@/AWS";
 import * as Endpoint from "@/AWS/Endpoint.ts";
 import * as Region from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as Lambda from "@distilled.cloud/aws/lambda";
-import * as SQS from "@distilled.cloud/aws/sqs";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { fileURLToPath } from "node:url";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import {
-  dockerAvailable,
-  FLOCI_ENDPOINT,
-  rawS3GetObject,
-} from "../Local/fixtures/raw.ts";
+import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const devFixtureDir = fileURLToPath(
-  new URL("./fixtures/floci-dev", import.meta.url),
-);
-const esmHandlerPath = fileURLToPath(
-  new URL("./fixtures/floci-esm/handler.mjs", import.meta.url),
-);
+const devFixtureDir = fileURLToPath(new URL("./fixtures/floci-dev", import.meta.url));
+const esmHandlerPath = fileURLToPath(new URL("./fixtures/floci-esm/handler.mjs", import.meta.url));
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */
 const flociContext = Layer.mergeAll(
@@ -121,8 +115,7 @@ test.provider.skipIf(!dockerAvailable)(
         }),
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
-          until: (res): boolean =>
-            res.status === 200 && res.body.startsWith("marker-v1"),
+          until: (res): boolean => res.status === 200 && res.body.startsWith("marker-v1"),
           times: 60,
         }),
       );
@@ -134,10 +127,7 @@ test.provider.skipIf(!dockerAvailable)(
       // rebuilds + uploads; floci's reactive S3 sync re-extracts.
       const source = yield* fs.readFileString(mainPath);
       const swapStartedAt = Date.now();
-      yield* fs.writeFileString(
-        mainPath,
-        source.replace(`"marker-v1"`, `"marker-v2"`),
-      );
+      yield* fs.writeFileString(mainPath, source.replace(`"marker-v1"`, `"marker-v2"`));
 
       const swapped = yield* client.get(fn.functionUrl!).pipe(
         Effect.flatMap((response) =>
@@ -153,25 +143,19 @@ test.provider.skipIf(!dockerAvailable)(
         }),
         Effect.repeat({
           schedule: Schedule.spaced("250 millis"),
-          until: (res): boolean =>
-            res.status === 200 && res.body.startsWith("marker-v2"),
+          until: (res): boolean => res.status === 200 && res.body.startsWith("marker-v2"),
           times: 240,
         }),
       );
       const swapLatencyMs = Date.now() - swapStartedAt;
       expect(swapped.body).toBe("marker-v2:env-carried");
-      yield* Effect.log(
-        `hot reload observed at the function URL in ${swapLatencyMs}ms`,
-      );
+      yield* Effect.log(`hot reload observed at the function URL in ${swapLatencyMs}ms`);
 
       // Second swap: the function's code is now enrolled on the stable dev
       // S3 key, so this one is a bare PutObject + floci reactive re-extract
       // (no Lambda API call).
       const secondStartedAt = Date.now();
-      yield* fs.writeFileString(
-        mainPath,
-        source.replace(`"marker-v1"`, `"marker-v3"`),
-      );
+      yield* fs.writeFileString(mainPath, source.replace(`"marker-v1"`, `"marker-v3"`));
       const reswapped = yield* client.get(fn.functionUrl!).pipe(
         Effect.flatMap((response) =>
           Effect.map(response.text, (body) => ({
@@ -186,8 +170,7 @@ test.provider.skipIf(!dockerAvailable)(
         }),
         Effect.repeat({
           schedule: Schedule.spaced("250 millis"),
-          until: (res): boolean =>
-            res.status === 200 && res.body.startsWith("marker-v3"),
+          until: (res): boolean => res.status === 200 && res.body.startsWith("marker-v3"),
           times: 240,
         }),
       );
@@ -228,17 +211,13 @@ test.provider.skipIf(!dockerAvailable)(
         }),
         Effect.repeat({
           schedule: Schedule.spaced("250 millis"),
-          until: (res): boolean =>
-            res.status === 200 && res.body === "marker-v3:env-updated",
+          until: (res): boolean => res.status === 200 && res.body === "marker-v3:env-updated",
           times: 240,
         }),
       );
       expect(afterUpdate.body).toBe("marker-v3:env-updated");
 
-      yield* fs.writeFileString(
-        mainPath,
-        source.replace(`"marker-v1"`, `"marker-v4"`),
-      );
+      yield* fs.writeFileString(mainPath, source.replace(`"marker-v1"`, `"marker-v4"`));
       const afterUpdateSwap = yield* client.get(fn.functionUrl!).pipe(
         Effect.flatMap((response) =>
           Effect.map(response.text, (body) => ({
@@ -253,23 +232,39 @@ test.provider.skipIf(!dockerAvailable)(
         }),
         Effect.repeat({
           schedule: Schedule.spaced("250 millis"),
-          until: (res): boolean =>
-            res.status === 200 && res.body.startsWith("marker-v4"),
+          until: (res): boolean => res.status === 200 && res.body.startsWith("marker-v4"),
           times: 240,
         }),
       );
       expect(afterUpdateSwap.body).toBe("marker-v4:env-updated");
 
+      // The invocations above made the emulator create the function's log
+      // group (control: the destroy assertion below is not vacuous).
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const logGroupExists = Logs.describeLogGroups({
+        logGroupNamePrefix: logGroupName,
+      }).pipe(
+        Effect.map((r) => (r.logGroups ?? []).some((g) => g.logGroupName === logGroupName)),
+        Effect.provide(flociContext),
+      );
+      const existedBeforeDestroy = yield* logGroupExists.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (exists): boolean => exists,
+          times: 20,
+        }),
+      );
+      expect(existedBeforeDestroy).toBe(true);
+
       // Destroy: the function (and its role) must be gone from the
       // emulator.
       yield* stack.destroy();
+      expect(yield* logGroupExists).toBe(false);
       const gone = yield* Lambda.getFunction({
         FunctionName: fn.functionName,
       }).pipe(
         Effect.map(() => false),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         Effect.provide(flociContext),
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
@@ -327,10 +322,7 @@ test.provider.skipIf(!dockerAvailable)(
 
       // Bounded poll: floci's ESM poller delivers to the containerized
       // function, whose S3 write-back proves consumption.
-      const consumed = yield* rawS3GetObject(
-        outputs.bucket.bucketName,
-        markerKey,
-      ).pipe(
+      const consumed = yield* rawS3GetObject(outputs.bucket.bucketName, markerKey).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("3 seconds"),
           until: (res): boolean => res.status === 200,
@@ -347,9 +339,7 @@ test.provider.skipIf(!dockerAvailable)(
         UUID: outputs.esm.uuid,
       }).pipe(
         Effect.map(() => false),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         Effect.provide(flociContext),
       );
       expect(esmGone).toBe(true);
@@ -358,9 +348,7 @@ test.provider.skipIf(!dockerAvailable)(
         FunctionName: outputs.fn.functionName,
       }).pipe(
         Effect.map(() => false),
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         Effect.provide(flociContext),
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
@@ -371,13 +359,52 @@ test.provider.skipIf(!dockerAvailable)(
       expect(gone).toBe(true);
     }),
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:s3",
-      "provider:aws:sqs",
-      "local",
-    ],
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
     timeout: 540_000,
   },
+);
+
+test.provider.skipIf(!dockerAvailable)(
+  "logging.retention creates the log group with its policy before the first invoke",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (logging?: AWS.Lambda.FunctionProps["logging"]) =>
+        stack.deploy(
+          AWS.Lambda.Function("DevRetentionFn", {
+            main: esmHandlerPath,
+            handler: "handler",
+            bundle: false,
+            functionUrl: false,
+            logging,
+          }),
+        );
+
+      // Control: without `logging` the provider does not touch CloudWatch
+      // Logs, and the function is never invoked, so no group exists.
+      const fn = yield* deploy();
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const findGroup = Logs.describeLogGroups({ logGroupNamePrefix: logGroupName }).pipe(
+        Effect.map((page) => page.logGroups?.find((g) => g.logGroupName === logGroupName)),
+        Effect.provide(flociContext),
+      );
+      yield* Effect.addFinalizer(() =>
+        Logs.deleteLogGroup({ logGroupName }).pipe(Effect.provide(flociContext), Effect.ignore),
+      );
+      expect(yield* findGroup).toBeUndefined();
+
+      // 10 days rounds up to CloudWatch's 14.
+      yield* deploy({ retention: "10 days" });
+      expect((yield* findGroup)?.retentionInDays).toBe(14);
+
+      // "forever" clears the policy and keeps the group.
+      yield* deploy({ retention: "forever" });
+      const cleared = yield* findGroup;
+      expect(cleared).toBeDefined();
+      expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
 );

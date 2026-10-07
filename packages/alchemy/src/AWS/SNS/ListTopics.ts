@@ -28,9 +28,7 @@ export interface ListTopics extends Binding.Service<
   ListTopics,
   "AWS.SNS.ListTopics",
   () => Effect.Effect<
-    (
-      request?: ListTopicsRequest,
-    ) => Effect.Effect<sns.ListTopicsResponse, sns.ListTopicsError>
+    (request?: ListTopicsRequest) => Effect.Effect<sns.ListTopicsResponse, sns.ListTopicsError>
   >
 > {}
 

@@ -49,14 +49,10 @@ export interface ModifyCapacityReservation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ModifyCapacityReservationRequest,
-    ) => Effect.Effect<
-      elbv2.ModifyCapacityReservationOutput,
-      elbv2.ModifyCapacityReservationError
-    >
+    ) => Effect.Effect<elbv2.ModifyCapacityReservationOutput, elbv2.ModifyCapacityReservationError>
   >
 > {}
 
-export const ModifyCapacityReservation =
-  Binding.Service<ModifyCapacityReservation>(
-    "AWS.ELBv2.ModifyCapacityReservation",
-  );
+export const ModifyCapacityReservation = Binding.Service<ModifyCapacityReservation>(
+  "AWS.ELBv2.ModifyCapacityReservation",
+);

@@ -2,10 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  BucketNotification,
-  NotificationsProps,
-} from "./BucketNotifications.ts";
+import type { BucketNotification, NotificationsProps } from "./BucketNotifications.ts";
 import type { S3EventType } from "./S3Event.ts";
 
 /**
@@ -83,9 +80,7 @@ export interface BucketEventSource extends Binding.Service<
   BucketEventSourceService
 > {}
 
-export const BucketEventSource = Binding.Service<BucketEventSource>(
-  "BucketNotificationStream",
-);
+export const BucketEventSource = Binding.Service<BucketEventSource>("BucketNotificationStream");
 
 export type BucketEventSourceService = <
   Events extends S3EventType[],

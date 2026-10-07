@@ -4,13 +4,10 @@ import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
 import { serveRpc, type Rpc } from "../../Rpc.ts";
-import {
-  packEnvValueKeepRedacted,
-  unpackEnvValue,
-} from "../../RuntimeContext.ts";
+import { packEnvValueKeepRedacted, unpackEnvValue } from "../../RuntimeContext.ts";
 import type { ProcessContext } from "../../Server/Process.ts";
 import type { Fetcher } from "../Fetcher.ts";
-import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
+import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
@@ -73,9 +70,7 @@ export const ContainerPlatform: Platform<
           // dispatched to the matching shape method, everything else falls
           // through to the user's `fetch` handler. The DO side talks to this
           // via `makeFetchRpcStub` over the container's TCP port.
-          const finalHandler = options?.shape
-            ? serveRpc(options.shape, handler)
-            : handler;
+          const finalHandler = options?.shape ? serveRpc(options.shape, handler) : handler;
           runners.push(
             Effect.gen(function* () {
               const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
@@ -148,9 +143,7 @@ export const ContainerPlatform: Platform<
       const namespace = yield* DurableObject;
 
       const container = Effect.isEffect(containerEff)
-        ? yield* containerEff as unknown as Effect.Effect<
-            ContainerApplication & Rpc<Shape>
-          >
+        ? yield* containerEff as unknown as Effect.Effect<ContainerApplication & Rpc<Shape>>
         : containerEff;
 
       yield* container.bind`${namespace}`({
@@ -179,36 +172,23 @@ export const ContainerPlatform: Platform<
         return {
           id: container.LogicalId,
           running: Effect.sync(() => state.container!.running ?? false),
-          destroy: (error?: any) =>
-            Effect.promise(() => state.container!.destroy(error)),
-          signal: (signo: number) =>
-            Effect.sync(() => state.container!.signal(signo)),
+          destroy: (error?: any) => Effect.promise(() => state.container!.destroy(error)),
+          signal: (signo: number) => Effect.sync(() => state.container!.signal(signo)),
           getTcpPort: (port: number) =>
             Effect.sync(() =>
-              fromCloudflareFetcher(
-                httpSchemePort(state.container!.getTcpPort(port)),
-              ),
+              fromCloudflareFetcher(httpSchemePort(state.container!.getTcpPort(port))),
             ),
           setInactivityTimeout: (durationMs: number | bigint) =>
-            Effect.promise(() =>
-              state.container!.setInactivityTimeout(durationMs),
-            ),
+            Effect.promise(() => state.container!.setInactivityTimeout(durationMs)),
+          // workerd routes intercepted requests to the binding over RPC, so it
+          // only accepts a native Fetcher (service binding, Durable Object
+          // stub, `ctx.exports` entrypoint) and rejects the returned promise
+          // for anything else.
           interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) =>
-                state.container!.interceptOutboundHttp(addr, binding),
-              ),
-            ),
+            Effect.promise(() => state.container!.interceptOutboundHttp(addr, binding.raw)),
           interceptAllOutboundHttp: (binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) =>
-                state.container!.interceptAllOutboundHttp(binding),
-              ),
-            ),
-          monitor: () =>
-            Effect.promise(
-              () => state.container?.monitor() ?? Promise.resolve(),
-            ),
+            Effect.promise(() => state.container!.interceptAllOutboundHttp(binding.raw)),
+          monitor: () => Effect.promise(() => state.container?.monitor() ?? Promise.resolve()),
           start: (options?: ContainerStartupOptions) =>
             Effect.sync(() => state.container!.start(options)),
         } as unknown;

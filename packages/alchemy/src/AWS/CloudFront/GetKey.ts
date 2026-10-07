@@ -30,11 +30,7 @@ export interface GetKey extends Binding.Service<
   "AWS.CloudFront.GetKey",
   (
     store: KeyValueStore,
-  ) => Effect.Effect<
-    (
-      request: GetKeyRequest,
-    ) => Effect.Effect<kvs.GetKeyResponse, kvs.GetKeyError>
-  >
+  ) => Effect.Effect<(request: GetKeyRequest) => Effect.Effect<kvs.GetKeyResponse, kvs.GetKeyError>>
 > {}
 
 export const GetKey = Binding.Service<GetKey>("AWS.CloudFront.GetKey");

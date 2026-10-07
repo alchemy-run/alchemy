@@ -35,7 +35,6 @@ export interface StartDocumentTextDetection extends Binding.Service<
     >
   >
 > {}
-export const StartDocumentTextDetection =
-  Binding.Service<StartDocumentTextDetection>(
-    "AWS.Textract.StartDocumentTextDetection",
-  );
+export const StartDocumentTextDetection = Binding.Service<StartDocumentTextDetection>(
+  "AWS.Textract.StartDocumentTextDetection",
+);

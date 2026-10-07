@@ -38,14 +38,10 @@ export interface ListFlowOperationResults extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListFlowOperationResultsRequest,
-    ) => Effect.Effect<
-      NFW.ListFlowOperationResultsResponse,
-      NFW.ListFlowOperationResultsError
-    >
+    ) => Effect.Effect<NFW.ListFlowOperationResultsResponse, NFW.ListFlowOperationResultsError>
   >
 > {}
 
-export const ListFlowOperationResults =
-  Binding.Service<ListFlowOperationResults>(
-    "AWS.NetworkFirewall.ListFlowOperationResults",
-  );
+export const ListFlowOperationResults = Binding.Service<ListFlowOperationResults>(
+  "AWS.NetworkFirewall.ListFlowOperationResults",
+);

@@ -120,25 +120,19 @@ export const TaskProvider = () =>
     Task,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: TaskProps) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const describe = Effect.fn(function* (taskArn: string) {
         return yield* datasync
           .describeTask({ TaskArn: taskArn })
-          .pipe(
-            Effect.catchTag("TaskNotFound", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("TaskNotFound", () => Effect.succeed(undefined)));
       });
 
       const findByName = Effect.fn(function* (name: string) {
         const tasks = yield* datasync.listTasks.pages({}).pipe(
           Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((p) => p.Tasks ?? []),
-          ),
+          Effect.map((chunk) => Array.from(chunk).flatMap((p) => p.Tasks ?? [])),
         );
         return tasks.find((t) => t.Name === name)?.TaskArn;
       });
@@ -157,9 +151,7 @@ export const TaskProvider = () =>
           Effect.gen(function* () {
             const tasks = yield* datasync.listTasks.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((p) => p.Tasks ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((p) => p.Tasks ?? [])),
             );
             return yield* Effect.forEach(tasks, (t) =>
               Effect.gen(function* () {
@@ -168,16 +160,13 @@ export const TaskProvider = () =>
               }),
             ).pipe(
               Effect.map((items) =>
-                items.filter(
-                  (i): i is ReturnType<typeof attrsOf> => i !== undefined,
-                ),
+                items.filter((i): i is ReturnType<typeof attrsOf> => i !== undefined),
               ),
             );
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const arn =
-            output?.taskArn ?? (yield* findByName(yield* createName(id, olds)));
+          const arn = output?.taskArn ?? (yield* findByName(yield* createName(id, olds)));
           if (arn === undefined) return undefined;
           const t = yield* describe(arn);
           return t === undefined ? undefined : attrsOf(t);
@@ -226,10 +215,7 @@ export const TaskProvider = () =>
                 // the propagation window.
                 Effect.retry({
                   while: (e) => e._tag === "LocationAccessTestFailed",
-                  schedule: Schedule.max([
-                    Schedule.spaced("5 seconds"),
-                    Schedule.recurs(9),
-                  ]),
+                  schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(9)]),
                 }),
               );
             arn = created.TaskArn!;
@@ -238,8 +224,7 @@ export const TaskProvider = () =>
             // 3a. SYNC updatable fields — only on a real delta.
             const changed =
               t.Name !== name ||
-              (t.CloudWatchLogGroupArn ?? "") !==
-                (news.cloudWatchLogGroupArn ?? "") ||
+              (t.CloudWatchLogGroupArn ?? "") !== (news.cloudWatchLogGroupArn ?? "") ||
               canonical(t.Options) !== canonical(news.options) ||
               canonical(t.Excludes) !== canonical(news.excludes) ||
               canonical(t.Includes) !== canonical(news.includes) ||

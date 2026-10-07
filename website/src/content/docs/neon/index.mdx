@@ -52,6 +52,19 @@ Migrations are ordered, hashed, and tracked in Alchemy's
 `__alchemy_migrations` table so each file runs exactly once — see
 [Migrations](/neon/data/migrations).
 
+## Roles
+
+A `Neon.Role` is a Postgres login on a branch. Give your app and your
+migrations their own:
+
+```typescript
+const app = yield* Neon.Role("App", { branch });
+const migrator = yield* Neon.Role("Migrator", { branch, name: "migrator" });
+```
+
+`app.password` is `Redacted` and stays the same across deploys — see
+[Roles](/neon/data/roles).
+
 ## Organization governance
 
 Manage organization API keys, existing members' roles, spending-alert thresholds,
@@ -146,7 +159,7 @@ const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
 );
 ```
 
-Import `LanguageModel` from `effect/unstable/ai` and provide
+Import `LanguageModel` from `effect/ai` and provide
 `Neon.QueryAIGatewayHttp` on the application. It selects injected or managed
 credentials automatically and exposes the model layer backed by Neon's
 OpenAI-compatible Chat Completions API. Model access and prepaid credits are separate account requirements; declaring

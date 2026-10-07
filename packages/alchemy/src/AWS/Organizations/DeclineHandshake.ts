@@ -27,10 +27,7 @@ export interface DeclineHandshake extends Binding.Service<
   () => Effect.Effect<
     (
       request: organizations.DeclineHandshakeRequest,
-    ) => Effect.Effect<
-      organizations.DeclineHandshakeResponse,
-      organizations.DeclineHandshakeError
-    >
+    ) => Effect.Effect<organizations.DeclineHandshakeResponse, organizations.DeclineHandshakeError>
   >
 > {}
 export const DeclineHandshake = Binding.Service<DeclineHandshake>(
