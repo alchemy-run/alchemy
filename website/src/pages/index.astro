@@ -759,6 +759,34 @@ const PROVIDERS = [
     .v2-hero__visual :global(.v2-hero__term) {
       display: none;
     }
+    /* The copy fills the screen width here, so the desktop halo can't fade
+       the rings at its edges. A blurred veil covering the whole copy block
+       keeps the white text readable over the animation. */
+    .v2-hero__copy::before {
+      inset: -28px -32px;
+      background: color-mix(in srgb, var(--alc-bg) 68%, transparent);
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+      -webkit-mask-image: radial-gradient(
+        farthest-side at 50% 50%,
+        #000 72%,
+        transparent 100%
+      );
+      mask-image: radial-gradient(
+        farthest-side at 50% 50%,
+        #000 72%,
+        transparent 100%
+      );
+    }
+    /* Equal-width, stacked CTAs. */
+    .v2-hero__copy :global(.alc-hero__cta) {
+      flex-direction: column;
+      align-items: stretch;
+      max-width: 340px;
+    }
+    .v2-hero__copy :global(.alc-hero__cta .alc-btn) {
+      justify-content: center;
+    }
     /* Stacked, the bottom-left spot falls on the code card. */
     .v2-motion-toggle {
       left: auto;

@@ -42,7 +42,7 @@ export default class LoaderGitHost extends Cloudflare.Worker<LoaderGitHost>()(
   Effect.gen(function* () {
     const fetch = yield* HttpRouter.toHttpEffect(GitLive);
     return { fetch };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 
 export const makeLoaderTestStack = (name: string) =>

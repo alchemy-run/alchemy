@@ -719,6 +719,10 @@ export default defineConfig({
                   label: "Custom domains & routes",
                   link: "/cloudflare/networking/custom-domains",
                 },
+                {
+                  label: "Federated APIs",
+                  link: "/cloudflare/networking/federated-apis",
+                },
                 { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
             },
@@ -1230,6 +1234,7 @@ export default defineConfig({
               items: [
                 { label: "Branching", link: "/neon/data/branching" },
                 { label: "Connections", link: "/neon/data/connections" },
+                { label: "Roles", link: "/neon/data/roles" },
                 { label: "Migrations", link: "/neon/data/migrations" },
               ],
             },

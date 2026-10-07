@@ -2,12 +2,13 @@ import * as container from "@distilled.cloud/gcp/container_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import { findClusterAdapter } from "@/Kubernetes/ClusterAdapter.ts";
 import * as Test from "@/Test/Alchemy";
-import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
+import { CAPACITY_ZONE, CAPACITY_ZONE_2, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -92,6 +93,18 @@ test.provider.skipIf(!runLifecycle)(
               spot: true,
               description: "alchemy-test-cluster",
               labels: { env: "test" },
+              ipAllocationPolicy: { useIpAliases: true },
+              enableShieldedNodes: true,
+              addonsConfig: { horizontalPodAutoscaling: { disabled: false } },
+              costManagementConfig: { enabled: true },
+              loggingConfig: {
+                componentConfig: { enableComponents: ["SYSTEM_COMPONENTS"] },
+              },
+              monitoringConfig: {
+                componentConfig: { enableComponents: ["SYSTEM_COMPONENTS"] },
+                managedPrometheusConfig: { enabled: true },
+              },
+              removeDefaultNodePool: true,
             });
           }),
         );
@@ -111,6 +124,18 @@ test.provider.skipIf(!runLifecycle)(
         }
         expect(created.kubernetesObjects).toEqual([]);
         expect(created.workloadPool).toEqual(`${project}.svc.id.goog`);
+        expect(created.ipAllocationPolicy?.useIpAliases).toEqual(true);
+        expect(created.enableShieldedNodes).toEqual(true);
+        // GKE omits proto3 defaults, so an enabled addon reports no `disabled`.
+        expect(created.addonsConfig?.horizontalPodAutoscaling?.disabled ?? false).toEqual(false);
+        expect(created.costManagementConfig?.enabled).toEqual(true);
+        expect(created.loggingConfig?.componentConfig?.enableComponents).toContain(
+          "SYSTEM_COMPONENTS",
+        );
+        expect(created.monitoringConfig?.componentConfig?.enableComponents).toContain(
+          "SYSTEM_COMPONENTS",
+        );
+        expect(created.monitoringConfig?.managedPrometheusConfig?.enabled).toEqual(true);
 
         const fetched = yield* container.getProjectsLocationsClusters({
           name: created.name,
@@ -119,22 +144,44 @@ test.provider.skipIf(!runLifecycle)(
         expect(fetched.resourceLabels?.env).toEqual("test");
         expect(fetched.description).toEqual("alchemy-test-cluster");
         expect(fetched.status).toEqual("RUNNING");
+        expect(fetched.shieldedNodes?.enabled).toEqual(true);
+        expect(fetched.costManagementConfig?.enabled).toEqual(true);
 
-        const updated = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* GCP.Container.Cluster("App", {
-              clusterId: created.clusterId,
-              location: CAPACITY_ZONE,
-              machineType: "e2-medium",
-              initialNodeCount: 1,
-              diskSizeGb: 20,
-              spot: true,
-              description: "alchemy-test-cluster",
-              loggingService: "none",
-              labels: { env: "prod", role: "k8s" },
-            });
-          }),
-        );
+        const defaultPool = yield* container
+          .getProjectsLocationsClustersNodePools({
+            name: `${created.name}/nodePools/default-pool`,
+          })
+          .pipe(
+            Effect.as("found" as const),
+            Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          );
+        expect(defaultPool).toEqual("gone");
+
+        const prodProps: GCP.Container.ClusterProps = {
+          clusterId: created.clusterId,
+          location: CAPACITY_ZONE,
+          machineType: "e2-medium",
+          initialNodeCount: 1,
+          diskSizeGb: 20,
+          spot: true,
+          description: "alchemy-test-cluster",
+          // `loggingConfig` is dropped here — it conflicts with "none".
+          loggingService: "none",
+          monitoringConfig: {
+            componentConfig: { enableComponents: ["SYSTEM_COMPONENTS"] },
+            managedPrometheusConfig: { enabled: true },
+          },
+          labels: { env: "prod", role: "k8s" },
+          ipAllocationPolicy: { useIpAliases: true },
+          enableShieldedNodes: true,
+          addonsConfig: { horizontalPodAutoscaling: { disabled: false } },
+          costManagementConfig: { enabled: true },
+          removeDefaultNodePool: true,
+        };
+        const prod = (props: Partial<GCP.Container.ClusterProps> = {}) =>
+          GCP.Container.Cluster("App", { ...prodProps, ...props });
+
+        const updated = yield* stack.deploy(prod());
 
         expect(updated.name).toEqual(created.name);
         expect(updated.clusterUid).toEqual(created.clusterUid);
@@ -149,6 +196,40 @@ test.provider.skipIf(!runLifecycle)(
         expect(refetched.loggingService).toEqual("none");
         // An unspecified monitoring service keeps its observed value.
         expect(refetched.monitoringService).toEqual(created.monitoringService);
+
+        // The default pool is gone, so its node shape describes no node.
+        const reshaped = yield* stack.plan(
+          prod({ machineType: "e2-standard-4", initialNodeCount: 3 }),
+        );
+        expect(reshaped.resources.App.action).not.toBe("replace");
+        // GKE only creates default-pool with the cluster, so restoring it replaces.
+        expect(
+          (yield* stack.plan(prod({ removeDefaultNodePool: false }))).resources.App.action,
+        ).toBe("replace");
+        // Secondary ranges are fixed at creation.
+        expect(
+          (yield* stack.plan(
+            prod({
+              ipAllocationPolicy: { useIpAliases: true, clusterSecondaryRangeName: "pods-b" },
+            }),
+          )).resources.App,
+        ).toMatchObject({ action: "replace", deleteFirst: true });
+
+        // Deletion protection blocks a replacement and a destroy until it is turned off.
+        yield* stack.deploy(prod({ deletionProtection: true }));
+        yield* Effect.gen(function* () {
+          const blockedReplace = yield* stack
+            .plan(prod({ deletionProtection: true, location: CAPACITY_ZONE_2 }))
+            .pipe(Effect.flip);
+          expect(blockedReplace).toMatchObject({ _tag: "GCP.Container.ClusterDeletionProtected" });
+          expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
+          expect(
+            (yield* container.getProjectsLocationsClusters({ name: created.name })).status,
+          ).toEqual("RUNNING");
+        }).pipe(
+          // Never leave the cluster locked, even if an assertion fails.
+          Effect.ensuring(Effect.ignore(stack.deploy(prod({ deletionProtection: false })))),
+        );
 
         yield* stack.destroy();
 

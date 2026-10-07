@@ -7,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
+import { waitUntilStable } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/do-abort/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -79,7 +80,22 @@ describe.skipIf(!!process.env.FAST)(
         const { url } = yield* stack;
         const client = yield* HttpClient.HttpClient;
 
-        yield* getJson(client, `${url}/ping`, "readiness").pipe(Effect.timeout("30 seconds"));
+        // Ready means three pings in a row reach the same Durable Object
+        // incarnation: a host still rolling out the new version answers 404,
+        // and a version swap restarts the object (boots changes), which would
+        // break the before/after-abort comparison below.
+        let lastBoots: number | undefined;
+        yield* waitUntilStable(
+          `Durable Object at ${url}`,
+          getJson<{ boots: number }>(client, `${url}/ping`, "readiness").pipe(
+            Effect.map(({ boots }) => {
+              const same = boots === lastBoots;
+              lastBoots = boots;
+              return same;
+            }),
+          ),
+          { consecutive: 2, timeout: "60 seconds" },
+        );
         const before = yield* getJson<{ boots: number; ok: true }>(
           client,
           `${url}/ping`,
