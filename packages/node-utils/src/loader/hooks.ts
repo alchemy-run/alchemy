@@ -1,23 +1,23 @@
 import { readFileSync } from "node:fs";
 import * as NodeModule from "node:module";
-import {
-  registerHooks,
-  type LoadFnOutput,
-  type LoadHookContext,
-  type ResolveFnOutput,
-  type ResolveHookContext,
+import type {
+  LoadFnOutput,
+  LoadHookContext,
+  LoadHookSync,
+  ResolveFnOutput,
+  ResolveHookContext,
+  ResolveHookSync,
 } from "node:module";
 import { pathToFileURL } from "node:url";
 import {
   filePathOfUrl,
-  isFileLikeSpecifier,
   isProjectPath,
   SpecifierResolver,
   splitSpecifierMetadata,
-} from "./resolve-specifier.ts";
-import { SourceTransformer } from "./transform-source.ts";
+} from "./resolve.ts";
+import { SourceTransformer } from "./transform.ts";
 
-export interface OxcLoaderOptions {
+export interface LoaderOptions {
   /**
    * Additional package export conditions used during module resolution.
    * They are made available alongside Node's ambient conditions to both the
@@ -30,8 +30,6 @@ export interface OxcLoaderOptions {
    * @default true
    */
   readonly tsconfig?: boolean | undefined;
-  /** Controls which file URLs belong to the fresh import graph. */
-  readonly shouldInvalidate?: ((url: string, parentURL: string | undefined) => boolean) | undefined;
   /**
    * Limits transformation to matching absolute file paths; everything else
    * loads through Node untouched. Lets a published install transpile only
@@ -50,51 +48,13 @@ export interface OxcLoaderOptions {
   readonly cache?: boolean | string | undefined;
 }
 
-export interface RegisterOxcOptions extends OxcLoaderOptions {
-  /**
-   * Isolates one import graph in the runtime's module cache: every file
-   * URL the graph resolves carries this namespace as a query parameter, so
-   * the same files import again as fresh modules under a new namespace.
-   * This is how `alchemy dev` reloads the user's stack (see
-   * `watch-import.ts`); an un-namespaced registration is the process-wide
-   * TypeScript loader.
-   */
-  readonly namespace?: string | undefined;
-  /** Called once the runtime loads a file in this registration's graph. */
-  readonly onImport?: ((url: string) => void) | undefined;
+/** Synchronous Node module hooks, as `module.registerHooks` takes them. */
+export interface LoaderHooks {
+  readonly resolve: ResolveHookSync;
+  readonly load: LoadHookSync;
 }
 
-export interface OxcLoader {
-  /**
-   * Imports a file under this registration's namespace. `specifier` is a
-   * file URL, an absolute path, or a path relative to `parentURL`.
-   */
-  import<T = unknown>(specifier: string, parentURL: string): Promise<T>;
-  unregister(): void;
-}
-
-const namespaceParameter = "alchemy-import-namespace";
-const globalRegistrationKey = Symbol.for("@alchemy.run/node-utils/register-oxc");
-
-type NextResolve = (specifier: string, context?: Partial<ResolveHookContext>) => ResolveFnOutput;
-
-const namespaceOf = (url: string | undefined) => {
-  if (url === undefined || !url.startsWith("file:")) return undefined;
-  return new URL(url).searchParams.get(namespaceParameter) ?? undefined;
-};
-
-const withoutNamespace = (url: string) => {
-  if (!url.startsWith("file:")) return url;
-  const parsed = new URL(url);
-  parsed.searchParams.delete(namespaceParameter);
-  return parsed.href;
-};
-
-const withNamespace = (url: string, namespace: string) => {
-  const parsed = new URL(url);
-  parsed.searchParams.set(namespaceParameter, namespace);
-  return parsed.href;
-};
+type NextResolve = Parameters<ResolveHookSync>[2];
 
 /**
  * Node's module compile cache (`module.enableCompileCache`) keeps V8 code
@@ -159,12 +119,11 @@ const resolveSpecifier = (
 
   const parentPath = filePathOfUrl(context.parentURL);
   const { specifier: clean, metadata } = splitSpecifierMetadata(specifier);
-  const conditions = context.conditions ?? [];
 
   // TypeScript's rules apply to project code. Dependencies keep Node's plain
   // resolution so published packages behave exactly as they would without us.
   if (parentPath !== undefined && isProjectPath(parentPath)) {
-    const candidate = resolver.resolve(parentPath, clean, conditions);
+    const candidate = resolver.resolve(parentPath, clean, context.conditions);
     if (candidate !== undefined) {
       return { url: pathToFileURL(candidate).href + metadata, shortCircuit: true };
     }
@@ -219,141 +178,57 @@ const textModule = (filePath: string): LoadFnOutput => ({
 });
 
 /**
- * Registers synchronous Node module hooks that transpile TypeScript with
- * Rolldown's Oxc transformer and resolve it the way TypeScript (and tsx)
- * does. A namespaced registration also provides a scoped import whose
- * namespace propagates through the complete ESM graph.
+ * The loader itself: synchronous `resolve` and `load` hooks that transpile
+ * TypeScript with Rolldown's Oxc transformer and resolve it the way
+ * TypeScript (and tsx) does. Register them process-wide with
+ * `registerOxc` (./register.ts), or scoped to one import graph through
+ * `namespaced` (./namespace.ts). Each call creates its own resolver,
+ * transformer and resolution memo.
  */
-export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
-  // One global (un-namespaced) registration per process. Alchemy starts every
-  // Node process with `--import` of a file that calls this, and in-process
-  // callers (the dev exec child, tests) may call it again; a second copy of
-  // the hooks would only re-run the resolve chain. The marker lives on
-  // globalThis because a checkout can load this module twice (src/ and lib/).
-  const globalRegistration = globalThis as typeof globalThis & {
-    [globalRegistrationKey]?: OxcLoader;
-  };
-  if (options.namespace === undefined) {
-    const existing = globalRegistration[globalRegistrationKey];
-    if (existing !== undefined) return existing;
-  }
+export const createHooks = (options: LoaderOptions = {}): LoaderHooks => {
   const transformer = new SourceTransformer(options);
-  const resolver = new SpecifierResolver({
-    tsconfig: options.tsconfig ?? true,
-  });
-  const shouldInvalidate = options.shouldInvalidate ?? (() => true);
-  // Per registration: a reloaded graph registers afresh, so files added or
-  // removed between generations are seen.
+  const resolver = new SpecifierResolver({ tsconfig: options.tsconfig ?? true });
   const resolutions = new Map<string, ResolveFnOutput>();
+  const conditions = options.conditions ?? [];
 
-  // Transformed sources reference their source maps (see transform-source);
-  // Node only reads and applies them to stack traces once source-map support
-  // is on. `nodeModules` stays on: a published alchemy runs its own `lib/`
-  // from `node_modules`, and ships maps back to its `src/`.
-  const previousSourceMapsSupport = NodeModule.getSourceMapsSupport();
-  NodeModule.setSourceMapsSupport(true, {
-    nodeModules: true,
-    generatedCode: previousSourceMapsSupport.generatedCode,
-  });
-
-  const hooks = registerHooks({
+  return {
     resolve(specifier, context, nextResolve) {
-      // A graph's entry carries the namespace itself (see `import` below);
-      // everything it imports inherits it from the importing module's URL.
-      const namespace =
-        options.namespace === undefined
-          ? undefined
-          : (namespaceOf(specifier) ?? namespaceOf(context.parentURL));
-
-      if (options.namespace !== undefined && namespace !== options.namespace) {
-        return nextResolve(specifier, context);
+      if (conditions.length > 0) {
+        context = { ...context, conditions: [...new Set([...conditions, ...context.conditions])] };
       }
-
-      const resolutionContext =
-        options.conditions === undefined || options.conditions.length === 0
-          ? context
-          : {
-              ...context,
-              conditions: [...new Set([...options.conditions, ...context.conditions])],
-            };
-      const key = resolutionKey(specifier, resolutionContext);
-      let resolved = key === undefined ? undefined : resolutions.get(key);
-      if (resolved === undefined) {
-        resolved = resolveSpecifier(resolver, specifier, resolutionContext, nextResolve);
-        // A memoized result skips the rest of the hook chain, which Node
-        // only accepts when it says so.
-        if (key !== undefined) resolutions.set(key, { ...resolved, shortCircuit: true });
-      }
-      if (
-        namespace !== undefined &&
-        resolved.url.startsWith("file:") &&
-        shouldInvalidate(
-          withoutNamespace(resolved.url),
-          context.parentURL === undefined ? undefined : withoutNamespace(context.parentURL),
-        )
-      ) {
-        return { ...resolved, url: withNamespace(resolved.url, namespace) };
-      }
+      const key = resolutionKey(specifier, context);
+      const memoized = key === undefined ? undefined : resolutions.get(key);
+      if (memoized !== undefined) return memoized;
+      const resolved = resolveSpecifier(resolver, specifier, context, nextResolve);
+      // A memoized result skips the rest of the hook chain, which Node only
+      // accepts when it says so.
+      if (key !== undefined) resolutions.set(key, { ...resolved, shortCircuit: true });
       return resolved;
     },
-    load(url, context, nextLoad): LoadFnOutput {
-      scheduleCompileCacheFlush();
-      const namespace = namespaceOf(url);
-      if (options.namespace !== undefined && namespace !== options.namespace) {
-        return nextLoad(url, context);
-      }
 
-      const cleanUrl = withoutNamespace(url);
-      const filePath = filePathOfUrl(cleanUrl);
-      if (filePath === undefined) return nextLoad(cleanUrl, context);
-      options.onImport?.(cleanUrl);
+    load(url, context, nextLoad) {
+      scheduleCompileCacheFlush();
+      const filePath = filePathOfUrl(url);
+      if (filePath === undefined) return nextLoad(url, context);
 
       // An attribute, not a transpile: applies to any file, filtered or not.
       if (context.importAttributes?.type === "text") return textModule(filePath);
 
       if (options.filter !== undefined && !options.filter(filePath)) {
-        return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
+        return nextLoad(url, withJsonAttribute(url, context));
       }
       const transformed = transformer.transform(filePath, context.format);
-      if (transformed === undefined) {
-        return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
-      }
+      if (transformed === undefined) return nextLoad(url, withJsonAttribute(url, context));
+
       // `importAttributes` is present on every import and absent on require().
       if (
         importedCommonJsNeedsNodeLoader &&
         transformed.format === "commonjs" &&
         context.importAttributes !== undefined
       ) {
-        return nextLoad(cleanUrl, { ...context, format: "commonjs" });
+        return nextLoad(url, { ...context, format: "commonjs" });
       }
       return { ...transformed, shortCircuit: true };
     },
-  });
-
-  const loader: OxcLoader = {
-    import<T>(specifier: string, parentURL: string) {
-      if (!isFileLikeSpecifier(specifier)) {
-        throw new Error(`Cannot import '${specifier}': expected a file URL or path.`);
-      }
-      const base = parentURL.startsWith("file:") ? parentURL : pathToFileURL(parentURL).href;
-      const url = specifier.startsWith("file:")
-        ? specifier
-        : new URL(specifier.startsWith(".") ? specifier : pathToFileURL(specifier).href, base).href;
-      return import(
-        options.namespace === undefined ? url : withNamespace(url, options.namespace)
-      ) as Promise<T>;
-    },
-    unregister() {
-      hooks.deregister();
-      if (globalRegistration[globalRegistrationKey] === loader) {
-        delete globalRegistration[globalRegistrationKey];
-      }
-      const { enabled, ...options } = previousSourceMapsSupport;
-      NodeModule.setSourceMapsSupport(enabled, options);
-    },
   };
-  if (options.namespace === undefined) {
-    globalRegistration[globalRegistrationKey] = loader;
-  }
-  return loader;
 };

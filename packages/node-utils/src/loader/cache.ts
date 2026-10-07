@@ -11,7 +11,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import rolldown from "rolldown/package.json" with { type: "json" };
-import self from "../package.json" with { type: "json" };
+import self from "../../package.json" with { type: "json" };
 
 /**
  * Anything that changes Oxc's output for identical input invalidates every

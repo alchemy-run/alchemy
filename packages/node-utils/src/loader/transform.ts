@@ -1,11 +1,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import * as inspector from "node:inspector";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { resolveTsconfig } from "rolldown/experimental";
 import { parseSync, transformSync, TsconfigCache, type TransformOptions } from "rolldown/utils";
-import type { OxcLoaderOptions } from "./register-oxc.ts";
-import { resolveCacheDirectory, TransformCache } from "./transform-cache.ts";
+import { resolveCacheDirectory, TransformCache } from "./cache.ts";
+import type { LoaderOptions } from "./hooks.ts";
+import { attachSourceMap, storedSourceMap } from "./source-map.ts";
 
 /** Extensions Oxc transpiles; everything else is JavaScript Node can run. */
 export const transformExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".jsx"]);
@@ -77,73 +76,13 @@ const language = (filePath: string): TransformOptions["lang"] => {
   }
 };
 
-type SourceMap = NonNullable<ReturnType<typeof transformSync>["map"]>;
-
-/**
- * Whether a debugger can be attached to this process. Checked per module, so
- * an inspector opened after startup (VS Code auto-attach, `SIGUSR1`,
- * `inspector.open()`) covers every module loaded from then on.
- */
-const isInspectorActive = () => inspector.url() !== undefined;
-
-const inlineSourceMapComment = (map: string) =>
-  `\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(map).toString("base64")}`;
-
-/**
- * Map by reference. Node's source-map support only understands `data:`
- * URLs and scheme-less paths (it resolves the latter against the module
- * URL and reads the file), so this is the file URL's path component —
- * `/var/…/x.map` on POSIX, `/C:/…/x.map` on Windows — never a `file:` URL.
- */
-const fileSourceMapComment = (mapFile: string) =>
-  `\n//# sourceMappingURL=${pathToFileURL(mapFile).pathname}`;
-
-/**
- * The map as stored: `sources` names the file by URL and `sourcesContent`
- * is dropped. A bare path in `sources` is resolved against the map's own
- * location, which for a cached map is the shared cache directory — a URL
- * is location-independent and correct on Windows too. Every source is a
- * file on this machine, so embedding its text only makes the map larger
- * than the code it describes and every process that loads the module pay
- * for it.
- */
-const storedSourceMap = (
-  { sourcesContent: _sourcesContent, ...map }: SourceMap,
-  filePath: string,
-): string => JSON.stringify({ ...map, sources: [pathToFileURL(filePath).href] });
-
-/**
- * The map as a debugger needs it: inline, with the source embedded. A map
- * referenced by path sits in the shared cache directory, which debuggers
- * either refuse to read (VS Code only loads maps under the workspace by
- * default) or cannot fetch over the inspector protocol (DevTools), leaving
- * every module to show up as transpiled output from a foreign folder.
- */
-const debuggerSourceMapComment = (map: string, source: string) =>
-  inlineSourceMapComment(JSON.stringify({ ...JSON.parse(map), sourcesContent: [source] }));
-
-/**
- * The module's source map comment. Inlined for a debugger, and when there
- * is no cache file to point at — the base64 becomes part of the script
- * source V8 retains for the process lifetime, which for a graph the size of
- * alchemy's is hundreds of megabytes, so it is never the default.
- */
-const sourceMapComment = (
-  map: string,
-  mapFile: string | undefined,
-  readSource: () => string,
-): string => {
-  if (isInspectorActive()) return debuggerSourceMapComment(map, readSource());
-  return mapFile === undefined ? inlineSourceMapComment(map) : fileSourceMapComment(mapFile);
-};
-
 export interface TransformedSource {
   readonly format: ModuleFormat;
   readonly source: string;
 }
 
 export class SourceTransformer {
-  readonly #options: OxcLoaderOptions;
+  readonly #options: LoaderOptions;
   readonly #tsconfigCache = new TsconfigCache();
   readonly #cache: TransformCache | undefined;
   /**
@@ -154,7 +93,7 @@ export class SourceTransformer {
    */
   readonly #tsconfigKeys = new Map<string, string>();
 
-  constructor(options: OxcLoaderOptions) {
+  constructor(options: LoaderOptions) {
     this.#options = options;
     const directory = resolveCacheDirectory(options.cache);
     this.#cache = directory === undefined ? undefined : new TransformCache(directory);
@@ -234,13 +173,11 @@ export class SourceTransformer {
         source:
           mapFile === undefined
             ? cached.code
-            : isInspectorActive()
-              ? cached.code +
-                debuggerSourceMapComment(
-                  readFileSync(mapFile, "utf8"),
-                  readFileSync(filePath, "utf8"),
-                )
-              : cached.code + fileSourceMapComment(mapFile),
+            : attachSourceMap(
+                cached.code,
+                { file: mapFile, text: () => readFileSync(mapFile, "utf8") },
+                () => readFileSync(filePath, "utf8"),
+              ),
       };
     }
     const source = readFileSync(filePath, "utf8");
@@ -271,7 +208,7 @@ export class SourceTransformer {
     const map =
       transformed.map === undefined ? undefined : storedSourceMap(transformed.map, filePath);
     // The map is stored next to the cache entry and referenced by path; see
-    // `sourceMapComment` for when it is inlined instead.
+    // `attachSourceMap` for when it is inlined instead.
     const mapFile =
       key === undefined || map === undefined
         ? undefined
@@ -285,7 +222,7 @@ export class SourceTransformer {
       source:
         map === undefined
           ? transformed.code
-          : transformed.code + sourceMapComment(map, mapFile, () => source),
+          : attachSourceMap(transformed.code, { file: mapFile, text: () => map }, () => source),
     };
   }
 }

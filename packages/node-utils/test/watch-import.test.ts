@@ -45,8 +45,12 @@ describe("watchImport", () => {
       ].join("\n"),
     );
 
-    const moduleUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/watch-import.ts")).href;
-    const registerUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/register-oxc.ts")).href;
+    const moduleUrl = pathToFileURL(
+      path.resolve(import.meta.dir, "../src/watch/import-watcher.ts"),
+    ).href;
+    const registerUrl = pathToFileURL(
+      path.resolve(import.meta.dir, "../src/loader/register.ts"),
+    ).href;
     const script = `
       import { writeFile } from "node:fs/promises";
       import { fileURLToPath, pathToFileURL } from "node:url";

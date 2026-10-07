@@ -108,7 +108,8 @@ const makeProject = () => {
   return root;
 };
 
-const registerUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/register-oxc.ts")).href;
+const srcUrl = (file: string) => pathToFileURL(path.resolve(import.meta.dir, "../src", file)).href;
+const registerUrl = srcUrl("loader/register.ts");
 
 const runNode = (
   cwd: string,
@@ -264,16 +265,19 @@ describe("registerOxc", () => {
     const result = runNode(
       root,
       `
+      const { registerHooks } = await import("node:module");
+      const { createHooks } = await import(${JSON.stringify(srcUrl("loader/hooks.ts"))});
+      const { namespaced, importNamespaced } = await import(${JSON.stringify(srcUrl("loader/namespace.ts"))});
       const { registerOxc } = await import(${JSON.stringify(registerUrl)});
       const seen = [];
-      const one = registerOxc({ namespace: "one", onImport: (url) => seen.push(url.split("/").pop()) });
-      const a = await one.import("./src/sub.ts", import.meta.url);
-      const b = await one.import("./src/sub.ts", import.meta.url);
-      const two = registerOxc({ namespace: "two" });
-      const c = await two.import("./src/sub.ts", import.meta.url);
+      const one = registerHooks(namespaced(createHooks(), { namespace: "one", onImport: (url) => seen.push(url.split("/").pop()) }));
+      const a = await importNamespaced("./src/sub.ts", import.meta.url, "one");
+      const b = await importNamespaced("./src/sub.ts", import.meta.url, "one");
+      const two = registerHooks(namespaced(createHooks(), { namespace: "two" }));
+      const c = await importNamespaced("./src/sub.ts", import.meta.url, "two");
       console.log(JSON.stringify({ same: a === b, fresh: a !== c, seen }));
-      one.unregister();
-      two.unregister();
+      one.deregister();
+      two.deregister();
       registerOxc({ filter: (file) => !file.includes("/node_modules/") });
       try {
         await import("wsdep");
