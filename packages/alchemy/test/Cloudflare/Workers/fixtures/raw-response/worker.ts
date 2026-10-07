@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
-import * as EffectHttp from "effect/unstable/http/HttpEffect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as EffectHttp from "effect/http/HttpEffect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 class Finalizers extends Cloudflare.DurableObject<Finalizers>()(
   "Finalizers",
@@ -15,15 +15,10 @@ class Finalizers extends Cloudflare.DurableObject<Finalizers>()(
         const [response] = yield* Cloudflare.upgrade();
         return response;
       }),
-      webSocketMessage: (
-        socket: Cloudflare.WebSocket,
-        message: string | Uint8Array,
-      ) => socket.send(message),
-      webSocketClose: (
-        socket: Cloudflare.WebSocket,
-        code: number,
-        reason: string,
-      ) => socket.close(code, reason),
+      webSocketMessage: (socket: Cloudflare.WebSocket, message: string | Uint8Array) =>
+        socket.send(message),
+      webSocketClose: (socket: Cloudflare.WebSocket, code: number, reason: string) =>
+        socket.close(code, reason),
     });
   }),
 ) {}
@@ -36,9 +31,7 @@ export default class RawResponseWorker extends Cloudflare.Worker<RawResponseWork
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const url = yield* Effect.sync(
-          () => new URL(request.url, "https://worker.test"),
-        );
+        const url = yield* Effect.sync(() => new URL(request.url, "https://worker.test"));
         const path = url.pathname;
         const journal = finalizers.getByName("requests");
         if (path === "/ready") {
@@ -47,9 +40,7 @@ export default class RawResponseWorker extends Cloudflare.Worker<RawResponseWork
         }
         if (path === "/finalized") {
           return HttpServerResponse.text(
-            String(
-              (yield* journal.has(url.searchParams.get("entry")!)) ?? false,
-            ),
+            String((yield* journal.has(url.searchParams.get("entry")!)) ?? false),
           );
         }
         if (path === "/websocket") return yield* journal.fetch(request);
@@ -62,10 +53,7 @@ export default class RawResponseWorker extends Cloudflare.Worker<RawResponseWork
           yield* EffectHttp.appendPreResponseHandler((_, response) =>
             Effect.succeed(
               response.pipe(
-                HttpServerResponse.setHeader(
-                  "x-observed-status",
-                  String(response.status),
-                ),
+                HttpServerResponse.setHeader("x-observed-status", String(response.status)),
                 HttpServerResponse.setHeader(
                   "x-observed-native",
                   response.headers["x-native"] ?? "missing",
@@ -93,11 +81,7 @@ export default class RawResponseWorker extends Cloudflare.Worker<RawResponseWork
             Effect.succeed(
               HttpServerResponse.setStatus(
                 response,
-                path === "/no-content"
-                  ? 204
-                  : path === "/reset-content"
-                    ? 205
-                    : 304,
+                path === "/no-content" ? 204 : path === "/reset-content" ? 205 : 304,
               ),
             ),
           );
@@ -108,9 +92,7 @@ export default class RawResponseWorker extends Cloudflare.Worker<RawResponseWork
             path === "/stream"
               ? new ReadableStream<Uint8Array>({
                   start(controller) {
-                    controller.enqueue(
-                      new TextEncoder().encode("raw-response:streamed"),
-                    );
+                    controller.enqueue(new TextEncoder().encode("raw-response:streamed"));
                     controller.close();
                   },
                 })
@@ -127,11 +109,7 @@ export default class RawResponseWorker extends Cloudflare.Worker<RawResponseWork
         });
         const response = HttpServerResponse.fromWeb(native);
         if (path === "/constructed-header") {
-          return HttpServerResponse.setHeader(
-            response,
-            "x-native",
-            "constructed",
-          );
+          return HttpServerResponse.setHeader(response, "x-native", "constructed");
         }
         if (path === "/explicit-status") {
           return HttpServerResponse.setStatus(response, 201);
