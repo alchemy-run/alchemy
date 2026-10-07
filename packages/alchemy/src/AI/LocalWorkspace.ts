@@ -376,8 +376,24 @@ const claimSpare = (root: string, prepared: string, name: string, dir: string, b
 export const prewarmWorkspaces = Effect.gen(function* () {
   const root = process.env.ALCHEMY_WORKTREES;
   if (!root) return;
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  for (const [mountPath, prepared] of Object.entries(localMounts())) {
+  const mounts = localMounts();
+  // Spares of checkouts no longer mounted (an older commit) are never
+  // claimed again: drop them.
+  const current = new Set(Object.values(mounts).map(spareKey));
+  const spares = path.join(root, SPARES);
+  yield* Effect.forkDetach(
+    Effect.gen(function* () {
+      if (!(yield* fs.exists(spares))) return;
+      for (const entry of yield* fs.readDirectory(spares)) {
+        if (!current.has(entry.split("-")[0]!)) {
+          yield* fs.remove(path.join(spares, entry), { recursive: true, force: true });
+        }
+      }
+    }).pipe(Effect.ignore),
+  );
+  for (const [mountPath, prepared] of Object.entries(mounts)) {
     yield* Effect.forkDetach(ensureSpare(root, prepared, path.basename(mountPath)));
   }
 });

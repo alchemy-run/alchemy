@@ -26,6 +26,15 @@ import {
 export const CLAUDE_AGENT_SDK: string = "@anthropic-ai/claude-agent-sdk";
 export const CLAUDE_AGENT_SDK_VERSION = "0.3.284";
 
+export type ClaudeCodeThinking =
+  | { readonly type: "adaptive"; readonly display?: "summarized" | "omitted" }
+  | {
+      readonly type: "enabled";
+      readonly budgetTokens?: number;
+      readonly display?: "summarized" | "omitted";
+    }
+  | { readonly type: "disabled" };
+
 export interface ClaudeCodeOptions {
   /**
    * Default permission mode for sessions. Sessions started with
@@ -35,6 +44,12 @@ export interface ClaudeCodeOptions {
   readonly permissionMode?: PermissionMode;
   /** Default model (e.g. `claude-opus-5-5`). */
   readonly model?: string;
+  /**
+   * Extended thinking: `adaptive` (the model decides; Opus 4.6+), a fixed
+   * `enabled` budget (older models), or `disabled`. Thinking streams as
+   * `reasoning.delta` events. @default the model's default
+   */
+  readonly thinking?: ClaudeCodeThinking;
   /** Path to the `claude` binary. @default the SDK's bundled resolution */
   readonly executable?: string;
   /** Extra environment for the `claude` process (credentials, base URL). */
@@ -198,6 +213,15 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
                 : {}),
               ...((session.model ?? options.model)
                 ? { model: session.model ?? options.model }
+                : {}),
+              // Thinking is shown (summarized) unless asked otherwise.
+              ...(options.thinking
+                ? {
+                    thinking:
+                      options.thinking.type === "disabled"
+                        ? { type: "disabled" as const }
+                        : { display: "summarized" as const, ...options.thinking },
+                  }
                 : {}),
               ...(session.systemPrompt
                 ? {

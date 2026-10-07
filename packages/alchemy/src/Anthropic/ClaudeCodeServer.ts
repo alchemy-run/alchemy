@@ -44,6 +44,11 @@ export interface ClaudeCodeServerProps {
   /** Default model for sessions (e.g. `claude-opus-5-5`). */
   model?: string;
   /**
+   * Extended thinking for sessions — streamed as reasoning.
+   * @default the model's default
+   */
+  thinking?: ClaudeCodeOptions["thinking"];
+  /**
    * Default permission mode. Sessions started with `approvals: "ask"` use
    * `default` and surface `permission.requested` events.
    * @default "bypassPermissions" (the container is the sandbox)
@@ -119,6 +124,7 @@ export const ClaudeCodeServer = (id = "ClaudeCode", props: ClaudeCodeServerProps
           return token ? { CLAUDE_CODE_OAUTH_TOKEN: token, ANTHROPIC_API_KEY: "" } : undefined;
         },
         ...(props.model ? { model: props.model } : {}),
+        ...(props.thinking ? { thinking: props.thinking } : {}),
         ...(props.permissionMode ? { permissionMode: props.permissionMode } : {}),
       }),
     ),

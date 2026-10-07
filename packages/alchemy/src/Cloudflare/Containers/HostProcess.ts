@@ -131,6 +131,9 @@ export const ensureHostProcess = (options: HostProcessOptions) =>
     return url;
   });
 
+/** The URL of the program's running process, if one runs (in this process). */
+export const hostProcessUrl = (id: string): string | undefined => running.get(id)?.url;
+
 /** Stop the program's process, if one runs. */
 export const stopHostProcess = (id: string) =>
   Effect.suspend(() => {

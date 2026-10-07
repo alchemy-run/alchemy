@@ -1,6 +1,7 @@
 import type * as AI from "alchemy/AI/Client";
 import {
   BotIcon,
+  BrainIcon,
   CircleDotIcon,
   CpuIcon,
   FolderGit2Icon,
@@ -47,20 +48,8 @@ import {
   PromptInputTools,
   PromptInputButton,
 } from "./components/ai-elements/prompt-input.tsx";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "./components/ai-elements/reasoning.tsx";
 import { Shimmer } from "./components/ai-elements/shimmer.tsx";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "./components/ai-elements/tool.tsx";
-import type { ToolState } from "./components/ai-elements/types.ts";
+import { AssistantTurn } from "./components/chat/work-log.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { cn } from "./lib/utils.ts";
@@ -205,50 +194,14 @@ function Sidebar(props: {
 
 //#region transcript parts
 
-const toolState = (state: "running" | "ok" | "error"): ToolState =>
-  state === "running" ? "input-available" : state === "ok" ? "output-available" : "output-error";
-
-const contentText = (content: ReadonlyArray<AI.ToolContent>) =>
-  content
-    .map((c) =>
-      c.type === "text"
-        ? c.text
-        : c.type === "diff"
-          ? `--- ${c.path}\n+++ ${c.path}\n${c.newText}`
-          : "",
-    )
-    .join("\n");
-
 function Part({ sessionId, part }: { sessionId: string; part: AI.TranscriptPart }) {
   switch (part.type) {
     case "text":
       return <MessageResponse>{part.text}</MessageResponse>;
     case "reasoning":
-      return (
-        <Reasoning isStreaming={part.streaming} defaultOpen={false}>
-          <ReasoningTrigger />
-          <ReasoningContent>{part.text}</ReasoningContent>
-        </Reasoning>
-      );
-    case "tool": {
-      const output = contentText(part.content) || part.output;
-      return (
-        <Tool defaultOpen={false}>
-          <ToolHeader
-            type={`tool-${part.tool.name ?? part.tool.kind}`}
-            title={part.tool.title}
-            state={toolState(part.state)}
-          />
-          <ToolContent>
-            {part.tool.input !== undefined && <ToolInput input={part.tool.input} />}
-            <ToolOutput
-              output={part.state === "error" ? undefined : output || undefined}
-              errorText={part.state === "error" ? output || "failed" : undefined}
-            />
-          </ToolContent>
-        </Tool>
-      );
-    }
+    case "tool":
+      // Rendered by the work log (AssistantTurn).
+      return null;
     case "plan":
       return (
         <Plan defaultOpen>
@@ -396,7 +349,8 @@ function Chat({ id }: { id: string }) {
   const { transcript, error, connected, pending } = useSession(id);
   const running = transcript.state === "running";
   const last = transcript.messages.at(-1);
-  const waiting = running && (last?.role !== "assistant" || last.parts.length === 0);
+  // Sent, but the turn hasn't started yet (a started turn shows its own progress).
+  const waiting = running && last?.role !== "assistant";
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -409,15 +363,24 @@ function Chat({ id }: { id: string }) {
               description={`The agent works in ${WORKDIR}, in its own container.`}
             />
           ) : (
-            transcript.messages.map((message) => (
-              <Message key={message.id} from={message.role}>
-                <MessageContent className="gap-3">
-                  {message.parts.map((part) => (
-                    <Part key={part.id} sessionId={id} part={part} />
-                  ))}
-                </MessageContent>
-              </Message>
-            ))
+            transcript.messages.map((message) =>
+              message.role === "assistant" ? (
+                <Message key={message.id} from="assistant">
+                  <AssistantTurn
+                    message={message}
+                    renderPart={(part) => <Part sessionId={id} part={part} />}
+                  />
+                </Message>
+              ) : (
+                <Message key={message.id} from="user">
+                  <MessageContent className="gap-3">
+                    {message.parts.map((part) => (
+                      <Part key={part.id} sessionId={id} part={part} />
+                    ))}
+                  </MessageContent>
+                </Message>
+              ),
+            )
           )}
           {pending.map((text, i) => (
             <Message key={`pending-${i}`} from="user">
@@ -425,7 +388,14 @@ function Chat({ id }: { id: string }) {
             </Message>
           ))}
           {!connected && !error && <Shimmer className="text-sm">Preparing workspace…</Shimmer>}
-          {waiting && <Shimmer className="text-sm">Working…</Shimmer>}
+          {waiting && (
+            <div className="flex items-center gap-1.5 px-0.5 text-sm" data-testid="thinking">
+              <span className="flex size-6 items-center justify-center">
+                <BrainIcon className="size-4 text-muted-foreground opacity-70" />
+              </span>
+              <Shimmer as="span">Thinking…</Shimmer>
+            </div>
+          )}
           {error && <div className="text-destructive text-xs">{error}</div>}
         </ConversationContent>
         <ConversationScrollButton />

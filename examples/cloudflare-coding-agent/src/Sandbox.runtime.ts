@@ -39,6 +39,8 @@ export default Sandbox.make(
     const claude = yield* Anthropic.ClaudeCodeServer("Claude", {
       apiKey: yield* Config.Redacted("ANTHROPIC_API_KEY"),
       model: "claude-haiku-4-5-20251001",
+      // Stream the model's thinking (shown in the UI as reasoning).
+      thinking: { type: "enabled", budgetTokens: 4000 },
       cwd: repo.path,
     });
     return { fetch: yield* AI.serveHarnessHttp(claude) };

@@ -24,6 +24,9 @@ export type TranscriptPart =
       readonly id: string;
       readonly text: string;
       readonly streaming: boolean;
+      /** When thinking started, and ended (ms since epoch). */
+      readonly startedAt: number;
+      readonly completedAt?: number;
     }
   | {
       readonly type: "tool";
@@ -33,6 +36,9 @@ export type TranscriptPart =
       /** Streamed output while running, then the tool's final content. */
       readonly output: string;
       readonly content: ReadonlyArray<ToolContent>;
+      /** When the tool started, and finished (ms since epoch). */
+      readonly startedAt: number;
+      readonly completedAt?: number;
     }
   | { readonly type: "plan"; readonly id: string; readonly entries: ReadonlyArray<PlanEntry> }
   | {
@@ -70,6 +76,9 @@ export interface TranscriptMessage {
   readonly status?: "streaming" | TurnStatus;
   readonly parts: ReadonlyArray<TranscriptPart>;
   readonly usage?: Usage;
+  /** Assistant messages: when the turn started, and ended (ms since epoch). */
+  readonly startedAt?: number;
+  readonly completedAt?: number;
 }
 
 /** A session's conversation, folded from its event log. */
@@ -134,8 +143,22 @@ const upsert = (
   return i === -1 ? [...parts, f(undefined)] : parts.map((p, j) => (j === i ? f(p) : p));
 };
 
-const doneStreaming = (parts: ReadonlyArray<TranscriptPart>) =>
-  parts.map((p) => (p.type === "text" || p.type === "reasoning" ? { ...p, streaming: false } : p));
+const doneStreaming = (parts: ReadonlyArray<TranscriptPart>, at: number) =>
+  parts.map((p) =>
+    p.type === "text"
+      ? { ...p, streaming: false }
+      : p.type === "reasoning" && p.streaming
+        ? { ...p, streaming: false, completedAt: at }
+        : p,
+  );
+
+/** Thinking ends when anything else starts. */
+const endReasoning = (parts: ReadonlyArray<TranscriptPart>, at: number, except?: string) =>
+  parts.map((p) =>
+    p.type === "reasoning" && p.streaming && p.id !== except
+      ? { ...p, streaming: false, completedAt: at }
+      : p,
+  );
 
 /** The turn the running assistant message belongs to (events between turns attach to the last). */
 const currentTurn = (t: Transcript) =>
@@ -173,7 +196,11 @@ export const reduceTranscript = (t: Transcript, e: SessionEvent): Transcript => 
         ...next,
         state: "running",
         turnStartedAt: e.at,
-        messages: withAssistant(t, e.turnId, (parts) => parts),
+        messages: withAssistant(t, e.turnId, (parts) => parts).map((m) =>
+          m.role === "assistant" && m.turnId === e.turnId && m.startedAt === undefined
+            ? { ...m, startedAt: e.at }
+            : m,
+        ),
       };
     case "message.completed":
       return e.role === "user"
@@ -196,7 +223,7 @@ export const reduceTranscript = (t: Transcript, e: SessionEvent): Transcript => 
       return {
         ...next,
         messages: withAssistant(t, currentTurn(t), (parts) =>
-          upsert(parts, e.itemId, (prev) => ({
+          upsert(endReasoning(parts, e.at), e.itemId, (prev) => ({
             type: "text",
             id: e.itemId,
             text: (prev?.type === "text" ? prev.text : "") + e.text,
@@ -208,11 +235,12 @@ export const reduceTranscript = (t: Transcript, e: SessionEvent): Transcript => 
       return {
         ...next,
         messages: withAssistant(t, currentTurn(t), (parts) =>
-          upsert(parts, `r:${e.itemId}`, (prev) => ({
+          upsert(endReasoning(parts, e.at, `r:${e.itemId}`), `r:${e.itemId}`, (prev) => ({
             type: "reasoning",
             id: `r:${e.itemId}`,
             text: (prev?.type === "reasoning" ? prev.text : "") + e.text,
             streaming: true,
+            startedAt: prev?.type === "reasoning" ? prev.startedAt : e.at,
           })),
         ),
       };
@@ -220,13 +248,14 @@ export const reduceTranscript = (t: Transcript, e: SessionEvent): Transcript => 
       return {
         ...next,
         messages: withAssistant(t, currentTurn(t), (parts) =>
-          upsert(parts, e.itemId, () => ({
+          upsert(endReasoning(parts, e.at), e.itemId, () => ({
             type: "tool",
             id: e.itemId,
             tool: e.tool,
             state: "running",
             output: "",
             content: [],
+            startedAt: e.at,
           })),
         ),
       };
@@ -252,6 +281,8 @@ export const reduceTranscript = (t: Transcript, e: SessionEvent): Transcript => 
             state: e.status,
             output: prev?.type === "tool" ? prev.output : "",
             content: e.content,
+            startedAt: prev?.type === "tool" ? prev.startedAt : e.at,
+            completedAt: e.at,
           })),
         ),
       };
@@ -321,9 +352,9 @@ export const reduceTranscript = (t: Transcript, e: SessionEvent): Transcript => 
         ]),
       };
     case "turn.completed": {
-      const messages = withAssistant(t, e.turnId, (parts) => doneStreaming(parts)).map((m) =>
+      const messages = withAssistant(t, e.turnId, (parts) => doneStreaming(parts, e.at)).map((m) =>
         m.role === "assistant" && m.turnId === e.turnId
-          ? { ...m, status: e.result.status, usage: e.result.usage }
+          ? { ...m, status: e.result.status, usage: e.result.usage, completedAt: e.at }
           : m,
       );
       return {

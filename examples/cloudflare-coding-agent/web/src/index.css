@@ -84,3 +84,37 @@
     font-size: 14px;
   }
 }
+
+/* A running tool's label: a bright band sweeping across the text. */
+.live-tool-shine {
+  background: linear-gradient(
+      90deg,
+      var(--color-muted-foreground) 0%,
+      var(--color-muted-foreground) 40%,
+      var(--color-foreground) 50%,
+      var(--color-muted-foreground) 60%,
+      var(--color-muted-foreground) 100%
+    )
+    0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: live-tool-shine 2.2s linear infinite;
+}
+.live-tool-shine * {
+  color: transparent;
+}
+@keyframes live-tool-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-tool-shine {
+    animation: none;
+    color: var(--color-muted-foreground);
+  }
+}

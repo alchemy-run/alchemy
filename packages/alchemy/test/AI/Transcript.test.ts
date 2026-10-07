@@ -56,6 +56,33 @@ describe("AI.reduceTranscript", { tags: ["unit", "local"] }, () => {
     expect(assistant.parts[2]).toMatchObject({ text: "There is a README.", streaming: false });
   });
 
+  test("times the turn, its thinking, and its tools", () => {
+    cursor = 0;
+    // Each event happens at 1000 + its cursor.
+    const events = stamp([
+      { type: "turn.started", turnId: "t1" }, // 1001
+      { type: "reasoning.delta", itemId: "m1", text: "hmm" }, // 1002
+      { type: "reasoning.delta", itemId: "m1", text: "..." }, // 1003
+      { type: "tool.started", itemId: "tool1", tool: { kind: "shell", title: "ls" } }, // 1004
+      { type: "tool.completed", itemId: "tool1", status: "ok", content: [] }, // 1005
+      { type: "reasoning.delta", itemId: "m2", text: "now" }, // 1006
+      {
+        type: "turn.completed",
+        turnId: "t1",
+        result: { turnId: "t1", status: "completed", message: [], usage },
+      }, // 1007
+    ]);
+    const assistant = events.reduce(reduceTranscript, emptyTranscript).messages[0]!;
+    expect(assistant).toMatchObject({ startedAt: 1001, completedAt: 1007 });
+    expect(assistant.parts).toMatchObject([
+      // Thinking ends when anything else starts…
+      { type: "reasoning", startedAt: 1002, completedAt: 1004, streaming: false },
+      { type: "tool", startedAt: 1004, completedAt: 1005 },
+      // …or when the turn ends.
+      { type: "reasoning", startedAt: 1006, completedAt: 1007, streaming: false },
+    ]);
+  });
+
   test("a running turn streams; replayed events are ignored", () => {
     cursor = 0;
     const events = stamp([

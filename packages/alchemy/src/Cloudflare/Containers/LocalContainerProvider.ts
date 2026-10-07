@@ -30,7 +30,7 @@ import {
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { ensureHostProcess, stopHostProcess } from "./HostProcess.ts";
+import { ensureHostProcess, hostProcessUrl, stopHostProcess } from "./HostProcess.ts";
 
 /**
  * Local (dev) provider for Cloudflare Container applications.
@@ -316,6 +316,11 @@ export const LocalContainerProvider = () =>
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, news, output, newBindings }) {
           if (!output) return { action: "update" };
+          // A program running on this machine (`devHost`) doesn't outlive
+          // the dev server: after a restart, start it again.
+          if (output.devHostUrl !== undefined && hostProcessUrl(id) !== output.devHostUrl) {
+            return { action: "update" };
+          }
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
           // fallback would call it a noop and the image would never rebuild.

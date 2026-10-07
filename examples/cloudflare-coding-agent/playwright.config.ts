@@ -14,6 +14,9 @@ export default defineConfig({
   timeout: 5 * 60_000,
   expect: { timeout: 3 * 60_000 },
   fullyParallel: true,
+  // Each session takes a ready worktree, and spares are rebuilt one at a
+  // time (~25s under `alchemy dev`): more workers only queue behind them.
+  workers: 2,
   reporter: "list",
   use: {
     baseURL: WEB_URL,
