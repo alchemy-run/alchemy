@@ -1024,6 +1024,38 @@ describe(
       { timeout: 120_000 },
     );
 
+    // #1990: an image that is still an Output at plan time (here from an
+    // Action) must still roll the container when it resolves to a new value.
+    test.provider("recreates a container when an Action-resolved image changes", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const Resolve = Action("ContainerImageRef", (input: { image: string }) =>
+          Effect.succeed(input.image),
+        );
+        const deploy = (image: string) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const ref = yield* Resolve({ image });
+              return yield* Docker.Container("action-image-container", {
+                image: ref,
+                command: ["sleep", "300"],
+                start: true,
+              });
+            }),
+          );
+
+        const first = yield* deploy("alpine:3.19");
+        const second = yield* deploy("busybox:1.36");
+        expect(second.id).not.toBe(first.id);
+        expect(second.imageRef).toBe("busybox:1.36");
+        expect((yield* docker.container.inspect(second.name)).Config.Image).toBe("busybox:1.36");
+
+        // The same resolved image keeps the container.
+        const third = yield* deploy("busybox:1.36");
+        expect(third.id).toBe(second.id);
+      }),
+    );
+
     test.provider("adopts a container from a named context without removing it", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
