@@ -1,10 +1,8 @@
+import { Command, Flag } from "effect/cli";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Command, Flag } from "effect/unstable/cli";
-
 import * as Provider from "../../Alchemist/routes/provider.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
-
 import { awsCommand } from "./aws.ts";
 import { cloudflareCommand } from "./cloudflare.ts";
 import { setExitCode } from "./errors.ts";
@@ -12,7 +10,7 @@ import { config, envFile, profile } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 /** Optional repeatable filter for checking a subset of registered providers. */
-const checkedProviders = Flag.string("provider").pipe(
+const checkedProviders = Flag.String("provider").pipe(
   Flag.withDescription(
     "Check only this provider (repeatable; defaults to every provider the stack registers)",
   ),

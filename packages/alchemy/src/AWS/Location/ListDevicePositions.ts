@@ -38,10 +38,7 @@ export interface ListDevicePositions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListDevicePositionsRequest,
-    ) => Effect.Effect<
-      location.ListDevicePositionsResponse,
-      location.ListDevicePositionsError
-    >
+    ) => Effect.Effect<location.ListDevicePositionsResponse, location.ListDevicePositionsError>
   >
 > {}
 export const ListDevicePositions = Binding.Service<ListDevicePositions>(

@@ -1,14 +1,14 @@
+import * as cur from "@distilled.cloud/aws/cost-and-usage-report-service";
+import { Region } from "@distilled.cloud/aws/Region";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import { ReportDefinition } from "@/AWS/CostAndUsageReport";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import { Region } from "@distilled.cloud/aws/Region";
-import * as cur from "@distilled.cloud/aws/cost-and-usage-report-service";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,17 +30,10 @@ const assertReportGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* findReport(name);
     if (found) {
-      return yield* Effect.fail(
-        new Error(`report definition '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`report definition '${name}' still exists`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]) }),
   );
 
 // Ungated probe: proves auth + response schema against the live us-east-1
@@ -52,6 +45,7 @@ test.provider(
       const response = yield* pin(cur.describeReportDefinitions({}));
       expect(Array.isArray(response.ReportDefinitions ?? [])).toBe(true);
     }),
+  { tags: ["provider:aws", "provider:aws:costandusagereport", "live"] },
 );
 
 const REPORT_NAME = "alchemy-test-cur-report";
@@ -121,11 +115,7 @@ test.provider(
 
       // CREATE
       const created = yield* stack.deploy(
-        program({
-          reportName: REPORT_NAME,
-          timeUnit: "DAILY",
-          compression: "GZIP",
-        }),
+        program({ reportName: REPORT_NAME, timeUnit: "DAILY", compression: "GZIP" }),
       );
       expect(created.report.reportName).toBe(REPORT_NAME);
       expect(created.report.reportArn).toBe(
@@ -144,9 +134,7 @@ test.provider(
       expect(observed?.AdditionalSchemaElements).toContain("RESOURCES");
 
       // Tags: user tag + alchemy internal tags.
-      const tags = yield* pin(
-        cur.listTagsForResource({ ReportName: REPORT_NAME }),
-      );
+      const tags = yield* pin(cur.listTagsForResource({ ReportName: REPORT_NAME }));
       expect(tags.Tags).toContainEqual({ Key: "fixture", Value: "cur-report" });
       expect(tags.Tags?.some((t) => t.Key.startsWith("alchemy:"))).toBe(true);
 
@@ -172,11 +160,7 @@ test.provider(
 
       // UPDATE in place (timeUnit + compression via modifyReportDefinition).
       const updated = yield* stack.deploy(
-        program({
-          reportName: REPORT_NAME,
-          timeUnit: "HOURLY",
-          compression: "ZIP",
-        }),
+        program({ reportName: REPORT_NAME, timeUnit: "HOURLY", compression: "ZIP" }),
       );
       expect(updated.report.reportName).toBe(REPORT_NAME);
       const modified = yield* findReport(REPORT_NAME);
@@ -185,11 +169,7 @@ test.provider(
 
       // REPLACE on reportName change: new report created, old one deleted.
       const replaced = yield* stack.deploy(
-        program({
-          reportName: REPLACED_REPORT_NAME,
-          timeUnit: "HOURLY",
-          compression: "ZIP",
-        }),
+        program({ reportName: REPLACED_REPORT_NAME, timeUnit: "HOURLY", compression: "ZIP" }),
       );
       expect(replaced.report.reportName).toBe(REPLACED_REPORT_NAME);
       const replacement = yield* findReport(REPLACED_REPORT_NAME);
@@ -200,5 +180,8 @@ test.provider(
       yield* stack.destroy();
       yield* assertReportGone(REPLACED_REPORT_NAME);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:costandusagereport", "provider:aws:s3", "live"],
+    timeout: 240_000,
+  },
 );

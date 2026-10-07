@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict } from "./internal.ts";
 
@@ -121,47 +116,28 @@ export const AccessLogSubscriptionProvider = () =>
       const observe = (id: string) =>
         vpclattice
           .getAccessLogSubscription({ accessLogSubscriptionIdentifier: id })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // A resource can hold at most one subscription per destination type;
       // recover the existing one for our destination's type.
-      const findByDestinationType = (
-        resourceIdentifier: string,
-        desiredDestinationArn: string,
-      ) =>
-        vpclattice.listAccessLogSubscriptions
-          .pages({ resourceIdentifier })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk)
-                .flatMap((page) => page.items ?? [])
-                .find(
-                  (s) =>
-                    destinationType(s.destinationArn) ===
-                    destinationType(desiredDestinationArn),
-                ),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const findByDestinationType = (resourceIdentifier: string, desiredDestinationArn: string) =>
+        vpclattice.listAccessLogSubscriptions.pages({ resourceIdentifier }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk)
+              .flatMap((page) => page.items ?? [])
+              .find(
+                (s) => destinationType(s.destinationArn) === destinationType(desiredDestinationArn),
+              ),
+          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -187,8 +163,7 @@ export const AccessLogSubscriptionProvider = () =>
           if (!isResolved(news)) return;
           if (
             olds?.resourceIdentifier !== news.resourceIdentifier ||
-            (olds?.serviceNetworkLogType ?? undefined) !==
-              news.serviceNetworkLogType
+            (olds?.serviceNetworkLogType ?? undefined) !== news.serviceNetworkLogType
           ) {
             return { action: "replace" } as const;
           }
@@ -196,8 +171,7 @@ export const AccessLogSubscriptionProvider = () =>
           // destination service (CloudWatch/Firehose/S3).
           if (
             olds !== undefined &&
-            destinationType(olds.destinationArn) !==
-              destinationType(news.destinationArn)
+            destinationType(olds.destinationArn) !== destinationType(news.destinationArn)
           ) {
             return { action: "replace" } as const;
           }
@@ -206,10 +180,7 @@ export const AccessLogSubscriptionProvider = () =>
           const subscription = output?.accessLogSubscriptionId
             ? yield* observe(output.accessLogSubscriptionId)
             : olds
-              ? yield* findByDestinationType(
-                  olds.resourceIdentifier,
-                  olds.destinationArn,
-                )
+              ? yield* findByDestinationType(olds.resourceIdentifier, olds.destinationArn)
               : undefined;
           if (!subscription) return undefined;
           const listed = yield* vpclattice.listTagsForResource({
@@ -223,9 +194,7 @@ export const AccessLogSubscriptionProvider = () =>
             destinationArn: subscription.destinationArn,
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
@@ -245,10 +214,7 @@ export const AccessLogSubscriptionProvider = () =>
               }
             | undefined = output?.accessLogSubscriptionId
             ? yield* observe(output.accessLogSubscriptionId)
-            : yield* findByDestinationType(
-                news.resourceIdentifier,
-                news.destinationArn,
-              );
+            : yield* findByDestinationType(news.resourceIdentifier, news.destinationArn);
 
           // Ensure — create if missing. A ConflictException means a
           // subscription for this destination type already exists (a race);
@@ -263,16 +229,11 @@ export const AccessLogSubscriptionProvider = () =>
               }),
             ).pipe(
               Effect.catchTag("ConflictException", () =>
-                findByDestinationType(
-                  news.resourceIdentifier,
-                  news.destinationArn,
-                ),
+                findByDestinationType(news.resourceIdentifier, news.destinationArn),
               ),
             );
             if (!created) {
-              return yield* Effect.fail(
-                new Error("Failed to create access log subscription"),
-              );
+              return yield* Effect.fail(new Error("Failed to create access log subscription"));
             }
             subscription = created;
           }
@@ -308,9 +269,7 @@ export const AccessLogSubscriptionProvider = () =>
             vpclattice.deleteAccessLogSubscription({
               accessLogSubscriptionIdentifier: output.accessLogSubscriptionId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

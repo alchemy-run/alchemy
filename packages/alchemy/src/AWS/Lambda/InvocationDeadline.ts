@@ -14,10 +14,9 @@ import { Flusher } from "effect/unstable/observability/OtlpExporter";
  * to the handler. Provided to every invocation's effect by the Lambda
  * dispatcher (see `Function.ts`).
  */
-export class HandlerContext extends Context.Service<
-  HandlerContext,
-  lambda.Context
->()("AWS.Lambda.HandlerContext") {}
+export class HandlerContext extends Context.Service<HandlerContext, lambda.Context>()(
+  "AWS.Lambda.HandlerContext",
+) {}
 
 /**
  * Environment variable the deploy side writes from
@@ -52,9 +51,7 @@ export const TIMEOUT_IMMINENT_ATTRIBUTE = "aws.lambda.timeout.imminent";
  * completion ends the span again with the real outcome (see
  * {@link withInvocationDeadline}).
  */
-export class InvocationTimeoutError extends Data.TaggedError(
-  "AWS.Lambda.InvocationTimeoutError",
-)<{
+export class InvocationTimeoutError extends Data.TaggedError("AWS.Lambda.InvocationTimeoutError")<{
   readonly functionName: string;
   readonly requestId: string;
   /** Milliseconds the handler had been running when the flush fired. */
@@ -79,10 +76,9 @@ interface Deadline {
  * and the outer one stands down, so the flush runs exactly once, from the
  * innermost guard.
  */
-class InvocationDeadline extends Context.Service<
-  InvocationDeadline,
-  Deadline
->()("AWS.Lambda.InvocationDeadline") {}
+class InvocationDeadline extends Context.Service<InvocationDeadline, Deadline>()(
+  "AWS.Lambda.InvocationDeadline",
+) {}
 
 /**
  * Parse the runtime margin from its environment variable. Unset → default;
@@ -91,9 +87,7 @@ class InvocationDeadline extends Context.Service<
 export const readTimeoutMargin = (raw: string | undefined): number => {
   if (raw === undefined || raw === "") return DEFAULT_TIMEOUT_MARGIN_MS;
   const ms = Number(raw);
-  return Number.isFinite(ms) && ms >= 0
-    ? Math.floor(ms)
-    : DEFAULT_TIMEOUT_MARGIN_MS;
+  return Number.isFinite(ms) && ms >= 0 ? Math.floor(ms) : DEFAULT_TIMEOUT_MARGIN_MS;
 };
 
 /**
@@ -164,13 +158,8 @@ export const withInvocationDeadline = <A, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
-    const context = Option.getOrUndefined(
-      yield* Effect.serviceOption(HandlerContext),
-    );
-    if (
-      context === undefined ||
-      typeof context.getRemainingTimeInMillis !== "function"
-    ) {
+    const context = Option.getOrUndefined(yield* Effect.serviceOption(HandlerContext));
+    if (context === undefined || typeof context.getRemainingTimeInMillis !== "function") {
       return yield* self;
     }
     const marginMs = readTimeoutMargin(process.env[TIMEOUT_MARGIN_ENV]);

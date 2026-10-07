@@ -8,17 +8,14 @@ import * as AwsState from "../../AWS/StateStore/State.ts";
 import * as CloudflareState from "../../Cloudflare/StateStore/State.ts";
 import * as State from "../../State/index.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { open, type Target } from "../Session.ts";
+import { open, StackEntrypointError, type Target } from "../Session.ts";
 
 /** Which store a state request addresses. */
 export type StateSource =
   /** `.alchemy/` on this machine, ignoring whatever the project configures. */
   | { readonly backend: "local" }
   /** A provider's default state store, without loading a project entrypoint. */
-  | ({ readonly backend: "aws" | "cloudflare" } & Pick<
-      Target,
-      "profile" | "envFile"
-    >)
+  | ({ readonly backend: "aws" | "cloudflare" } & Pick<Target, "profile" | "envFile">)
   /** Whatever the project's entrypoint configures. */
   | ({ readonly backend: "configured" } & Target);
 
@@ -35,14 +32,9 @@ export type StateSource =
  * );
  * ```
  */
-export const store = Effect.fn("Alchemist.state.store")(function* (
-  source: StateSource,
-) {
+export const store = Effect.fn("Alchemist.state.store")(function* (source: StateSource) {
   if (source.backend === "local") {
-    return yield* Effect.provide(
-      Effect.flatten(State.State),
-      State.localState(),
-    );
+    return yield* Effect.provide(Effect.flatten(State.State), State.localState());
   }
   if (source.backend === "aws" || source.backend === "cloudflare") {
     const config = ConfigProvider.layer(
@@ -51,10 +43,7 @@ export const store = Effect.fn("Alchemist.state.store")(function* (
         source.profile,
       ),
     );
-    const authProviders = Layer.succeed(
-      AuthProviders,
-      {} satisfies AuthProviders["Service"],
-    );
+    const authProviders = Layer.succeed(AuthProviders, {} satisfies AuthProviders["Service"]);
     if (source.backend === "aws") {
       return yield* Effect.flatten(State.State).pipe(
         Effect.provide(AwsState.state()),
@@ -68,7 +57,19 @@ export const store = Effect.fn("Alchemist.state.store")(function* (
       Effect.provide(config),
     );
   }
-  const session = yield* open(source);
+  // The configured store lives in the stack entrypoint; this is the one
+  // command that can also work without one.
+  const session = yield* open(source).pipe(
+    Effect.catchIf(
+      (error): error is StackEntrypointError => error instanceof StackEntrypointError,
+      (error) =>
+        Effect.fail(
+          new StackEntrypointError({
+            message: `${error.message} For config-less state access use --backend aws or --backend cloudflare.`,
+          }),
+        ),
+    ),
+  );
   return yield* Effect.provide(Effect.flatten(State.State), session.context);
 });
 

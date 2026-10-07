@@ -32,12 +32,7 @@ export interface DescribeForecast extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.DescribeForecastRequest,
-    ) => Effect.Effect<
-      forecast.DescribeForecastResponse,
-      forecast.DescribeForecastError
-    >
+    ) => Effect.Effect<forecast.DescribeForecastResponse, forecast.DescribeForecastError>
   >
 > {}
-export const DescribeForecast = Binding.Service<DescribeForecast>(
-  "AWS.Forecast.DescribeForecast",
-);
+export const DescribeForecast = Binding.Service<DescribeForecast>("AWS.Forecast.DescribeForecast");

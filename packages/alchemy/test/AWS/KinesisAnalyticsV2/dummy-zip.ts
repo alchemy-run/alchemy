@@ -30,8 +30,7 @@ export const makeZip = (entries: ReadonlyArray<ZipEntry>): Uint8Array => {
 
   for (const entry of entries) {
     const name = encoder.encode(entry.name);
-    const body =
-      typeof entry.data === "string" ? encoder.encode(entry.data) : entry.data;
+    const body = typeof entry.data === "string" ? encoder.encode(entry.data) : entry.data;
     const crc = crc32(body);
 
     const localHeader = new Uint8Array(30 + name.length);
@@ -86,8 +85,6 @@ export const makeZip = (entries: ReadonlyArray<ZipEntry>): Uint8Array => {
  * (empty) jar with a manifest.
  */
 export const makeDummyFlinkCodeZip = (): Uint8Array => {
-  const jar = makeZip([
-    { name: "META-INF/MANIFEST.MF", data: "Manifest-Version: 1.0\r\n\r\n" },
-  ]);
+  const jar = makeZip([{ name: "META-INF/MANIFEST.MF", data: "Manifest-Version: 1.0\r\n\r\n" }]);
   return makeZip([{ name: "app.jar", data: jar }]);
 };

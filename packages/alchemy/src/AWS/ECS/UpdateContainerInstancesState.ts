@@ -46,7 +46,6 @@ export interface UpdateContainerInstancesState extends Binding.Service<
     >
   >
 > {}
-export const UpdateContainerInstancesState =
-  Binding.Service<UpdateContainerInstancesState>(
-    "AWS.ECS.UpdateContainerInstancesState",
-  );
+export const UpdateContainerInstancesState = Binding.Service<UpdateContainerInstancesState>(
+  "AWS.ECS.UpdateContainerInstancesState",
+);

@@ -112,6 +112,12 @@ redirect hostnames never appear there — they serve no content. Their
 redirect rules live in the zone's `http_request_dynamic_redirect`
 phase, which runs before Workers.
 
+Set `previews: true` so [Worker Previews](/cloudflare/compute/previews)
+of this Worker are served at `<preview-name>.api.example.com`. That is
+a parent setting — enable it on the production Worker, not on the
+Preview Worker. Use a dedicated hostname (`previews.example.com`) if
+production already has subdomains, so the wildcard does not collide.
+
 ## Route a hostname pattern to a Worker
 
 Routes are the classic alternative: a zone-level mapping from a URL
@@ -162,6 +168,27 @@ yield* Cloudflare.Workers.WorkerRoute("ApiRoute", {
 
 Both `pattern` and `script` are mutable — changing either updates the
 same physical route in place. Changing `zoneId` triggers a replacement.
+
+## Split one hostname across Workers
+
+Routes win over custom domains, so one Worker can own a hostname while
+others claim paths under it:
+
+```typescript
+yield* Cloudflare.Worker("Home", {
+  main: "./src/home.ts",
+  domain: "api.example.com",
+});
+
+yield* Cloudflare.Worker("Orders", {
+  main: "./src/orders.ts",
+  routes: [{ pattern: "api.example.com/orders*" }],
+});
+```
+
+`alchemy dev` applies the same routing locally. See
+[Federated APIs](/cloudflare/networking/federated-apis) for the full
+pattern.
 
 ## DNS records for non-Worker targets
 

@@ -10,8 +10,7 @@ import { Stack } from "../../Stack.ts";
  * The AWS-managed base image MicroVM Dockerfiles build on. The MicroVM build
  * runs the Dockerfile server-side and snapshots the result with Firecracker.
  */
-export const MICROVM_BASE_DOCKER_IMAGE =
-  "public.ecr.aws/lambda/microvms:al2023-minimal";
+export const MICROVM_BASE_DOCKER_IMAGE = "public.ecr.aws/lambda/microvms:al2023-minimal";
 
 /** The default port the in-VM HTTP server listens on. */
 export const DEFAULT_MICROVM_PORT = 8080;
@@ -85,10 +84,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   const realMain = yield* fs.realPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
-  const buildBundle = Effect.fn(function* (
-    entry: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ) {
+  const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {
     return yield* Bundle.build(
       {
         ...build?.input,
@@ -103,9 +99,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
         platform: "node",
         resolve: {
           conditionNames:
-            runtime === "bun"
-              ? [...Bundle.BUN_CONDITION_NAMES]
-              : [...Bundle.NODE_CONDITION_NAMES],
+            runtime === "bun" ? [...Bundle.BUN_CONDITION_NAMES] : [...Bundle.NODE_CONDITION_NAMES],
           ...build?.input?.resolve,
         },
         plugins: [build?.input?.plugins, plugins],
@@ -148,10 +142,7 @@ await bootstrap(entrypoint, ${JSON.stringify({
 
   const files = bundleOutput.files.map((f) => ({
     path: f.path,
-    content:
-      typeof f.content === "string"
-        ? new TextEncoder().encode(f.content)
-        : f.content,
+    content: typeof f.content === "string" ? new TextEncoder().encode(f.content) : f.content,
   }));
 
   return { files, hash: bundleOutput.hash };
@@ -167,22 +158,7 @@ export interface ArtifactFile {
  * package the MicroVM code artifact (Dockerfile + bundled program, or a build
  * context) before uploading it to S3.
  */
-export const zipFiles = Effect.fn(function* (
-  files: ReadonlyArray<ArtifactFile>,
-) {
-  const zip = new (yield* Effect.promise(() => import("jszip"))).default();
-  const date = new Date("1980-01-01T00:00:00.000Z");
-  for (const file of files) {
-    zip.file(file.path, file.content, { date });
-  }
-  return yield* Effect.promise(() =>
-    zip.generateAsync({
-      type: "nodebuffer",
-      compression: "DEFLATE",
-      platform: "UNIX",
-    }),
-  );
-});
+export { zipFiles } from "../../Util/zip.ts";
 
 /**
  * Recursively read a build-context directory into a flat list of files

@@ -32,6 +32,4 @@ export interface DescribeDBClusters extends Binding.Service<
     ) => Effect.Effect<rds.DBClusterMessage, rds.DescribeDBClustersError>
   >
 > {}
-export const DescribeDBClusters = Binding.Service<DescribeDBClusters>(
-  "AWS.RDS.DescribeDBClusters",
-);
+export const DescribeDBClusters = Binding.Service<DescribeDBClusters>("AWS.RDS.DescribeDBClusters");

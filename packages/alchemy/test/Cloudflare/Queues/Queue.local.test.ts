@@ -1,15 +1,15 @@
+import * as queues from "@distilled.cloud/cloudflare/queues";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as queues from "@distilled.cloud/cloudflare/queues";
-import { expect } from "alchemy-test";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as pathe from "pathe";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command (see
@@ -22,10 +22,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -45,10 +42,7 @@ const getJsonReady = (url: string) =>
         // Cap the backoff: an uncapped exponential over 10 recurs sums to
         // ~8.5 minutes and turns a persistent non-200 into an apparent hang.
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -73,10 +67,7 @@ test.provider(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue("LocalQueue");
           const worker = yield* Cloudflare.Worker("queue-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/queue-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/queue-local-worker.ts"),
             env: { QUEUE: queue },
           });
           yield* Cloudflare.Queues.Consumer("LocalConsumer", {
@@ -92,15 +83,13 @@ test.provider(
       expect(deployed.queue.queueId).toMatch(/^dev:/);
       expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const sent = (yield* getJsonReady(
-        `${deployed.worker.url}/send?text=local-hello`,
-      )) as { sent: string };
+      const sent = (yield* getJsonReady(`${deployed.worker.url}/send?text=local-hello`)) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("local-hello");
 
       // Poll until the broker delivers to the fixture's queue() handler.
-      const received = yield* getJsonReady(
-        `${deployed.worker.url}/received`,
-      ).pipe(
+      const received = yield* getJsonReady(`${deployed.worker.url}/received`).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
@@ -112,7 +101,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -134,10 +131,7 @@ test.provider(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue("BatchSettingsQueue");
           const worker = yield* Cloudflare.Worker("queue-batch-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/queue-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/queue-local-worker.ts"),
             env: { QUEUE: queue },
           });
           yield* Cloudflare.Queues.Consumer("BatchSettingsConsumer", {
@@ -157,9 +151,7 @@ test.provider(
 
       // All five arrive: two full batches immediately, the leftover after
       // the 2s flush timeout.
-      const received = yield* getJsonReady(
-        `${deployed.worker.url}/received`,
-      ).pipe(
+      const received = yield* getJsonReady(`${deployed.worker.url}/received`).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
@@ -169,15 +161,23 @@ test.provider(
       );
       expect(received.length).toBe(5);
 
-      const { batches } = (yield* getJsonReady(
-        `${deployed.worker.url}/batches`,
-      )) as { batches: number[] };
+      const { batches } = (yield* getJsonReady(`${deployed.worker.url}/batches`)) as {
+        batches: number[];
+      };
       expect(Math.max(...batches)).toBe(2);
       expect(batches.reduce((a, b) => a + b, 0)).toBe(5);
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -198,10 +198,7 @@ test.provider(
           const queue = yield* Cloudflare.Queues.Queue("DlqSourceQueue");
           const dlq = yield* Cloudflare.Queues.Queue("DlqTargetQueue");
           const worker = yield* Cloudflare.Worker("queue-dlq-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/queue-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/queue-local-worker.ts"),
             env: { QUEUE: queue },
           });
           yield* Cloudflare.Queues.Consumer("DlqLocalConsumer", {
@@ -218,14 +215,12 @@ test.provider(
       expect(deployed.dlq.queueId).toMatch(/^dev:/);
 
       // The worker starts (the DLQ binding resolves) and delivers normally.
-      const sent = (yield* getJsonReady(
-        `${deployed.worker.url}/send?text=dlq-hello`,
-      )) as { sent: string };
+      const sent = (yield* getJsonReady(`${deployed.worker.url}/send?text=dlq-hello`)) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("dlq-hello");
 
-      const received = yield* getJsonReady(
-        `${deployed.worker.url}/received`,
-      ).pipe(
+      const received = yield* getJsonReady(`${deployed.worker.url}/received`).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
@@ -237,7 +232,15 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -255,14 +258,9 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queues.Queue(
-            "LiveRoundtripQueue",
-          ).pipe(Alchemy.remote());
+          const queue = yield* Cloudflare.Queues.Queue("LiveRoundtripQueue").pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("queue-roundtrip-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/queue-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/queue-local-worker.ts"),
             env: { QUEUE: queue },
           });
           yield* Cloudflare.Queues.Consumer("LiveRoundtripConsumer", {
@@ -277,21 +275,19 @@ test.provider(
       expect(deployed.queue.queueId).not.toMatch(/^dev:/);
 
       // Produce through the shim into the real queue.
-      const sent = (yield* getJsonReady(
-        `${deployed.worker.url}/send?text=roundtrip-hello`,
-      )) as { sent: string };
+      const sent = (yield* getJsonReady(`${deployed.worker.url}/send?text=roundtrip-hello`)) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("roundtrip-hello");
 
       // The pull loop drains the real queue into the local broker, which
       // delivers to the fixture's queue() handler.
-      const received = yield* getJsonReady(
-        `${deployed.worker.url}/received`,
-      ).pipe(
+      const received = yield* getJsonReady(`${deployed.worker.url}/received`).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
+          schedule: Schedule.spaced("4 seconds"),
           until: (received) => received.includes("roundtrip-hello"),
-          times: 30,
+          times: 10,
         }),
       );
       expect(received).toContain("roundtrip-hello");
@@ -300,15 +296,21 @@ test.provider(
 
       // Destroy removed the real queue (with its pull consumer and shim).
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const gone = yield* queues
-        .getQueue({ accountId, queueId: deployed.queue.queueId })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
-        );
+      const gone = yield* queues.getQueue({ accountId, queueId: deployed.queue.queueId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 /**
@@ -330,14 +332,9 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const queue = yield* Cloudflare.Queues.Queue("LiveDevQueue").pipe(
-            Alchemy.remote(),
-          );
+          const queue = yield* Cloudflare.Queues.Queue("LiveDevQueue").pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("queue-live-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/queue-local-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/queue-local-worker.ts"),
             env: { QUEUE: queue },
           });
           return { queue, worker };
@@ -361,13 +358,13 @@ test.provider(
       // queue. The first send rides out the shim's workers.dev propagation
       // (the forwarder retries 404/503 internally; the outer retry covers
       // the tail).
-      const sent = (yield* getJsonReady(
-        `${deployed.worker.url}/send?text=live-hello`,
-      )) as { sent: string };
+      const sent = (yield* getJsonReady(`${deployed.worker.url}/send?text=live-hello`)) as {
+        sent: string;
+      };
       expect(sent.sent).toBe("live-hello");
-      const batch = (yield* getJsonReady(
-        `${deployed.worker.url}/sendbatch?text=live-batch`,
-      )) as { sent: number };
+      const batch = (yield* getJsonReady(`${deployed.worker.url}/sendbatch?text=live-batch`)) as {
+        sent: number;
+      };
       expect(batch.sent).toBe(2);
 
       // Pull the messages back from the REAL queue. Pulled messages are
@@ -404,13 +401,19 @@ test.provider(
       yield* stack.destroy();
 
       // Destroy removed the real queue (and with it the shim + consumer).
-      const gone = yield* queues
-        .getQueue({ accountId, queueId: deployed.queue.queueId })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
-        );
+      const gone = yield* queues.getQueue({ accountId, queueId: deployed.queue.queueId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { DataSource, Index } from "@/AWS/Kendra";
-import * as Test from "@/Test/Alchemy";
 import * as kendra from "@distilled.cloud/aws/kendra";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { DataSource, Index } from "@/AWS/Kendra";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,7 +13,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // The ungated probes assert the distilled wiring surfaces the typed
 // not-found errors the provider's read/delete paths depend on; the full
 // lifecycle is gated behind AWS_TEST_SLOW=1.
-describe("AWS.Kendra.Index", () => {
+describe("AWS.Kendra.Index", { tags: ["provider:aws", "provider:aws:kendra", "live"] }, () => {
   test.provider(
     "describeIndex on a nonexistent id yields a typed ResourceNotFoundException",
     (_stack) =>
@@ -70,11 +70,7 @@ describe("AWS.Kendra.Index", () => {
                         Effect: "Allow",
                         Action: ["cloudwatch:PutMetricData"],
                         Resource: ["*"],
-                        Condition: {
-                          StringEquals: {
-                            "cloudwatch:namespace": "AWS/Kendra",
-                          },
-                        },
+                        Condition: { StringEquals: { "cloudwatch:namespace": "AWS/Kendra" } },
                       },
                       {
                         Effect: "Allow",
@@ -92,9 +88,7 @@ describe("AWS.Kendra.Index", () => {
                 },
               });
 
-              const bucket = yield* AWS.S3.Bucket("KendraDocs", {
-                forceDestroy: true,
-              });
+              const bucket = yield* AWS.S3.Bucket("KendraDocs", { forceDestroy: true });
 
               // Role Kendra assumes to crawl the S3 bucket.
               const dataSourceRole = yield* AWS.IAM.Role("KendraDataRole", {
@@ -119,10 +113,7 @@ describe("AWS.Kendra.Index", () => {
                       },
                       {
                         Effect: "Allow",
-                        Action: [
-                          "kendra:BatchPutDocument",
-                          "kendra:BatchDeleteDocument",
-                        ],
+                        Action: ["kendra:BatchPutDocument", "kendra:BatchDeleteDocument"],
                         Resource: ["*"],
                       },
                     ],
@@ -141,11 +132,7 @@ describe("AWS.Kendra.Index", () => {
                 indexId: index.id,
                 type: "S3",
                 roleArn: dataSourceRole.roleArn,
-                configuration: {
-                  S3Configuration: {
-                    BucketName: bucket.bucketName,
-                  },
-                },
+                configuration: { S3Configuration: { BucketName: bucket.bucketName } },
               });
 
               return { index, source };
@@ -177,9 +164,7 @@ describe("AWS.Kendra.Index", () => {
         yield* Effect.gen(function* () {
           const gone = yield* kendra.describeIndex({ Id: index.id }).pipe(
             Effect.map((d) => d.Status === "DELETING"),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           );
           if (!gone) {
             return yield* Effect.fail({ _tag: "StillExists" as const });
@@ -187,13 +172,10 @@ describe("AWS.Kendra.Index", () => {
         }).pipe(
           Effect.retry({
             while: (e: { _tag: string }) => e._tag === "StillExists",
-            schedule: Schedule.max([
-              Schedule.spaced("15 seconds"),
-              Schedule.recurs(40),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(40)]),
           }),
         );
       }),
-    { timeout: 3_600_000 },
+    { tags: ["provider:aws:iam", "provider:aws:s3"], timeout: 3_600_000 },
   );
 });

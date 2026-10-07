@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 import CronTestWorker from "./cron-worker.ts";
 
 export default Alchemy.Stack(
@@ -12,6 +12,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const worker = yield* CronTestWorker;
     return {
+      workerName: worker.workerName,
       url: worker.url.as<string>(),
       crons: worker.crons,
     };

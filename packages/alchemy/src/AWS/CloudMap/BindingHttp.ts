@@ -20,12 +20,7 @@ import type { Service } from "./Service.ts";
  * plus any `extraStatements` (e.g. the Route 53 record management Cloud Map
  * performs on the caller's behalf for DNS services).
  */
-export const makeCloudMapServiceHttpBinding = <
-  I extends { ServiceId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeCloudMapServiceHttpBinding = <I extends { ServiceId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.CloudMap.GetInstance`. */
   tag: string;
   /** The distilled operation; `ServiceId` is injected from the service. */

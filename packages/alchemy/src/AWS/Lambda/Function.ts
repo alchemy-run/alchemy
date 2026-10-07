@@ -11,17 +11,17 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { PackageInstall } from "../../Bundle/InstalledPackages.ts";
-import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -31,26 +31,19 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
 import * as Serverless from "../../Serverless/index.ts";
-import { buildEventTelemetry } from "../../Telemetry.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "../../Tags.ts";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  syncEventInvokeConfig,
-  type EventInvokeConfig,
-} from "./EventInvokeConfig.ts";
+import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
 import {
   decodeFunctionImageSource,
@@ -74,12 +67,24 @@ export type FunctionTypeId = typeof FunctionTypeId;
 
 class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
   functionName: string;
-}> {}
+  state?: string;
+  stateReason?: string;
+  lastUpdateStatus?: string;
+  lastUpdateStatusReason?: string;
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
+  }
+}
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
-}> {}
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
+  }
+}
 
 export const isFunction = (value: any): value is Function => {
   return (
@@ -182,8 +187,8 @@ const accessPointArnOf = (config: {
 }): string | undefined =>
   typeof config.accessPoint === "string"
     ? config.accessPoint
-    : typeof (config.accessPoint as { accessPointArn?: unknown } | undefined)
-          ?.accessPointArn === "string"
+    : typeof (config.accessPoint as { accessPointArn?: unknown } | undefined)?.accessPointArn ===
+        "string"
       ? (config.accessPoint as { accessPointArn: string }).accessPointArn
       : config.arn;
 
@@ -311,6 +316,15 @@ export interface FunctionCommonProps extends PlatformProps {
    * config to an alias instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
+  /**
+   * Retention for the function's CloudWatch log group
+   * (`/aws/lambda/<functionName>`), e.g. `{ retention: "2 weeks" }` or
+   * `{ retention: "forever" }`. When set, Alchemy creates (or adopts) the
+   * log group so the policy applies before the first invocation, and
+   * deletes it with the function. When omitted the log group is left to
+   * Lambda, which creates it on first invoke with no expiry.
+   */
+  logging?: LogRetentionConfig;
 }
 
 export interface FunctionZipProps extends FunctionCommonProps {
@@ -393,9 +407,8 @@ export interface FunctionImageProps extends FunctionCommonProps {
 
 export type FunctionProps = FunctionZipProps | FunctionImageProps;
 
-const isFunctionImageProps = (
-  props: FunctionProps,
-): props is FunctionImageProps => props.image !== undefined;
+const isFunctionImageProps = (props: FunctionProps): props is FunctionImageProps =>
+  props.image !== undefined;
 
 interface FunctionPackageValidationProps {
   image?: unknown;
@@ -413,36 +426,36 @@ interface FunctionPackageValidationProps {
  * Validate package-mode exclusivity before any Lambda or ECR mutation.
  * @internal
  */
-export const validateFunctionPackageProps = Effect.fn(
-  "AWS.Lambda.validateFunctionPackageProps",
-)(function* (id: string, props: FunctionPackageValidationProps) {
-  if (props.image === undefined) {
-    if (props.main === undefined) {
+export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFunctionPackageProps")(
+  function* (id: string, props: FunctionPackageValidationProps) {
+    if (props.image === undefined) {
+      if (props.main === undefined) {
+        return yield* Effect.fail(
+          new Error(`Function(${id}): declare exactly one of main or image`),
+        );
+      }
+      return;
+    }
+
+    const incompatible = [
+      ["main", props.main],
+      ["handler", props.handler],
+      ["runtime", props.runtime],
+      ["layers", props.layers],
+      ["build", props.build],
+      ["uploadSourceMap", props.uploadSourceMap],
+      ["exports", props.exports],
+      ["durableConfig", props.durableConfig],
+    ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
+    if (incompatible.length > 0) {
       return yield* Effect.fail(
-        new Error(`Function(${id}): declare exactly one of main or image`),
+        new Error(
+          `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
+        ),
       );
     }
-    return;
-  }
-
-  const incompatible = [
-    ["main", props.main],
-    ["handler", props.handler],
-    ["runtime", props.runtime],
-    ["layers", props.layers],
-    ["build", props.build],
-    ["uploadSourceMap", props.uploadSourceMap],
-    ["exports", props.exports],
-    ["durableConfig", props.durableConfig],
-  ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
-  if (incompatible.length > 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
-      ),
-    );
-  }
-});
+  },
+);
 
 /**
  * The Lambda `ImageConfig` for an image source's overrides; `undefined` when
@@ -458,8 +471,7 @@ const toLambdaImageConfig = (
     ? undefined
     : {
         Command: config.command === undefined ? undefined : [...config.command],
-        EntryPoint:
-          config.entryPoint === undefined ? undefined : [...config.entryPoint],
+        EntryPoint: config.entryPoint === undefined ? undefined : [...config.entryPoint],
         WorkingDirectory: config.workingDirectory,
       };
 
@@ -467,12 +479,8 @@ const toLambdaImageConfig = (
  * `UpdateFunctionConfiguration` preserves old image overrides when the field
  * is omitted. An empty object therefore means "clear overrides" on update.
  */
-const imageConfigForUpdate = (
-  props: FunctionProps,
-): Lambda.ImageConfig | undefined =>
-  isFunctionImageProps(props)
-    ? (toLambdaImageConfig(props.image) ?? {})
-    : undefined;
+const imageConfigForUpdate = (props: FunctionProps): Lambda.ImageConfig | undefined =>
+  isFunctionImageProps(props) ? (toLambdaImageConfig(props.image) ?? {}) : undefined;
 
 /**
  * The Lambda `Handler` string for a function's props: `<file>.<export>`.
@@ -488,12 +496,7 @@ const handlerStringOf = (props: FunctionZipProps): string => {
   const base =
     props.bundle === false && typeof props.main === "string"
       ? props.main
-          .slice(
-            Math.max(
-              props.main.lastIndexOf("/"),
-              props.main.lastIndexOf("\\"),
-            ) + 1,
-          )
+          .slice(Math.max(props.main.lastIndexOf("/"), props.main.lastIndexOf("\\")) + 1)
           .replace(/\.[^.]+$/, "")
       : "index";
   return `${base}.${externalMode ? (props.handler ?? "default") : "default"}`;
@@ -507,9 +510,7 @@ const handlerStringOf = (props: FunctionZipProps): string => {
  * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
  * accepts before delegating.
  */
-export const toTimeoutSeconds = (
-  timeout: Duration.Duration | undefined,
-): number | undefined => {
+export const toTimeoutSeconds = (timeout: Duration.Duration | undefined): number | undefined => {
   if (timeout === undefined) return undefined;
   const json = timeout as {
     _id?: unknown;
@@ -572,7 +573,12 @@ export interface Function extends Resource<
   Providers
 > {}
 
-export type FunctionServices = Credentials | Region | AWSEnvironment;
+export type FunctionServices =
+  | Credentials
+  | Region
+  | AWSEnvironment
+  // The host itself, provided to the implementation at runtime (like Cloudflare's Worker).
+  | Function;
 
 export type FunctionShape = Main<FunctionServices>;
 
@@ -1013,138 +1019,122 @@ export const Function: Platform<
   {},
   FunctionZipProps
 > = Platform(FunctionTypeId, {
-  createRuntimeContext: (id) => createFunctionRuntimeContext(id),
-});
+  createRuntimeContext: (id: string): Serverless.FunctionContext => {
+    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+    const env: Record<string, any> = {};
 
-/**
- * The Lambda runtime context: collects the listeners registered during
- * Construction and produces the sandbox's `handler` export — the per-
- * invocation dispatcher. Exported so the dispatcher can be driven
- * in-process by tests.
- *
- * @internal
- */
-export const createFunctionRuntimeContext = (
-  id: string,
-): Serverless.FunctionContext => {
-  const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-  const env: Record<string, any> = {};
-
-  const ctx = {
-    Type: FunctionTypeId,
-    id,
-    env,
-    set: (id: string, output: Output.Output) =>
-      Effect.sync(() => {
-        // Key is already canonical (see RuntimeContext.sanitizeKey); store it
-        // verbatim. `packEnvValue` marker-packs Redacted values so they
-        // survive the Output → Lambda env var round-trip.
-        const key = id;
-        env[key] = output.pipe(Output.map(packEnvValue));
-        return key;
-      }),
-    get: <T>(key: string) =>
-      // Key is already canonical (see RuntimeContext.sanitizeKey). Read
-      // straight from `process.env` — see `unpackEnvValue` for why this
-      // must never resolve through `Config.string`.
-      Effect.sync(() => unpackEnvValue<T>(process.env[key])),
-    serve: (handler: HttpEffect) =>
-      // @ts-ignore
-      ctx.listen(makeFunctionHttpHandler(handler)),
-    listen: ((
-      handler:
-        | Serverless.FunctionListener
-        | Effect.Effect<Serverless.FunctionListener>,
-    ) =>
-      Effect.sync(() =>
-        Effect.isEffect(handler)
-          ? listeners.push(handler)
-          : listeners.push(Effect.succeed(handler)),
-      )) as any as Serverless.FunctionContext["listen"],
-    exports: Effect.sync(() => ({
-      // construct an Effect that produces the Function's entrypoint
-      // Effect<(event, context) => Promise<any>>
-      handler: Effect.gen(function* () {
-        const handlers = yield* Effect.all(listeners, {
-          concurrency: "unbounded",
-        });
-        // Sandbox-lifetime services, captured so each invocation can
-        // build its telemetry exporters and run the handler effect
-        // against the same context the init phase saw (mirrors
-        // WorkerBridge). The build's memo map is stripped so a Layer the
-        // user `Effect.provide`s inside a handler builds per invocation.
-        const services = Context.omit(Layer.CurrentMemoMap)(
-          yield* Effect.context<never>(),
-        );
-        return async (event: any, context: lambda.Context): Promise<any> => {
-          for (const handler of handlers) {
-            const eff = handler(event);
-            if (Effect.isEffect(eff)) {
-              // Each invocation gets a fresh request scope, matching the
-              // Worker / Durable Object / Workflow bridges. The scope is
-              // settled inline before returning: a buffered Lambda
-              // response is not released to the caller until the Invoke
-              // phase completes, so deferring cleanup (e.g. via an
-              // INVOKE-subscribed extension window) shows up as response
-              // latency anyway — keep request finalizers fast. A failing
-              // finalizer is logged and ignored so it can't mask the
-              // invocation's outcome.
-              //
-              // The scope is ALSO what a timeout would take with it: Lambda
-              // freezes the sandbox mid-flight and the buffered telemetry
-              // never flushes. `withInvocationDeadline` flushes it
-              // `timeoutMargin` before that happens — without touching the
-              // handler or the invocation's outcome.
-              const scope = Scope.makeUnsafe();
-              const exit = await eff.pipe(
-                withInvocationDeadline,
-                Effect.provide(
-                  Layer.mergeAll(
-                    Layer.succeed(HandlerContext, context),
-                    Layer.succeed(Scope.Scope, scope),
-                    // The configured telemetry exporters, attached to the
-                    // invocation scope by `buildEventTelemetry` so
-                    // buffered spans/logs/metrics flush when it settles
-                    // below.
-                    Layer.effectContext(
-                      buildEventTelemetry(
-                        services,
-                        scope,
-                        (ctx as Serverless.FunctionContext).telemetry,
+    const ctx = {
+      Type: FunctionTypeId,
+      id,
+      env,
+      set: (id: string, output: Output.Output) =>
+        Effect.sync(() => {
+          // Key is already canonical (see RuntimeContext.sanitizeKey); store it
+          // verbatim. `packEnvValue` marker-packs Redacted values so they
+          // survive the Output → Lambda env var round-trip.
+          const key = id;
+          env[key] = output.pipe(Output.map(packEnvValue));
+          return key;
+        }),
+      get: <T>(key: string) =>
+        // Key is already canonical (see RuntimeContext.sanitizeKey). Read
+        // straight from `process.env` — see `unpackEnvValue` for why this
+        // must never resolve through `Config.String`.
+        Effect.sync(() => unpackEnvValue<T>(process.env[key])),
+      serve: (handler: HttpEffect) =>
+        // @ts-ignore
+        ctx.listen(makeFunctionHttpHandler(handler)),
+      listen: ((
+        handler: Serverless.FunctionListener | Effect.Effect<Serverless.FunctionListener>,
+      ) =>
+        Effect.sync(() =>
+          Effect.isEffect(handler)
+            ? listeners.push(handler)
+            : listeners.push(Effect.succeed(handler)),
+        )) as any as Serverless.FunctionContext["listen"],
+      exports: Effect.sync(() => ({
+        // construct an Effect that produces the Function's entrypoint
+        // Effect<(event, context) => Promise<any>>
+        handler: Effect.gen(function* () {
+          const handlers = yield* Effect.all(listeners, {
+            concurrency: "unbounded",
+          });
+          // Sandbox-lifetime services, captured so each invocation can
+          // build its telemetry exporters and run the handler effect
+          // against the same context the init phase saw (mirrors
+          // WorkerBridge). The build's memo map is stripped so a Layer the
+          // user `Effect.provide`s inside a handler builds per invocation.
+          const services = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
+          return async (event: any, context: lambda.Context): Promise<any> => {
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                // Each invocation gets a fresh request scope, matching the
+                // Worker / Durable Object / Workflow bridges. The scope is
+                // settled inline before returning: a buffered Lambda
+                // response is not released to the caller until the Invoke
+                // phase completes, so deferring cleanup (e.g. via an
+                // INVOKE-subscribed extension window) shows up as response
+                // latency anyway — keep request finalizers fast. A failing
+                // finalizer is logged and ignored so it can't mask the
+                // invocation's outcome.
+                //
+                // The scope is ALSO what a timeout would take with it: Lambda
+                // freezes the sandbox mid-flight and the buffered telemetry
+                // never flushes. `withInvocationDeadline` flushes it
+                // `timeoutMargin` before that happens — without touching the
+                // handler or the invocation's outcome.
+                const scope = Scope.makeUnsafe();
+                const exit = await eff.pipe(
+                  withInvocationDeadline,
+                  Effect.provide(
+                    Layer.mergeAll(
+                      Layer.succeed(HandlerContext, context),
+                      Layer.succeed(Scope.Scope, scope),
+                      // The configured telemetry exporters, attached to the
+                      // invocation scope by `buildEventTelemetry` so
+                      // buffered spans/logs/metrics flush when it settles
+                      // below.
+                      Layer.effectContext(
+                        buildEventTelemetry(
+                          services,
+                          scope,
+                          (ctx as Serverless.FunctionContext).telemetry,
+                        ),
                       ),
-                    ),
-                  ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
-                ),
-                Effect.tap(Effect.logDebug),
-                Effect.runPromiseExit,
-              );
-              if (!isScopeEjected(scope)) {
-                // The HttpMiddleware tracer ends the request's root span
-                // in a dispatcher task scheduled after the handler effect
-                // resolves; yield one macrotask so it reaches the
-                // telemetry exporter's buffer before the flush finalizer.
-                await new Promise((resolve) => setTimeout(resolve, 0));
-                await Scope.close(scope, exit).pipe(
-                  Effect.ignoreCause({
-                    log: "Warn",
-                    message: "Lambda invocation scope close failed",
-                  }),
-                  Effect.runPromise,
+                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                  ),
+                  Effect.tap(Effect.logDebug),
+                  Effect.runPromiseExit,
                 );
+                if (!isScopeEjected(scope)) {
+                  // The HttpMiddleware tracer ends the request's root span
+                  // in a dispatcher task scheduled after the handler effect
+                  // resolves; yield one macrotask so it reaches the
+                  // telemetry exporter's buffer before the flush finalizer.
+                  await new Promise((resolve) => setTimeout(resolve, 0));
+                  await Scope.close(scope, exit).pipe(
+                    Effect.ignoreCause({
+                      log: "Warn",
+                      message: "Lambda invocation scope close failed",
+                    }),
+                    Effect.runPromise,
+                  );
+                }
+                if (Exit.isSuccess(exit)) {
+                  return exit.value;
+                }
+                throw Cause.squash(exit.cause);
               }
-              if (Exit.isSuccess(exit)) {
-                return exit.value;
-              }
-              throw Cause.squash(exit.cause);
             }
-          }
-          throw new Error("No event handler found");
-        };
-      }),
-    })),
-  };
-  return ctx;
-};
+            throw new Error("No event handler found");
+          };
+        }),
+      })),
+    };
+    return ctx;
+  },
+});
 
 export const FunctionProvider = () =>
   Provider.effect(
@@ -1162,21 +1152,14 @@ export const FunctionProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const createFunctionName = (
-        id: string,
-        functionName: string | undefined,
-      ) =>
+      const createFunctionName = (id: string, functionName: string | undefined) =>
         Effect.gen(function* () {
-          return (
-            functionName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-          );
+          return functionName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         });
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
-      const createPolicyName = (id: string) =>
-        createPhysicalName({ id, maxLength: 128 });
+      const createPolicyName = (id: string) => createPhysicalName({ id, maxLength: 128 });
 
       const hashBundle = (code: Uint8Array<ArrayBufferLike>) => sha256(code);
 
@@ -1209,21 +1192,18 @@ export const FunctionProvider = () =>
         bindings: ResourceBinding<Function["Binding"]>[];
       }) {
         const activeBindings = bindings.filter(
-          (
-            binding: ResourceBinding<Function["Binding"]> & { action?: string },
-          ) => binding.action !== "delete",
+          (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
+            binding.action !== "delete",
         );
         const env = activeBindings
           .map((binding) => binding?.data?.env)
           .reduce((acc, env) => ({ ...acc, ...env }), {});
         const policyStatements = activeBindings.flatMap(
           (binding) =>
-            binding?.data?.policyStatements?.map(
-              (stmt: IAM.PolicyStatement) => ({
-                ...stmt,
-                Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
-              }),
-            ) ?? [],
+            binding?.data?.policyStatements?.map((stmt: IAM.PolicyStatement) => ({
+              ...stmt,
+              Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
+            })) ?? [],
         );
         // VPC attachments requested through the binding channel (DECISION
         // #5) — set-union across bindings; merged with the `vpc` prop in
@@ -1234,12 +1214,8 @@ export const FunctionProvider = () =>
         const vpc =
           vpcRequests.length > 0
             ? {
-                subnetIds: [
-                  ...new Set(vpcRequests.flatMap((v) => v.subnetIds)),
-                ],
-                securityGroupIds: [
-                  ...new Set(vpcRequests.flatMap((v) => v.securityGroupIds)),
-                ],
+                subnetIds: [...new Set(vpcRequests.flatMap((v) => v.subnetIds))],
+                securityGroupIds: [...new Set(vpcRequests.flatMap((v) => v.securityGroupIds))],
               }
             : undefined;
         // EFS mounts requested through the binding channel (`EFS.Mount`) —
@@ -1274,8 +1250,7 @@ export const FunctionProvider = () =>
         return { env, vpc, fileSystemConfigs };
       });
 
-      const xrayWriteAccessPolicyArn =
-        "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
+      const xrayWriteAccessPolicyArn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
 
       /**
        * Converge the X-Ray write managed policy on the execution role with
@@ -1325,11 +1300,7 @@ export const FunctionProvider = () =>
         // EntityAlreadyExists exception (important under high concurrency).
         let role = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         if (role === undefined) {
           // Engine has cleared us via `read` — foreign-tagged functions are
           // surfaced as `Unowned` and require `--adopt`. On a race between
@@ -1362,8 +1333,7 @@ export const FunctionProvider = () =>
         yield* iam
           .attachRolePolicy({
             RoleName: roleName,
-            PolicyArn:
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
           })
           .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
 
@@ -1371,13 +1341,9 @@ export const FunctionProvider = () =>
           yield* iam
             .attachRolePolicy({
               RoleName: roleName,
-              PolicyArn:
-                "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
             })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.tap(Effect.logDebug),
-            );
+            .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
         }
 
         yield* Effect.logDebug(`attached policy ${id}`);
@@ -1405,51 +1371,37 @@ export const FunctionProvider = () =>
 
         return {
           ...env,
-          NODE_OPTIONS: current
-            ? `${current} --enable-source-maps`
-            : "--enable-source-maps",
+          NODE_OPTIONS: current ? `${current} --enable-source-maps` : "--enable-source-maps",
         };
       };
 
       // The runtime reads the invocation deadline margin per invocation
       // (see `withInvocationDeadline`); only written when set so the
       // runtime default applies otherwise.
-      const timeoutMarginEnv = (
-        margin: Duration.Duration | undefined,
-      ): Record<string, string> => {
+      const timeoutMarginEnv = (margin: Duration.Duration | undefined): Record<string, string> => {
         const ms = toTimeoutMarginMillis(margin);
         return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
       };
 
       const retryFunctionMutation = Effect.retry({
         while: (e: any) =>
-          e._tag === "ResourceConflictException" ||
-          e._tag === "TooManyRequestsException",
-        schedule: Schedule.max([
-          Schedule.exponential(100),
-          Schedule.recurs(30),
-        ]),
-      }) as <A, R, Err>(
-        self: Effect.Effect<A, Err, R>,
-      ) => Effect.Effect<A, Err, R>;
+          e._tag === "ResourceConflictException" || e._tag === "TooManyRequestsException",
+        schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(30)]),
+      }) as <A, R, Err>(self: Effect.Effect<A, Err, R>) => Effect.Effect<A, Err, R>;
 
       const waitForFunctionUpdate = Effect.fn(function* (
         functionName: string,
         session: { note: (note: string) => Effect.Effect<void> },
+        vpc: boolean,
       ) {
         return yield* Effect.gen(function* () {
           const configuration = (yield* Lambda.getFunction({
             FunctionName: functionName,
           })).Configuration;
-          if (
-            configuration?.State === "Failed" ||
-            configuration?.LastUpdateStatus === "Failed"
-          ) {
+          if (configuration?.State === "Failed" || configuration?.LastUpdateStatus === "Failed") {
             return yield* new FunctionUpdateFailed({
               functionName,
-              reason:
-                configuration.LastUpdateStatusReason ??
-                configuration.StateReason,
+              reason: configuration.LastUpdateStatusReason ?? configuration.StateReason,
             });
           }
           if (
@@ -1459,32 +1411,35 @@ export const FunctionProvider = () =>
           ) {
             return;
           }
-          return yield* new FunctionUpdatePending({ functionName });
+          return yield* new FunctionUpdatePending({
+            functionName,
+            state: configuration?.State,
+            stateReason: configuration?.StateReason,
+            lastUpdateStatus: configuration?.LastUpdateStatus,
+            lastUpdateStatusReason: configuration?.LastUpdateStatusReason,
+          });
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "FunctionUpdatePending",
             schedule: Schedule.spaced("2 seconds").pipe(
               Schedule.tap(({ attempt }) =>
                 session.note(
-                  `Waiting for Lambda image update before repository cleanup: ${functionName} (${attempt * 2}s)`,
+                  `Waiting for Lambda function update: ${functionName} (${attempt * 2}s)`,
                 ),
               ),
             ),
-            times: 30,
+            // New VPC attachments can spend several minutes provisioning Hyperplane ENIs.
+            times: vpc ? 150 : 30,
           }),
         );
       });
 
-      const getReservedConcurrentExecutions = Effect.fn(function* (
-        functionName: string,
-      ) {
+      const getReservedConcurrentExecutions = Effect.fn(function* (functionName: string) {
         return yield* Lambda.getFunctionConcurrency({
           FunctionName: functionName,
         }).pipe(
           Effect.map((config) => config.ReservedConcurrentExecutions),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -1514,9 +1469,7 @@ export const FunctionProvider = () =>
           FunctionName: functionName,
           ReservedConcurrentExecutions: reservedConcurrentExecutions,
         }).pipe(retryFunctionMutation);
-        return (
-          updated.ReservedConcurrentExecutions ?? reservedConcurrentExecutions
-        );
+        return updated.ReservedConcurrentExecutions ?? reservedConcurrentExecutions;
       });
 
       type FunctionDeploymentCode =
@@ -1577,12 +1530,8 @@ export const FunctionProvider = () =>
           return yield* prepareImageFunctionCode({ id, props, session });
         }
 
-        // Mock code for the pre-created stub. It responds 503 (rather than a
-        // bare 200) so that, during the brief window where the real code/config
-        // update is still `InProgress`, a Function URL hit serves an honest
-        // "not ready" signal. Downstream readiness probes already retry on
-        // non-200, so they wait for the real handler without blocking the
-        // provider.
+        // The precreated stub responds 503 until reconciliation installs the
+        // real handler and waits for its configuration to become active.
         const code = new TextEncoder().encode(
           `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
         );
@@ -1687,15 +1636,11 @@ export const FunctionProvider = () =>
           (e.message?.includes("cannot be assumed by Lambda") ||
             // Freshly attached AWSLambdaVPCAccessExecutionRole still
             // propagating when a VPC-attached function is created/updated.
-            e.message?.includes(
-              "does not have permissions to call CreateNetworkInterface",
-            ) ||
+            e.message?.includes("does not have permissions to call CreateNetworkInterface") ||
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
               e.message?.includes("ARN does not refer to a valid principal")));
 
-        const isSecurityGroupPropagationError = (
-          e: Lambda.CreateFunctionError,
-        ) =>
+        const isSecurityGroupPropagationError = (e: Lambda.CreateFunctionError) =>
           e._tag === "InvalidParameterValueException" &&
           e.message?.includes("InvalidGroup.NotFound");
 
@@ -1712,24 +1657,18 @@ export const FunctionProvider = () =>
           }
           // Try to use S3 if the assets bucket is available, otherwise fall
           // back to an inline ZipFile.
-          const assets = (yield* Effect.serviceOption(Assets)).pipe(
-            Option.getOrUndefined,
-          );
+          const assets = (yield* Effect.serviceOption(Assets)).pipe(Option.getOrUndefined);
           if (!assets) {
             return { ZipFile: code.archive } as const;
           }
           const key = yield* assets.uploadAsset(code.hash, code.archive);
-          yield* Effect.logDebug(
-            `Using S3 for code: s3://${yield* assets.bucketName}/${key}`,
-          );
+          yield* Effect.logDebug(`Using S3 for code: s3://${yield* assets.bucketName}/${key}`);
           return {
             S3Bucket: yield* assets.bucketName,
             S3Key: key,
           } as const;
         });
-        const runtimeEnv = isFunctionImageProps(news)
-          ? env
-          : withNodeSourceMaps(env, news);
+        const runtimeEnv = isFunctionImageProps(news) ? env : withNodeSourceMaps(env, news);
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
@@ -1797,9 +1736,7 @@ export const FunctionProvider = () =>
                   Resource: f.Configuration?.FunctionArn ?? "",
                 }).pipe(
                   Effect.map((r) => hasTags(tags, r.Tags ?? {})),
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(false),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
                 ),
           ),
           Effect.filterOrFail(
@@ -1817,14 +1754,10 @@ export const FunctionProvider = () =>
                 ...codeLocation,
               }).pipe(
                 Effect.tapError((e) =>
-                  isRolePropagationError(e)
-                    ? noteCreateDependencyWait()
-                    : Effect.void,
+                  isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
                 ),
                 Effect.retry({
-                  while: (e) =>
-                    e._tag === "ResourceConflictException" ||
-                    isRolePropagationError(e),
+                  while: (e) => e._tag === "ResourceConflictException" || isRolePropagationError(e),
                   schedule: Schedule.exponential(100),
                 }),
               );
@@ -1852,14 +1785,10 @@ export const FunctionProvider = () =>
                 DurableConfig: createFunctionRequest.DurableConfig,
               }).pipe(
                 Effect.tapError((e) =>
-                  isRolePropagationError(e)
-                    ? noteCreateDependencyWait()
-                    : Effect.void,
+                  isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
                 ),
                 Effect.retry({
-                  while: (e) =>
-                    e._tag === "ResourceConflictException" ||
-                    isRolePropagationError(e),
+                  while: (e) => e._tag === "ResourceConflictException" || isRolePropagationError(e),
                   schedule: Schedule.exponential(100),
                 }),
               );
@@ -1875,11 +1804,8 @@ export const FunctionProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (e) =>
-              isRolePropagationError(e) || isSecurityGroupPropagationError(e),
-            schedule: Schedule.fixed(1000).pipe(
-              Schedule.tap(() => noteCreateDependencyWait()),
-            ),
+            while: (e) => isRolePropagationError(e) || isSecurityGroupPropagationError(e),
+            schedule: Schedule.fixed(1000).pipe(Schedule.tap(() => noteCreateDependencyWait())),
           }),
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
@@ -1900,23 +1826,17 @@ export const FunctionProvider = () =>
       const publicUrlAccessStatementId = "FunctionURLAllowPublicAccess";
       const publicUrlInvokeStatementId = "FunctionURLAllowPublicInvoke";
 
-      const removePublicFunctionUrlPermissions = Effect.fn(function* (
-        functionName: string,
-      ) {
+      const removePublicFunctionUrlPermissions = Effect.fn(function* (functionName: string) {
         yield* Effect.all(
           [
             Lambda.removePermission({
               FunctionName: functionName,
               StatementId: publicUrlAccessStatementId,
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            ),
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
             Lambda.removePermission({
               FunctionName: functionName,
               StatementId: publicUrlInvokeStatementId,
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            ),
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           ],
           { concurrency: "unbounded" },
         );
@@ -1929,18 +1849,14 @@ export const FunctionProvider = () =>
               yield* Lambda.removePermission({
                 FunctionName: permission.FunctionName,
                 StatementId: permission.StatementId,
-              }).pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               yield* Lambda.addPermission(permission);
             }),
           ),
           retryFunctionMutation,
         );
 
-      const upsertPublicFunctionUrlPermissions = Effect.fn(function* (
-        functionName: string,
-      ) {
+      const upsertPublicFunctionUrlPermissions = Effect.fn(function* (functionName: string) {
         yield* Effect.all(
           [
             upsertPermission({
@@ -1978,22 +1894,15 @@ export const FunctionProvider = () =>
         const hadFunctionUrl = previous !== undefined || !!currentFunctionUrl;
 
         if (desired) {
-          yield* Effect.logDebug(
-            `creating function url config ${functionName}`,
-          );
-          const shouldClearCors =
-            desired.cors === undefined && previous?.cors !== undefined;
+          yield* Effect.logDebug(`creating function url config ${functionName}`);
+          const shouldClearCors = desired.cors === undefined && previous?.cors !== undefined;
           const config = {
             FunctionName: functionName,
             AuthType: desired.authType,
             Cors: desired.cors ?? (shouldClearCors ? {} : undefined),
             InvokeMode: desired.invokeMode,
-          } satisfies
-            | Lambda.CreateFunctionUrlConfigRequest
-            | Lambda.UpdateFunctionUrlConfigRequest;
-          const { FunctionUrl } = yield* Lambda.createFunctionUrlConfig(
-            config,
-          ).pipe(
+          } satisfies Lambda.CreateFunctionUrlConfigRequest | Lambda.UpdateFunctionUrlConfigRequest;
+          const { FunctionUrl } = yield* Lambda.createFunctionUrlConfig(config).pipe(
             Effect.catchTag("ResourceConflictException", () =>
               Lambda.updateFunctionUrlConfig(config),
             ),
@@ -2009,9 +1918,7 @@ export const FunctionProvider = () =>
           yield* Effect.logDebug(`created function url config ${functionName}`);
           return FunctionUrl;
         } else if (hadFunctionUrl) {
-          yield* Effect.logDebug(
-            `deleting function url config ${functionName}`,
-          );
+          yield* Effect.logDebug(`deleting function url config ${functionName}`);
           yield* Effect.all([
             Lambda.deleteFunctionUrlConfig({
               FunctionName: functionName,
@@ -2069,9 +1976,7 @@ export const FunctionProvider = () =>
           ...output.code,
           image: {
             ...output.code.image,
-            ...(observed?.ImageUri === undefined
-              ? {}
-              : { imageUri: observed.ImageUri }),
+            ...(observed?.ImageUri === undefined ? {} : { imageUri: observed.ImageUri }),
             ...(resolvedImageUri === undefined ? {} : { resolvedImageUri }),
             ...(digest === undefined ? {} : { digest }),
           },
@@ -2080,7 +1985,17 @@ export const FunctionProvider = () =>
 
       return {
         stables: ["functionArn", "functionName", "roleName"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, oldBindings, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the bundle hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? ({
+                  ...desired,
+                  exports: stripEffects(desired.exports),
+                } as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
@@ -2132,11 +2047,7 @@ export const FunctionProvider = () =>
           let imageIdentity: FunctionImageIdentity | undefined;
           let codeHash: string;
           if (isFunctionImageProps(news)) {
-            imageIdentity = yield* functionImage.identity(
-              id,
-              news.image,
-              news.architecture,
-            );
+            imageIdentity = yield* functionImage.identity(id, news.image, news.architecture);
             codeHash = imageIdentity.hash;
           } else {
             codeHash = (yield* bundleCode(id, news)).identityHash;
@@ -2154,42 +2065,29 @@ export const FunctionProvider = () =>
                 ? image.imageUri !== imageIdentity.imageUri ||
                   image.resolvedImageUri !== imageIdentity.resolvedImageUri
                 : image.imageUri !== `${image.repositoryUri}:${codeHash}` ||
-                  !(yield* functionImage.isReady(
-                    id,
-                    image.repositoryName,
-                    codeHash,
-                  )))
+                  !(yield* functionImage.isReady(id, image.repositoryName, codeHash)))
             ) {
               return { action: "update" };
             }
             if (
               isFunctionImageProps(olds) &&
-              !deepEqual(
-                toLambdaImageConfig(olds.image),
-                toLambdaImageConfig(news.image),
-              )
+              !deepEqual(toLambdaImageConfig(olds.image), toLambdaImageConfig(news.image))
             ) {
               return { action: "update" };
             }
           }
-          if (
-            toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
-          ) {
+          if (toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)) {
             return { action: "update" };
           }
           if (
-            toTimeoutMarginMillis(olds.timeoutMargin) !==
-            toTimeoutMarginMillis(news.timeoutMargin)
+            toTimeoutMarginMillis(olds.timeoutMargin) !== toTimeoutMarginMillis(news.timeoutMargin)
           ) {
             return { action: "update" };
           }
           if (olds.architecture !== news.architecture) {
             return { action: "update" };
           }
-          if (
-            olds.reservedConcurrentExecutions !==
-            news.reservedConcurrentExecutions
-          ) {
+          if (olds.reservedConcurrentExecutions !== news.reservedConcurrentExecutions) {
             return { action: "update" };
           }
           // `layers` accepts a LayerVersion resource or a raw ARN, and the
@@ -2202,21 +2100,22 @@ export const FunctionProvider = () =>
             layers: (props.layers ?? []).map(layerVersionArnOf),
           });
           if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            // Bindings (env / policies from `bind`) are not props. An explicit
+            // noop would skip the engine's binding comparison, so defer to it
+            // whenever they may have changed.
+            if (!isResolved(newBindings) || !deepEqual(oldBindings, newBindings)) {
+              return undefined;
+            }
             return { action: "noop" };
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const functionName =
-            output?.functionName ??
-            (yield* createFunctionName(id, olds?.functionName));
+            output?.functionName ?? (yield* createFunctionName(id, olds?.functionName));
           yield* Effect.logDebug(`reading function ${functionName}`);
           const result = yield* Lambda.getFunction({
             FunctionName: functionName,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           const fn = result?.Configuration;
           if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) {
             return undefined;
@@ -2237,12 +2136,11 @@ export const FunctionProvider = () =>
               while: (e: any) => e._tag === "ResourceConflictException",
               schedule: Schedule.exponential(100),
             }),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
-          const reservedConcurrentExecutions =
-            yield* getReservedConcurrentExecutions(fn.FunctionName);
+          const reservedConcurrentExecutions = yield* getReservedConcurrentExecutions(
+            fn.FunctionName,
+          );
           // Reuse the persisted output where we have it (e.g. code hash) so
           // diff doesn't see drift it can't reconstruct from the API.
           const attrs = {
@@ -2259,9 +2157,7 @@ export const FunctionProvider = () =>
             }),
             reservedConcurrentExecutions,
           } satisfies Function["Attributes"];
-          return (yield* hasAlchemyTags(id, tagsResult))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
         // Account/region collection: exhaustively paginate `listFunctions`
         // (its `Functions` items are `FunctionConfiguration`s, the same shape
@@ -2290,12 +2186,11 @@ export const FunctionProvider = () =>
                     // No URL config (or the function vanished between the
                     // list and the hydrate) — surface `undefined`, matching
                     // `read`.
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
-                  const reservedConcurrentExecutions =
-                    yield* getReservedConcurrentExecutions(fn.FunctionName);
+                  const reservedConcurrentExecutions = yield* getReservedConcurrentExecutions(
+                    fn.FunctionName,
+                  );
                   return {
                     functionArn: fn.FunctionArn,
                     functionName: fn.FunctionName,
@@ -2310,9 +2205,7 @@ export const FunctionProvider = () =>
                 }),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is Function["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Function["Attributes"] => row !== undefined);
           }),
 
         precreate: Effect.fn(function* ({ id, news, session }) {
@@ -2326,10 +2219,7 @@ export const FunctionProvider = () =>
             yield* functionImage.identity(id, news.image, news.architecture);
           }
           const { accountId, region } = yield* AWSEnvironment.current;
-          const { roleName, functionName, roleArn } = yield* createNames(
-            id,
-            news.functionName,
-          );
+          const { roleName, functionName, roleArn } = yield* createNames(id, news.functionName);
 
           const role = yield* createRoleIfNotExists({
             id,
@@ -2362,14 +2252,7 @@ export const FunctionProvider = () =>
             roleArn,
           };
         }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          olds,
-          bindings,
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, bindings, output, session }) {
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
             yield* decodeFunctionImageSource(id, news.image);
@@ -2416,10 +2299,7 @@ export const FunctionProvider = () =>
             news.vpc || bindingVpc
               ? {
                   subnetIds: [
-                    ...new Set([
-                      ...(news.vpc?.subnetIds ?? []),
-                      ...(bindingVpc?.subnetIds ?? []),
-                    ]),
+                    ...new Set([...(news.vpc?.subnetIds ?? []), ...(bindingVpc?.subnetIds ?? [])]),
                   ],
                   securityGroupIds: [
                     ...new Set([
@@ -2437,8 +2317,7 @@ export const FunctionProvider = () =>
           if (vpc) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
-              PolicyArn:
-                "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
             });
           }
 
@@ -2448,8 +2327,7 @@ export const FunctionProvider = () =>
             // Routine update from Active, or adoption (output without olds)
             // where the prior tracing mode is unknown.
             mayHaveBeenActive:
-              olds?.tracing === "Active" ||
-              (olds === undefined && output !== undefined),
+              olds?.tracing === "Active" || (olds === undefined && output !== undefined),
           });
 
           // Desired EFS mounts: the `fileSystemConfigs` prop (access-point
@@ -2482,8 +2360,7 @@ export const FunctionProvider = () =>
           if (desiredFileSystemConfigs.length > 0) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
-              PolicyArn:
-                "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
+              PolicyArn: "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
             });
           }
 
@@ -2518,32 +2395,39 @@ export const FunctionProvider = () =>
             session,
           });
 
+          yield* waitForFunctionUpdate(functionName, session, vpc !== undefined);
+
           const previousImage = output?.code.image;
-          const nextImage =
-            "image" in prepared.attributes
-              ? prepared.attributes.image
-              : undefined;
+          const nextImage = "image" in prepared.attributes ? prepared.attributes.image : undefined;
           if (
             previousImage?.ownsRepository === true &&
             previousImage.repositoryUri !== nextImage?.repositoryUri
           ) {
-            // The function has moved from an Alchemy-owned local image to a
-            // different source. Wait until Lambda has adopted the new digest
-            // before deleting the now-unreferenced managed repository.
-            yield* waitForFunctionUpdate(functionName, session);
+            // Lambda has adopted the new image; the previous managed
+            // repository is no longer referenced.
             yield* functionImage.deleteRepository(previousImage.repositoryName);
           }
 
-          const reservedConcurrentExecutions =
-            yield* syncReservedConcurrentExecutions({
-              functionName,
-              reservedConcurrentExecutions: news.reservedConcurrentExecutions,
-            });
+          const reservedConcurrentExecutions = yield* syncReservedConcurrentExecutions({
+            functionName,
+            reservedConcurrentExecutions: news.reservedConcurrentExecutions,
+          });
 
           yield* syncEventInvokeConfig({
             functionName,
             config: news.eventInvokeConfig,
           });
+
+          // Lambda only auto-creates the log group on first invoke and with
+          // no expiry, so create (or adopt) it here to give the retention
+          // policy a group to attach to. The delete path already reaps it.
+          if (news.logging?.retention !== undefined) {
+            const logGroupName = `/aws/lambda/${functionName}`;
+            yield* logs
+              .createLogGroup({ logGroupName, tags: yield* createInternalTags(id) })
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+            yield* syncLogGroupRetention({ logGroupName, retention: news.logging.retention });
+          }
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
@@ -2581,12 +2465,7 @@ export const FunctionProvider = () =>
                         RoleName: output.roleName,
                         PolicyName: policyName,
                       })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                   ),
                 ),
               ),
@@ -2606,12 +2485,7 @@ export const FunctionProvider = () =>
                         RoleName: output.roleName,
                         PolicyArn: policy.PolicyArn!,
                       })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                   ),
                 ),
               ),
@@ -2620,17 +2494,13 @@ export const FunctionProvider = () =>
 
           yield* Lambda.deleteFunction({
             FunctionName: output.functionName,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           if (output.code.image?.ownsRepository) {
             // Lambda must release its image before the owned repository is
             // force-deleted. Both operations are idempotent, so an interrupted
             // destroy converges on the next run.
-            yield* functionImage.deleteRepository(
-              output.code.image.repositoryName,
-            );
+            yield* functionImage.deleteRepository(output.code.image.repositoryName);
           }
 
           // Release the execution role before the auxiliary CloudWatch Logs
@@ -2651,11 +2521,18 @@ export const FunctionProvider = () =>
             }),
           );
 
-          // CloudWatch Logs is not implemented by the floci emulator. The
-          // live reap below (flush watch + observe→delete) would sit on
-          // describe/delete timeouts for minutes; emulator log groups die
-          // with the container anyway.
+          // The floci emulator serves CloudWatch Logs but never recreates a
+          // group after the function is gone, so there is no flush window to
+          // watch. One bounded delete is enough; the live reap below (flush
+          // watch + observe→delete) would only add minutes of waiting.
           if (yield* AWSEnvironment.isLocalEmulator) {
+            yield* logs.deleteLogGroup({ logGroupName: `/aws/lambda/${output.functionName}` }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                orElse: () => Effect.void,
+              }),
+            );
             return null as any;
           }
 
@@ -2681,10 +2558,7 @@ export const FunctionProvider = () =>
             // attempt while preserving the t=0/20/40 flush watch below.
             Effect.timeoutOrElse({
               duration: "5 seconds",
-              orElse: () =>
-                Effect.logWarning(
-                  `Timed out reaping Lambda log group ${logGroupName}`,
-                ),
+              orElse: () => Effect.logWarning(`Timed out reaping Lambda log group ${logGroupName}`),
             }),
           );
           const lastIngestion = yield* logs
@@ -2696,9 +2570,7 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.logStreams?.[0]?.lastIngestionTime),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               Effect.timeoutOrElse({
                 duration: "5 seconds",
                 orElse: () =>
@@ -2711,8 +2583,7 @@ export const FunctionProvider = () =>
               }),
             );
           const now = yield* Effect.sync(() => Date.now());
-          const quiescent =
-            lastIngestion !== undefined && now - lastIngestion > 120_000;
+          const quiescent = lastIngestion !== undefined && now - lastIngestion > 120_000;
           if (quiescent) {
             yield* reapLogGroup;
           } else {
@@ -2743,9 +2614,7 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.map((response) =>
-                (response.logGroups ?? []).some(
-                  (group) => group.logGroupName === logGroupName,
-                ),
+                (response.logGroups ?? []).some((group) => group.logGroupName === logGroupName),
               ),
             );
 
@@ -2770,36 +2639,25 @@ export const FunctionProvider = () =>
               duration: "30 seconds",
               orElse: () =>
                 Effect.die(
-                  new Error(
-                    `Timed out confirming Lambda log group deletion: ${logGroupName}`,
-                  ),
+                  new Error(`Timed out confirming Lambda log group deletion: ${logGroupName}`),
                 ),
             }),
           );
 
-          const deleteLogGroupAgain = logs
-            .deleteLogGroup({ logGroupName })
-            .pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "OperationAbortedException" ||
-                  error._tag === "ServiceUnavailableException",
-                schedule: Schedule.max([
-                  Schedule.exponential("250 millis"),
-                  Schedule.recurs(8),
-                ]),
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.timeoutOrElse({
-                duration: "45 seconds",
-                orElse: () =>
-                  Effect.die(
-                    new Error(
-                      `Timed out deleting Lambda log group ${logGroupName}`,
-                    ),
-                  ),
-              }),
-            );
+          const deleteLogGroupAgain = logs.deleteLogGroup({ logGroupName }).pipe(
+            Effect.retry({
+              while: (error) =>
+                error._tag === "OperationAbortedException" ||
+                error._tag === "ServiceUnavailableException",
+              schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.timeoutOrElse({
+              duration: "45 seconds",
+              orElse: () =>
+                Effect.die(new Error(`Timed out deleting Lambda log group ${logGroupName}`)),
+            }),
+          );
 
           const reapIfObserved = Effect.gen(function* () {
             const present = yield* observeLogGroup;
@@ -2827,9 +2685,7 @@ export const FunctionProvider = () =>
           // deletion (denied/undeletable) and must fail loudly.
           if (observedAtBudgetEnd && (yield* observeLogGroupOrDie)) {
             yield* Effect.die(
-              new Error(
-                `Lambda log group ${logGroupName} remained observable after delete`,
-              ),
+              new Error(`Lambda log group ${logGroupName} remained observable after delete`),
             );
           }
 
@@ -2851,17 +2707,17 @@ export const FunctionProvider = () =>
             return response.responseStream.pipe(
               Stream.flatMap((event) => {
                 if ("sessionUpdate" in event && event.sessionUpdate) {
-                  const lines: LogLine[] = (
-                    event.sessionUpdate.sessionResults ?? []
-                  ).flatMap((result) => {
-                    if (!result.message) return [];
-                    return [
-                      {
-                        timestamp: new Date(result.timestamp ?? Date.now()),
-                        message: result.message.trimEnd(),
-                      },
-                    ];
-                  });
+                  const lines: LogLine[] = (event.sessionUpdate.sessionResults ?? []).flatMap(
+                    (result) => {
+                      if (!result.message) return [];
+                      return [
+                        {
+                          timestamp: new Date(result.timestamp ?? Date.now()),
+                          message: result.message.trimEnd(),
+                        },
+                      ];
+                    },
+                  );
                   return Stream.fromIterable(lines);
                 }
                 return Stream.empty;
@@ -2869,17 +2725,9 @@ export const FunctionProvider = () =>
             );
           });
 
-          return Stream.unwrap(runTailSession).pipe(
-            Stream.retry(Schedule.spaced("1 second")),
-          );
+          return Stream.unwrap(runTailSession).pipe(Stream.retry(Schedule.spaced("1 second")));
         },
-        logs: ({
-          output,
-          options,
-        }: {
-          output: Function["Attributes"];
-          options: LogsInput;
-        }) =>
+        logs: ({ output, options }: { output: Function["Attributes"]; options: LogsInput }) =>
           logs
             .filterLogEvents({
               logGroupName: `/aws/lambda/${output.functionName}`,
@@ -2898,9 +2746,7 @@ export const FunctionProvider = () =>
                   ];
                 }),
               ),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([] as LogLine[]),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as LogLine[])),
             ),
       };
     }),

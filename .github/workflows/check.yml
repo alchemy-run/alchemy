@@ -1,40 +1,12 @@
 name: Check
 
-# Validates the repository type graph and website docs.
+# Validates repository formatting, the type graph, and website docs.
 
 on:
   push:
     branches: [main]
-    paths:
-      - "submodules/distilled"
-      - "benchmark/**"
-      - "examples/**"
-      - "packages/**"
-      - "website/**"
-      - "scripts/**"
-      - "patches/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "tsconfig.json"
-      - ".github/workflows/check.yml"
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - "submodules/distilled"
-      - "benchmark/**"
-      - "examples/**"
-      - "packages/**"
-      - "website/**"
-      - "scripts/**"
-      - "patches/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - "tsconfig.json"
-      - ".github/workflows/check.yml"
   workflow_dispatch:
 
 permissions:
@@ -59,11 +31,11 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: website/node_modules/.astro
-          key: website-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-${{ github.workflow }}-${{ github.run_attempt }}
+          key: website-astro-check-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-${{ github.workflow }}-${{ github.run_attempt }}
           restore-keys: |
-            website-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-
-            website-astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
-            website-astro-${{ runner.os }}-main-
+            website-astro-check-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}-
+            website-astro-check-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
+            website-astro-check-${{ runner.os }}-main-
 
       - name: Restore Turbo cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -81,11 +53,25 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Build
+        run: pnpm tsc -b
+
       - name: Run Node Utils tests
         run: pnpm -C packages/node-utils test
 
-      - name: Run Typecheck
-        run: pnpm tsc -b
+      - name: Run pkg tests
+        run: pnpm -C packages/pkg test
+
+      # Must run after `tsc -b`: it reads distilled's emitted `lib/*.d.ts`,
+      # and stale/missing declarations resolve to `any`.
+      - name: Lint providers
+        run: pnpm lint:providers
+
+      - name: Test CLI launcher
+        run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
 
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc
@@ -99,3 +85,6 @@ jobs:
           github.event.pull_request.head.repo.full_name != github.repository ||
           !contains(github.event.pull_request.labels.*.name, 'deploy-website')
         run: pnpm docs:check
+
+      - name: Run Lint
+        run: pnpm lint

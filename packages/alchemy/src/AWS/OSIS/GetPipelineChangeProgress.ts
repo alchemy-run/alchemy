@@ -32,13 +32,9 @@ export interface GetPipelineChangeProgress extends Binding.Service<
   (
     pipeline: Pipeline,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      osis.GetPipelineChangeProgressResponse,
-      osis.GetPipelineChangeProgressError
-    >
+    () => Effect.Effect<osis.GetPipelineChangeProgressResponse, osis.GetPipelineChangeProgressError>
   >
 > {}
-export const GetPipelineChangeProgress =
-  Binding.Service<GetPipelineChangeProgress>(
-    "AWS.OSIS.GetPipelineChangeProgress",
-  );
+export const GetPipelineChangeProgress = Binding.Service<GetPipelineChangeProgress>(
+  "AWS.OSIS.GetPipelineChangeProgress",
+);

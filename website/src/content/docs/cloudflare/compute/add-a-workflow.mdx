@@ -247,7 +247,7 @@ sleep → broadcast → return — is durable end to end.
 ## Bind a secret
 
 Most real workflows need credentials — an upstream API key, a
-signing token, etc. `Config.redacted` registers a `secret_text`
+signing token, etc. `Config.Redacted` registers a `secret_text`
 binding on the workflow at plantime and hands back a
 `Redacted<string>` for use inside steps:
 
@@ -261,10 +261,10 @@ binding on the workflow at plantime and hands back a
    "Notifier",
    Effect.gen(function* () {
      const rooms = yield* Room;
-+    const apiKey = yield* Config.redacted("API_KEY");
++    const apiKey = yield* Config.Redacted("API_KEY");
 ```
 
-`Config.redacted("API_KEY")` reads `API_KEY` from the active
+`Config.Redacted("API_KEY")` reads `API_KEY` from the active
 `Config` provider (env vars, `.env`, …) at plantime and binds it
 into the workflow as `secret_text`. Set it in your local `.env`:
 
@@ -284,14 +284,14 @@ site that needs it (here, an `Authorization` header):
 
 ```diff lang="typescript"
 +import * as Redacted from "effect/Redacted";
-+import * as HttpClient from "effect/unstable/http/HttpClient";
-+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
++import * as HttpClient from "effect/http/HttpClient";
++import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
  export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
    "Notifier",
    Effect.gen(function* () {
      const rooms = yield* Room;
-     const apiKey = yield* Config.redacted("API_KEY");
+     const apiKey = yield* Config.Redacted("API_KEY");
 
      return Effect.gen(function* () {
        const env = yield* Cloudflare.Workers.WorkerEnvironment;
@@ -340,8 +340,8 @@ Worker's Construction phase. Use `create()` to start an instance and
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import NotifyWorkflow from "./NotifyWorkflow.ts";
 
 export default Cloudflare.Worker(
@@ -406,7 +406,7 @@ import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({

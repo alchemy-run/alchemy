@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as CredentialsCache from "../Auth/CredentialsCache.ts";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import { deferUntilFirstUse, resolveProviderConfig } from "../Auth/Resolve.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
@@ -32,9 +32,7 @@ declare module "@distilled.cloud/cloudflare/Credentials" {
  * caching rules. Non-OAuth credentials (API token / global key) never expire
  * and cache forever.
  */
-export const cacheUntilExpiry = <E>(
-  resolve: Effect.Effect<ResolvedCredentials, E>,
-) =>
+export const cacheUntilExpiry = <E>(resolve: Effect.Effect<ResolvedCredentials, E>) =>
   CredentialsCache.cacheUntilExpiry(resolve, (credentials) =>
     credentials.type === "oauth" ? credentials.expiresAt : undefined,
   );
@@ -48,29 +46,25 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const { profileName, resolve: resolveAuth } =
-        yield* resolveProviderConfig<
-          CloudflareAuthConfig,
-          CloudflareResolvedCredentials
-        >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-
-      const resolve = resolveAuth.pipe(
+      // Defer both profile lookup and credential resolution. Local-only dev
+      // builds this layer too, but never evaluates its credential recipe.
+      const resolve = yield* resolveProviderConfig<
+        CloudflareAuthConfig,
+        CloudflareResolvedCredentials
+      >(CLOUDFLARE_AUTH_PROVIDER_NAME).pipe(
+        Effect.flatMap(({ resolve }) => resolve),
         Effect.map((creds) =>
           Match.value(creds).pipe(
-            Match.when({ type: "apiToken" }, (c) =>
-              apiTokenCredentials({
-                apiToken: Redacted.value(c.apiToken),
-              }),
-            ),
+            Match.when({ type: "apiToken" }, (c) => apiTokenCredentials({ apiToken: c.apiToken })),
             Match.when({ type: "apiKey" }, (c) =>
               apiKeyCredentials({
-                apiKey: Redacted.value(c.apiKey),
+                apiKey: c.apiKey,
                 email: Redacted.value(c.email),
               }),
             ),
             Match.when({ type: "oauth" }, (c) =>
               oauthCredentials({
-                accessToken: Redacted.value(c.accessToken),
+                accessToken: c.accessToken,
                 expiresAt: c.expires,
               }),
             ),
@@ -79,10 +73,9 @@ export const fromAuthProvider = () =>
         ),
         Effect.mapError(
           (e) =>
-            new ConfigError({
-              message: `Failed to resolve Cloudflare credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-            }),
+            new ConfigError({ message: `Failed to resolve Cloudflare credentials: ${e.message}` }),
         ),
+        deferUntilFirstUse,
       );
 
       // `auth.read` refreshes and persists expired OAuth tokens when it is

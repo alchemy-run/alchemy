@@ -1,5 +1,6 @@
-/** @jsxImportSource react */
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+/** @jsxImportSource @alchemy.run/sigil */
+import { useEffect, useMemo, useState } from "@alchemy.run/sigil/react";
+import type { ReactNode } from "react";
 import type {
   ConfirmOptions,
   CycleSelectOptions,
@@ -12,7 +13,6 @@ import type {
   SelectOptions,
   TextInputOptions,
 } from "../types.ts";
-import { theme } from "../../../Util/Theme.ts";
 import { useGlyphs, useKeyGlyphs } from "../ui/Environment.tsx";
 import { Alert } from "../ui/Feedback.tsx";
 import {
@@ -62,9 +62,7 @@ const useCancel = (cancel: () => void) =>
 const screen =
   <Options, Value>(
     name: string,
-    Component: (
-      props: { readonly options: Options } & ScreenController<Value>,
-    ) => ReactNode,
+    Component: (props: { readonly options: Options } & ScreenController<Value>) => ReactNode,
   ) =>
   (options: Options): Screen<Value> => ({
     name,
@@ -95,10 +93,7 @@ const useChoiceList = ({
   readonly onCancel: () => void;
   readonly initialCursor?: number;
 }) => {
-  const { cursor, setCursor } = useListNavigation(
-    disabled.length,
-    initialCursor,
-  );
+  const { cursor, setCursor } = useListNavigation(disabled.length, initialCursor);
   useEffect(() => {
     setCursor((current) => {
       if (disabled.length === 0) return 0;
@@ -121,18 +116,14 @@ const useChoiceList = ({
     else if (key.down || (!searchable && plain && input === "j"))
       setCursor(moveSkippingDisabled(disabled, cursor, 1));
     else if (key.home) setCursor(jumpSkippingDisabled(disabled, cursor, 0));
-    else if (key.end)
-      setCursor(jumpSkippingDisabled(disabled, cursor, disabled.length - 1));
-    else if (key.pageUp)
-      setCursor(jumpSkippingDisabled(disabled, cursor, cursor - page));
-    else if (key.pageDown)
-      setCursor(jumpSkippingDisabled(disabled, cursor, cursor + page));
+    else if (key.end) setCursor(jumpSkippingDisabled(disabled, cursor, disabled.length - 1));
+    else if (key.pageUp) setCursor(jumpSkippingDisabled(disabled, cursor, cursor - page));
+    else if (key.pageDown) setCursor(jumpSkippingDisabled(disabled, cursor, cursor + page));
     else if (key.escape) {
       // An active filter absorbs the first Escape; the second cancels.
       if (query !== "") resetFilter("");
       else onCancel();
-    } else if (searchable && (key.backspace || key.delete))
-      resetFilter(query.slice(0, -1));
+    } else if (searchable && (key.backspace || key.delete)) resetFilter(query.slice(0, -1));
     else if (searchable && plain && !key.tab) {
       const typed = sanitizeTextInsert(input);
       if (typed.length === 0) return false;
@@ -150,6 +141,37 @@ const useChoiceList = ({
   return { cursor, setCursor, handleKey } as const;
 };
 
+/**
+ * fzf-style query row for searchable lists: a `/` prefix, the typed text
+ * with a block cursor, and a right-hand annotation (match count, selection
+ * count). The row is always present so the list does not jump when the first
+ * character is typed.
+ */
+function FilterLine({
+  query,
+  annotation,
+}: {
+  readonly query: string;
+  readonly annotation: string;
+}) {
+  return (
+    <Box gap={2}>
+      <Text>
+        <Text tone="muted">/ </Text>
+        {query === "" ? (
+          <Text tone="muted">type to filter</Text>
+        ) : (
+          <>
+            {query}
+            <Text inverse> </Text>
+          </>
+        )}
+      </Text>
+      <Text tone="muted">{annotation}</Text>
+    </Box>
+  );
+}
+
 type TextPromptProps = {
   readonly options: TextInputOptions | PasswordInputOptions;
   readonly mask?: boolean;
@@ -165,9 +187,7 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
   useCancel(cancel);
   const complete = (raw: string) => {
     const value =
-      raw === "" &&
-      "defaultValue" in options &&
-      options.defaultValue !== undefined
+      raw === "" && "defaultValue" in options && options.defaultValue !== undefined
         ? options.defaultValue
         : raw;
     const problem = errorMessage(options.validate?.(value));
@@ -175,10 +195,7 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
     else
       submit(
         value,
-        <AnsweredPrompt
-          message={options.message}
-          answer={answerText(value, maskGlyph)}
-        />,
+        <AnsweredPrompt message={options.message} answer={answerText(value, maskGlyph)} />,
       );
   };
   return (
@@ -198,12 +215,9 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
         // Keep it a placeholder (rather than initialValue) so the first
         // keystroke starts a replacement instead of appending to the default.
         placeholder={
-          options.placeholder ??
-          ("defaultValue" in options ? options.defaultValue : undefined)
+          options.placeholder ?? ("defaultValue" in options ? options.defaultValue : undefined)
         }
-        initialValue={
-          "initialValue" in options ? options.initialValue : undefined
-        }
+        initialValue={"initialValue" in options ? options.initialValue : undefined}
         mask={maskGlyph}
         ariaLabel={options.message}
         onChange={() => setError(undefined)}
@@ -213,15 +227,11 @@ function TextPrompt({ options, mask, submit, cancel }: TextPromptProps) {
   );
 }
 
-export const textScreen = screen<TextInputOptions, string>(
-  "text input",
-  TextPrompt,
-);
+export const textScreen = screen<TextInputOptions, string>("text input", TextPrompt);
 
-export const passwordScreen = screen<PasswordInputOptions, string>(
-  "password input",
-  (props) => <TextPrompt {...props} mask />,
-);
+export const passwordScreen = screen<PasswordInputOptions, string>("password input", (props) => (
+  <TextPrompt {...props} mask />
+));
 
 type SelectPromptProps<Value> = {
   readonly options: SelectOptions<Value>;
@@ -244,8 +254,7 @@ function SelectPrompt<Value>({
 }: SelectPromptProps<Value>) {
   const keys = useKeyGlyphs();
   const { rows } = useTerminalSize();
-  const visibleCount =
-    options.visibleCount ?? Math.max(3, Math.min(16, rows - 8));
+  const visibleCount = options.visibleCount ?? Math.max(3, Math.min(16, rows - 8));
   const searchable = options.searchable === true;
   const [query, setQuery] = useState("");
   const filtered = useMemo(
@@ -258,16 +267,10 @@ function SelectPrompt<Value>({
   const initialOriginalIndex = options.options.findIndex(
     (choice) => choice.value === options.initialValue,
   );
-  const initialIndex = filtered.findIndex(
-    ({ index }) => index === initialOriginalIndex,
-  );
+  const initialIndex = filtered.findIndex(({ index }) => index === initialOriginalIndex);
   const firstEnabled = filtered.findIndex(({ choice }) => !choice.disabled);
   const disabled = useMemo(
-    () =>
-      filtered.map(
-        ({ choice }) =>
-          choice.disabled !== undefined && choice.disabled !== false,
-      ),
+    () => filtered.map(({ choice }) => choice.disabled !== undefined && choice.disabled !== false),
     [filtered],
   );
   const { cursor, handleKey } = useChoiceList({
@@ -288,9 +291,7 @@ function SelectPrompt<Value>({
       if (choice !== undefined && !choice.disabled) {
         submit(
           choice.value,
-          summary ? (
-            <AnsweredPrompt message={options.message} answer={choice.label} />
-          ) : undefined,
+          summary ? <AnsweredPrompt message={options.message} answer={choice.label} /> : undefined,
         );
       }
       return;
@@ -308,11 +309,16 @@ function SelectPrompt<Value>({
           [keys.escape, query === "" ? escapeLabel : "clear filter"],
         ]}
       >
-        <Box flexDirection="column" gap={searchable ? 1 : 0}>
+        <Box flexDirection="column">
           {searchable ? (
-            <Text tone="muted">
-              filter · <Text color={theme.color.info}>{query || "all"}</Text>
-            </Text>
+            <FilterLine
+              query={query}
+              annotation={
+                query === ""
+                  ? `${options.options.length} choices`
+                  : `${filtered.length} of ${options.options.length}`
+              }
+            />
           ) : null}
           <Menu
             choices={filtered.map(({ choice }) => choice)}
@@ -328,18 +334,14 @@ function SelectPrompt<Value>({
   );
 }
 
-export const selectScreen = <Value,>(
-  options: SelectOptions<Value>,
-): Screen<Value> => ({
+export const selectScreen = <Value,>(options: SelectOptions<Value>): Screen<Value> => ({
   name: "selection",
   render: ({ submit, cancel }) => (
     <SelectPrompt options={options} submit={submit} cancel={cancel} />
   ),
 });
 
-export const menuScreen = <Value,>(
-  options: MenuOptions<Value>,
-): Screen<Value> => {
+export const menuScreen = <Value,>(options: MenuOptions<Value>): Screen<Value> => {
   const hasBack = Object.hasOwn(options, "back");
   return {
     name: "menu",
@@ -363,15 +365,10 @@ type MultiSelectPromptProps<Value> = {
   readonly cancel: () => void;
 };
 
-function MultiSelectPrompt<Value>({
-  options,
-  submit,
-  cancel,
-}: MultiSelectPromptProps<Value>) {
+function MultiSelectPrompt<Value>({ options, submit, cancel }: MultiSelectPromptProps<Value>) {
   const keys = useKeyGlyphs();
   const { rows } = useTerminalSize();
-  const visibleCount =
-    options.visibleCount ?? Math.max(3, Math.min(16, rows - 10));
+  const visibleCount = options.visibleCount ?? Math.max(3, Math.min(16, rows - 10));
   const searchable = options.searchable === true;
   const [query, setQuery] = useState("");
   const filtered = useMemo(
@@ -426,19 +423,14 @@ function MultiSelectPrompt<Value>({
     }
     return result;
   }, [filtered]);
-  const [selected, setSelected] = useSelectedChoices(
-    options.options,
-    options.initialValues ?? [],
-  );
+  const [selected, setSelected] = useSelectedChoices(options.options, options.initialValues ?? []);
   const [error, setError] = useState<string>();
   const disabled = useMemo(
     () =>
       listRows.map((row) =>
         row.type === "choice"
           ? row.choice.disabled !== undefined && row.choice.disabled !== false
-          : row.indices.every((index) =>
-              Boolean(options.options[index]?.disabled),
-            ),
+          : row.indices.every((index) => Boolean(options.options[index]?.disabled)),
       ),
     [listRows, options.options],
   );
@@ -453,9 +445,7 @@ function MultiSelectPrompt<Value>({
   useTerminalInput((input, key) => {
     if (key.ctrl && input === "a") {
       const enabledVisible = filtered.flatMap(({ choice, index }) =>
-        choice.disabled !== undefined && choice.disabled !== false
-          ? []
-          : [index],
+        choice.disabled !== undefined && choice.disabled !== false ? [] : [index],
       );
       if (enabledVisible.length === 0) return;
       setSelected((current) => {
@@ -532,11 +522,8 @@ function MultiSelectPrompt<Value>({
       }
       // Match the toggle semantics: disabled children are excluded there, so
       // they must not keep a fully-toggled group from rendering as selected.
-      const toggleable = row.indices.filter(
-        (index) => !options.options[index]?.disabled,
-      );
-      return toggleable.length > 0 &&
-        toggleable.every((index) => selected.has(index))
+      const toggleable = row.indices.filter((index) => !options.options[index]?.disabled);
+      return toggleable.length > 0 && toggleable.every((index) => selected.has(index))
         ? [visibleIndex]
         : [];
     }),
@@ -553,13 +540,16 @@ function MultiSelectPrompt<Value>({
         [keys.escape, query === "" ? "cancel" : "clear filter"],
       ]}
     >
-      <Box flexDirection="column" gap={searchable ? 1 : 0}>
+      <Box flexDirection="column">
         {searchable ? (
-          <Text tone="muted">
-            filter · <Text color={theme.color.info}>{query || "all"}</Text>
-            {" · "}
-            {selected.size} selected
-          </Text>
+          <FilterLine
+            query={query}
+            annotation={
+              query === ""
+                ? `${selected.size} selected`
+                : `${filtered.length} of ${options.options.length} · ${selected.size} selected`
+            }
+          />
         ) : (
           <Text tone="muted">{selected.size} selected</Text>
         )}
@@ -591,18 +581,11 @@ type CycleSelectPromptProps<State> = {
   readonly cancel: () => void;
 };
 
-function CycleSelectPrompt<State>({
-  options,
-  submit,
-  cancel,
-}: CycleSelectPromptProps<State>) {
+function CycleSelectPrompt<State>({ options, submit, cancel }: CycleSelectPromptProps<State>) {
   const keys = useKeyGlyphs();
   const { rows } = useTerminalSize();
-  const visibleCount =
-    options.visibleCount ?? Math.max(3, Math.min(16, rows - 8));
-  const navigation = useCycleNavigation(
-    options.options.map((choice) => choice.states.length),
-  );
+  const visibleCount = options.visibleCount ?? Math.max(3, Math.min(16, rows - 8));
+  const navigation = useCycleNavigation(options.options.map((choice) => choice.states.length));
   const [unchanged, setUnchanged] = useState(false);
   useCancel(cancel);
   const last = Math.max(0, options.options.length - 1);
@@ -613,10 +596,8 @@ function CycleSelectPrompt<State>({
     else if (key.down || (plain && input === "j")) navigation.move(1);
     else if (key.home) navigation.setCursor(0);
     else if (key.end) navigation.setCursor(last);
-    else if (key.pageUp)
-      navigation.setCursor(Math.max(0, navigation.cursor - page));
-    else if (key.pageDown)
-      navigation.setCursor(Math.min(last, navigation.cursor + page));
+    else if (key.pageUp) navigation.setCursor(Math.max(0, navigation.cursor - page));
+    else if (key.pageDown) navigation.setCursor(Math.min(last, navigation.cursor + page));
     else if ((plain && input === " ") || key.right) {
       navigation.cycle(1);
       setUnchanged(false);
@@ -624,10 +605,7 @@ function CycleSelectPrompt<State>({
       navigation.cycle(-1);
       setUnchanged(false);
     } else if (key.enter) {
-      if (
-        options.requireChange &&
-        navigation.indices.every((index) => index === 0)
-      ) {
+      if (options.requireChange && navigation.indices.every((index) => index === 0)) {
         setUnchanged(true);
         return;
       }
@@ -638,9 +616,7 @@ function CycleSelectPrompt<State>({
       const changed = options.options.flatMap((choice, index) => {
         if ((navigation.indices[index] ?? 0) === 0) return [];
         const state = choice.states[navigation.indices[index] ?? 0];
-        return state === undefined
-          ? []
-          : [`${choice.label}: ${state.label ?? "changed"}`];
+        return state === undefined ? [] : [`${choice.label}: ${state.label ?? "changed"}`];
       });
       submit(
         values,
@@ -670,8 +646,7 @@ function CycleSelectPrompt<State>({
         />
         {unchanged ? (
           <Alert variant="warning" title="No changes to apply">
-            {options.unchangedMessage ??
-              "Press Space to change a selection, or Esc to go back."}
+            {options.unchangedMessage ?? "Press Space to change a selection, or Esc to go back."}
           </Alert>
         ) : null}
       </Box>
@@ -708,11 +683,7 @@ function ConfirmPrompt({ options, submit, cancel }: ConfirmPromptProps) {
       answer,
       <AnsweredPrompt
         message={options.message}
-        answer={
-          answer
-            ? (options.confirmLabel ?? "yes")
-            : (options.cancelLabel ?? "no")
-        }
+        answer={answer ? (options.confirmLabel ?? "yes") : (options.cancelLabel ?? "no")}
       />,
     );
   const value = useConfirmKeys({
@@ -728,8 +699,7 @@ function ConfirmPrompt({ options, submit, cancel }: ConfirmPromptProps) {
       message={options.message}
       keys={[
         [
-          options.confirmLabel === undefined &&
-          options.cancelLabel === undefined
+          options.confirmLabel === undefined && options.cancelLabel === undefined
             ? keys.yesNo
             : keys.leftRight,
           "choose",
@@ -749,7 +719,4 @@ function ConfirmPrompt({ options, submit, cancel }: ConfirmPromptProps) {
   );
 }
 
-export const confirmScreen = screen<ConfirmOptions, boolean>(
-  "confirmation",
-  ConfirmPrompt,
-);
+export const confirmScreen = screen<ConfirmOptions, boolean>("confirmation", ConfirmPrompt);

@@ -85,7 +85,7 @@ The `Config` read binds the value at deploy time, and because it is
 ```typescript
 const Honeycomb = Layer.unwrap(
   Effect.gen(function* () {
-    const key = yield* Config.redacted("HONEYCOMB_API_KEY");
+    const key = yield* Config.Redacted("HONEYCOMB_API_KEY");
     return Alchemy.Telemetry.layerOtlp({
       url: "https://api.honeycomb.io",
       headers: { "x-honeycomb-team": key },
@@ -174,7 +174,7 @@ const object = yield* bucket
 
 `Alchemy.Telemetry.layer` installs any Layer that provides a
 `Tracer`, loggers, or metric exporters — Effect's
-`effect/unstable/observability` modules (`OtlpTracer`, `OtlpLogger`,
+`effect/observability` modules (`OtlpTracer`, `OtlpLogger`,
 `OtlpMetrics`, protobuf serialization) compose here directly. The
 Layer is built per event into the event's request scope, so a custom
 exporter gets the same flush-on-close behavior as the built-in one.

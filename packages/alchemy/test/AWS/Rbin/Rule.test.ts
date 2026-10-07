@@ -1,30 +1,25 @@
-import * as AWS from "@/AWS";
-import { Rule } from "@/AWS/Rbin";
-import * as Test from "@/Test/Alchemy";
 import * as rbin from "@distilled.cloud/aws/rbin";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Rule } from "@/AWS/Rbin";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 /** Typed wait-until-gone: getRule must settle on RULE_NOT_FOUND. */
 const assertRuleGone = (identifier: string) =>
   rbin.getRule({ Identifier: identifier }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`retention rule ${identifier} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`retention rule ${identifier} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
-describe("AWS.Rbin.Rule", () => {
+describe("AWS.Rbin.Rule", { tags: ["provider:aws", "provider:aws:rbin", "live"] }, () => {
   test.provider(
     "lifecycle: create, update in place, replace on resourceType, destroy",
     (stack) =>
@@ -42,17 +37,12 @@ describe("AWS.Rbin.Rule", () => {
               resourceTags: [{ key: "alchemy-rbin-test", value: "snapshots" }],
               tags: { purpose: "alchemy-test" },
             });
-            return {
-              identifier: rule.identifier,
-              ruleArn: rule.ruleArn,
-            };
+            return { identifier: rule.identifier, ruleArn: rule.ruleArn };
           }),
         );
 
         // Out-of-band verification via distilled.
-        const observed = yield* rbin.getRule({
-          Identifier: created.identifier,
-        });
+        const observed = yield* rbin.getRule({ Identifier: created.identifier });
         expect(observed.RuleArn).toEqual(created.ruleArn);
         expect(observed.ResourceType).toEqual("EBS_SNAPSHOT");
         expect(observed.RetentionPeriod).toEqual({
@@ -61,16 +51,11 @@ describe("AWS.Rbin.Rule", () => {
         });
         expect(observed.Description).toEqual("alchemy rbin lifecycle test");
         expect(observed.ResourceTags).toEqual([
-          {
-            ResourceTagKey: "alchemy-rbin-test",
-            ResourceTagValue: "snapshots",
-          },
+          { ResourceTagKey: "alchemy-rbin-test", ResourceTagValue: "snapshots" },
         ]);
         expect(observed.Status).toEqual("available");
 
-        const tags = yield* rbin.listTagsForResource({
-          ResourceArn: created.ruleArn,
-        });
+        const tags = yield* rbin.listTagsForResource({ ResourceArn: created.ruleArn });
         expect(tags.Tags).toEqual(
           expect.arrayContaining([
             { Key: "purpose", Value: "alchemy-test" },
@@ -94,22 +79,14 @@ describe("AWS.Rbin.Rule", () => {
         );
         expect(updated.identifier).toEqual(created.identifier);
 
-        const observedUpdated = yield* rbin.getRule({
-          Identifier: updated.identifier,
-        });
-        expect(observedUpdated.RetentionPeriod?.RetentionPeriodValue).toEqual(
-          14,
-        );
-        expect(observedUpdated.Description).toEqual(
-          "alchemy rbin lifecycle test (updated)",
-        );
+        const observedUpdated = yield* rbin.getRule({ Identifier: updated.identifier });
+        expect(observedUpdated.RetentionPeriod?.RetentionPeriodValue).toEqual(14);
+        expect(observedUpdated.Description).toEqual("alchemy rbin lifecycle test (updated)");
         expect(observedUpdated.ResourceTags).toEqual([
           { ResourceTagKey: "alchemy-rbin-test", ResourceTagValue: "updated" },
         ]);
 
-        const updatedTags = yield* rbin.listTagsForResource({
-          ResourceArn: updated.ruleArn,
-        });
+        const updatedTags = yield* rbin.listTagsForResource({ ResourceArn: updated.ruleArn });
         expect(updatedTags.Tags).toEqual(
           expect.arrayContaining([{ Key: "owner", Value: "alchemy" }]),
         );
@@ -132,9 +109,7 @@ describe("AWS.Rbin.Rule", () => {
         );
         expect(replaced.identifier).not.toEqual(created.identifier);
 
-        const observedReplaced = yield* rbin.getRule({
-          Identifier: replaced.identifier,
-        });
+        const observedReplaced = yield* rbin.getRule({ Identifier: replaced.identifier });
         expect(observedReplaced.ResourceType).toEqual("EC2_IMAGE");
         // The replaced (old) rule is deleted after the new one lands.
         yield* assertRuleGone(created.identifier);

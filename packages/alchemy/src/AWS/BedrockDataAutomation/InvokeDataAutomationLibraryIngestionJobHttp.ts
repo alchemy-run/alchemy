@@ -11,8 +11,6 @@ export const InvokeDataAutomationLibraryIngestionJobHttp = Layer.effect(
     actions: ["bedrock:InvokeDataAutomationLibraryIngestionJob"],
     // The action authorizes against the ingestion-job resource (minted at
     // runtime), not the library ARN.
-    additionalResources: [
-      "arn:aws:bedrock:*:*:data-automation-library-ingestion-job/*",
-    ],
+    additionalResources: ["arn:aws:bedrock:*:*:data-automation-library-ingestion-job/*"],
   }),
 );

@@ -1,18 +1,16 @@
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Command from "effect/unstable/cli/Command";
-import * as Flag from "effect/unstable/cli/Flag";
-
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import { Cli } from "../../Report.ts";
 import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
-
 import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 import { renderApply, renderPlanning } from "./render.ts";
 
-const repairFlag = Flag.boolean("repair").pipe(
+const repairFlag = Flag.Boolean("repair").pipe(
   Flag.withDescription("Repair detected drift without prompting"),
   Flag.withDefault(false),
 );
@@ -73,11 +71,7 @@ const routeDrift = Effect.fn(function* ({
           initialValue: "cancel" as const,
         }),
       )
-      .pipe(
-        Effect.catchTag("TerminalCancelled", () =>
-          Effect.succeed("cancel" as const),
-        ),
-      );
+      .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed("cancel" as const)));
     if (decision === "cancel") return;
   }
 

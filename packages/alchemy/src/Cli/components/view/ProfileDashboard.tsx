@@ -1,4 +1,5 @@
-/** @jsxImportSource react */
+import { useEffect, useState } from "@alchemy.run/sigil/react";
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
  * mounted for the whole session and screens replace each other in place:
@@ -18,14 +19,17 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
-import { type JSX, useEffect, useState } from "react";
+import type { JSX } from "react";
+import { CliKit, theme, type NonInteractiveTerminal } from "../../CliKit/index.ts";
 import {
   Alert,
   Box,
   CycleList,
+  Gutter,
   InlineConfirm,
   KeyBar,
   LiveStore,
+  Pointer,
   PromptFrame,
   Spinner,
   Stack,
@@ -34,22 +38,20 @@ import {
   Text,
   TextField,
   Toast,
-  useBorderStyle,
   useCycleNavigation,
   useGlyphs,
   useKeyGlyphs,
   useLiveStore,
   useTerminalInput,
+  useTerminalSize,
+  VirtualList,
 } from "../ui/index.ts";
-import {
-  CliKit,
-  theme,
-  type NonInteractiveTerminal,
-} from "../../CliKit/index.ts";
 import {
   type EditState,
   editStateStyle,
-  ProfileDetailsBody,
+  ProviderBlock,
+  providerBlockHeight,
+  providerColumnWidths,
   type ProfileProviderDisplay,
 } from "./Profile.tsx";
 
@@ -128,9 +130,8 @@ interface DashState {
  * the mounted dashboard. The resolver bridge and the notice auto-dismiss
  * timer live outside the snapshot — they carry no visual state.
  */
-class DashStore extends LiveStore<DashState> {
-  private resolver: ((action: PureAction | ExternalAction) => void) | null =
-    null;
+export class DashStore extends LiveStore<DashState> {
+  private resolver: ((action: PureAction | ExternalAction) => void) | null = null;
 
   constructor(entries: ReadonlyArray<DashboardEntry>) {
     super({
@@ -193,14 +194,11 @@ class DashStore extends LiveStore<DashState> {
 type DetailsPaneProps = {
   details: Details;
   refreshingProvider?: string;
-  focusedProvider?: string;
+  /** Index into `details.providers` the up/down cursor rests on. */
+  focusedIndex: number;
 };
 
-function DetailsPane({
-  details,
-  refreshingProvider,
-  focusedProvider,
-}: DetailsPaneProps): JSX.Element {
+function DetailsPane({ details, refreshingProvider, focusedIndex }: DetailsPaneProps): JSX.Element {
   if (details.state === "loading") {
     return <Spinner label="resolving credentials…" />;
   }
@@ -208,20 +206,37 @@ function DetailsPane({
     return <Status variant="error">{details.message}</Status>;
   }
   if (details.providers.length === 0) {
-    return (
-      <Text tone="muted">No accounts connected — press e to add one.</Text>
-    );
+    return <Text tone="muted">No accounts connected — press e to add one.</Text>;
   }
-  // Same body as `profile show`, so the dashboard's detail pane and the
-  // non-interactive command render identically.
+  const { providers } = details;
+  const { nameWidth, methodWidth } = providerColumnWidths(providers);
+  const focusedProvider = providers[focusedIndex]?.name;
+  const reauthHint = "press r to re-login";
+  // The same blocks `profile show` prints, windowed to the rows the terminal
+  // leaves the pane: the list shrinks to fit (see the root layout in
+  // `Dashboard`) and scrolls just enough to keep the focused provider in view.
+  // The profile-level slot (no focused provider) shows the list from the top.
   return (
-    <ProfileDetailsBody
-      providers={details.providers}
-      reauthHint="press r to re-login"
-      refreshingProvider={refreshingProvider}
-      focusedProvider={focusedProvider}
-      showFocusRail
-    />
+    <Box flexDirection="column" minHeight={0}>
+      <VirtualList
+        items={providers}
+        getKey={(provider) => provider.name}
+        itemHeight={(provider, index) => providerBlockHeight(provider, index === 0)}
+        focusedIndex={Math.max(0, focusedIndex)}
+        renderItem={(provider, index) => (
+          <ProviderBlock
+            provider={provider}
+            first={index === 0}
+            nameWidth={nameWidth}
+            methodWidth={methodWidth}
+            reauthHint={reauthHint}
+            refreshingProvider={refreshingProvider}
+            focusedProvider={focusedProvider}
+            focusColumn
+          />
+        )}
+      />
+    </Box>
   );
 }
 
@@ -240,15 +255,8 @@ type EditScreenProps = {
   onBack: () => void;
 };
 
-function EditScreen({
-  profile,
-  rows,
-  onApply,
-  onBack,
-}: EditScreenProps): JSX.Element {
-  const { cursor, indices, move, cycle } = useCycleNavigation(
-    rows.map((row) => row.states.length),
-  );
+function EditScreen({ profile, rows, onApply, onBack }: EditScreenProps): JSX.Element {
+  const { cursor, indices, move, cycle } = useCycleNavigation(rows.map((row) => row.states.length));
   const keys = useKeyGlyphs();
   const glyphs = useGlyphs();
   const [unchanged, setUnchanged] = useState(false);
@@ -418,10 +426,10 @@ type DashboardProps = {
   initialSelected: number;
 };
 
-function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
+export function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
-  const borderStyle = useBorderStyle();
+  const { rows } = useTerminalSize();
   const [selected, setSelected] = useState(initialSelected);
   // -1 is the profile-level slot: no provider is focused and profile actions
   // are shown. Up/down cycles through this slot and every connected provider.
@@ -431,9 +439,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const { entries, focus: requestedFocus, flow, busy, notice } = state;
   useEffect(() => {
     if (requestedFocus === undefined) return;
-    const focusIndex = entries.findIndex(
-      (entry) => entry.name === requestedFocus,
-    );
+    const focusIndex = entries.findIndex((entry) => entry.name === requestedFocus);
     store.clearFocus();
     if (focusIndex >= 0) {
       setSelected(focusIndex);
@@ -441,8 +447,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   }, [entries, requestedFocus, store]);
   const index = Math.min(Math.max(selected, 0), entries.length - 1);
   const entry = entries[index];
-  const details =
-    entry === undefined ? undefined : store.detailsFor(entry.name);
+  const details = entry === undefined ? undefined : store.detailsFor(entry.name);
   const providers = details?.state === "ready" ? details.providers : [];
   const provider = providers[focusedProvider];
   const moveProviderFocus = (delta: -1 | 1) =>
@@ -478,11 +483,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
       setMode("rename");
     } else if (provider === undefined && input === "d" && !entry.isDefault) {
       setMode("delete");
-    } else if (
-      provider === undefined &&
-      input === "e" &&
-      details?.state === "ready"
-    ) {
+    } else if (provider === undefined && input === "e" && details?.state === "ready") {
       setScreen("edit");
     } else if (provider === undefined && input === "r") {
       store.dispatch({ kind: "refresh", name: entry.name });
@@ -543,9 +544,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
         onBack={() => setScreen("overview")}
         onApply={(choices) => {
           const pick = (state: EditState) =>
-            rows.flatMap((row, i) =>
-              choices[i] === state ? [row.provider] : [],
-            );
+            rows.flatMap((row, i) => (choices[i] === state ? [row.provider] : []));
           const action: ExternalAction = {
             kind: "edit-apply",
             name: entry.name,
@@ -554,12 +553,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
             remove: pick("remove"),
           };
           setScreen("overview");
-          if (
-            action.add.length +
-              action.reconfigure.length +
-              action.remove.length ===
-            0
-          ) {
+          if (action.add.length + action.reconfigure.length + action.remove.length === 0) {
             return;
           }
           store.dispatch(action);
@@ -578,9 +572,7 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
         ]
       : [
           [keyGlyphs.leftRight, "switch profile"],
-          ...(providers.length === 0
-            ? []
-            : ([[keyGlyphs.upDown, "focus provider"]] as const)),
+          ...(providers.length === 0 ? [] : ([[keyGlyphs.upDown, "focus provider"]] as const)),
           ...(provider !== undefined
             ? ([
                 ["e", "reconfigure"],
@@ -605,59 +597,62 @@ function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
           ["q", "quit"],
         ];
 
+  // The frame never exceeds the terminal: the provider list is the only part
+  // allowed to shrink (a `VirtualList` windows it to whatever rows are left),
+  // so every other row of chrome opts out of shrinking. Short lists keep the
+  // compact layout because the cap is a maximum, not a fixed height.
   return (
-    <Stack>
-      <Tabs
-        tabs={entries.map((e) => ({
-          id: e.name,
-          label: e.name,
-          marked: e.isActive,
-        }))}
-        active={entry?.name ?? ""}
-      />
-      <Stack gap={1}>
+    <Stack maxHeight={rows}>
+      <Stack flexShrink={0}>
+        <Tabs
+          tabs={entries.map((e) => ({
+            id: e.name,
+            label: e.name,
+            marked: e.isActive,
+          }))}
+          active={entry?.name ?? ""}
+        />
+      </Stack>
+      <Stack gap={1} minHeight={0}>
         {entry === undefined ? (
           <Text tone="muted">No profiles yet — press n to create one.</Text>
         ) : (
           <>
-            <Box
-              flexDirection="row"
-              paddingLeft={provider === undefined ? 0 : 1}
-              borderStyle={borderStyle}
-              borderLeft={provider === undefined}
-              borderRight={false}
-              borderTop={false}
-              borderBottom={false}
-              borderColor={theme.color.brand}
-            >
-              <Text bold color={theme.color.accent}>
-                {entry.name}
-              </Text>
-              {annotation === "" ? null : (
-                <Text tone="muted"> · {annotation}</Text>
-              )}
+            {/* The profile row is the first focus slot. It sits in the same
+                gutter as the provider rows and shares their cursor column, so
+                the pointer moves in a straight line as focus travels. */}
+            <Box flexShrink={0}>
+              <Gutter>
+                <Box flexDirection="row">
+                  <Pointer focused={provider === undefined} />
+                  <Text> </Text>
+                  <Text bold color={provider === undefined ? theme.paint.focus : undefined}>
+                    {entry.name}
+                  </Text>
+                  {annotation === "" ? null : <Text tone="muted"> · {annotation}</Text>}
+                </Box>
+              </Gutter>
             </Box>
-            <Box>
+            <Box flexDirection="column" minHeight={0}>
               <DetailsPane
                 details={details ?? { state: "loading" }}
-                focusedProvider={provider?.name}
-                refreshingProvider={
-                  flow?.kind === "refresh" ? flow.provider : undefined
-                }
+                focusedIndex={focusedProvider}
+                refreshingProvider={flow?.kind === "refresh" ? flow.provider : undefined}
               />
             </Box>
           </>
         )}
       </Stack>
-      {/* Keep one stable status row so notices do not push the controls around. */}
-      <Box minHeight={1}>
+      {/* Keep one stable status row so notices do not push the controls around.
+          It shares the gutter with the profile/provider rows above it. */}
+      <Box minHeight={1} flexShrink={0} paddingLeft={theme.space.indent}>
         {busy && flow === undefined ? (
           <Spinner label="working…" />
         ) : notice !== undefined ? (
           <Toast variant={notice.ok ? "info" : "error"}>{notice.message}</Toast>
         ) : null}
       </Box>
-      <Stack>
+      <Stack flexShrink={0}>
         <DashboardControls
           mode={mode}
           busy={busy}
@@ -687,9 +682,7 @@ export interface DashboardSessionOptions<R> {
     name: string,
   ) => Effect.Effect<ProfileDetailsPayload, { readonly message: string }, R>;
   /** Executes a pure store action and returns the refreshed state. */
-  readonly execute: (
-    action: PureAction,
-  ) => Effect.Effect<ExecuteResult, never, R>;
+  readonly execute: (action: PureAction) => Effect.Effect<ExecuteResult, never, R>;
   /**
    * Runs an edit/refresh flow. Its prompts render inside the dashboard via
    * the embedded session; resolves with a toast outcome — `ok: false`
@@ -703,11 +696,7 @@ export interface DashboardSessionOptions<R> {
     },
   ) => Effect.Effect<{ ok: boolean; message: string }, never, R>;
   /** Re-reads entries after a flow (the active profile may have changed). */
-  readonly reloadEntries: Effect.Effect<
-    ReadonlyArray<DashboardEntry>,
-    never,
-    R
-  >;
+  readonly reloadEntries: Effect.Effect<ReadonlyArray<DashboardEntry>, never, R>;
 }
 
 /**
@@ -741,9 +730,7 @@ export const runProfileDashboardSession = <R,>(
           const loadInto = (name: string) =>
             options.loadDetails(name).pipe(
               Effect.flatMap((payload) =>
-                Effect.sync(() =>
-                  store.setDetails(name, { state: "ready", ...payload }),
-                ),
+                Effect.sync(() => store.setDetails(name, { state: "ready", ...payload })),
               ),
               Effect.catch((error) =>
                 Effect.sync(() =>
@@ -769,9 +756,7 @@ export const runProfileDashboardSession = <R,>(
 
           const initialSelected = Math.max(
             0,
-            options.entries.findIndex(
-              (entry) => entry.name === options.selected,
-            ),
+            options.entries.findIndex((entry) => entry.name === options.selected),
           );
 
           const live = yield* cli.live.open(
@@ -782,17 +767,14 @@ export const runProfileDashboardSession = <R,>(
           // Mount the spinner before starting stack import/provider builds.
           // Forking the loader first allowed synchronous module evaluation to
           // delay the dashboard's first frame, making it look fully hung.
-          const loader = yield* Effect.forEach(
-            options.entries,
-            (entry) => loadInto(entry.name),
-            { concurrency: 2, discard: true },
-          ).pipe(Effect.delay("1 millis"), Effect.forkChild);
+          const loader = yield* Effect.forEach(options.entries, (entry) => loadInto(entry.name), {
+            concurrency: 2,
+            discard: true,
+          }).pipe(Effect.delay("1 millis"), Effect.forkChild);
 
           yield* Effect.gen(function* () {
             while (true) {
-              const action = yield* Effect.callback<
-                PureAction | ExternalAction
-              >((resume) => {
+              const action = yield* Effect.callback<PureAction | ExternalAction>((resume) => {
                 store.bindResolver((action) => resume(Effect.succeed(action)));
               });
               switch (action.kind) {
@@ -803,8 +785,7 @@ export const runProfileDashboardSession = <R,>(
                   store.setFlow({
                     kind: action.kind,
                     name: action.name,
-                    provider:
-                      action.kind === "refresh" ? action.provider : undefined,
+                    provider: action.kind === "refresh" ? action.provider : undefined,
                     // refresh keeps the overview on screen with a spinner; only
                     // account editing takes over the whole view
                     inline: action.kind === "refresh",
@@ -833,9 +814,7 @@ export const runProfileDashboardSession = <R,>(
                   } satisfies CliKit["Service"];
                   const result = yield* cli.wizard(
                     action.kind === "refresh"
-                      ? flowEffect.pipe(
-                          Effect.provideService(CliKit, quietRefreshCli),
-                        )
+                      ? flowEffect.pipe(Effect.provideService(CliKit, quietRefreshCli))
                       : flowEffect,
                   );
                   const entries = yield* options.reloadEntries;
@@ -873,9 +852,7 @@ export const runProfileDashboardSession = <R,>(
             Effect.ensuring(Effect.sync(() => store.dispose())),
             Effect.ensuring(
               Effect.suspend(() =>
-                noticeFiber === undefined
-                  ? Effect.void
-                  : Fiber.interrupt(noticeFiber),
+                noticeFiber === undefined ? Effect.void : Fiber.interrupt(noticeFiber),
               ),
             ),
             Effect.ensuring(live.close),

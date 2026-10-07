@@ -29,19 +29,21 @@ const Website = Cloudflare.Website.StaticSite(
       command: "bun run build",
       main: "./src/worker.ts",
       outdir: "dist",
-      version: previewParent
+      preview: previewParent
         ? {
-            parent: previewParent,
-            alias: stack.stage,
-            message: process.env.PULL_REQUEST
-              ? `PR #${process.env.PULL_REQUEST}`
-              : undefined,
+            of: previewParent,
+            name: stack.stage,
+            message: process.env.PULL_REQUEST ? `PR #${process.env.PULL_REQUEST}` : undefined,
           }
         : undefined,
       workersDev: stack.stage === "prod" ? false : undefined,
       domain:
         stack.stage === "prod"
-          ? { name: "alchemy.run", redirects: ["v2.alchemy.run"] }
+          ? {
+              name: "alchemy.run",
+              redirects: ["v2.alchemy.run"],
+              previews: true,
+            }
           : stack.stage === "main"
             ? { name: "main.alchemy.run" }
             : undefined,
@@ -66,9 +68,7 @@ const Website = Cloudflare.Website.StaticSite(
     } satisfies Cloudflare.Website.StaticSiteProps<{}>;
   }),
 ).pipe(
-  RemovalPolicy.retain(
-    Alchemy.Stack.pipe(Effect.map(({ stage }) => !stage.startsWith("pr-"))),
-  ),
+  RemovalPolicy.retain(Alchemy.Stack.pipe(Effect.map(({ stage }) => !stage.startsWith("pr-")))),
 );
 
 export default Alchemy.Stack(
