@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "$CHANNEL" == "tag" ]]; then
+  echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  exit 0
+fi
+
 tag="v${VERSION}"
 git config user.email "alchemy-version-bot[bot]@users.noreply.github.com"
 git config user.name "alchemy-version-bot[bot]"

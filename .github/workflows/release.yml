@@ -1,9 +1,18 @@
 name: Release
 
-# Publishes the next `2.0.0-beta.N` of every publishable package under npm's
-# `latest` dist-tag.
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Release spec. `beta` (the default) publishes the next
+          `2.0.0-beta.N`; `beta.N` publishes that exact candidate. `rc[.N]`
+          and `alpha[.N]` select those prerelease channels.
+          `patch|minor|major` or `x.y.z` publishes a stable release. Anything
+          else publishes `0.0.0-<name>`.
+        required: false
+        type: string
+        default: "beta"
 
 concurrency:
   group: release-${{ github.ref }}
@@ -23,6 +32,7 @@ jobs:
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
+      channel: ${{ steps.release.outputs.channel }}
     steps:
       - name: Generate bot token
         id: bot-token
@@ -51,7 +61,7 @@ jobs:
         name: Prepare release
         run: |
           set -euo pipefail
-          bun scripts/release/prepare.ts | tee -a "$GITHUB_OUTPUT"
+          bun scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
 
       - name: Build release packages
         # The cold tsgo build can starve the runner without Go heap limits on
@@ -73,6 +83,7 @@ jobs:
         name: Commit and tag
         env:
           VERSION: ${{ steps.release.outputs.version }}
+          CHANNEL: ${{ steps.release.outputs.channel }}
           GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/release/commit.sh
 
@@ -117,23 +128,21 @@ jobs:
           name: release-packages
           path: release-packages
 
-      # Publishes to `latest` (pnpm's default dist-tag). Versions already on
-      # npm are skipped, so a partially failed release can be re-run.
       - name: Publish tarballs with OIDC
-        run: |
-          for tarball in release-packages/*.tgz; do
-            spec=$(tar -xOzf "$tarball" package/package.json | jq -r '"\(.name)@\(.version)"')
-            pnpm view "$spec" version >/dev/null 2>&1 || pnpm publish "$tarball" --access public --no-git-checks
-          done
+        run: node scripts/release/publish.ts
 
       - name: Create GitHub release
+        if: needs.build.outputs.channel != 'tag'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
-        run: bun scripts/release/github-release.ts "v${VERSION}" beta
+          CHANNEL: ${{ needs.build.outputs.channel }}
+        run: bun scripts/release/github-release.ts "v${VERSION}" "$CHANNEL"
 
       - name: Notify Discord
+        if: needs.build.outputs.channel != 'tag'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           VERSION: ${{ needs.build.outputs.version }}
-        run: bun scripts/release/discord-notify.ts "v${VERSION}" beta
+          CHANNEL: ${{ needs.build.outputs.channel }}
+        run: bun scripts/release/discord-notify.ts "v${VERSION}" "$CHANNEL"
