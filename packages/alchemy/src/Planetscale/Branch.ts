@@ -93,7 +93,11 @@ export interface BaseBranchAttributes {
   production: boolean;
   /** Time at which the branch was created (ISO 8601). */
   createdAt: string;
-  /** Time at which the branch was last updated (ISO 8601). */
+  /**
+   * Time at which the branch was last updated (ISO 8601), as observed by the
+   * last deploy. PlanetScale bumps this timestamp on its own, so it is not
+   * refreshed by drift detection.
+   */
   updatedAt: string;
   /** HTML URL for accessing the branch in the dashboard. */
   htmlUrl: string;
@@ -355,7 +359,12 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
               parentBranch: data.parent_branch ?? "main",
               production: data.production,
               createdAt: data.created_at,
-              updatedAt: data.updated_at,
+              // PlanetScale bumps `updated_at` asynchronously (e.g. seconds
+              // after a deploy, on role creation, maintenance) without any
+              // config change, so the observed value is volatile. Keep the
+              // value recorded by the last reconcile so drift detection only
+              // flags real configuration changes (#1955).
+              updatedAt: output?.updatedAt ?? data.updated_at,
               htmlUrl: data.html_url,
               region: { slug: data.region.slug },
               migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
