@@ -37,7 +37,6 @@ export interface BatchGetMembershipDatasources extends Binding.Service<
     >
   >
 > {}
-export const BatchGetMembershipDatasources =
-  Binding.Service<BatchGetMembershipDatasources>(
-    "AWS.Detective.BatchGetMembershipDatasources",
-  );
+export const BatchGetMembershipDatasources = Binding.Service<BatchGetMembershipDatasources>(
+  "AWS.Detective.BatchGetMembershipDatasources",
+);

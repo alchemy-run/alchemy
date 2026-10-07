@@ -1,25 +1,23 @@
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import {
-  PlatformError,
-  SystemError,
-  type SystemErrorTag,
-} from "effect/PlatformError";
+import { PlatformError, SystemError, type SystemErrorTag } from "effect/PlatformError";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import type { ScopedPlanStatusSession } from "../Report.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
+import type { ScopedPlanStatusSession } from "../Report.ts";
+import { classifyDockerRegistryError, type DockerImagePublicationError } from "./RegistryError.ts";
 
 /** Credentials for a single image registry, scoped to a Docker command. */
 export interface RegistryCredentials {
@@ -34,17 +32,17 @@ export interface RegistryCredentials {
 const RegistryAuth = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value) => {
-      const decoded = Encoding.decodeBase64(value);
+      const decoded = Base64.decode(value);
       return Result.isSuccess(decoded) && decoded.success.indexOf(58) > 0;
     }),
   ),
 );
 
 const decodeRegistryAuthConfig = Schema.Struct({
-  auths: Schema.Record(
-    Schema.String,
-    Schema.Struct({ auth: RegistryAuth }),
-  ).pipe(Schema.NullOr, Schema.optional),
+  auths: Schema.Record(Schema.String, Schema.Struct({ auth: RegistryAuth })).pipe(
+    Schema.NullOr,
+    Schema.optional,
+  ),
 }).pipe(Schema.fromJsonString, (schema) =>
   Schema.decodeEffect(schema, { onExcessProperty: "error" }),
 );
@@ -53,17 +51,12 @@ export class Docker extends Context.Service<
   Docker,
   {
     /** Runs a Docker command and returns the output. Use this to run a command that doesn't have a dedicated method. */
-    readonly run: (
-      args: Array<string>,
-    ) => Effect.Effect<CommandOutput, PlatformError>;
+    readonly run: (args: Array<string>) => Effect.Effect<CommandOutput, PlatformError>;
     /** Writes build files and an inline Dockerfile to the given context directory. */
     readonly materialize: (options: {
       context: string;
       dockerfile: string;
-      files: ReadonlyArray<{
-        path: string;
-        content: string | Uint8Array;
-      }>;
+      files: ReadonlyArray<{ path: string; content: string | Uint8Array }>;
     }) => Effect.Effect<void, PlatformError>;
     readonly container: {
       /** Creates a new container. */
@@ -72,9 +65,13 @@ export class Docker extends Context.Service<
         image: string;
         volume: Array<string> | undefined;
         env: Record<string, string> | undefined;
+        /** Paths to Docker env files, forwarded as repeated `--env-file`. */
+        "env-file"?: Array<string> | undefined;
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval": string | undefined;
         "health-timeout": string | undefined;
         "health-retries": number | undefined;
@@ -84,6 +81,12 @@ export class Docker extends Context.Service<
         p: Array<string> | undefined;
         /** `--add-host` entries, each `hostname:address`. */
         "add-host"?: Array<string> | undefined;
+        /** Docker network namespace, including `container:<id>`. */
+        network?: string | undefined;
+        /** Linux capabilities to add. */
+        "cap-add"?: Array<string> | undefined;
+        /** Host devices in Docker's `host:container[:permissions]` form. */
+        device?: Array<string> | undefined;
         command: Array<string> | undefined;
         label?: Record<string, string>;
         context?: string;
@@ -112,14 +115,17 @@ export class Docker extends Context.Service<
     };
     readonly image: {
       /**
-       * Builds locally, or exports directly to a registry when credentials are
-       * supplied. Registry exports require Buildx 0.26.0 or newer. If a session
-       * is provided, build logs will be emitted as session notes.
+       * Builds locally, or publishes to a registry when credentials are
+       * supplied. With Buildx 0.26.0 or newer the image is exported straight
+       * from BuildKit (`buildx build --push`); older plugins build into the
+       * local image store and then `push`. If a session is provided, build
+       * logs will be emitted as session notes.
        */
       readonly build: (
         options: {
           context: string;
-          tag: string;
+          /** Image tags to build and publish together. */
+          tag: string | [string, ...string[]];
           file?: string;
           platform?: string;
           target?: string;
@@ -128,10 +134,12 @@ export class Docker extends Context.Service<
           "cache-to"?: Array<string>;
           args?: Array<string>;
           engineContext?: string;
+          /** Registry auth for the build itself (base images, caches); publishes nothing. */
+          credentials?: RegistryCredentials;
         },
         session?: ScopedPlanStatusSession,
         registry?: RegistryCredentials,
-      ) => Effect.Effect<CommandOutput, PlatformError>;
+      ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
       /** Pulls an image. */
       readonly pull: (
         ref: string,
@@ -152,7 +160,7 @@ export class Docker extends Context.Service<
         credentials: RegistryCredentials,
         platform?: string,
         context?: string,
-      ) => Effect.Effect<CommandOutput, PlatformError>;
+      ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
       /** Tags an image. */
       readonly tag: (
         source: string,
@@ -207,9 +215,7 @@ export class Docker extends Context.Service<
         docker?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Inspects a Docker context. */
-      readonly inspect: (
-        name: string,
-      ) => Effect.Effect<Docker.Context, PlatformError>;
+      readonly inspect: (name: string) => Effect.Effect<Docker.Context, PlatformError>;
       /** Removes a Docker context. */
       readonly remove: (
         name: string,
@@ -259,9 +265,7 @@ export class Docker extends Context.Service<
         "default-addr-pool-mask-length"?: number;
       }) => Effect.Effect<CommandOutput, PlatformError>;
       /** Reads the engine's swarm state (`docker info --format '{{json .Swarm}}'`). */
-      readonly info: (
-        context?: string,
-      ) => Effect.Effect<Docker.SwarmInfo, PlatformError>;
+      readonly info: (context?: string) => Effect.Effect<Docker.SwarmInfo, PlatformError>;
       /** Leaves the swarm (`docker swarm leave`). */
       readonly leave: (
         force?: boolean,
@@ -297,6 +301,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -340,6 +346,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -382,13 +390,7 @@ export declare namespace Docker {
 
   export interface SwarmInfo {
     NodeID: string;
-    LocalNodeState:
-      | "inactive"
-      | "pending"
-      | "active"
-      | "error"
-      | "locked"
-      | (string & {});
+    LocalNodeState: "inactive" | "pending" | "active" | "error" | "locked" | (string & {});
     ControlAvailable: boolean;
     Cluster?: { ID: string; CreatedAt?: string } | null;
     RemoteManagers?: Array<{ NodeID: string; Addr: string }> | null;
@@ -407,8 +409,13 @@ export declare namespace Docker {
 
   export interface Container {
     Id: string;
+    Image: string;
     Name?: string;
-    State: { Status: ContainerStatus };
+    State: {
+      Status: ContainerStatus;
+      /** Present when the container has a healthcheck. */
+      Health?: { Status: "starting" | "healthy" | "unhealthy" };
+    };
     Created: string;
     Config: {
       Image: string;
@@ -426,30 +433,22 @@ export declare namespace Docker {
       } | null;
     };
     HostConfig: {
-      PortBindings: Record<
-        string,
-        Array<{ HostIp: string; HostPort: string }> | null
-      > | null;
+      PortBindings: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
       Binds: string[] | null;
       ExtraHosts: string[] | null;
-      RestartPolicy: {
-        Name: string;
-        MaximumRetryCount: number;
-      };
+      RestartPolicy: { Name: string; MaximumRetryCount: number };
       AutoRemove: boolean;
+      NetworkMode?: string;
+      CapAdd?: string[] | null;
+      Devices?: Array<{
+        PathOnHost: string;
+        PathInContainer: string;
+        CgroupPermissions: string;
+      }> | null;
     };
     NetworkSettings: {
-      Networks: Record<
-        string,
-        {
-          NetworkID: string;
-          Aliases: string[] | null;
-        }
-      > | null;
-      Ports?: Record<
-        string,
-        Array<{ HostIp: string; HostPort: string }> | null
-      > | null;
+      Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
+      Ports?: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
     };
   }
 
@@ -472,12 +471,8 @@ export declare namespace Docker {
 
   export interface Context {
     Name: string;
-    Metadata?: {
-      Description?: string;
-    };
-    Endpoints?: {
-      docker?: string;
-    };
+    Metadata?: { Description?: string };
+    Endpoints?: { docker?: string };
   }
 
   export interface Network {
@@ -497,26 +492,34 @@ export interface CommandOutput {
   stderr: string;
 }
 
-const DockerBin = Config.String("DOCKER_BIN").pipe(
-  Effect.orElseSucceed(() => "docker"),
-);
+export interface DockerOptions {
+  /**
+   * The Docker-compatible CLI to run, e.g. `"podman"`. The `DOCKER_BIN`
+   * environment variable, when set, overrides it (per machine or CI).
+   * @default "docker"
+   */
+  bin?: string;
+}
 
-export const DockerLive = Layer.effect(
-  Docker,
+/** The Docker CLI client, running `options.bin` (`DOCKER_BIN` overrides). */
+export const dockerLive = (options: DockerOptions = {}) =>
+  Layer.effect(Docker, makeDocker(options));
+
+const makeDocker = (options: DockerOptions) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const bin = yield* DockerBin;
+    const bin = yield* Config.String("DOCKER_BIN").pipe(
+      Effect.orElseSucceed(() => options.bin ?? "docker"),
+    );
 
     const run = (
       args: Array<string>,
       env?: Record<string, string>,
       tap: (
         stream: Stream.Stream<string, PlatformError, never>,
-      ) => Stream.Stream<string, PlatformError, never> = Stream.tap(
-        Effect.logDebug,
-      ),
+      ) => Stream.Stream<string, PlatformError, never> = Stream.tap(Effect.logDebug),
     ) =>
       ChildProcess.make(bin, args, {
         stdin: "ignore",
@@ -551,34 +554,27 @@ export const DockerLive = Layer.effect(
           systemError({
             _tag: "Unknown",
             args,
-            description: "The command failed unexpectedly.",
+            // Name the CLI: a misconfigured `bin` / DOCKER_BIN fails here.
+            description: `Failed to run \`${bin}\`; is it installed and on PATH?`,
             cause: error.reason,
           }),
         ),
         Effect.tap((result) => {
           if (result.exitCode === 0) return Effect.void;
-          const stderr = result.stderr.replace(
-            /^Error response from daemon: /,
-            "",
-          );
-          if (stderr.match(/no such/i) || stderr.match(/not found/i)) {
-            return systemError({
-              _tag: "NotFound",
-              args,
-              description: stderr,
-            });
+          const stderr = result.stderr.replace(/^Error response from daemon: /, "");
+          if (stderr.match(/not found|not known|no such/i)) {
+            return systemError({ _tag: "NotFound", args, description: stderr });
           }
           if (stderr.match(/already exists/i)) {
-            return systemError({
-              _tag: "AlreadyExists",
-              args,
-              description: stderr,
-            });
+            return systemError({ _tag: "AlreadyExists", args, description: stderr });
           }
           return systemError({
             _tag: "Unknown",
             args,
-            description: `Command exited with code ${result.exitCode}: ${stderr}`,
+            description: `Command exited with code ${result.exitCode}: ${failureOutput(
+              stderr,
+              result.stdout,
+            )}`,
           });
         }),
         Effect.scoped,
@@ -610,9 +606,7 @@ export const DockerLive = Layer.effect(
             const password = Redacted.isRedacted(credentials.password)
               ? Redacted.value(credentials.password)
               : credentials.password;
-            const auth = Encoding.encodeBase64(
-              `${credentials.username}:${password}`,
-            );
+            const auth = Base64.encode(`${credentials.username}:${password}`);
             // Preserve Docker's file/helper fallback, contexts, and builders.
             return {
               DOCKER_AUTH_CONFIG: JSON.stringify({
@@ -623,41 +617,103 @@ export const DockerLive = Layer.effect(
         ),
     );
 
-    const requireRegistryExporter = Effect.gen(function* () {
-      const unsupported = () =>
-        systemError({
-          _tag: "InvalidData",
-          args: ["buildx", "version"],
-          description:
-            "Registry builds require Buildx 0.26.0 or newer; upgrade the Docker Buildx plugin to support DOCKER_AUTH_CONFIG.",
+    // How a build reaches a registry. Buildx 0.26 is the first release
+    // embedding Docker CLI 28.3's DOCKER_AUTH_CONFIG credential store, so it
+    // can `buildx build --push` straight from BuildKit. Older plugins (e.g.
+    // the buildx bundled with Docker Desktop < 4.44) silently ignore the
+    // variable, so the image is instead `--load`ed into the local store and
+    // published with the isolated-config `push`. Without any buildx plugin
+    // the legacy builder always loads, so a plain `image build` suffices.
+    // Probed once per Docker service instance.
+    const publication = yield* Effect.cached(
+      Effect.gen(function* () {
+        const version = yield* run(["buildx", "version"]).pipe(Effect.option);
+        if (Option.isNone(version)) return "legacy" as const;
+        // Numeric template captures can consume version separators as decimals.
+        const match =
+          /^github\.com\/docker\/buildx v(\d+)\.(\d+)\.\d+(?:[-+][^\s]+)?(?:\s.*)?$/.exec(
+            version.value.stdout,
+          );
+        if (!match) return "load" as const;
+        const major = Number(match[1]);
+        const minor = Number(match[2]);
+        return major >= 1 || minor >= 26 ? ("export" as const) : ("load" as const);
+      }),
+    );
+
+    // `podman push` prints no `digest:` line, and Podman's RepoDigests can
+    // list a source digest under the pushed name, so Podman pushes report the
+    // published digest through `--digestfile` instead. Probed once.
+    const isPodman = yield* Effect.cached(
+      run(["--version"]).pipe(
+        Effect.map((result) => /^podman\b/i.test(result.stdout.trim())),
+        Effect.orElseSucceed(() => false),
+      ),
+    );
+
+    const push: Docker["Service"]["image"]["push"] = Effect.fn(
+      function* (ref, credentials, platform, context) {
+        // Write the registry credentials directly into an isolated docker config
+        // as a plaintext `auths` entry and skip `docker login` entirely.
+        //
+        // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
+        // through the shared `osxkeychain`/`desktop` credential helper *regardless*
+        // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
+        // keychain (`The specified item already exists in the keychain (-25299)`) or
+        // land the credential in the helper — leaving this isolated config without
+        // an `auths` entry, so the subsequent `docker push` fails with "no basic
+        // auth credentials". Embedding the base64 `auth` inline (the same thing
+        // `docker login` would write when no credsStore is configured) makes each
+        // deploy fully self-contained: no credential helper, no keychain, no login
+        // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
+        // global docker config (buildx builders, `docker context`, etc. intact).
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+        const config = yield* Effect.sync(() => {
+          const password = Redacted.isRedacted(credentials.password)
+            ? Redacted.value(credentials.password)
+            : credentials.password;
+          const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
+          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
         });
-      const version = yield* run(["buildx", "version"]).pipe(
-        Effect.mapError(unsupported),
-      );
-      const [, major, , minor] = yield* Schema.decodeUnknownEffect(
-        Schema.TemplateLiteralParser([
-          "github.com/docker/buildx v",
-          Schema.NumberFromString,
-          ".",
-          Schema.NumberFromString,
-          ".",
-          Schema.NumberFromString,
-          Schema.String,
-        ]),
-      )(version.stdout).pipe(Effect.mapError(unsupported));
-      // Buildx 0.26 is the first release embedding Docker CLI 28.3's
-      // DOCKER_AUTH_CONFIG credential store. Older plugins ignore it.
-      if (major < 1 && minor < 26) return yield* unsupported();
-    });
+        yield* fs.writeFileString(path.join(dir, "config.json"), config);
+        const digestFile = path.join(dir, "digest");
+        const digestArgs = (yield* isPodman) ? ["--digestfile", digestFile] : [];
+        const result =
+          platform === undefined
+            ? yield* run([...formatArgs({ context }), "push", ...digestArgs, ref], {
+                DOCKER_CONFIG: dir,
+              })
+            : yield* run(
+                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                { DOCKER_CONFIG: dir },
+              ).pipe(
+                // Engines without the containerd image store reject `--platform`
+                // on push; their local tag is already narrowed to the requested
+                // platform by `pull --platform`, so a plain push is equivalent.
+                Effect.catchIf(
+                  (error) => /--platform|unknown flag|containerd/i.test(String(error)),
+                  () =>
+                    run([...formatArgs({ context }), "push", ...digestArgs, ref], {
+                      DOCKER_CONFIG: dir,
+                    }),
+                ),
+              );
+        if (digestArgs.length === 0) return result;
+        const digest = (yield* fs
+          .readFileString(digestFile)
+          .pipe(Effect.orElseSucceed(() => ""))).trim();
+        // Report it the way `docker push` does, so callers parse one format.
+        return digest ? { ...result, stdout: `${result.stdout}\ndigest: ${digest}` } : result;
+      },
+      Effect.scoped,
+      Effect.mapError(classifyDockerRegistryError),
+    );
 
     return Docker.of({
       run,
       materialize: Effect.fn((options) =>
         Effect.forEach(
-          [
-            ...options.files,
-            { path: "Dockerfile", content: options.dockerfile },
-          ],
+          [...options.files, { path: "Dockerfile", content: options.dockerfile }],
           (file) => {
             const fullPath = path.join(options.context, file.path);
             return fs
@@ -683,68 +739,76 @@ export const DockerLive = Layer.effect(
               ...formatArgs({ context }),
               "container",
               "create",
-              ...formatArgs({
-                ...options,
-                env: env ? Object.keys(env) : undefined,
-              }),
+              ...formatArgs({ ...options, env: env ? Object.keys(env) : undefined }),
               image,
               ...(command ?? []),
             ],
             env,
           ),
         inspect: (name, context) =>
-          runInspect<Docker.Container>([
-            ...formatArgs({ context }),
-            "container",
-            "inspect",
-            name,
-          ]),
+          runInspect<Docker.Container>([...formatArgs({ context }), "container", "inspect", name]),
         remove: (name, force, context) =>
-          run([
-            ...formatArgs({ context }),
-            "container",
-            "rm",
-            name,
-            ...(force ? ["-f"] : []),
-          ]),
-        start: (name, context) =>
-          run([...formatArgs({ context }), "container", "start", name]),
-        stop: (name, context) =>
-          run([...formatArgs({ context }), "container", "stop", name]),
+          run([...formatArgs({ context }), "container", "rm", name, ...(force ? ["-f"] : [])]),
+        start: (name, context) => run([...formatArgs({ context }), "container", "start", name]),
+        stop: (name, context) => run([...formatArgs({ context }), "container", "stop", name]),
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, ...options },
+          { context: buildContext, engineContext, args, credentials, ...options },
           session,
           registry,
         ) {
-          const env = registry
-            ? yield* registryEnvironment(registry)
-            : undefined;
-          if (registry) yield* requireRegistryExporter;
-          return yield* run(
-            [
-              ...formatArgs({ context: engineContext }),
-              ...(registry
-                ? ["buildx", "build", "--push"]
-                : ["image", "build"]),
-              buildContext,
-              ...formatArgs(options),
-              ...(args ?? []),
-            ],
-            env,
-            session
-              ? Stream.tapSink(
-                  Sink.make<string>()(
-                    flow(
-                      Stream.splitLines,
-                      Stream.runForEach((line) =>
-                        session.note(line, { kind: "output" }),
-                      ),
-                    ),
+          const tap = session
+            ? Stream.tapSink(
+                Sink.make<string>()(
+                  flow(
+                    Stream.splitLines,
+                    Stream.runForEach((line) => session.note(line, { kind: "output" })),
                   ),
-                )
-              : undefined,
+                ),
+              )
+            : undefined;
+          const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
+          const engine = formatArgs({ context: engineContext });
+          if (registry === undefined) {
+            return yield* run(
+              [...engine, "image", "build", ...buildArgs],
+              credentials ? yield* registryEnvironment(credentials) : undefined,
+              tap,
+            );
+          }
+          const mode = yield* publication;
+          if (mode === "export") {
+            // Export straight from BuildKit to the registry; the image never
+            // round-trips through the local image store.
+            const env = yield* registryEnvironment(registry);
+            return yield* run(
+              [...engine, "buildx", "build", "--push", ...buildArgs],
+              env,
+              tap,
+            ).pipe(Effect.mapError(classifyDockerRegistryError));
+          }
+          // Older Buildx ignores DOCKER_AUTH_CONFIG, so a `--push` export
+          // would fail with "no basic auth credentials". Build into the local
+          // store and publish with the isolated-config `push` instead.
+          // `--load` matters for non-loading builders (docker-container):
+          // without it the result stays in the build cache and `push` sees no
+          // such tag.
+          yield* run(
+            [
+              ...engine,
+              ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
+              ...buildArgs,
+            ],
+            undefined,
+            tap,
+          );
+          const [tag, ...tags] =
+            typeof options.tag === "string" ? ([options.tag] as const) : options.tag;
+          return yield* push(tag, registry, options.platform, engineContext).pipe(
+            Effect.tap(() =>
+              Effect.forEach(tags, (tag) => push(tag, registry, options.platform, engineContext)),
+            ),
           );
         }),
         pull: (ref, platform, context) =>
@@ -756,12 +820,7 @@ export const DockerLive = Layer.effect(
             ...(platform ? ["--platform", platform] : []),
           ]),
         inspect: (ref, context) =>
-          runInspect<Docker.Image>([
-            ...formatArgs({ context }),
-            "image",
-            "inspect",
-            ref,
-          ]),
+          runInspect<Docker.Image>([...formatArgs({ context }), "image", "inspect", ref]),
         remove: (ref, force, context) =>
           run([
             ...formatArgs({ context }),
@@ -772,98 +831,22 @@ export const DockerLive = Layer.effect(
           ]),
         tag: (source, target, context) =>
           run([...formatArgs({ context }), "image", "tag", source, target]),
-        push: Effect.fn(function* (ref, credentials, platform, context) {
-          // Write the registry credentials directly into an isolated docker config
-          // as a plaintext `auths` entry and skip `docker login` entirely.
-          //
-          // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
-          // through the shared `osxkeychain`/`desktop` credential helper *regardless*
-          // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
-          // keychain (`The specified item already exists in the keychain (-25299)`) or
-          // land the credential in the helper — leaving this isolated config without
-          // an `auths` entry, so the subsequent `docker push` fails with "no basic
-          // auth credentials". Embedding the base64 `auth` inline (the same thing
-          // `docker login` would write when no credsStore is configured) makes each
-          // deploy fully self-contained: no credential helper, no keychain, no login
-          // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
-          // global docker config (buildx builders, `docker context`, etc. intact).
-          const dir = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-docker-",
-          });
-          const config = yield* Effect.sync(() => {
-            const password = Redacted.isRedacted(credentials.password)
-              ? Redacted.value(credentials.password)
-              : credentials.password;
-            const auth = Buffer.from(
-              `${credentials.username}:${password}`,
-            ).toString("base64");
-            return JSON.stringify({
-              auths: {
-                [credentials.server]: { auth },
-              },
-            });
-          });
-          yield* fs.writeFileString(path.join(dir, "config.json"), config);
-          if (platform === undefined) {
-            return yield* run([...formatArgs({ context }), "push", ref], {
-              DOCKER_CONFIG: dir,
-            });
-          }
-          return yield* run(
-            [...formatArgs({ context }), "push", "--platform", platform, ref],
-            { DOCKER_CONFIG: dir },
-          ).pipe(
-            // Engines without the containerd image store reject `--platform`
-            // on push; their local tag is already narrowed to the requested
-            // platform by `pull --platform`, so a plain push is equivalent.
-            Effect.catchIf(
-              (error) =>
-                /--platform|unknown flag|containerd/i.test(String(error)),
-              () =>
-                run([...formatArgs({ context }), "push", ref], {
-                  DOCKER_CONFIG: dir,
-                }),
-            ),
-          );
-        }, Effect.scoped),
+        push,
       },
       volume: {
         create: ({ context, ...options }) =>
-          run([
-            ...formatArgs({ context }),
-            "volume",
-            "create",
-            ...formatArgs(options),
-          ]),
-        remove: (name, context) =>
-          run([...formatArgs({ context }), "volume", "rm", name]),
+          run([...formatArgs({ context }), "volume", "create", ...formatArgs(options)]),
+        remove: (name, context) => run([...formatArgs({ context }), "volume", "rm", name]),
         inspect: (name, context) =>
-          runInspect<Docker.Volume>([
-            ...formatArgs({ context }),
-            "volume",
-            "inspect",
-            name,
-          ]),
+          runInspect<Docker.Volume>([...formatArgs({ context }), "volume", "inspect", name]),
       },
       context: {
         create: ({ name, description, docker }) =>
-          run([
-            "context",
-            "create",
-            name,
-            ...formatArgs({ description, docker }),
-          ]),
+          run(["context", "create", name, ...formatArgs({ description, docker })]),
         update: ({ name, description, docker }) =>
-          run([
-            "context",
-            "update",
-            name,
-            ...formatArgs({ description, docker }),
-          ]),
-        inspect: (name) =>
-          runInspect<Docker.Context>(["context", "inspect", name]),
-        remove: (name, force) =>
-          run(["context", "rm", ...(force ? ["-f"] : []), name]),
+          run(["context", "update", name, ...formatArgs({ description, docker })]),
+        inspect: (name) => runInspect<Docker.Context>(["context", "inspect", name]),
+        remove: (name, force) => run(["context", "rm", ...(force ? ["-f"] : []), name]),
       },
       network: {
         create: ({ name, driver, ipv6, label, context }) =>
@@ -884,49 +867,20 @@ export const DockerLive = Layer.effect(
             ...(alias ? alias.flatMap((a) => ["--alias", a]) : []),
           ]),
         disconnect: ({ network, container, context }) =>
-          run([
-            ...formatArgs({ context }),
-            "network",
-            "disconnect",
-            network,
-            container,
-          ]),
+          run([...formatArgs({ context }), "network", "disconnect", network, container]),
         inspect: (name, context) =>
-          runInspect<Docker.Network>([
-            ...formatArgs({ context }),
-            "network",
-            "inspect",
-            name,
-          ]),
-        remove: (id, context) =>
-          run([...formatArgs({ context }), "network", "rm", id]),
+          runInspect<Docker.Network>([...formatArgs({ context }), "network", "inspect", name]),
+        remove: (id, context) => run([...formatArgs({ context }), "network", "rm", id]),
       },
       swarm: {
         init: ({ context, ...options }) =>
-          run([
-            ...formatArgs({ context }),
-            "swarm",
-            "init",
-            ...formatArgs(options),
-          ]),
+          run([...formatArgs({ context }), "swarm", "init", ...formatArgs(options)]),
         info: (context) =>
-          run([
-            ...formatArgs({ context }),
-            "info",
-            "--format",
-            "{{json .Swarm}}",
-          ]).pipe(
-            Effect.map(
-              (result) => JSON.parse(result.stdout) as Docker.SwarmInfo,
-            ),
+          run([...formatArgs({ context }), "info", "--format", "{{json .Swarm}}"]).pipe(
+            Effect.map((result) => JSON.parse(result.stdout) as Docker.SwarmInfo),
           ),
         leave: (force, context) =>
-          run([
-            ...formatArgs({ context }),
-            "swarm",
-            "leave",
-            ...(force ? ["--force"] : []),
-          ]),
+          run([...formatArgs({ context }), "swarm", "leave", ...(force ? ["--force"] : [])]),
       },
       service: {
         create: ({ context, image, command, args, ...options }) =>
@@ -950,16 +904,15 @@ export const DockerLive = Layer.effect(
           ]),
         inspect: (id, context) =>
           runInspect([...formatArgs({ context }), "service", "inspect", id]),
-        remove: (id, context) =>
-          run([...formatArgs({ context }), "service", "rm", id]),
+        remove: (id, context) => run([...formatArgs({ context }), "service", "rm", id]),
       },
     });
-  }),
-);
+  });
 
-export const dockerContextName = (
-  context: Docker.ContextRef | undefined,
-): string | undefined => {
+/** The Docker CLI client, running `docker` (or `DOCKER_BIN`). */
+export const DockerLive = dockerLive();
+
+export const dockerContextName = (context: Docker.ContextRef | undefined): string | undefined => {
   const value = typeof context === "string" ? context : context?.name;
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
@@ -970,9 +923,7 @@ export const dockerContextName = (
  * reference (narrowed by its `nodeId` attribute) contributes the context the
  * swarm was initialized on.
  */
-export const dockerEngineContextName = (
-  ref: Docker.EngineRef | undefined,
-): string | undefined => {
+export const dockerEngineContextName = (ref: Docker.EngineRef | undefined): string | undefined => {
   if (typeof ref === "object" && ref !== null && "nodeId" in ref) {
     return dockerContextName((ref as { context?: string }).context);
   }
@@ -989,12 +940,20 @@ export const dockerPhysicalName = (
 ) =>
   props?.name
     ? Effect.succeed(props.name)
-    : createPhysicalName({
-        id,
-        instanceId,
-        maxLength,
-        lowercase: true,
-      });
+    : createPhysicalName({ id, instanceId, maxLength, lowercase: true });
+
+/**
+ * A failing `docker` command splits its diagnosis over both streams: the
+ * builder writes the step log to one and the reason it stopped to the other,
+ * and which carries which depends on the builder, the progress mode and
+ * whether the output is a terminal. A build that fails inside a `RUN` step
+ * therefore reports nothing but its exit code when only `stderr` is kept.
+ * Keep both, the reason first, so the error says why the build failed.
+ */
+const failureOutput = (stderr: string, stdout: string) => {
+  const output = [stderr, stdout].filter((text) => text.length > 0);
+  return output.length > 0 ? output.join("\n") : "the command wrote no output.";
+};
 
 /** Constructs a PlatformError from a command execution result. */
 const systemError = (input: {
@@ -1018,12 +977,7 @@ const systemError = (input: {
 const formatArgs = (
   options: Record<
     string,
-    | boolean
-    | string
-    | number
-    | undefined
-    | Record<string, string>
-    | Array<string>
+    boolean | string | number | undefined | Record<string, string> | Array<string>
   >,
 ) => {
   const args: Array<string> = [];

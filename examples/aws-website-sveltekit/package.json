@@ -2,7 +2,15 @@
   "name": "aws-website-sveltekit",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/aws-website-sveltekit"
+  },
   "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
   "scripts": {
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",
@@ -24,12 +32,7 @@
     "alchemy-test": "workspace:*",
     "svelte": "catalog:",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:typescript-classic",
     "vite": "catalog:"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/aws-website-sveltekit"
   }
 }

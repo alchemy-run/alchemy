@@ -1,17 +1,13 @@
+import { spawn } from "node:child_process";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { spawn } from "node:child_process";
 import * as pathe from "pathe";
 import { parse as parseYaml } from "yaml";
 
 const repoRoot = pathe.resolve(import.meta.dirname, "../../../../..");
 
-const run = (options: {
-  cmd: string;
-  args: string[];
-  cwd: string;
-}): Effect.Effect<string, Error> =>
+const run = (options: { cmd: string; args: string[]; cwd: string }): Effect.Effect<string, Error> =>
   Effect.callback<string, Error>((resume) => {
     const child = spawn(options.cmd, options.args, {
       cwd: options.cwd,
@@ -27,9 +23,7 @@ const run = (options: {
         code === 0
           ? Effect.succeed(output)
           : Effect.fail(
-              new Error(
-                `${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`,
-              ),
+              new Error(`${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`),
             ),
       ),
     );
@@ -78,9 +72,7 @@ const rewriteCatalogVersions = Effect.fn(function* (rootDir: string) {
   rewrite(pkg.dependencies);
   rewrite(pkg.devDependencies);
   if (missing.length > 0) {
-    return yield* Effect.fail(
-      new Error(`unresolved catalog versions: ${missing.join(", ")}`),
-    );
+    return yield* Effect.fail(new Error(`unresolved catalog versions: ${missing.join(", ")}`));
   }
   yield* fs.writeFileString(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 });

@@ -74,10 +74,7 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
       // that reads the value back from `WorkerEnvironment` at runtime —
       // reconstructing the `Redacted` wrapper. No direct `event.env` access.
       const secret = props.secret
-        ? yield* Output.named(
-            Output.asOutput(props.secret),
-            webhookSecretEnvName(props),
-          )
+        ? yield* Output.named(Output.asOutput(props.secret), webhookSecretEnvName(props))
         : undefined;
 
       yield* ctx.listen((event) => {
@@ -112,9 +109,7 @@ const handleDelivery = <Req>(
       return new Response("method not allowed", { status: 405 });
     }
 
-    const body = yield* Effect.promise(() =>
-      (request as unknown as Request).text(),
-    );
+    const body = yield* Effect.promise(() => (request as unknown as Request).text());
 
     if (secret !== undefined) {
       const resolved = yield* secret;
@@ -168,11 +163,7 @@ const verifySignature = (
         false,
         ["sign"],
       );
-      const digest = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        encoder.encode(body),
-      );
+      const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
       const hex = Array.from(new Uint8Array(digest))
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("");

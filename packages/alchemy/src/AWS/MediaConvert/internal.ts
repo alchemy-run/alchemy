@@ -32,10 +32,7 @@ export const readMcTags = Effect.fn(function* (arn: string) {
  * takes a tag map keyed by ARN in the body; `untagResource` takes an ARN path
  * label plus the keys to remove.
  */
-export const syncMcTags = Effect.fn(function* (
-  arn: string,
-  desiredTags: Record<string, string>,
-) {
+export const syncMcTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
   const observedTags = yield* readMcTags(arn);
   const { removed, upsert } = diffTags(observedTags, desiredTags);
   if (upsert.length > 0) {

@@ -20,11 +20,76 @@ export class NotReady extends Data.TaggedError("Planetscale::NotReady")<{
  * region, kind, parent_branch). User-recoverable: change the config to
  * match, or replace/delete the existing resource and retry.
  */
-export class PlanetscaleConflict extends Data.TaggedError(
-  "Planetscale::Conflict",
-)<{
+export class PlanetscaleConflict extends Data.TaggedError("Planetscale::Conflict")<{
   message: string;
 }> {}
+
+/**
+ * Tagged error raised when deleting a database that has deletion
+ * protection enabled. Alchemy never turns protection off on its own:
+ * set `deletionProtection: false`, deploy, then delete.
+ */
+export class PlanetscaleDeletionProtected extends Data.TaggedError(
+  "Planetscale::DeletionProtected",
+)<{
+  message: string;
+  organization: string;
+  database: string;
+}> {}
+
+/**
+ * Deletes a database unless it has deletion protection enabled, in which
+ * case it fails with {@link PlanetscaleDeletionProtected}. A database that
+ * no longer exists counts as deleted.
+ */
+export const deleteUnprotectedDatabase = Effect.fn(function* (
+  organization: string,
+  database: string,
+) {
+  const live = yield* ps
+    .getDatabase({ organization, database })
+    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  if (!live) return;
+  if (live.deletion_protected) {
+    return yield* new PlanetscaleDeletionProtected({
+      message:
+        `Planetscale database "${database}" has deletion protection enabled. ` +
+        "Set `deletionProtection: false` and deploy before deleting it. " +
+        "If it is the old database of a replacement, the resource now " +
+        "manages the new database, so turn protection off on this one in " +
+        "PlanetScale directly, then deploy again.",
+      organization,
+      database,
+    });
+  }
+  yield* ps
+    .deleteDatabase({ organization, database })
+    .pipe(Effect.catchTag("NotFound", () => Effect.void));
+});
+
+/**
+ * Plans a database replacement. A replacement creates the new database
+ * before deleting the old one, so an explicit `name` that stays the same
+ * would make both generations the same database: reconcile would converge
+ * onto the old database and the cleanup of the old generation would then
+ * delete it. That plan fails with {@link PlanetscaleConflict} instead.
+ */
+export const replaceDatabase = (
+  news: { name?: string },
+  output: { name: string } | undefined,
+  change: string,
+) =>
+  news.name !== undefined && news.name === output?.name
+    ? Effect.fail(
+        new PlanetscaleConflict({
+          message:
+            `Changing the ${change} of Planetscale database "${news.name}" ` +
+            "requires a new database, but its explicit `name` is unchanged. " +
+            "Give the replacement a different `name`, or omit `name` to let " +
+            "Alchemy generate one.",
+        }),
+      )
+    : Effect.succeed({ action: "replace" } as const);
 
 /**
  * Default polling schedule: 5s spaced retries with a 30-minute total
@@ -33,10 +98,7 @@ export class PlanetscaleConflict extends Data.TaggedError(
  * database creates routinely run 10-12 minutes, so a 10-minute budget
  * regularly false-positives as "stuck".
  */
-const defaultSchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(360),
-]);
+const defaultSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(360)]);
 
 /**
  * Generic polling helper that retries until `predicate(value)` returns true
@@ -52,9 +114,7 @@ export const pollUntil = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   fn.pipe(
     Effect.flatMap((value) =>
-      predicate(value)
-        ? Effect.succeed(value)
-        : Effect.fail(new NotReady({ description })),
+      predicate(value) ? Effect.succeed(value) : Effect.fail(new NotReady({ description })),
     ),
     Effect.retry({
       while: (e: any) => e?._tag === "Planetscale::NotReady",
@@ -91,9 +151,7 @@ export const waitForBranchReady = Effect.fn(function* (
       return yield* ps.getBranch({ organization, database, branch });
     }).pipe(
       Effect.catchTag("NotFound", () =>
-        Effect.fail(
-          new NotReady({ description: `branch "${branch}" not found yet` }),
-        ),
+        Effect.fail(new NotReady({ description: `branch "${branch}" not found yet` })),
       ),
     ),
     (data) => data.ready,
@@ -139,9 +197,8 @@ export const waitForDatabaseReady = Effect.fn(function* (
   );
 });
 
-export const isKnownError =
-  (tag: string, message: string) => (error: unknown) =>
-    typeof error === "object" &&
-    error !== null &&
-    (error as { readonly _tag?: unknown })._tag === tag &&
-    (error as { readonly message?: unknown }).message === message;
+export const isKnownError = (tag: string, message: string) => (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { readonly _tag?: unknown })._tag === tag &&
+  (error as { readonly message?: unknown }).message === message;

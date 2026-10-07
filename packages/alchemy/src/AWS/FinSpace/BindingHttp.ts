@@ -24,12 +24,7 @@ import type { KxEnvironment } from "./KxEnvironment.ts";
  * sub-resource wildcard; the runtime callable injects the environment's id
  * into every request.
  */
-export const makeFinSpaceKxHttpBinding = <
-  I extends { environmentId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeFinSpaceKxHttpBinding = <I extends { environmentId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.FinSpace.GetKxConnectionString`. */
   tag: string;
   /** The distilled operation. */

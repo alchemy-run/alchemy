@@ -1,56 +1,53 @@
-import * as AWS from "@/AWS";
-import { SecurityGroup, SecurityGroupRule, Vpc } from "@/AWS/EC2";
-import type {
-  SecurityGroupProps,
-  SecurityGroupRuleData,
-} from "@/AWS/EC2/SecurityGroup.ts";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { SecurityGroup, SecurityGroupRule, Vpc } from "@/AWS/EC2";
+import type { SecurityGroupProps, SecurityGroupRuleData } from "@/AWS/EC2/SecurityGroup.ts";
+import * as Provider from "@/Provider";
 import { assertSecurityGroupGone, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const describeRules = (groupId: string) =>
   EC2.describeSecurityGroupRules({
     Filters: [{ Name: "group-id", Values: [groupId] }],
   }).pipe(Effect.map((result) => result.SecurityGroupRules ?? []));
 
-test.provider("list enumerates the deployed Security Group", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed Security Group",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const { vpc, sg } = yield* stack.deploy(
-      Effect.gen(function* () {
-        const vpc = yield* Vpc("ListSgVpc", {
-          cidrBlock: "10.0.0.0/16",
-        });
-        const sg = yield* SecurityGroup("ListSg", {
-          vpcId: vpc.vpcId,
-        });
-        return { vpc, sg };
-      }),
-    );
+      const { vpc, sg } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const vpc = yield* Vpc("ListSgVpc", {
+            cidrBlock: "10.0.0.0/16",
+          });
+          const sg = yield* SecurityGroup("ListSg", {
+            vpcId: vpc.vpcId,
+          });
+          return { vpc, sg };
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(SecurityGroup);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(SecurityGroup);
+      const all = yield* provider.list();
 
-    expect(all.some((x) => x.groupId === sg.groupId)).toBe(true);
+      expect(all.some((x) => x.groupId === sg.groupId)).toBe(true);
 
-    yield* stack.destroy();
+      yield* stack.destroy();
 
-    yield* assertSecurityGroupGone(sg.groupId);
-    yield* assertVpcGone(vpc.vpcId);
-  }).pipe(logLevel),
+      yield* assertSecurityGroupGone(sg.groupId);
+      yield* assertVpcGone(vpc.vpcId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"] },
 );
 
 test.provider(
@@ -114,9 +111,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(makeStack(443));
       const declared = (yield* describeRules(deployed.sg.groupId)).find(
-        (rule) =>
-          rule.SecurityGroupRuleId ===
-          deployed.ingressRule?.securityGroupRuleId,
+        (rule) => rule.SecurityGroupRuleId === deployed.ingressRule?.securityGroupRuleId,
       )!;
       // Even copied ownership tags do not delegate an undeclared physical rule.
       const rogue = yield* EC2.authorizeSecurityGroupIngress({
@@ -129,9 +124,7 @@ test.provider(
             IpRanges: [{ CidrIp: "0.0.0.0/0" }],
           },
         ],
-        TagSpecifications: [
-          { ResourceType: "security-group-rule", Tags: declared.Tags },
-        ],
+        TagSpecifications: [{ ResourceType: "security-group-rule", Tags: declared.Tags }],
       });
       const rogueId = rogue.SecurityGroupRules![0]!.SecurityGroupRuleId!;
       const stale = yield* EC2.authorizeSecurityGroupEgress({
@@ -163,33 +156,23 @@ test.provider(
           }),
         )).some((rule) => rule.SecurityGroupRuleId === rogueId),
       ).toBe(true);
-      expect(
-        (yield* stack.plan(makeStack(443))).resources.MixedRulesSg?.action,
-      ).toBe("update");
+      expect((yield* stack.plan(makeStack(443))).resources.MixedRulesSg?.action).toBe("update");
       yield* stack.deploy(makeStack(443));
       const repaired = yield* describeRules(deployed.sg.groupId);
-      expect(
-        repaired.some((rule) =>
-          [rogueId, staleId].includes(rule.SecurityGroupRuleId!),
-        ),
-      ).toBe(false);
+      expect(repaired.some((rule) => [rogueId, staleId].includes(rule.SecurityGroupRuleId!))).toBe(
+        false,
+      );
       expect(
         repaired.some(
-          (rule) =>
-            rule.SecurityGroupRuleId ===
-            deployed.ingressRule?.securityGroupRuleId,
+          (rule) => rule.SecurityGroupRuleId === deployed.ingressRule?.securityGroupRuleId,
         ),
       ).toBe(true);
       expect(
         repaired.some(
-          (rule) =>
-            rule.SecurityGroupRuleId ===
-            deployed.egressRule?.securityGroupRuleId,
+          (rule) => rule.SecurityGroupRuleId === deployed.egressRule?.securityGroupRuleId,
         ),
       ).toBe(true);
-      expect(
-        (yield* stack.plan(makeStack(443))).resources.MixedRulesSg?.action,
-      ).toBe("noop");
+      expect((yield* stack.plan(makeStack(443))).resources.MixedRulesSg?.action).toBe("noop");
       const updated = yield* stack.deploy(makeStack(8443));
 
       expect(updated.ingressRule?.securityGroupRuleId).toEqual(
@@ -203,23 +186,19 @@ test.provider(
       expect(
         updatedRules.some(
           (rule) =>
-            rule.SecurityGroupRuleId ===
-              updated.ingressRule?.securityGroupRuleId &&
+            rule.SecurityGroupRuleId === updated.ingressRule?.securityGroupRuleId &&
             rule.Tags?.some((tag) => tag.Key === "alchemy::id"),
         ),
       ).toBe(true);
       expect(
         updatedRules.some(
           (rule) =>
-            rule.SecurityGroupRuleId ===
-              updated.egressRule?.securityGroupRuleId &&
+            rule.SecurityGroupRuleId === updated.egressRule?.securityGroupRuleId &&
             rule.Tags?.some((tag) => tag.Key === "alchemy::id"),
         ),
       ).toBe(true);
       expect(
-        updatedRules.filter(
-          (rule) => rule.FromPort === 8443 && rule.ToPort === 8443,
-        ),
+        updatedRules.filter((rule) => rule.FromPort === 8443 && rule.ToPort === 8443),
       ).toHaveLength(2);
       expect(updatedRules.some((rule) => rule.FromPort === 443)).toBe(false);
 
@@ -228,23 +207,19 @@ test.provider(
       expect(
         finalRules.some(
           (rule) =>
-            rule.SecurityGroupRuleId ===
-              updated.ingressRule?.securityGroupRuleId ||
-            rule.SecurityGroupRuleId ===
-              updated.egressRule?.securityGroupRuleId,
+            rule.SecurityGroupRuleId === updated.ingressRule?.securityGroupRuleId ||
+            rule.SecurityGroupRuleId === updated.egressRule?.securityGroupRuleId,
         ),
       ).toBe(false);
       expect(
-        finalRules.filter(
-          (rule) => rule.FromPort === 8443 && rule.ToPort === 8443,
-        ),
+        finalRules.filter((rule) => rule.FromPort === 8443 && rule.ToPort === 8443),
       ).toHaveLength(2);
 
       yield* stack.destroy();
       yield* assertSecurityGroupGone(updated.sg.groupId);
       yield* assertVpcGone(updated.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -264,10 +239,7 @@ test.provider(
         };
         const sg = yield* SecurityGroup("DualStackSg", {
           vpcId: vpc.vpcId,
-          ingress: [
-            permission,
-            { ipProtocol: "58", cidrIpv6: "2001:db8::/64" },
-          ],
+          ingress: [permission, { ipProtocol: "58", cidrIpv6: "2001:db8::/64" }],
           egress: [permission],
         });
         return { sg, vpc };
@@ -280,27 +252,19 @@ test.provider(
           (rule) => rule.IsEgress === isEgress && rule.IpProtocol === "tcp",
         );
         expect(https).toHaveLength(2);
-        expect(https.some((rule) => rule.CidrIpv4 === "10.0.0.0/16")).toBe(
-          true,
-        );
-        expect(https.some((rule) => rule.CidrIpv6 === "2001:db8::/64")).toBe(
-          true,
-        );
+        expect(https.some((rule) => rule.CidrIpv4 === "10.0.0.0/16")).toBe(true);
+        expect(https.some((rule) => rule.CidrIpv6 === "2001:db8::/64")).toBe(true);
       }
-      expect((yield* stack.plan(program)).resources.DualStackSg?.action).toBe(
-        "noop",
-      );
+      expect((yield* stack.plan(program)).resources.DualStackSg?.action).toBe("noop");
       yield* stack.deploy(program);
       expect(
-        (yield* describeRules(sg.groupId))
-          .map((rule) => rule.SecurityGroupRuleId)
-          .sort(),
+        (yield* describeRules(sg.groupId)).map((rule) => rule.SecurityGroupRuleId).sort(),
       ).toEqual(rules.map((rule) => rule.SecurityGroupRuleId).sort());
       yield* stack.destroy();
       yield* assertSecurityGroupGone(sg.groupId);
       yield* assertVpcGone(vpc.vpcId);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 const securityGroupStack = (props: { egress?: [] }) =>
@@ -319,9 +283,7 @@ const describeEgress = (groupId: string) =>
   EC2.describeSecurityGroupRules({
     Filters: [{ Name: "group-id", Values: [groupId] }],
   }).pipe(
-    Effect.map((result) =>
-      (result.SecurityGroupRules ?? []).filter((rule) => rule.IsEgress),
-    ),
+    Effect.map((result) => (result.SecurityGroupRules ?? []).filter((rule) => rule.IsEgress)),
   );
 
 test.provider(
@@ -331,15 +293,11 @@ test.provider(
       yield* stack.destroy();
 
       // Creating with explicitly empty egress removes AWS's default allow-all rule.
-      const noOutbound = yield* stack.deploy(
-        securityGroupStack({ egress: [] }),
-      );
+      const noOutbound = yield* stack.deploy(securityGroupStack({ egress: [] }));
       expect(yield* describeEgress(noOutbound.sg.groupId)).toEqual([]);
 
       // Redeploying the same configuration must keep outbound access disabled.
-      const stillNoOutbound = yield* stack.deploy(
-        securityGroupStack({ egress: [] }),
-      );
+      const stillNoOutbound = yield* stack.deploy(securityGroupStack({ egress: [] }));
       expect(yield* describeEgress(stillNoOutbound.sg.groupId)).toEqual([]);
 
       // Omitting the egress property restores default allow-all IPv4 access.
@@ -350,18 +308,14 @@ test.provider(
       expect(defaultEgress[0]?.CidrIpv4).toEqual("0.0.0.0/0");
 
       // Switching back to explicitly empty egress removes allow-all again.
-      const outboundDisabledAgain = yield* stack.deploy(
-        securityGroupStack({ egress: [] }),
-      );
-      expect(yield* describeEgress(outboundDisabledAgain.sg.groupId)).toEqual(
-        [],
-      );
+      const outboundDisabledAgain = yield* stack.deploy(securityGroupStack({ egress: [] }));
+      expect(yield* describeEgress(outboundDisabledAgain.sg.groupId)).toEqual([]);
 
       yield* stack.destroy();
       yield* assertSecurityGroupGone(outboundDisabledAgain.sg.groupId);
       yield* assertVpcGone(outboundDisabledAgain.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -418,7 +372,7 @@ test.provider(
       yield* assertSecurityGroupGone(created.sg.groupId);
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );
 
 test.provider(
@@ -475,7 +429,7 @@ test.provider(
       yield* assertSecurityGroupGone(created.sg.groupId);
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );
 
 test.provider(
@@ -522,14 +476,10 @@ test.provider(
         }),
       ]);
 
-      const ingressEmpty = yield* stack.deploy(
-        makeStack({ ingress: [] }, "ingress-empty"),
-      );
+      const ingressEmpty = yield* stack.deploy(makeStack({ ingress: [] }, "ingress-empty"));
       expect(ingressEmpty.sg.groupId).toBe(created.sg.groupId);
       const egressOnly = yield* readRules();
-      expect(egressOnly.SecurityGroupRules).toEqual(
-        defaultRules.SecurityGroupRules,
-      );
+      expect(egressOnly.SecurityGroupRules).toEqual(defaultRules.SecurityGroupRules);
 
       const emptyStack = makeStack({ egress: [] }, "egress-empty");
       const empty = yield* stack.deploy(emptyStack);
@@ -543,7 +493,7 @@ test.provider(
       yield* assertSecurityGroupGone(created.sg.groupId);
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );
 
 test.provider(
@@ -603,7 +553,7 @@ test.provider(
       yield* assertSecurityGroupGone(created.sg.groupId);
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );
 
 test.provider(
@@ -646,12 +596,8 @@ test.provider(
         });
       const initial = yield* readRules();
       expect(initial.SecurityGroupRules).toHaveLength(2);
-      const retainedRule = initial.SecurityGroupRules?.find(
-        (rule) => rule.FromPort === 443,
-      );
-      const removedRule = initial.SecurityGroupRules?.find(
-        (rule) => rule.FromPort === 22,
-      );
+      const retainedRule = initial.SecurityGroupRules?.find((rule) => rule.FromPort === 443);
+      const removedRule = initial.SecurityGroupRules?.find((rule) => rule.FromPort === 22);
       expect(retainedRule?.SecurityGroupRuleId).toMatch(/^sgr-/);
       expect(removedRule?.SecurityGroupRuleId).toMatch(/^sgr-/);
       const desiredStack = makeStack(after);
@@ -679,13 +625,10 @@ test.provider(
       );
       expect(
         changed.SecurityGroupRules?.some(
-          (rule) =>
-            rule.SecurityGroupRuleId === removedRule?.SecurityGroupRuleId,
+          (rule) => rule.SecurityGroupRuleId === removedRule?.SecurityGroupRuleId,
         ),
       ).toBe(false);
-      const addedRule = changed.SecurityGroupRules?.find(
-        (rule) => rule.FromPort === 53,
-      );
+      const addedRule = changed.SecurityGroupRules?.find((rule) => rule.FromPort === 53);
       expect(addedRule?.SecurityGroupRuleId).toMatch(/^sgr-/);
       yield* EC2.revokeSecurityGroupIngress({
         GroupId: created.sg.groupId,
@@ -739,7 +682,7 @@ test.provider(
       yield* assertSecurityGroupGone(created.sg.groupId);
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );
 
 test.provider(
@@ -769,9 +712,7 @@ test.provider(
       const repaired = yield* stack.deploy(resources);
       expect(repaired.sg.groupId).not.toBe(created.sg.groupId);
       expect(repaired.rule.groupId).toBe(repaired.sg.groupId);
-      expect(repaired.rule.securityGroupRuleId).not.toBe(
-        created.rule.securityGroupRuleId,
-      );
+      expect(repaired.rule.securityGroupRuleId).not.toBe(created.rule.securityGroupRuleId);
       const observed = yield* EC2.describeSecurityGroupRules({
         Filters: [{ Name: "group-id", Values: [repaired.sg.groupId] }],
       });
@@ -788,7 +729,7 @@ test.provider(
       yield* assertSecurityGroupGone(repaired.sg.groupId);
       yield* assertVpcGone(repaired.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );
 
 test.provider(
@@ -889,19 +830,11 @@ test.provider(
             expect.objectContaining({
               IsEgress: false,
               IpProtocol:
-                rule.ipProtocol === "58"
-                  ? expect.stringMatching(/^(58|icmpv6)$/)
-                  : rule.ipProtocol,
-              ...(rule.fromPort === undefined
-                ? {}
-                : { FromPort: rule.fromPort }),
+                rule.ipProtocol === "58" ? expect.stringMatching(/^(58|icmpv6)$/) : rule.ipProtocol,
+              ...(rule.fromPort === undefined ? {} : { FromPort: rule.fromPort }),
               ...(rule.toPort === undefined ? {} : { ToPort: rule.toPort }),
-              ...(rule.cidrIpv4 === undefined
-                ? {}
-                : { CidrIpv4: rule.cidrIpv4 }),
-              ...(rule.cidrIpv6 === undefined
-                ? {}
-                : { CidrIpv6: rule.cidrIpv6 }),
+              ...(rule.cidrIpv4 === undefined ? {} : { CidrIpv4: rule.cidrIpv4 }),
+              ...(rule.cidrIpv6 === undefined ? {} : { CidrIpv6: rule.cidrIpv6 }),
             }),
           ]),
         );
@@ -931,5 +864,5 @@ test.provider(
       yield* assertSecurityGroupGone(created.sg.groupId);
       yield* assertVpcGone(created.vpc.vpcId);
     }).pipe(logLevel),
-  { timeout: 120000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120000 },
 );

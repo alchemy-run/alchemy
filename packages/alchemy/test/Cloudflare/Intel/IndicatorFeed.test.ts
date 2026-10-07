@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Custom indicator feeds require the account to be approved as a
 // Cloudforce One feed provider. On the standard testing account
@@ -86,7 +83,10 @@ test.provider.skipIf(entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:intel", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Canonical `list()` test (account collection). Enumeration is NOT gated by
@@ -99,9 +99,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Intel.IndicatorFeed,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Intel.IndicatorFeed);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -113,7 +111,10 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:intel", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Requires a Cloudforce One feed-provider account to create the feed under
@@ -134,9 +135,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Intel.IndicatorFeed,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Intel.IndicatorFeed);
       const all = yield* provider.list();
 
       const found = all.find((f) => f.feedId === feed.feedId);
@@ -146,7 +145,10 @@ test.provider.skipIf(!entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:intel", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Requires a Cloudforce One feed-provider account — unentitled accounts fail with
@@ -192,9 +194,7 @@ test.provider.skipIf(!entitled)(
       expect(updated.isDownloadable).toEqual(true);
 
       const liveUpdated = yield* getFeed(accountId, feed.feedId);
-      expect(liveUpdated.description).toEqual(
-        "alchemy intel lifecycle feed v2",
-      );
+      expect(liveUpdated.description).toEqual("alchemy intel lifecycle feed v2");
       expect(liveUpdated.isAttributable).toEqual(true);
 
       // No-op redeploy keeps the same feed.
@@ -227,7 +227,10 @@ test.provider.skipIf(!entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:intel", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Requires a Cloudflare feed-provider account (typed IndicatorFeedsNotEntitled otherwise);
@@ -290,5 +293,8 @@ test.provider.skipIf(!entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:intel", "live"],
+    timeout: 120_000,
+  },
 );

@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link GetResourceDashboard} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type GetResourceDashboardInput = Omit<
-  emr.GetResourceDashboardRequest,
-  "applicationId"
->;
+export type GetResourceDashboardInput = Omit<emr.GetResourceDashboardRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:GetResourceDashboard`.
@@ -39,10 +36,7 @@ export interface GetResourceDashboard extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetResourceDashboardInput,
-    ) => Effect.Effect<
-      emr.GetResourceDashboardResponse,
-      emr.GetResourceDashboardError
-    >
+    ) => Effect.Effect<emr.GetResourceDashboardResponse, emr.GetResourceDashboardError>
   >
 > {}
 export const GetResourceDashboard = Binding.Service<GetResourceDashboard>(

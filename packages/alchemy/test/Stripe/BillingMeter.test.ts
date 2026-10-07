@@ -1,19 +1,16 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetBillingMeter } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -72,9 +69,7 @@ test.provider(
       expect(fetched.default_aggregation.formula).toEqual("sum");
       expect(fetched.value_settings.event_payload_key).toEqual("value");
       expect(fetched.customer_mapping.type).toEqual("by_id");
-      expect(fetched.customer_mapping.event_payload_key).toEqual(
-        "stripe_customer_id",
-      );
+      expect(fetched.customer_mapping.event_payload_key).toEqual("stripe_customer_id");
       expect(fetched.status).toEqual("active");
 
       const updated = yield* stack.deploy(
@@ -110,7 +105,10 @@ test.provider(
       const deactivated = yield* GetBillingMeter({ id: created.id });
       expect(deactivated.status).toEqual("inactive");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:billingmeter", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -159,7 +157,10 @@ test.provider(
       const gone = yield* waitUntilInactive(replaced.id);
       expect(gone).toEqual("inactive");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:billingmeter", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -194,5 +195,8 @@ test.provider(
       const after = yield* provider.list();
       expect(after.find((meter) => meter.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:billingmeter", "live"],
+    timeout: 120_000,
+  },
 );

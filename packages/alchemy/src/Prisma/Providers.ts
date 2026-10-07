@@ -1,50 +1,40 @@
+import { Retry } from "@distilled.cloud/prisma";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "../Auth/Profile.ts";
+import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
-import { PrismaAuth } from "./AuthProvider.ts";
+import { Server, ServerProvider } from "../Website/Server.ts";
 import { App, AppProvider } from "./App.ts";
+import { PrismaAuth } from "./AuthProvider.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { BucketAccessKey, BucketAccessKeyProvider } from "./BucketAccessKey.ts";
-import {
-  PrismaClient,
-  PrismaClientLive,
-  type PrismaManagementClient,
-} from "./Client.ts";
-import { Connection, ConnectionProvider } from "./Connection.ts";
-import { Retry } from "@distilled.cloud/prisma-postgres";
-import * as Credentials from "./Credentials.ts";
+import { PrismaClient, PrismaClientLive, type PrismaManagementClient } from "./Client.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
+import { Connection, ConnectionProvider } from "./Connection.ts";
+import * as Credentials from "./Credentials.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
 import { Deployment, DeploymentProvider } from "./Deployment.ts";
-import {
-  EnvironmentVariable,
-  EnvironmentVariableProvider,
-} from "./EnvironmentVariable.ts";
-import {
-  PrismaHttpClientLive,
-  PrismaUploadClientLive,
-} from "./Internal/HttpClient.ts";
+import { EnvironmentVariable, EnvironmentVariableProvider } from "./EnvironmentVariable.ts";
+import { PrismaHttpClientLive, PrismaUploadClientLive } from "./Internal/HttpClient.ts";
+import { Contract, ContractProvider } from "./ORM/Contract.ts";
+import { Migrate, MigrateProvider } from "./ORM/Migrate.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
-import {
-  SourceRepository,
-  SourceRepositoryProvider,
-} from "./SourceRepository.ts";
+import { SourceRepository, SourceRepositoryProvider } from "./SourceRepository.ts";
+import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
 export { PrismaEnvironment } from "./PrismaEnvironment.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Prisma",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Prisma") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -58,10 +48,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 const standaloneManagementApiLayer = () =>
   PrismaClientLive.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        Credentials.fromEnvironment(),
-        Layer.succeed(Retry.Retry, Retry.makeDefault),
-      ),
+      Layer.mergeAll(Credentials.fromEnvironment(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
     ),
     Layer.provideMerge(fromProfile()),
     Layer.provideMerge(PrismaAuth),
@@ -118,10 +105,7 @@ const stackManagementApiLayer = () =>
     }),
   ).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(
-        Credentials.fromAuthProvider(),
-        Layer.succeed(Retry.Retry, Retry.makeDefault),
-      ),
+      Layer.mergeAll(Credentials.fromAuthProvider(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
     ),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
@@ -165,10 +149,7 @@ const stackManagementApiLayer = () =>
  * ```
  */
 export const managementApi = () =>
-  standaloneManagementApiLayer().pipe(
-    Layer.provide(FetchHttpClient.layer),
-    Layer.orDie,
-  );
+  standaloneManagementApiLayer().pipe(Layer.provide(FetchHttpClient.layer), Layer.orDie);
 
 /**
  * Build a layer that registers all Prisma resource providers, the Prisma
@@ -226,6 +207,10 @@ export const providers = () =>
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
+      Contract,
+      Migrate,
+      Server,
+      WebsiteArtifact,
     ]),
   ).pipe(
     Layer.provideMerge(
@@ -242,6 +227,10 @@ export const providers = () =>
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
+        ContractProvider(),
+        MigrateProvider(),
+        ServerProvider(),
+        WebsiteArtifactProvider(),
       ),
     ),
     // The management client layer is shared by every live variant. It is
@@ -249,6 +238,7 @@ export const providers = () =>
     // auth registers without resolving credentials, so `alchemy dev` never
     // needs a Prisma token.
     Layer.provideMerge(stackManagementApiLayer()),
+    Layer.provideMerge(Command.providers()),
     Layer.provide(FetchHttpClient.layer),
     Layer.orDie,
   );

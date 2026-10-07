@@ -22,13 +22,8 @@ export interface GetDelegations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: auditmanager.GetDelegationsRequest,
-    ) => Effect.Effect<
-      auditmanager.GetDelegationsResponse,
-      auditmanager.GetDelegationsError
-    >
+    ) => Effect.Effect<auditmanager.GetDelegationsResponse, auditmanager.GetDelegationsError>
   >
 > {}
 
-export const GetDelegations = Binding.Service<GetDelegations>(
-  "AWS.AuditManager.GetDelegations",
-);
+export const GetDelegations = Binding.Service<GetDelegations>("AWS.AuditManager.GetDelegations");

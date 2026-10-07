@@ -33,12 +33,7 @@ export interface DetectPHI extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehendmedical.DetectPHIRequest,
-    ) => Effect.Effect<
-      comprehendmedical.DetectPHIResponse,
-      comprehendmedical.DetectPHIError
-    >
+    ) => Effect.Effect<comprehendmedical.DetectPHIResponse, comprehendmedical.DetectPHIError>
   >
 > {}
-export const DetectPHI = Binding.Service<DetectPHI>(
-  "AWS.ComprehendMedical.DetectPHI",
-);
+export const DetectPHI = Binding.Service<DetectPHI>("AWS.ComprehendMedical.DetectPHI");

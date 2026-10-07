@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
+import * as Os from "node:os";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Option from "effect/Option";
-import * as Os from "node:os";
-import HandoffWorkerLive, {
-  HandoffWorker,
-  setDeployN,
-} from "./fixtures/handoff-worker.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
+import HandoffWorkerLive, { HandoffWorker, setDeployN } from "./fixtures/handoff-worker.ts";
 
 /**
  * `dev: true` runs the local providers in a persistent, file-scoped RPC
@@ -31,10 +28,7 @@ const { test, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "LocalWorkerHandoffStack",
@@ -54,9 +48,7 @@ const fetchDeploy = (url: string) =>
     const res = yield* client.get(url);
     if (res.status !== 200) {
       const text = yield* res.text;
-      return yield* Effect.fail(
-        new Error(`status ${res.status}: ${text.slice(0, 500)}`),
-      );
+      return yield* Effect.fail(new Error(`status ${res.status}: ${text.slice(0, 500)}`));
     }
     const body = (yield* res.json) as { deploy: string; pong: string };
     expect(body.pong).toBe("pong");
@@ -66,14 +58,8 @@ const fetchDeploy = (url: string) =>
 const registryEntryPath = (workerName: string) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    const stateHome =
-      process.env.XDG_STATE_HOME ?? path.join(Os.homedir(), ".local", "state");
-    return path.join(
-      stateHome,
-      "alchemy",
-      "registry",
-      `${encodeURIComponent(workerName)}.json`,
-    );
+    const stateHome = process.env.XDG_STATE_HOME ?? path.join(Os.homedir(), ".local", "state");
+    return path.join(stateHome, "alchemy", "registry", `${encodeURIComponent(workerName)}.json`);
   });
 
 const registryEntryExists = (workerName: string) =>
@@ -83,19 +69,31 @@ const registryEntryExists = (workerName: string) =>
   });
 
 /**
- * The registry entry's inode. A make-before-break handoff only ever
- * overwrites `{scriptName}.json` in place (the replacement re-registers,
- * then the owner-aware unregister of the old instance no-ops), so the inode
- * is stable across a redeploy. The broken path unlinks the entry when the
- * old instance is torn down and recreates it when the replacement finally
- * serves — observable as an inode change even when the dark window itself
- * is too short to catch with a request.
+ * Poll the registry entry's existence in a tight loop, counting every probe
+ * that finds it missing. A make-before-break handoff only ever overwrites
+ * `{scriptName}.json` (an atomic temp-file + rename, so the path always
+ * resolves; the owner-aware unregister of the old instance no-ops). The
+ * broken path unlinks the entry when the old instance is torn down and
+ * recreates it when the replacement finally serves — a dark window the
+ * millisecond poller catches even when it is too short to observe with a
+ * request. (The inode is NOT a usable signal: every atomic rename publishes
+ * a fresh inode.)
  */
-const registryEntryIno = (workerName: string) =>
+const watchRegistryEntryMisses = (workerName: string) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const stat = yield* fs.stat(yield* registryEntryPath(workerName));
-    return Option.getOrUndefined(stat.ino);
+    let probes = 0;
+    let misses = 0;
+    const fiber = yield* registryEntryExists(workerName).pipe(
+      Effect.tap((exists) =>
+        Effect.sync(() => {
+          probes++;
+          if (!exists) misses++;
+        }),
+      ),
+      Effect.repeat(Schedule.spaced("2 millis")),
+      Effect.forkChild,
+    );
+    return Fiber.interrupt(fiber).pipe(Effect.map(() => ({ probes, misses })));
   });
 
 /**
@@ -121,16 +119,13 @@ test(
     // Wait for the first instance to actually serve (fresh workerd + DO).
     const initial = yield* fetchDeploy(first.url).pipe(
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 20,
       }),
     );
     expect(initial).toBe("1");
     expect(yield* registryEntryExists(first.workerName)).toBe(true);
-    const inoBefore = yield* registryEntryIno(first.workerName);
+    const stopWatching = yield* watchRegistryEntryMisses(first.workerName);
 
     // Redeploy with a changed env var: the Worker's structural signature
     // changes, so the provider replaces the instance. The deploy returns as
@@ -160,11 +155,16 @@ test(
     );
     expect(final).toBe("2");
     expect(yield* registryEntryExists(second.workerName)).toBe(true);
-    // The entry was overwritten in place by the replacement, never deleted —
+    // The entry was overwritten by the replacement, never deleted —
     // cross-script DO bindings resolving through it never saw it vanish.
-    expect(yield* registryEntryIno(second.workerName)).toBe(inoBefore);
+    const { probes, misses } = yield* stopWatching;
+    expect(probes).toBeGreaterThan(0);
+    expect(misses).toBe(0);
 
     yield* destroy(Stack);
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 240_000,
+  },
 );

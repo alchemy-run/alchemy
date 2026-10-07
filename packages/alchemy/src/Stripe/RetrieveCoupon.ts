@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Coupon } from "./Coupon.ts";
 
-export interface RetrieveCouponRequest extends Omit<
-  GetCouponRequest,
-  "coupon"
-> {}
+export interface RetrieveCouponRequest extends Omit<GetCouponRequest, "coupon"> {}
 
 /**
  * Retrieve a bound Stripe Coupon over HTTP.
@@ -24,6 +21,7 @@ export interface RetrieveCouponRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Product
  */
 export interface RetrieveCoupon extends Binding.Service<
   RetrieveCoupon,
@@ -31,12 +29,8 @@ export interface RetrieveCoupon extends Binding.Service<
   (
     coupon: Coupon,
   ) => Effect.Effect<
-    (
-      request?: RetrieveCouponRequest,
-    ) => Effect.Effect<StripeCoupon, GetCouponError, RuntimeContext>
+    (request?: RetrieveCouponRequest) => Effect.Effect<StripeCoupon, GetCouponError, RuntimeContext>
   >
 > {}
 
-export const RetrieveCoupon = Binding.Service<RetrieveCoupon>(
-  "Stripe.RetrieveCoupon",
-);
+export const RetrieveCoupon = Binding.Service<RetrieveCoupon>("Stripe.RetrieveCoupon");

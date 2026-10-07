@@ -29,10 +29,6 @@ export interface StopPipeline extends Binding.Service<
   "AWS.OSIS.StopPipeline",
   (
     pipeline: Pipeline,
-  ) => Effect.Effect<
-    () => Effect.Effect<osis.StopPipelineResponse, osis.StopPipelineError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<osis.StopPipelineResponse, osis.StopPipelineError>>
 > {}
-export const StopPipeline = Binding.Service<StopPipeline>(
-  "AWS.OSIS.StopPipeline",
-);
+export const StopPipeline = Binding.Service<StopPipeline>("AWS.OSIS.StopPipeline");

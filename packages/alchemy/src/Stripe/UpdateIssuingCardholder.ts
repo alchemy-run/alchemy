@@ -24,6 +24,7 @@ export interface UpdateIssuingCardholderRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Issuing
  */
 export interface UpdateIssuingCardholder extends Binding.Service<
   UpdateIssuingCardholder,
@@ -33,11 +34,7 @@ export interface UpdateIssuingCardholder extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: UpdateIssuingCardholderRequest,
-    ) => Effect.Effect<
-      StripeIssuingCardholder,
-      UpdateIssuingCardholderError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeIssuingCardholder, UpdateIssuingCardholderError, RuntimeContext>
   >
 > {}
 

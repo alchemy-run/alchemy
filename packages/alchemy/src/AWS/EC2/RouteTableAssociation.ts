@@ -3,21 +3,18 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SubnetId } from "./Subnet.ts";
 
-export type RouteTableAssociationId<ID extends string = string> =
-  `rtbassoc-${ID}`;
+export type RouteTableAssociationId<ID extends string = string> = `rtbassoc-${ID}`;
 export const RouteTableAssociationId = <ID extends string>(
   id: ID,
-): ID & RouteTableAssociationId<ID> =>
-  `rtbassoc-${id}` as ID & RouteTableAssociationId<ID>;
+): ID & RouteTableAssociationId<ID> => `rtbassoc-${id}` as ID & RouteTableAssociationId<ID>;
 
 export interface RouteTableAssociationProps {
   /**
@@ -171,8 +168,7 @@ export const RouteTableAssociationProvider = () =>
                         a.RouteTableId != null,
                     )
                     .map((a) => ({
-                      associationId:
-                        a.RouteTableAssociationId as RouteTableAssociationId,
+                      associationId: a.RouteTableAssociationId as RouteTableAssociationId,
                       routeTableId: a.RouteTableId as RouteTableId,
                       subnetId: a.SubnetId as SubnetId | undefined,
                       gatewayId: a.GatewayId,
@@ -261,17 +257,9 @@ export const RouteTableAssociationProvider = () =>
                   schedule: Schedule.exponential(100),
                 }),
               );
-            const associationId =
-              result.AssociationId! as RouteTableAssociationId;
-            yield* session.note(
-              `Route table association created: ${associationId}`,
-            );
-            yield* waitForAssociationState(
-              news.routeTableId,
-              associationId,
-              "associated",
-              session,
-            );
+            const associationId = result.AssociationId! as RouteTableAssociationId;
+            yield* session.note(`Route table association created: ${associationId}`);
+            yield* waitForAssociationState(news.routeTableId, associationId, "associated", session);
             return {
               associationId,
               routeTableId: news.routeTableId as RouteTableId,
@@ -293,11 +281,8 @@ export const RouteTableAssociationProvider = () =>
               RouteTableId: news.routeTableId,
               DryRun: false,
             });
-            const newAssociationId =
-              result.NewAssociationId! as RouteTableAssociationId;
-            yield* session.note(
-              `Route table association replaced: ${newAssociationId}`,
-            );
+            const newAssociationId = result.NewAssociationId! as RouteTableAssociationId;
+            yield* session.note(`Route table association replaced: ${newAssociationId}`);
             yield* waitForAssociationState(
               news.routeTableId,
               newAssociationId,
@@ -330,9 +315,7 @@ export const RouteTableAssociationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output, session }) {
-          yield* session.note(
-            `Deleting route table association: ${output.associationId}`,
-          );
+          yield* session.note(`Deleting route table association: ${output.associationId}`);
 
           // Disassociate the route table
           yield* ec2
@@ -342,10 +325,7 @@ export const RouteTableAssociationProvider = () =>
             })
             .pipe(
               Effect.tapError(Effect.log),
-              Effect.catchTag(
-                "InvalidAssociationID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidAssociationID.NotFound", () => Effect.void),
             );
 
           yield* session.note(
@@ -362,24 +342,18 @@ export const RouteTableAssociationProvider = () =>
 const waitForAssociationState = (
   routeTableId: string,
   associationId: string,
-  targetState:
-    | "associating"
-    | "associated"
-    | "disassociating"
-    | "disassociated",
+  targetState: "associating" | "associated" | "disassociating" | "disassociated",
   session?: ScopedPlanStatusSession,
 ) =>
   Effect.retry(
     Effect.gen(function* () {
-      const result = yield* ec2
-        .describeRouteTables({ RouteTableIds: [routeTableId] })
-        .pipe(
-          Effect.catchTag("InvalidRouteTableID.NotFound", () =>
-            Effect.succeed({
-              RouteTables: [],
-            } as ec2.DescribeRouteTablesResult),
-          ),
-        );
+      const result = yield* ec2.describeRouteTables({ RouteTableIds: [routeTableId] }).pipe(
+        Effect.catchTag("InvalidRouteTableID.NotFound", () =>
+          Effect.succeed({
+            RouteTables: [],
+          } as ec2.DescribeRouteTablesResult),
+        ),
+      );
 
       const routeTable = result.RouteTables?.[0];
       if (!routeTable) {
@@ -401,9 +375,7 @@ const waitForAssociationState = (
 
       if (association.AssociationState?.State === "failed") {
         return yield* Effect.fail(
-          new Error(
-            `Association failed: ${association.AssociationState.StatusMessage}`,
-          ),
+          new Error(`Association failed: ${association.AssociationState.StatusMessage}`),
         );
       }
 
@@ -416,9 +388,7 @@ const waitForAssociationState = (
       schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(30)]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for association to be ${targetState}... (${attempt}s)`,
-              )
+            ? session.note(`Waiting for association to be ${targetState}... (${attempt}s)`)
             : Effect.void,
         ),
       ),

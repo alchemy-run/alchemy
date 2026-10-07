@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Channel } from "./Channel.ts";
 
-export interface InsertAdBreakRequest extends Omit<
-  ivs.InsertAdBreakRequest,
-  "channelArn"
-> {}
+export interface InsertAdBreakRequest extends Omit<ivs.InsertAdBreakRequest, "channelArn"> {}
 
 /**
  * Runtime binding for `ivs:InsertAdBreak`.
@@ -40,6 +37,4 @@ export interface InsertAdBreak extends Binding.Service<
     ) => Effect.Effect<ivs.InsertAdBreakResponse, ivs.InsertAdBreakError>
   >
 > {}
-export const InsertAdBreak = Binding.Service<InsertAdBreak>(
-  "AWS.IVS.InsertAdBreak",
-);
+export const InsertAdBreak = Binding.Service<InsertAdBreak>("AWS.IVS.InsertAdBreak");

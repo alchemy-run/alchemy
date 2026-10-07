@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import type * as Redacted from "effect/Redacted";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
@@ -100,9 +100,6 @@ export interface HttpScope {
   queueId: string;
 }
 
-const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = [
-  "Queues Read",
-  "Queues Write",
-];
+const QUEUE_HTTP_PERMISSION_GROUPS: PermissionGroupRef[] = ["Queues Read", "Queues Write"];
 
 type PermissionGroup = (typeof QUEUE_HTTP_PERMISSION_GROUPS)[number];

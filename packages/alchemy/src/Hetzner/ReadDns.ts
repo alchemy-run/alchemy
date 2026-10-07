@@ -42,6 +42,7 @@ import type { Zone } from "./Zone.ts";
  * ```
  *
  * @binding
+ * @product DNS
  */
 export interface ReadDns extends Binding.Service<
   ReadDns,
@@ -52,10 +53,7 @@ export interface ReadDns extends Binding.Service<
 export const ReadDns = Binding.Service<ReadDns>("Hetzner.DNS.ReadDns");
 
 /** List-RRSets request, minus the zone id (bound at `ReadDns(zone)` time). */
-export type ListRecordSetsRequestInput = Omit<
-  ListZoneRrsetsRequest,
-  "id_or_name"
->;
+export type ListRecordSetsRequestInput = Omit<ListZoneRrsetsRequest, "id_or_name">;
 
 /**
  * Read-only DNS RRSet operations. The zone is fixed when the client is

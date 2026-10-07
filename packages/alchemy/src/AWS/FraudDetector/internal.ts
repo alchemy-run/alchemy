@@ -6,9 +6,7 @@ import { diffTags } from "../../Tags.ts";
  * Coerce a FraudDetector wire tag list (`{ key, value }[]`) into a plain
  * `Record<string, string>`.
  */
-export const toTagRecord = (
-  tags: frauddetector.Tag[] | undefined,
-): Record<string, string> =>
+export const toTagRecord = (tags: frauddetector.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries((tags ?? []).map((t) => [t.key, t.value] as const));
 
 /**

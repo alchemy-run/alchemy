@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/dynamic-worker-loader/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -26,17 +26,12 @@ const readJson = (url: string) =>
       res.status === 200
         ? res.json
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
       while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
     }),
   );
 
@@ -56,7 +51,10 @@ test(
     const body = yield* readJson(asyncWorkerUrl);
     expect(body).toMatchObject({ mode: "async", ok: true });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -66,7 +64,10 @@ test(
     const body = yield* readJson(effectWorkerUrl);
     expect(body).toMatchObject({ mode: "effect", ok: true });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -76,7 +77,10 @@ test(
     const body = yield* readJson(`${effectWorkerUrl}/get`);
     expect(body).toMatchObject({ mode: "get", ok: true });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -87,7 +91,10 @@ test(
     const body = yield* readJson(`${getWorkerUrl}/?id=${id}`);
     expect(body).toMatchObject({ id, hits: 1 });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -112,7 +119,10 @@ test(
     expect(reused).toMatchObject({ id });
     expect((reused as { hits: number }).hits).toBeGreaterThanOrEqual(2);
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -123,7 +133,10 @@ test(
     const body = yield* readJson(`${getWorkerUrl}/?id=${id}&entrypoint=1`);
     expect(body).toMatchObject({ id, hits: 1 });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 // `globalOutbound: null` must reach the runtime as `null` — coercing it to
@@ -138,7 +151,10 @@ test(
     const body = yield* readJson(`${effectWorkerUrl}/outbound/sandboxed`);
     expect(body).toMatchObject({ outbound: "blocked" });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -148,5 +164,8 @@ test(
     const body = yield* readJson(`${effectWorkerUrl}/outbound/open`);
     expect(body).toMatchObject({ outbound: "allowed", status: 200 });
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

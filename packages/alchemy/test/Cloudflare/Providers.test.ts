@@ -1,30 +1,37 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import { v4 as uuidv4 } from "uuid";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import { Credentials } from "@/Cloudflare/Credentials.ts";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { v4 as uuidv4 } from "uuid";
 
 it.live(
-  "building the Cloudflare provider layers rejects an unknown explicit profile",
+  "Cloudflare providers defer unknown explicit profile errors until credentials are requested",
   () =>
     Effect.gen(function* () {
-      const result = yield* Effect.result(
-        Effect.sandbox(Layer.build(Cloudflare.providers())),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain("does not exist");
-        expect(String(result.failure)).toContain("alchemy profile create");
+      const providers = yield* Layer.build(Cloudflare.providers());
+      for (const resolve of [
+        Context.get(providers, CloudflareEnvironment).pipe(Effect.asVoid),
+        Context.get(providers, Credentials).pipe(Effect.asVoid),
+      ]) {
+        const result = yield* Effect.result(Effect.sandbox(resolve));
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(String(result.failure)).toContain("does not exist");
+          expect(String(result.failure)).toContain("alchemy profile create");
+        }
       }
     }).pipe(
       Effect.provide(
@@ -38,16 +45,10 @@ it.live(
             bindings: {},
             actions: {},
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
+          Layer.succeed(AlchemyContext, { dev: false, adopt: false, dotAlchemy: ".alchemy" }),
           Layer.succeed(
             ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-            }),
+            ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
           ),
           Layer.sync(ArtifactStore, createArtifactStore),
           NodeServices.layer,
@@ -56,13 +57,18 @@ it.live(
       ),
       Effect.provide(CliKit.layer({ input: false })),
     ),
+  { tags: ["unit", "provider:cloudflare", "local"] },
 );
 
 it.live(
   "builds Cloudflare providers from CI environment credentials without a profile",
   () =>
     Effect.gen(function* () {
-      yield* Layer.build(Cloudflare.providers());
+      const providers = yield* Layer.build(Cloudflare.providers());
+      const environment = yield* Context.get(providers, CloudflareEnvironment);
+      expect(environment.accountId).toBe("0123456789abcdef0123456789abcdef");
+      const credentials = yield* Context.get(providers, Credentials);
+      expect(credentials.type).toBe("apiToken");
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -75,11 +81,7 @@ it.live(
             bindings: {},
             actions: {},
           }),
-          Layer.succeed(AlchemyContext, {
-            dev: false,
-            adopt: false,
-            dotAlchemy: ".alchemy",
-          }),
+          Layer.succeed(AlchemyContext, { dev: false, adopt: false, dotAlchemy: ".alchemy" }),
           Layer.succeed(
             ConfigProvider.ConfigProvider,
             ConfigProvider.fromUnknown({
@@ -96,4 +98,5 @@ it.live(
       ),
       Effect.provide(CliKit.layer({ input: false })),
     ),
+  { tags: ["unit", "provider:cloudflare", "local"] },
 );

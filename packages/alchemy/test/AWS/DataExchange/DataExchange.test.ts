@@ -1,24 +1,27 @@
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DataSet, EventAction, Revision } from "@/AWS/DataExchange";
 import { toTagRecord } from "@/AWS/DataExchange/internal.ts";
 import * as Test from "@/Test/Alchemy";
-import * as dataexchange from "@distilled.cloud/aws/dataexchange";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Typed-error probe: proves the SDK decodes DataExchange errors as typed
 // tags. A missing data set surfaces as ResourceNotFoundException.
-test.provider("getDataSet on a nonexistent id fails with a typed error", () =>
-  Effect.gen(function* () {
-    const error = yield* Effect.flip(
-      dataexchange.getDataSet({
-        DataSetId: "ffffffffffffffffffffffffffffffff",
-      }),
-    );
-    expect(error._tag).toBe("ResourceNotFoundException");
-  }),
+test.provider(
+  "getDataSet on a nonexistent id fails with a typed error",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        dataexchange.getDataSet({
+          DataSetId: "ffffffffffffffffffffffffffffffff",
+        }),
+      );
+      expect(error._tag).toBe("ResourceNotFoundException");
+    }),
+  { tags: ["provider:aws", "provider:aws:dataexchange", "live"] },
 );
 
 // Data sets and revisions are cheap, instant metadata objects — the live
@@ -112,9 +115,7 @@ test.provider(
         ResourceArn: created.revision.revisionArn,
       });
       expect(toTagRecord(updatedRevisionTags.Tags).Environment).toBeUndefined();
-      expect(toTagRecord(updatedRevisionTags.Tags)["alchemy::id"]).toBe(
-        "PricesV1",
-      );
+      expect(toTagRecord(updatedRevisionTags.Tags)["alchemy::id"]).toBe("PricesV1");
 
       // Destroy and verify deletion out-of-band.
       yield* stack.destroy();
@@ -123,7 +124,10 @@ test.provider(
       );
       expect(dataSetError._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dataexchange", "live"],
+    timeout: 300_000,
+  },
 );
 
 // Replacement: assetType is immutable, so changing it replaces the data set.
@@ -166,7 +170,10 @@ test.provider(
       );
       expect(newError._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dataexchange", "live"],
+    timeout: 300_000,
+  },
 );
 
 // Event actions only attach to ENTITLED data sets (subscriptions / accepted
@@ -202,7 +209,10 @@ test.provider(
       );
       expect(error._tag).toBe("ValidationException");
     }),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dataexchange", "live"],
+    timeout: 60_000,
+  },
 );
 
 // Full event-action lifecycle needs an entitled data set — run it from an
@@ -214,8 +224,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID)(
   "create, update, destroy an event action on an entitled data set",
   (stack) =>
     Effect.gen(function* () {
-      const entitledDataSetId =
-        process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID!;
+      const entitledDataSetId = process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID!;
       const exportBucket = process.env.AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET!;
       yield* stack.destroy();
 
@@ -246,9 +255,9 @@ test.provider.skipIf(!process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID)(
       const observed = yield* dataexchange.getEventAction({
         EventActionId: created.eventActionId,
       });
-      expect(
-        observed.Action?.ExportRevisionToS3?.RevisionDestination.KeyPattern,
-      ).toBe("exports/${Revision.CreatedAt}/${Asset.Name}");
+      expect(observed.Action?.ExportRevisionToS3?.RevisionDestination.KeyPattern).toBe(
+        "exports/${Revision.CreatedAt}/${Asset.Name}",
+      );
 
       yield* stack.destroy();
       const gone = yield* Effect.flip(
@@ -258,5 +267,8 @@ test.provider.skipIf(!process.env.AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID)(
       );
       expect(gone._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:dataexchange", "live"],
+    timeout: 300_000,
+  },
 );
