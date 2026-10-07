@@ -763,7 +763,11 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
           Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
           Match.exhaustive,
         )
-        .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
+        .pipe(
+          Effect.mapError(
+            (e) => new AuthError({ message: `login failed: ${e.message}`, cause: e }),
+          ),
+        );
 
     const readEnvironment = Effect.gen(function* () {
       const accessKeyId = yield* getEnvRedactedRequired("AWS_ACCESS_KEY_ID");
