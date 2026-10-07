@@ -1,32 +1,24 @@
-import {
-  classifyMigrationHistory,
-  rewrittenMigrationHistory,
-} from "@/SQL/Migrations/index.ts";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { classifyMigrationHistory, rewrittenMigrationHistory } from "@/SQL/Migrations/index.ts";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
 
 const describe = layer(NodeServices.layer);
 
 describe("rewrittenMigrationHistory", (it) => {
   it.effect("treats missing prior hashes as not rewritten", () =>
     Effect.sync(() => {
-      expect(
-        rewrittenMigrationHistory(undefined, { "0001.sql": "aaa" }),
-      ).toBeUndefined();
+      expect(rewrittenMigrationHistory(undefined, { "0001.sql": "aaa" })).toBeUndefined();
     }),
   );
 
   it.effect("treats additive files as not rewritten", () =>
     Effect.sync(() => {
       expect(
-        rewrittenMigrationHistory(
-          { "0001.sql": "aaa" },
-          { "0001.sql": "aaa", "0002.sql": "bbb" },
-        ),
+        rewrittenMigrationHistory({ "0001.sql": "aaa" }, { "0001.sql": "aaa", "0002.sql": "bbb" }),
       ).toBeUndefined();
     }),
   );
@@ -45,10 +37,7 @@ describe("rewrittenMigrationHistory", (it) => {
   it.effect("detects a removed already-applied file", () =>
     Effect.sync(() => {
       expect(
-        rewrittenMigrationHistory(
-          { "0001.sql": "aaa", "0002.sql": "bbb" },
-          { "0002.sql": "bbb" },
-        ),
+        rewrittenMigrationHistory({ "0001.sql": "aaa", "0002.sql": "bbb" }, { "0002.sql": "bbb" }),
       ).toEqual({ changed: [], removed: ["0001.sql"] });
     }),
   );
