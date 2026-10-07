@@ -40,6 +40,44 @@ export const parseRepoDigest = (imageRef: string, output: string): string | unde
 };
 
 /**
+ * Picks the `repository@digest` that inspect reports for this image.
+ *
+ * A fallback when push output has no `digest:` line. Podman pushes report the
+ * published digest through `--digestfile` instead, because Podman can list a
+ * pulled image's source digest under the pushed name here.
+ */
+export const repoDigestFromInspect = (
+  imageRef: string,
+  repoDigests: ReadonlyArray<string> | null | undefined,
+): string | undefined => {
+  const repository = repositoryFromImageRef(imageRef);
+  for (const digest of repoDigests ?? []) {
+    const at = digest.lastIndexOf("@");
+    if (at > 0 && digest.slice(0, at) === repository) return digest;
+  }
+  return undefined;
+};
+
+/**
+ * Digest from push output when the engine prints one, otherwise the matching
+ * `RepoDigests` entry. `registryRef` is the host-qualified name when it
+ * differs from the local reference that was pushed.
+ */
+export const publishedRepoDigest = (
+  imageRef: string,
+  output: { stdout: string; stderr: string },
+  repoDigests: ReadonlyArray<string> | null | undefined,
+  registryRef?: string,
+): string | undefined => {
+  const text = `${output.stdout}\n${output.stderr}`;
+  return (
+    parseRepoDigest(imageRef, text) ??
+    (registryRef === undefined ? undefined : repoDigestFromInspect(registryRef, repoDigests)) ??
+    repoDigestFromInspect(imageRef, repoDigests)
+  );
+};
+
+/**
  * Parses an image's RFC 3339 `Created` timestamp into epoch milliseconds.
  *
  * Docker only reports `Created` when the image config carries a creation time:
