@@ -504,9 +504,12 @@ const waitForInternetGatewayDeleted = (
         return yield* Effect.fail(new Error("Internet gateway still exists"));
       }),
       {
-        schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
+        // EC2 can keep listing a deleted gateway for minutes (eventual
+        // consistency), so bound the wait like the delete retry above and
+        // NatGateway: 5s x 60 = ~5 min.
+        schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(60)]).pipe(
           Schedule.tap(({ attempt }) =>
-            session.note(`Waiting for internet gateway deletion... (${attempt * 2}s)`),
+            session.note(`Waiting for internet gateway deletion... (${attempt * 5}s)`),
           ),
         ),
       },
