@@ -65,6 +65,8 @@ export class Docker extends Context.Service<
         image: string;
         volume: Array<string> | undefined;
         env: Record<string, string> | undefined;
+        /** Paths to Docker env files, forwarded as repeated `--env-file`. */
+        "env-file"?: Array<string> | undefined;
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;
@@ -130,6 +132,8 @@ export class Docker extends Context.Service<
           "cache-to"?: Array<string>;
           args?: Array<string>;
           engineContext?: string;
+          /** Registry auth for the build itself (base images, caches); publishes nothing. */
+          credentials?: RegistryCredentials;
         },
         session?: ScopedPlanStatusSession,
         registry?: RegistryCredentials,
@@ -544,7 +548,10 @@ export const DockerLive = Layer.effect(
           return systemError({
             _tag: "Unknown",
             args,
-            description: `Command exited with code ${result.exitCode}: ${stderr}`,
+            description: `Command exited with code ${result.exitCode}: ${failureOutput(
+              stderr,
+              result.stdout,
+            )}`,
           });
         }),
         Effect.scoped,
@@ -700,7 +707,7 @@ export const DockerLive = Layer.effect(
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, ...options },
+          { context: buildContext, engineContext, args, credentials, ...options },
           session,
           registry,
         ) {
@@ -717,7 +724,11 @@ export const DockerLive = Layer.effect(
           const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
-            return yield* run([...engine, "image", "build", ...buildArgs], undefined, tap);
+            return yield* run(
+              [...engine, "image", "build", ...buildArgs],
+              credentials ? yield* registryEnvironment(credentials) : undefined,
+              tap,
+            );
           }
           const mode = yield* publication;
           if (mode === "export") {
@@ -881,6 +892,19 @@ export const dockerPhysicalName = (
   props?.name
     ? Effect.succeed(props.name)
     : createPhysicalName({ id, instanceId, maxLength, lowercase: true });
+
+/**
+ * A failing `docker` command splits its diagnosis over both streams: the
+ * builder writes the step log to one and the reason it stopped to the other,
+ * and which carries which depends on the builder, the progress mode and
+ * whether the output is a terminal. A build that fails inside a `RUN` step
+ * therefore reports nothing but its exit code when only `stderr` is kept.
+ * Keep both, the reason first, so the error says why the build failed.
+ */
+const failureOutput = (stderr: string, stdout: string) => {
+  const output = [stderr, stdout].filter((text) => text.length > 0);
+  return output.length > 0 ? output.join("\n") : "the command wrote no output.";
+};
 
 /** Constructs a PlatformError from a command execution result. */
 const systemError = (input: {
