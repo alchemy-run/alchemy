@@ -48,7 +48,9 @@ test("stops the Worker's stream when the client hangs up", async () => {
     configFile: false,
     logLevel: "silent",
     server: { host: "127.0.0.1", port: 0 },
-    plugins: [cloudflareVitePlugin({ main: entry, worker: { name: "vite-dev-proxy-test" } })],
+    plugins: [
+      cloudflareVitePlugin({ main: entry, worker: { name: "vite-dev-proxy-test", bindings: [] } }),
+    ],
   });
   onTestFinished(() => server.close());
   await server.listen();
