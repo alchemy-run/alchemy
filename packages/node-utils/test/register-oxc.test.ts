@@ -110,8 +110,13 @@ const makeProject = () => {
 
 const registerUrl = pathToFileURL(path.resolve(import.meta.dir, "../src/register-oxc.ts")).href;
 
-const runNode = (cwd: string, script: string, env: Record<string, string> = {}) =>
-  spawnSync("node", ["--no-warnings", "--input-type=module", "-e", script], {
+const runNode = (
+  cwd: string,
+  script: string,
+  env: Record<string, string> = {},
+  nodeArgs: ReadonlyArray<string> = [],
+) =>
+  spawnSync("node", [...nodeArgs, "--no-warnings", "--input-type=module", "-e", script], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, ...env },
@@ -158,7 +163,8 @@ describe("registerOxc", () => {
     for (const name of maps) {
       const map = JSON.parse(readFileSync(path.join(cache, name), "utf8"));
       expect(map.sourcesContent).toBeUndefined();
-      expect(map.sources[0]).toMatch(/\.(ts|tsx|cts|js)$/);
+      // By URL: a bare path would resolve against the cache directory.
+      expect(map.sources[0]).toMatch(/^file:\/\/.*\.(ts|tsx|cts|js)$/);
     }
     // The cache-hit path references the same file.
     const hit = runNode(root, script, { ALCHEMY_TRANSFORM_CACHE: cache });
@@ -168,6 +174,37 @@ describe("registerOxc", () => {
     const inline = runNode(root, script, { ALCHEMY_TRANSFORM_CACHE: "0" });
     expect(inline.status, inline.stderr).toBe(0);
     expect(inline.stdout.trim().split("\n")[1]).toMatch(/entry\.ts:15:/);
+  });
+
+  it("inlines source maps with their source while an inspector is attached", () => {
+    const root = makeProject();
+    const cache = path.join(root, "cache");
+    // What a debugger sees for each module: a map it can always read, not a
+    // reference into the shared cache directory. Run twice to cover a cold
+    // transform and a cache hit.
+    const script = `
+      const { Session } = await import("node:inspector");
+      const session = new Session();
+      session.connect();
+      const maps = {};
+      session.on("Debugger.scriptParsed", ({ params }) => {
+        if (params.url.endsWith("/src/sub.ts")) maps.sub = params.sourceMapURL;
+      });
+      session.post("Debugger.enable");
+      const { registerOxc } = await import(${JSON.stringify(registerUrl)});
+      registerOxc();
+      await import("./src/sub.ts");
+      console.log(maps.sub);
+      `;
+    for (const _ of [0, 1]) {
+      const result = runNode(root, script, { ALCHEMY_TRANSFORM_CACHE: cache }, ["--inspect=0"]);
+      expect(result.status, result.stderr).toBe(0);
+      const sourceMapUrl = result.stdout.trim();
+      expect(sourceMapUrl).toStartWith("data:application/json;base64,");
+      const map = JSON.parse(Buffer.from(sourceMapUrl.split(",")[1]!, "base64").toString("utf8"));
+      expect(map.sources).toEqual([pathToFileURL(path.join(root, "src/sub.ts")).href]);
+      expect(map.sourcesContent).toEqual([readFileSync(path.join(root, "src/sub.ts"), "utf8")]);
+    }
   });
 
   it("adds configured package export conditions to project resolution", () => {

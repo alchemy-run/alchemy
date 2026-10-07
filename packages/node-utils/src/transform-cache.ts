@@ -18,7 +18,7 @@ import self from "../package.json" with { type: "json" };
  * entry: the transformer itself (rolldown), this package's transform
  * pipeline, and the on-disk entry layout.
  */
-const CACHE_VERSION = ["1", self.version, rolldown.version].join("-");
+const CACHE_VERSION = ["2", self.version, rolldown.version].join("-");
 
 /** Entries untouched for this long are swept on the first disk access. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
+import * as inspector from "node:inspector";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveTsconfig } from "rolldown/experimental";
@@ -67,15 +68,17 @@ const language = (filePath: string): TransformOptions["lang"] => {
   }
 };
 
+type SourceMap = NonNullable<ReturnType<typeof transformSync>["map"]>;
+
 /**
- * Inline map, for when there is no cache file to point at. Only the
- * fallback: the base64 becomes part of the script source V8 retains, and
- * for a non-ASCII source it is stored two bytes per character on top.
+ * Whether a debugger can be attached to this process. Checked per module, so
+ * an inspector opened after startup (VS Code auto-attach, `SIGUSR1`,
+ * `inspector.open()`) covers every module loaded from then on.
  */
-const inlineSourceMapComment = (map: string | object) => {
-  const json = typeof map === "string" ? map : JSON.stringify(map);
-  return `\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(json).toString("base64")}`;
-};
+const isInspectorActive = () => inspector.url() !== undefined;
+
+const inlineSourceMapComment = (map: string) =>
+  `\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(map).toString("base64")}`;
 
 /**
  * Map by reference. Node's source-map support only understands `data:`
@@ -87,15 +90,43 @@ const fileSourceMapComment = (mapFile: string) =>
   `\n//# sourceMappingURL=${pathToFileURL(mapFile).pathname}`;
 
 /**
- * The transform's map without `sourcesContent`. Every source is a file on
- * this machine, named by the map's `sources`, so embedding its text only
- * makes the map larger than the code it describes and every process that
- * loads the module pay for it.
+ * The map as stored: `sources` names the file by URL and `sourcesContent`
+ * is dropped. A bare path in `sources` is resolved against the map's own
+ * location, which for a cached map is the shared cache directory — a URL
+ * is location-independent and correct on Windows too. Every source is a
+ * file on this machine, so embedding its text only makes the map larger
+ * than the code it describes and every process that loads the module pay
+ * for it.
  */
-const withoutSourcesContent = ({
-  sourcesContent: _sourcesContent,
-  ...map
-}: NonNullable<ReturnType<typeof transformSync>["map"]>) => map;
+const storedSourceMap = (
+  { sourcesContent: _sourcesContent, ...map }: SourceMap,
+  filePath: string,
+): string => JSON.stringify({ ...map, sources: [pathToFileURL(filePath).href] });
+
+/**
+ * The map as a debugger needs it: inline, with the source embedded. A map
+ * referenced by path sits in the shared cache directory, which debuggers
+ * either refuse to read (VS Code only loads maps under the workspace by
+ * default) or cannot fetch over the inspector protocol (DevTools), leaving
+ * every module to show up as transpiled output from a foreign folder.
+ */
+const debuggerSourceMapComment = (map: string, source: string) =>
+  inlineSourceMapComment(JSON.stringify({ ...JSON.parse(map), sourcesContent: [source] }));
+
+/**
+ * The module's source map comment. Inlined for a debugger, and when there
+ * is no cache file to point at — the base64 becomes part of the script
+ * source V8 retains for the process lifetime, which for a graph the size of
+ * alchemy's is hundreds of megabytes, so it is never the default.
+ */
+const sourceMapComment = (
+  map: string,
+  mapFile: string | undefined,
+  readSource: () => string,
+): string => {
+  if (isInspectorActive()) return debuggerSourceMapComment(map, readSource());
+  return mapFile === undefined ? inlineSourceMapComment(map) : fileSourceMapComment(mapFile);
+};
 
 export interface TransformedSource {
   readonly format: ModuleFormat;
@@ -172,12 +203,19 @@ export class SourceTransformer {
     const key = this.#cacheKey(filePath, options, moduleFormat);
     const cached = key === undefined ? undefined : this.#cache?.get(key);
     if (cached !== undefined) {
+      const { mapFile } = cached;
       return {
         format: cached.format,
         source:
-          cached.mapFile === undefined
+          mapFile === undefined
             ? cached.code
-            : cached.code + fileSourceMapComment(cached.mapFile),
+            : isInspectorActive()
+              ? cached.code +
+                debuggerSourceMapComment(
+                  readFileSync(mapFile, "utf8"),
+                  readFileSync(filePath, "utf8"),
+                )
+              : cached.code + fileSourceMapComment(mapFile),
       };
     }
     const source = readFileSync(filePath, "utf8");
@@ -206,11 +244,9 @@ export class SourceTransformer {
           );
     }
     const map =
-      transformed.map === undefined
-        ? undefined
-        : JSON.stringify(withoutSourcesContent(transformed.map));
-    // The map ends up in the module exactly one way: on disk next to the
-    // cache entry and referenced by path, or (cache off) inlined.
+      transformed.map === undefined ? undefined : storedSourceMap(transformed.map, filePath);
+    // The map is stored next to the cache entry and referenced by path; see
+    // `sourceMapComment` for when it is inlined instead.
     const mapFile =
       key === undefined || map === undefined
         ? undefined
@@ -222,11 +258,9 @@ export class SourceTransformer {
     return {
       format: moduleFormat,
       source:
-        mapFile !== undefined
-          ? transformed.code + fileSourceMapComment(mapFile)
-          : map !== undefined
-            ? transformed.code + inlineSourceMapComment(map)
-            : transformed.code,
+        map === undefined
+          ? transformed.code
+          : transformed.code + sourceMapComment(map, mapFile, () => source),
     };
   }
 }
