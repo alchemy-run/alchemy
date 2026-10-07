@@ -67,3 +67,36 @@ InlineStack.state;
 InlineStack satisfies Test.MakeOptions<never>;
 // @ts-expect-error Configure a class reference with .make before reusing it.
 Test.make(InlineStack);
+
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+declare const anyStage: string;
+
+class StagedStack extends Stack<StagedStack, { value: string }, "prod" | `pr-${number}`>()(
+  "StagedStack",
+) {}
+
+type _AtReturnsSelf = Expect<Equal<ReturnType<typeof StagedStack.at>, Effect.Effect<StagedStack>>>;
+type _StageReturnsSelf = Expect<Equal<typeof StagedStack.stage.prod, Effect.Effect<StagedStack>>>;
+StagedStack.at("prod");
+StagedStack.at("pr-42");
+StagedStack.stage["pr-42"];
+// @ts-expect-error
+StagedStack.at("prdo");
+// @ts-expect-error
+StagedStack.stage.prdo;
+// @ts-expect-error
+StagedStack.at("pr-abc");
+// @ts-expect-error
+StagedStack.at(anyStage);
+
+type _DefaultAtReturnsSelf = Expect<
+  Equal<ReturnType<typeof NamedStack.at>, Effect.Effect<NamedStack>>
+>;
+type _InlineAtReturnsSelf = Expect<
+  Equal<ReturnType<typeof InlineStack.at>, Effect.Effect<InlineStack>>
+>;
+NamedStack.at(anyStage);
+NamedStack.stage[anyStage];
+InlineStack.at(anyStage);
+InlineStack.stage[anyStage];
