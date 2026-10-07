@@ -140,7 +140,7 @@ const waitForEndpoint = (input: Parameters<typeof readEndpoint>[0], dnsName?: st
   readEndpoint(input).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
-      times: 8,
+      times: 20,
       until: (endpoint) =>
         endpoint != null && (dnsName === undefined || endpoint.dnsName === dnsName),
     }),
@@ -158,48 +158,27 @@ const setPrefix = (environmentId: string, serviceId: string, prefix: string | nu
   });
 
 test.provider(
-  "private network enables the environment and restores its previous disabled flag",
+  "private network enables the environment and tolerates Railway's always-on networking on delete",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const partition = yield* stack.deploy(suitePartition);
       const environmentId = partition.environment.environmentId;
-      const service = yield* Effect.acquireRelease(
-        createService({
-          projectId: partition.project.projectId,
-          environmentId,
-          name: "private-network-disable-fixture",
-          image: "nginx:alpine",
-        }),
-        (service) =>
-          deleteService(service.id).pipe(
-            Effect.catchTag("RailwayNotFound", () => Effect.void),
-            Effect.orDie,
-          ),
-      );
-      const [platformNetwork] = yield* readPrivateNetworks(environmentId);
-      yield* waitForEndpoint({
-        environmentId,
-        privateNetworkId: platformNetwork!.publicId,
-        serviceId: service.id,
-      });
+
+      // Railway now keeps private networking on: the disable patch commits
+      // but the environment configuration stays enabled.
+      const initial = yield* readConfig(environmentId);
+      expect(initial.config.privateNetworkDisabled ?? false).toBe(false);
       const disablePatch = yield* commitEnvironmentPatch(environmentId, {
         privateNetworkDisabled: true,
       });
       yield* Effect.logInfo("Private-network disable commit", { disablePatch });
-      const disabled = yield* readConfig(environmentId).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          times: 8,
-          until: ({ config }) => config.privateNetworkDisabled === true,
-        }),
-      );
-      yield* Effect.logInfo("Private-network disabled state", {
-        privateNetworkDisabled: disabled.config.privateNetworkDisabled,
+      const afterDisable = yield* readConfig(environmentId);
+      yield* Effect.logInfo("Private-network state after disable", {
+        privateNetworkDisabled: afterDisable.config.privateNetworkDisabled,
         patches: yield* readEnvironmentPatches(environmentId),
-        networks: yield* readPrivateNetworks(environmentId),
       });
-      expect(disabled.config.privateNetworkDisabled).toBe(true);
+      expect(afterDisable.config.privateNetworkDisabled ?? false).toBe(false);
 
       const provider = yield* Provider.findProvider(Railway.PrivateNetwork);
       for (const name of ["backend", "legacy-network"]) {
@@ -216,15 +195,15 @@ test.provider(
           failure: { _tag: "Railway.PrivateNetworkNameUnsupported", name },
         });
       }
-      expect((yield* readConfig(environmentId)).etag).toBe(disabled.etag);
+      expect((yield* readConfig(environmentId)).etag).toBe(afterDisable.etag);
 
       const created = yield* stack.deploy(networkStack);
       expect(created.network.name).toBe("railway");
       expect(created.network.environmentId).toBe(environmentId);
       expect(created.network.projectId).toBe(partition.project.projectId);
-      expect(created.network.previousPrivateNetworkDisabled).toBe(true);
+      expect(created.network.previousPrivateNetworkDisabled).toBe(false);
       const enabled = yield* readConfig(environmentId);
-      expect(enabled.config.privateNetworkDisabled).toBe(false);
+      expect(enabled.config.privateNetworkDisabled ?? false).toBe(false);
       const networks = yield* readPrivateNetworks(environmentId);
       expect(
         networks.find(
@@ -238,27 +217,39 @@ test.provider(
         olds: props,
         output: created.network,
       });
-      expect(refreshed?.previousPrivateNetworkDisabled).toBe(true);
+      expect(refreshed?.previousPrivateNetworkDisabled).toBe(false);
       const repeated = yield* stack.deploy(networkStack);
       expect(repeated.network.publicId).toBe(created.network.publicId);
-      expect(repeated.network.previousPrivateNetworkDisabled).toBe(true);
+      expect(repeated.network.previousPrivateNetworkDisabled).toBe(false);
       expect((yield* readConfig(environmentId)).etag).toBe(enabled.etag);
 
       // Legacy state cannot establish what the environment used to contain.
       const { previousPrivateNetworkDisabled: _, ...legacy } = repeated.network;
       yield* provider.delete({ ...lifecycle("Mesh"), olds: props, output: legacy });
       expect((yield* readConfig(environmentId)).etag).toBe(enabled.etag);
-      expect((yield* readConfig(environmentId)).config.privateNetworkDisabled).toBe(false);
+      expect((yield* readConfig(environmentId)).config.privateNetworkDisabled ?? false).toBe(false);
+
+      // State captured while Railway still allowed disabling asks for a
+      // restore; Railway keeps networking on, and delete must still succeed.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        yield* provider.delete({
+          ...lifecycle("Mesh"),
+          olds: props,
+          output: { ...repeated.network, previousPrivateNetworkDisabled: true },
+        });
+      }
+      expect((yield* readConfig(environmentId)).config.privateNetworkDisabled ?? false).toBe(false);
 
       const retained = yield* stack.deploy(suitePartition);
       expect(retained.environment.environmentId).toBe(environmentId);
-      const restored = yield* readConfig(environmentId);
-      expect(restored.config.privateNetworkDisabled).toBe(true);
-      for (let attempt = 0; attempt < 2; attempt++) {
-        yield* provider.delete({ ...lifecycle("Mesh"), olds: props, output: repeated.network });
-      }
-      expect((yield* readConfig(environmentId)).etag).toBe(restored.etag);
-    }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.orDie)), logLevel),
+      const released = yield* readConfig(environmentId);
+      expect(released.config.privateNetworkDisabled ?? false).toBe(false);
+      expect(
+        (yield* readPrivateNetworks(environmentId)).find(
+          (network) => network.publicId === created.network.publicId && network.deletedAt == null,
+        ),
+      ).toBeDefined();
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)), logLevel),
   {
     tags: [
       "provider:railway",
