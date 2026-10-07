@@ -6,9 +6,17 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "../../SQL/Migrations/index.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { runDsqlMigrations } from "./Migrations.ts";
 
 export interface ClusterProps {
   /**
@@ -24,6 +32,21 @@ export interface ClusterProps {
    * @default an AWS-owned key
    */
   kmsEncryptionKey?: string;
+  /**
+   * SQL migrations to apply to the cluster's `postgres` database on deploy,
+   * connecting as `admin` with an IAM auth token. Accepts a directory path,
+   * a `Drizzle.Schema` resource, or `{ dir, table? }`.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy: the old tool's applied history is
+   * copied into Alchemy's table and the old table is left frozen.
+   *
+   * DSQL runs at most one DDL statement per transaction, so each statement
+   * commits on its own: put every DDL statement in its own file or separate
+   * statements with `--> statement-breakpoint` (drizzle-kit's default).
+   */
+  migrations?: MigrationsInput;
   /**
    * User-defined tags for the cluster.
    */
@@ -48,6 +71,12 @@ export interface Cluster extends Resource<
     endpoint: string;
     /** Whether deletion protection is enabled on the cluster. */
     deletionProtectionEnabled: boolean;
+    /** Directory of the applied SQL migrations. */
+    migrationsDir: string | undefined;
+    /** Migration bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** Applied migration content hashes. */
+    migrationsHashes: Record<string, string>;
   },
   never,
   Providers
@@ -80,6 +109,26 @@ export interface Cluster extends Resource<
  * const cluster = yield* Cluster("AppDb", {
  *   kmsEncryptionKey: key.keyArn,
  * });
+ * ```
+ *
+ * ### Migrations
+ * Point `migrations` at a folder of migration files. Pending migrations are
+ * applied in order on each deploy; already-applied ones are skipped.
+ *
+ * **Example:** Apply migrations from a directory
+ * ```typescript
+ * const cluster = yield* Cluster("AppDb", {
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
+ * **Example:** Drizzle migrations
+ * ```typescript
+ * const schema = yield* Drizzle.Schema("app-schema", {
+ *   schema: "./src/schema.ts",
+ *   dialect: "postgres",
+ * });
+ * const cluster = yield* Cluster("AppDb", { migrations: schema });
  * ```
  *
  * @resource
@@ -136,22 +185,29 @@ export const ClusterProvider = () =>
       const toAttrs = (
         cluster: dsql.GetClusterOutput | dsql.CreateClusterOutput,
         region: string,
-      ) => ({
+        previous: Cluster["Attributes"] | undefined,
+      ): Cluster["Attributes"] => ({
         clusterId: cluster.identifier,
         clusterArn: cluster.arn,
         status: cluster.status,
         endpoint: cluster.endpoint ?? endpointFor(cluster.identifier, region),
         deletionProtectionEnabled: cluster.deletionProtectionEnabled,
+        migrationsDir: previous?.migrationsDir,
+        migrationsTable: previous?.migrationsTable,
+        migrationsHashes: previous?.migrationsHashes ?? {},
       });
 
       return {
         stables: ["clusterId", "clusterArn", "endpoint"],
 
-        diff: Effect.fn(function* ({ olds = {}, news }) {
+        diff: Effect.fn(function* ({ olds = {}, news, output }) {
           if (!isResolved(news)) return undefined;
           // KMS key is create-only; changing it forces a replacement.
           if ((news.kmsEncryptionKey ?? undefined) !== (olds.kmsEncryptionKey ?? undefined)) {
             return { action: "replace" } as const;
+          }
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
           }
         }),
 
@@ -163,7 +219,7 @@ export const ClusterProvider = () =>
             return undefined;
           }
           const tags = yield* readTags(cluster.arn);
-          const attrs = toAttrs(cluster, region);
+          const attrs = toAttrs(cluster, region, output);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -219,8 +275,24 @@ export const ClusterProvider = () =>
             });
           }
 
+          // 3c. Sync migrations — the shared pipeline skips applied files,
+          // so this converges on create, update, and adoption alike.
+          const previous = output?.clusterId === observed.identifier ? output : undefined;
+          const attrs = toAttrs(observed, region, previous);
+          const migrationsInput = migrationsInputOf(news);
+          const migrations = migrationsInput
+            ? yield* runDsqlMigrations({
+                endpoint: attrs.endpoint,
+                input: migrationsInput,
+                stamped: stampedOf(previous),
+              })
+            : undefined;
+
           yield* session.note(identifier!);
-          return toAttrs(observed, region);
+          return {
+            ...attrs,
+            ...migrationsAttrs({ input: migrationsInput, run: migrations, output: previous }),
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {
@@ -261,7 +333,7 @@ export const ClusterProvider = () =>
                   Effect.map((cluster) =>
                     cluster === undefined || cluster.status === "DELETED"
                       ? undefined
-                      : toAttrs(cluster, region),
+                      : toAttrs(cluster, region, undefined),
                   ),
                 ),
               { concurrency: 4 },

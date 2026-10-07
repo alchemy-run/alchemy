@@ -35,6 +35,12 @@ export interface MigrationRecord {
 export interface SqlExecutor {
   readonly dialect: MigrationDialect;
   /**
+   * How the Postgres bookkeeping table generates its `id`. Aurora DSQL has
+   * no `SERIAL`, only identity columns.
+   * @default "serial"
+   */
+  readonly idColumn?: "serial" | "identity";
+  /**
    * Run a single query and return its rows as objects. `params` bind as
    * `?`/`$n` placeholders; adapters without native parameter support inline
    * them as SQL literals (see `inlineSqlParams`).

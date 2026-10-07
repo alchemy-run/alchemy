@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import type { MigrationsInput } from "../../SQL/Migrations/index.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -18,6 +19,10 @@ import {
   type DBClusterProps,
   type DBCluster as DBClusterResource,
 } from "./DBCluster.ts";
+import {
+  DBClusterMigrations,
+  type DBClusterMigrations as DBClusterMigrationsResource,
+} from "./DBClusterMigrations.ts";
 import {
   DBClusterParameterGroup,
   type DBClusterParameterGroupProps,
@@ -187,6 +192,18 @@ export interface AuroraProps {
    */
   dataApi?: boolean;
   /**
+   * SQL migrations to apply to `databaseName` on deploy, over the Data API
+   * once the writer is available. Accepts a directory path, a
+   * `Drizzle.Schema` resource, or `{ dir, table? }`. Requires `dataApi`.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy. The Data API runs one statement per
+   * call: put each statement in its own file or separate statements with
+   * `--> statement-breakpoint` (drizzle-kit's default).
+   */
+  migrations?: MigrationsInput;
+  /**
    * Backup retention period (e.g. `"7 days"`), forwarded to the cluster.
    */
   backupRetentionPeriod?: Duration.Input;
@@ -280,6 +297,7 @@ export interface AuroraDatabase {
   writer: DBInstanceResource;
   readers: DBInstanceResource[];
   instances: [DBInstanceResource, ...DBInstanceResource[]];
+  migrations?: DBClusterMigrationsResource;
   proxy?: {
     role: IAM.Role;
     proxy: DBProxyResource;
@@ -333,6 +351,16 @@ const inferProxyEngineFamily = (engine: string) => {
  *   securityGroupIds: [databaseSecurityGroup.groupId],
  *   readers: 2,
  *   proxy: true,
+ * });
+ * ```
+ *
+ * ### Migrations
+ * **Example:** Apply migrations once the writer is up
+ * ```typescript
+ * const db = yield* AWS.RDS.Aurora("AppDb", {
+ *   subnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ *   securityGroupIds: [databaseSecurityGroup.groupId],
+ *   migrations: "./migrations",
  * });
  * ```
  *
@@ -533,6 +561,17 @@ export const Aurora = (id: string, props: AuroraProps) =>
         { concurrency: "unbounded" },
       );
 
+      // The writer's cluster identifier orders the migrations after the
+      // writer, which the Data API needs to serve requests.
+      const migrations = props.migrations
+        ? yield* DBClusterMigrations("Migrations", {
+            dbClusterIdentifier: writer.dbClusterIdentifier.as<string>(),
+            secretArn: secret.secretArn,
+            database: databaseName,
+            migrations: props.migrations,
+          })
+        : undefined;
+
       const proxy =
         proxyConfig === undefined
           ? undefined
@@ -626,6 +665,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
         writer,
         readers,
         instances: [writer, ...readers] as [DBInstanceResource, ...DBInstanceResource[]],
+        migrations,
         proxy,
       } satisfies AuroraDatabase as AuroraDatabase;
     }),

@@ -13,6 +13,7 @@ export * from "./CreateDBSnapshot.ts";
 export * from "./CreateDBSnapshotHttp.ts";
 export * from "./DBCluster.ts";
 export * from "./DBClusterEndpoint.ts";
+export * from "./DBClusterMigrations.ts";
 export * from "./DBClusterParameterGroup.ts";
 export * from "./DBInstance.ts";
 export * from "./DBParameterGroup.ts";
