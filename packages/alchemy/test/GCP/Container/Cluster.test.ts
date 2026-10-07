@@ -217,15 +217,19 @@ test.provider.skipIf(!runLifecycle)(
 
         // Deletion protection blocks a replacement and a destroy until it is turned off.
         yield* stack.deploy(prod({ deletionProtection: true }));
-        const blockedReplace = yield* stack
-          .plan(prod({ deletionProtection: true, location: CAPACITY_ZONE_2 }))
-          .pipe(Effect.flip);
-        expect(blockedReplace).toMatchObject({ _tag: "GCP.Container.ClusterDeletionProtected" });
-        expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
-        expect(
-          (yield* container.getProjectsLocationsClusters({ name: created.name })).status,
-        ).toEqual("RUNNING");
-        yield* stack.deploy(prod({ deletionProtection: false }));
+        yield* Effect.gen(function* () {
+          const blockedReplace = yield* stack
+            .plan(prod({ deletionProtection: true, location: CAPACITY_ZONE_2 }))
+            .pipe(Effect.flip);
+          expect(blockedReplace).toMatchObject({ _tag: "GCP.Container.ClusterDeletionProtected" });
+          expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
+          expect(
+            (yield* container.getProjectsLocationsClusters({ name: created.name })).status,
+          ).toEqual("RUNNING");
+        }).pipe(
+          // Never leave the cluster locked, even if an assertion fails.
+          Effect.ensuring(Effect.ignore(stack.deploy(prod({ deletionProtection: false })))),
+        );
 
         yield* stack.destroy();
 
