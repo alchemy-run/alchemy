@@ -14,3 +14,4 @@ export * from "./SessionRpcs.ts";
 export * from "./SessionStore.ts";
 export * from "./Tool.ts";
 export * from "./UIMessageStream.ts";
+export * from "./Transcript.ts";

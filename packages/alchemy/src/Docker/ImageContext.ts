@@ -105,24 +105,40 @@ const materialize = (context: string, cacheDir: string, source: ImageContextSour
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const target = path.join(context, source.target);
-    yield* fs.remove(target, { recursive: true, force: true });
-    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+    // Digest the SOURCE first and rewrite the target only when it changed:
+    // every plan materializes, and rewriting an unchanged mount would race
+    // an image build reading the same context.
+    const marker = `${target}.digest`;
+    const previous = yield* fs.readFileString(marker).pipe(Effect.orElseSucceed(() => ""));
+    const replace = (
+      digest: string,
+      write: Effect.Effect<void, PlatformError | ImageContextError>,
+    ) =>
+      Effect.gen(function* () {
+        if (digest === previous && (yield* fs.exists(target))) return digest;
+        yield* fs.remove(target, { recursive: true, force: true });
+        yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+        yield* write;
+        yield* fs.writeFileString(marker, digest);
+        return digest;
+      });
     switch (source.kind) {
-      case "content": {
-        yield* fs.writeFileString(target, source.content);
-        return sha256(source.content);
-      }
+      case "content":
+        return yield* replace(sha256(source.content), fs.writeFileString(target, source.content));
       case "directory": {
         if (!(yield* fs.exists(source.source))) {
           return yield* new ImageContextError({
             message: `mounted folder ${source.source} does not exist`,
           });
         }
-        yield* fs.copy(source.source, target);
-        return yield* hashTree(target);
+        return yield* replace(yield* hashTree(source.source), fs.copy(source.source, target));
       }
       case "git":
-        return yield* checkoutGit(cacheDir, target, source);
+        // Copy under the cache lock: another mount of the same repository
+        // may check out a different ref next.
+        return yield* checkoutGit(cacheDir, source, (cache, commit) =>
+          replace(commit, fs.copy(cache, target)),
+        );
     }
   });
 
@@ -144,8 +160,8 @@ const hashTree = (root: string) =>
   });
 
 /**
- * Fetch `source` into a reusable cache clone, check out the ref, and copy
- * the working tree (with `.git`) to `target`. Returns the commit sha.
+ * Fetch `source` into a reusable cache clone and check out the ref; `use`
+ * runs with the checkout (and its commit sha) under the cache's lock.
  */
 /** One lock per cache clone: mounts of the same repository share it. */
 const cacheLocks = new Map<string, Semaphore.Semaphore>();
@@ -158,13 +174,19 @@ const cacheLock = (cache: string) => {
   return lock;
 };
 
-const checkoutGit = (cacheDir: string, target: string, source: GitSource) =>
+const checkoutGit = <A, E, R>(
+  cacheDir: string,
+  source: GitSource,
+  use: (cache: string, commit: string) => Effect.Effect<A, E, R>,
+) =>
   Effect.suspend(() => {
     const cache = `${cacheDir}/${sha256(source.url).slice(0, 16)}`;
-    return cacheLock(cache).withPermits(1)(checkoutGitLocked(cache, target, source));
+    return cacheLock(cache).withPermits(1)(
+      checkoutGitLocked(cache, source).pipe(Effect.flatMap(({ commit }) => use(cache, commit))),
+    );
   });
 
-const checkoutGitLocked = (cache: string, target: string, source: GitSource) =>
+const checkoutGitLocked = (cache: string, source: GitSource) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -217,8 +239,7 @@ const checkoutGitLocked = (cache: string, target: string, source: GitSource) =>
     }
     yield* git(cache, ["clean", "-fdxq"]);
     const commit = (yield* git(cache, ["rev-parse", "HEAD"])).trim();
-    yield* fs.copy(cache, target);
-    return commit;
+    return { cache, commit };
   });
 
 const git = (cwd: string, args: ReadonlyArray<string>) =>

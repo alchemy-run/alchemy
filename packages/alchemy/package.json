@@ -35,6 +35,7 @@
     ".": "./src/index.ts",
     "./*": "./src/*.ts",
     "./AI": "./src/AI/index.ts",
+    "./AI/Client": "./src/AI/Client.ts",
     "./Anthropic": "./src/Anthropic/index.ts",
     "./OpenAI": "./src/OpenAI/index.ts",
     "./OpenCode": "./src/OpenCode/index.ts",
@@ -121,6 +122,11 @@
         "types": "./lib/AI/index.d.ts",
         "bun": "./src/AI/index.ts",
         "default": "./lib/AI/index.js"
+      },
+      "./AI/Client": {
+        "types": "./lib/AI/Client.d.ts",
+        "bun": "./src/AI/Client.ts",
+        "default": "./lib/AI/Client.js"
       },
       "./Anthropic": {
         "types": "./lib/Anthropic/index.d.ts",

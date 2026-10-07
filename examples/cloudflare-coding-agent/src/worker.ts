@@ -24,6 +24,7 @@ const cors = {
  *   POST /agents/:id/model    { model }   switch models mid-session
  *   GET  /agents/:id                      session info (state, model, usage)
  *   GET  /agents/:id/events?after=N       server-sent events, resumable by cursor
+ *   GET  /agents/:id/rpc                  `AI.SessionRpcs` over a WebSocket (Effect RPC)
  *
  * Each agent is its own Durable Object + container. For a browser, connect
  * straight to the DO over a hibernating WebSocket with `agents.fetch(id, request)`.
@@ -39,12 +40,17 @@ export default Cloudflare.Worker(
         const request = yield* HttpServerRequest;
         if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204 });
         const url = new URL(request.url, "http://agents");
-        const match = /^\/agents\/([\w-]+)(?:\/(steer|interrupt|events|model))?$/.exec(
+        const match = /^\/agents\/([\w-]+)(?:\/(rpc|steer|interrupt|events|model))?$/.exec(
           url.pathname,
         );
         if (!match) return HttpServerResponse.text("POST /agents/:id { prompt }", { status: 404 });
         const [, id, action] = match;
 
+        if (action === "rpc") {
+          // Effect RPC (`AI.SessionRpcs`) over a hibernating WebSocket,
+          // straight to the session's Durable Object.
+          return yield* agents.fetch(id!, request);
+        }
         if (action === "events") {
           // `EventSource` reconnects with `Last-Event-ID` (our cursor).
           const after = Number(
@@ -92,7 +98,11 @@ export default Cloudflare.Worker(
         Effect.catchCause((cause) =>
           Effect.succeed(HttpServerResponse.text(String(cause), { status: 500 })),
         ),
-        Effect.map(HttpServerResponse.setHeaders(cors)),
+        // A WebSocket upgrade must pass through untouched: rebuilding the
+        // response to add headers would drop its socket.
+        Effect.map((response) =>
+          response.status === 101 ? response : HttpServerResponse.setHeaders(response, cors),
+        ),
       ),
     };
   }),
