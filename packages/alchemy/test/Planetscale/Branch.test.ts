@@ -1,15 +1,24 @@
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import { adopt } from "@/AdoptPolicy";
+import * as Drift from "@/Drift.ts";
 import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const fixturesDir = `${import.meta.dirname}/Postgres/fixtures`;
 
 const branchOutput = (
   overrides: Partial<Planetscale.PostgresBranchAttributes> = {},
@@ -172,6 +181,147 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
 
           yield* stack.destroy();
           yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    // Regression for #1955: a PostgresBranch adopting the database's default
+    // `main` branch (with a role on it, as in the issue) must report no drift
+    // right after a successful deploy.
+    test.provider(
+      "Postgres default branch reports no drift after deploy",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, branch } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("DriftDatabase", {
+                clusterSize: "PS_10",
+              });
+              const branch = yield* Planetscale.PostgresBranch("Branch", {
+                database,
+                name: "main",
+                migrations: `${fixturesDir}/migrations`,
+              }).pipe(adopt(true));
+              yield* Planetscale.PostgresRole("Role", {
+                database,
+                branch,
+                inheritedRoles: [],
+              });
+
+              return { database, branch };
+            }),
+          );
+
+          expect(branch.name).toEqual("main");
+          expect(branch.migrationsHashes["0001_create_widgets.sql"]).toEqual(expect.any(String));
+
+          // PlanetScale bumps the branch's `updated_at` a few seconds after the
+          // deploy (no config change). Wait for that bump so drift detection
+          // observes the volatile timestamp.
+          yield* ps
+            .getBranch({
+              organization: branch.organization,
+              database: branch.database,
+              branch: branch.name,
+            })
+            .pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("3 seconds"),
+                until: (live) => live.updated_at !== branch.updatedAt,
+                times: 20,
+              }),
+            );
+
+          const { plan } = yield* Drift.plan({ name: stack.name, stage: stack.stage }).pipe(
+            Effect.provide(stack.state),
+          );
+          const { action, drift } = plan.resources.Branch!;
+          expect({ action, drift }).toEqual({ action: "noop", drift: undefined });
+          expect(plan.resources.DriftDatabase).toMatchObject({ action: "noop" });
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    // #1389: an edited already-applied migration used to plan as an
+    // in-place update; the runner skipped it by name and persisted the new
+    // hash, silently accepting rewritten history.
+    test.provider(
+      "rewritten migration history replaces a development branch and fails on production",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = path.join(import.meta.dirname, "../../.tmp", `ps-rewrite-${stack.stage}`);
+          const databaseDir = path.join(root, "database");
+          const branchDir = path.join(root, "branch");
+          yield* fs.remove(root, { recursive: true, force: true });
+          yield* fs.makeDirectory(databaseDir, { recursive: true });
+          yield* fs.makeDirectory(branchDir, { recursive: true });
+          const init = "CREATE TABLE users (id int);";
+          yield* fs.writeFileString(path.join(databaseDir, "0001_init.sql"), init);
+          yield* fs.writeFileString(path.join(branchDir, "0001_init.sql"), init);
+          // Applied only on the development branch, never on main.
+          yield* fs.writeFileString(
+            path.join(branchDir, "0002_posts.sql"),
+            "CREATE TABLE posts (id int);",
+          );
+
+          const program = Effect.gen(function* () {
+            const database = yield* Planetscale.PostgresDatabase("RewriteDatabase", {
+              clusterSize: "PS_5",
+              migrations: databaseDir,
+            });
+            const branch = yield* Planetscale.PostgresBranch("RewriteBranch", {
+              database,
+              parentBranch: "main",
+              migrations: branchDir,
+            });
+            return { database, branch };
+          });
+
+          yield* stack.destroy();
+
+          const first = yield* stack.deploy(program);
+          expect(first.branch.production).toBe(false);
+
+          // Rewrite the branch-only migration: the branch re-forks from main
+          // (which never ran it) and applies the new version.
+          yield* fs.writeFileString(
+            path.join(branchDir, "0002_posts.sql"),
+            "CREATE TABLE posts (id int, title text);",
+          );
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.RewriteBranch).toMatchObject({ action: "replace" });
+
+          const second = yield* stack.deploy(program);
+          expect(second.branch.name).not.toEqual(first.branch.name);
+          expect(second.branch.migrationsHashes).toEqual(yield* hashMigrations(branchDir));
+          yield* waitForBranchToBeDeleted(
+            first.database.name,
+            first.branch.name,
+            first.database.organization,
+          );
+
+          // Rewrite a migration main (a production branch) already ran: no
+          // replacement is possible, so the deploy fails and keeps the
+          // recorded history.
+          yield* fs.writeFileString(
+            path.join(databaseDir, "0001_init.sql"),
+            "CREATE TABLE users (id int, name text);",
+          );
+          const rewrite = yield* Effect.exit(stack.deploy(program));
+          expect(Exit.isFailure(rewrite)).toBe(true);
+          if (Exit.isFailure(rewrite)) {
+            expect(Cause.pretty(rewrite.cause)).toContain("forward migration");
+          }
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(first.database.name, first.database.organization);
         }).pipe(logLevel),
       { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
     );

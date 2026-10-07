@@ -13,6 +13,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as Http from "../../Http.ts";
+import { withInvocationDeadline } from "./InvocationDeadline.ts";
 
 export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent => {
   return event.requestContext?.http?.method !== undefined;
@@ -35,13 +36,35 @@ export const isAlbEvent = (event: any): event is ALBEvent => {
   return typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 };
 
+// `HttpMiddleware.tracer` records the request on the `http.server` span only
+// when the request finishes. A span the deadline flush ends early would ship
+// without it, so record the method and path up front.
+const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const span = yield* Effect.option(Effect.currentSpan);
+    if (Option.isSome(span)) {
+      span.value.attribute("http.request.method", request.method);
+      span.value.attribute("url.path", new URL(request.url, "http://localhost").pathname);
+    }
+    return yield* self;
+  });
+
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // `HttpMiddleware.tracer` creates the `http.server` root span per request
   // (continuing an incoming `traceparent`), matching the Worker bridge's
   // fetch path. With the default no-op tracer this is free; with a telemetry
   // exporter installed the span is exported when the invocation scope
   // flushes.
-  const safeHandler = HttpMiddleware.tracer(Http.safeHttpEffect(handler));
+  //
+  // The invocation deadline flush sits INSIDE the span so it can find the
+  // `http.server` root span in context and end it — with
+  // `InvocationTimeoutError` as its status — before draining the exporters.
+  // The dispatcher's outer guard stands down when this one takes the
+  // deadline; see `withInvocationDeadline`.
+  const safeHandler = HttpMiddleware.tracer(
+    withInvocationDeadline(Http.safeHttpEffect(handler)).pipe(annotateRequestSpan),
+  );
   return (
     event: any,
   ):
