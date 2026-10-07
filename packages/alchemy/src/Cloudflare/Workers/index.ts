@@ -14,18 +14,6 @@ export * from "./DurableObjectBridge.ts";
 export * from "./DurableObjectState.ts";
 export * from "./DurableObjectStorage.ts";
 export * from "./EmailEventSource.ts";
-export {
-  Exports,
-  isWorkerExports,
-  type DeletedDurableObjectExport,
-  type DurableObjectExportName,
-  type DurableObjectExportProps,
-  type EntrypointExportName,
-  type EntrypointExportProps,
-  type ExportProps,
-  type InferGlobalProps,
-  type WorkerExports,
-} from "./Exports.ts";
 export * from "./Fetch.ts";
 export * from "./GitHubRepositoryEventSource.ts";
 export * from "./HttpServer.ts";

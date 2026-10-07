@@ -41,7 +41,6 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
-import { getEffectExports } from "./Exports.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
@@ -2197,7 +2196,7 @@ export const LiveWorkerProvider = () =>
                 compatibility: getCompatibility(props),
                 entry: props.isExternal
                   ? { kind: "external" }
-                  : { kind: "effect", exports: getEffectExports(props.exports) },
+                  : { kind: "effect", exports: props.exports ?? {} },
                 stack: { name: stack.name, stage: stack.stage },
                 extraOptions: props.build,
               })
@@ -2683,7 +2682,7 @@ export const LiveWorkerProvider = () =>
         // migrations, which the versions API can't carry — and which would
         // mutate the parent's namespaces.
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
-        const exportedClasses = Object.keys(getEffectExports(news.exports));
+        const exportedClasses = Object.keys(news.exports ?? {});
         if (hostedClasses.length > 0 || exportedClasses.length > 0) {
           return yield* Effect.fail(
             new WorkerVersionConfigError({
@@ -4731,7 +4730,7 @@ export const LiveWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          const exportMap = getEffectExports(news.exports);
+          const exportMap = news.exports ?? {};
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
           // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`

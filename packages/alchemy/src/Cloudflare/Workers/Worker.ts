@@ -38,7 +38,6 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
-import type { EntrypointExportName, WorkerExports } from "./Exports.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -726,16 +725,12 @@ export interface WorkerProps<
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
   /**
-   * The Durable Object and `WorkerEntrypoint` classes an async Worker's
-   * module exports, created with {@link Exports} and type-checked against
-   * the module. Deployed as Cloudflare's declarative `exports` metadata.
-   *
-   * Durable Objects bound in `env` are exported automatically; declare a
-   * class here when nothing binds it (it is reached through `ctx.exports`)
-   * or to configure it. Effect-native Workers collect their exports from
-   * the classes they yield and do not set this.
+   * Tracks Durable Object and Workflow exports and captured SQL migrations
+   * for Effect-native Workers only.
+   * Populated automatically from bindings; do not set manually.
+   * @internal
    */
-  exports?: WorkerExports | Record<string, WorkerExport>;
+  exports?: Record<string, WorkerExport>;
   /**
    * Environment variables and native Cloudflare Bindings to bind to
    * the Worker. Accepts:
@@ -1438,27 +1433,20 @@ export type Self = typeof Self & {
 };
 
 /**
- * {@link Self}, targeting a named `WorkerEntrypoint` class this Worker's
- * module exports (Wrangler's `services: [{ binding, service: <this worker>,
- * entrypoint }]`). The name is checked against the module's type, passed
- * with `typeof import(...)`.
+ * {@link Self}, targeting a named `WorkerEntrypoint` class this Worker
+ * exports instead of its default export (Wrangler's `services: [{ binding,
+ * service: <this worker>, entrypoint }]`).
  *
  * ```typescript
- * type Main = typeof import("./src/worker.ts");
- *
  * const worker = yield* Cloudflare.Worker("Api", {
  *   main: "./src/worker.ts",
  *   env: {
- *     MCP: Cloudflare.Workers.SelfEntrypoint<Main>()("McpEntrypoint"),
+ *     MCP: Cloudflare.Workers.SelfEntrypoint("McpEntrypoint"),
  *   },
  * });
  * ```
  */
-export const SelfEntrypoint =
-  <Module>() =>
-  <const Name extends string>(
-    entrypoint: Name & (Name extends EntrypointExportName<Module> ? Name : never),
-  ): Self => ({ ...Self, entrypoint });
+export const SelfEntrypoint = (entrypoint: string): Self => ({ ...Self, entrypoint });
 
 /** Returns true when the value is the {@link Self} marker. */
 export const isSelf = (value: unknown): value is Self =>
