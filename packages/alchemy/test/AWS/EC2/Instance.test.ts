@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as AWS from "@/AWS";
 import { amazonLinux2023, Instance, Subnet, Vpc, type InstanceProps } from "@/AWS/EC2";
+import { Queue } from "@/AWS/SQS";
+import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider";
 import { State } from "@/State/State";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
@@ -125,6 +127,60 @@ describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "li
         yield* stack.destroy();
 
         // Zero-orphan proof for the replacement generation and the VPC.
+        yield* assertInstanceTerminated(second.instance.instanceId);
+        yield* assertVpcGone(second.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
+
+  // EC2 runs userData only at launch. When it interpolates an upstream that
+  // is being replaced, its new value is unknown at plan time; the instance
+  // must still be replaced, or it keeps running the old userData.
+  test.provider.skipIf(!!process.env.FAST)(
+    "replaces the instance when userData depends on a replaced upstream",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const program = (fifo: boolean) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("UpstreamUserDataVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("UpstreamUserDataSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            // Toggling `fifo` replaces the queue, so its URL is unknown at plan time.
+            const queue = yield* Queue("UpstreamUserDataQueue", { fifo });
+            const instance = yield* Instance("UpstreamUserDataInstance", {
+              imageId: amazonLinux2023(),
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+              userData: Output.interpolate`#!/bin/bash
+echo ${queue.queueUrl}
+`,
+            });
+            return { vpc, queue, instance };
+          });
+
+        const first = yield* stack.deploy(program(false));
+        const plan = yield* stack.plan(program(true));
+        expect(plan.resources.UpstreamUserDataInstance?.action).toBe("replace");
+
+        const second = yield* stack.deploy(program(true));
+        expect(second.instance.instanceId).not.toBe(first.instance.instanceId);
+
+        // The new instance launched with the replaced queue's URL.
+        const userData = yield* ec2.describeInstanceAttribute({
+          InstanceId: second.instance.instanceId,
+          Attribute: "userData",
+        });
+        const script = yield* Effect.sync(() =>
+          Buffer.from(userData.UserData?.Value ?? "", "base64").toString("utf8"),
+        );
+        expect(script).toContain(second.queue.queueUrl);
+        yield* assertInstanceTerminated(first.instance.instanceId);
+
+        yield* stack.destroy();
         yield* assertInstanceTerminated(second.instance.instanceId);
         yield* assertVpcGone(second.vpc.vpcId);
       }).pipe(logLevel),
