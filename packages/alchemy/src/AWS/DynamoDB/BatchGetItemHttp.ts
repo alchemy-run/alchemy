@@ -1,11 +1,7 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  BatchGetItem,
-  type BatchGetItemRequest,
-  type BatchGetItemTables,
-} from "./BatchGetItem.ts";
+import { BatchGetItem, type BatchGetItemRequest, type BatchGetItemTables } from "./BatchGetItem.ts";
 import { grantTables, signed, tablesRegion } from "./BindingHttp.ts";
 
 export const BatchGetItemHttp = Layer.effect(
@@ -25,9 +21,7 @@ export const BatchGetItemHttp = Layer.effect(
         const TableName = tableNames.get(tableId);
         if (!TableName) {
           return yield* Effect.die(
-            new Error(
-              `BatchGetItem request references unbound table '${tableId}'`,
-            ),
+            new Error(`BatchGetItem request references unbound table '${tableId}'`),
           );
         }
         return yield* TableName;
@@ -70,10 +64,6 @@ export const BatchGetItemHttp = Layer.effect(
 );
 
 const sortTables = (tables: BatchGetItemTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
+  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()].sort((a, b) =>
     a.LogicalId.localeCompare(b.LogicalId),
   ) as BatchGetItemTables;

@@ -1,17 +1,14 @@
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as placementGroups from "@distilled.cloud/hetzner/placement_groups";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -39,7 +36,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(created.servers).toEqual([]);
       expect(created.labels).toMatchObject({ env: "test" });
 
-      const fetched = yield* Services.placementGroups.getPlacementGroup({
+      const fetched = yield* placementGroups.getPlacementGroup({
         id: created.id,
       });
       expect(fetched.placement_group.id).toEqual(created.id);
@@ -64,7 +61,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(updated.name).toEqual(`${created.name.slice(0, 55)}-renamed`);
       expect(updated.labels).toMatchObject({ env: "prod", role: "web" });
 
-      const refetched = yield* Services.placementGroups.getPlacementGroup({
+      const refetched = yield* placementGroups.getPlacementGroup({
         id: updated.id,
       });
       expect(refetched.placement_group.name).toEqual(updated.name);

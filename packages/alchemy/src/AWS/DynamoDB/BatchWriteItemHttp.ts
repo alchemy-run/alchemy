@@ -26,9 +26,7 @@ export const BatchWriteItemHttp = Layer.effect(
         const TableName = tableNames.get(tableId);
         if (!TableName) {
           return yield* Effect.die(
-            new Error(
-              `BatchWriteItem request references unbound table '${tableId}'`,
-            ),
+            new Error(`BatchWriteItem request references unbound table '${tableId}'`),
           );
         }
         return yield* TableName;
@@ -46,26 +44,26 @@ export const BatchWriteItemHttp = Layer.effect(
       );
       const region = yield* tablesRegion(access, sortedTables);
 
-      return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(
-        function* (request: BatchWriteItemRequest) {
-          const requestItems = yield* Effect.forEach(
-            Object.entries(request.RequestItems),
-            ([tableId, writes]) =>
-              Effect.gen(function* () {
-                return [yield* getTableName(tableId), writes] as const;
-              }),
-          );
-
-          return yield* signed(
-            access,
-            region,
-            DynamoDB.batchWriteItem({
-              ...request,
-              RequestItems: Object.fromEntries(requestItems),
+      return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(function* (
+        request: BatchWriteItemRequest,
+      ) {
+        const requestItems = yield* Effect.forEach(
+          Object.entries(request.RequestItems),
+          ([tableId, writes]) =>
+            Effect.gen(function* () {
+              return [yield* getTableName(tableId), writes] as const;
             }),
-          );
-        },
-      );
+        );
+
+        return yield* signed(
+          access,
+          region,
+          DynamoDB.batchWriteItem({
+            ...request,
+            RequestItems: Object.fromEntries(requestItems),
+          }),
+        );
+      });
     });
   }),
 );

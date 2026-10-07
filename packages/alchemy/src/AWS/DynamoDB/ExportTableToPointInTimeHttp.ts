@@ -14,10 +14,7 @@ import type { Table } from "./Table.ts";
 export const ExportTableToPointInTimeHttp = Layer.effect(
   ExportTableToPointInTime,
   Effect.gen(function* () {
-    return Effect.fn(function* <T extends Table, B extends Bucket>(
-      table: T,
-      bucket: B,
-    ) {
+    return Effect.fn(function* <T extends Table, B extends Bucket>(table: T, bucket: B) {
       const TableArn = yield* table.tableArn;
       const S3Bucket = yield* bucket.bucketName;
       const access = yield* grantTables(
@@ -30,11 +27,7 @@ export const ExportTableToPointInTimeHttp = Layer.effect(
           },
           {
             Effect: "Allow",
-            Action: [
-              "s3:AbortMultipartUpload",
-              "s3:PutObject",
-              "s3:PutObjectAcl",
-            ],
+            Action: ["s3:AbortMultipartUpload", "s3:PutObject", "s3:PutObjectAcl"],
             Resource: [Output.interpolate`${bucket.bucketArn}/*`],
           },
         ],

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ComputeQuota } from "@/AWS/SageMaker";
-import * as Test from "@/Test/Alchemy";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ComputeQuota } from "@/AWS/SageMaker";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,9 +14,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        sagemaker.describeComputeQuota({
-          ComputeQuotaId: "abcdef012345",
-        }),
+        sagemaker.describeComputeQuota({ ComputeQuotaId: "abcdef012345" }),
       );
       expect(error._tag).toBe("ResourceNotFound");
     }),
@@ -38,21 +36,15 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const clusterArn =
-        process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN!;
+      const clusterArn = process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN!;
 
       const { quota } = yield* stack.deploy(
         Effect.gen(function* () {
           const quota = yield* ComputeQuota("TestQuota", {
             clusterArn,
-            computeQuotaTarget: {
-              TeamName: "alchemy-research",
-              FairShareWeight: 10,
-            },
+            computeQuotaTarget: { TeamName: "alchemy-research", FairShareWeight: 10 },
             computeQuotaConfig: {
-              ComputeQuotaResources: [
-                { InstanceType: "ml.t3.medium", Count: 1 },
-              ],
+              ComputeQuotaResources: [{ InstanceType: "ml.t3.medium", Count: 1 }],
             },
             activationState: "Enabled",
             tags: { purpose: "alchemy-test" },
@@ -74,14 +66,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
         Effect.gen(function* () {
           const quota = yield* ComputeQuota("TestQuota", {
             clusterArn,
-            computeQuotaTarget: {
-              TeamName: "alchemy-research",
-              FairShareWeight: 20,
-            },
+            computeQuotaTarget: { TeamName: "alchemy-research", FairShareWeight: 20 },
             computeQuotaConfig: {
-              ComputeQuotaResources: [
-                { InstanceType: "ml.t3.medium", Count: 2 },
-              ],
+              ComputeQuotaResources: [{ InstanceType: "ml.t3.medium", Count: 2 }],
             },
             activationState: "Enabled",
             tags: { purpose: "alchemy-test" },
@@ -90,17 +77,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD_EKS_CLUSTER_ARN)(
         }),
       );
       expect(updated.computeQuotaId).toBe(quota.computeQuotaId);
-      expect(updated.computeQuotaVersion).toBeGreaterThan(
-        quota.computeQuotaVersion,
-      );
+      expect(updated.computeQuotaVersion).toBeGreaterThan(quota.computeQuotaVersion);
 
       // Destroy and verify gone.
       yield* stack.destroy();
       const gone = yield* findQuota(quota.computeQuotaId);
       expect(gone === undefined || gone.Status === "Deleted").toBe(true);
     }),
-  {
-    tags: ["provider:aws", "provider:aws:sagemaker", "live"],
-    timeout: 600_000,
-  },
+  { tags: ["provider:aws", "provider:aws:sagemaker", "live"], timeout: 600_000 },
 );

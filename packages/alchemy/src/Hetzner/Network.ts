@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -22,9 +22,7 @@ import {
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
-export class NetworkNotCreated extends Data.TaggedError(
-  "Hetzner.NetworkNotCreated",
-)<{
+export class NetworkNotCreated extends Data.TaggedError("Hetzner.NetworkNotCreated")<{
   name: string;
 }> {}
 
@@ -266,9 +264,7 @@ const subnetKey = (subnet: {
 const routeKey = (route: { destination: string; gateway: string }): string =>
   `${route.destination}|${route.gateway}`;
 
-const toSubnetAttr = (
-  subnet: ObservedNetwork["subnets"][number],
-): NetworkSubnetAttr => ({
+const toSubnetAttr = (subnet: ObservedNetwork["subnets"][number]): NetworkSubnetAttr => ({
   type: subnet.type as NetworkSubnetType,
   ipRange: subnet.ip_range,
   networkZone: subnet.network_zone,
@@ -293,9 +289,7 @@ const toAttrs = (network: ObservedNetwork): Network["Attributes"] => ({
   created: network.created,
 });
 
-const parseCidr = (
-  cidr: string,
-): { ip: number; prefix: number } | undefined => {
+const parseCidr = (cidr: string): { ip: number; prefix: number } | undefined => {
   const [addr, prefixRaw] = cidr.split("/");
   if (addr === undefined || prefixRaw === undefined) return undefined;
   const parts = addr.split(".").map(Number);
@@ -307,9 +301,7 @@ const parseCidr = (
   }
   const prefix = Number(prefixRaw);
   if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return undefined;
-  const ip =
-    ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>>
-    0;
+  const ip = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0;
   return { ip, prefix };
 };
 
@@ -324,20 +316,18 @@ const cidrContains = (outer: string, inner: string): boolean => {
 };
 
 const getById = (id: number) =>
-  Services.networks.getNetwork({ id }).pipe(
+  Hetzner.networks.getNetwork({ id }).pipe(
     Effect.map(({ network }) => network),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const findByName = (name: string) =>
-  Services.networks
+  Hetzner.networks
     .listNetworks({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ networks }) => networks.find((item) => item.name === name)),
-    );
+    .pipe(Effect.map(({ networks }) => networks.find((item) => item.name === name)));
 
 const findByLabels = (labels: Record<string, string>) =>
-  Services.networks
+  Hetzner.networks
     .listNetworks({
       label_selector: labelSelector(labels),
       per_page: 50,
@@ -367,7 +357,7 @@ const syncIpRange = (networkId: number, observed: string, desired: string) =>
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
-      Services.networkActions.changeNetworkIpRange({
+      Hetzner.networkActions.changeNetworkIpRange({
         id: networkId,
         ip_range: desired,
       }),
@@ -386,16 +376,13 @@ const syncMetadata = (args: {
     const { removed, upsert } = diffLabels(observedLabels, args.labels);
     const labelsChanged = removed.length > 0 || upsert.length > 0;
     const nameChanged = args.observed.name !== args.name;
-    const exposeChanged =
-      args.observed.expose_routes_to_vswitch !== args.exposeRoutesToVswitch;
+    const exposeChanged = args.observed.expose_routes_to_vswitch !== args.exposeRoutesToVswitch;
     if (!labelsChanged && !nameChanged && !exposeChanged) return;
-    yield* Services.networks
+    yield* Hetzner.networks
       .updateNetwork({
         id: args.networkId,
         name: nameChanged ? args.name : undefined,
-        expose_routes_to_vswitch: exposeChanged
-          ? args.exposeRoutesToVswitch
-          : undefined,
+        expose_routes_to_vswitch: exposeChanged ? args.exposeRoutesToVswitch : undefined,
         labels: labelsChanged ? args.labels : undefined,
       })
       .pipe(Effect.retry(busyRetry));
@@ -420,7 +407,7 @@ const syncSubnets = (
       if (desiredKeys.has(subnetKey(subnet))) continue;
       if (subnet.ipRange === undefined) continue;
       yield* runAction(
-        Services.networkActions.deleteNetworkSubnet({
+        Hetzner.networkActions.deleteNetworkSubnet({
           id: networkId,
           ip_range: subnet.ipRange,
         }),
@@ -430,7 +417,7 @@ const syncSubnets = (
     for (const subnet of desired) {
       if (observedKeys.has(subnetKey(subnet))) continue;
       yield* runAction(
-        Services.networkActions.addNetworkSubnet({
+        Hetzner.networkActions.addNetworkSubnet({
           id: networkId,
           type: subnet.type,
           ip_range: subnet.ipRange,
@@ -453,7 +440,7 @@ const syncRoutes = (
     for (const route of observed) {
       if (desiredKeys.has(routeKey(route))) continue;
       yield* runAction(
-        Services.networkActions.deleteNetworkRoute({
+        Hetzner.networkActions.deleteNetworkRoute({
           id: networkId,
           destination: route.destination,
           gateway: route.gateway,
@@ -464,7 +451,7 @@ const syncRoutes = (
     for (const route of desired) {
       if (observedKeys.has(routeKey(route))) continue;
       yield* runAction(
-        Services.networkActions.addNetworkRoute({
+        Hetzner.networkActions.addNetworkRoute({
           id: networkId,
           destination: route.destination,
           gateway: route.gateway,
@@ -473,15 +460,11 @@ const syncRoutes = (
     }
   });
 
-const syncProtection = (
-  networkId: number,
-  observed: boolean,
-  desired: boolean,
-) =>
+const syncProtection = (networkId: number, observed: boolean, desired: boolean) =>
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
-      Services.networkActions.changeNetworkProtection({
+      Hetzner.networkActions.changeNetworkProtection({
         id: networkId,
         delete: desired,
       }),
@@ -493,7 +476,7 @@ export const NetworkProvider = () =>
     stables: ["networkId", "created"],
 
     list: Effect.fn(function* () {
-      return yield* Services.networks.listNetworks
+      return yield* Hetzner.networks.listNetworks
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -518,9 +501,7 @@ export const NetworkProvider = () =>
       const observed = yield* observe(output?.networkId, name, id);
       if (observed === undefined) return undefined;
       const attrs = toAttrs(observed);
-      return (yield* hasAlchemyLabels(id, tagRecord(observed.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(observed.labels))) ? attrs : Unowned(attrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -554,7 +535,7 @@ export const NetworkProvider = () =>
       // Ensure — create when missing. A name-collision race is treated as
       // the peer winning; we pick that row up and continue into sync.
       if (current === undefined) {
-        const created = yield* Services.networks
+        const created = yield* Hetzner.networks
           .createNetwork({
             name,
             ip_range: news.ipRange,
@@ -597,11 +578,7 @@ export const NetworkProvider = () =>
       const afterSubnets = (yield* getById(current.id)) ?? afterMeta;
       yield* syncRoutes(current.id, afterSubnets.routes, desiredRoutes);
       const afterRoutes = (yield* getById(current.id)) ?? afterSubnets;
-      yield* syncProtection(
-        current.id,
-        afterRoutes.protection.delete,
-        deleteProtection,
-      );
+      yield* syncProtection(current.id, afterRoutes.protection.delete, deleteProtection);
 
       const fresh = yield* getById(current.id);
       return toAttrs(fresh ?? afterRoutes);
@@ -610,13 +587,13 @@ export const NetworkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (output.deleteProtection) {
         yield* runAction(
-          Services.networkActions.changeNetworkProtection({
+          Hetzner.networkActions.changeNetworkProtection({
             id: output.networkId,
             delete: false,
           }),
         ).pipe(Effect.catchIf(alreadyGone, () => Effect.void));
       }
-      yield* Services.networks.deleteNetwork({ id: output.networkId }).pipe(
+      yield* Hetzner.networks.deleteNetwork({ id: output.networkId }).pipe(
         Effect.retry(busyRetry),
         Effect.catchTag("NotFound", () => Effect.void),
       );

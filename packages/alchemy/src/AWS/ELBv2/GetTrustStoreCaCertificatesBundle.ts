@@ -32,10 +32,7 @@ export interface GetTrustStoreCaCertificatesBundle extends Binding.Service<
     trustStore: TrustStore,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        elbv2.GetTrustStoreCaCertificatesBundleInput,
-        "TrustStoreArn"
-      >,
+      request?: Omit<elbv2.GetTrustStoreCaCertificatesBundleInput, "TrustStoreArn">,
     ) => Effect.Effect<
       elbv2.GetTrustStoreCaCertificatesBundleOutput,
       elbv2.GetTrustStoreCaCertificatesBundleError
@@ -43,7 +40,6 @@ export interface GetTrustStoreCaCertificatesBundle extends Binding.Service<
   >
 > {}
 
-export const GetTrustStoreCaCertificatesBundle =
-  Binding.Service<GetTrustStoreCaCertificatesBundle>(
-    "AWS.ELBv2.GetTrustStoreCaCertificatesBundle",
-  );
+export const GetTrustStoreCaCertificatesBundle = Binding.Service<GetTrustStoreCaCertificatesBundle>(
+  "AWS.ELBv2.GetTrustStoreCaCertificatesBundle",
+);

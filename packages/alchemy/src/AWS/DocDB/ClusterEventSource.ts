@@ -134,7 +134,5 @@ export class ClusterEventSource extends Context.Service<
 export type ClusterEventSourceService = <TDoc = unknown, Req = never>(
   cluster: DBCluster,
   props: ClusterEventSourceProps,
-  process: (
-    stream: Stream.Stream<DocumentDBRecord<TDoc>>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (stream: Stream.Stream<DocumentDBRecord<TDoc>>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;

@@ -11,10 +11,7 @@ import type { Table } from "./Table.ts";
 export const RestoreTableToPointInTimeHttp = Layer.effect(
   RestoreTableToPointInTime,
   Effect.gen(function* () {
-    return Effect.fn(function* <From extends Table, To extends Table>(
-      from: From,
-      to: To,
-    ) {
+    return Effect.fn(function* <From extends Table, To extends Table>(from: From, to: To) {
       const SourceTableName = yield* from.tableName;
       const TargetTableName = yield* to.tableName;
       const access = yield* grantTables(

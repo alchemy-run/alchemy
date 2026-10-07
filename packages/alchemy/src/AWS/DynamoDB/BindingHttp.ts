@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import type { Input } from "../../Input.ts";
 import {
   hostAwsAccess,
   regionFromArn,
@@ -45,10 +45,7 @@ const ambientRegion: Effect.Effect<string> = Effect.die(
  * Resolve how the host reaches AWS and grant it `policyStatements` under
  * `label` (see `hostAwsAccess`). The grant is deploy-only.
  */
-export const grantTables = (
-  label: string,
-  policyStatements: () => Input<PolicyStatement>[],
-) =>
+export const grantTables = (label: string, policyStatements: () => Input<PolicyStatement>[]) =>
   Effect.gen(function* () {
     const host = yield* Binding.Host;
     return yield* hostAwsAccess(host, () => ({
@@ -96,15 +93,13 @@ export const tablesRegion = Effect.fn(function* (
  * the stack's AWS region at deploy, bound onto the Worker. On an AWS host
  * the `Region` is ambient and nothing is bound.
  */
-export const accountRegion = Effect.fn(function* (
-  access: WorkerAwsAccess | undefined,
-) {
+export const accountRegion = Effect.fn(function* (access: WorkerAwsAccess | undefined) {
   if (access === undefined) {
     return ambientRegion;
   }
-  return yield* (
-    Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>
-  ).bind("ALCHEMY_AWS_REGION") as Effect.Effect<Effect.Effect<string>>;
+  return yield* (Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>).bind(
+    "ALCHEMY_AWS_REGION",
+  ) as Effect.Effect<Effect.Effect<string>>;
 });
 
 /**
@@ -116,8 +111,7 @@ export const signed = <A, E, R>(
   access: WorkerAwsAccess | undefined,
   region: Effect.Effect<string>,
   operation: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E> =>
-  withRuntimeCredentials(access, region, operation) as Effect.Effect<A, E>;
+): Effect.Effect<A, E> => withRuntimeCredentials(access, region, operation) as Effect.Effect<A, E>;
 
 /**
  * Build the impl Effect for an account-level operation (`ListTables`,
@@ -148,11 +142,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
       ]);
       const region = yield* accountRegion(access);
       return Effect.fn(options.tag)(function* (request?: I) {
-        return yield* signed(
-          access,
-          region,
-          options.operation((request ?? {}) as I),
-        );
+        return yield* signed(access, region, options.operation((request ?? {}) as I));
       });
     });
   });
@@ -162,12 +152,7 @@ export const makeAccountHttpBinding = <I, A, E, R>(options: {
  * injects the bound {@link Table}'s physical name as `TableName` and the
  * deploy-time half grants `actions` on `resources` (default: the table ARN).
  */
-export const makeTableHttpBinding = <
-  I extends { TableName?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeTableHttpBinding = <I extends { TableName?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DynamoDB.GetItem`. */
   tag: string;
   /**
@@ -185,16 +170,13 @@ export const makeTableHttpBinding = <
   Effect.gen(function* () {
     return Effect.fn(function* (table: Table) {
       const TableName = yield* table.tableName;
-      const access = yield* grantTables(
-        `${options.tag}(${table.LogicalId})`,
-        () => [
-          {
-            Effect: "Allow",
-            Action: [...options.actions],
-            Resource: options.resources?.(table) ?? [table.tableArn],
-          },
-        ],
-      );
+      const access = yield* grantTables(`${options.tag}(${table.LogicalId})`, () => [
+        {
+          Effect: "Allow",
+          Action: [...options.actions],
+          Resource: options.resources?.(table) ?? [table.tableArn],
+        },
+      ]);
       const region = yield* tablesRegion(access, [table]);
       return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
         request?: Omit<I, "TableName">,
@@ -242,20 +224,15 @@ export const makeTableArnHttpBinding = <
   Effect.gen(function* () {
     return Effect.fn(function* (table: Table) {
       const TableArn = yield* table.tableArn;
-      const access = yield* grantTables(
-        `${options.tag}(${table.LogicalId})`,
-        () => [
-          {
-            Effect: "Allow",
-            Action: [...options.actions],
-            Resource: options.resources?.(table) ?? [table.tableArn],
-          },
-        ],
-      );
+      const access = yield* grantTables(`${options.tag}(${table.LogicalId})`, () => [
+        {
+          Effect: "Allow",
+          Action: [...options.actions],
+          Resource: options.resources?.(table) ?? [table.tableArn],
+        },
+      ]);
       const region = access ? Effect.map(TableArn, regionFromArn) : undefined;
-      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* signed(
           access,
           region ?? ambientRegion,
@@ -290,20 +267,15 @@ export const makeTableIamHttpBinding = <I, A, E, R>(options: {
 }) =>
   Effect.gen(function* () {
     return Effect.fn(function* (table: Table) {
-      const access = yield* grantTables(
-        `${options.tag}(${table.LogicalId})`,
-        () => [
-          {
-            Effect: "Allow",
-            Action: [...options.actions],
-            Resource: options.resources(table),
-          },
-        ],
-      );
+      const access = yield* grantTables(`${options.tag}(${table.LogicalId})`, () => [
+        {
+          Effect: "Allow",
+          Action: [...options.actions],
+          Resource: options.resources(table),
+        },
+      ]);
       const region = yield* tablesRegion(access, [table]);
-      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${table.LogicalId})`)(function* (request: I) {
         return yield* signed(access, region, options.operation(request));
       });
     });

@@ -7,12 +7,6 @@ import type * as Redacted from "effect/Redacted";
 import { AuthError, refreshHint } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { resolveProviderConfig } from "../Auth/Resolve.ts";
-import {
-  DopplerAuth,
-  type DopplerAuthConfig,
-  type DopplerResolvedCredentials,
-} from "./AuthProvider.ts";
-import { UserFacingError } from "../UserFacingError.ts";
 import { logLoadedKeys } from "../Secrets/Log.ts";
 import {
   CredentialsConfig,
@@ -20,6 +14,12 @@ import {
   type SecretsLayer,
   type SecretsOption,
 } from "../Secrets/Provider.ts";
+import { UserFacingError } from "../UserFacingError.ts";
+import {
+  DopplerAuth,
+  type DopplerAuthConfig,
+  type DopplerResolvedCredentials,
+} from "./AuthProvider.ts";
 
 export interface DopplerOptions {
   /** Project slug. Required with browser login or personal tokens. */
@@ -52,9 +52,7 @@ const describeSelection = (options: DopplerOptions) => {
  * up front and names the selection, so a stack trace never has to be read
  * to know which secrets source broke.
  */
-export class DopplerSecretsError extends Data.TaggedError(
-  "DopplerSecretsError",
-)<{
+export class DopplerSecretsError extends Data.TaggedError("DopplerSecretsError")<{
   readonly selection: DopplerOptions;
   readonly credentials: DopplerCredentials;
   /** What the Doppler SDK failed with. */
@@ -82,10 +80,9 @@ export class DopplerSecretsError extends Data.TaggedError(
  * present, otherwise the selected profile.
  */
 const resolveCredentials = Effect.gen(function* () {
-  const resolved = yield* resolveProviderConfig<
-    DopplerAuthConfig,
-    DopplerResolvedCredentials
-  >("Doppler").pipe(Effect.provide(DopplerAuth));
+  const resolved = yield* resolveProviderConfig<DopplerAuthConfig, DopplerResolvedCredentials>(
+    "Doppler",
+  ).pipe(Effect.provide(DopplerAuth));
   const { token } = yield* resolved.resolve;
   const credentials: DopplerCredentials = {
     token,
@@ -108,10 +105,7 @@ const downloadSecrets = Effect.fn("downloadDopplerSecrets")(function* (
     Retry.none,
     Effect.provide(fromApiKey({ apiKey: credentials.token })),
     Effect.timeout("30 seconds"),
-    Effect.mapError(
-      (cause) =>
-        new DopplerSecretsError({ selection: options, credentials, cause }),
-    ),
+    Effect.mapError((cause) => new DopplerSecretsError({ selection: options, credentials, cause })),
   );
 
   const env: Record<string, string> = {};
@@ -122,9 +116,9 @@ const downloadSecrets = Effect.fn("downloadDopplerSecrets")(function* (
 });
 
 /** A `secrets` entry that loads a Doppler config. */
-export class DopplerSecretsProvider extends Data.TaggedClass(
-  "alchemy/SecretProvider::Doppler",
-)<{ readonly layer: SecretsLayer }> {}
+export class DopplerSecretsProvider extends Data.TaggedClass("alchemy/SecretProvider::Doppler")<{
+  readonly layer: SecretsLayer;
+}> {}
 
 /**
  * Load Doppler secrets into Effect Config without touching `process.env`.
@@ -151,8 +145,7 @@ export const Secrets = (options: SecretsOption<DopplerOptions> = {}) =>
         // Auth-provider discovery builds stack layers just to find out which
         // providers are used. It must work offline and with expired tokens, so
         // the user can configure or refresh the very token this layer needs.
-        if (yield* SuppressMissingProviderConfig)
-          return ConfigProvider.fromEnv({ env: {} });
+        if (yield* SuppressMissingProviderConfig) return ConfigProvider.fromEnv({ env: {} });
 
         const resolved = yield* resolveSecretsOption(options);
         const credentials = yield* resolveCredentials;
@@ -168,10 +161,7 @@ export const Secrets = (options: SecretsOption<DopplerOptions> = {}) =>
         }
 
         const env = yield* downloadSecrets(resolved, credentials);
-        yield* logLoadedKeys(
-          `Doppler (${describeSelection(resolved)})`,
-          Object.keys(env),
-        );
+        yield* logLoadedKeys(`Doppler (${describeSelection(resolved)})`, Object.keys(env));
         return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });
       }),
       { asPrimary: true },

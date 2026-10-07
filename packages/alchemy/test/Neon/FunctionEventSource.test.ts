@@ -1,11 +1,13 @@
+import * as Api from "@distilled.cloud/neon";
+import { expect } from "alchemy-test";
+import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import * as Alchemy from "@/index";
 import { providers } from "@/Neon/Providers";
 import * as Test from "@/Test/Alchemy";
-import * as Api from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import EventFunction from "./fixtures/function-events.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -93,23 +95,38 @@ test(
   },
 );
 
-test(
+// Neon skipped the first occurrence after the trigger was created in a live
+// probe and delivered the next one within ~4s, so wait through the occurrence
+// after the reported next_run_at (up to ~2 minutes); skip under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "real minute schedule invokes the typed cron route",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
-    const events = yield* client.get(url).pipe(
-      Effect.flatMap((response) => response.json),
-      Effect.repeat({
-        schedule: Schedule.spaced("6 seconds"),
-        times: 9,
-        until: (body) => JSON.stringify(body).includes('"schedule"'),
-      }),
-    );
-    expect(events).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]),
-    );
-  }),
+  () =>
+    Effect.gen(function* () {
+      const { url, projectId, branchId, slug } = yield* stack;
+      const { triggers } = yield* Api.listProjectBranchTriggers({
+        project_id: projectId,
+        branch_id: branchId,
+      });
+      const minute = triggers.find(
+        (trigger): trigger is Api.ScheduleTrigger =>
+          trigger.type === "schedule" && trigger.function_slug === slug,
+      );
+      expect(minute?.next_run_at).toEqual(expect.any(String));
+      const nextRunAt = Date.parse(minute!.next_run_at!);
+      const now = yield* Clock.currentTimeMillis;
+      const client = yield* HttpClient.HttpClient;
+      const events = yield* client.get(url).pipe(
+        Effect.flatMap((response) => response.json),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (body) => JSON.stringify(body).includes('"schedule"'),
+        }),
+        Effect.timeout(Duration.millis(Math.max(nextRunAt - now, 0) + 75_000)),
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]),
+      );
+    }),
   {
     tags: [
       "provider:neon",
@@ -118,6 +135,6 @@ test(
       "provider:neon:project",
       "live",
     ],
-    timeout: 120_000,
+    timeout: 180_000,
   },
 );

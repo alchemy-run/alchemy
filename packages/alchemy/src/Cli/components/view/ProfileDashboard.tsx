@@ -1,3 +1,4 @@
+import { useEffect, useState } from "@alchemy.run/sigil/react";
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
@@ -18,8 +19,8 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
-import { useEffect, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
+import { CliKit, theme, type NonInteractiveTerminal } from "../../CliKit/index.ts";
 import {
   Alert,
   Box,
@@ -45,11 +46,6 @@ import {
   useTerminalSize,
   VirtualList,
 } from "../ui/index.ts";
-import {
-  CliKit,
-  theme,
-  type NonInteractiveTerminal,
-} from "../../CliKit/index.ts";
 import {
   type EditState,
   editStateStyle,
@@ -135,8 +131,7 @@ interface DashState {
  * timer live outside the snapshot — they carry no visual state.
  */
 export class DashStore extends LiveStore<DashState> {
-  private resolver: ((action: PureAction | ExternalAction) => void) | null =
-    null;
+  private resolver: ((action: PureAction | ExternalAction) => void) | null = null;
 
   constructor(entries: ReadonlyArray<DashboardEntry>) {
     super({
@@ -203,11 +198,7 @@ type DetailsPaneProps = {
   focusedIndex: number;
 };
 
-function DetailsPane({
-  details,
-  refreshingProvider,
-  focusedIndex,
-}: DetailsPaneProps): JSX.Element {
+function DetailsPane({ details, refreshingProvider, focusedIndex }: DetailsPaneProps): JSX.Element {
   if (details.state === "loading") {
     return <Spinner label="resolving credentials…" />;
   }
@@ -215,9 +206,7 @@ function DetailsPane({
     return <Status variant="error">{details.message}</Status>;
   }
   if (details.providers.length === 0) {
-    return (
-      <Text tone="muted">No accounts connected — press e to add one.</Text>
-    );
+    return <Text tone="muted">No accounts connected — press e to add one.</Text>;
   }
   const { providers } = details;
   const { nameWidth, methodWidth } = providerColumnWidths(providers);
@@ -232,9 +221,7 @@ function DetailsPane({
       <VirtualList
         items={providers}
         getKey={(provider) => provider.name}
-        itemHeight={(provider, index) =>
-          providerBlockHeight(provider, index === 0)
-        }
+        itemHeight={(provider, index) => providerBlockHeight(provider, index === 0)}
         focusedIndex={Math.max(0, focusedIndex)}
         renderItem={(provider, index) => (
           <ProviderBlock
@@ -268,15 +255,8 @@ type EditScreenProps = {
   onBack: () => void;
 };
 
-function EditScreen({
-  profile,
-  rows,
-  onApply,
-  onBack,
-}: EditScreenProps): JSX.Element {
-  const { cursor, indices, move, cycle } = useCycleNavigation(
-    rows.map((row) => row.states.length),
-  );
+function EditScreen({ profile, rows, onApply, onBack }: EditScreenProps): JSX.Element {
+  const { cursor, indices, move, cycle } = useCycleNavigation(rows.map((row) => row.states.length));
   const keys = useKeyGlyphs();
   const glyphs = useGlyphs();
   const [unchanged, setUnchanged] = useState(false);
@@ -446,10 +426,7 @@ type DashboardProps = {
   initialSelected: number;
 };
 
-export function Dashboard({
-  store,
-  initialSelected,
-}: DashboardProps): JSX.Element {
+export function Dashboard({ store, initialSelected }: DashboardProps): JSX.Element {
   const state = useLiveStore(store);
   const keyGlyphs = useKeyGlyphs();
   const { rows } = useTerminalSize();
@@ -462,9 +439,7 @@ export function Dashboard({
   const { entries, focus: requestedFocus, flow, busy, notice } = state;
   useEffect(() => {
     if (requestedFocus === undefined) return;
-    const focusIndex = entries.findIndex(
-      (entry) => entry.name === requestedFocus,
-    );
+    const focusIndex = entries.findIndex((entry) => entry.name === requestedFocus);
     store.clearFocus();
     if (focusIndex >= 0) {
       setSelected(focusIndex);
@@ -472,8 +447,7 @@ export function Dashboard({
   }, [entries, requestedFocus, store]);
   const index = Math.min(Math.max(selected, 0), entries.length - 1);
   const entry = entries[index];
-  const details =
-    entry === undefined ? undefined : store.detailsFor(entry.name);
+  const details = entry === undefined ? undefined : store.detailsFor(entry.name);
   const providers = details?.state === "ready" ? details.providers : [];
   const provider = providers[focusedProvider];
   const moveProviderFocus = (delta: -1 | 1) =>
@@ -509,11 +483,7 @@ export function Dashboard({
       setMode("rename");
     } else if (provider === undefined && input === "d" && !entry.isDefault) {
       setMode("delete");
-    } else if (
-      provider === undefined &&
-      input === "e" &&
-      details?.state === "ready"
-    ) {
+    } else if (provider === undefined && input === "e" && details?.state === "ready") {
       setScreen("edit");
     } else if (provider === undefined && input === "r") {
       store.dispatch({ kind: "refresh", name: entry.name });
@@ -574,9 +544,7 @@ export function Dashboard({
         onBack={() => setScreen("overview")}
         onApply={(choices) => {
           const pick = (state: EditState) =>
-            rows.flatMap((row, i) =>
-              choices[i] === state ? [row.provider] : [],
-            );
+            rows.flatMap((row, i) => (choices[i] === state ? [row.provider] : []));
           const action: ExternalAction = {
             kind: "edit-apply",
             name: entry.name,
@@ -585,12 +553,7 @@ export function Dashboard({
             remove: pick("remove"),
           };
           setScreen("overview");
-          if (
-            action.add.length +
-              action.reconfigure.length +
-              action.remove.length ===
-            0
-          ) {
+          if (action.add.length + action.reconfigure.length + action.remove.length === 0) {
             return;
           }
           store.dispatch(action);
@@ -609,9 +572,7 @@ export function Dashboard({
         ]
       : [
           [keyGlyphs.leftRight, "switch profile"],
-          ...(providers.length === 0
-            ? []
-            : ([[keyGlyphs.upDown, "focus provider"]] as const)),
+          ...(providers.length === 0 ? [] : ([[keyGlyphs.upDown, "focus provider"]] as const)),
           ...(provider !== undefined
             ? ([
                 ["e", "reconfigure"],
@@ -665,17 +626,10 @@ export function Dashboard({
                 <Box flexDirection="row">
                   <Pointer focused={provider === undefined} />
                   <Text> </Text>
-                  <Text
-                    bold
-                    color={
-                      provider === undefined ? theme.paint.focus : undefined
-                    }
-                  >
+                  <Text bold color={provider === undefined ? theme.paint.focus : undefined}>
                     {entry.name}
                   </Text>
-                  {annotation === "" ? null : (
-                    <Text tone="muted"> · {annotation}</Text>
-                  )}
+                  {annotation === "" ? null : <Text tone="muted"> · {annotation}</Text>}
                 </Box>
               </Gutter>
             </Box>
@@ -683,9 +637,7 @@ export function Dashboard({
               <DetailsPane
                 details={details ?? { state: "loading" }}
                 focusedIndex={focusedProvider}
-                refreshingProvider={
-                  flow?.kind === "refresh" ? flow.provider : undefined
-                }
+                refreshingProvider={flow?.kind === "refresh" ? flow.provider : undefined}
               />
             </Box>
           </>
@@ -730,9 +682,7 @@ export interface DashboardSessionOptions<R> {
     name: string,
   ) => Effect.Effect<ProfileDetailsPayload, { readonly message: string }, R>;
   /** Executes a pure store action and returns the refreshed state. */
-  readonly execute: (
-    action: PureAction,
-  ) => Effect.Effect<ExecuteResult, never, R>;
+  readonly execute: (action: PureAction) => Effect.Effect<ExecuteResult, never, R>;
   /**
    * Runs an edit/refresh flow. Its prompts render inside the dashboard via
    * the embedded session; resolves with a toast outcome — `ok: false`
@@ -746,11 +696,7 @@ export interface DashboardSessionOptions<R> {
     },
   ) => Effect.Effect<{ ok: boolean; message: string }, never, R>;
   /** Re-reads entries after a flow (the active profile may have changed). */
-  readonly reloadEntries: Effect.Effect<
-    ReadonlyArray<DashboardEntry>,
-    never,
-    R
-  >;
+  readonly reloadEntries: Effect.Effect<ReadonlyArray<DashboardEntry>, never, R>;
 }
 
 /**
@@ -784,9 +730,7 @@ export const runProfileDashboardSession = <R,>(
           const loadInto = (name: string) =>
             options.loadDetails(name).pipe(
               Effect.flatMap((payload) =>
-                Effect.sync(() =>
-                  store.setDetails(name, { state: "ready", ...payload }),
-                ),
+                Effect.sync(() => store.setDetails(name, { state: "ready", ...payload })),
               ),
               Effect.catch((error) =>
                 Effect.sync(() =>
@@ -812,9 +756,7 @@ export const runProfileDashboardSession = <R,>(
 
           const initialSelected = Math.max(
             0,
-            options.entries.findIndex(
-              (entry) => entry.name === options.selected,
-            ),
+            options.entries.findIndex((entry) => entry.name === options.selected),
           );
 
           const live = yield* cli.live.open(
@@ -825,17 +767,14 @@ export const runProfileDashboardSession = <R,>(
           // Mount the spinner before starting stack import/provider builds.
           // Forking the loader first allowed synchronous module evaluation to
           // delay the dashboard's first frame, making it look fully hung.
-          const loader = yield* Effect.forEach(
-            options.entries,
-            (entry) => loadInto(entry.name),
-            { concurrency: 2, discard: true },
-          ).pipe(Effect.delay("1 millis"), Effect.forkChild);
+          const loader = yield* Effect.forEach(options.entries, (entry) => loadInto(entry.name), {
+            concurrency: 2,
+            discard: true,
+          }).pipe(Effect.delay("1 millis"), Effect.forkChild);
 
           yield* Effect.gen(function* () {
             while (true) {
-              const action = yield* Effect.callback<
-                PureAction | ExternalAction
-              >((resume) => {
+              const action = yield* Effect.callback<PureAction | ExternalAction>((resume) => {
                 store.bindResolver((action) => resume(Effect.succeed(action)));
               });
               switch (action.kind) {
@@ -846,8 +785,7 @@ export const runProfileDashboardSession = <R,>(
                   store.setFlow({
                     kind: action.kind,
                     name: action.name,
-                    provider:
-                      action.kind === "refresh" ? action.provider : undefined,
+                    provider: action.kind === "refresh" ? action.provider : undefined,
                     // refresh keeps the overview on screen with a spinner; only
                     // account editing takes over the whole view
                     inline: action.kind === "refresh",
@@ -876,9 +814,7 @@ export const runProfileDashboardSession = <R,>(
                   } satisfies CliKit["Service"];
                   const result = yield* cli.wizard(
                     action.kind === "refresh"
-                      ? flowEffect.pipe(
-                          Effect.provideService(CliKit, quietRefreshCli),
-                        )
+                      ? flowEffect.pipe(Effect.provideService(CliKit, quietRefreshCli))
                       : flowEffect,
                   );
                   const entries = yield* options.reloadEntries;
@@ -916,9 +852,7 @@ export const runProfileDashboardSession = <R,>(
             Effect.ensuring(Effect.sync(() => store.dispose())),
             Effect.ensuring(
               Effect.suspend(() =>
-                noticeFiber === undefined
-                  ? Effect.void
-                  : Fiber.interrupt(noticeFiber),
+                noticeFiber === undefined ? Effect.void : Fiber.interrupt(noticeFiber),
               ),
             ),
             Effect.ensuring(live.close),

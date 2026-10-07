@@ -39,14 +39,10 @@ export interface UpdateQAppSessionMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateQAppSessionMetadataRequest,
-    ) => Effect.Effect<
-      qapps.UpdateQAppSessionMetadataOutput,
-      qapps.UpdateQAppSessionMetadataError
-    >
+    ) => Effect.Effect<qapps.UpdateQAppSessionMetadataOutput, qapps.UpdateQAppSessionMetadataError>
   >
 > {}
 
-export const UpdateQAppSessionMetadata =
-  Binding.Service<UpdateQAppSessionMetadata>(
-    "AWS.QApps.UpdateQAppSessionMetadata",
-  );
+export const UpdateQAppSessionMetadata = Binding.Service<UpdateQAppSessionMetadata>(
+  "AWS.QApps.UpdateQAppSessionMetadata",
+);

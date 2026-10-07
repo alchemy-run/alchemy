@@ -181,12 +181,9 @@ const toRuleInput = (rule: BackupPlanRule): backup.BackupRuleInput => ({
   RecoveryPointTags: rule.recoveryPointTags,
   Lifecycle: rule.lifecycle
     ? {
-        MoveToColdStorageAfterDays: toWireDays(
-          rule.lifecycle.moveToColdStorageAfter,
-        ),
+        MoveToColdStorageAfterDays: toWireDays(rule.lifecycle.moveToColdStorageAfter),
         DeleteAfterDays: toWireDays(rule.lifecycle.deleteAfter),
-        OptInToArchiveForSupportedResources:
-          rule.lifecycle.optInToArchiveForSupportedResources,
+        OptInToArchiveForSupportedResources: rule.lifecycle.optInToArchiveForSupportedResources,
       }
     : undefined,
 });
@@ -199,10 +196,7 @@ export const BackupPlanProvider = () =>
         id: string,
         props: { backupPlanName?: string | undefined },
       ) {
-        return (
-          props.backupPlanName ??
-          (yield* createPhysicalName({ id, maxLength: 50 }))
-        );
+        return props.backupPlanName ?? (yield* createPhysicalName({ id, maxLength: 50 }));
       });
 
       return BackupPlan.Provider.of({
@@ -235,27 +229,18 @@ export const BackupPlanProvider = () =>
           if (!output?.backupPlanId) return undefined;
           const found = yield* backup
             .getBackupPlan({ BackupPlanId: output.backupPlanId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!found?.BackupPlanArn) return undefined;
           const attrs = {
             backupPlanId: output.backupPlanId,
             backupPlanArn: found.BackupPlanArn,
-            backupPlanName:
-              found.BackupPlan?.BackupPlanName ?? output.backupPlanName,
+            backupPlanName: found.BackupPlan?.BackupPlanName ?? output.backupPlanName,
             versionId: found.VersionId ?? output.versionId,
           };
-          const tags = yield* backup
-            .listTags({ ResourceArn: found.BackupPlanArn })
-            .pipe(
-              Effect.map((r) => r.Tags ?? {}),
-              Effect.catch(() =>
-                Effect.succeed({} as Record<string, string | undefined>),
-              ),
-            );
+          const tags = yield* backup.listTags({ ResourceArn: found.BackupPlanArn }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string | undefined>)),
+          );
           return (yield* hasAlchemyTags(id, tags as Record<string, string>))
             ? attrs
             : Unowned(attrs);
@@ -272,11 +257,7 @@ export const BackupPlanProvider = () =>
           const live = output?.backupPlanId
             ? yield* backup
                 .getBackupPlan({ BackupPlanId: output.backupPlanId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
             : undefined;
 
           let backupPlanId: string;
@@ -305,18 +286,14 @@ export const BackupPlanProvider = () =>
           }
 
           // SYNC tags — diff against observed cloud tags.
-          const currentTags = yield* backup
-            .listTags({ ResourceArn: backupPlanArn })
-            .pipe(
-              Effect.map((r) => r.Tags ?? {}),
-              Effect.catch(() =>
-                Effect.succeed({} as Record<string, string | undefined>),
-              ),
-            );
-          const { upsert, removed } = diffTags(
-            currentTags as Record<string, string>,
-            { ...news.tags, ...internalTags },
+          const currentTags = yield* backup.listTags({ ResourceArn: backupPlanArn }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string | undefined>)),
           );
+          const { upsert, removed } = diffTags(currentTags as Record<string, string>, {
+            ...news.tags,
+            ...internalTags,
+          });
           if (upsert.length > 0) {
             yield* backup.tagResource({
               ResourceArn: backupPlanArn,
@@ -347,13 +324,9 @@ export const BackupPlanProvider = () =>
             .pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.BackupSelectionsList ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.BackupSelectionsList ?? []),
               ),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([]),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
             );
           yield* Effect.forEach(
             selections,
@@ -364,29 +337,19 @@ export const BackupPlanProvider = () =>
                       BackupPlanId: output.backupPlanId,
                       SelectionId: s.SelectionId,
                     })
-                    .pipe(
-                      Effect.catchTag(
-                        "ResourceNotFoundException",
-                        () => Effect.void,
-                      ),
-                    )
+                    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void))
                 : Effect.void,
             { discard: true },
           );
-          yield* backup
-            .deleteBackupPlan({ BackupPlanId: output.backupPlanId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // Selection deletion is eventually consistent; the plan delete
-              // rejects with InvalidRequestException until it settles.
-              Effect.retry({
-                while: (e) => e._tag === "InvalidRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(10),
-                ]),
-              }),
-            );
+          yield* backup.deleteBackupPlan({ BackupPlanId: output.backupPlanId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            // Selection deletion is eventually consistent; the plan delete
+            // rejects with InvalidRequestException until it settles.
+            Effect.retry({
+              while: (e) => e._tag === "InvalidRequestException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+            }),
+          );
         }),
       });
     }),

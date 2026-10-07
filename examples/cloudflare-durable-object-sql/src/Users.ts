@@ -12,8 +12,7 @@ export default class Users extends Cloudflare.DurableObject<Users>()(
       const db = yield* Drizzle.DurableObject({ migrations, relations });
 
       return {
-        addUser: (name: string) =>
-          db.insert(users).values({ name }).returning(),
+        addUser: (name: string) => db.insert(users).values({ name }).returning(),
         listUsers: () => db.select().from(users).orderBy(users.id),
       };
     });

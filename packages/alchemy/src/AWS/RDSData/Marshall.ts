@@ -6,10 +6,7 @@ import type * as rdsdata from "@distilled.cloud/aws/rds-data";
  * `Date`s as `TIMESTAMP`-hinted strings, `Uint8Array` as blobs, and
  * anything else JSON-stringified.
  */
-export const toSqlParameter = (
-  name: string,
-  value: unknown,
-): rdsdata.SqlParameter => {
+export const toSqlParameter = (name: string, value: unknown): rdsdata.SqlParameter => {
   if (value === null || value === undefined) {
     return { name, value: { isNull: true } };
   }
@@ -42,22 +39,14 @@ export const toSqlParameter = (
   return { name, value: { stringValue: JSON.stringify(value) } };
 };
 
-const TIMESTAMP_TYPES = new Set([
-  "timestamp",
-  "timestamptz",
-  "date",
-  "datetime",
-]);
+const TIMESTAMP_TYPES = new Set(["timestamp", "timestamptz", "date", "datetime"]);
 
 /**
  * Data API `Field` → JS value. Timestamp-typed columns (per the response's
  * `columnMetadata.typeName`) revive as `Date`s — the Data API returns UTC
  * timestamps as `"YYYY-MM-DD HH:MM:SS[.FFF]"` strings.
  */
-export const fromField = (
-  field: rdsdata.Field,
-  typeName: string | undefined,
-): unknown => {
+export const fromField = (field: rdsdata.Field, typeName: string | undefined): unknown => {
   const f = field;
   if (f.isNull) {
     return null;

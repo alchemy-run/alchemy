@@ -38,10 +38,7 @@ export interface BatchCreatePartition extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchCreatePartitionRequest,
-    ) => Effect.Effect<
-      glue.BatchCreatePartitionResponse,
-      glue.BatchCreatePartitionError
-    >
+    ) => Effect.Effect<glue.BatchCreatePartitionResponse, glue.BatchCreatePartitionError>
   >
 > {}
 

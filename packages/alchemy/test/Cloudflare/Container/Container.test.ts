@@ -1,24 +1,24 @@
+import * as Containers from "@distilled.cloud/cloudflare/containers";
+import { assert, describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { destroy as destroyStack } from "@/Destroy.ts";
-import { State, inMemoryState } from "@/State";
 import * as Plan from "@/Plan.ts";
 import { Stage } from "@/Stage.ts";
-import * as Layer from "effect/Layer";
-import * as Containers from "@distilled.cloud/cloudflare/containers";
-import * as Cause from "effect/Cause";
-import * as Exit from "effect/Exit";
-import { assert, describe, expect } from "alchemy-test";
+import { State, inMemoryState } from "@/State";
+import * as Test from "@/Test/Alchemy";
+import makeAsyncContainerStack from "./fixtures/async/stack.ts";
 import AttachmentStack, {
   attachmentStack,
   stackName as attachmentStackName,
 } from "./fixtures/attachment/stack.ts";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import makeAsyncContainerStack from "./fixtures/async/stack.ts";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import makeExternalStack from "./fixtures/external/stack.ts";
 import makeInferredClassStack from "./fixtures/inferred/stack.ts";
@@ -35,11 +35,7 @@ describe.concurrent.each([
     // when a saturated machine keeps the local container answering 500s.
     timeout: 300_000,
   },
-  {
-    dev: false,
-    stage: process.env.ALCHEMY_TEST_STAGE ?? "test-live",
-    timeout: 300_000,
-  },
+  { dev: false, stage: process.env.ALCHEMY_TEST_STAGE ?? "test-live", timeout: 300_000 },
 ])(
   "Container (dev: $dev)",
   ({ dev, stage, timeout }) => {
@@ -60,10 +56,7 @@ describe.concurrent.each([
         dev,
       });
 
-    const logLevel = Effect.provideService(
-      MinimumLogLevel,
-      process.env.DEBUG ? "Debug" : "Info",
-    );
+    const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
     // Container image build + push + worker/DO deploy comfortably exceeds the
     // default 120s hook budget, so give every deploy/destroy plenty of room.
@@ -78,94 +71,74 @@ describe.concurrent.each([
      * read back from inside the container over its scoped HTTP token, surfaced
      * both via RPC and via fetch.
      */
-    describe(
-      "effectful container (main)",
-      { tags: ["provider:cloudflare:r2", "live"] },
-      () => {
-        const { test, beforeAll, afterAll, deploy, destroy } = make(true);
-        const stack = beforeAll(deploy(EffectfulStack), {
-          timeout: HOOK_TIMEOUT,
-        });
-        afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(EffectfulStack), {
-          timeout: HOOK_TIMEOUT,
-        });
+    describe("effectful container (main)", { tags: ["provider:cloudflare:r2", "live"] }, () => {
+      const { test, beforeAll, afterAll, deploy, destroy } = make(true);
+      const stack = beforeAll(deploy(EffectfulStack), { timeout: HOOK_TIMEOUT });
+      afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(EffectfulStack), { timeout: HOOK_TIMEOUT });
 
-        test(
-          "RPC: ping round-trips into the container",
-          Effect.gen(function* () {
-            const { url } = yield* stack;
+      test(
+        "RPC: ping round-trips into the container",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
 
-            const pong = yield* fetchReady(new URL("/ping", url), "pong");
-            expect(pong).toContain("pong");
-          }).pipe(logLevel),
-          { timeout },
-        );
+          const pong = yield* fetchReady(new URL("/ping", url), "pong");
+          expect(pong).toContain("pong");
+        }).pipe(logLevel),
+        { timeout },
+      );
 
-        test(
-          "fetch: serves over its TCP port",
-          Effect.gen(function* () {
-            const { url } = yield* stack;
+      test(
+        "fetch: serves over its TCP port",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
 
-            const hello = yield* fetchReady(
-              new URL("/hello", url),
-              "effectful container",
-            );
-            expect(hello).toContain("effectful container");
-          }).pipe(logLevel),
-          { timeout },
-        );
+          const hello = yield* fetchReady(new URL("/hello", url), "effectful container");
+          expect(hello).toContain("effectful container");
+        }).pipe(logLevel),
+        { timeout },
+      );
 
-        // A container is a real process — it has no workerd bindings, so a
-        // capability's only channel into it is the binding contract's `env`.
-        // The provider used to declare that contract and silently drop the
-        // values; this pins that a `Binding.Service`'s `host.bind({ env })`
-        // lands in the container's `process.env`, resolved Output and all.
-        // Same mechanism `Prisma.Connect` rides into a container.
-        test(
-          "a Binding.Service's bound env reaches the container",
-          Effect.gen(function* () {
-            const { url, bucketName } = yield* stack;
+      // A container is a real process — it has no workerd bindings, so a
+      // capability's only channel into it is the binding contract's `env`.
+      // The provider used to declare that contract and silently drop the
+      // values; this pins that a `Binding.Service`'s `host.bind({ env })`
+      // lands in the container's `process.env`, resolved Output and all.
+      // Same mechanism `Prisma.Connect` rides into a container.
+      test(
+        "a Binding.Service's bound env reaches the container",
+        Effect.gen(function* () {
+          const { url, bucketName } = yield* stack;
 
-            const body = yield* fetchReady(
-              new URL("/bound-env", url),
-              bucketName,
-            );
-            expect(JSON.parse(body)).toEqual({ value: bucketName });
-          }).pipe(logLevel),
-          { timeout },
-        );
+          const body = yield* fetchReady(new URL("/bound-env", url), bucketName);
+          expect(JSON.parse(body)).toEqual({ value: bucketName });
+        }).pipe(logLevel),
+        { timeout },
+      );
 
-        test(
-          "RPC: reads an R2 object from inside the container",
-          Effect.gen(function* () {
-            const { url } = yield* stack;
+      test(
+        "RPC: reads an R2 object from inside the container",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
 
-            yield* seed(url, "rpc.txt", "hello-rpc");
-            const body = yield* fetchReady(
-              new URL("/rpc?key=rpc.txt", url),
-              "hello-rpc",
-            );
-            expect(body).toContain("hello-rpc");
-          }).pipe(logLevel),
-          { timeout },
-        );
+          yield* seed(url, "rpc.txt", "hello-rpc");
+          const body = yield* fetchReady(new URL("/rpc?key=rpc.txt", url), "hello-rpc");
+          expect(body).toContain("hello-rpc");
+        }).pipe(logLevel),
+        { timeout },
+      );
 
-        test(
-          "fetch: reads an R2 object from inside the container",
-          Effect.gen(function* () {
-            const { url } = yield* stack;
+      test(
+        "fetch: reads an R2 object from inside the container",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
 
-            yield* seed(url, "fetch.txt", "hello-fetch");
-            const body = yield* fetchReady(
-              new URL("/fetch?key=fetch.txt", url),
-              "hello-fetch",
-            );
-            expect(body).toContain("hello-fetch");
-          }).pipe(logLevel),
-          { timeout },
-        );
-      },
-    );
+          yield* seed(url, "fetch.txt", "hello-fetch");
+          const body = yield* fetchReady(new URL("/fetch?key=fetch.txt", url), "hello-fetch");
+          expect(body).toContain("hello-fetch");
+        }).pipe(logLevel),
+        { timeout },
+      );
+    });
 
     /**
      * External container (`context` / `dockerfile`): Alchemy builds the user's
@@ -175,19 +148,14 @@ describe.concurrent.each([
     describe("external container (context/dockerfile)", () => {
       const { test, beforeAll, afterAll, deploy, destroy } = make();
       const stack = beforeAll(deploy(ExternalStack), { timeout: HOOK_TIMEOUT });
-      afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ExternalStack), {
-        timeout: HOOK_TIMEOUT,
-      });
+      afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ExternalStack), { timeout: HOOK_TIMEOUT });
 
       test(
         "builds the user Dockerfile and serves it over its TCP port",
         Effect.gen(function* () {
           const { url } = yield* stack;
 
-          const hello = yield* fetchReady(
-            new URL("/hello", url),
-            "external container",
-          );
+          const hello = yield* fetchReady(new URL("/hello", url), "external container");
           expect(hello).toContain("external container");
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
@@ -199,79 +167,67 @@ describe.concurrent.each([
      * re-pushes it to Cloudflare's registry without building anything; the DO
      * proxies a request to it.
      */
-    describe(
-      "remote container (image)",
-      { tags: ["provider:cloudflare:r2"] },
-      () => {
-        const { test, beforeAll, afterAll, deploy, destroy } = make();
-        const stack = beforeAll(deploy(RemoteStack), { timeout: HOOK_TIMEOUT });
-        afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RemoteStack), {
-          timeout: HOOK_TIMEOUT,
-        });
+    describe("remote container (image)", { tags: ["provider:cloudflare:r2"] }, () => {
+      const { test, beforeAll, afterAll, deploy, destroy } = make();
+      const stack = beforeAll(deploy(RemoteStack), { timeout: HOOK_TIMEOUT });
+      afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RemoteStack), { timeout: HOOK_TIMEOUT });
 
-        test(
-          "preserves memoryMib and serves the remote image over its TCP port",
-          Effect.gen(function* () {
-            const { url, app } = yield* stack;
+      test(
+        "preserves memoryMib and serves the remote image over its TCP port",
+        Effect.gen(function* () {
+          const { url, app } = yield* stack;
 
-            expect(app.configuration.memoryMib).toBe(4096);
-            expect(app.configuration.instanceType).toBeUndefined();
-            expect(app.applicationId.startsWith("dev:")).toBe(dev);
+          expect(app.configuration.memoryMib).toBe(4096);
+          expect(app.configuration.instanceType).toBeUndefined();
+          expect(app.applicationId.startsWith("dev:")).toBe(dev);
 
-            const hello = yield* fetchReady(new URL("/hello", url), "method");
-            expect(hello).toContain("method");
-          }).pipe(logLevel),
-          { tags: [...(dev ? ["local"] : ["live"])], timeout },
-        );
+          const hello = yield* fetchReady(new URL("/hello", url), "method");
+          expect(hello).toContain("method");
+        }).pipe(logLevel),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
 
-        // A pre-built image has no Effect runtime to inject config into, so `env`
-        // is the only channel: it lands as the ContainerApplication's
-        // `environmentVariables` and shows up as plain `process.env` entries
-        // inside the image. Covers all three value shapes — a literal, a
-        // `Redacted` (encrypted in state, plain in the container), and an Output
-        // resolved from a sibling resource (the canonical shape of a database
-        // connection string).
-        test(
-          "passes env — literal, Redacted, and sibling-resource Output — into the image",
-          Effect.gen(function* () {
-            const { url, bucketName } = yield* stack;
-            const body = yield* fetchReady(
-              new URL("/hello", url),
-              "DEMO_PLAIN",
-            );
-            const echoed = JSON.parse(body) as { env: Record<string, string> };
+      // A pre-built image has no Effect runtime to inject config into, so `env`
+      // is the only channel: it lands as the ContainerApplication's
+      // `environmentVariables` and shows up as plain `process.env` entries
+      // inside the image. Covers all three value shapes — a literal, a
+      // `Redacted` (encrypted in state, plain in the container), and an Output
+      // resolved from a sibling resource (the canonical shape of a database
+      // connection string).
+      test(
+        "passes env — literal, Redacted, and sibling-resource Output — into the image",
+        Effect.gen(function* () {
+          const { url, bucketName } = yield* stack;
+          const body = yield* fetchReady(new URL("/hello", url), "DEMO_PLAIN");
+          const echoed = JSON.parse(body) as { env: Record<string, string> };
 
-            expect(echoed.env.DEMO_PLAIN).toBe(DEMO_PLAIN);
-            expect(echoed.env.DEMO_SECRET).toBe(DEMO_SECRET);
-            expect(echoed.env.DEMO_BUCKET).toBe(bucketName);
-          }).pipe(logLevel),
-          { tags: [...(dev ? ["local"] : ["live"])], timeout },
-        );
+          expect(echoed.env.DEMO_PLAIN).toBe(DEMO_PLAIN);
+          expect(echoed.env.DEMO_SECRET).toBe(DEMO_SECRET);
+          expect(echoed.env.DEMO_BUCKET).toBe(bucketName);
+        }).pipe(logLevel),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
 
-        // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
-        // worker → DO fetch handler → container port, forwarding the raw incoming
-        // request. In the live variant the incoming web Request carries an
-        // https:// URL and workerd rejects TLS on container ports ("Connecting to
-        // a container using HTTPS is not currently supported"), so this pins the
-        // runtime's scheme downgrade on the container hop; dev serves http:// and
-        // just pins the passthrough itself.
-        test(
-          "proxies the raw incoming request through the DO to the container",
-          Effect.gen(function* () {
-            const { url } = yield* stack;
+      // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
+      // worker → DO fetch handler → container port, forwarding the raw incoming
+      // request. In the live variant the incoming web Request carries an
+      // https:// URL and workerd rejects TLS on container ports ("Connecting to
+      // a container using HTTPS is not currently supported"), so this pins the
+      // runtime's scheme downgrade on the container hop; dev serves http:// and
+      // just pins the passthrough itself.
+      test(
+        "proxies the raw incoming request through the DO to the container",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
 
-            // The echo image reflects the request as JSON ("method" only appears
-            // in a real echo response, never in an error page).
-            const body = yield* fetchReady(
-              new URL("/passthrough", url),
-              "method",
-            );
-            expect(body).toContain("method");
-          }).pipe(logLevel),
-          { tags: [...(dev ? ["local"] : ["live"])], timeout },
-        );
-      },
-    );
+          // The echo image reflects the request as JSON ("method" only appears
+          // in a real echo response, never in an error page).
+          const body = yield* fetchReady(new URL("/passthrough", url), "method");
+          expect(body).toContain("method");
+        }).pipe(logLevel),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
+    });
     /**
      * Container bound directly on a plain async Worker's `env` (issue #953),
      * with the Container's logical id EQUAL to the env key
@@ -290,9 +246,7 @@ describe.concurrent.each([
      */
     describe("async container bound on env", () => {
       const { test, beforeAll, afterAll, deploy, destroy } = make();
-      const stack = beforeAll(deploy(AsyncContainerStack), {
-        timeout: HOOK_TIMEOUT,
-      });
+      const stack = beforeAll(deploy(AsyncContainerStack), { timeout: HOOK_TIMEOUT });
       afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(AsyncContainerStack), {
         timeout: HOOK_TIMEOUT,
       });
@@ -303,9 +257,7 @@ describe.concurrent.each([
           const { url } = yield* stack;
 
           const body = yield* fetchReady(new URL("/binding", url), "kind");
-          expect(JSON.parse(body)).toEqual({
-            kind: "durable_object_namespace",
-          });
+          expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );
@@ -333,9 +285,7 @@ describe.concurrent.each([
      */
     describe("async container with inferred class name", () => {
       const { test, beforeAll, afterAll, deploy, destroy } = make();
-      const stack = beforeAll(deploy(InferredClassStack), {
-        timeout: HOOK_TIMEOUT,
-      });
+      const stack = beforeAll(deploy(InferredClassStack), { timeout: HOOK_TIMEOUT });
       afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(InferredClassStack), {
         timeout: HOOK_TIMEOUT,
       });
@@ -346,9 +296,7 @@ describe.concurrent.each([
           const { url } = yield* stack;
 
           const body = yield* fetchReady(new URL("/binding", url), "kind");
-          expect(JSON.parse(body)).toEqual({
-            kind: "durable_object_namespace",
-          });
+          expect(JSON.parse(body)).toEqual({ kind: "durable_object_namespace" });
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );
@@ -365,13 +313,7 @@ describe.concurrent.each([
       );
     });
   },
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:container",
-      "provider:cloudflare:worker",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:container", "provider:cloudflare:worker"] },
 );
 
 describe.sequential(
@@ -397,19 +339,9 @@ describe.sequential(
       dev: false,
     });
     const stack = beforeAll(deploy(AttachmentStack), { timeout: 120_000 });
-    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(AttachmentStack), {
-      timeout: 120_000,
-    });
-    const workerKey = {
-      stack: attachmentStackName,
-      stage,
-      fqn: "AttachmentWorker",
-    };
-    const containerKey = {
-      stack: attachmentStackName,
-      stage,
-      fqn: "AttachmentContainer",
-    };
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(AttachmentStack), { timeout: 120_000 });
+    const workerKey = { stack: attachmentStackName, stage, fqn: "AttachmentWorker" };
+    const containerKey = { stack: attachmentStackName, stage, fqn: "AttachmentContainer" };
 
     test(
       "preserves the live attachment when the Worker projection and cached attachment are stale",
@@ -421,32 +353,19 @@ describe.sequential(
         assert(otherNamespaceId);
         expect(otherNamespaceId).not.toBe(namespaceId);
         const detached = yield* attachmentStack(false).pipe(
-          Effect.flatMap((stack) =>
-            Plan.make(stack).pipe(Effect.provide(stack.services)),
-          ),
+          Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
         );
         expect(detached.resources.AttachmentContainer.action).toBe("replace");
         const state = yield* yield* State;
         const workerRow = yield* state.get(workerKey);
         const containerRow = yield* state.get(containerKey);
-        assert(
-          workerRow?.status === "created" || workerRow?.status === "updated",
-        );
-        assert(
-          containerRow?.status === "created" ||
-            containerRow?.status === "updated",
-        );
-        for (const durableObjects of [
-          { namespaceId: otherNamespaceId },
-          undefined,
-        ]) {
+        assert(workerRow?.status === "created" || workerRow?.status === "updated");
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        for (const durableObjects of [{ namespaceId: otherNamespaceId }, undefined]) {
           yield* Effect.gen(function* () {
             yield* state.set({
               ...workerKey,
-              value: {
-                ...workerRow,
-                attr: { ...workerRow.attr, durableObjectNamespaces: {} },
-              },
+              value: { ...workerRow, attr: { ...workerRow.attr, durableObjectNamespaces: {} } },
             });
             yield* state.set({
               ...containerKey,
@@ -460,9 +379,7 @@ describe.sequential(
               },
             });
             const plan = yield* AttachmentStack.pipe(
-              Effect.flatMap((stack) =>
-                Plan.make(stack).pipe(Effect.provide(stack.services)),
-              ),
+              Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
             );
             expect(plan.resources.AttachmentContainer.action).toBe("update");
             const next = yield* deploy(AttachmentStack);
@@ -477,22 +394,14 @@ describe.sequential(
             );
             expect(observed.durableObjects).toEqual({ namespaceId });
             expect(observed.maxInstances).toBe(2);
-            expect(next.otherApp.applicationId).toBe(
-              first.otherApp.applicationId,
-            );
+            expect(next.otherApp.applicationId).toBe(first.otherApp.applicationId);
             const other = yield* readAttachmentApplication(
               first.otherApp.accountId,
               first.otherApp.applicationId,
             );
-            expect(other.durableObjects).toEqual({
-              namespaceId: otherNamespaceId,
-            });
+            expect(other.durableObjects).toEqual({ namespaceId: otherNamespaceId });
             expect(other.maxInstances).toBe(2);
-            const response = yield* fetchReady(
-              new URL("/hello", next.url),
-              "method",
-              8,
-            );
+            const response = yield* fetchReady(new URL("/hello", next.url), "method", 8);
             expect(JSON.parse(response).method).toBe("GET");
           }).pipe(
             Effect.ensuring(
@@ -504,19 +413,13 @@ describe.sequential(
                   current.attr?.applicationId &&
                   current.attr.applicationId !== first.app.applicationId
                 ) {
-                  yield* destroyStack({
-                    stack: AttachmentStack,
-                    stage,
-                    dev: false,
-                  });
+                  yield* destroyStack({ stack: AttachmentStack, stage, dev: false });
                 }
                 yield* state
                   .set({ ...workerKey, value: workerRow })
                   .pipe(
                     Effect.ensuring(
-                      state
-                        .set({ ...containerKey, value: containerRow })
-                        .pipe(Effect.orDie),
+                      state.set({ ...containerKey, value: containerRow }).pipe(Effect.orDie),
                     ),
                   );
               }).pipe(Effect.orDie),
@@ -536,31 +439,17 @@ describe.sequential(
         const state = yield* yield* State;
         const workerRow = yield* state.get(workerKey);
         const containerRow = yield* state.get(containerKey);
-        assert(
-          workerRow?.status === "created" || workerRow?.status === "updated",
-        );
-        assert(
-          containerRow?.status === "created" ||
-            containerRow?.status === "updated",
-        );
-        const interrupted = {
-          ...containerRow,
-          status: "creating" as const,
-          attr: undefined,
-        };
+        assert(workerRow?.status === "created" || workerRow?.status === "updated");
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        const interrupted = { ...containerRow, status: "creating" as const, attr: undefined };
         yield* Effect.gen(function* () {
           yield* state.set({
             ...workerKey,
-            value: {
-              ...workerRow,
-              attr: { ...workerRow.attr, durableObjectNamespaces: {} },
-            },
+            value: { ...workerRow, attr: { ...workerRow.attr, durableObjectNamespaces: {} } },
           });
           yield* state.set({ ...containerKey, value: interrupted });
           const plan = yield* AttachmentStack.pipe(
-            Effect.flatMap((stack) =>
-              Plan.make(stack).pipe(Effect.provide(stack.services)),
-            ),
+            Effect.flatMap((stack) => Plan.make(stack).pipe(Effect.provide(stack.services))),
           );
           expect(plan.resources.AttachmentContainer).toMatchObject({
             action: "create",
@@ -581,15 +470,10 @@ describe.sequential(
             first.worker.durableObjectNamespaces,
           );
           const committed = yield* state.get(containerKey);
-          assert(
-            committed?.status === "created" || committed?.status === "updated",
-          );
+          assert(committed?.status === "created" || committed?.status === "updated");
           expect(committed).toMatchObject({
             instanceId: containerRow.instanceId,
-            attr: {
-              applicationId: first.app.applicationId,
-              durableObjects: { namespaceId },
-            },
+            attr: { applicationId: first.app.applicationId, durableObjects: { namespaceId } },
           });
           const observed = yield* readAttachmentApplication(
             first.app.accountId,
@@ -601,14 +485,8 @@ describe.sequential(
             first.otherApp.applicationId,
           );
           expect(other.durableObjects).toEqual(first.otherApp.durableObjects);
-          expect(recovered.otherApp.applicationId).toBe(
-            first.otherApp.applicationId,
-          );
-          const response = yield* fetchReady(
-            new URL("/hello", recovered.url),
-            "method",
-            8,
-          );
+          expect(recovered.otherApp.applicationId).toBe(first.otherApp.applicationId);
+          const response = yield* fetchReady(new URL("/hello", recovered.url), "method", 8);
           expect(JSON.parse(response).method).toBe("GET");
         }).pipe(
           Effect.ensuring(
@@ -620,19 +498,13 @@ describe.sequential(
                 current.attr?.applicationId &&
                 current.attr.applicationId !== first.app.applicationId
               ) {
-                yield* destroyStack({
-                  stack: AttachmentStack,
-                  stage,
-                  dev: false,
-                });
+                yield* destroyStack({ stack: AttachmentStack, stage, dev: false });
               }
               yield* state
                 .set({ ...workerKey, value: workerRow })
                 .pipe(
                   Effect.ensuring(
-                    state
-                      .set({ ...containerKey, value: containerRow })
-                      .pipe(Effect.orDie),
+                    state.set({ ...containerKey, value: containerRow }).pipe(Effect.orDie),
                   ),
                 );
             }).pipe(Effect.orDie),
@@ -651,23 +523,13 @@ describe.sequential(
         const state = yield* yield* State;
         const workerRow = yield* state.get(workerKey);
         const containerRow = yield* state.get(containerKey);
-        assert(
-          workerRow?.status === "created" || workerRow?.status === "updated",
-        );
-        assert(
-          containerRow?.status === "created" ||
-            containerRow?.status === "updated",
-        );
-        const corruptProjection = (
-          durableObjects: { namespaceId?: string } | undefined,
-        ) =>
+        assert(workerRow?.status === "created" || workerRow?.status === "updated");
+        assert(containerRow?.status === "created" || containerRow?.status === "updated");
+        const corruptProjection = (durableObjects: { namespaceId?: string } | undefined) =>
           Effect.gen(function* () {
             yield* state.set({
               ...workerKey,
-              value: {
-                ...workerRow,
-                attr: { ...workerRow.attr, durableObjectNamespaces: {} },
-              },
+              value: { ...workerRow, attr: { ...workerRow.attr, durableObjectNamespaces: {} } },
             });
             yield* state.set({
               ...containerKey,
@@ -691,14 +553,11 @@ describe.sequential(
           }).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
-              until: (apps) =>
-                apps.every((app) => app.id !== first.app.applicationId),
+              until: (apps) => apps.every((app) => app.id !== first.app.applicationId),
               times: 8,
             }),
           );
-          expect(
-            remaining.some((app) => app.id === first.app.applicationId),
-          ).toBe(false);
+          expect(remaining.some((app) => app.id === first.app.applicationId)).toBe(false);
           // Reconcile observes by id first; list deletion can propagate earlier.
           const deleted = yield* Containers.getContainerApplication({
             accountId: first.app.accountId,
@@ -709,9 +568,7 @@ describe.sequential(
                 `Deleted container application ${app.id} is absent from list but still readable by id`,
               ),
             ),
-            Effect.catchTag("ContainerApplicationNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
               until: (app) => app === undefined,
@@ -723,17 +580,11 @@ describe.sequential(
             yield* corruptProjection(missing);
             const failed = yield* deploy(AttachmentStack).pipe(Effect.exit);
             assert(Exit.isFailure(failed));
-            expect(Cause.pretty(failed.cause)).toContain(
-              "unresolved Durable Object namespace",
-            );
+            expect(Cause.pretty(failed.cause)).toContain("unresolved Durable Object namespace");
             const applications = yield* Containers.listContainerApplications({
               accountId: first.app.accountId,
             });
-            expect(
-              applications.some(
-                (app) => app.name === first.app.applicationName,
-              ),
-            ).toBe(false);
+            expect(applications.some((app) => app.name === first.app.applicationName)).toBe(false);
           }
           yield* corruptProjection({ namespaceId });
           const recovered = yield* deploy(AttachmentStack);
@@ -753,21 +604,13 @@ describe.sequential(
             first.otherApp.applicationId,
           );
           expect(other.durableObjects).toEqual(first.otherApp.durableObjects);
-          const response = yield* fetchReady(
-            new URL("/hello", recovered.url),
-            "method",
-            8,
-          );
+          const response = yield* fetchReady(new URL("/hello", recovered.url), "method", 8);
           expect(JSON.parse(response).method).toBe("GET");
         }).pipe(
           Effect.ensuring(
             Effect.gen(function* () {
               // Delete the replacement while its current identity is still persisted.
-              yield* destroyStack({
-                stack: AttachmentStack,
-                stage,
-                dev: false,
-              });
+              yield* destroyStack({ stack: AttachmentStack, stage, dev: false });
               yield* Effect.gen(function* () {
                 const remaining = yield* Containers.listContainerApplications({
                   accountId: first.app.accountId,
@@ -796,9 +639,7 @@ describe.sequential(
                     .set({ ...workerKey, value: workerRow })
                     .pipe(
                       Effect.ensuring(
-                        state
-                          .set({ ...containerKey, value: containerRow })
-                          .pipe(Effect.orDie),
+                        state.set({ ...containerKey, value: containerRow }).pipe(Effect.orDie),
                       ),
                       Effect.orDie,
                     ),
@@ -853,9 +694,7 @@ const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
 // and can land on an edge that already has the new deploy (a pooled keep-alive
 // socket stays pinned to one edge metal and can keep reading the stale body).
 const freshConn = HttpClient.HttpClient.pipe(
-  Effect.map(
-    HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close")),
-  ),
+  Effect.map(HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"))),
 );
 
 // Retry a freshly-deployed worker route until it answers 200 with a body that
@@ -889,9 +728,9 @@ const seed = (url: string, key: string, value: string) =>
     const client = yield* freshConn;
     return yield* client
       .execute(
-        HttpClientRequest.put(
-          new URL(`/seed?key=${encodeURIComponent(key)}`, url),
-        ).pipe(HttpClientRequest.bodyText(value)),
+        HttpClientRequest.put(new URL(`/seed?key=${encodeURIComponent(key)}`, url)).pipe(
+          HttpClientRequest.bodyText(value),
+        ),
       )
       .pipe(
         Effect.flatMap((r) =>
@@ -900,9 +739,6 @@ const seed = (url: string, key: string, value: string) =>
             : Effect.fail(new Error(`seed not ready: ${r.status}`)),
         ),
         Effect.timeout("10 seconds"),
-        Effect.retry({
-          schedule: readinessSchedule,
-          times: readinessRetries,
-        }),
+        Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
       );
   });

@@ -25,12 +25,7 @@ import type { Canary } from "./Canary.ts";
  * {@link Canary}. The runtime callable injects the canary's name as the
  * request's `Name`; the deploy-time half grants `actions` on the canary ARN.
  */
-export const makeSyntheticsCanaryHttpBinding = <
-  I extends { Name: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeSyntheticsCanaryHttpBinding = <I extends { Name: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Synthetics.GetCanaryRuns`. */
   tag: string;
   /** The distilled operation; `Name` is injected from the resource. */

@@ -1,17 +1,15 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import MediaConvertTestFunctionLive, {
-  MediaConvertTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import MediaConvertTestFunctionLive, { MediaConvertTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -38,50 +36,32 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string, body: object) =>
   send(
-    HttpClientRequest.post(`${baseUrl}${path}`).pipe(
-      HttpClientRequest.bodyJsonUnsafe(body),
-    ),
+    HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "MediaConvert Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:mediaconvert",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:mediaconvert", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "MediaConvert test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("MediaConvert test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("MediaConvert test setup: deploying fixture");
@@ -100,15 +80,10 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(75),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
           }),
         );
       }),
@@ -162,9 +137,10 @@ describe.sequential(
         "returns the typed NotFoundException for a missing job",
         () =>
           Effect.gen(function* () {
-            const body = (yield* postJson("/cancel", {
-              id: NONEXISTENT_JOB_ID,
-            })) as { cancelled: boolean; error?: string };
+            const body = (yield* postJson("/cancel", { id: NONEXISTENT_JOB_ID })) as {
+              cancelled: boolean;
+              error?: string;
+            };
             expect(body.cancelled).toBe(false);
             expect(body.error).toBe("NotFoundException");
           }),
@@ -203,9 +179,7 @@ describe.sequential(
               role: "arn:aws:iam::000000000000:role/alchemy-does-not-exist",
             })) as { jobId?: string; error?: string };
             expect(body.jobId).toBeUndefined();
-            expect(["BadRequestException", "AccessDeniedException"]).toContain(
-              body.error,
-            );
+            expect(["BadRequestException", "AccessDeniedException"]).toContain(body.error);
           }),
         { timeout: 60_000 },
       );
@@ -223,18 +197,12 @@ describe.sequential(
             expect(started.error).toBeUndefined();
             expect(started.queryId).toBeTruthy();
 
-            const result = yield* getJson(
-              `/jobsQueryResults?id=${started.queryId}`,
-            ).pipe(
-              Effect.map(
-                (r) => r as { status?: string; count: number; error?: string },
-              ),
+            const result = yield* getJson(`/jobsQueryResults?id=${started.queryId}`).pipe(
+              Effect.map((r) => r as { status?: string; count: number; error?: string }),
               Effect.repeat({
                 schedule: Schedule.spaced("3 seconds"),
                 until: (r): boolean =>
-                  r.status === "COMPLETE" ||
-                  r.status === "ERROR" ||
-                  r.error !== undefined,
+                  r.status === "COMPLETE" || r.status === "ERROR" || r.error !== undefined,
                 times: 20,
               }),
             );
@@ -251,25 +219,17 @@ describe.sequential(
         "created the EventBridge rule for MediaConvert job state changes",
         () =>
           Effect.gen(function* () {
-            const ref = yield* AWS.EventBridge.Rule.ref(
-              "MediaConvertJobEvents",
-              {
-                stack: sharedStack.name,
-                stage: sharedStack.stage,
-              },
-            );
+            const ref = yield* AWS.EventBridge.Rule.ref("MediaConvertJobEvents", {
+              stack: sharedStack.name,
+              stage: sharedStack.stage,
+            });
             const { Name, EventBusName } = yield* Effect.all({
               Name: Output.evaluate(ref.ruleName, {}),
               EventBusName: Output.evaluate(ref.eventBusName, {}),
             }).pipe(Effect.provide(sharedStack.state));
-            const rule = yield* eventbridge.describeRule({
-              Name,
-              EventBusName,
-            });
+            const rule = yield* eventbridge.describeRule({ Name, EventBusName });
             expect(rule?.EventPattern).toContain("aws.mediaconvert");
-            expect(rule?.EventPattern).toContain(
-              "MediaConvert Job State Change",
-            );
+            expect(rule?.EventPattern).toContain("MediaConvert Job State Change");
           }),
         { timeout: 60_000 },
       );

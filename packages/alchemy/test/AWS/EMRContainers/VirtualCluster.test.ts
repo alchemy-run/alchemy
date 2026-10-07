@@ -1,14 +1,14 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/EKS";
 import { VirtualCluster } from "@/AWS/EMRContainers";
 import { Role } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as emrc from "@distilled.cloud/aws/emr-containers";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,9 +28,7 @@ test.provider(
     Effect.gen(function* () {
       const id = "abcdefabcdefabcdefabcdef01";
 
-      const describeError = yield* Effect.flip(
-        emrc.describeVirtualCluster({ id }),
-      );
+      const describeError = yield* Effect.flip(emrc.describeVirtualCluster({ id }));
       expect(describeError._tag).toBe("ResourceNotFoundException");
 
       const deleteError = yield* Effect.flip(emrc.deleteVirtualCluster({ id }));
@@ -60,9 +58,7 @@ test.provider(
       );
       expect(describeError._tag).toBe("ValidationException");
 
-      const cancelError = yield* Effect.flip(
-        emrc.cancelJobRun({ id: jobRunId, virtualClusterId }),
-      );
+      const cancelError = yield* Effect.flip(emrc.cancelJobRun({ id: jobRunId, virtualClusterId }));
       expect(cancelError._tag).toBe("ValidationException");
 
       const list = yield* emrc.listJobRuns({ virtualClusterId });
@@ -131,9 +127,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 },
               ],
             },
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-            ],
+            managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"],
           });
           const cluster = yield* Cluster("Cluster", {
             clusterName: EKS_CLUSTER_NAME,
@@ -156,13 +150,9 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       expect(vc.state).toBe("RUNNING");
 
       // Out-of-band verification via distilled.
-      const observed = yield* emrc.describeVirtualCluster({
-        id: vc.virtualClusterId,
-      });
+      const observed = yield* emrc.describeVirtualCluster({ id: vc.virtualClusterId });
       expect(observed.virtualCluster?.name).toBe(VC_NAME);
-      expect(observed.virtualCluster?.containerProvider?.id).toBe(
-        EKS_CLUSTER_NAME,
-      );
+      expect(observed.virtualCluster?.containerProvider?.id).toBe(EKS_CLUSTER_NAME);
 
       // Destroy immediately and verify the virtual cluster terminated.
       yield* stack.destroy();
@@ -185,20 +175,11 @@ const assertVirtualClusterGone = (id: string) =>
   Effect.gen(function* () {
     const state = yield* emrc.describeVirtualCluster({ id }).pipe(
       Effect.map((response) => response.virtualCluster?.state ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone"),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone")),
     );
     if (state !== "gone" && state !== "TERMINATED" && state !== "TERMINATING") {
-      return yield* Effect.fail(
-        new Error(`virtual cluster ${id} still exists (${state})`),
-      );
+      return yield* Effect.fail(new Error(`virtual cluster ${id} still exists (${state})`));
     }
   }).pipe(
-    Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
-    }),
+    Effect.retry({ schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]) }),
   );

@@ -29,10 +29,7 @@ export interface ListLandingZones extends Binding.Service<
   () => Effect.Effect<
     (
       request?: controltower.ListLandingZonesInput,
-    ) => Effect.Effect<
-      controltower.ListLandingZonesOutput,
-      controltower.ListLandingZonesError
-    >
+    ) => Effect.Effect<controltower.ListLandingZonesOutput, controltower.ListLandingZonesError>
   >
 > {}
 

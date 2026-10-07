@@ -34,6 +34,4 @@ export interface DescribeEndpoint extends Binding.Service<
   >
 > {}
 
-export const DescribeEndpoint = Binding.Service<DescribeEndpoint>(
-  "AWS.IoT.DescribeEndpoint",
-);
+export const DescribeEndpoint = Binding.Service<DescribeEndpoint>("AWS.IoT.DescribeEndpoint");

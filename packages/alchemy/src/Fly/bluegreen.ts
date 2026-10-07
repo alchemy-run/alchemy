@@ -6,8 +6,18 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../Diff.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import { alchemyMetadataKeys as keys } from "./Metadata.ts";
+import {
+  applyImageSet,
+  encodeImageSet,
+  pinsFromConfig,
+  sameImageSet,
+  validObservedImageSet,
+} from "./DeploymentImages.ts";
+import { classifyDeploymentState, validProtocol2Generation } from "./DeploymentState.ts";
 import { usingMachineLeases, type MachineLeases } from "./leases.ts";
+import { canonicalContainers } from "./MachineContainers.ts";
+import { alchemyMetadataKeys as keys } from "./Metadata.ts";
+import { regionOfReplica } from "./Region.ts";
 import {
   autostopMode,
   checksPassing,
@@ -50,11 +60,7 @@ const setMetadata = Effect.fn(function* (
     machine.id!,
     () =>
       machines
-        .updateMachineMetadata({
-          app_name: appName,
-          machine_id: machine.id!,
-          metadata,
-        })
+        .patchMachineMetadata({ app_name: appName, machine_id: machine.id!, metadata })
         .pipe(Effect.timeout("30 seconds")),
     { idempotent: true },
   );
@@ -70,15 +76,7 @@ const phase = Effect.fn(function* (
   leases: MachineLeases,
 ) {
   if (machine.config?.metadata?.[keys.phase] !== value) {
-    yield* setMetadata(
-      appName,
-      machine,
-      {
-        ...metadataOf(machine),
-        [keys.phase]: value,
-      },
-      leases,
-    );
+    yield* setMetadata(appName, machine, { ...metadataOf(machine), [keys.phase]: value }, leases);
   }
 });
 
@@ -95,11 +93,7 @@ export const setRouting = (
         machineId,
         (lease_nonce) =>
           Effect.gen(function* () {
-            const request = {
-              app_name: appName,
-              machine_id: machineId,
-              lease_nonce,
-            };
+            const request = { app_name: appName, machine_id: machineId, lease_nonce };
             if (cordoned) yield* machines.cordonMachine(request);
             else yield* machines.uncordonMachine(request);
           }).pipe(Effect.timeout("30 seconds")),
@@ -127,10 +121,7 @@ const pinnedImage = (machine: Machine) => {
 
 export class DeploymentRecoveryAmbiguous extends Data.TaggedError(
   "Fly.DeploymentRecoveryAmbiguous",
-)<{
-  appName: string;
-  message: string;
-}> {}
+)<{ appName: string; message: string }> {}
 
 export const readinessRoles = (
   config: machines.FlyMachineConfig,
@@ -138,42 +129,25 @@ export const readinessRoles = (
   predecessors: Machine[],
 ): Array<"run" | "idle"> => {
   const services = config.services ?? [];
-  if (
-    !services.length ||
-    services.some((service) => autostopMode(service.autostop) === "off")
-  ) {
+  if (!services.length || services.some((service) => autostopMode(service.autostop) === "off")) {
     return Array.from({ length: count }, () => "run");
   }
-  const roles: Array<"run" | "idle"> = Array.from(
-    { length: count },
-    (_, index) =>
-      predecessors.some(
-        (machine) =>
-          replicaIndexOf(machine) === index && machine.state === "started",
-      )
-        ? "run"
-        : "idle",
+  const roles: Array<"run" | "idle"> = Array.from({ length: count }, (_, index) =>
+    predecessors.some((machine) => replicaIndexOf(machine) === index && machine.state === "started")
+      ? "run"
+      : "idle",
   );
   const floor = Math.min(
     count,
-    Math.max(
-      1,
-      ...services.map((service) => service.min_machines_running ?? 0),
-    ),
+    Math.max(1, ...services.map((service) => service.min_machines_running ?? 0)),
   );
-  for (
-    let index = 0;
-    roles.filter((role) => role === "run").length < floor;
-    index++
-  )
+  for (let index = 0; roles.filter((role) => role === "run").length < floor; index++)
     roles[index] = "run";
   return roles;
 };
 
 const idle = (machine: Machine) =>
-  machine.state === "stopped" ||
-  machine.state === "suspended" ||
-  machine.state === "created";
+  machine.state === "stopped" || machine.state === "suspended" || machine.state === "created";
 
 /** Cloud metadata records preparation and promotion; replica zero commits a complete set. */
 export const reconcileBlueGreen = Effect.fn(function* (
@@ -183,14 +157,21 @@ export const reconcileBlueGreen = Effect.fn(function* (
   leases: MachineLeases,
 ) {
   const config = input.buildConfig({ index: 0, mounts: [], metadata });
-  const workload = yield* sha256Object({
-    config,
-    count: input.count,
-    minSecretsVersion: input.minSecretsVersion,
-    region: input.region,
-  });
+  const containerPins = config.containers === undefined ? undefined : pinsFromConfig(config);
+  const containerMode = config.containers !== undefined;
   const ambiguous = (message: string) =>
     new DeploymentRecoveryAmbiguous({ appName: input.appName, message });
+  if (containerMode && containerPins === undefined)
+    return yield* ambiguous("Blue/green requires a complete immutable container image set.");
+  const workload = yield* sha256Object({
+    config: containerMode
+      ? { ...config, containers: canonicalContainers(config.containers) }
+      : config,
+    count: input.count,
+    minSecretsVersion: input.minSecretsVersion,
+    // A single region hashes as before, so existing generations stay current.
+    region: input.regions.length === 1 ? input.regions[0] : [...input.regions],
+  });
   const observe = listMachinesByApp(input.appName).pipe(
     Effect.flatMap((listed) => {
       const owned = ownedReplicas(listed, {
@@ -200,15 +181,11 @@ export const reconcileBlueGreen = Effect.fn(function* (
       });
       const changed = listed.find(
         (machine) =>
-          machine.id &&
-          input.outputMachineIds?.includes(machine.id) &&
-          !owned.includes(machine),
+          machine.id && input.outputMachineIds?.includes(machine.id) && !owned.includes(machine),
       );
       return changed
         ? Effect.fail(
-            ambiguous(
-              `Cached Machine ${changed.id} no longer has the expected ownership.`,
-            ),
+            ambiguous(`Cached Machine ${changed.id} no longer has the expected ownership.`),
           )
         : Effect.succeed(owned);
     }),
@@ -216,61 +193,40 @@ export const reconcileBlueGreen = Effect.fn(function* (
   const snapshot = yield* observe;
   const owned = yield* leaseSnapshot(input.appName, snapshot, leases);
   // A vanished snapshot member can have a successor outside this inventory.
-  if (
-    snapshot.some(
-      (machine) => !owned.some((current) => current.id === machine.id),
-    )
-  ) {
+  if (snapshot.some((machine) => !owned.some((current) => current.id === machine.id))) {
     return yield* ambiguous(
       "Owned Machine membership changed while acquiring leases; retry with a fresh deployment snapshot.",
     );
   }
   for (const machine of owned) {
-    const protocol = machine.config?.metadata?.[keys.protocol];
-    if (protocol !== undefined && protocol !== "1")
-      return yield* ambiguous(
-        `Unknown deployment metadata protocol on ${machine.id}.`,
-      );
-    if (
-      protocol === "1" &&
-      (!Number.isSafeInteger(replicaIndexOf(machine)) ||
-        String(replicaIndexOf(machine)) !==
-          machine.config?.metadata?.[keys.replica] ||
-        ![
-          "candidate",
-          "promoting",
-          "validating",
-          "active",
-          "retiring",
-        ].includes(machine.config?.metadata?.[keys.phase] ?? ""))
-    ) {
-      return yield* ambiguous(`Invalid recovery metadata on ${machine.id}.`);
-    }
+    const state = classifyDeploymentState(machine);
+    if (state.protocol === "invalid")
+      return yield* ambiguous(`Machine ${machine.id}: ${state.reason}`);
   }
+
   const idleAllowed =
     (config.services?.length ?? 0) > 0 &&
-    config.services!.every(
-      (service) => autostopMode(service.autostop) !== "off",
-    );
-  const preparationServices = config.services?.map((service) => ({
-    ...service,
-    autostop: "off",
-  }));
+    config.services!.every((service) => autostopMode(service.autostop) !== "off");
+  const preparationServices = config.services?.map((service) => ({ ...service, autostop: "off" }));
   const mismatchOf = (machine: Machine): string | undefined => {
     const observed = metadataOf(machine);
-    const pinned = observed[keys.image];
-    if (pinned === undefined && observed[keys.phase] !== "candidate")
-      return "metadata.image";
-    if (
-      !pinnedImage(machine) ||
-      (pinned !== undefined && pinned !== pinnedImage(machine))
-    )
-      return "image_ref";
+    if (containerMode) {
+      if (
+        observed[keys.protocol] !== "2" ||
+        !validObservedImageSet(machine) ||
+        !sameImageSet(pinsFromConfig(machine.config), containerPins)
+      )
+        return "container image set";
+    } else {
+      const pinned = observed[keys.image];
+      if (pinned === undefined && observed[keys.phase] !== "candidate") return "metadata.image";
+      if (!pinnedImage(machine) || (pinned !== undefined && pinned !== pinnedImage(machine)))
+        return "image_ref";
+    }
     const secretsVersion = Number(observed[keys.secretsVersion] ?? -1);
     if (
       input.minSecretsVersion !== undefined &&
-      (!Number.isSafeInteger(secretsVersion) ||
-        secretsVersion < input.minSecretsVersion)
+      (!Number.isSafeInteger(secretsVersion) || secretsVersion < input.minSecretsVersion)
     )
       return "metadata.secretsVersion";
     const temporary =
@@ -292,9 +248,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
           mounts: [],
           metadata: {
             ...Object.fromEntries(
-              Object.entries(observed).filter(([key]) =>
-                key.startsWith("alchemy."),
-              ),
+              Object.entries(observed).filter(([key]) => key.startsWith("alchemy.")),
             ),
             ...metadata,
           },
@@ -302,8 +256,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
       )
     )
       return "config";
-    if (!sameChecks(machine.config?.checks, config.checks))
-      return "config.checks";
+    if (!sameChecks(machine.config?.checks, config.checks)) return "config.checks";
     if (!sameStopConfig(machine.config?.stop_config, config.stop_config))
       return "config.stop_config";
     return undefined;
@@ -319,9 +272,9 @@ export const reconcileBlueGreen = Effect.fn(function* (
       !Number.isSafeInteger(Number(sequence)) ||
       Number(sequence) < 1 ||
       sequences.has(sequence) ||
-      group.some(
-        (machine) => machine.config?.metadata?.[keys.sequence] !== sequence,
-      )
+      group.some((machine) => machine.config?.metadata?.[keys.sequence] !== sequence) ||
+      (group.some((machine) => machine.config?.metadata?.[keys.protocol] === "2") &&
+        !validProtocol2Generation(group))
     ) {
       return yield* ambiguous(
         "Owned generations have ambiguous sequence/lineage metadata; preserving all capacity.",
@@ -330,9 +283,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
     sequences.add(sequence);
   }
   const reusable = [...groups.entries()]
-    .filter(
-      ([generation, group]) => generation !== undefined && group.every(matches),
-    )
+    .filter(([generation, group]) => generation !== undefined && group.every(matches))
     .sort(
       ([, a], [, b]) =>
         Number(b[0]?.config?.metadata?.[keys.sequence] ?? 0) -
@@ -359,18 +310,14 @@ export const reconcileBlueGreen = Effect.fn(function* (
       1 +
         Math.max(
           0,
-          ...owned.map((machine) =>
-            Number(machine.config?.metadata?.[keys.sequence] ?? 0),
-          ),
+          ...owned.map((machine) => Number(machine.config?.metadata?.[keys.sequence] ?? 0)),
         ),
     );
   const predecessors = owned.filter(
     (machine) => machine.config?.metadata?.[keys.generation] !== generation,
   );
   const recordedRoles = desired[0]?.config?.metadata?.[keys.roles];
-  const roles =
-    recordedRoles?.split(",") ??
-    readinessRoles(config, input.count, predecessors);
+  const roles = recordedRoles?.split(",") ?? readinessRoles(config, input.count, predecessors);
   if (
     roles.length !== input.count ||
     roles.some((role) => role !== "run" && role !== "idle") ||
@@ -378,14 +325,12 @@ export const reconcileBlueGreen = Effect.fn(function* (
     desired.some(
       (machine) =>
         machine.config?.metadata?.[keys.roles] !== recordedRoles ||
-        (machine.config?.metadata?.[keys.protocol] === "1" &&
-          machine.config.metadata[keys.role] !==
-            roles[replicaIndexOf(machine)]),
+        ((machine.config?.metadata?.[keys.protocol] === "1" ||
+          machine.config?.metadata?.[keys.protocol] === "2") &&
+          machine.config.metadata[keys.role] !== roles[replicaIndexOf(machine)]),
     )
   ) {
-    return yield* ambiguous(
-      "The recovered generation has inconsistent readiness roles.",
-    );
+    return yield* ambiguous("The recovered generation has inconsistent readiness roles.");
   }
   const complete =
     desired.length === input.count &&
@@ -395,17 +340,13 @@ export const reconcileBlueGreen = Effect.fn(function* (
         machine.config.metadata[keys.restored] === "true" &&
         (roles[replicaIndexOf(machine)] === "idle" ||
           (machine.instance_id !== undefined &&
-            machine.config.metadata[keys.checkedInstance] ===
-              machine.instance_id)) &&
+            machine.config.metadata[keys.checkedInstance] === machine.instance_id)) &&
         machine.cordoned === false,
     );
   if (
     complete &&
     !predecessors.length &&
-    desired.every(
-      (machine) =>
-        machine.state === "started" || (idleAllowed && idle(machine)),
-    )
+    desired.every((machine) => machine.state === "started" || (idleAllowed && idle(machine)))
   ) {
     return toReplicaSet(
       [...desired]
@@ -431,9 +372,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
     for (const index of order) {
       const suffix = `-${generation}-${index}`;
       const name = `${input.baseName.slice(0, 30 - suffix.length).replace(/-+$/g, "")}${suffix}`;
-      let current = desired.find(
-        (machine) => replicaIndexOf(machine) === index,
-      );
+      let current = desired.find((machine) => replicaIndexOf(machine) === index);
       if (current === undefined) {
         const run = roles[index] === "run";
         const candidateConfig = input.buildConfig({
@@ -447,19 +386,25 @@ export const reconcileBlueGreen = Effect.fn(function* (
             [keys.phase]: "candidate",
             [keys.sequence]: sequence,
             [keys.count]: String(input.count),
-            [keys.protocol]: "1",
+            [keys.protocol]: containerMode ? "2" : "1",
             [keys.roles]: roles.join(","),
             [keys.role]: roles[index]!,
             [keys.predecessors]: predecessorIds,
-            [keys.restored]: String(
-              !run || sameServices(config.services, preparationServices),
-            ),
+            [keys.restored]: String(!run || sameServices(config.services, preparationServices)),
             ...(input.minSecretsVersion === undefined
               ? {}
               : { [keys.secretsVersion]: String(input.minSecretsVersion) }),
-            ...(image ? { [keys.image]: image } : {}),
+            ...(containerPins
+              ? { [keys.containerImageSet]: encodeImageSet(containerPins)! }
+              : image
+                ? { [keys.image]: image }
+                : {}),
           },
         });
+        const pinnedConfig = containerPins
+          ? applyImageSet(candidateConfig, containerPins)
+          : candidateConfig;
+        if (pinnedConfig === undefined) return yield* ambiguous("Incomplete candidate image set.");
         const readback = observe.pipe(
           Effect.map((listed) =>
             listed.find(
@@ -484,10 +429,10 @@ export const reconcileBlueGreen = Effect.fn(function* (
           .createMachine({
             app_name: input.appName,
             name,
-            region: input.region,
+            region: regionOfReplica(input.regions, index),
             config: {
-              ...candidateConfig,
-              image: image ?? config.image,
+              ...pinnedConfig,
+              image: containerPins ? undefined : (image ?? config.image),
               services: run ? preparationServices : config.services,
             },
             skip_launch: !run,
@@ -497,24 +442,14 @@ export const reconcileBlueGreen = Effect.fn(function* (
           .pipe(
             Retry.none,
             Effect.timeout("30 seconds"),
-            Effect.catchTag(
-              ["Conflict", "GatewayTimeout", "TimeoutError"],
-              () => readback,
-            ),
+            Effect.catchTag(["Conflict", "GatewayTimeout", "TimeoutError"], () => readback),
             Effect.catchTag("HttpClientError", (error) =>
-              error.reason._tag === "TransportError"
-                ? readback
-                : Effect.fail(error),
+              error.reason._tag === "TransportError" ? readback : Effect.fail(error),
             ),
           );
       }
-      if (!current?.id)
-        return yield* new ReplicaNotCreated({ appName: input.appName, name });
-      const leased = (yield* leaseSnapshot(
-        input.appName,
-        [current],
-        leases,
-      ))[0];
+      if (!current?.id) return yield* new ReplicaNotCreated({ appName: input.appName, name });
+      const leased = (yield* leaseSnapshot(input.appName, [current], leases))[0];
       if (!leased?.id)
         return yield* ambiguous(
           `Candidate ${current.id} disappeared before its lease was acquired.`,
@@ -526,27 +461,29 @@ export const reconcileBlueGreen = Effect.fn(function* (
         );
       current = leased;
       snapshotIds.add(current.id);
-      const resolvedImage = pinnedImage(current);
-      if (!resolvedImage || (image !== undefined && image !== resolvedImage))
-        return yield* ambiguous(`Image pin mismatch on ${current.id}.`);
-      image = resolvedImage;
-      if (current.config?.metadata?.[keys.image] !== image)
-        yield* setMetadata(
-          input.appName,
-          current,
-          {
-            ...metadataOf(current),
-            [keys.image]: image,
-          },
-          leases,
-        );
+      if (containerPins) {
+        if (
+          !validObservedImageSet(current) ||
+          !sameImageSet(pinsFromConfig(current.config), containerPins)
+        )
+          return yield* ambiguous(`Container image pin mismatch on ${current.id}.`);
+      } else {
+        const resolvedImage = pinnedImage(current);
+        if (!resolvedImage || (image !== undefined && image !== resolvedImage))
+          return yield* ambiguous(`Image pin mismatch on ${current.id}.`);
+        image = resolvedImage;
+        if (current.config?.metadata?.[keys.image] !== image)
+          yield* setMetadata(
+            input.appName,
+            current,
+            { ...metadataOf(current), [keys.image]: image },
+            leases,
+          );
+      }
       const checked =
-        current.config?.metadata?.[keys.checkedInstance] ===
-          current.instance_id && current.instance_id !== undefined;
-      if (
-        roles[index] === "run" &&
-        !(idleAllowed && checked && idle(current))
-      ) {
+        current.config?.metadata?.[keys.checkedInstance] === current.instance_id &&
+        current.instance_id !== undefined;
+      if (roles[index] === "run" && !(idleAllowed && checked && idle(current))) {
         current = yield* ensureStarted(
           input.appName,
           current,
@@ -577,6 +514,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
         if (
           found.every(
             (machine) =>
+              (!containerMode || matches(machine)) &&
               machine.config?.metadata?.[keys.phase] === "candidate" &&
               machine.cordoned === true,
           )
@@ -602,20 +540,15 @@ export const reconcileBlueGreen = Effect.fn(function* (
   );
 
   const needsPromotion = candidates.some(
-    (machine) =>
-      machine.cordoned !== false ||
-      machine.config?.metadata?.[keys.phase] !== "active",
+    (machine) => machine.cordoned !== false || machine.config?.metadata?.[keys.phase] !== "active",
   );
   if (needsPromotion) {
-    for (const machine of candidates)
-      yield* phase(input.appName, machine, "promoting", leases);
+    for (const machine of candidates) yield* phase(input.appName, machine, "promoting", leases);
     // Promotion metadata resets reports; validate the whole set before routing any member.
     for (const [index, machine] of candidates.entries()) {
       const current = yield* getMachineById(input.appName, machine.id!);
       if (!current || !matches(current))
-        return yield* ambiguous(
-          `Candidate ${machine.id} changed before promotion.`,
-        );
+        return yield* ambiguous(`Candidate ${machine.id} changed before promotion.`);
       if (current.state === "started") {
         candidates[index] = yield* waitHealthy(
           input.appName,
@@ -628,17 +561,13 @@ export const reconcileBlueGreen = Effect.fn(function* (
         !idle(current) ||
         (roles[index] === "run" &&
           (current.instance_id === undefined ||
-            current.config?.metadata?.[keys.checkedInstance] !==
-              current.instance_id))
+            current.config?.metadata?.[keys.checkedInstance] !== current.instance_id))
       ) {
-        return yield* ambiguous(
-          `Candidate ${machine.id} has no readiness proof before promotion.`,
-        );
+        return yield* ambiguous(`Candidate ${machine.id} has no readiness proof before promotion.`);
       } else candidates[index] = current;
     }
     for (const machine of candidates)
-      if (machine.cordoned !== false)
-        yield* setRouting(input.appName, machine.id!, false, leases);
+      if (machine.cordoned !== false) yield* setRouting(input.appName, machine.id!, false, leases);
     if (hasPublishedService(config.services)) yield* Effect.sleep("10 seconds");
   }
   for (const [index, machine] of candidates.entries()) {
@@ -647,6 +576,16 @@ export const reconcileBlueGreen = Effect.fn(function* (
       // Restoring services creates a new instance; its predecessor's checks cannot prove readiness.
       const machineId = current.id!;
       const currentVersion = current.instance_id;
+      const restoreConfig = input.buildConfig({
+        index,
+        mounts: [],
+        metadata: { ...metadataOf(current), [keys.restored]: "true" },
+      });
+      const restored = containerPins
+        ? applyImageSet(restoreConfig, containerPins)
+        : { ...restoreConfig, image };
+      if (restored === undefined)
+        return yield* ambiguous("Incomplete image set during service restoration.");
       current = yield* leases.mutate(machineId, (lease_nonce) =>
         machines
           .updateMachine({
@@ -654,14 +593,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
             machine_id: machineId,
             lease_nonce,
             current_version: currentVersion,
-            config: {
-              ...input.buildConfig({
-                index,
-                mounts: [],
-                metadata: { ...metadataOf(current), [keys.restored]: "true" },
-              }),
-              image,
-            },
+            config: restored,
             min_secrets_version: input.minSecretsVersion,
           })
           .pipe(Effect.timeout("30 seconds")),
@@ -704,18 +636,11 @@ export const reconcileBlueGreen = Effect.fn(function* (
     candidates[index] = current;
   }
   // Reset reports while still pending; an interrupted validation is not a commit.
-  for (const machine of candidates)
-    yield* phase(input.appName, machine, "validating", leases);
+  for (const machine of candidates) yield* phase(input.appName, machine, "validating", leases);
   for (const [index, machine] of candidates.entries()) {
     const current = yield* getMachineById(input.appName, machine.id!);
-    if (
-      !current ||
-      !matches(current) ||
-      current.config?.metadata?.[keys.restored] !== "true"
-    )
-      return yield* ambiguous(
-        `Candidate ${machine.id} changed before commitment.`,
-      );
+    if (!current || !matches(current) || current.config?.metadata?.[keys.restored] !== "true")
+      return yield* ambiguous(`Candidate ${machine.id} changed before commitment.`);
     if (current.state === "started")
       candidates[index] = yield* waitHealthy(
         input.appName,
@@ -728,12 +653,8 @@ export const reconcileBlueGreen = Effect.fn(function* (
       !idle(current) ||
       (roles[index] === "run" &&
         (current.instance_id === undefined ||
-          (current.config?.metadata?.[keys.checkedInstance] !==
-            current.instance_id &&
-            !(
-              machine.instance_id === current.instance_id &&
-              checksPassing(machine, config)
-            ))))
+          (current.config?.metadata?.[keys.checkedInstance] !== current.instance_id &&
+            !(machine.instance_id === current.instance_id && checksPassing(machine, config)))))
     ) {
       return yield* ambiguous(
         `Candidate ${machine.id} has no readiness proof for its current instance.`,
@@ -745,8 +666,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
     const committed = {
       ...metadataOf(machine),
       [keys.phase]: "active",
-      ...(machine.state === "started" ||
-      roles[replicaIndexOf(machine)] === "run"
+      ...(machine.state === "started" || roles[replicaIndexOf(machine)] === "run"
         ? { [keys.checkedInstance]: machine.instance_id! }
         : {}),
     };
@@ -755,16 +675,20 @@ export const reconcileBlueGreen = Effect.fn(function* (
   }
   // Legacy ownership is required; predecessor phase stamps are only advisory.
   for (const machine of predecessors) {
+    if (machine.config?.metadata?.[keys.protocol] === "2") {
+      const observed = yield* getMachineById(input.appName, machine.id!);
+      if (
+        !observed ||
+        observed.config?.metadata?.[keys.protocol] !== "2" ||
+        !validObservedImageSet(observed) ||
+        !sameImageSet(pinsFromConfig(observed.config), pinsFromConfig(machine.config))
+      )
+        return yield* ambiguous(
+          `Predecessor ${machine.id} image identity changed before retirement.`,
+        );
+    }
     if (machine.config?.metadata?.[keys.instance] === undefined)
-      yield* setMetadata(
-        input.appName,
-        machine,
-        {
-          ...metadataOf(machine),
-          ...metadata,
-        },
-        leases,
-      );
+      yield* setMetadata(input.appName, machine, { ...metadataOf(machine), ...metadata }, leases);
     if (machine.host_status !== "unreachable")
       yield* phase(input.appName, machine, "retiring", leases).pipe(
         Effect.catch((error) =>

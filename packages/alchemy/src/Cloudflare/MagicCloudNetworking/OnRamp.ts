@@ -2,7 +2,6 @@ import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -166,13 +165,7 @@ export interface OnRampAttributes {
   destroyOnDelete: boolean;
 }
 
-export type OnRamp = Resource<
-  TypeId,
-  OnRampProps,
-  OnRampAttributes,
-  never,
-  Providers
->;
+export type OnRamp = Resource<TypeId, OnRampProps, OnRampAttributes, never, Providers>;
 
 /**
  * A Magic Cloud Networking on-ramp — connects cloud VPCs/VNets to Magic WAN
@@ -252,14 +245,7 @@ export const isOnRamp = (value: unknown): value is OnRamp =>
 
 export const OnRampProvider = () =>
   Provider.succeed(OnRamp, {
-    stables: [
-      "onRampId",
-      "accountId",
-      "cloudType",
-      "type",
-      "dynamicRouting",
-      "cloudAsn",
-    ],
+    stables: ["onRampId", "accountId", "cloudType", "type", "dynamicRouting", "cloudAsn"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
@@ -275,10 +261,7 @@ export const OnRampProvider = () =>
         return { action: "replace" } as const;
       }
       const oldDynamicRouting = output?.dynamicRouting ?? old?.dynamicRouting;
-      if (
-        oldDynamicRouting !== undefined &&
-        oldDynamicRouting !== news.dynamicRouting
-      ) {
+      if (oldDynamicRouting !== undefined && oldDynamicRouting !== news.dynamicRouting) {
         return { action: "replace" } as const;
       }
       if (old !== undefined) {
@@ -301,8 +284,7 @@ export const OnRampProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const destroyOnDelete =
-        output?.destroyOnDelete ?? olds?.destroyOnDelete ?? false;
+      const destroyOnDelete = output?.destroyOnDelete ?? olds?.destroyOnDelete ?? false;
 
       // Owned path: refresh by our persisted on-ramp id.
       if (output?.onRampId) {
@@ -316,9 +298,7 @@ export const OnRampProvider = () =>
       // match as Unowned and let the engine gate adoption.
       const name = yield* onRampName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match
-        ? Unowned(toAttributes(match, acct, destroyOnDelete))
-        : undefined;
+      return match ? Unowned(toAttributes(match, acct, destroyOnDelete)) : undefined;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -371,10 +351,7 @@ export const OnRampProvider = () =>
         patch.name = name;
         dirty = true;
       }
-      if (
-        news.description !== undefined &&
-        (observed.description ?? "") !== news.description
-      ) {
+      if (news.description !== undefined && (observed.description ?? "") !== news.description) {
         patch.description = news.description;
         dirty = true;
       }
@@ -406,16 +383,14 @@ export const OnRampProvider = () =>
       }
       if (
         news.manageHubToHubAttachments !== undefined &&
-        (observed.manageHubToHubAttachments ?? false) !==
-          news.manageHubToHubAttachments
+        (observed.manageHubToHubAttachments ?? false) !== news.manageHubToHubAttachments
       ) {
         patch.manageHubToHubAttachments = news.manageHubToHubAttachments;
         dirty = true;
       }
       if (
         news.manageVpcToHubAttachments !== undefined &&
-        (observed.manageVpcToHubAttachments ?? false) !==
-          news.manageVpcToHubAttachments
+        (observed.manageVpcToHubAttachments ?? false) !== news.manageVpcToHubAttachments
       ) {
         patch.manageVpcToHubAttachments = news.manageVpcToHubAttachments;
         dirty = true;
@@ -453,9 +428,7 @@ export const OnRampProvider = () =>
         Stream.map((onramp) => onramp.id),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
-        Effect.catchTag("FeatureNotEnabled", () =>
-          Effect.succeed([] as string[]),
-        ),
+        Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([] as string[])),
       );
       const rows = yield* Effect.forEach(
         ids,

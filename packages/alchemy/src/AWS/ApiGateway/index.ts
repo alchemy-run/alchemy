@@ -12,11 +12,7 @@ export {
   type DeploymentProps,
   type DeploymentType,
 } from "./Deployment.ts";
-export {
-  DomainName,
-  DomainNameProvider,
-  type DomainNameProps,
-} from "./DomainName.ts";
+export { DomainName, DomainNameProvider, type DomainNameProps } from "./DomainName.ts";
 export {
   GatewayResponse,
   GatewayResponseProvider,
@@ -37,33 +33,11 @@ export {
   type MethodProps,
   type MethodType,
 } from "./Method.ts";
-export {
-  RestApi,
-  RestApiProvider,
-  type RestApiProps,
-  type RestApiBinding,
-} from "./RestApi.ts";
-export {
-  Stage,
-  StageResource,
-  StageProvider,
-  type StageProps,
-} from "./Stage.ts";
-export {
-  UsagePlan,
-  UsagePlanProvider,
-  type UsagePlanProps,
-} from "./UsagePlan.ts";
-export {
-  UsagePlanKey,
-  UsagePlanKeyProvider,
-  type UsagePlanKeyProps,
-} from "./UsagePlanKey.ts";
-export {
-  Authorizer,
-  AuthorizerProvider,
-  type AuthorizerProps,
-} from "./Authorizer.ts";
+export { RestApi, RestApiProvider, type RestApiProps, type RestApiBinding } from "./RestApi.ts";
+export { Stage, StageResource, StageProvider, type StageProps } from "./Stage.ts";
+export { UsagePlan, UsagePlanProvider, type UsagePlanProps } from "./UsagePlan.ts";
+export { UsagePlanKey, UsagePlanKeyProvider, type UsagePlanKeyProps } from "./UsagePlanKey.ts";
+export { Authorizer, AuthorizerProvider, type AuthorizerProps } from "./Authorizer.ts";
 export {
   restApiArn,
   stageArn,
@@ -86,25 +60,13 @@ export { UpdateApiKey, type UpdateApiKeyRequest } from "./UpdateApiKey.ts";
 export { UpdateApiKeyHttp } from "./UpdateApiKeyHttp.ts";
 export { DeleteApiKey, type DeleteApiKeyRequest } from "./DeleteApiKey.ts";
 export { DeleteApiKeyHttp } from "./DeleteApiKeyHttp.ts";
-export {
-  CreateUsagePlanKey,
-  type CreateUsagePlanKeyRequest,
-} from "./CreateUsagePlanKey.ts";
+export { CreateUsagePlanKey, type CreateUsagePlanKeyRequest } from "./CreateUsagePlanKey.ts";
 export { CreateUsagePlanKeyHttp } from "./CreateUsagePlanKeyHttp.ts";
-export {
-  DeleteUsagePlanKey,
-  type DeleteUsagePlanKeyRequest,
-} from "./DeleteUsagePlanKey.ts";
+export { DeleteUsagePlanKey, type DeleteUsagePlanKeyRequest } from "./DeleteUsagePlanKey.ts";
 export { DeleteUsagePlanKeyHttp } from "./DeleteUsagePlanKeyHttp.ts";
-export {
-  GetUsagePlanKey,
-  type GetUsagePlanKeyRequest,
-} from "./GetUsagePlanKey.ts";
+export { GetUsagePlanKey, type GetUsagePlanKeyRequest } from "./GetUsagePlanKey.ts";
 export { GetUsagePlanKeyHttp } from "./GetUsagePlanKeyHttp.ts";
-export {
-  GetUsagePlanKeys,
-  type GetUsagePlanKeysRequest,
-} from "./GetUsagePlanKeys.ts";
+export { GetUsagePlanKeys, type GetUsagePlanKeysRequest } from "./GetUsagePlanKeys.ts";
 export { GetUsagePlanKeysHttp } from "./GetUsagePlanKeysHttp.ts";
 export { GetUsage, type GetUsageRequest } from "./GetUsage.ts";
 export { GetUsageHttp } from "./GetUsageHttp.ts";

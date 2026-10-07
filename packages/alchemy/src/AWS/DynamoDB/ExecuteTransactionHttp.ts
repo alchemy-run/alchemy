@@ -12,9 +12,7 @@ export const ExecuteTransactionHttp = Layer.effect(
   ExecuteTransaction,
   Effect.gen(function* () {
     return Effect.fn(function* (...tables: ExecuteTransactionTables) {
-      const sortedTables = [...tables].sort((a, b) =>
-        a.LogicalId.localeCompare(b.LogicalId),
-      );
+      const sortedTables = [...tables].sort((a, b) => a.LogicalId.localeCompare(b.LogicalId));
       const access = yield* grantTables(
         `AWS.DynamoDB.ExecuteTransaction(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
         () => [
@@ -34,11 +32,7 @@ export const ExecuteTransactionHttp = Layer.effect(
       return Effect.fn(`AWS.DynamoDB.ExecuteTransaction(${tables})`)(function* (
         request: ExecuteTransactionRequest,
       ) {
-        return yield* signed(
-          access,
-          region,
-          DynamoDB.executeTransaction(request),
-        );
+        return yield* signed(access, region, DynamoDB.executeTransaction(request));
       });
     });
   }),

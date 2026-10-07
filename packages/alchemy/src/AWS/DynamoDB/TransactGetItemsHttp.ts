@@ -25,9 +25,7 @@ export const TransactGetItemsHttp = Layer.effect(
         const TableName = tableNames.get(tableId);
         if (!TableName) {
           return yield* Effect.die(
-            new Error(
-              `TransactGetItems request references unbound table '${tableId}'`,
-            ),
+            new Error(`TransactGetItems request references unbound table '${tableId}'`),
           );
         }
         return yield* TableName;
@@ -45,40 +43,34 @@ export const TransactGetItemsHttp = Layer.effect(
       );
       const region = yield* tablesRegion(access, sortedTables);
 
-      return Effect.fn(`AWS.DynamoDB.TransactGetItems(${sortedTables})`)(
-        function* (request: TransactGetItemsRequest) {
-          const transactItems = yield* Effect.forEach(
-            request.TransactItems,
-            ({ Get }) =>
-              Effect.gen(function* () {
-                return {
-                  Get: {
-                    ...Get,
-                    TableName: yield* getTableName(Get.Table),
-                  },
-                };
-              }),
-          );
+      return Effect.fn(`AWS.DynamoDB.TransactGetItems(${sortedTables})`)(function* (
+        request: TransactGetItemsRequest,
+      ) {
+        const transactItems = yield* Effect.forEach(request.TransactItems, ({ Get }) =>
+          Effect.gen(function* () {
+            return {
+              Get: {
+                ...Get,
+                TableName: yield* getTableName(Get.Table),
+              },
+            };
+          }),
+        );
 
-          return yield* signed(
-            access,
-            region,
-            DynamoDB.transactGetItems({
-              ...request,
-              TransactItems: transactItems,
-            }),
-          );
-        },
-      );
+        return yield* signed(
+          access,
+          region,
+          DynamoDB.transactGetItems({
+            ...request,
+            TransactItems: transactItems,
+          }),
+        );
+      });
     });
   }),
 );
 
 const sortTables = (tables: TransactGetItemsTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
+  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()].sort((a, b) =>
     a.LogicalId.localeCompare(b.LogicalId),
   ) as TransactGetItemsTables;

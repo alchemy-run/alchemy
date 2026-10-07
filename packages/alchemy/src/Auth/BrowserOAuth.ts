@@ -9,7 +9,7 @@
  * login UX stays uniform.
  */
 import * as Effect from "effect/Effect";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Interaction from "../Interaction.ts";
 import { CallbackServerStartError } from "./OAuthFlow.ts";
 
@@ -54,14 +54,12 @@ export const browserOAuth = Effect.fn(function* <A, E1, R1, E2, R2>(
       .awaitExternal({
         message: `${options.provider} authorization`,
         waitingLabel:
-          options.waitingLabel ??
-          "waiting for browser authorization (up to 5 minutes)…",
+          options.waitingLabel ?? "waiting for browser authorization (up to 5 minutes)…",
         url: options.url,
         openFailed,
         onOpen: () => openUrl(Interaction.openUrl(options.url)),
         inputLabel: "Paste the authorization code or callback URL",
-        validate: (value) =>
-          value.trim().length > 0 ? undefined : "Paste a code or URL",
+        validate: (value) => (value.trim().length > 0 ? undefined : "Paste a code or URL"),
       })
       .pipe(Effect.flatMap(options.exchange)),
   );

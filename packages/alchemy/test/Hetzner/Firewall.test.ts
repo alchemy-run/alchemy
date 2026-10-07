@@ -1,18 +1,15 @@
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as firewalls from "@distilled.cloud/hetzner/firewalls";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -33,7 +30,7 @@ const httpRule: Hetzner.FirewallRule = {
 };
 
 const waitUntilGone = (id: number) =>
-  Services.firewalls.getFirewall({ id }).pipe(
+  firewalls.getFirewall({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -74,7 +71,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         ]),
       );
 
-      const fetched = yield* Services.firewalls.getFirewall({
+      const fetched = yield* firewalls.getFirewall({
         id: created.id,
       });
       expect(fetched.firewall.id).toEqual(created.id);
@@ -113,7 +110,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         ]),
       );
 
-      const refetched = yield* Services.firewalls.getFirewall({
+      const refetched = yield* firewalls.getFirewall({
         id: updated.id,
       });
       expect(refetched.firewall.id).toEqual(created.id);
@@ -127,12 +124,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:firewall",
-      "provider:hetzner:service",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:firewall", "provider:hetzner:service", "live"],
     timeout: 120_000,
   },
 );
@@ -172,12 +164,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:hetzner",
-      "provider:hetzner:firewall",
-      "provider:hetzner:service",
-      "live",
-    ],
+    tags: ["provider:hetzner", "provider:hetzner:firewall", "provider:hetzner:service", "live"],
     timeout: 120_000,
   },
 );

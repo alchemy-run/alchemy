@@ -1,17 +1,10 @@
-import type {
-  FlyContainerConfig,
-  FlyMachineConfig,
-} from "@distilled.cloud/fly-io/machines";
+import type { FlyContainerConfig, FlyMachineConfig } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-
+import { deepEqual } from "../Diff.ts";
 import type { MachineContainer, MachineProps } from "./Machine.ts";
 
-import { deepEqual } from "../Diff.ts";
-
-export class InvalidMachineContainers extends Data.TaggedError(
-  "Fly.InvalidMachineContainers",
-)<{
+export class InvalidMachineContainers extends Data.TaggedError("Fly.InvalidMachineContainers")<{
   message: string;
 }> {}
 
@@ -30,9 +23,7 @@ export const validateMachineContainers = (
   if (image !== undefined)
     return typeof image === "string" && image.trim().length > 0
       ? Effect.void
-      : Effect.fail(
-          new InvalidMachineContainers({ message: "image must be nonempty." }),
-        );
+      : Effect.fail(new InvalidMachineContainers({ message: "image must be nonempty." }));
   if (!Array.isArray(containers) || containers.length === 0)
     return Effect.fail(
       new InvalidMachineContainers({
@@ -75,11 +66,7 @@ export const validateMachineContainers = (
   }
   for (const container of containers)
     for (const dependency of container.dependsOn ?? [])
-      if (
-        dependency == null ||
-        typeof dependency.name !== "string" ||
-        !names.has(dependency.name)
-      )
+      if (dependency == null || typeof dependency.name !== "string" || !names.has(dependency.name))
         return Effect.fail(
           new InvalidMachineContainers({
             message: `Container ${container.name} depends on an undeclared container.`,
@@ -88,9 +75,7 @@ export const validateMachineContainers = (
   return Effect.void;
 };
 
-export const toFlyContainers = (
-  containers: MachineContainer[],
-): FlyContainerConfig[] =>
+export const toFlyContainers = (containers: MachineContainer[]): FlyContainerConfig[] =>
   containers.map((container) => ({
     name: container.name,
     image: container.image,
@@ -123,7 +108,8 @@ export const toFlyContainers = (
     })),
   }));
 
-const normalized = (containers: FlyContainerConfig[] | undefined) =>
+/** Canonical semantic config shared by drift detection and generation identity. */
+export const canonicalContainers = (containers: FlyContainerConfig[] | undefined) =>
   (containers ?? [])
     .map((container) => ({
       name: container.name,
@@ -131,9 +117,7 @@ const normalized = (containers: FlyContainerConfig[] | undefined) =>
       cmd: container.cmd,
       entrypoint: container.entrypoint,
       env: Object.fromEntries(
-        Object.entries(container.env ?? {}).filter(
-          ([, value]) => value !== undefined,
-        ),
+        Object.entries(container.env ?? {}).filter(([, value]) => value !== undefined),
       ),
       depends_on: [...(container.depends_on ?? [])]
         .map(({ name, condition }) => ({ name, condition }))
@@ -157,7 +141,9 @@ export const sameContainers = (
   observed: FlyContainerConfig[] | undefined,
   desired: FlyContainerConfig[] | undefined,
 ) =>
-  deepEqual(normalized(observed), normalized(desired), { stripNullish: true });
+  deepEqual(canonicalContainers(observed), canonicalContainers(desired), {
+    stripNullish: true,
+  });
 
 /** Fly may synthesize a top-level image from the first container on readback. */
 export const sameContainerWorkload = (

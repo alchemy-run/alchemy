@@ -1,26 +1,25 @@
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
+import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
+import { noopSession } from "@/Report";
 import * as Test from "@/Test/Alchemy";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test record names. Each test owns a disjoint subdomain so
 // reruns and parallel runs never collide, and the same name is reused on every
@@ -53,9 +52,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -71,11 +68,7 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 // distilled >= 0.24.9) plus a client-side match as defense in depth.
 const listByNameType = (zoneId: string, name: string, type: string) =>
   dns.listRecords
-    .items({
-      zoneId,
-      name: { exact: name },
-      type: type as dns.ListRecordsRequest["type"],
-    })
+    .items({ zoneId, name: { exact: name }, type: type as dns.ListRecordsRequest["type"] })
     .pipe(
       Stream.filter((r) => r.name === name && r.type === type),
       Stream.runCollect,
@@ -105,9 +98,7 @@ const purgeRecords = (zoneId: string, name: string, type: string) =>
   listByNameType(zoneId, name, type).pipe(
     Effect.flatMap(
       Effect.forEach((r) =>
-        dns
-          .deleteRecord({ zoneId, dnsRecordId: r.id })
-          .pipe(Effect.catch(() => Effect.void)),
+        dns.deleteRecord({ zoneId, dnsRecordId: r.id }).pipe(Effect.catch(() => Effect.void)),
       ),
     ),
   );
@@ -151,14 +142,7 @@ test.provider(
       const gone = yield* findRecord(zoneId, NAME_DEFAULT, "A");
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 test.provider(
@@ -187,9 +171,7 @@ test.provider(
 
       const created = yield* getRecord(zoneId, initial.recordId);
       expect(created.type).toEqual("SVCB");
-      expect("data" in created ? created.data : undefined).toEqual(
-        SVCB_DATA_V1,
-      );
+      expect("data" in created ? created.data : undefined).toEqual(SVCB_DATA_V1);
 
       const provider = yield* Provider.findProvider(Cloudflare.DNS.Record);
       const listed = (yield* provider.list()).find(
@@ -231,12 +213,7 @@ test.provider(
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"],
     timeout: 120_000,
   },
 );
@@ -279,12 +256,7 @@ test.provider(
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"],
     timeout: 120_000,
   },
 );
@@ -338,14 +310,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 test.provider(
@@ -393,14 +358,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 test.provider(
@@ -478,14 +436,7 @@ test.provider(
       const gone = yield* findRecord(zoneId, NAME_ADOPT, "A");
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 test.provider(
@@ -545,12 +496,7 @@ test.provider(
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"],
     timeout: 120_000,
   },
 );
@@ -592,14 +538,7 @@ test.provider(
       const gone = yield* findRecord(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 // Several records legitimately share `(name, type)` — e.g. a primary MX and
@@ -688,27 +627,16 @@ test.provider(
       );
       expect(changed.backup.recordId).toEqual(preBackup.id);
       const liveBackup = yield* getRecord(zoneId, changed.backup.recordId);
-      expect(
-        "priority" in liveBackup ? liveBackup.priority : undefined,
-      ).toEqual(20);
+      expect("priority" in liveBackup ? liveBackup.priority : undefined).toEqual(20);
       const livePrimary = yield* getRecord(zoneId, changed.primary.recordId);
-      expect(
-        "priority" in livePrimary ? livePrimary.priority : undefined,
-      ).toEqual(1);
+      expect("priority" in livePrimary ? livePrimary.priority : undefined).toEqual(1);
 
       yield* stack.destroy();
 
       const leftovers = yield* listByNameType(zoneId, NAME_MX, "MX");
       expect(leftovers).toEqual([]);
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 // When multiple candidates survive the content/priority filter, adoption must
@@ -770,14 +698,7 @@ test.provider(
       yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 // Canonical `list()` test (zone-scoped collection): `list()` enumerates every
@@ -816,14 +737,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:dns",
-      "provider:cloudflare:zone",
-      "live",
-    ],
-  },
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 /**
@@ -845,9 +759,7 @@ const findError = (cause: Cause.Cause<unknown>): unknown =>
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -856,7 +768,55 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);
+
+test.provider(
+  "missing DNS records recover on read and delete while other API errors propagate",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneId = yield* resolveZoneId;
+      const name = `alchemy-dnsrecord-missing.${zoneName}`;
+      const props = { zoneId, name, type: "A" as const, content: "192.0.2.1" };
+      const record = yield* stack.deploy(
+        Cloudflare.DNS.Record("MissingRecord", props).pipe(adopt(true)),
+      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.Record);
+      const input = {
+        id: "MissingRecord",
+        fqn: "MissingRecord",
+        instanceId: "missing-record-test",
+        olds: props,
+        output: record,
+        bindings: [],
+        session: { ...noopSession, note: () => Effect.void },
+      };
+
+      // The real API must reject an inaccessible zone; neither lifecycle may
+      // hide that failure as if the record had simply been deleted.
+      const inaccessible = {
+        ...input,
+        output: { ...record, zoneId: "00000000000000000000000000000000" },
+      };
+      for (const operation of [provider.read!(inaccessible), provider.delete(inaccessible)]) {
+        const result = yield* operation.pipe(Retry.none, Effect.result);
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) expect(result.failure._tag).not.toBe("RecordNotFound");
+      }
+
+      // Delete out of band to exercise stale persisted state against Cloudflare.
+      yield* dns.deleteRecord({ zoneId, dnsRecordId: record.recordId });
+      const missing = yield* dns
+        .getRecord({ zoneId, dnsRecordId: record.recordId })
+        .pipe(Effect.flip);
+      expect(missing._tag).toBe("RecordNotFound");
+      expect(yield* provider.read!(input)).toBeUndefined();
+      yield* provider.delete(input);
+      yield* provider.delete(input);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"],
+    timeout: 120000,
+  },
+);

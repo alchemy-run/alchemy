@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type { GetFloatingIpResponseFloatingIp } from "@distilled.cloud/hetzner/floating_ips";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -12,9 +12,7 @@ import { waitForAction } from "./actions.ts";
 import { alchemyStackSelector } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
-export class FloatingIpAssignmentError extends Data.TaggedError(
-  "FloatingIpAssignmentError",
-)<{
+export class FloatingIpAssignmentError extends Data.TaggedError("FloatingIpAssignmentError")<{
   message: string;
 }> {}
 
@@ -112,9 +110,7 @@ export type FloatingIpAssignment = Resource<
  * @resource
  * @product IP Address
  */
-export const FloatingIpAssignment = Resource<FloatingIpAssignment>(
-  "Hetzner.FloatingIpAssignment",
-);
+export const FloatingIpAssignment = Resource<FloatingIpAssignment>("Hetzner.FloatingIpAssignment");
 
 type CloudFloatingIp = GetFloatingIpResponseFloatingIp;
 
@@ -134,9 +130,7 @@ const serverIdOf = (value: unknown): number | undefined => {
   return undefined;
 };
 
-const toAttrs = (
-  ip: CloudFloatingIp,
-): FloatingIpAssignment["Attributes"] | undefined => {
+const toAttrs = (ip: CloudFloatingIp): FloatingIpAssignment["Attributes"] | undefined => {
   if (ip.server === null) return undefined;
   return {
     floatingIpId: ip.id,
@@ -145,13 +139,13 @@ const toAttrs = (
 };
 
 const getById = (id: number) =>
-  Services.floatingIps.getFloatingIp({ id }).pipe(
+  Hetzner.floatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const refresh = (id: number) =>
-  Services.floatingIps.getFloatingIp({ id }).pipe(
+  Hetzner.floatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
     Effect.retry({
       while: (e) => e._tag === "NotFound",
@@ -174,7 +168,7 @@ const observeAssignment = (floatingIpId: number, serverId: number) =>
 const unassignIfNeeded = (ip: CloudFloatingIp) =>
   Effect.gen(function* () {
     if (ip.server === null) return ip;
-    const { action } = yield* Services.floatingIpActions.unassignFloatingIp({
+    const { action } = yield* Hetzner.floatingIpActions.unassignFloatingIp({
       id: ip.id,
     });
     yield* waitForAction(action);
@@ -184,7 +178,7 @@ const unassignIfNeeded = (ip: CloudFloatingIp) =>
 const assignTo = (ip: CloudFloatingIp, serverId: number) =>
   Effect.gen(function* () {
     if (ip.server === serverId) return ip;
-    const { action } = yield* Services.floatingIpActions.assignFloatingIp({
+    const { action } = yield* Hetzner.floatingIpActions.assignFloatingIp({
       id: ip.id,
       server: serverId,
     });
@@ -197,7 +191,7 @@ export const FloatingIpAssignmentProvider = () =>
     stables: ["floatingIpId", "serverId"],
     nuke: { dependsOn: ["Hetzner.FloatingIp", "Hetzner.Server"] },
     list: Effect.fn(function* () {
-      const items = yield* Services.floatingIps.listFloatingIps
+      const items = yield* Hetzner.floatingIps.listFloatingIps
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -214,10 +208,7 @@ export const FloatingIpAssignmentProvider = () =>
     }),
     read: Effect.fn(function* ({ output }) {
       if (output === undefined) return undefined;
-      const found = yield* observeAssignment(
-        output.floatingIpId,
-        output.serverId,
-      );
+      const found = yield* observeAssignment(output.floatingIpId, output.serverId);
       return found === undefined ? undefined : toAttrs(found);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -225,8 +216,7 @@ export const FloatingIpAssignmentProvider = () =>
       const serverId = serverIdOf(news.server);
       if (floatingIpId === undefined || serverId === undefined) {
         return yield* new FloatingIpAssignmentError({
-          message:
-            "FloatingIpAssignment requires a resolved floatingIp and server",
+          message: "FloatingIpAssignment requires a resolved floatingIp and server",
         });
       }
 
@@ -252,8 +242,7 @@ export const FloatingIpAssignmentProvider = () =>
       const attrs = toAttrs(current);
       if (attrs === undefined) {
         return yield* new FloatingIpAssignmentError({
-          message:
-            "FloatingIpAssignment reconcile finished without an assignment",
+          message: "FloatingIpAssignment reconcile finished without an assignment",
         });
       }
       return attrs;

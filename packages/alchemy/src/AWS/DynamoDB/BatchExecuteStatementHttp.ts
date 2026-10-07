@@ -34,15 +34,11 @@ export const BatchExecuteStatementHttp = Layer.effect(
         ],
       );
       const region = yield* tablesRegion(access, sortedTables);
-      return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(
-        function* (request: BatchExecuteStatementRequest) {
-          return yield* signed(
-            access,
-            region,
-            DynamoDB.batchExecuteStatement(request),
-          );
-        },
-      );
+      return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(function* (
+        request: BatchExecuteStatementRequest,
+      ) {
+        return yield* signed(access, region, DynamoDB.batchExecuteStatement(request));
+      });
     });
   }),
 );

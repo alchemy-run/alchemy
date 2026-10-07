@@ -1,10 +1,10 @@
-import { handleWebSocket } from "../websockets.ts";
 import * as NodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
 import * as NodeNet from "node:net";
 import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
+import { handleWebSocket } from "../websockets.ts";
 
 const DEBUG = !!process.env.WS_PROXY_DEBUG;
 const dbg = (...args: Array<unknown>) => {
@@ -109,9 +109,7 @@ const makeFakeRequest = (overrides: {
       connection: "Upgrade",
       "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
       "sec-websocket-version": "13",
-      ...(overrides.protocol
-        ? { "sec-websocket-protocol": overrides.protocol }
-        : {}),
+      ...(overrides.protocol ? { "sec-websocket-protocol": overrides.protocol } : {}),
     },
   }) as unknown as NodeHttp.IncomingMessage;
 };
@@ -146,19 +144,13 @@ describe("handleWebSocket", () => {
       ws.send("hello");
     });
 
-    const client = new WebSocket(
-      `ws://127.0.0.1:${harness.clientPort}/path?x=1`,
-    );
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/path?x=1`);
     const received: Array<string> = [];
-    client.on("upgrade", (res) =>
-      dbg("client received upgrade response", res.statusCode),
-    );
+    client.on("upgrade", (res) => dbg("client received upgrade response", res.statusCode));
     client.on("unexpected-response", (_req, res) =>
       dbg("client unexpected-response", res.statusCode),
     );
-    client.on("close", (code, reason) =>
-      dbg("client close", code, reason.toString()),
-    );
+    client.on("close", (code, reason) => dbg("client close", code, reason.toString()));
     await new Promise<void>((resolve, reject) => {
       client.on("open", () => {
         dbg("client open, sending ping");
@@ -213,23 +205,15 @@ describe("handleWebSocket", () => {
     });
 
     const sandboxHost = `4567-my-sandbox-sup3rs3cr3t.localhost:${harness.clientPort}`;
-    const client = new WebSocket(
-      `ws://127.0.0.1:${harness.clientPort}/`,
-      "vite-hmr",
-      {
-        headers: { host: sandboxHost },
-      },
-    );
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/`, "vite-hmr", {
+      headers: { host: sandboxHost },
+    });
     client.on("open", () => dbg("sandbox client open"));
-    client.on("upgrade", (res) =>
-      dbg("sandbox client received upgrade response", res.statusCode),
-    );
+    client.on("upgrade", (res) => dbg("sandbox client received upgrade response", res.statusCode));
     client.on("unexpected-response", (_req, res) =>
       dbg("sandbox client unexpected-response", res.statusCode),
     );
-    client.on("close", (code, reason) =>
-      dbg("sandbox client close", code, reason.toString()),
-    );
+    client.on("close", (code, reason) => dbg("sandbox client close", code, reason.toString()));
     const message = await new Promise<string>((resolve, reject) => {
       client.on("message", (data) => {
         dbg("sandbox client message", data.toString());
@@ -245,9 +229,7 @@ describe("handleWebSocket", () => {
     expect(message).toBe("ack");
     expect(harness.upstreamCalls).toHaveLength(1);
     expect(harness.upstreamCalls[0]!.headers.host).toBe(sandboxHost);
-    expect(harness.upstreamCalls[0]!.headers["sec-websocket-protocol"]).toBe(
-      "vite-hmr",
-    );
+    expect(harness.upstreamCalls[0]!.headers["sec-websocket-protocol"]).toBe("vite-hmr");
   });
 
   test("prefers X-Forwarded-Host over Host when set by a tunnel", async () => {
@@ -289,16 +271,51 @@ describe("handleWebSocket", () => {
     expect(response.ok).toBe(true);
   });
 
-  test("destroys client socket when worker does not upgrade", async () => {
-    // Upstream responds with a normal HTTP 200 instead of upgrading.
+  test("relays the worker's response and closes when it refuses the upgrade", async () => {
+    // The worker rejects the handshake with a plain HTTP response instead of
+    // upgrading — the client must see that response, not a connection reset,
+    // and the socket closes once it is relayed (the promise resolves on close).
     harness.upstreamServer.removeAllListeners("upgrade");
+    harness.upstreamServer.on("upgrade", (_request, socket) => {
+      socket.end(
+        [
+          "HTTP/1.1 403 Forbidden",
+          "content-type: text/plain",
+          "content-length: 9",
+          "connection: close",
+          "",
+          "Forbidden",
+        ].join("\r\n"),
+      );
+    });
 
-    const fakeReq = makeFakeRequest({ host: "localhost" });
-    const fakeSocket = new NodeNet.Socket();
-    harness.clientServer.emit("upgrade", fakeReq, fakeSocket, Buffer.alloc(0));
+    const received = await new Promise<string>((resolve, reject) => {
+      const socket = NodeNet.connect(harness.clientPort, "127.0.0.1", () => {
+        socket.write(
+          [
+            "GET /ws HTTP/1.1",
+            `Host: 127.0.0.1:${harness.clientPort}`,
+            "Connection: Upgrade",
+            "Upgrade: websocket",
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+            "Sec-WebSocket-Version: 13",
+            "",
+            "",
+          ].join("\r\n"),
+        );
+      });
+      let buffer = "";
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk) => {
+        buffer += chunk;
+      });
+      socket.on("close", () => resolve(buffer));
+      socket.on("error", reject);
+    });
 
-    await new Promise<void>((resolve) => fakeSocket.once("close", resolve));
-    expect(fakeSocket.destroyed).toBe(true);
+    expect(received).toContain("HTTP/1.1 403 Forbidden");
+    expect(received).toContain("content-type: text/plain");
+    expect(received.endsWith("Forbidden")).toBe(true);
   });
 
   test("returns a cleanup function that removes the upgrade listener", async () => {

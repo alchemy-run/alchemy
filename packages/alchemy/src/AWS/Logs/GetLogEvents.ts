@@ -60,6 +60,4 @@ export interface GetLogEvents extends Binding.Service<
     ) => Effect.Effect<Logs.GetLogEventsResponse, Logs.GetLogEventsError>
   >
 > {}
-export const GetLogEvents = Binding.Service<GetLogEvents>(
-  "AWS.Logs.GetLogEvents",
-);
+export const GetLogEvents = Binding.Service<GetLogEvents>("AWS.Logs.GetLogEvents");

@@ -1,13 +1,13 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
 import * as Command from "@/Command/index.ts";
 import { providers } from "@/Neon/Providers.ts";
 import { stageWebsiteArtifact } from "@/Neon/Website/Artifact.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { Server } from "@/Website/Server.ts";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { exampleRoot } from "./Fixture.ts";
 import { frameworks } from "./Frameworks.ts";
 
@@ -38,10 +38,7 @@ describe.sequential(
                       outdir: "dist",
                       memo: false,
                     }).pipe(
-                      Effect.map((build) => ({
-                        distDir: build.outdir,
-                        serverEntry: undefined,
-                      })),
+                      Effect.map((build) => ({ distDir: build.outdir, serverEntry: undefined })),
                     )
                   : Server("Build", {
                       root,
@@ -52,8 +49,7 @@ describe.sequential(
                       target,
                       memo: false,
                       env: { GREETING: `Hello from ${name} on Neon!` },
-                      options:
-                        slug === "astro" ? { astro: { output: "server" } } : {},
+                      options: slug === "astro" ? { astro: { output: "server" } } : {},
                     });
               }),
             );
@@ -94,10 +90,7 @@ describe.sequential(
               ],
               { concurrency: "unbounded" },
             ).pipe(Effect.timeout("30 seconds"));
-            expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({
-              code: 0,
-              stderr: "",
-            });
+            expect({ code, stderr: code === 0 ? "" : stderr }).toEqual({ code: 0, stderr: "" });
             expect(stdout).toContain("NEON_FETCH_ARTIFACT_OK");
             yield* stack.destroy();
           }).pipe(Effect.scoped),

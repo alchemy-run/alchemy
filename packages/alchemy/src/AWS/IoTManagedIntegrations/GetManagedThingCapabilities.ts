@@ -31,13 +31,9 @@ export interface GetManagedThingCapabilities extends Binding.Service<
   (
     thing: ManagedThing,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mi.GetManagedThingCapabilitiesResponse,
-      mi.GetManagedThingCapabilitiesError
-    >
+    () => Effect.Effect<mi.GetManagedThingCapabilitiesResponse, mi.GetManagedThingCapabilitiesError>
   >
 > {}
-export const GetManagedThingCapabilities =
-  Binding.Service<GetManagedThingCapabilities>(
-    "AWS.IoTManagedIntegrations.GetManagedThingCapabilities",
-  );
+export const GetManagedThingCapabilities = Binding.Service<GetManagedThingCapabilities>(
+  "AWS.IoTManagedIntegrations.GetManagedThingCapabilities",
+);
