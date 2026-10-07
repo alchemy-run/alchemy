@@ -42,8 +42,9 @@ export const parseRepoDigest = (imageRef: string, output: string): string | unde
 /**
  * Picks the `repository@digest` that inspect reports for this image.
  *
- * `docker push` prints `digest: sha256:...`. `podman push` does not, but both
- * engines record the published digest on `RepoDigests` after the push.
+ * A fallback when push output has no `digest:` line. Podman pushes report the
+ * published digest through `--digestfile` instead, because Podman can list a
+ * pulled image's source digest under the pushed name here.
  */
 export const repoDigestFromInspect = (
   imageRef: string,

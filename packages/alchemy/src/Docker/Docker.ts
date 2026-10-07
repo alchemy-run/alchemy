@@ -628,6 +628,16 @@ export const DockerLive = Layer.effect(
       }),
     );
 
+    // `podman push` prints no `digest:` line, and Podman's RepoDigests can
+    // list a source digest under the pushed name, so Podman pushes report the
+    // published digest through `--digestfile` instead. Probed once.
+    const isPodman = yield* Effect.cached(
+      run(["--version"]).pipe(
+        Effect.map((result) => /^podman\b/i.test(result.stdout.trim())),
+        Effect.orElseSucceed(() => false),
+      ),
+    );
+
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context) {
         // Write the registry credentials directly into an isolated docker config
@@ -653,20 +663,34 @@ export const DockerLive = Layer.effect(
           return JSON.stringify({ auths: { [credentials.server]: { auth } } });
         });
         yield* fs.writeFileString(path.join(dir, "config.json"), config);
-        if (platform === undefined) {
-          return yield* run([...formatArgs({ context }), "push", ref], { DOCKER_CONFIG: dir });
-        }
-        return yield* run([...formatArgs({ context }), "push", "--platform", platform, ref], {
-          DOCKER_CONFIG: dir,
-        }).pipe(
-          // Engines without the containerd image store reject `--platform`
-          // on push; their local tag is already narrowed to the requested
-          // platform by `pull --platform`, so a plain push is equivalent.
-          Effect.catchIf(
-            (error) => /--platform|unknown flag|containerd/i.test(String(error)),
-            () => run([...formatArgs({ context }), "push", ref], { DOCKER_CONFIG: dir }),
-          ),
-        );
+        const digestFile = path.join(dir, "digest");
+        const digestArgs = (yield* isPodman) ? ["--digestfile", digestFile] : [];
+        const result =
+          platform === undefined
+            ? yield* run([...formatArgs({ context }), "push", ...digestArgs, ref], {
+                DOCKER_CONFIG: dir,
+              })
+            : yield* run(
+                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                { DOCKER_CONFIG: dir },
+              ).pipe(
+                // Engines without the containerd image store reject `--platform`
+                // on push; their local tag is already narrowed to the requested
+                // platform by `pull --platform`, so a plain push is equivalent.
+                Effect.catchIf(
+                  (error) => /--platform|unknown flag|containerd/i.test(String(error)),
+                  () =>
+                    run([...formatArgs({ context }), "push", ...digestArgs, ref], {
+                      DOCKER_CONFIG: dir,
+                    }),
+                ),
+              );
+        if (digestArgs.length === 0) return result;
+        const digest = (yield* fs
+          .readFileString(digestFile)
+          .pipe(Effect.orElseSucceed(() => ""))).trim();
+        // Report it the way `docker push` does, so callers parse one format.
+        return digest ? { ...result, stdout: `${result.stdout}\ndigest: ${digest}` } : result;
       },
       Effect.scoped,
       Effect.mapError(classifyDockerRegistryError),
