@@ -100,6 +100,7 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
     expect(out.info.usage.outputTokens).toBe("echo: hello".length);
     expect(out.types).toEqual([
       "state",
+      "message.completed",
       "turn.started",
       "message.delta",
       "turn.completed",
@@ -251,6 +252,7 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
     expect(out.liveTypes).toEqual([
       "state",
       "model.changed",
+      "message.completed",
       "turn.started",
       "message.delta",
       "turn.completed",
@@ -258,6 +260,7 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
     expect(out.types).toEqual([
       "state",
       "model.changed",
+      "message.completed",
       "turn.started",
       "message.delta",
       "turn.completed",

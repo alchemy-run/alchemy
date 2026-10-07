@@ -253,20 +253,31 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
             .pipe(Effect.andThen(handle(message)));
         });
 
+      let streamMessageId: string | undefined;
       const handle = (message: SDKMessage): Effect.Effect<void> => {
         const turnId = turn?.turnId ?? "turn";
         switch (message.type) {
           case "stream_event": {
             const event = message.event as {
               type: string;
+              index?: number;
+              message?: { id?: string };
               delta?: { type: string; text?: string; thinking?: string };
             };
+            // Deltas of one content block share an item id: the API message
+            // id (from `message_start`) plus the block index. `uuid` is per
+            // stream event, so it would split one answer into fragments.
+            if (event.type === "message_start") {
+              streamMessageId = event.message?.id;
+              return Effect.void;
+            }
             if (event.type !== "content_block_delta" || !event.delta) return Effect.void;
+            const blockId = `${streamMessageId ?? message.uuid ?? turnId}:${event.index ?? 0}`;
             if (event.delta.type === "text_delta" && event.delta.text) {
               if (turn) turn.text += event.delta.text;
               return session.emit({
                 type: "message.delta",
-                itemId: message.uuid ?? turnId,
+                itemId: blockId,
                 role: "assistant",
                 text: event.delta.text,
                 ...(message.parent_tool_use_id ? { parentId: message.parent_tool_use_id } : {}),
@@ -275,7 +286,7 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
             if (event.delta.type === "thinking_delta" && event.delta.thinking) {
               return session.emit({
                 type: "reasoning.delta",
-                itemId: message.uuid ?? turnId,
+                itemId: blockId,
                 text: event.delta.thinking,
               });
             }

@@ -193,10 +193,15 @@ export const makeHarness = (
           Effect.onError(() => Scope.close(scope, Exit.void)),
         );
 
+        // The log records what the user said, so it replays as a transcript.
+        const userMessage = (prompt: ReadonlyArray<ContentBlock>) =>
+          emit({ type: "message.completed", itemId: newId(), role: "user", content: prompt });
+
         const startTurn = (prompt: ReadonlyArray<ContentBlock>) =>
           Effect.gen(function* () {
             const turnId = newId();
             entry!.lastTurnId = turnId;
+            yield* userMessage(prompt);
             yield* native.prompt(turnId, prompt);
             return { turnId, cursor: yield* store.latest(id) };
           });
@@ -211,7 +216,9 @@ export const makeHarness = (
             entry!.state === "idle"
               ? startTurn(promptBlocks(prompt)).pipe(Effect.asVoid)
               : native.steer
-                ? native.steer(promptBlocks(prompt))
+                ? userMessage(promptBlocks(prompt)).pipe(
+                    Effect.andThen(native.steer(promptBlocks(prompt))),
+                  )
                 : Effect.gen(function* () {
                     // Degrade: interrupt the running turn, then start the
                     // steering message as a fresh turn.

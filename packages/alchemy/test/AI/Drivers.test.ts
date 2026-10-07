@@ -42,10 +42,17 @@ const roundTrip = (
       };
     }
     yield* session.close();
-    const types = new Set(
-      Array.from(yield* Stream.runCollect(session.events())).map((e) => e.type),
-    );
-    return { result, types, switched };
+    const events = Array.from(yield* Stream.runCollect(session.events()));
+    const types = new Set(events.map((e) => e.type));
+    // Streamed text for one turn's answer should group into few items, not
+    // one per delta.
+    const firstTurnEnd = events.findIndex((e) => e.type === "turn.completed");
+    const answerItems = new Set(
+      events
+        .slice(0, firstTurnEnd)
+        .flatMap((e) => (e.type === "message.delta" && e.role === "assistant" ? [e.itemId] : [])),
+    ).size;
+    return { result, types, switched, answerItems };
   }).pipe(
     Effect.scoped,
     Effect.provide(Layer.mergeAll(MemorySessionStore, RuntimeContext.phantom, NodeServices.layer)),
@@ -57,7 +64,7 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
     () =>
       Effect.runPromise(
         Effect.gen(function* () {
-          const { result, types, switched } = yield* roundTrip(
+          const { result, types, switched, answerItems } = yield* roundTrip(
             Effect.succeed(
               claudeCodeDriver({
                 model: "claude-haiku-4-5-20251001",
@@ -72,6 +79,7 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
           expect(JSON.stringify(result.message).toLowerCase()).toContain("pong");
           expect(result.usage.outputTokens).toBeGreaterThan(0);
           expect(switched).toEqual({ model: "haiku", status: "completed" });
+          expect(answerItems).toBe(1);
           expect(types.has("message.delta")).toBe(true);
         }) as Effect.Effect<void>,
       ),

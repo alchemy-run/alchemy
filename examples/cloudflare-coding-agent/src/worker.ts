@@ -7,10 +7,18 @@ import { Agent } from "./Agent.ts";
 
 const encoder = new TextEncoder();
 
+/** The web UI is served from another origin. */
+const cors = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type, last-event-id",
+};
+
 /**
  * A small HTTP API over many coding agents:
  *
  *   POST /agents/:id          { prompt }  start the session (idempotent) and run a turn → result
+ *                                         (`?wait=false` returns as soon as the turn starts)
  *   POST /agents/:id/steer    { prompt }  redirect the running turn
  *   POST /agents/:id/interrupt            stop the running turn
  *   POST /agents/:id/model    { model }   switch models mid-session
@@ -22,12 +30,14 @@ const encoder = new TextEncoder();
  */
 export default Cloudflare.Worker(
   "CodingAgents",
-  { main: import.meta.url },
+  // Under `alchemy dev` the web UI takes the default port.
+  { main: import.meta.url, dev: { port: 1338 } },
   Effect.gen(function* () {
     const agents = yield* Agent;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
+        if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204 });
         const url = new URL(request.url, "http://agents");
         const match = /^\/agents\/([\w-]+)(?:\/(steer|interrupt|events|model))?$/.exec(
           url.pathname,
@@ -36,7 +46,10 @@ export default Cloudflare.Worker(
         const [, id, action] = match;
 
         if (action === "events") {
-          const after = Number(url.searchParams.get("after") ?? 0);
+          // `EventSource` reconnects with `Last-Event-ID` (our cursor).
+          const after = Number(
+            request.headers["last-event-id"] ?? url.searchParams.get("after") ?? 0,
+          );
           // The body is read after this handler returns, so the stream opens
           // (and owns) its own connection to the agent.
           const events = Stream.unwrap(
@@ -71,6 +84,7 @@ export default Cloudflare.Worker(
         }
         yield* agent.start({});
         const turn = yield* agent.prompt({ prompt });
+        if (url.searchParams.get("wait") === "false") return yield* HttpServerResponse.json(turn);
         const result = yield* agent.result({ turnId: turn.turnId });
         return yield* HttpServerResponse.json(result);
       }).pipe(
@@ -78,6 +92,7 @@ export default Cloudflare.Worker(
         Effect.catchCause((cause) =>
           Effect.succeed(HttpServerResponse.text(String(cause), { status: 500 })),
         ),
+        Effect.map(HttpServerResponse.setHeaders(cors)),
       ),
     };
   }),
