@@ -1094,6 +1094,19 @@ describe.concurrent(
         route: "/hello",
         response: "hello from external container",
         imageFqn: "ExternalContainer/Image",
+        // The checked-in context is identical on every run, so the shared
+        // repository would serve a previous run's image and nothing would be
+        // built. A per-run nonce in the context forces a real build + push.
+        prepare: Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const nonce = `${import.meta.dirname}/fixtures/external/context/.run-nonce`;
+          yield* Effect.acquireRelease(
+            Effect.sync(() => crypto.randomUUID()).pipe(
+              Effect.flatMap((id) => fs.writeFileString(nonce, id)),
+            ),
+            () => fs.remove(nonce, { force: true }).pipe(Effect.ignore),
+          );
+        }),
       },
       {
         name: "generated",
@@ -1112,6 +1125,7 @@ describe.concurrent(
         (stack) =>
           Effect.gen(function* () {
             yield* stack.destroy();
+            if (fixture.prepare !== undefined) yield* fixture.prepare;
             const docker = yield* Docker;
             const fs = yield* FileSystem.FileSystem;
             const path = yield* Path.Path;
