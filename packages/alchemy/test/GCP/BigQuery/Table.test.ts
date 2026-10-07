@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
+import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -179,4 +180,181 @@ test.provider(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 90_000 },
+);
+
+const tableStatus = (projectId: string, datasetId: string, tableId: string) =>
+  bigquery.getTables({ projectId, datasetId, tableId, view: "FULL" });
+
+test.provider(
+  "create, update, and replace a view",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const viewStack = (props: { datasetId?: string; query?: string }) =>
+        Effect.gen(function* () {
+          const dataset = yield* GCP.BigQuery.Dataset("Analytics", {
+            datasetId: props.datasetId,
+            location: "US-CENTRAL1",
+            forceDestroy: true,
+          });
+          const events = yield* GCP.BigQuery.Table("Events", {
+            datasetId: dataset.datasetId,
+            schema: [
+              { name: "id", type: "STRING" },
+              { name: "n", type: "INT64" },
+            ],
+          });
+          return yield* GCP.BigQuery.Table("EventIds", {
+            datasetId: dataset.datasetId,
+            ...(props.query === undefined
+              ? { schema: [{ name: "id", type: "STRING" }] }
+              : {
+                  view: {
+                    query: Output.interpolate`${props.query} FROM ${events.datasetId}.${events.tableId}`,
+                  },
+                }),
+          });
+        });
+
+      const created = yield* stack.deploy(viewStack({ query: "SELECT id" }));
+      expect(created.type).toEqual("VIEW");
+      expect(created.view?.query).toMatch(/^SELECT id FROM /);
+      expect(created.view?.useLegacySql).toEqual(false);
+
+      const fetched = yield* tableStatus(created.project, created.datasetId, created.tableId);
+      expect(fetched.type).toEqual("VIEW");
+      expect(fetched.view?.useLegacySql).toEqual(false);
+      expect((fetched.schema?.fields ?? []).map((field) => field.name)).toEqual(["id"]);
+
+      const updated = yield* stack.deploy(
+        viewStack({ datasetId: created.datasetId, query: "SELECT id, n" }),
+      );
+      expect(updated.tableId).toEqual(created.tableId);
+      expect(updated.creationTime).toEqual(created.creationTime);
+      expect(updated.view?.query).toMatch(/^SELECT id, n FROM /);
+
+      const fetchedUpdate = yield* tableStatus(created.project, created.datasetId, created.tableId);
+      expect(fetchedUpdate.creationTime).toEqual(created.creationTime);
+      expect((fetchedUpdate.schema?.fields ?? []).map((field) => field.name)).toEqual(["id", "n"]);
+
+      // A generated name is replaced create-before-delete, under a new name.
+      const replaced = yield* stack.deploy(viewStack({ datasetId: created.datasetId }));
+      expect(replaced.tableId).not.toEqual(created.tableId);
+      expect(replaced.type).toEqual("TABLE");
+      expect(replaced.view).toBeUndefined();
+
+      const fetchedReplace = yield* tableStatus(
+        replaced.project,
+        replaced.datasetId,
+        replaced.tableId,
+      );
+      expect(fetchedReplace.type).toEqual("TABLE");
+      expect(fetchedReplace.view).toBeUndefined();
+
+      const viewGone = yield* waitUntilGone(created.project, created.datasetId, created.tableId);
+      expect(viewGone).toEqual("gone");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(replaced.project, replaced.datasetId, replaced.tableId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "create and update a hive-partitioned external table over Cloud Storage",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const externalStack = (props: { datasetId?: string; requirePartitionFilter?: boolean }) =>
+        Effect.gen(function* () {
+          const bucket = yield* GCP.Storage.Bucket("Data", {
+            location: "US-CENTRAL1",
+            forceDestroy: true,
+          });
+          const first = yield* GCP.Storage.Object("DayOne", {
+            bucketName: bucket.bucketName,
+            key: "events/day=2024-01-01/part-0.json",
+            content: '{"id":"a","n":1}\n{"id":"b","n":2}\n',
+            contentType: "application/json",
+          });
+          const second = yield* GCP.Storage.Object("DayTwo", {
+            bucketName: bucket.bucketName,
+            key: "events/day=2024-01-02/part-0.json",
+            content: '{"id":"c","n":3}\n',
+            contentType: "application/json",
+          });
+          const dataset = yield* GCP.BigQuery.Dataset("Analytics", {
+            datasetId: props.datasetId,
+            location: "US-CENTRAL1",
+            forceDestroy: true,
+          });
+          // Referencing both objects orders the table after its source files,
+          // which autodetect reads at create time.
+          const table = yield* GCP.BigQuery.Table("Events", {
+            datasetId: dataset.datasetId,
+            externalDataConfiguration: {
+              sourceUris: [Output.interpolate`gs://${first.bucketName}/events/*`],
+              sourceFormat: "NEWLINE_DELIMITED_JSON",
+              autodetect: true,
+              hivePartitioningOptions: {
+                mode: "CUSTOM",
+                sourceUriPrefix: Output.interpolate`gs://${second.bucketName}/events/{day:DATE}`,
+                requirePartitionFilter: props.requirePartitionFilter,
+              },
+            },
+          });
+          return { bucket, table };
+        });
+
+      const { bucket, table: created } = yield* stack.deploy(externalStack({}));
+      expect(created.type).toEqual("EXTERNAL");
+      expect(created.externalDataConfiguration).toMatchObject({
+        sourceUris: [`gs://${bucket.bucketName}/events/*`],
+        sourceFormat: "NEWLINE_DELIMITED_JSON",
+        hivePartitioningOptions: {
+          mode: "CUSTOM",
+          sourceUriPrefix: `gs://${bucket.bucketName}/events/{day:DATE}`,
+          requirePartitionFilter: false,
+        },
+      });
+
+      const queried = yield* bigquery.queryJobs({
+        projectId: created.project,
+        body: {
+          query: `SELECT day, SUM(n) AS total FROM ${created.datasetId}.${created.tableId} GROUP BY day ORDER BY day`,
+          useLegacySql: false,
+          location: created.location,
+        },
+      });
+      expect(queried.jobComplete).toEqual(true);
+      expect((queried.rows ?? []).map((row) => row.f?.map((cell) => cell.v))).toEqual([
+        ["2024-01-01", "3"],
+        ["2024-01-02", "3"],
+      ]);
+
+      const { table: updated } = yield* stack.deploy(
+        externalStack({ datasetId: created.datasetId, requirePartitionFilter: true }),
+      );
+      expect(updated.tableId).toEqual(created.tableId);
+      expect(updated.creationTime).toEqual(created.creationTime);
+      expect(updated.externalDataConfiguration?.hivePartitioningOptions).toMatchObject({
+        requirePartitionFilter: true,
+      });
+
+      const fetchedUpdate = yield* tableStatus(created.project, created.datasetId, created.tableId);
+      expect(fetchedUpdate.creationTime).toEqual(created.creationTime);
+      expect(
+        fetchedUpdate.externalDataConfiguration?.hivePartitioningOptions?.requirePartitionFilter,
+      ).toEqual(true);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.project, created.datasetId, created.tableId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 180_000 },
 );
