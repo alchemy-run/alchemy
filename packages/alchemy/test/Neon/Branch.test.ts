@@ -544,6 +544,61 @@ describe.concurrent(
     );
 
     test.provider(
+      "reparents onto a parent branch created in the same deploy",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const initial = yield* stack.deploy(
+            Effect.gen(function* () {
+              const project = yield* Project("LateParentProject");
+              const branch = yield* Branch("LateParentChild", {
+                project,
+                name: "late-parent-child",
+              });
+              return { project, branch };
+            }),
+          );
+          const program = (parentName?: string) =>
+            Effect.gen(function* () {
+              const project = yield* Project("LateParentProject");
+              const parent = yield* Branch("LateParent", { project, name: parentName });
+              const branch = yield* Branch("LateParentChild", {
+                project,
+                name: "late-parent-child",
+                parentBranch: parent,
+              });
+              return { project, parent, branch };
+            });
+          const plan = yield* stack.plan(program());
+          expect(plan.resources.LateParentChild).toMatchObject({
+            action: "replace",
+            deleteFirst: true,
+          });
+          const reparented = yield* stack.deploy(program());
+          expect(reparented.branch.branchId).not.toBe(initial.branch.branchId);
+          expect(reparented.branch.branchName).toBe(initial.branch.branchName);
+          expect(reparented.branch.parentBranchId).toBe(reparented.parent.branchId);
+          const current = yield* getProjectBranch({
+            project_id: reparented.project.projectId,
+            branch_id: reparented.branch.branchId,
+          });
+          expect(current.branch.parent_id).toBe(reparented.parent.branchId);
+          expect((yield* stack.plan(program())).resources.LateParentChild.action).toBe("noop");
+
+          // Updating the parent in place keeps its stable branchId, so the
+          // child (and its data) must survive.
+          const renamePlan = yield* stack.plan(program("late-parent-renamed"));
+          expect(renamePlan.resources.LateParent.action).toBe("update");
+          expect(renamePlan.resources.LateParentChild.action).not.toBe("replace");
+          const renamed = yield* stack.deploy(program("late-parent-renamed"));
+          expect(renamed.parent.branchName).toBe("late-parent-renamed");
+          expect(renamed.branch.branchId).toBe(reparented.branch.branchId);
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
       "explicit branch names preserve schema-only roots and replace changed schema sources",
       (stack) =>
         Effect.gen(function* () {

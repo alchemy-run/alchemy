@@ -251,14 +251,29 @@ export const BranchProvider = () =>
       if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      const pending = news as Partial<BranchProps>;
       const replacement = {
         action: "replace",
         deleteFirst:
-          news.name !== undefined &&
-          news.name === (output?.branchName ?? olds.name) &&
+          pending.name !== undefined &&
+          pending.name === (output?.branchName ?? olds.name) &&
           oldProjectId === newProjectId,
       } as const;
+      // A fork point only known at apply time cannot be proven unchanged, and
+      // `reconcile` never re-forks an existing branch, so an update would
+      // silently keep the old data.
+      if (
+        output &&
+        !isResolved([
+          pending.parentBranch,
+          pending.parentLsn,
+          pending.parentTimestamp,
+          pending.initSource,
+        ])
+      ) {
+        return replacement;
+      }
+      if (!isResolved(news)) return undefined;
       if (
         olds.parentLsn !== news.parentLsn ||
         olds.parentTimestamp !== news.parentTimestamp ||
