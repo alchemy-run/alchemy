@@ -46,8 +46,7 @@ export interface AxiomTelemetryProps {
 const instance = <T>(resource: ResourceInput<T>): Effect.Effect<T> =>
   Effect.isEffect(resource) ? (resource as Effect.Effect<T>) : Effect.succeed(resource);
 
-/** @internal */
-export const signal = (
+const signal = (
   token: ApiToken,
   dataset: Dataset | undefined,
   urlAttr: "otelTracesEndpoint" | "otelLogsEndpoint" | "otelMetricsEndpoint",
