@@ -507,7 +507,18 @@ export const ClientVpnEndpointProvider = () =>
                   Tags: createTagsList(tags),
                 },
               ],
-            });
+            }).pipe(
+              // EC2 creates one Client VPN endpoint per account at a time, and
+              // a just-created VPC can take a moment to become visible to it.
+              // The ClientToken keeps the retried create idempotent.
+              (effect) =>
+                retryClientVpn(
+                  effect,
+                  (error) =>
+                    error._tag === "ClientVpnEndpointCreationInProgress" ||
+                    error._tag === "InvalidVpcID.NotFound",
+                ),
+            );
             const endpointId = created.ClientVpnEndpointId!;
             endpoint = yield* describe(endpointId).pipe(
               Effect.flatMap((value) =>

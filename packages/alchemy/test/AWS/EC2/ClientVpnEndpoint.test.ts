@@ -53,7 +53,7 @@ describe.sequential(
   "Client VPN endpoints",
   { tags: ["provider:aws", "provider:aws:acm", "provider:aws:ec2", "provider:aws:logs", "live"] },
   () => {
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "creates, lists, updates, removes optional settings, and deletes a Client VPN endpoint",
       (stack) =>
         Effect.gen(function* () {
@@ -217,7 +217,7 @@ describe.sequential(
       { timeout: clientVpnTestTimeout },
     );
 
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "repairs out-of-band endpoint settings and tags with unchanged desired props",
       (stack) =>
         Effect.gen(function* () {
@@ -269,7 +269,7 @@ describe.sequential(
       { timeout: clientVpnTestTimeout },
     );
 
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "enables group-only logging from a newly created dependency without replacing the endpoint",
       (stack) =>
         Effect.gen(function* () {
@@ -306,7 +306,7 @@ describe.sequential(
       { timeout: clientVpnTestTimeout },
     );
 
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "fails with a typed error when the configured VPC has been deleted",
       (stack) =>
         Effect.gen(function* () {
@@ -328,7 +328,7 @@ describe.sequential(
       { timeout: clientVpnTestTimeout },
     );
 
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       "replaces an endpoint for client CIDR and transport protocol changes",
       (stack) =>
         Effect.gen(function* () {
