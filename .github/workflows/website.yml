@@ -132,21 +132,16 @@ jobs:
             website-astro-full-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
             website-astro-full-${{ runner.os }}-main-
 
-      - name: Setup pnpm, Node.js, Bun
+      - name: Setup pnpm, Node.js, Bun and install dependencies
         uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
         with:
           cache: true
-          install: false
+          install: true
+          require-lockfile: true
 
-      # Destroy evaluates the stack and calls providers; it does not build or
-      # bundle anything, so it skips native postinstalls and the root prepare.
-      - name: Install dependencies
-        run: >-
-          pnpm install --frozen-lockfile
-          ${{ steps.mode.outputs.mode == 'destroy' && '--ignore-scripts' || '' }}
-
+      # Deploy and destroy both evaluate the stack, which loads the
+      # dist-consumed Cloudflare packages.
       - name: Build Cloudflare packages
-        if: steps.mode.outputs.mode == 'deploy'
         run: pnpm ensure:built
 
       # Main/prod use the production account; PR stages use the test account.
