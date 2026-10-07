@@ -2,6 +2,8 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -10,7 +12,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../Tags.ts";
 import { toSeconds } from "../Util/Duration.ts";
-import { sha256Object } from "../Util/sha256.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -31,6 +33,16 @@ export interface ContainerProps {
   command?: string[];
   /** Container environment variables. Use Redacted for secrets. */
   environment?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Paths to Docker env files, forwarded in the declared order as repeated
+   * `--env-file` options. Explicit `environment` values are forwarded after
+   * these files and take precedence in Docker. Editing a file's contents
+   * replaces the container on the next deploy. Only a digest of the contents
+   * is kept, on the container's own label; neither contents nor digest are
+   * written to Alchemy state. Docker itself exposes the resolved values
+   * through `docker inspect`, so treat env files as secrets.
+   */
+  envFiles?: string[];
   /** Host/container port mappings. */
   ports?: Container.PortMapping[];
   /** Volume or bind mounts. */
@@ -187,6 +199,25 @@ export interface Container extends Resource<
  * });
  * ```
  *
+ * ### Environment Files
+ * **Example:** Layered Docker env files
+ * ```typescript
+ * const app = yield* Docker.Container("app", {
+ *   image: "ghcr.io/acme/app:latest",
+ *   envFiles: ["./config/base.env", "./config/production.env"],
+ *   // Explicit values are passed after env files and take precedence.
+ *   environment: { LOG_LEVEL: "info" },
+ * });
+ * ```
+ *
+ * Editing an env file replaces the container on the next deploy, as does
+ * adopting a container that uses env files (once, so later edits are tracked).
+ * Alchemy reads
+ * the files at plan time but keeps only a digest of their contents, on the
+ * container's own label; neither the values nor the digest are written to
+ * Alchemy state. Docker exposes the resolved values through `docker inspect`,
+ * so treat env files as secrets.
+ *
  * ### Networks and Volumes
  * **Example:** PostgreSQL with persistent storage
  * ```typescript
@@ -326,6 +357,37 @@ export const ContainerProvider = () =>
     Container,
     Effect.gen(function* () {
       const docker = yield* Docker;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      // Env files are read so editing one rolls the container, but only a
+      // digest of their bytes enters the config hash, which lives solely in
+      // the container's own label (where `docker inspect` already exposes
+      // the resolved values). Neither contents nor digest reach alchemy state.
+      const envFilesDigest = Effect.fn(function* (envFiles: ReadonlyArray<string> | undefined) {
+        if (!envFiles?.length) return undefined;
+        const digests = yield* Effect.forEach(envFiles, (file) =>
+          fs.readFile(path.resolve(file)).pipe(
+            Effect.flatMap(sha256),
+            Effect.map((digest) => `${file}\0${digest}`),
+          ),
+        );
+        return yield* sha256(digests.join("\n"));
+      });
+
+      // Without env files the hash input is unchanged from before they were
+      // supported, so existing containers keep their label and are not rolled.
+      const desiredConfigHash = Effect.fn(function* (
+        args: Parameters<Docker["Service"]["container"]["create"]>[0],
+        news: ContainerProps,
+      ) {
+        const envFiles = yield* envFilesDigest(news.envFiles);
+        return yield* sha256Object({
+          ...args,
+          imageId: normalizeImageId(news.image),
+          ...(envFiles === undefined ? {} : { envFiles }),
+        });
+      });
 
       const reconcileNetworks = Effect.fn(function* (
         live: Docker.Container,
@@ -424,14 +486,20 @@ export const ContainerProvider = () =>
           ) {
             return { action: "update" as const };
           }
+          // Same env file paths, possibly new contents: compare against the
+          // hash stamped on the running container.
+          if (news.envFiles?.length) {
+            const live = yield* inspect(newArgs.name, dockerContextName(news.context));
+            const applied = live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL];
+            if (applied !== undefined && applied !== (yield* desiredConfigHash(newArgs, news))) {
+              return { action: "update" as const };
+            }
+          }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
-          const configHash = yield* sha256Object({
-            ...args,
-            imageId: normalizeImageId(news.image),
-          });
+          const configHash = yield* desiredConfigHash(args, news);
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
           const oldContext = olds ? dockerContextName(olds.context) : context;
@@ -461,7 +529,10 @@ export const ContainerProvider = () =>
             (live.Config.Labels?.[CREATE_CONFIG_HASH_LABEL] === undefined
               ? (oldArgs !== undefined && !Equal.equals(oldArgs, args)) ||
                 normalizeImageId(olds?.image) !== normalizeImageId(news.image) ||
-                !matchesLegacyConfig(live, args, news.image)
+                !matchesLegacyConfig(live, args, news.image) ||
+                // Env file contents can't be compared without a label (e.g. an
+                // adopted container); recreate once so later edits are tracked.
+                (news.envFiles?.length ?? 0) > 0
               : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
           if (recreate) {
             yield* remove(live.Id, context);
@@ -542,6 +613,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       image: normalizeImageRef(news.image),
       command: news.command,
       env: normalizeEnvironment(news.environment),
+      "env-file": news.envFiles?.length ? news.envFiles : undefined,
       volume: news.volumes?.map(
         (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
       ),

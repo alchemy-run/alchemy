@@ -22,7 +22,7 @@ import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
 import * as Endpoint from "../Endpoint.ts";
-import { AWSEnvironment, Default as DefaultEnvironment } from "../Environment.ts";
+import { AWSEnvironment, providedOrDefault } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
 import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
 
@@ -140,6 +140,26 @@ const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (le
  * );
  * ```
  *
+ * ### Supplying the AWS Environment
+ * The store resolves its account, region and credentials from the configured
+ * profile, CI credentials or the ambient AWS environment. Provide an
+ * `AWSEnvironment` to use another credential source; provide the same layer
+ * to `AWS.providers()` so the state bucket and every resource share it.
+ *
+ * **Example:** Deploy-role credentials shared with the providers
+ * ```typescript
+ * const Stack = Alchemy.Stack(
+ *   "my-stack",
+ *   {
+ *     providers: AWS.providers().pipe(Layer.provide(environment)),
+ *     state: AWS.state({ bucketName: "my-company-state" }).pipe(Layer.provide(environment)),
+ *   },
+ *   Effect.gen(function* () {
+ *     // ...
+ *   }),
+ * );
+ * ```
+ *
  * ### Managing SSE-C Restrictions
  * **Example:** Block customer-provided encryption keys on the state bucket
  * ```typescript
@@ -174,10 +194,13 @@ export const state = (options: S3StateOptions = {}) =>
       return yield* Effect.cached(make);
     }),
   ).pipe(
-    Layer.provideMerge(AwsRegion.fromEnvironment),
-    Layer.provideMerge(AwsCredentials.fromEnvironment),
-    Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
+    // Fresh per call: these derive from the environment below, and shared
+    // (memoized) instances built for another environment in the same run
+    // would shadow an `AWSEnvironment` provided to this layer.
+    Layer.provideMerge(Layer.fresh(AwsRegion.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
+    Layer.provideMerge(providedOrDefault()),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
