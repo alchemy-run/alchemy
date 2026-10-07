@@ -3,12 +3,13 @@ import { Card } from "./components/Card.tsx";
 import { GreetingCard } from "./components/GreetingCard.tsx";
 import { ApiError, getGreeting } from "./lib/api.ts";
 import { runEffect } from "./lib/effect.ts";
+import { runtime } from "./lib/runtime.ts";
 
 export const App = component(function* App() {
   // Read path: the memo runs the Effect. It is pending until the fiber
   // settles and fails with the Effect's typed error, ApiError.
   const greeting = yield* $memo(function* () {
-    return yield* runEffect(getGreeting, (defect) => new ApiError(String(defect)));
+    return yield* runEffect(runtime, getGreeting, (defect) => new ApiError(String(defect)));
   });
   // Event path: refreshing the memo re-runs the Effect.
   const reload = $event(function* () {

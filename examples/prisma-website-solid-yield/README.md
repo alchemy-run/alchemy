@@ -7,10 +7,13 @@ without a database.
 
 - `src/spec.ts` defines the API once as an Effect `HttpApi`. The backend
   implements it with `HttpApiBuilder`.
-- `src/lib/api.ts` calls the backend with `HttpApiClient.make(GreetingApi, {
-  baseUrl: VITE_API_URL })`, failing with `ApiError` (a solid-yield `Failure`).
-- `src/lib/effect.ts` runs an Effect inside a solid-yield routine. The
-  Effect's typed error becomes the routine's failure color.
+- `src/lib/runtime.ts` builds the `Api` client once —
+  `HttpApiClient.make(GreetingApi, { baseUrl: VITE_API_URL })` — and serves it
+  from a `ManagedRuntime` that every UI Effect runs on.
+- `src/lib/api.ts` calls the backend through `Api`, failing with `ApiError`
+  (a solid-yield `Failure`).
+- `src/lib/effect.ts` runs an Effect on that runtime inside a solid-yield
+  routine. The Effect's typed error becomes the routine's failure color.
 - `src/app.tsx` runs the Effect in a `$memo`, so the greeting is typed as
   pending and failing with `ApiError`. `Loading` and `Errored` discharge both
   colors before `render` accepts the app. The Refresh `$event` re-runs it.

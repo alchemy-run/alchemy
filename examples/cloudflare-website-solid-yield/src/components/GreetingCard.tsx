@@ -14,6 +14,9 @@ export const GreetingCard = component(function* GreetingCard(
         <p id="greeting" class="mt-2 text-slate-700">
           {yield* props.greeting.message}
         </p>
+        <p id="served-at" class="mt-1 text-sm text-slate-500">
+          Served at {yield* props.greeting.servedAt}
+        </p>
       </section>
     );
   });

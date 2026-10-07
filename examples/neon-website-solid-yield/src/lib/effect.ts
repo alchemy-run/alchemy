@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Result from "effect/Result";
 import { attempt } from "solid-yield";
 
@@ -11,20 +12,22 @@ class EffectFailed {
 }
 
 /**
- * Run an Effect inside a solid-yield routine (a `$memo` or an `$event`).
+ * Run an Effect on `runtime` inside a solid-yield routine (a `$memo` or an
+ * `$event`). The runtime provides the Effect's services.
  *
  * The routine is pending while the fiber runs. The Effect's typed failure `E`
  * becomes the routine's failure color as-is, so make `E` a solid-yield
  * `Failure` and an `Errored({ catch: [E] })` handles it. A defect is mapped
  * through `onDefect`.
  */
-export const runEffect = <A, E extends Error, D extends Error>(
-  effect: Effect.Effect<A, E>,
+export const runEffect = <A, E extends Error, D extends Error, R>(
+  runtime: ManagedRuntime.ManagedRuntime<R, never>,
+  effect: Effect.Effect<A, E, R>,
   onDefect: (defect: unknown) => D,
 ): ReturnType<typeof attempt<Promise<A>, E | D>> =>
   attempt<Promise<A>, E | D>(
     () =>
-      Effect.runPromiseExit(effect).then((exit) => {
+      runtime.runPromiseExit(effect).then((exit) => {
         if (Exit.isSuccess(exit)) return exit.value;
         throw new EffectFailed(exit.cause);
       }),

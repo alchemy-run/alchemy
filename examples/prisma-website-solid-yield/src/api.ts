@@ -32,7 +32,12 @@ export default class Api extends Prisma.Compute<Api>()(
   Effect.gen(function* () {
     const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
       handlers.handle("greeting", () =>
-        Effect.succeed({ message: "Hello from the Prisma API!", platform: "Prisma" }),
+        Effect.sync(() => ({
+          message: "Hello from the Prisma API!",
+          platform: "Prisma",
+          servedAt:
+            new Date().toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false }) + " UTC",
+        })),
       ),
     );
 

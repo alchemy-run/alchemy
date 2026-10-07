@@ -14,7 +14,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
   Effect.gen(function* () {
     const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
       handlers.handle("greeting", () =>
-        Effect.succeed({ message: "Hello from the Cloudflare API!", platform: "Cloudflare" }),
+        Effect.sync(() => ({
+          message: "Hello from the Cloudflare API!",
+          platform: "Cloudflare",
+          servedAt:
+            new Date().toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false }) + " UTC",
+        })),
       ),
     );
 

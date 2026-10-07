@@ -18,7 +18,12 @@ export default class Api extends Fly.Service<Api>()(
   Effect.gen(function* () {
     const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
       handlers.handle("greeting", () =>
-        Effect.succeed({ message: "Hello from the Fly API!", platform: "Fly" }),
+        Effect.sync(() => ({
+          message: "Hello from the Fly API!",
+          platform: "Fly",
+          servedAt:
+            new Date().toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false }) + " UTC",
+        })),
       ),
     );
 

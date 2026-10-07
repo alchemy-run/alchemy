@@ -7,6 +7,8 @@ import * as Schema from "effect/Schema";
 export const Greeting = Schema.Struct({
   message: Schema.String,
   platform: Schema.String,
+  /** When the API served this response. Changes on every call. */
+  servedAt: Schema.String,
 });
 export type Greeting = typeof Greeting.Type;
 

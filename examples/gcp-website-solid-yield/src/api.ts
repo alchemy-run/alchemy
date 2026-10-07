@@ -22,7 +22,12 @@ export default class Api extends GCP.Function<Api>()(
   Effect.gen(function* () {
     const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
       handlers.handle("greeting", () =>
-        Effect.succeed({ message: "Hello from the GCP API!", platform: "GCP" }),
+        Effect.sync(() => ({
+          message: "Hello from the GCP API!",
+          platform: "GCP",
+          servedAt:
+            new Date().toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false }) + " UTC",
+        })),
       ),
     );
 

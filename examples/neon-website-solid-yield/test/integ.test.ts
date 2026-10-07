@@ -95,7 +95,7 @@ test(
   Effect.gen(function* () {
     const api = trim((yield* stack).apiUrl);
     const body = yield* getBodyWhenReady(`${api}/api/greeting`, "Hello from the Neon API!");
-    expect(JSON.parse(body)).toEqual({
+    expect(JSON.parse(body)).toMatchObject({
       message: "Hello from the Neon API!",
       platform: "Neon",
     });

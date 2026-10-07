@@ -18,7 +18,12 @@ export default class Api extends Lambda.Function<Api>()(
   Effect.gen(function* () {
     const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
       handlers.handle("greeting", () =>
-        Effect.succeed({ message: "Hello from the AWS API!", platform: "AWS" }),
+        Effect.sync(() => ({
+          message: "Hello from the AWS API!",
+          platform: "AWS",
+          servedAt:
+            new Date().toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false }) + " UTC",
+        })),
       ),
     );
 

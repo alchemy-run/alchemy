@@ -11,7 +11,11 @@ import { GreetingApi } from "./spec.ts";
 
 const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
   handlers.handle("greeting", () =>
-    Effect.succeed({ message: "Hello from the Hetzner API!", platform: "Hetzner" }),
+    Effect.sync(() => ({
+      message: "Hello from the Hetzner API!",
+      platform: "Hetzner",
+      servedAt: new Date().toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false }) + " UTC",
+    })),
   ),
 );
 
