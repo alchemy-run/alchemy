@@ -44,12 +44,6 @@ concurrency:
 
 jobs:
   test:
-    # GitHub does not expose repository secrets to fork pull requests. Keep
-    # the secret-backed test matrix on trusted refs while still running it for
-    # pushes, manual dispatches, and pull requests from this repository.
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -80,11 +74,3 @@ jobs:
         env:
           # Limit concurrent package test runs on the smaller runners.
           pnpm_config_workspace_concurrency: ${{ runner.os == 'Windows' && '3' || runner.os == 'macOS' && '2' || '' }}
-          TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
-          TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TEST_KV_NAMESPACE_ID: ${{ secrets.TEST_KV_NAMESPACE_ID }}
-          TEST_R2_BUCKET_NAME: ${{ secrets.TEST_R2_BUCKET_NAME }}
-          TEST_D1_DATABASE_ID: ${{ secrets.TEST_D1_DATABASE_ID }}
-          TEST_SERVICE_WORKER_NAME: ${{ secrets.TEST_SERVICE_WORKER_NAME }}

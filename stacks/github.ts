@@ -20,8 +20,6 @@ const REPO = { owner: "alchemy-run", repository: "alchemy" } as const;
  * in the repository settings:
  * - `ALCHEMY_VERSION_BOT_ID`, `ALCHEMY_VERSION_BOT_PRIVATE_KEY` (release.yml, website.yml)
  * - `NPM_TOKEN` (release.yml)
- * - `TEST_D1_DATABASE_ID`, `TEST_KV_NAMESPACE_ID`, `TEST_R2_BUCKET_NAME`,
- *   `TEST_SERVICE_WORKER_NAME`, `TEST_MYSQL_URL`, `TEST_POSTGRES_URL` (cloudflare-tools.yml)
  */
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
@@ -105,10 +103,6 @@ export default Alchemy.Stack(
         // website.yml production deploy
         PROD_CLOUDFLARE_ACCOUNT_ID,
         PROD_CLOUDFLARE_API_TOKEN: PROD_CLOUDFLARE_API_TOKEN.value,
-        // cloudflare-tools.yml runs the runtime packages' suites against the
-        // test account under the unprefixed names.
-        CLOUDFLARE_ACCOUNT_ID: TEST_CLOUDFLARE_ACCOUNT_ID,
-        CLOUDFLARE_API_TOKEN: TEST_CLOUDFLARE_API_TOKEN.value,
         // claude.yml
         AWS_ROLE_ARN: role.roleArn,
         ANTHROPIC_API_KEY,
