@@ -719,6 +719,10 @@ export default defineConfig({
                   label: "Custom domains & routes",
                   link: "/cloudflare/networking/custom-domains",
                 },
+                {
+                  label: "Federated APIs",
+                  link: "/cloudflare/networking/federated-apis",
+                },
                 { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
             },
