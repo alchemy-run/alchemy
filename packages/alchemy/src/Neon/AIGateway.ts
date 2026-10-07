@@ -72,12 +72,10 @@ export interface AIGateway {
  * ```
  *
  * @resource
+ * @product AI Gateway
  * @category AI Gateway
  */
-export const AIGateway = Effect.fn(function* (
-  id: string,
-  props: AIGatewayProps,
-) {
+export const AIGateway = Effect.fn(function* (id: string, props: AIGatewayProps) {
   if ((props.branch !== undefined) === (props.project !== undefined)) {
     return yield* Effect.die(
       new InvalidBranchScope({
@@ -86,9 +84,7 @@ export const AIGateway = Effect.fn(function* (
     );
   }
   const namespace = yield* Namespace.CurrentChain;
-  const projectId = Output.asOutput(
-    props.branch?.projectId ?? props.project!.projectId,
-  );
+  const projectId = Output.asOutput(props.branch?.projectId ?? props.project!.projectId);
   const branchId = props.branch
     ? Output.asOutput(props.branch.branchId)
     : projectId.pipe(

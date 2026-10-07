@@ -1,12 +1,3 @@
-import { Branch } from "@/Neon/Branch";
-import type { PostgresOrigin } from "@/Neon/PostgresOrigin";
-import { Project, type ProjectProps } from "@/Neon/Project";
-import { providers } from "@/Neon/Providers";
-import { runSql, withPgClient } from "@/Neon/Migrations.ts";
-import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
-import * as Provider from "@/Provider";
-import { hashMigrations } from "@/SQL/SqlFile.ts";
-import * as Test from "@/Test/Alchemy";
 import {
   createProject,
   deleteProject,
@@ -14,22 +5,28 @@ import {
   getProject,
   updateProject,
 } from "@distilled.cloud/neon";
-import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
-import * as Result from "effect/Result";
-import { waitForOperations } from "@/Neon/Project";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import { adopt, OwnedBySomeoneElse, Unowned } from "@/AdoptPolicy";
+import { Branch } from "@/Neon/Branch";
+import { runSql, withPgClient } from "@/Neon/Migrations.ts";
+import type { PostgresOrigin } from "@/Neon/PostgresOrigin";
+import { Project, type ProjectProps } from "@/Neon/Project";
+import { waitForOperations } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import * as Provider from "@/Provider";
+import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const expectPooledOrigin = (project: {
   pooledConnectionUri: string;
@@ -46,103 +43,106 @@ const expectPooledOrigin = (project: {
   expect(project.pooledOrigin.password).toBeDefined();
 };
 
-test.provider("create and delete project with default props", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "create and delete project with default props",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const project = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("DefaultProject");
-      }),
-    );
+      const project = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("DefaultProject");
+        }),
+      );
 
-    expect(project.projectId).toBeDefined();
-    expect(project.projectName).toBeDefined();
-    expect(project.defaultBranchId).toBeDefined();
-    expect(project.connectionUri).toContain("postgres");
-    expect(project.pooledConnectionUri).toContain("postgres");
-    expectPooledOrigin(project);
+      expect(project.projectId).toBeDefined();
+      expect(project.projectName).toBeDefined();
+      expect(project.defaultBranchId).toBeDefined();
+      expect(project.connectionUri).toContain("postgres");
+      expect(project.pooledConnectionUri).toContain("postgres");
+      expectPooledOrigin(project);
 
-    const fetched = yield* getProject({ project_id: project.projectId });
-    expect(fetched.project.id).toEqual(project.projectId);
+      const fetched = yield* getProject({ project_id: project.projectId });
+      expect(fetched.project.id).toEqual(project.projectId);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
-test.provider("project with default props does not change on update", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "project with default props does not change on update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deploy = stack.deploy(Project("DefaultProjectUpdate"));
+      const deploy = stack.deploy(Project("DefaultProjectUpdate"));
 
-    const created = yield* deploy;
+      const created = yield* deploy;
 
-    expect(created.projectId).toBeDefined();
-    expect(created.projectName).toBeDefined();
-    expect(created.defaultBranchId).toBeDefined();
-    expect(created.connectionUri).toContain("postgres");
-    expectPooledOrigin(created);
+      expect(created.projectId).toBeDefined();
+      expect(created.projectName).toBeDefined();
+      expect(created.defaultBranchId).toBeDefined();
+      expect(created.connectionUri).toContain("postgres");
+      expectPooledOrigin(created);
 
-    const fetched = yield* getProject({ project_id: created.projectId });
-    expect(fetched.project.id).toEqual(created.projectId);
+      const fetched = yield* getProject({ project_id: created.projectId });
+      expect(fetched.project.id).toEqual(created.projectId);
 
-    const updated = yield* deploy;
+      const updated = yield* deploy;
 
-    expect(updated.projectId).toEqual(created.projectId);
-    expect(updated.projectName).toEqual(created.projectName);
-    expect(updated.defaultBranchId).toEqual(created.defaultBranchId);
-    expect(updated.connectionUri).toEqual(created.connectionUri);
-    expectPooledOrigin(updated);
+      expect(updated.projectId).toEqual(created.projectId);
+      expect(updated.projectName).toEqual(created.projectName);
+      expect(updated.defaultBranchId).toEqual(created.defaultBranchId);
+      expect(updated.connectionUri).toEqual(created.connectionUri);
+      expectPooledOrigin(updated);
 
-    const renamed = yield* stack.deploy(
-      Project("DefaultProjectUpdate", {
-        name: `${created.projectName}-renamed`,
-      }),
-    );
-    expect(renamed.projectId).toBe(created.projectId);
-    expect(
-      (yield* getProject({ project_id: renamed.projectId })).project.name,
-    ).toBe(`${created.projectName}-renamed`);
-    const preserved = yield* deploy;
-    expect(preserved.projectId).toBe(created.projectId);
-    expect(preserved.projectName).toBe(renamed.projectName);
+      const renamed = yield* stack.deploy(
+        Project("DefaultProjectUpdate", { name: `${created.projectName}-renamed` }),
+      );
+      expect(renamed.projectId).toBe(created.projectId);
+      expect((yield* getProject({ project_id: renamed.projectId })).project.name).toBe(
+        `${created.projectName}-renamed`,
+      );
+      const preserved = yield* deploy;
+      expect(preserved.projectId).toBe(created.projectId);
+      expect(preserved.projectName).toBe(renamed.projectName);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
-test.provider("enable logical replication on update", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "enable logical replication on update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("LogicalReplicationProject", {
-          region: "aws-us-east-1",
-        });
-      }),
-    );
-    expect(initial.enableLogicalReplication).toEqual(false);
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("LogicalReplicationProject", { region: "aws-us-east-1" });
+        }),
+      );
+      expect(initial.enableLogicalReplication).toEqual(false);
 
-    const enabled = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("LogicalReplicationProject", {
-          region: "aws-us-east-1",
-          enableLogicalReplication: true,
-        });
-      }),
-    );
-    expect(enabled.projectId).toEqual(initial.projectId);
-    expect(enabled.enableLogicalReplication).toEqual(true);
+      const enabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("LogicalReplicationProject", {
+            region: "aws-us-east-1",
+            enableLogicalReplication: true,
+          });
+        }),
+      );
+      expect(enabled.projectId).toEqual(initial.projectId);
+      expect(enabled.enableLogicalReplication).toEqual(true);
 
-    const fetched = yield* getProject({ project_id: enabled.projectId });
-    expect(fetched.project.settings).toMatchObject({
-      enable_logical_replication: true,
-    });
+      const fetched = yield* getProject({ project_id: enabled.projectId });
+      expect(fetched.project.settings).toMatchObject({ enable_logical_replication: true });
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
 test.provider(
@@ -152,10 +152,7 @@ test.provider(
       yield* stack.destroy();
       const deploy = (historyRetentionSeconds?: number) =>
         stack.deploy(
-          Project("ObservedProject", {
-            defaultBranchName: "production",
-            historyRetentionSeconds,
-          }),
+          Project("ObservedProject", { defaultBranchName: "production", historyRetentionSeconds }),
         );
       const initial = yield* deploy(21600);
       expect(initial.defaultBranchName).toBe("production");
@@ -165,22 +162,14 @@ test.provider(
         fqn: "ObservedProject",
         instanceId: "observed-project",
         bindings: [],
-        session: {
-          emit: () => Effect.void,
-          done: () => Effect.void,
-          note: () => Effect.void,
-        },
+        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
       };
       const news = {
         name: initial.projectName,
         defaultBranchName: "production",
         historyRetentionSeconds: 21600,
       };
-      const unowned = yield* provider.read!({
-        ...context,
-        olds: news,
-        output: undefined,
-      });
+      const unowned = yield* provider.read!({ ...context, olds: news, output: undefined });
       expect(Unowned.is(unowned)).toBe(true);
       const drift = yield* updateProject({
         project_id: initial.projectId,
@@ -196,8 +185,7 @@ test.provider(
       expect(adopted.historyRetentionSeconds).toBe(21600);
       const reset = yield* deploy();
       expect(
-        (yield* getProject({ project_id: reset.projectId })).project
-          .history_retention_seconds,
+        (yield* getProject({ project_id: reset.projectId })).project.history_retention_seconds,
       ).toBe(86400);
       const uri = yield* getConnectionURI({
         project_id: reset.projectId,
@@ -221,7 +209,7 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:neon", "provider:neon:project", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -230,10 +218,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const program = (props: ProjectProps = {}) =>
-        Project("NamedProject", {
-          name: "alchemy-neon-named-replacement",
-          ...props,
-        });
+        Project("NamedProject", { name: "alchemy-neon-named-replacement", ...props });
       const initial = yield* stack.deploy(program());
       for (const props of [
         { region: "aws-us-west-2" },
@@ -243,16 +228,10 @@ test.provider(
         { roleName: "application_owner" },
       ] satisfies ProjectProps[]) {
         const plan = yield* stack.plan(program(props));
-        expect(plan.resources.NamedProject).toMatchObject({
-          action: "replace",
-          deleteFirst: true,
-        });
+        expect(plan.resources.NamedProject).toMatchObject({ action: "replace", deleteFirst: true });
       }
       const renamed = yield* stack.plan(
-        program({
-          name: "alchemy-neon-renamed-replacement",
-          databaseName: "application",
-        }),
+        program({ name: "alchemy-neon-renamed-replacement", databaseName: "application" }),
       );
       expect(renamed.resources.NamedProject).toMatchObject({
         action: "replace",
@@ -268,34 +247,25 @@ test.provider(
           olds: undefined,
           output: undefined,
           bindings: [],
-          session: {
-            emit: () => Effect.void,
-            done: () => Effect.void,
-            note: () => Effect.void,
-          },
+          session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
         })
         .pipe(Effect.result);
       expect(Result.isFailure(recovery)).toBe(true);
-      if (Result.isFailure(recovery))
-        expect(recovery.failure).toBeInstanceOf(OwnedBySomeoneElse);
-      const replaced = yield* stack.deploy(
-        program({ databaseName: "application" }),
-      );
+      if (Result.isFailure(recovery)) expect(recovery.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      const replaced = yield* stack.deploy(program({ databaseName: "application" }));
       expect(replaced.projectId).not.toBe(initial.projectId);
       expect(replaced.projectName).toBe(initial.projectName);
       expect(replaced.databaseName).toBe("application");
-      expect(
-        (yield* getProject({ project_id: replaced.projectId })).project.id,
-      ).toBe(replaced.projectId);
+      expect((yield* getProject({ project_id: replaced.projectId })).project.id).toBe(
+        replaced.projectId,
+      );
       expect(
         yield* getProject({ project_id: initial.projectId }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      const stable = yield* stack.deploy(
-        program({ databaseName: "application" }),
-      );
+      const stable = yield* stack.deploy(program({ databaseName: "application" }));
       expect(stable.projectId).toBe(replaced.projectId);
       yield* stack.destroy();
       expect(
@@ -305,7 +275,7 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:neon", "provider:neon:project", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -338,38 +308,20 @@ test.provider(
         fqn: "LateProject",
         instanceId: "late-project",
         bindings: [],
-        session: {
-          emit: () => Effect.void,
-          done: () => Effect.void,
-          note: () => Effect.void,
-        },
+        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
       };
       const late = yield* provider
-        .reconcile({
-          ...context,
-          news: { name },
-          olds: undefined,
-          output: undefined,
-        })
+        .reconcile({ ...context, news: { name }, olds: undefined, output: undefined })
         .pipe(Effect.result);
       expect(Result.isFailure(late)).toBe(true);
-      if (Result.isFailure(late))
-        expect(late.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      if (Result.isFailure(late)) expect(late.failure).toBeInstanceOf(OwnedBySomeoneElse);
       yield* deleteProject({ project_id: initial.cached.projectId });
       const cached = yield* provider
-        .reconcile({
-          ...context,
-          news: { name },
-          olds: {},
-          output: initial.cached,
-        })
+        .reconcile({ ...context, news: { name }, olds: {}, output: initial.cached })
         .pipe(Effect.result);
       expect(Result.isFailure(cached)).toBe(true);
-      if (Result.isFailure(cached))
-        expect(cached.failure).toBeInstanceOf(OwnedBySomeoneElse);
-      const observed = yield* getProject({
-        project_id: initial.foreign.projectId,
-      });
+      if (Result.isFailure(cached)) expect(cached.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      const observed = yield* getProject({ project_id: initial.foreign.projectId });
       expect(observed.project.history_retention_seconds).toBe(21600);
       expect(observed.project.name).toBe(name);
       yield* stack.destroy();
@@ -382,7 +334,7 @@ test.provider(
         ).toBe(true);
       }
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:neon", "provider:neon:project", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -404,12 +356,10 @@ test.provider(
         },
       });
       yield* waitForOperations(foreign.operations);
-      const program = (allow: boolean) =>
-        Project("CustomizedProject", { name }).pipe(adopt(allow));
+      const program = (allow: boolean) => Project("CustomizedProject", { name }).pipe(adopt(allow));
       const refused = yield* stack.plan(program(false)).pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused))
-        expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
       const plan = yield* stack.plan(program(true));
       expect(plan.resources.CustomizedProject.action).not.toBe("replace");
       const adopted = yield* stack.deploy(program(true));
@@ -419,12 +369,10 @@ test.provider(
       expect(adopted.roleName).toBe("application_owner");
       const stable = yield* stack.plan(program(false));
       expect(stable.resources.CustomizedProject.action).toBe("noop");
-      expect((yield* stack.deploy(program(false))).projectId).toBe(
+      expect((yield* stack.deploy(program(false))).projectId).toBe(foreign.project.id);
+      expect((yield* getProject({ project_id: foreign.project.id })).project.id).toBe(
         foreign.project.id,
       );
-      expect(
-        (yield* getProject({ project_id: foreign.project.id })).project.id,
-      ).toBe(foreign.project.id);
       yield* stack.destroy();
       expect(
         yield* getProject({ project_id: foreign.project.id }).pipe(
@@ -433,28 +381,31 @@ test.provider(
         ),
       ).toBe(true);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:neon", "provider:neon:project", "live"], timeout: 120_000 },
 );
 
-test.provider("list enumerates the deployed project", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed project",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Project("ListProject");
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Project("ListProject");
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(Project);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(Project);
+      const all = yield* provider.list();
 
-    const found = all.find((p) => p.projectId === deployed.projectId);
-    expect(found).toBeDefined();
-    expectPooledOrigin(found!);
+      const found = all.find((p) => p.projectId === deployed.projectId);
+      expect(found).toBeDefined();
+      expectPooledOrigin(found!);
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
 /**
@@ -471,11 +422,8 @@ test.provider(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-neon-drizzle-",
-      });
-      const initSql =
-        "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);";
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-neon-drizzle-" });
+      const initSql = "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);";
       yield* fs.makeDirectory(path.join(migrationsDir, "20240101000000_init"));
       yield* fs.writeFileString(
         path.join(migrationsDir, "20240101000000_init", "migration.sql"),
@@ -520,9 +468,7 @@ test.provider(
       );
       const project = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Project("DrizzleAdoptionProject", {
-            migrations: migrationsDir,
-          });
+          return yield* Project("DrizzleAdoptionProject", { migrations: migrationsDir });
         }),
       );
       expect(project.projectId).toEqual(seeded.projectId);
@@ -535,10 +481,7 @@ test.provider(
           "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
         ),
       );
-      expect(applied.map((r) => r.name)).toEqual([
-        "20240101000000_init",
-        "20240102000000_posts",
-      ]);
+      expect(applied.map((r) => r.name)).toEqual(["20240101000000_init", "20240102000000_posts"]);
       expect(applied[0].hash).toBe(initHash);
 
       // drizzle's schema-qualified table is frozen.
@@ -551,6 +494,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
 test.provider(
@@ -559,21 +503,14 @@ test.provider(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-neon-migrations-",
-      });
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-neon-migrations-" });
       yield* fs.writeFileString(
         path.join(migrationsDir, "0001_users.sql"),
         "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
       );
-      const seedDir = yield* fs.makeTempDirectory({
-        prefix: "alchemy-neon-seed-",
-      });
+      const seedDir = yield* fs.makeTempDirectory({ prefix: "alchemy-neon-seed-" });
       const seedPath = path.join(seedDir, "seed.sql");
-      yield* fs.writeFileString(
-        seedPath,
-        "INSERT INTO users (name) VALUES ('alice'), ('bob');",
-      );
+      yield* fs.writeFileString(seedPath, "INSERT INTO users (name) VALUES ('alice'), ('bob');");
 
       yield* stack.destroy();
 
@@ -583,9 +520,7 @@ test.provider(
             migrations: migrationsDir,
             importFiles: [seedPath],
           });
-          const branch = yield* Branch("FeatureBranch", {
-            project,
-          });
+          const branch = yield* Branch("FeatureBranch", { project });
           return { project, branch };
         }),
       );
@@ -593,9 +528,7 @@ test.provider(
       // Fresh deploys use Alchemy's one table; legacy rows that persisted
       // neon_migrations keep converging against it via state.
       expect(project.migrationsTable).toEqual("__alchemy_migrations");
-      expect(Object.keys(project.migrationsHashes).sort()).toEqual([
-        "0001_users.sql",
-      ]);
+      expect(Object.keys(project.migrationsHashes).sort()).toEqual(["0001_users.sql"]);
       expect(project.importHashes[seedPath]).toBeDefined();
 
       expect(branch.projectId).toEqual(project.projectId);
@@ -603,4 +536,5 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:branch", "provider:neon:project", "live"] },
 );

@@ -7,9 +7,9 @@ import { makeReadObjectHttp } from "./StorageObjectBinding.ts";
  * Typed object reads using injected or automatically scoped credentials.
  *
  * @layer
+ * @product Bucket
  * @provides ReadObject
  */
-export const ReadObjectHttp = Layer.effect(
-  ReadObject,
-  makeReadObjectHttp(),
-).pipe(Layer.provide(storageHttpLayer));
+export const ReadObjectHttp = Layer.effect(ReadObject, makeReadObjectHttp()).pipe(
+  Layer.provide(storageHttpLayer),
+);

@@ -1,32 +1,55 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { projectServices } from "@/Railway/GraphQL.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { projectServices } from "@/Railway/GraphQL.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const PUBLIC_TEMPLATE_CODE = "postgres";
 
+const readServiceDeletedAt = Query.fn((id: string) => ({
+  deletedAt: RailwayApi.service({ id }).deletedAt,
+}));
+
+const readServiceTemplateId = Query.fn((id: string) => ({
+  templateId: RailwayApi.service({ id }).templateId,
+}));
+
+const readTemplateByCode = Query.fn((code: string) => {
+  const template = RailwayApi.template({ code });
+  return {
+    id: template.id,
+    code: template.code,
+    name: template.name,
+    serializedConfig: template.serializedConfig,
+  };
+});
+
+const readTemplateById = Query.fn((id: string) => {
+  const template = RailwayApi.template({ id });
+  return { id: template.id, code: template.code };
+});
+
+const readTemplateSourceForProject = Query.fn((projectId: string) =>
+  RailwayApi.templateSourceForProject({ projectId }).pipe(
+    Query.map((template) => ({ id: template.id })),
+  ),
+);
+
 const waitUntilServiceGone = (serviceId: string) =>
-  railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+  readServiceDeletedAt(serviceId).pipe(
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -40,10 +63,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const fetched = yield* railway.template(
-        { code: PUBLIC_TEMPLATE_CODE },
-        { id: true, code: true, name: true, serializedConfig: true },
-      );
+      const fetched = yield* readTemplateByCode(PUBLIC_TEMPLATE_CODE);
       expect(fetched.id).toEqual(expect.any(String));
       expect(fetched.id.length).toBeGreaterThan(0);
       expect(fetched.code).toEqual(PUBLIC_TEMPLATE_CODE);
@@ -52,7 +72,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { tags: ["provider:railway", "provider:railway:template", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -78,9 +98,7 @@ test.provider(
       expect(created.deployed.code).toEqual(PUBLIC_TEMPLATE_CODE);
       expect(created.deployed.name).toEqual(expect.any(String));
       expect(created.deployed.projectId).toEqual(created.project.projectId);
-      expect(created.deployed.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.deployed.environmentId).toEqual(created.environment.environmentId);
       expect(created.deployed.workspaceId).toEqual(created.project.workspaceId);
       expect(created.deployed.ownsProject).toEqual(false);
       expect(created.deployed.serviceIds.length).toBeGreaterThan(0);
@@ -88,39 +106,23 @@ test.provider(
         `https://railway.com/project/${created.project.projectId}`,
       );
 
-      const live = yield* projectServices(created.project.projectId, {
-        id: true,
-        deletedAt: true,
-      });
-      const liveIds = live
-        .filter((node) => node.deletedAt == null)
-        .map((node) => node.id);
+      const live = yield* projectServices(created.project.projectId, (service) => ({
+        id: service.id,
+        deletedAt: service.deletedAt,
+      }));
+      const liveIds = live.filter((node) => node.deletedAt == null).map((node) => node.id);
       for (const serviceId of created.deployed.serviceIds) {
         expect(liveIds).toContain(serviceId);
       }
 
-      const source = yield* railway
-        .templateSourceForProject(
-          {
-            projectId: created.project.projectId,
-          },
-          { id: true },
-        )
-        .pipe(
-          railway.catchTags(["RailwayNotFound", "RailwayForbidden"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const source = yield* readTemplateSourceForProject(created.project.projectId).pipe(
+        Effect.catchTag("RailwayForbidden", () => Effect.succeed(undefined)),
+      );
       if (source != null) {
         expect(source.id).toEqual(created.deployed.templateId);
       }
 
-      const stamped = yield* railway.service(
-        {
-          id: created.deployed.serviceIds[0]!,
-        },
-        { templateId: true },
-      );
+      const stamped = yield* readServiceTemplateId(created.deployed.serviceIds[0]!);
       if (stamped.templateId != null) {
         expect(stamped.templateId).toEqual(created.deployed.templateId);
       }
@@ -134,9 +136,7 @@ test.provider(
       );
       expect(found).toBeDefined();
       if (found === undefined) {
-        return yield* Effect.fail(
-          new Error("Deployed marketplace template was not listed"),
-        );
+        return yield* Effect.fail(new Error("Deployed marketplace template was not listed"));
       }
       expect(found.templateId).toEqual(created.deployed.templateId);
       expect(found.serviceIds.length).toBeGreaterThan(0);
@@ -145,17 +145,12 @@ test.provider(
       } else {
         // Listing preserves service ownership even when Railway refuses
         // marketplace metadata by ID. Confirm that omission against the API.
-        const metadata = yield* Effect.result(
-          railway.template({ id: found.templateId }, { id: true, code: true }),
-        );
+        const metadata = yield* Effect.result(readTemplateById(found.templateId));
         expect(Result.isFailure(metadata)).toBe(true);
         if (Result.isFailure(metadata)) {
-          expect(
-            railway.isErrorTag(metadata.failure, [
-              "RailwayForbidden",
-              "RailwayNotFound",
-            ]),
-          ).toBe(true);
+          expect(["RailwayForbidden", "RailwayNotFound"].includes(metadata.failure._tag)).toBe(
+            true,
+          );
         }
       }
 
@@ -166,5 +161,15 @@ test.provider(
         expect(gone).toEqual("gone");
       }
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "provider:railway:template",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

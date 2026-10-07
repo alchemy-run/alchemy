@@ -1,27 +1,22 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetTaxRate } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilInactive = (id: string) =>
   GetTaxRate({ tax_rate: id }).pipe(
-    Effect.map((rate) =>
-      rate.active ? ("active" as const) : ("inactive" as const),
-    ),
+    Effect.map((rate) => (rate.active ? ("active" as const) : ("inactive" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("inactive" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -69,12 +64,8 @@ test.provider(
       expect(fetched.description).toEqual("Initial sales tax");
       expect(fetched.tax_type).toEqual("sales_tax");
       expect(fetched.metadata?.region).toEqual("us");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -114,7 +105,10 @@ test.provider(
       const deactivated = yield* GetTaxRate({ tax_rate: created.id });
       expect(deactivated.active).toEqual(false);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:taxrate", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -163,7 +157,10 @@ test.provider(
       const gone = yield* waitUntilInactive(replaced.id);
       expect(gone).toEqual("inactive");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:taxrate", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -196,5 +193,8 @@ test.provider(
       const inactive = yield* waitUntilInactive(deployed.id);
       expect(inactive).toEqual("inactive");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:taxrate", "live"],
+    timeout: 120_000,
+  },
 );

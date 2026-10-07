@@ -43,7 +43,6 @@ export interface ListEventIntegrationAssociations extends Binding.Service<
     >
   >
 > {}
-export const ListEventIntegrationAssociations =
-  Binding.Service<ListEventIntegrationAssociations>(
-    "AWS.AppIntegrations.ListEventIntegrationAssociations",
-  );
+export const ListEventIntegrationAssociations = Binding.Service<ListEventIntegrationAssociations>(
+  "AWS.AppIntegrations.ListEventIntegrationAssociations",
+);

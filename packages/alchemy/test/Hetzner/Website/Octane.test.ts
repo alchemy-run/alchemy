@@ -1,6 +1,4 @@
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
-import { Services } from "@distilled.cloud/hetzner";
+import * as servers from "@distilled.cloud/hetzner/servers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -8,22 +6,18 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/octane-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 const fixtureEntries = [
   ".gitignore",
@@ -36,7 +30,7 @@ const fixtureEntries = [
 ];
 
 const waitUntilGone = (id: number) =>
-  Services.servers.getServer({ id }).pipe(
+  servers.getServer({ id }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -95,14 +89,10 @@ test.provider.skipIf(!hasHetznerCreds)(
         timeout: "90 seconds",
         label: "home page",
       });
-      yield* expectUrlContains(
-        `${url!}/api/hello?echo=roundtrip`,
-        "OCTANE_AWS_API_MARKER",
-        {
-          timeout: "30 seconds",
-          label: "api route",
-        },
-      );
+      yield* expectUrlContains(`${url!}/api/hello?echo=roundtrip`, "OCTANE_AWS_API_MARKER", {
+        timeout: "30 seconds",
+        label: "api route",
+      });
 
       const serverId = deployed.site.server!.serverId;
       yield* stack.destroy();
@@ -115,5 +105,8 @@ test.provider.skipIf(!hasHetznerCreds)(
         Effect.logWarning(`skipping: Hetzner quota (${error._tag})`),
       ),
     ),
-  { timeout: 180000 },
+  {
+    tags: ["provider:hetzner", "provider:hetzner:service", "provider:hetzner:website", "live"],
+    timeout: 180000,
+  },
 );

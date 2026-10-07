@@ -24,10 +24,6 @@ export interface StartJobRun extends Binding.Service<
   "AWS.DataBrew.StartJobRun",
   <J extends Job>(
     job: J,
-  ) => Effect.Effect<
-    () => Effect.Effect<SVC.StartJobRunResponse, SVC.StartJobRunError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<SVC.StartJobRunResponse, SVC.StartJobRunError>>
 > {}
-export const StartJobRun = Binding.Service<StartJobRun>(
-  "AWS.DataBrew.StartJobRun",
-);
+export const StartJobRun = Binding.Service<StartJobRun>("AWS.DataBrew.StartJobRun");

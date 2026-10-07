@@ -1,11 +1,11 @@
-import * as Alchemy from "@/index.ts";
-import * as Prisma from "@/Prisma/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Alchemy from "@/index.ts";
+import * as Prisma from "@/Prisma/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { bodyContaining, copyViteFixture } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: Prisma.providers(), dev: true });
@@ -19,9 +19,7 @@ test.provider(
       const path = yield* Path.Path;
       const rootDir = yield* copyViteFixture;
       const { site } = yield* stack.deploy(
-        Prisma.Website.Vite("Web", { rootDir }).pipe(
-          Effect.map((site) => ({ site })),
-        ),
+        Prisma.Website.Vite("Web", { rootDir }).pipe(Effect.map((site) => ({ site }))),
       );
       expect(site.url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+/);
       expect(site.compute).toBeUndefined();
@@ -35,10 +33,13 @@ test.provider(
       yield* bodyContaining(`${site.url}/main.ts`, "second revision");
       yield* stack.destroy();
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:prisma", "provider:prisma:website", "local"],
+    timeout: 120_000,
+  },
 );
 
-test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
+test.provider(
   "Vite remote opt-out deploys real Compute from dev and removes it",
   (stack) =>
     Effect.gen(function* () {
@@ -57,10 +58,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const appId = site.compute!.appId;
       expect((yield* getProject({ id: projectId })).data.id).toBe(projectId);
       expect((yield* getService({ serviceId: appId })).data.id).toBe(appId);
-      yield* bodyContaining(
-        `${site.url}/client/route`,
-        "Prisma Website fixture",
-      );
+      yield* bodyContaining(`${site.url}/client/route`, "Prisma Website fixture");
       yield* stack.destroy();
       expect(
         yield* getService({ serviceId: appId }).pipe(
@@ -75,5 +73,8 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         ),
       ).toBe(true);
     }).pipe(Effect.scoped),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:prisma", "provider:prisma:website", "live"],
+    timeout: 120_000,
+  },
 );

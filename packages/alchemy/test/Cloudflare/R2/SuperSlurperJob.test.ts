@@ -1,20 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
+import { createHash } from "node:crypto";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
-import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as queues from "@distilled.cloud/cloudflare/queues";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { createHash } from "node:crypto";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
-const missingJobId =
-  "0000000000000000000000000000000000000000000000000000000000000000";
+const missingJobId = "0000000000000000000000000000000000000000000000000000000000000000";
 
 const program = (options: {
   job: boolean;
@@ -39,10 +38,7 @@ const program = (options: {
       policies: [
         {
           effect: "allow",
-          permissionGroups: [
-            "Workers R2 Storage Read",
-            "Workers R2 Storage Write",
-          ],
+          permissionGroups: ["Workers R2 Storage Read", "Workers R2 Storage Write"],
           resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
         },
       ],
@@ -52,9 +48,7 @@ const program = (options: {
       secretAccessKey: token.value.pipe(
         Output.mapEffect((value) =>
           Effect.sync(() =>
-            Redacted.make(
-              createHash("sha256").update(Redacted.value(value)).digest("hex"),
-            ),
+            Redacted.make(createHash("sha256").update(Redacted.value(value)).digest("hex")),
           ),
         ),
       ),
@@ -131,8 +125,7 @@ test.provider(
       expect(missing.message).toBe("Internal Server Error");
       const invalidSecret = {
         accessKeyId: "00000000000000000000000000000000",
-        secretAccessKey:
-          "0000000000000000000000000000000000000000000000000000000000000000",
+        secretAccessKey: "0000000000000000000000000000000000000000000000000000000000000000",
       };
       const rejected = yield* r2
         .createSuperSlurperJob({
@@ -150,9 +143,7 @@ test.provider(
         })
         .pipe(Retry.none, Effect.flip);
       expect(rejected._tag).toBe("SuperSlurperPreconnectivityFailed");
-      expect(rejected.message).toBe(
-        "Preconnectivity failed, please verify tokens and try again",
-      );
+      expect(rejected.message).toBe("Preconnectivity failed, please verify tokens and try again");
       for (const operation of [
         r2.abortSuperSlurperJob,
         r2.pauseSuperSlurperJob,
@@ -164,7 +155,11 @@ test.provider(
       }
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -196,9 +191,7 @@ test.provider(
       expect(paused.target?.bucket).toBe(buckets.target.bucketName);
       expect(paused.status === "paused" || terminal(paused.status)).toBe(true);
 
-      const noop = yield* stack.deploy(
-        program({ job: true, paused: true, reference: true }),
-      );
+      const noop = yield* stack.deploy(program({ job: true, paused: true, reference: true }));
       expect(noop.job!.jobId).toBe(job.jobId);
       expect(noop.reference!.jobId).toBe(job.jobId);
       expect(noop.reference!.accountId).toBe(accountId);
@@ -206,13 +199,9 @@ test.provider(
       const resumed = yield* stack.deploy(program({ job: true }));
       expect(resumed.job!.jobId).toBe(job.jobId);
       const running = yield* getJob(job);
-      expect(running.status === "running" || terminal(running.status)).toBe(
-        true,
-      );
+      expect(running.status === "running" || terminal(running.status)).toBe(true);
       if (!terminal(running.status)) {
-        yield* r2
-          .abortSuperSlurperJob({ accountId, jobId: job.jobId })
-          .pipe(Retry.none);
+        yield* r2.abortSuperSlurperJob({ accountId, jobId: job.jobId }).pipe(Retry.none);
       }
       const finished = yield* getJob(job).pipe(
         Effect.repeat({
@@ -223,15 +212,11 @@ test.provider(
       );
       expect(terminal(finished.status)).toBe(true);
 
-      const terminalRedeploy = yield* stack.deploy(
-        program({ job: true, paused: true }),
-      );
+      const terminalRedeploy = yield* stack.deploy(program({ job: true, paused: true }));
       expect(terminalRedeploy.job!.jobId).toBe(job.jobId);
       expect((yield* getJob(job)).status).toBe(finished.status);
 
-      const replaced = yield* stack.deploy(
-        program({ job: true, paused: true, overwrite: true }),
-      );
+      const replaced = yield* stack.deploy(program({ job: true, paused: true, overwrite: true }));
       const replacement = replaced.job!;
       expect(replacement.jobId).not.toBe(job.jobId);
       expect((yield* getJob(job)).status).toBe(finished.status);
@@ -264,9 +249,7 @@ test.provider(
       expect(firstPage.result[0]!.id).not.toBe(secondPage.result[0]!.id);
       expect((yield* getJob(filtered)).source?.pathPrefix).toBe("migration");
       const otherBeforeRemoval = yield* getJob(otherJob);
-      const removed = yield* stack.deploy(
-        program({ job: false, otherJob: true }),
-      );
+      const removed = yield* stack.deploy(program({ job: false, otherJob: true }));
       expect(removed.otherJob!.jobId).toBe(otherJob.jobId);
       expect((yield* getJob(otherJob)).status).toBe(otherBeforeRemoval.status);
       expect(terminal((yield* getJob(filtered)).status)).toBe(true);
@@ -284,25 +267,16 @@ test.provider(
         accountId,
         bucketName: buckets.target.bucketName,
       });
-      expect(
-        objects.result.some((object) => object.key === "sentinel.txt"),
-      ).toBe(true);
+      expect(objects.result.some((object) => object.key === "sentinel.txt")).toBe(true);
       const sourceObjects = yield* r2.listBucketObjects({
         accountId,
         bucketName: buckets.source.bucketName,
       });
-      expect(
-        sourceObjects.result.some((object) => object.key === "migration.txt"),
-      ).toBe(true);
+      expect(sourceObjects.result.some((object) => object.key === "migration.txt")).toBe(true);
 
       yield* stack.destroy();
-      for (const bucketName of [
-        buckets.source.bucketName,
-        buckets.target.bucketName,
-      ]) {
-        const error = yield* r2
-          .getBucket({ accountId, bucketName })
-          .pipe(Effect.flip);
+      for (const bucketName of [buckets.source.bucketName, buckets.target.bucketName]) {
+        const error = yield* r2.getBucket({ accountId, bucketName }).pipe(Effect.flip);
         expect(error._tag).toBe("NoSuchBucket");
       }
       expect((yield* getJob(job)).status).toBe(finished.status);
@@ -321,7 +295,18 @@ test.provider(
       });
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:account",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -344,14 +329,22 @@ test.provider(
         }),
       );
       expect(replaced.job!.jobId).not.toBe(initial.job!.jobId);
-      expect((yield* getJob(replaced.job!)).target?.bucket).toBe(
-        replaced.target.bucketName,
-      );
+      expect((yield* getJob(replaced.job!)).target?.bucket).toBe(replaced.target.bucketName);
       expect(terminal((yield* getJob(initial.job!)).status)).toBe(true);
       yield* stack.destroy();
       expect(terminal((yield* getJob(replaced.job!)).status)).toBe(true);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -377,9 +370,7 @@ test.provider(
         accountId,
         subscriptionId: subscription.subscriptionId,
       });
-      expect(live.source).toEqual(
-        expect.objectContaining({ type: "superSlurper" }),
-      );
+      expect(live.source).toEqual(expect.objectContaining({ type: "superSlurper" }));
       yield* queues.createConsumer({
         accountId,
         queueId: created.queue!.queueId,
@@ -388,12 +379,8 @@ test.provider(
       const referenced = yield* stack.deploy(
         program({ job: true, paused: true, subscription: "ref" }),
       );
-      expect(referenced.subscription!.subscriptionId).toBe(
-        subscription.subscriptionId,
-      );
-      const resumed = yield* stack.deploy(
-        program({ job: true, subscription: "ref" }),
-      );
+      expect(referenced.subscription!.subscriptionId).toBe(subscription.subscriptionId);
+      const resumed = yield* stack.deploy(program({ job: true, subscription: "ref" }));
       expect(resumed.job!.jobId).toBe(job.jobId);
       const bodies: string[] = [];
       const delivered = () =>
@@ -418,8 +405,7 @@ test.provider(
               times: 8,
             }),
           );
-        for (const message of batch.messages ?? [])
-          if (message.body) bodies.push(message.body);
+        for (const message of batch.messages ?? []) if (message.body) bodies.push(message.body);
         const acks = (batch.messages ?? []).flatMap((message) =>
           message.leaseId ? [{ leaseId: message.leaseId }] : [],
         );
@@ -429,6 +415,12 @@ test.provider(
             queueId: created.queue!.queueId,
             acks,
           });
+        // A `job.resumed` emitted before the new subscription propagates is
+        // lost, so emit a fresh one until an event is delivered.
+        if (!delivered() && (yield* getJob(job)).status === "running") {
+          yield* r2.pauseSuperSlurperJob(job).pipe(Retry.none, Effect.ignore);
+          yield* r2.resumeSuperSlurperJob(job).pipe(Retry.none, Effect.ignore);
+        }
       }).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
@@ -450,13 +442,21 @@ test.provider(
       yield* stack.destroy();
       expect(terminal((yield* getJob(job)).status)).toBe(true);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 // A one-object migration remained running after the bounded 24-second probe.
-test.provider.skipIf(
-  process.env.CLOUDFLARE_TEST_SUPER_SLURPER_COMPLETION !== "1",
-)(
+test.provider.skipIf(process.env.CLOUDFLARE_TEST_SUPER_SLURPER_COMPLETION !== "1")(
   "completes a real object transfer and never restarts the completed job",
   (stack) =>
     Effect.gen(function* () {
@@ -483,16 +483,22 @@ test.provider.skipIf(
         accountId,
         bucketName: buckets.target.bucketName,
       });
-      expect(
-        migrated.result.some((object) => object.key === "migration.txt"),
-      ).toBe(true);
-      const redeployed = yield* stack.deploy(
-        program({ job: true, paused: true }),
-      );
+      expect(migrated.result.some((object) => object.key === "migration.txt")).toBe(true);
+      const redeployed = yield* stack.deploy(program({ job: true, paused: true }));
       expect(redeployed.job!.jobId).toBe(job.jobId);
       expect((yield* getJob(job)).status).toBe("completed");
       yield* stack.destroy();
       expect((yield* getJob(job)).status).toBe("completed");
     }),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:apitoken",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

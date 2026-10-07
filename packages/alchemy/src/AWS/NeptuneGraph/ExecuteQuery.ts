@@ -53,12 +53,7 @@ export interface ExecuteQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecuteQueryRequest,
-    ) => Effect.Effect<
-      neptunegraph.ExecuteQueryOutput,
-      neptunegraph.ExecuteQueryError
-    >
+    ) => Effect.Effect<neptunegraph.ExecuteQueryOutput, neptunegraph.ExecuteQueryError>
   >
 > {}
-export const ExecuteQuery = Binding.Service<ExecuteQuery>(
-  "AWS.NeptuneGraph.ExecuteQuery",
-);
+export const ExecuteQuery = Binding.Service<ExecuteQuery>("AWS.NeptuneGraph.ExecuteQuery");

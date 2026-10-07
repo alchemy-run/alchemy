@@ -6,7 +6,6 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { unredact } from "./internal.ts";
 
 /**
  * Lake Formation provisioning configuration for a blueprint.
@@ -144,10 +143,9 @@ export interface EnvironmentBlueprintConfiguration extends Resource<
  *
  * @resource
  */
-export const EnvironmentBlueprintConfiguration =
-  Resource<EnvironmentBlueprintConfiguration>(
-    "AWS.DataZone.EnvironmentBlueprintConfiguration",
-  );
+export const EnvironmentBlueprintConfiguration = Resource<EnvironmentBlueprintConfiguration>(
+  "AWS.DataZone.EnvironmentBlueprintConfiguration",
+);
 
 /** No blueprint with the requested name or id exists in the domain. */
 export class EnvironmentBlueprintNotFound extends Data.TaggedError(
@@ -168,12 +166,10 @@ const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) =>
-      (e._tag === "ValidationException" ||
-        e._tag === "AccessDeniedException") &&
+      (e._tag === "ValidationException" || e._tag === "AccessDeniedException") &&
       "message" in e &&
       typeof e.message === "string" &&
-      (e.message.toLowerCase().includes("role") ||
-        e.message.toLowerCase().includes("assume")),
+      (e.message.toLowerCase().includes("role") || e.message.toLowerCase().includes("assume")),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -182,10 +178,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
     EnvironmentBlueprintConfiguration,
     Effect.gen(function* () {
       // Resolve a blueprint name-or-id to its { id, name } within the domain.
-      const resolveBlueprint = Effect.fn(function* (
-        domainId: string,
-        nameOrId: string,
-      ) {
+      const resolveBlueprint = Effect.fn(function* (domainId: string, nameOrId: string) {
         const match = yield* datazone.listEnvironmentBlueprints
           .items({
             domainIdentifier: domainId,
@@ -194,9 +187,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
           .pipe(
             Stream.filter((b) => b.name === nameOrId || b.id === nameOrId),
             Stream.runHead,
-            Effect.map((head) =>
-              head._tag === "Some" ? head.value : undefined,
-            ),
+            Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
           );
         if (match === undefined) {
           return yield* new EnvironmentBlueprintNotFound({
@@ -221,12 +212,8 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
             environmentBlueprintIdentifier: blueprintId,
           })
           .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("AccessDeniedException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -246,29 +233,18 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
                 name: output.environmentBlueprintName,
               }
             : olds?.environmentBlueprint
-              ? yield* resolveBlueprint(
-                  domainId,
-                  olds.environmentBlueprint,
-                ).pipe(
-                  Effect.catchTag(
-                    "AWS.DataZone.EnvironmentBlueprintNotFound",
-                    () => Effect.succeed(undefined),
+              ? yield* resolveBlueprint(domainId, olds.environmentBlueprint).pipe(
+                  Effect.catchTag("AWS.DataZone.EnvironmentBlueprintNotFound", () =>
+                    Effect.succeed(undefined),
                   ),
                   // the domain itself may already be gone (reported as
                   // NotFound or as AccessDenied — auth precedes existence)
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                  Effect.catchTag("AccessDeniedException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
                 )
               : undefined;
           if (blueprint === undefined) return undefined;
-          const config = yield* getConfigurationOrUndefined(
-            domainId,
-            blueprint.id,
-          );
+          const config = yield* getConfigurationOrUndefined(domainId, blueprint.id);
           // An un-configured blueprint returns an empty configuration shell —
           // treat "no enabled regions and no roles" as absent.
           if (
@@ -321,8 +297,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
               enabledRegions: news.enabledRegions,
               provisioningRoleArn: news.provisioningRoleArn,
               manageAccessRoleArn: news.manageAccessRoleArn,
-              environmentRolePermissionBoundary:
-                news.environmentRolePermissionBoundary,
+              environmentRolePermissionBoundary: news.environmentRolePermissionBoundary,
               regionalParameters: news.regionalParameters,
               globalParameters: news.globalParameters,
               provisioningConfigurations: news.provisioningConfigurations,

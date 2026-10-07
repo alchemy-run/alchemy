@@ -1,20 +1,18 @@
-import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
+import { Query } from "@distilled.cloud/core/query";
+import { Railway as RailwaySdk } from "@distilled.cloud/railway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const VALUE_A = Redacted.make("alchemy-railway-var-a");
 const VALUE_B = Redacted.make("alchemy-railway-var-b");
@@ -32,34 +30,24 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const readVariables = (
-  projectId: string,
-  environmentId: string,
-  serviceId?: string,
-) =>
-  railway
-    .variables({
-      projectId,
-      environmentId,
-      ...(serviceId !== undefined ? { serviceId } : {}),
-      unrendered: true,
-    })
-    .pipe(
-      Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
-    );
+const queryVariables = Query.fn((projectId: string, environmentId: string, serviceId?: string) =>
+  RailwaySdk.variables({
+    projectId,
+    environmentId,
+    ...(serviceId !== undefined ? { serviceId } : {}),
+    unrendered: true,
+  }),
+);
 
-const waitUntilVariableGone = (
-  projectId: string,
-  environmentId: string,
-  name: string,
-) =>
+const readVariables = (projectId: string, environmentId: string, serviceId?: string) =>
+  queryVariables(projectId, environmentId, serviceId).pipe(
+    Effect.map(asVariableMap),
+    Effect.catchTag("RailwayNotFound", () => Effect.succeed({} as Record<string, string>)),
+  );
+
+const waitUntilVariableGone = (projectId: string, environmentId: string, name: string) =>
   readVariables(projectId, environmentId).pipe(
-    Effect.map((vars) =>
-      Object.hasOwn(vars, name) ? ("found" as const) : ("gone" as const),
-    ),
+    Effect.map((vars) => (Object.hasOwn(vars, name) ? ("found" as const) : ("gone" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -67,8 +55,7 @@ const waitUntilVariableGone = (
     }),
   );
 
-const matchesPlain = (observed: string | undefined, expected: string) =>
-  observed === expected;
+const matchesPlain = (observed: string | undefined, expected: string) => observed === expected;
 
 test.provider(
   "create, update, list, and delete a variable",
@@ -89,9 +76,7 @@ test.provider(
       );
 
       expect(created.variable.projectId).toEqual(created.project.projectId);
-      expect(created.variable.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.variable.environmentId).toEqual(created.environment.environmentId);
       expect(created.variable.serviceId).toBeUndefined();
       expect(created.variable.name).toEqual(expect.any(String));
       expect(created.variable.name.length).toBeGreaterThan(0);
@@ -104,9 +89,7 @@ test.provider(
         created.variable.environmentId,
       );
       expect(Object.hasOwn(fetched, created.variable.name)).toBe(true);
-      expect(
-        matchesPlain(fetched[created.variable.name], Redacted.value(VALUE_A)),
-      ).toBe(true);
+      expect(matchesPlain(fetched[created.variable.name], Redacted.value(VALUE_A))).toBe(true);
 
       const provider = yield* Provider.findProvider(Railway.Variable);
       const listed = yield* provider.list();
@@ -133,9 +116,7 @@ test.provider(
       );
 
       expect(updated.variable.projectId).toEqual(created.variable.projectId);
-      expect(updated.variable.environmentId).toEqual(
-        created.variable.environmentId,
-      );
+      expect(updated.variable.environmentId).toEqual(created.variable.environmentId);
       expect(updated.variable.name).toEqual(created.variable.name);
       expect(updated.variable.digest).toEqual(expect.any(String));
       expect(updated.variable.digest).not.toEqual(created.variable.digest);
@@ -146,12 +127,8 @@ test.provider(
         updated.variable.environmentId,
       );
       expect(Object.hasOwn(refetched, updated.variable.name)).toBe(true);
-      expect(
-        matchesPlain(refetched[updated.variable.name], Redacted.value(VALUE_B)),
-      ).toBe(true);
-      expect(
-        matchesPlain(refetched[updated.variable.name], Redacted.value(VALUE_A)),
-      ).toBe(false);
+      expect(matchesPlain(refetched[updated.variable.name], Redacted.value(VALUE_B))).toBe(true);
+      expect(matchesPlain(refetched[updated.variable.name], Redacted.value(VALUE_A))).toBe(false);
 
       yield* stack.destroy();
 
@@ -162,5 +139,14 @@ test.provider(
       );
       expect(variableGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:variable",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

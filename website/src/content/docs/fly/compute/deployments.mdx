@@ -8,14 +8,11 @@ Use blue/green when you want to start a checked replacement before stopping your
 ```typescript title="api.ts"
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
-export const app = Fly.App("App");
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends Fly.Service<Api>()(
   "Api",
   {
-    app,
     main: import.meta.url,
     deploy: { strategy: "bluegreen" },
   },
@@ -27,28 +24,67 @@ export default class Api extends Fly.Service<Api>()(
 
 You still declare one Service. Alchemy creates the temporary replacement Machines during each rollout.
 
+## Deploy named containers as a group
+
+`Fly.Machine` also accepts named containers for a blue/green deployment. Pin
+**every** image to a full `repository@sha256:<digest>` reference and configure
+Machine or service readiness checks that cover every critical component.
+Container health checks and `dependsOn` govern startup; they do not replace
+Alchemy's deployment readiness checks.
+
+A Machine runs in a [`Fly.App`](/fly/compute/apps) you declare:
+
+```typescript
+const app = yield* Fly.App("Previews");
+
+const preview = yield* Fly.Machine("Preview", {
+  app,
+  deploy: { strategy: "bluegreen" },
+  containers: [
+    { name: "api", image: apiDigest, healthChecks: [{ http: { port: 3000, path: "/health" } }] },
+    { name: "worker", image: workerDigest, dependsOn: [{ name: "api", condition: "healthy" }],
+      healthChecks: [{ http: { port: 3001, path: "/health" } }] },
+  ],
+  checks: {
+    apiReady: { type: "http", port: 3000, path: "/health" },
+    workerReady: { type: "http", port: 3001, path: "/health" },
+  },
+});
+```
+
+The worker image in this example exposes `/health` on port 3001. Alchemy
+replaces the full group, even if only one image changes. New workers
+may start before HTTP promotion, so their jobs need overlap-safe ownership or
+drain behavior. Attached volumes, including `MountVolume` bindings, remain
+incompatible with blue/green; use rolling updates for a local database.
+
+Reordering containers or their startup dependencies does not create a new
+generation. Changing a dependency condition, image, command or environment does.
+The shutdown budget applies to the Machine. Each container must handle the
+configured signal and finish its own in-flight work; setting `shutdown` does not
+install a signal handler in your images.
+
 ## Put the Service in your stack
 
-Allocate a public IP and return the Service URL for your clients:
+Return the Service URL for your clients:
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
 import * as Fly from "alchemy/Fly";
 import * as Effect from "effect/Effect";
-import Api, { app } from "./api.ts";
+import Api from "./api.ts";
 
 export default Alchemy.Stack(
   "Site",
   { providers: Fly.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    yield* Fly.IpAssignment("PublicIp", { app, type: "shared_v4" });
     const api = yield* Api;
     return { url: api.url };
   }),
 );
 ```
 
-Use `api.url` rather than a Machine ID or private IP in client configuration. The App URL survives a rollout; the underlying Machines are replaced.
+Use `api.url` rather than a Machine ID or private IP in client configuration. The Service's App and its URL survive a rollout; the underlying Machines are replaced.
 
 ## Deploy a new response
 
@@ -174,14 +210,12 @@ import * as Fly from "alchemy/Fly";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { app } from "./api.ts";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { runJobs } from "./jobs.ts";
 
 export default class Jobs extends Fly.Service<Jobs>()(
   "Jobs",
   {
-    app,
     main: import.meta.url,
     services: [],
     checks: { ready: { type: "http", port: 3000, path: "/" } },
@@ -203,7 +237,7 @@ export default class Jobs extends Fly.Service<Jobs>()(
 ) {}
 ```
 
-`services: []` keeps the worker off the public proxy. Fly can still call its named check on port 3000 before Alchemy retires the old worker.
+`services: []` keeps the worker off the proxy; the worker runs in its own App. Fly can still call its named check on port 3000 before Alchemy retires the old worker.
 
 ## Close your queue worker on shutdown
 
@@ -244,7 +278,7 @@ With the 60-second budget above, unfinished jobs can still be cut off at 54 seco
 Import `Jobs` in `alchemy.run.ts`:
 
 ```diff lang="typescript" title="alchemy.run.ts"
- import Api, { app } from "./api.ts";
+import Api from "./api.ts";
 +import Jobs from "./jobs-service.ts";
 ```
 
@@ -278,6 +312,12 @@ alchemy deploy
 
 Alchemy can keep an already-promoted replacement and finish removing its predecessor. Keep the existing logical IDs and ownership metadata so it can find both versions; renaming the resource starts a different lifecycle.
 
+If recovery reports contradictory deployment metadata, inspect the reported
+Machine before retrying. Removing or downgrading protocol metadata is not a
+rollback: Alchemy preserves ambiguous capacity instead of treating it as a
+completed deployment. Roll back application images using the same provider
+version and logical resource IDs.
+
 If you want to remove the application instead, use normal stack cleanup:
 
 ```sh
@@ -303,7 +343,7 @@ Use a distinct group for each stack and stage. This prevents a newer workflow fr
 When your API handler needs a credential, import Effect Config and your handler in `api.ts`:
 
 ```diff lang="typescript" title="api.ts"
- import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import * as Config from "effect/Config";
 +import { handleRequest } from "./handler.ts";
 ```
@@ -325,11 +365,11 @@ After changing `API_KEY` in your deployment environment, run:
 alchemy deploy
 ```
 
-Alchemy prepares the Service-bound secret before starting replacements. Keep both versions compatible with the new credential during overlap: the App vault is shared, and a failed rollout does not restore its old values.
+Alchemy prepares the Service-bound secret before starting replacements. Keep both versions compatible with the new credential during overlap: both generations read the Service's App vault, and a failed rollout does not restore its old values.
 
 ## Require a secret version in a raw Machine
 
-If you rotate an App secret outside the Service deployment and Fly reports version 42, declare that minimum on your existing `Fly.Machine` resource:
+If you rotate an App secret outside the deployment and Fly reports version 42, declare that minimum on your existing `Fly.Machine` resource in that App:
 
 ```diff lang="typescript"
  const worker = Fly.Machine("Worker", {

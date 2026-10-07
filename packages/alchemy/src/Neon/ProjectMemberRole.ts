@@ -94,15 +94,12 @@ export interface ProjectMemberRole extends Resource<
  * ```
  *
  * @resource
+ * @product Project
  */
-export const ProjectMemberRole = Resource<ProjectMemberRole>(
-  "Neon.ProjectMemberRole",
-);
+export const ProjectMemberRole = Resource<ProjectMemberRole>("Neon.ProjectMemberRole");
 
 /** Validate persisted or desired project grants. @internal */
-export const validateProjectGovernanceRole = (
-  role: ProjectGovernanceRole | null,
-) =>
+export const validateProjectGovernanceRole = (role: ProjectGovernanceRole | null) =>
   role === null || role === "viewer" || role === "editor" || role === "admin"
     ? Effect.void
     : Effect.fail(
@@ -113,14 +110,10 @@ export const validateProjectGovernanceRole = (
 
 /** Distinguish direct access from the effective role and organization defaults. @internal */
 export const projectMemberDirectRole = (member: Neon.ProjectMember) => {
-  if (
-    member.org_role === "admin" ||
-    member.grant_source === "org_admin_override"
-  ) {
+  if (member.org_role === "admin" || member.grant_source === "org_admin_override") {
     return Effect.fail(
       new GovernanceRoleSafetyError({
-        message:
-          "Organization-admin project overrides cannot be managed as direct grants",
+        message: "Organization-admin project overrides cannot be managed as direct grants",
       }),
     );
   }
@@ -130,8 +123,7 @@ export const projectMemberDirectRole = (member: Neon.ProjectMember) => {
     if (permission === "EDITOR") return Effect.succeed("editor" as const);
     if (permission === "ADMIN") return Effect.succeed("admin" as const);
   } else if (
-    (member.grant_source === "org_role_default" ||
-      member.grant_source === "unassigned") &&
+    (member.grant_source === "org_role_default" || member.grant_source === "unassigned") &&
     permission === undefined
   ) {
     return Effect.succeed(null);
@@ -146,10 +138,7 @@ export const projectMemberDirectRole = (member: Neon.ProjectMember) => {
 
 const validateProps = Effect.fn(function* (props: ProjectMemberRoleProps) {
   yield* validateGovernanceScope(props);
-  if (
-    !props.project?.projectId ||
-    typeof props.project.projectId !== "string"
-  ) {
+  if (!props.project?.projectId || typeof props.project.projectId !== "string") {
     return yield* new GovernanceRoleSafetyError({
       message: "An explicit resolved existing project ID is required",
     });
@@ -172,10 +161,7 @@ const observe = Effect.fn(function* (
 ) {
   yield* validateGovernanceScope(scope);
   const { project } = yield* Neon.getProject({ project_id: scope.projectId });
-  if (
-    project.org_id !== scope.orgId ||
-    project.effective_project_permission !== "ADMIN"
-  ) {
+  if (project.org_id !== scope.orgId || project.effective_project_permission !== "ADMIN") {
     return yield* new GovernanceRoleSafetyError({
       message:
         "Project organization and caller ADMIN permission must be observable before managing grants",
@@ -200,9 +186,7 @@ const observe = Effect.fn(function* (
       cursor,
       limit: 500,
     });
-    const member = response.project_members.find(
-      (member) => member.member_id === scope.memberId,
-    );
+    const member = response.project_members.find((member) => member.member_id === scope.memberId);
     if (member) {
       if (
         member.user_id !== membership.user_id ||
@@ -211,8 +195,7 @@ const observe = Effect.fn(function* (
         !member.user_id
       ) {
         return yield* new GovernanceRoleSafetyError({
-          message:
-            "Project member does not match the observed organization membership",
+          message: "Project member does not match the observed organization membership",
         });
       }
       return {
@@ -240,11 +223,7 @@ const projectAbsenceProven = Effect.fn(function* (
   members: readonly Neon.Member[],
 ) {
   const actor = yield* Neon.getCurrentUserInfo({});
-  if (
-    !members.some(
-      (member) => member.user_id === actor.id && member.role === "admin",
-    )
-  ) {
+  if (!members.some((member) => member.user_id === actor.id && member.role === "admin")) {
     return yield* new GovernanceRoleSafetyError({
       message:
         "Project absence requires an organization-admin listing; restricted project visibility is not proof of deletion",
@@ -260,37 +239,32 @@ const projectAbsenceProven = Effect.fn(function* (
     });
     if (response.unavailable_project_ids?.length) {
       return yield* new GovernanceRoleSafetyError({
-        message:
-          "Project listing contains unavailable projects; absence is unproven",
+        message: "Project listing contains unavailable projects; absence is unproven",
       });
     }
     if (
       response.projects.some(
-        (project) =>
-          project.org_id !== undefined && project.org_id !== scope.orgId,
+        (project) => project.org_id !== undefined && project.org_id !== scope.orgId,
       )
     ) {
       return yield* new GovernanceRoleSafetyError({
         message: "Scoped project listing returned a different organization",
       });
     }
-    if (response.projects.some((project) => project.id === scope.projectId))
-      return false;
+    if (response.projects.some((project) => project.id === scope.projectId)) return false;
     if (response.projects.length === 0) return true;
     const next = response.pagination?.cursor;
     if (next === undefined) return true;
     if (!next || seen.has(next)) {
       return yield* new GovernanceRoleSafetyError({
-        message:
-          "Scoped project listing returned an invalid or repeated cursor",
+        message: "Scoped project listing returned an invalid or repeated cursor",
       });
     }
     seen.add(next);
     cursor = next;
   }
   return yield* new GovernanceRoleSafetyError({
-    message:
-      "Scoped project listing exceeded its bounded pagination limit; absence is unproven",
+    message: "Scoped project listing exceeded its bounded pagination limit; absence is unproven",
   });
 });
 
@@ -328,9 +302,7 @@ export const ProjectMemberRoleProvider = () =>
         memberId: olds.memberId,
         projectId: olds.project.projectId,
       };
-      const baseline = output
-        ? yield* verifyBaseline(output, { fqn, instanceId })
-        : undefined;
+      const baseline = output ? yield* verifyBaseline(output, { fqn, instanceId }) : undefined;
       const observed = yield* observe(scope);
       if (output && baseline) {
         if (observed.userId !== baseline.userId)
@@ -360,8 +332,7 @@ export const ProjectMemberRoleProvider = () =>
       const baseline = yield* verifyBaseline(output, { fqn, instanceId });
       if (!output)
         return yield* new GovernanceRoleSafetyError({
-          message:
-            "A persisted initial grant snapshot is required before changing project access",
+          message: "A persisted initial grant snapshot is required before changing project access",
         });
       if (
         news.orgId !== output.orgId ||
@@ -378,10 +349,7 @@ export const ProjectMemberRoleProvider = () =>
           message: "Membership user changed",
         });
       if (yield* governanceRoleTransition(baseline, observed.role, news.role)) {
-        yield* validateGovernanceActor(
-          observed.userId,
-          (yield* Neon.getCurrentUserInfo({})).id,
-        );
+        yield* validateGovernanceActor(observed.userId, (yield* Neon.getCurrentUserInfo({})).id);
         yield* Neon.setProjectMemberRole({
           ...request(output),
           role: news.role,
@@ -404,9 +372,7 @@ export const ProjectMemberRoleProvider = () =>
       const baseline = yield* verifyBaseline(output, { fqn, instanceId });
       yield* validateGovernanceScope(output);
       const members = yield* listGovernanceOrganizationMembers(output.orgId);
-      const membership = members.find(
-        (member) => member.id === output.memberId,
-      );
+      const membership = members.find((member) => member.id === output.memberId);
       if (!membership) return;
       if (membership.user_id !== baseline.userId) {
         return yield* new GovernanceRoleSafetyError({
@@ -426,18 +392,8 @@ export const ProjectMemberRoleProvider = () =>
         return yield* new GovernanceRoleSafetyError({
           message: "Membership user changed",
         });
-      if (
-        yield* governanceRoleTransition(
-          baseline,
-          observed.role,
-          baseline.originalRole,
-          true,
-        )
-      ) {
-        yield* validateGovernanceActor(
-          observed.userId,
-          (yield* Neon.getCurrentUserInfo({})).id,
-        );
+      if (yield* governanceRoleTransition(baseline, observed.role, baseline.originalRole, true)) {
+        yield* validateGovernanceActor(observed.userId, (yield* Neon.getCurrentUserInfo({})).id);
         if (baseline.originalRole === null) {
           yield* Neon.removeProjectMemberRole({
             ...request(output),
@@ -451,10 +407,7 @@ export const ProjectMemberRoleProvider = () =>
           });
         }
         const restored = yield* observe(output);
-        if (
-          restored.userId !== baseline.userId ||
-          restored.role !== baseline.originalRole
-        ) {
+        if (restored.userId !== baseline.userId || restored.role !== baseline.originalRole) {
           return yield* new GovernanceRoleSafetyError({
             message: "Original explicit project grant was not restored",
           });

@@ -210,6 +210,7 @@ export interface Label extends Resource<
  * ```
  *
  * @resource
+ * @product Issue
  */
 export const Label = Resource<Label>("GitHub.Label");
 
@@ -306,14 +307,11 @@ export const LabelProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const labels = await octokit.paginate(
-                  octokit.rest.issues.listLabelsForRepo,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const labels = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return labels.map(attrsOf);
               } catch (error: any) {
                 // Repos where the token lacks label access reject with

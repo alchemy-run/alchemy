@@ -5,9 +5,10 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import type { FunctionBinding, FunctionProps } from "./Function.ts";
 
-export class FunctionConfigurationError extends Data.TaggedError(
-  "FunctionConfigurationError",
-)<{ message: string }> {}
+export class FunctionConfigurationError extends Data.TaggedError("FunctionConfigurationError")<{
+  message: string;
+  cause?: unknown;
+}> {}
 
 const injected = new Set([
   "NEON_API_KEY",
@@ -38,12 +39,10 @@ const injected = new Set([
 const checkedSlug = Effect.fn(function* (id: string, slug?: string) {
   const value =
     slug ??
-    (yield* createPhysicalName({
-      id,
-      maxLength: 20,
-      delimiter: "",
-      lowercase: true,
-    })).replaceAll(/[^a-z0-9]/g, "");
+    (yield* createPhysicalName({ id, maxLength: 20, delimiter: "", lowercase: true })).replaceAll(
+      /[^a-z0-9]/g,
+      "",
+    );
   if (!/^[a-z0-9]{1,20}$/.test(value))
     return yield* new FunctionConfigurationError({
       message: "Function slug must match ^[a-z0-9]{1,20}$",
@@ -55,10 +54,7 @@ export function functionSlug(
   id: string,
   slug: string,
 ): Effect.Effect<string, FunctionConfigurationError>;
-export function functionSlug(
-  id: string,
-  slug?: string,
-): ReturnType<typeof checkedSlug>;
+export function functionSlug(id: string, slug?: string): ReturnType<typeof checkedSlug>;
 export function functionSlug(id: string, slug?: string) {
   return checkedSlug(id, slug);
 }
@@ -68,10 +64,7 @@ export const functionEnvironment = Effect.fn(function* (
   bindings: ResourceBinding<FunctionBinding>[],
 ) {
   const env: Record<string, string> = {};
-  for (const source of [
-    props.env ?? {},
-    ...bindings.map((binding) => binding.data.env ?? {}),
-  ]) {
+  for (const source of [props.env ?? {}, ...bindings.map((binding) => binding.data.env ?? {})]) {
     for (const [key, value] of Object.entries(source)) {
       if (value === undefined) continue;
       if (injected.has(key) || key.startsWith("ALCHEMY_"))

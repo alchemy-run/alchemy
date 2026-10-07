@@ -7,16 +7,13 @@ import {
 import * as Retry from "@distilled.cloud/infisical/Retry";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  AuthError,
-  AuthProviderLayer,
-  type ConfigureField,
-} from "../Auth/AuthProvider.ts";
+import { AuthError, AuthProviderLayer, type ConfigureField } from "../Auth/AuthProvider.ts";
 import { displayRedacted } from "../Auth/Credentials.ts";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
+import { detectOidcToken, SUPPORTED_OIDC_PLATFORMS } from "../Auth/OidcToken.ts";
 import {
   collectFieldValues,
   storedValueText,
@@ -24,10 +21,6 @@ import {
   type StoredValues,
 } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
-import {
-  detectOidcToken,
-  SUPPORTED_OIDC_PLATFORMS,
-} from "../Auth/OidcToken.ts";
 
 export const INFISICAL_TOKEN_ENV = "INFISICAL_TOKEN";
 /** The machine identity to log into with a platform OIDC token. */
@@ -61,10 +54,7 @@ const AccessTokenConfig = Schema.Struct({
   apiBaseUrl: Schema.optional(Schema.String),
 });
 
-export const InfisicalAuthConfigSchema = Schema.Union([
-  UniversalAuthConfig,
-  AccessTokenConfig,
-]);
+export const InfisicalAuthConfigSchema = Schema.Union([UniversalAuthConfig, AccessTokenConfig]);
 export type InfisicalAuthConfig = typeof InfisicalAuthConfigSchema.Type;
 
 export interface InfisicalResolvedCredentials {
@@ -75,8 +65,7 @@ export interface InfisicalResolvedCredentials {
 const apiBaseUrlField: ConfigureField = {
   name: "apiBaseUrl",
   label: "Infisical API URL",
-  description:
-    "For the EU cloud (https://eu.infisical.com) or a self-hosted instance.",
+  description: "For the EU cloud (https://eu.infisical.com) or a self-hosted instance.",
   placeholder: DEFAULT_API_BASE_URL,
   optional: true,
 };
@@ -177,11 +166,7 @@ export const mintAccessTokenFromOidc = (config: {
  */
 const resolve = (
   config: InfisicalAuthConfig,
-): Effect.Effect<
-  InfisicalResolvedCredentials,
-  AuthError,
-  HttpClient.HttpClient
-> =>
+): Effect.Effect<InfisicalResolvedCredentials, AuthError, HttpClient.HttpClient> =>
   config.method === "universal-auth"
     ? mintAccessToken(config)
     : Effect.succeed({
@@ -209,8 +194,7 @@ const toConfig = (
  * Verify Universal Auth with a login before storing it. Pasted access
  * tokens are used as supplied and checked when secrets are requested.
  */
-const verify = (config: InfisicalAuthConfig) =>
-  resolve(config).pipe(Effect.as(config));
+const verify = (config: InfisicalAuthConfig) => resolve(config).pipe(Effect.as(config));
 
 const fieldsFor = (method: InfisicalAuthConfig["method"]) =>
   method === "universal-auth" ? universalAuthFields : accessTokenFields;
@@ -222,8 +206,7 @@ const chooseMethod = Interaction.accessors.prompt
       {
         value: "universal-auth" as const,
         label: "Machine identity",
-        description:
-          "Client ID and secret; mints a fresh access token on each run",
+        description: "Client ID and secret; mints a fresh access token on each run",
       },
       {
         value: "access-token" as const,
@@ -271,88 +254,83 @@ const readEnvironment = Effect.gen(function* () {
  * Infisical profile authentication: a machine identity's universal-auth
  * credentials (recommended) or a pasted access token.
  */
-export const InfisicalAuth = AuthProviderLayer<
-  InfisicalAuthConfig,
-  InfisicalResolvedCredentials
->()(PROVIDER_NAME, {
-  configSchema: InfisicalAuthConfigSchema,
-  configure: () =>
-    chooseMethod.pipe(
-      Effect.flatMap((method) =>
-        collectFieldValues(fieldsFor(method)).pipe(
-          Effect.map((values) => toConfig(method, values)),
+export const InfisicalAuth = AuthProviderLayer<InfisicalAuthConfig, InfisicalResolvedCredentials>()(
+  PROVIDER_NAME,
+  {
+    configSchema: InfisicalAuthConfigSchema,
+    configure: () =>
+      chooseMethod.pipe(
+        Effect.flatMap((method) =>
+          collectFieldValues(fieldsFor(method)).pipe(
+            Effect.map((values) => toConfig(method, values)),
+          ),
         ),
+        Effect.flatMap(verify),
       ),
-      Effect.flatMap(verify),
-    ),
-  configureMethods: [
-    { method: "universal-auth", fields: universalAuthFields },
-    { method: "access-token", fields: accessTokenFields },
-  ],
-  configureWith: (_, input) => {
-    if (input.method !== "universal-auth" && input.method !== "access-token") {
-      return Effect.fail(
-        new AuthError({
-          message: `Infisical: unknown method '${input.method}'. Valid methods: universal-auth, access-token.`,
-        }),
+    configureMethods: [
+      { method: "universal-auth", fields: universalAuthFields },
+      { method: "access-token", fields: accessTokenFields },
+    ],
+    configureWith: (_, input) => {
+      if (input.method !== "universal-auth" && input.method !== "access-token") {
+        return Effect.fail(
+          new AuthError({
+            message: `Infisical: unknown method '${input.method}'. Valid methods: universal-auth, access-token.`,
+          }),
+        );
+      }
+      const method = input.method;
+      return validateFieldValues(PROVIDER_NAME, fieldsFor(method), input.values).pipe(
+        Effect.map((values) => toConfig(method, values)),
+        Effect.flatMap(verify),
       );
-    }
-    const method = input.method;
-    return validateFieldValues(
-      PROVIDER_NAME,
-      fieldsFor(method),
-      input.values,
-    ).pipe(
-      Effect.map((values) => toConfig(method, values)),
-      Effect.flatMap(verify),
-    );
+    },
+    // Nothing to re-authenticate: stored credentials are long-lived (or, for
+    // access tokens, replaced by reconfiguring). Verifying them is enough.
+    login: (_, config) => verify(config),
+    // Client secrets are revoked from the Infisical dashboard by an admin;
+    // there is nothing session-like to tear down.
+    logout: () => Effect.void,
+    read: (_, config) => resolve(config),
+    details: (_, config) =>
+      Effect.succeed({
+        lines: [
+          { key: "method", value: config.method },
+          config.method === "universal-auth"
+            ? { key: "clientId", value: config.clientId }
+            : {
+                key: "token",
+                value: displayRedacted(Redacted.make(config.token)),
+              },
+          { key: "apiBaseUrl", value: config.apiBaseUrl ?? DEFAULT_API_BASE_URL },
+        ],
+      }),
+    readEnvironment,
+    environment: [
+      {
+        name: INFISICAL_TOKEN_ENV,
+        required: true,
+        secret: true,
+        alternatives: [INFISICAL_IDENTITY_ID_ENV],
+        description:
+          "A machine identity access token; or set INFISICAL_IDENTITY_ID instead to log in with the platform's OIDC token (Vercel, GitHub Actions, GitLab CI, GCP)",
+      },
+      {
+        name: INFISICAL_OIDC_TOKEN_ENV,
+        required: false,
+        secret: true,
+        description: "Explicit OIDC token for platforms that are not auto-detected",
+      },
+      {
+        name: INFISICAL_OIDC_AUDIENCE_ENV,
+        required: false,
+        description: "Audience to request in the platform's OIDC token",
+      },
+      {
+        name: INFISICAL_API_URL_ENV,
+        required: false,
+        description: "Base URL of a self-hosted Infisical instance",
+      },
+    ],
   },
-  // Nothing to re-authenticate: stored credentials are long-lived (or, for
-  // access tokens, replaced by reconfiguring). Verifying them is enough.
-  login: (_, config) => verify(config),
-  // Client secrets are revoked from the Infisical dashboard by an admin;
-  // there is nothing session-like to tear down.
-  logout: () => Effect.void,
-  read: (_, config) => resolve(config),
-  details: (_, config) =>
-    Effect.succeed({
-      lines: [
-        { key: "method", value: config.method },
-        config.method === "universal-auth"
-          ? { key: "clientId", value: config.clientId }
-          : {
-              key: "token",
-              value: displayRedacted(Redacted.make(config.token)),
-            },
-        { key: "apiBaseUrl", value: config.apiBaseUrl ?? DEFAULT_API_BASE_URL },
-      ],
-    }),
-  readEnvironment,
-  environment: [
-    {
-      name: INFISICAL_TOKEN_ENV,
-      required: true,
-      secret: true,
-      alternatives: [INFISICAL_IDENTITY_ID_ENV],
-      description:
-        "A machine identity access token; or set INFISICAL_IDENTITY_ID instead to log in with the platform's OIDC token (Vercel, GitHub Actions, GitLab CI, GCP)",
-    },
-    {
-      name: INFISICAL_OIDC_TOKEN_ENV,
-      required: false,
-      secret: true,
-      description:
-        "Explicit OIDC token for platforms that are not auto-detected",
-    },
-    {
-      name: INFISICAL_OIDC_AUDIENCE_ENV,
-      required: false,
-      description: "Audience to request in the platform's OIDC token",
-    },
-    {
-      name: INFISICAL_API_URL_ENV,
-      required: false,
-      description: "Base URL of a self-hosted Infisical instance",
-    },
-  ],
-});
+);

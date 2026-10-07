@@ -1,17 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const GATEWAY_ID = "alchemy-test-aigw-providerkey";
 const PROVIDER_SLUG = "openai";
@@ -47,9 +44,7 @@ test.provider(
       expect(deployed.secret.scopes).toContain("ai_gateway");
 
       // The gateway provider must reference the backing secret's id.
-      expect(deployed.gatewayProvider.secretId).toEqual(
-        deployed.secret.secretId,
-      );
+      expect(deployed.gatewayProvider.secretId).toEqual(deployed.secret.secretId);
       // The alias carried through is `"default"` (the omitted-alias default).
       expect(deployed.gatewayProvider.alias).toEqual("default");
       expect(deployed.gatewayProvider.providerSlug).toEqual(PROVIDER_SLUG);
@@ -78,36 +73,52 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:secretsstore",
+      "live",
+    ],
+  },
 );
 
-test.provider("explicit alias threads through the naming contract", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "explicit alias threads through the naming contract",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const store = yield* Cloudflare.SecretsStore.Store("PkAliasStore");
-        const gateway = yield* Cloudflare.AI.Gateway("PkAliasGateway", {
-          id: GATEWAY_ID + "-alias",
-          storeId: store.storeId,
-        });
-        return yield* Cloudflare.AI.ProviderKey("PkAliasKey", {
-          store,
-          gatewayId: gateway.gatewayId,
-          providerSlug: "anthropic",
-          alias: "evals",
-          value: Redacted.make("alchemy-test-not-a-real-key"),
-        });
-      }),
-    );
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const store = yield* Cloudflare.SecretsStore.Store("PkAliasStore");
+          const gateway = yield* Cloudflare.AI.Gateway("PkAliasGateway", {
+            id: GATEWAY_ID + "-alias",
+            storeId: store.storeId,
+          });
+          return yield* Cloudflare.AI.ProviderKey("PkAliasKey", {
+            store,
+            gatewayId: gateway.gatewayId,
+            providerSlug: "anthropic",
+            alias: "evals",
+            value: Redacted.make("alchemy-test-not-a-real-key"),
+          });
+        }),
+      );
 
-    expect(deployed.secret.secretName).toEqual(
-      `${GATEWAY_ID}-alias_anthropic_evals`,
-    );
-    expect(deployed.gatewayProvider.alias).toEqual("evals");
+      expect(deployed.secret.secretName).toEqual(`${GATEWAY_ID}-alias_anthropic_evals`);
+      expect(deployed.gatewayProvider.alias).toEqual("evals");
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:secretsstore",
+      "live",
+    ],
+  },
 );
 
 test.provider(
@@ -132,15 +143,11 @@ test.provider(
           });
         });
 
-      const initial = yield* stack.deploy(
-        program({ value: "alchemy-test-key-v1" }),
-      );
+      const initial = yield* stack.deploy(program({ value: "alchemy-test-key-v1" }));
 
       // Rotating the key value is an in-place update: the secret keeps its
       // id, so the provider config it feeds is untouched.
-      const rotated = yield* stack.deploy(
-        program({ value: "alchemy-test-key-v2" }),
-      );
+      const rotated = yield* stack.deploy(program({ value: "alchemy-test-key-v2" }));
       expect(rotated.secret.secretId).toEqual(initial.secret.secretId);
       expect(rotated.gatewayProvider.providerConfigId).toEqual(
         initial.gatewayProvider.providerConfigId,
@@ -152,9 +159,7 @@ test.provider(
       const renamed = yield* stack.deploy(
         program({ value: "alchemy-test-key-v2", alias: "rotated" }),
       );
-      expect(renamed.secret.secretName).toEqual(
-        `${GATEWAY_ID}-rotate_${PROVIDER_SLUG}_rotated`,
-      );
+      expect(renamed.secret.secretName).toEqual(`${GATEWAY_ID}-rotate_${PROVIDER_SLUG}_rotated`);
       expect(renamed.secret.secretId).not.toEqual(initial.secret.secretId);
       expect(renamed.gatewayProvider.providerConfigId).not.toEqual(
         initial.gatewayProvider.providerConfigId,
@@ -169,13 +174,19 @@ test.provider(
           storeId: initial.secret.storeId,
           secretId: initial.secret.secretId,
         })
-        .pipe(
-          Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)));
       expect(oldSecret).toBeUndefined();
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:secretsstore",
+      "live",
+    ],
+  },
 );
 
 test.provider(
@@ -200,9 +211,7 @@ test.provider(
         }),
       );
 
-      expect(deployed.secret.secretName).toEqual(
-        `${GATEWAY_ID}-delete_${PROVIDER_SLUG}_default`,
-      );
+      expect(deployed.secret.secretName).toEqual(`${GATEWAY_ID}-delete_${PROVIDER_SLUG}_default`);
 
       yield* stack.destroy();
 
@@ -218,9 +227,15 @@ test.provider(
           storeId: deployed.secret.storeId,
           secretId: deployed.secret.secretId,
         })
-        .pipe(
-          Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)));
       expect(secretAfter).toBeUndefined();
     }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:secretsstore",
+      "live",
+    ],
+  },
 );

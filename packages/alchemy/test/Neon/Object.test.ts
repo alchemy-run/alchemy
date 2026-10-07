@@ -1,19 +1,15 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import { Bucket, bucketStorageClient } from "@/Neon/Bucket";
-import {
-  Object as NeonObject,
-  serializeObjectValue,
-  storageBodyBytes,
-} from "@/Neon/Object";
-import { Project } from "@/Neon/Project";
-import { providers } from "@/Neon/Providers";
-import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import { Bucket, bucketStorageClient } from "@/Neon/Bucket";
+import { Object as NeonObject, serializeObjectValue, storageBodyBytes } from "@/Neon/Object";
+import { Project } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -64,14 +60,11 @@ test(
       new Date(0),
       { [Symbol("key")]: 1 },
     ]) {
-      expect(
-        Result.isFailure(
-          yield* serializeObjectValue(value).pipe(Effect.result),
-        ),
-      ).toBe(true);
+      expect(Result.isFailure(yield* serializeObjectValue(value).pipe(Effect.result))).toBe(true);
     }
     expect(accessed).toBe(false);
   }),
+  { tags: ["provider:neon", "provider:neon:object", "live"] },
 );
 
 test.provider(
@@ -119,19 +112,15 @@ test.provider(
       expect(yield* Effect.sync(() => new TextDecoder().decode(json))).toBe(
         '{"pageSize":25,"theme":"system"}',
       );
-      expect(
-        Array.from(
-          yield* storageBodyBytes((yield* client.get("raw.bin"))?.Body),
-        ),
-      ).toEqual(Array.from(bytes));
+      expect(Array.from(yield* storageBodyBytes((yield* client.get("raw.bin"))?.Body))).toEqual(
+        Array.from(bytes),
+      );
       const unchanged = yield* deploy(false);
       expect(unchanged.object.etag).toBe(first.object.etag);
       const updated = yield* deploy(true);
       expect(updated.object.key).toBe("new/settings.json");
       expect(yield* client.get("settings.json")).toBeUndefined();
-      expect((yield* client.head(updated.object.key))?.CacheControl).toBe(
-        "no-store",
-      );
+      expect((yield* client.head(updated.object.key))?.CacheControl).toBe("no-store");
       const listing = yield* SDK.listProjectBranchBucketObjects({
         project_id: updated.bucket.projectId,
         branch_id: updated.bucket.branchId,
@@ -141,7 +130,16 @@ test.provider(
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -173,11 +171,8 @@ test.provider(
         });
       const refused = yield* stack.deploy(program(false)).pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
-      if (Result.isFailure(refused))
-        expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
-      expect((yield* client.head("foreign.json"))?.Metadata?.foreign).toBe(
-        "yes",
-      );
+      if (Result.isFailure(refused)) expect(refused.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      expect((yield* client.head("foreign.json"))?.Metadata?.foreign).toBe("yes");
       const adopted = yield* stack.deploy(program(true));
       expect(adopted.metadata["alchemy-id"]).toBe("AdoptedObject");
       yield* client.put("foreign.json", '{"count":999}', {
@@ -185,17 +180,22 @@ test.provider(
       });
       const repaired = yield* stack.deploy(program(true, 2));
       expect(repaired.contentHash).toBe(adopted.contentHash);
-      const bytes = yield* storageBodyBytes(
-        (yield* client.get("foreign.json"))?.Body,
-      );
-      expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe(
-        '{"count":1}',
-      );
+      const bytes = yield* storageBodyBytes((yield* client.get("foreign.json"))?.Body);
+      expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe('{"count":1}');
       yield* client.delete("foreign.json");
       const recreated = yield* stack.deploy(program(true, 3));
       expect(recreated.contentHash).toBe(adopted.contentHash);
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

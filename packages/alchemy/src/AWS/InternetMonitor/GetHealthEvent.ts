@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface GetHealthEventRequest extends Omit<
-  im.GetHealthEventInput,
-  "MonitorName"
-> {}
+export interface GetHealthEventRequest extends Omit<im.GetHealthEventInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:GetHealthEvent` — read the full
@@ -41,6 +38,4 @@ export interface GetHealthEvent extends Binding.Service<
   >
 > {}
 
-export const GetHealthEvent = Binding.Service<GetHealthEvent>(
-  "AWS.InternetMonitor.GetHealthEvent",
-);
+export const GetHealthEvent = Binding.Service<GetHealthEvent>("AWS.InternetMonitor.GetHealthEvent");

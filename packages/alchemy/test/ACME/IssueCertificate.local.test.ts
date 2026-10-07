@@ -1,11 +1,11 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as ACME from "@/ACME";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/issue-stack.ts";
 import { ZONE_NAME } from "./fixtures/shared.ts";
 
@@ -53,5 +53,17 @@ test(
     expect(body.dnsNames).toEqual([NAME]);
     expect(body.hasKey).toBe(true);
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:acme",
+      "provider:acme:account",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "provider:zerossl",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

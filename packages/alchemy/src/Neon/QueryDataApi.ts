@@ -1,25 +1,21 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import {
-  backendEnvKey,
-  backendString,
-  bindBackendEnvironment,
-} from "./BackendConnection.ts";
+import { backendEnvKey, backendString, bindBackendEnvironment } from "./BackendConnection.ts";
 import type { DataApi } from "./DataApi.ts";
 
-export class DataApiRequestError extends Data.TaggedError(
-  "DataApiRequestError",
-)<{ message: string }> {}
+export class DataApiRequestError extends Data.TaggedError("DataApiRequestError")<{
+  message: string;
+}> {}
 
 export interface QueryDataApiClient {
   /** Bound public PostgREST endpoint. */
@@ -56,6 +52,7 @@ export interface QueryDataApiClient {
  * ```
  *
  * @binding
+ * @product Data API
  */
 export interface QueryDataApi extends Binding.Service<
   QueryDataApi,

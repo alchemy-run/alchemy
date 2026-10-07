@@ -1,14 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  RuntimeStorageMethods,
-  StorageBindingOptions,
-} from "./StorageBinding.ts";
+import type { RuntimeStorageMethods, StorageBindingOptions } from "./StorageBinding.ts";
 
-export interface ReadBucketClient extends RuntimeStorageMethods<
-  "get" | "head" | "list"
-> {
+export interface ReadBucketClient extends RuntimeStorageMethods<"get" | "head" | "list"> {
   /** Presign an object download. This does not make the bucket public. */
   presignGet(
     key: string,
@@ -29,13 +24,11 @@ export interface ReadBucketClient extends RuntimeStorageMethods<
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface ReadBucket extends Binding.Service<
   ReadBucket,
   "Neon.ReadBucket",
-  (
-    bucket: Bucket,
-    options?: StorageBindingOptions,
-  ) => Effect.Effect<ReadBucketClient>
+  (bucket: Bucket, options?: StorageBindingOptions) => Effect.Effect<ReadBucketClient>
 > {}
 export const ReadBucket = Binding.Service<ReadBucket>("Neon.ReadBucket");

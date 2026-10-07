@@ -1,12 +1,12 @@
-import { Project } from "@/Neon/Project";
-import { Function, type FunctionProps } from "@/Neon/Function";
-import * as Provider from "@/Provider";
-import { providers } from "@/Neon/Providers";
-import * as Test from "@/Test/Alchemy";
 import * as NeonApi from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import { Function, type FunctionProps } from "@/Neon/Function";
+import { Project } from "@/Neon/Project";
+import { providers } from "@/Neon/Providers";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import {
   functionRolloutSamples,
   functionRolloutTimeout,
@@ -49,7 +49,10 @@ test.provider(
       }
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:neon", "provider:neon:function", "live"],
+    timeout: 120_000,
+  },
 );
 
 // Live lifecycles below poll deployment rollout for minutes; skip under --fast.
@@ -58,8 +61,7 @@ test.provider.skipIf(!!process.env.FAST)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const main = new URL("./fixtures/function-native.ts", import.meta.url)
-        .href;
+      const main = new URL("./fixtures/function-native.ts", import.meta.url).href;
       const deploy = (env: Record<string, string>, name?: string) =>
         stack.deploy(
           Effect.gen(function* () {
@@ -89,9 +91,7 @@ test.provider.skipIf(!!process.env.FAST)(
         branch_id: first.api.branchId,
         slug: first.api.slug,
       });
-      expect(observed.function.active_deployment?.id).toBe(
-        first.api.activeDeploymentId,
-      );
+      expect(observed.function.active_deployment?.id).toBe(first.api.activeDeploymentId);
       const noop = yield* deploy({
         FUNCTION_TEST_VALUE: "one",
         FUNCTION_TEST_REMOVED: "remove-me",
@@ -106,9 +106,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const updated = yield* deploy({ FUNCTION_TEST_VALUE: "two" });
       expect(updated.api.functionId).toBe(first.api.functionId);
       expect(updated.api.name).toBe(first.api.slug);
-      expect(updated.api.activeDeploymentId).not.toBe(
-        first.api.activeDeploymentId,
-      );
+      expect(updated.api.activeDeploymentId).not.toBe(first.api.activeDeploymentId);
       expect(updated.api.url).toBe(first.api.url);
       const changedEnv = yield* functionRolloutSamples(
         client.get(`${updated.api.url}env`).pipe(
@@ -145,12 +143,8 @@ test.provider.skipIf(!!process.env.FAST)(
         branch_id: updated.api.branchId,
         slug: updated.api.slug,
       });
-      expect(state.function.active_deployment?.environment).not.toContain(
-        "FUNCTION_TEST_REMOVED",
-      );
-      yield* stack.deploy(
-        Project("FunctionProject", { region: "aws-us-east-2" }),
-      );
+      expect(state.function.active_deployment?.environment).not.toContain("FUNCTION_TEST_REMOVED");
+      yield* stack.deploy(Project("FunctionProject", { region: "aws-us-east-2" }));
       const absent = yield* NeonApi.getProjectBranchFunction({
         project_id: updated.api.projectId,
         branch_id: updated.api.branchId,
@@ -162,7 +156,10 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(absent).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: functionRolloutTimeout },
+  {
+    tags: ["provider:neon", "provider:neon:function", "provider:neon:project", "live"],
+    timeout: functionRolloutTimeout,
+  },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -183,8 +180,7 @@ test.provider.skipIf(!!process.env.FAST)(
             });
           }),
         );
-      const main = new URL("./fixtures/function-native.ts", import.meta.url)
-        .href;
+      const main = new URL("./fixtures/function-native.ts", import.meta.url).href;
       const first = yield* deploy(main, "one");
       const client = yield* HttpClient.HttpClient;
       expect(yield* (yield* client.get(first.url)).text).toBe("native-v1");
@@ -200,9 +196,7 @@ test.provider.skipIf(!!process.env.FAST)(
         branch_id: code.branchId,
         slug: code.slug,
       });
-      expect(observed.function.active_deployment?.id).toBe(
-        code.activeDeploymentId,
-      );
+      expect(observed.function.active_deployment?.id).toBe(code.activeDeploymentId);
       yield* Effect.logInfo(
         JSON.stringify({
           functionCodeUpdate: {
@@ -219,10 +213,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(code.functionId).toBe(first.functionId);
       expect(code.url).toBe(first.url);
-      const samples = yield* functionTextSamples(
-        code.url,
-        (body) => body === "bare-v2",
-      );
+      const samples = yield* functionTextSamples(code.url, (body) => body === "bare-v2");
       yield* Effect.logInfo(JSON.stringify({ functionStableUrl: samples }));
       const noop = yield* deploy(
         new URL("./fixtures/function-bare.ts", import.meta.url).href,
@@ -238,5 +229,8 @@ test.provider.skipIf(!!process.env.FAST)(
       ).toBe(true);
       for (const text of samples) expect(text).toBe("bare-v2");
     }),
-  { timeout: functionRolloutTimeout },
+  {
+    tags: ["provider:neon", "provider:neon:function", "provider:neon:project", "live"],
+    timeout: functionRolloutTimeout,
+  },
 );

@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetOperationDetailRequest
-  extends route53domains.GetOperationDetailRequest {}
+export interface GetOperationDetailRequest extends route53domains.GetOperationDetailRequest {}
 
 /**
  * Runtime binding for `route53domains:GetOperationDetail` — return the

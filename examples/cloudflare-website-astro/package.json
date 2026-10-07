@@ -2,6 +2,11 @@
   "name": "cloudflare-website-astro",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-website-astro"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -22,10 +27,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-website-astro"
   }
 }

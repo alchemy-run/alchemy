@@ -44,17 +44,15 @@ export const ManageConnectionsHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.ApiGatewayV2.ManageConnections(${stage}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["execute-api:ManageConnections"],
-                  Resource: [stage.connectionsArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.ApiGatewayV2.ManageConnections(${stage}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["execute-api:ManageConnections"],
+                Resource: [stage.connectionsArn],
+              },
+            ],
+          });
         }
       }
 
@@ -65,31 +63,27 @@ export const ManageConnectionsHttp = Layer.effect(
         effect: Effect.Effect<A, E>,
         endpoint: string,
       ): Effect.Effect<A, E> =>
-        Effect.provideService(
-          effect,
-          Endpoint.Endpoint,
-          Effect.succeed(endpoint),
-        );
+        Effect.provideService(effect, Endpoint.Endpoint, Effect.succeed(endpoint));
 
       return {
-        postToConnection: Effect.fn(
-          `AWS.ApiGatewayV2.PostToConnection(${stage.LogicalId})`,
-        )(function* (request: PostToConnectionRequest) {
-          const endpoint = yield* CallbackUrl;
-          return yield* withEndpoint(postToConnection(request), endpoint);
-        }),
-        getConnection: Effect.fn(
-          `AWS.ApiGatewayV2.GetConnection(${stage.LogicalId})`,
-        )(function* (request: GetConnectionRequest) {
+        postToConnection: Effect.fn(`AWS.ApiGatewayV2.PostToConnection(${stage.LogicalId})`)(
+          function* (request: PostToConnectionRequest) {
+            const endpoint = yield* CallbackUrl;
+            return yield* withEndpoint(postToConnection(request), endpoint);
+          },
+        ),
+        getConnection: Effect.fn(`AWS.ApiGatewayV2.GetConnection(${stage.LogicalId})`)(function* (
+          request: GetConnectionRequest,
+        ) {
           const endpoint = yield* CallbackUrl;
           return yield* withEndpoint(getConnection(request), endpoint);
         }),
-        deleteConnection: Effect.fn(
-          `AWS.ApiGatewayV2.DeleteConnection(${stage.LogicalId})`,
-        )(function* (request: DeleteConnectionRequest) {
-          const endpoint = yield* CallbackUrl;
-          return yield* withEndpoint(deleteConnection(request), endpoint);
-        }),
+        deleteConnection: Effect.fn(`AWS.ApiGatewayV2.DeleteConnection(${stage.LogicalId})`)(
+          function* (request: DeleteConnectionRequest) {
+            const endpoint = yield* CallbackUrl;
+            return yield* withEndpoint(deleteConnection(request), endpoint);
+          },
+        ),
       };
     });
   }),

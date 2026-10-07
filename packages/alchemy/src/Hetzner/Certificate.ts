@@ -1,4 +1,4 @@
-import { Services } from "@distilled.cloud/hetzner";
+import * as Hetzner from "@distilled.cloud/hetzner";
 import type { GetCertificateResponseCertificate } from "@distilled.cloud/hetzner/certificates";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -14,7 +14,6 @@ import { tagRecord } from "../Tags.ts";
 import { arrayEqualsUnordered } from "../Util/equal.ts";
 import { waitForAction } from "./actions.ts";
 import {
-  alchemyLabelKeys,
   alchemyStackSelector,
   createInternalLabels,
   diffLabels,
@@ -92,9 +91,7 @@ export type ManagedCertificateProps = {
   labels?: Record<string, string>;
 };
 
-export type CertificateProps =
-  | UploadedCertificateProps
-  | ManagedCertificateProps;
+export type CertificateProps = UploadedCertificateProps | ManagedCertificateProps;
 
 export type Certificate = Resource<
   "Hetzner.Certificate",
@@ -171,12 +168,11 @@ export type Certificate = Resource<
  * ```
  *
  * @resource
+ * @product Certificate
  */
 export const Certificate = Resource<Certificate>("Hetzner.Certificate");
 
-export class CertificateNotResolved extends Data.TaggedError(
-  "Hetzner.CertificateNotResolved",
-)<{
+export class CertificateNotResolved extends Data.TaggedError("Hetzner.CertificateNotResolved")<{
   name: string;
 }> {}
 
@@ -204,17 +200,13 @@ const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toStatus = (
-  status: CloudCertificate["status"],
-): CertificateStatus | undefined => {
+const toStatus = (status: CloudCertificate["status"]): CertificateStatus | undefined => {
   if (status == null) return undefined;
   return {
     issuance: status.issuance,
     renewal: status.renewal,
     error:
-      status.error == null
-        ? undefined
-        : { code: status.error.code, message: status.error.message },
+      status.error == null ? undefined : { code: status.error.code, message: status.error.message },
   };
 };
 
@@ -236,43 +228,32 @@ const toAttrs = (cert: CloudCertificate): Certificate["Attributes"] => ({
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.succeed(name ?? existing ?? undefined).pipe(
     Effect.flatMap((resolved) =>
-      resolved !== undefined
-        ? Effect.succeed(resolved)
-        : createPhysicalName({ id, maxLength: 64 }),
+      resolved !== undefined ? Effect.succeed(resolved) : createPhysicalName({ id, maxLength: 64 }),
     ),
   );
 
-const normalizePem = (pem: string | undefined): string =>
-  (pem ?? "").replace(/\r\n/g, "\n").trim();
+const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\r\n/g, "\n").trim();
 
 const getById = (id: number) =>
-  Services.certificates.getCertificate({ id }).pipe(
+  Hetzner.certificates.getCertificate({ id }).pipe(
     Effect.map(({ certificate }) => certificate),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
 const findByName = (name: string) =>
-  Services.certificates
+  Hetzner.certificates
     .listCertificates({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ certificates }) =>
-        certificates.find((cert) => cert.name === name),
-      ),
-    );
+    .pipe(Effect.map(({ certificates }) => certificates.find((cert) => cert.name === name)));
 
 const findByLabels = (labels: Record<string, string>) =>
-  Services.certificates
+  Hetzner.certificates
     .listCertificates({
       label_selector: labelSelector(labels),
       per_page: 50,
     })
     .pipe(Effect.map(({ certificates }) => certificates[0]));
 
-const observe = Effect.fn(function* (input: {
-  id?: number;
-  name?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: number; name?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -286,12 +267,12 @@ const observe = Effect.fn(function* (input: {
 });
 
 const deleteById = (id: number) =>
-  Services.certificates
+  Hetzner.certificates
     .deleteCertificate({ id })
     .pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 const waitForManagedIssuance = (id: number) =>
-  Services.certificates.getCertificate({ id }).pipe(
+  Hetzner.certificates.getCertificate({ id }).pipe(
     Effect.flatMap(({ certificate }) =>
       Effect.gen(function* () {
         const issuance = certificate.status?.issuance;
@@ -299,9 +280,7 @@ const waitForManagedIssuance = (id: number) =>
           return yield* new CertificateIssuanceFailed({
             certificateId: id,
             code: certificate.status?.error?.code,
-            message:
-              certificate.status?.error?.message ??
-              "Certificate issuance failed",
+            message: certificate.status?.error?.message ?? "Certificate issuance failed",
           });
         }
         if (issuance !== undefined && issuance !== "completed") {
@@ -341,7 +320,7 @@ const ensureCreated = Effect.fn(function* ({
 }) {
   const created =
     news.type === "managed"
-      ? yield* Services.certificates
+      ? yield* Hetzner.certificates
           .createCertificate({
             name,
             type: "managed",
@@ -349,7 +328,7 @@ const ensureCreated = Effect.fn(function* ({
             labels: desiredLabels,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)))
-      : yield* Services.certificates
+      : yield* Hetzner.certificates
           .createCertificate({
             name,
             type: "uploaded",
@@ -408,19 +387,11 @@ export const CertificateProvider = () =>
         return undefined;
       }
 
-      const prevCert =
-        olds !== undefined && olds.type !== "managed"
-          ? olds.certificate
-          : undefined;
-      const prevKey =
-        olds !== undefined && olds.type !== "managed"
-          ? olds.privateKey
-          : undefined;
+      const prevCert = olds !== undefined && olds.type !== "managed" ? olds.certificate : undefined;
+      const prevKey = olds !== undefined && olds.type !== "managed" ? olds.privateKey : undefined;
       if (
-        (prevCert !== undefined &&
-          normalizePem(news.certificate) !== normalizePem(prevCert)) ||
-        (prevKey !== undefined &&
-          normalizePem(news.privateKey) !== normalizePem(prevKey))
+        (prevCert !== undefined && normalizePem(news.certificate) !== normalizePem(prevCert)) ||
+        (prevKey !== undefined && normalizePem(news.privateKey) !== normalizePem(prevKey))
       ) {
         return { action: "replace" as const, deleteFirst };
       }
@@ -436,13 +407,11 @@ export const CertificateProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
-      Services.certificates.listCertificates
+      Hetzner.certificates.listCertificates
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -489,8 +458,7 @@ export const CertificateProvider = () =>
           return yield* new CertificateIssuanceFailed({
             certificateId: current.id,
             code: current.status?.error?.code,
-            message:
-              current.status?.error?.message ?? "Certificate issuance failed",
+            message: current.status?.error?.message ?? "Certificate issuance failed",
           });
         }
       }
@@ -500,7 +468,7 @@ export const CertificateProvider = () =>
       const nameChanged = current.name !== name;
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (nameChanged || labelsChanged) {
-        const updated = yield* Services.certificates.updateCertificate({
+        const updated = yield* Hetzner.certificates.updateCertificate({
           id: current.id,
           name: nameChanged ? name : undefined,
           labels: labelsChanged ? desiredLabels : undefined,

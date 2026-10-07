@@ -40,6 +40,4 @@ export interface BatchGetImage extends Binding.Service<
   >
 > {}
 
-export const BatchGetImage = Binding.Service<BatchGetImage>(
-  "AWS.ECR.BatchGetImage",
-);
+export const BatchGetImage = Binding.Service<BatchGetImage>("AWS.ECR.BatchGetImage");

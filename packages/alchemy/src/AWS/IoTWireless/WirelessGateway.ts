@@ -6,17 +6,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readIotWirelessTags,
-  sameShape,
-  syncIotWirelessTags,
-} from "./internal.ts";
+import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
 
 export interface WirelessGatewayProps {
   /**
@@ -96,9 +88,7 @@ export interface WirelessGateway extends Resource<
  *
  * @resource
  */
-export const WirelessGateway = Resource<WirelessGateway>(
-  "AWS.IoTWireless.WirelessGateway",
-);
+export const WirelessGateway = Resource<WirelessGateway>("AWS.IoTWireless.WirelessGateway");
 
 /** The parts of a LoRaWAN gateway spec that form its immutable identity. */
 const gatewayIdentity = (loRaWAN: iotw.LoRaWANGateway | undefined) => ({
@@ -112,33 +102,21 @@ export const WirelessGatewayProvider = () =>
   Provider.effect(
     WirelessGateway,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const getBy = (identifier: string, type: iotw.WirelessGatewayIdType) =>
         iotw
           .getWirelessGateway({ Identifier: identifier, IdentifierType: type })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const observe = Effect.fn(function* (
         output: WirelessGateway["Attributes"] | undefined,
         props: WirelessGatewayProps,
       ) {
         if (output?.wirelessGatewayId !== undefined) {
-          const found = yield* getBy(
-            output.wirelessGatewayId,
-            "WirelessGatewayId",
-          );
+          const found = yield* getBy(output.wirelessGatewayId, "WirelessGatewayId");
           if (found !== undefined) return found;
         }
         // Recover identity by the gateway's unique EUI when state was lost.
@@ -148,10 +126,7 @@ export const WirelessGatewayProvider = () =>
         return undefined;
       });
 
-      const toAttrs = Effect.fn(function* (
-        gateway: iotw.GetWirelessGatewayResponse,
-        name: string,
-      ) {
+      const toAttrs = Effect.fn(function* (gateway: iotw.GetWirelessGatewayResponse, name: string) {
         if (gateway.Id === undefined || gateway.Arn === undefined) {
           return yield* Effect.fail(
             new Error(`IoT Wireless gateway '${name}' returned without Id/Arn`),
@@ -191,8 +166,7 @@ export const WirelessGatewayProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const props = olds ?? { loRaWAN: {} };
-          const name =
-            output?.wirelessGatewayName ?? (yield* createName(id, props));
+          const name = output?.wirelessGatewayName ?? (yield* createName(id, props));
           const gateway = yield* observe(output, props);
           if (gateway === undefined) return undefined;
           const attrs = yield* toAttrs(gateway, name);
@@ -205,19 +179,13 @@ export const WirelessGatewayProvider = () =>
         // place via UpdateWirelessGateway.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            !sameShape(
-              gatewayIdentity(olds?.loRaWAN),
-              gatewayIdentity(news.loRaWAN),
-            )
-          ) {
+          if (!sameShape(gatewayIdentity(olds?.loRaWAN), gatewayIdentity(news.loRaWAN))) {
             return { action: "replace" } as const;
           }
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.wirelessGatewayName ?? (yield* createName(id, news));
+          const name = output?.wirelessGatewayName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -235,11 +203,7 @@ export const WirelessGatewayProvider = () =>
                 LoRaWAN: news.loRaWAN,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             gateway =
               created?.Id !== undefined
                 ? yield* getBy(created.Id, "WirelessGatewayId")
@@ -247,9 +211,7 @@ export const WirelessGatewayProvider = () =>
           }
           if (gateway === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless gateway '${name}' not found after create`,
-              ),
+              new Error(`IoT Wireless gateway '${name}' not found after create`),
             );
           }
           const attrs = yield* toAttrs(gateway, name);
@@ -257,23 +219,15 @@ export const WirelessGatewayProvider = () =>
           // 3. SYNC — apply the mutable-aspect delta from OBSERVED state.
           const nameDelta = gateway.Name !== name;
           const descriptionDelta =
-            news.description !== undefined &&
-            gateway.Description !== news.description;
+            news.description !== undefined && gateway.Description !== news.description;
           const joinFiltersDelta =
             news.loRaWAN.JoinEuiFilters !== undefined &&
-            !sameShape(
-              gateway.LoRaWAN?.JoinEuiFilters,
-              news.loRaWAN.JoinEuiFilters,
-            );
+            !sameShape(gateway.LoRaWAN?.JoinEuiFilters, news.loRaWAN.JoinEuiFilters);
           const netIdFiltersDelta =
             news.loRaWAN.NetIdFilters !== undefined &&
-            !sameShape(
-              gateway.LoRaWAN?.NetIdFilters,
-              news.loRaWAN.NetIdFilters,
-            );
+            !sameShape(gateway.LoRaWAN?.NetIdFilters, news.loRaWAN.NetIdFilters);
           const maxEirpDelta =
-            news.loRaWAN.MaxEirp !== undefined &&
-            gateway.LoRaWAN?.MaxEirp !== news.loRaWAN.MaxEirp;
+            news.loRaWAN.MaxEirp !== undefined && gateway.LoRaWAN?.MaxEirp !== news.loRaWAN.MaxEirp;
           if (
             nameDelta ||
             descriptionDelta ||
@@ -295,15 +249,10 @@ export const WirelessGatewayProvider = () =>
           yield* syncIotWirelessTags(attrs.wirelessGatewayArn, desiredTags);
 
           // 4. RETURN fresh attributes.
-          const final = yield* getBy(
-            attrs.wirelessGatewayId,
-            "WirelessGatewayId",
-          );
+          const final = yield* getBy(attrs.wirelessGatewayId, "WirelessGatewayId");
           if (final === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `IoT Wireless gateway '${name}' vanished during update`,
-              ),
+              new Error(`IoT Wireless gateway '${name}' vanished during update`),
             );
           }
           yield* session.note(attrs.wirelessGatewayId);
@@ -311,12 +260,10 @@ export const WirelessGatewayProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* iotw
-            .deleteWirelessGateway({ Id: output.wirelessGatewayId })
-            .pipe(
-              Effect.asVoid,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* iotw.deleteWirelessGateway({ Id: output.wirelessGatewayId }).pipe(
+            Effect.asVoid,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

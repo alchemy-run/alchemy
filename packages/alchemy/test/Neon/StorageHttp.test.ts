@@ -1,18 +1,18 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
-import { bucketStorageClient, type BucketAttributes } from "@/Neon/Bucket";
-import { providers } from "@/Neon/Providers";
-import { storageBodyBytes } from "@/Neon/Object";
-import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { StorageBucket } from "./fixtures/StorageResources.ts";
-import StorageHttpWorker from "./fixtures/StorageHttpWorker.ts";
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
+import { bucketStorageClient, type BucketAttributes } from "@/Neon/Bucket";
+import { storageBodyBytes } from "@/Neon/Object";
+import { providers } from "@/Neon/Providers";
+import * as Test from "@/Test/Alchemy";
 import StorageHttpLambda from "./fixtures/StorageHttpLambda.ts";
+import StorageHttpWorker from "./fixtures/StorageHttpWorker.ts";
+import { StorageBucket } from "./fixtures/StorageResources.ts";
 
 const { test: workerTest } = Test.make({
   providers: Layer.mergeAll(providers(), Cloudflare.providers()),
@@ -32,21 +32,14 @@ const verify = Effect.fn(function* (url: string, bucket: BucketAttributes) {
     hasAccountKey: false,
   });
   const client = yield* bucketStorageClient(bucket);
-  const bytes = yield* storageBodyBytes(
-    (yield* client.get("external.txt"))?.Body,
-  );
-  expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe(
-    "external roundtrip",
-  );
+  const bytes = yield* storageBodyBytes((yield* client.get("external.txt"))?.Body);
+  expect(yield* Effect.sync(() => new TextDecoder().decode(bytes))).toBe("external roundtrip");
   const scope = { project_id: bucket.projectId, branch_id: bucket.branchId };
   const credentials = (yield* SDK.listCredentials(scope)).credentials.filter(
-    (credential) =>
-      credential.branch_id === bucket.branchId && !credential.revoked_at,
+    (credential) => credential.branch_id === bucket.branchId && !credential.revoked_at,
   );
   expect(
-    credentials
-      .map((credential) => credential.scopes)
-      .sort((a, b) => a.length - b.length),
+    credentials.map((credential) => credential.scopes).sort((a, b) => a.length - b.length),
   ).toEqual([
     ["storage:read"],
     ["storage:read", "storage:write"],
@@ -78,14 +71,25 @@ workerTest.provider(
       })).credentials;
       expect(
         remaining.some(
-          (credential) =>
-            tokens.includes(credential.token_id) && !credential.revoked_at,
+          (credential) => tokens.includes(credential.token_id) && !credential.revoked_at,
         ),
       ).toBe(false);
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 lambdaTest.provider(
@@ -106,12 +110,23 @@ lambdaTest.provider(
       })).credentials;
       expect(
         remaining.some(
-          (credential) =>
-            tokens.includes(credential.token_id) && !credential.revoked_at,
+          (credential) => tokens.includes(credential.token_id) && !credential.revoked_at,
         ),
       ).toBe(false);
       yield* stack.destroy();
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:neon",
+      "provider:neon:branch",
+      "provider:neon:bucket",
+      "provider:neon:object",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

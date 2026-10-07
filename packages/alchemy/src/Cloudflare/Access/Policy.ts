@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -28,12 +27,8 @@ export type PolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
  * raw wire shape there — so these props use the SDK's own unions rather
  * than reusing {@link PolicyRule}.
  */
-export type PolicyExcludeRule = NonNullable<
-  zeroTrust.CreateAccessPolicyRequest["exclude"]
->[number];
-export type PolicyRequireRule = NonNullable<
-  zeroTrust.CreateAccessPolicyRequest["require"]
->[number];
+export type PolicyExcludeRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["exclude"]>[number];
+export type PolicyRequireRule = NonNullable<zeroTrust.CreateAccessPolicyRequest["require"]>[number];
 
 /**
  * Scalar shorthand for rule kinds with a single parameter (and bare names
@@ -99,9 +94,7 @@ const SCALAR_RULE_PARAMS: Record<string, string> = {
  * Expand the scalar shorthand to Cloudflare's wire shape; wire-shaped rules
  * pass through untouched.
  */
-export const normalizePolicyRule = <Rule>(
-  rule: Rule | PolicyRuleShorthand,
-): Rule => {
+export const normalizePolicyRule = <Rule>(rule: Rule | PolicyRuleShorthand): Rule => {
   if (typeof rule === "string") {
     // "everyone" -> { everyone: {} }
     return { [rule]: {} } as Rule;
@@ -127,9 +120,7 @@ export function normalizePolicyRules<Rule>(
 export function normalizePolicyRules<Rule>(
   rules: ReadonlyArray<Rule | PolicyRuleShorthand> | undefined,
 ): Rule[] | undefined {
-  return rules === undefined
-    ? undefined
-    : rules.map((r) => normalizePolicyRule(r));
+  return rules === undefined ? undefined : rules.map((r) => normalizePolicyRule(r));
 }
 
 /**
@@ -384,9 +375,7 @@ export const PolicyProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(
-          new Error("Policy: ensured policy missing id"),
-        );
+        return yield* Effect.fail(new Error("Policy: ensured policy missing id"));
       }
       return {
         policyId: ensured.id,

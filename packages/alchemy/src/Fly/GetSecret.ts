@@ -1,7 +1,4 @@
-import type {
-  AppSecret,
-  GetSecretError,
-} from "@distilled.cloud/fly-io/machines";
+import type { AppSecret, GetSecretError } from "@distilled.cloud/fly-io/machines";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -40,15 +37,12 @@ import type { Secret } from "./Secret.ts";
  * ```
  *
  * @binding
+ * @product Secret
  */
 export interface GetSecret extends Binding.Service<
   GetSecret,
   "Fly.GetSecret",
-  (
-    secret: Secret,
-  ) => Effect.Effect<
-    () => Effect.Effect<AppSecret, GetSecretError, RuntimeContext>
-  >
+  (secret: Secret) => Effect.Effect<() => Effect.Effect<AppSecret, GetSecretError, RuntimeContext>>
 > {}
 
 export const GetSecret = Binding.Service<GetSecret>("Fly.GetSecret");

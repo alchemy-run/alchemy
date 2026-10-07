@@ -1,22 +1,19 @@
 import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Namespace from "../Namespace.ts";
 import { ProviderModePolicy } from "../ProviderMode.ts";
-import { Function } from "./Function.ts";
-import { FunctionRequest } from "./FunctionEnvironment.ts";
-import { FunctionTrigger } from "./FunctionTrigger.ts";
 import type { Bucket } from "./Bucket.ts";
 import {
   BucketEventSource,
   type BucketEventSourceProps,
   type BucketEventSourceService,
 } from "./BucketEventSource.ts";
-import {
-  decodeFunctionTriggerEvent,
-  type BucketEvent,
-} from "./FunctionTriggerEvent.ts";
+import { Function } from "./Function.ts";
+import { FunctionRequest } from "./FunctionEnvironment.ts";
+import { FunctionTrigger } from "./FunctionTrigger.ts";
+import { decodeFunctionTriggerEvent, type BucketEvent } from "./FunctionTriggerEvent.ts";
 
 /**
  * Neon Function HTTP object-event dispatch and deployment wiring.
@@ -33,6 +30,7 @@ import {
  * ```
  *
  * @layer
+ * @product Bucket
  * @provides Neon.BucketEventSource
  */
 export const BucketEventSourceHttp = Layer.effect(
@@ -67,9 +65,7 @@ export const BucketEventSourceHttp = Layer.effect(
       yield* host.route(
         path,
         Effect.gen(function* () {
-          const event = yield* decodeFunctionTriggerEvent(
-            yield* FunctionRequest,
-          );
+          const event = yield* decodeFunctionTriggerEvent(yield* FunctionRequest);
           if (
             event.trigger.type !== "storage_object_created" ||
             event.trigger.name !== triggerName ||

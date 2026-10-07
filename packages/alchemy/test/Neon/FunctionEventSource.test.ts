@@ -1,11 +1,11 @@
-import * as Alchemy from "@/index";
-import { providers } from "@/Neon/Providers";
-import * as Test from "@/Test/Alchemy";
 import * as Api from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Alchemy from "@/index";
+import { providers } from "@/Neon/Providers";
+import * as Test from "@/Test/Alchemy";
 import EventFunction from "./fixtures/function-events.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -44,7 +44,16 @@ test.provider(
       ).toEqual(["schedule", "storage_object_created"]);
       expect(triggers.every((trigger) => trigger.enabled)).toBe(true);
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test(
@@ -72,7 +81,16 @@ test(
     );
     expect(JSON.stringify(events)).not.toContain("outside.txt");
   }),
-  { timeout: 180_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -88,9 +106,16 @@ test(
         until: (body) => JSON.stringify(body).includes('"schedule"'),
       }),
     );
-    expect(events).toEqual(
-      expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]),
-    );
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "schedule" })]));
   }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:bucket",
+      "provider:neon:function",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

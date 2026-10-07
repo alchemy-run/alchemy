@@ -1,10 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  RuntimeStorageMethods,
-  StorageBindingOptions,
-} from "./StorageBinding.ts";
+import type { RuntimeStorageMethods, StorageBindingOptions } from "./StorageBinding.ts";
 
 export interface WriteBucketClient extends RuntimeStorageMethods<
   | "put"
@@ -37,13 +34,11 @@ export interface WriteBucketClient extends RuntimeStorageMethods<
  * ```
  *
  * @binding
+ * @product Bucket
  */
 export interface WriteBucket extends Binding.Service<
   WriteBucket,
   "Neon.WriteBucket",
-  (
-    bucket: Bucket,
-    options?: StorageBindingOptions,
-  ) => Effect.Effect<WriteBucketClient>
+  (bucket: Bucket, options?: StorageBindingOptions) => Effect.Effect<WriteBucketClient>
 > {}
 export const WriteBucket = Binding.Service<WriteBucket>("Neon.WriteBucket");

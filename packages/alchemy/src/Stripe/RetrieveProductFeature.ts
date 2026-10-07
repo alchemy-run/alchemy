@@ -24,6 +24,7 @@ export interface RetrieveProductFeatureRequest extends Omit<
  * ```
  *
  * @binding
+ * @product Product
  */
 export interface RetrieveProductFeature extends Binding.Service<
   RetrieveProductFeature,
@@ -33,11 +34,7 @@ export interface RetrieveProductFeature extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: RetrieveProductFeatureRequest,
-    ) => Effect.Effect<
-      StripeProductFeature,
-      GetProductFeatureError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<StripeProductFeature, GetProductFeatureError, RuntimeContext>
   >
 > {}
 

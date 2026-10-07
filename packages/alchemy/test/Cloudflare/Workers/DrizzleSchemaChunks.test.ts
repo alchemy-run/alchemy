@@ -1,12 +1,12 @@
+import { fileURLToPath } from "node:url";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import type { WorkerBuildOptions } from "@/Cloudflare/Workers/Sources/Rolldown.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { fileURLToPath } from "node:url";
 
 const fixtureMain = fileURLToPath(
   new URL("./fixtures/drizzle-schema-chunks/worker.ts", import.meta.url),
@@ -81,7 +81,10 @@ test(
     );
     expect(body).toContain('"ok":true');
   }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 /**
@@ -124,5 +127,8 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
 );

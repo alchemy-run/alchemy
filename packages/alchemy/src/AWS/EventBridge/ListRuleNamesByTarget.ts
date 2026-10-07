@@ -2,8 +2,7 @@ import type * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListRuleNamesByTargetRequest
-  extends eventbridge.ListRuleNamesByTargetRequest {}
+export interface ListRuleNamesByTargetRequest extends eventbridge.ListRuleNamesByTargetRequest {}
 
 /**
  * Lists the EventBridge rules that route events to a given target ARN

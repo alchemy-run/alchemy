@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Domain } from "@/AWS/SimpleDB";
-import * as Test from "@/Test/Alchemy";
 import * as sdb from "@distilled.cloud/aws/simpledb";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Domain } from "@/AWS/SimpleDB";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,16 +21,11 @@ class DomainStillExists extends Data.TaggedError("DomainStillExists")<{
 const assertDomainDeleted = (domainName: string) =>
   findDomain(domainName).pipe(
     Effect.flatMap((metadata) =>
-      metadata === undefined
-        ? Effect.void
-        : Effect.fail(new DomainStillExists({ domainName })),
+      metadata === undefined ? Effect.void : Effect.fail(new DomainStillExists({ domainName })),
     ),
     Effect.retry({
       while: (e) => e._tag === "DomainStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -67,7 +62,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertDomainDeleted(domain.domainName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:simpledb", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -101,7 +96,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertDomainDeleted(second.domainName);
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:simpledb", "live"], timeout: 120_000 },
 );
 
 test.provider(
@@ -113,5 +108,5 @@ test.provider(
         .pipe(Effect.flip);
       expect(error._tag).toBe("NoSuchDomain");
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:simpledb", "live"], timeout: 60_000 },
 );

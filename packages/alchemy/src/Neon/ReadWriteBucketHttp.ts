@@ -1,14 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ReadWriteBucket } from "./ReadWriteBucket.ts";
 import { makeReadBucketClient } from "./ReadBucketHttp.ts";
-import { makeWriteBucketClient } from "./WriteBucketHttp.ts";
+import { ReadWriteBucket } from "./ReadWriteBucket.ts";
 import { makeStorageBinding, storageHttpLayer } from "./StorageBinding.ts";
+import { makeWriteBucketClient } from "./WriteBucketHttp.ts";
 
 /**
  * One injected or managed credential for both interfaces.
  *
  * @layer
+ * @product Bucket
  * @provides ReadWriteBucket
  */
 export const ReadWriteBucketHttp = Layer.effect(

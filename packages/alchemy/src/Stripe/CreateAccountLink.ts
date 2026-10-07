@@ -27,6 +27,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  * ```
  *
  * @binding
+ * @product Account
  */
 export interface CreateAccountLink extends Binding.Service<
   CreateAccountLink,
@@ -38,6 +39,4 @@ export interface CreateAccountLink extends Binding.Service<
   >
 > {}
 
-export const CreateAccountLink = Binding.Service<CreateAccountLink>(
-  "Stripe.CreateAccountLink",
-);
+export const CreateAccountLink = Binding.Service<CreateAccountLink>("Stripe.CreateAccountLink");

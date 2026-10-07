@@ -33,11 +33,7 @@ export interface ListSessions extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request?: ListSessionsInput,
-    ) => Effect.Effect<emr.ListSessionsResponse, emr.ListSessionsError>
+    (request?: ListSessionsInput) => Effect.Effect<emr.ListSessionsResponse, emr.ListSessionsError>
   >
 > {}
-export const ListSessions = Binding.Service<ListSessions>(
-  "AWS.EMRServerless.ListSessions",
-);
+export const ListSessions = Binding.Service<ListSessions>("AWS.EMRServerless.ListSessions");

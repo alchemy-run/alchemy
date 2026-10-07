@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
-import * as Output from "@/Output";
 import * as ai from "@distilled.cloud/cloudflare/ai";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Schema from "effect/Schema";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -32,7 +32,11 @@ test.provider(
       yield* stack.destroy();
       yield* ai.getModelSchema({ accountId, model: updated.modelName });
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "live"],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -48,9 +52,7 @@ test.provider(
           const model = yield* Cloudflare.AI.Model("Model", {
             modelName: identity.bucketName.pipe(
               Output.map((name) =>
-                name.endsWith("-a")
-                  ? "@cf/baai/bge-m3"
-                  : "@cf/baai/bge-base-en-v1.5",
+                name.endsWith("-a") ? "@cf/baai/bge-m3" : "@cf/baai/bge-base-en-v1.5",
               ),
             ),
           });
@@ -65,9 +67,7 @@ test.provider(
       const initial = yield* stack.deploy(program("a"));
       const replaced = yield* stack.deploy(program("b"));
       expect(replaced.model.modelName).toBe("@cf/baai/bge-base-en-v1.5");
-      expect(replaced.subscription.subscriptionId).not.toBe(
-        initial.subscription.subscriptionId,
-      );
+      expect(replaced.subscription.subscriptionId).not.toBe(initial.subscription.subscriptionId);
       const observed = yield* queues.getSubscription({
         accountId: replaced.subscription.accountId,
         subscriptionId: replaced.subscription.subscriptionId,
@@ -80,7 +80,17 @@ test.provider(
       );
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );
 
 test.provider(
@@ -101,14 +111,11 @@ test.provider(
             main: `${import.meta.dirname}/fixtures/model-batch.ts`,
             env: { AI: Cloudflare.Workers.AI() },
           });
-          const subscription = yield* Cloudflare.Queues.Subscription(
-            "ModelEvents",
-            {
-              source: yield* Cloudflare.AI.Model.ref("Model"),
-              events: ["batch.queued", "batch.succeeded", "batch.failed"],
-              queueId: queue.queueId,
-            },
-          );
+          const subscription = yield* Cloudflare.Queues.Subscription("ModelEvents", {
+            source: yield* Cloudflare.AI.Model.ref("Model"),
+            events: ["batch.queued", "batch.succeeded", "batch.failed"],
+            queueId: queue.queueId,
+          });
           return { queue, worker, subscription };
         }),
       );
@@ -124,11 +131,7 @@ test.provider(
       );
       const batch = yield* client.post(deployed.worker.url!).pipe(
         Effect.flatMap((response) => response.json),
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(
-            Schema.Struct({ request_id: Schema.String }),
-          ),
-        ),
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ request_id: Schema.String }))),
       );
       const bodies: string[] = [];
       const delivered = () =>
@@ -154,8 +157,7 @@ test.provider(
               times: 8,
             }),
           );
-        for (const message of pulled.messages ?? [])
-          if (message.body) bodies.push(message.body);
+        for (const message of pulled.messages ?? []) if (message.body) bodies.push(message.body);
         const acks = (pulled.messages ?? []).flatMap((message) =>
           message.leaseId ? [{ leaseId: message.leaseId }] : [],
         );
@@ -178,5 +180,15 @@ test.provider(
       yield* ai.getModelSchema({ accountId, model: "@cf/baai/bge-m3" });
       yield* stack.destroy();
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
-  { timeout: 120_000, exclusive: true },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ai",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+    exclusive: true,
+  },
 );

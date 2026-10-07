@@ -1,46 +1,33 @@
-import {
-  defineContract,
-  enumType,
-  field,
-  member,
-  model,
-} from "@/Prisma/ORM/index.ts";
-import type { PostgresDatabase } from "@/Prisma/ORM/Postgres.ts";
 import type { ExtractTypeMapsFromContract } from "@prisma/orm-postgres/family-contract/types";
+import type * as Effect from "effect/Effect";
+import { defineContract, enumType, field, member, model } from "@/Prisma/ORM/index.ts";
+import type { PostgresDatabase } from "@/Prisma/ORM/Postgres.ts";
 import type { PostgresAggregateTypes } from "@/Prisma/ORM/PostgresAggregateTypes.ts";
 import type { AggregateTypes } from "./fixtures/client/generated/contract.d.ts";
-import type * as Effect from "effect/Effect";
 
 type Assert<T extends true> = T;
 type Equal<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-    ? true
-    : false;
-type Normalized<T> = T extends object
-  ? { [K in keyof T]: Normalized<T[K]> }
-  : T;
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Normalized<T> = T extends object ? { [K in keyof T]: Normalized<T[K]> } : T;
 export type AggregateParity = Assert<
   Equal<Normalized<PostgresAggregateTypes>, Normalized<AggregateTypes>>
 >;
 
-const contract = defineContract(
-  { namespaces: ["auth"] },
-  ({ field, model }) => ({
-    models: {
-      Account: model("Account", {
-        namespace: "auth",
-        fields: {
-          id: field.int().id().defaultSql("1").sql({ column: "account_id" }),
-          name: field.text(),
-          tags: field.text().many(),
-          nullableTags: field.text().many().optional(),
-          nickname: field.text().optional(),
-          mapped: field.text().column("mapped_name"),
-        },
-      }).sql({ table: "account" }),
-    },
-  }),
-);
+const contract = defineContract({ namespaces: ["auth"] }, ({ field, model }) => ({
+  models: {
+    Account: model("Account", {
+      namespace: "auth",
+      fields: {
+        id: field.int().id().defaultSql("1").sql({ column: "account_id" }),
+        name: field.text(),
+        tags: field.text().many(),
+        nullableTags: field.text().many().optional(),
+        nickname: field.text().optional(),
+        mapped: field.text().column("mapped_name"),
+      },
+    }).sql({ table: "account" }),
+  },
+}));
 type Maps = ExtractTypeMapsFromContract<typeof contract>;
 export type Fields = Assert<
   Equal<
@@ -67,10 +54,7 @@ export type ScalarColumn = Assert<
   >
 >;
 export type ListColumn = Assert<
-  Equal<
-    typeof contract.storage.namespaces.auth.entries.table.account.columns.tags.many,
-    true
-  >
+  Equal<typeof contract.storage.namespaces.auth.entries.table.account.columns.tags.many, true>
 >;
 
 const Status = enumType(
@@ -99,10 +83,7 @@ export type NativeArray = Assert<
   >
 >;
 export type EnumOutput = Assert<
-  Equal<
-    DirectMaps["fieldOutputTypes"]["public"]["Record"]["status"],
-    "active" | "inactive"
-  >
+  Equal<DirectMaps["fieldOutputTypes"]["public"]["Record"]["status"], "active" | "inactive">
 >;
 // @ts-expect-error native enum defaults remain constrained to their declared values
 field.namedType(Status).default("missing");
@@ -119,9 +100,10 @@ export function contractTypes(db: PostgresDatabase<typeof contract>): void {
   db.orm.auth.Account.where({ id: "1" });
   // @ts-expect-error custom namespace models are not also in public
   db.orm.public.Account;
-  const count: Effect.Effect<{ total: number }, unknown> =
-    db.orm.auth.Account.aggregate((aggregate) => ({
+  const count: Effect.Effect<{ total: number }, unknown> = db.orm.auth.Account.aggregate(
+    (aggregate) => ({
       total: aggregate.count(),
-    }));
+    }),
+  );
   void count;
 }

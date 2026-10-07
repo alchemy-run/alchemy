@@ -1,30 +1,23 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetTerminalLocation } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (id: string) =>
   GetTerminalLocation({ location: id }).pipe(
     Effect.map((location) =>
-      "deleted" in location && location.deleted
-        ? ("gone" as const)
-        : ("found" as const),
+      "deleted" in location && location.deleted ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -95,12 +88,8 @@ test.provider(
       expect(fetched.address.country).toEqual(usAddress.country);
       expect(fetched.phone).toEqual("+14155550100");
       expect(fetched.metadata?.region).toEqual("west");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -139,7 +128,10 @@ test.provider(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:terminallocation", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -191,7 +183,10 @@ test.provider(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:terminallocation", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -223,5 +218,8 @@ test.provider(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:terminallocation", "live"],
+    timeout: 120_000,
+  },
 );

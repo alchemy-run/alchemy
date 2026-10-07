@@ -1,3 +1,12 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import {
+  runCompactJob,
+  runGeometricMergeJob,
+  shouldCompact,
+  BLOB_TYPE,
+} from "@/Git/Jobs/Compact.ts";
 /**
  * Object store unit tests (src/Git/Store/ObjectStore.ts, Jobs/Compact.ts)
  * over the bun:sqlite + in-memory blob harness. Every emitted pack is
@@ -15,12 +24,6 @@ import { bufferRandomAccess, ingestPack } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import type { ManifestEntry } from "@/Git/Protocol/Store.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
-import {
-  runCompactJob,
-  runGeometricMergeJob,
-  shouldCompact,
-  BLOB_TYPE,
-} from "@/Git/Jobs/Compact.ts";
 import { packKey, packKeyOf, wirePackId } from "@/Git/Store/Keys.ts";
 import {
   makeObjectStore,
@@ -28,10 +31,7 @@ import {
   WINDOW_BYTES,
   WINDOW_CACHE_BYTES,
 } from "@/Git/Store/ObjectStore.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Stream from "effect/Stream";
 import { concat, verifyPack } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
@@ -43,9 +43,7 @@ const run = <A>(effect: Effect.Effect<A, unknown, RuntimeContext>) =>
     effect.pipe(
       Effect.provide(RuntimeContext.phantom),
       Effect.mapError((e) =>
-        e instanceof Error && !("reason" in e)
-          ? e
-          : new Error(JSON.stringify(e)),
+        e instanceof Error && !("reason" in e) ? e : new Error(JSON.stringify(e)),
       ),
     ),
   );
@@ -75,11 +73,7 @@ const makeFixture = (type: ObjectType, content: Uint8Array) =>
   });
 
 /** A repo with `blobs` incompressible blobs of `blobSize` and `trees` small trees. */
-const seedRepo = (options: {
-  blobs: number;
-  blobSize: number;
-  trees: number;
-}) =>
+const seedRepo = (options: { blobs: number; blobSize: number; trees: number }) =>
   Effect.gen(function* () {
     const sql = makeTestSqlClient();
     const blobs = makeMemoryBlobStore();
@@ -90,12 +84,7 @@ const seedRepo = (options: {
     }
     for (let i = 0; i < options.trees; i++) {
       // Not a real tree encoding; the store never parses tree bytes here.
-      fixtures.push(
-        yield* makeFixture(
-          2,
-          new TextEncoder().encode(`tree ${i} ${"x".repeat(40)}`),
-        ),
-      );
+      fixtures.push(yield* makeFixture(2, new TextEncoder().encode(`tree ${i} ${"x".repeat(40)}`)));
     }
     yield* sql.transactionSync((raw) => {
       for (const f of fixtures) {
@@ -105,20 +94,14 @@ const seedRepo = (options: {
           f.type,
           f.content.length,
           f.zdata.length,
-          f.zdata.buffer.slice(
-            f.zdata.byteOffset,
-            f.zdata.byteOffset + f.zdata.byteLength,
-          ),
+          f.zdata.buffer.slice(f.zdata.byteOffset, f.zdata.byteOffset + f.zdata.byteLength),
         );
       }
     });
     return { sql, blobs, store, fixtures };
   });
 
-const manifestOf = (
-  fixtures: ReadonlyArray<Fixture>,
-  location: ManifestEntry["location"],
-) =>
+const manifestOf = (fixtures: ReadonlyArray<Fixture>, location: ManifestEntry["location"]) =>
   fixtures.map((f): ManifestEntry => ({
     oid: f.oid,
     type: f.type,
@@ -133,9 +116,7 @@ const buildPack = (
   entries: ReadonlyArray<ManifestEntry>,
 ) =>
   Effect.gen(function* () {
-    const body = Array.from(
-      yield* Stream.runCollect(store.packEntries(entries)),
-    );
+    const body = Array.from(yield* Stream.runCollect(store.packEntries(entries)));
     const head = packHeader(entries.length);
     const sha = makeSha1();
     sha.update(head);
@@ -144,10 +125,7 @@ const buildPack = (
   });
 
 /** Parses a pack with the real parser and returns the oids it yields. */
-const parsePack = (
-  pack: Uint8Array,
-  store: ReturnType<typeof makeObjectStore>,
-) =>
+const parsePack = (pack: Uint8Array, store: ReturnType<typeof makeObjectStore>) =>
   Effect.gen(function* () {
     const seen = new Map<string, number>();
     const summary = yield* ingestPack({
@@ -182,52 +160,39 @@ const compactAll = (
     return packIds;
   });
 
-describe("compaction is blob-only", () => {
+describe("compaction is blob-only", { tags: ["unit", "local"] }, () => {
   test("shouldCompact ignores commits/trees; runCompactJob leaves them as rows", async () => {
     await run(
       Effect.gen(function* () {
-        const { sql, blobs, fixtures } = yield* seedRepo({
-          blobs: 5,
-          blobSize: 100,
-          trees: 50,
-        });
+        const { sql, blobs, fixtures } = yield* seedRepo({ blobs: 5, blobSize: 100, trees: 50 });
         expect(BLOB_TYPE).toBe(3);
         // 55 rows total, but only 5 blobs: below a count threshold of 10.
-        expect(
-          yield* shouldCompact(sql, {
-            countThreshold: 10,
-            bytesThreshold: 1 << 30,
-          }),
-        ).toBe(false);
-        expect(
-          yield* shouldCompact(sql, {
-            countThreshold: 5,
-            bytesThreshold: 1 << 30,
-          }),
-        ).toBe(true);
+        expect(yield* shouldCompact(sql, { countThreshold: 10, bytesThreshold: 1 << 30 })).toBe(
+          false,
+        );
+        expect(yield* shouldCompact(sql, { countThreshold: 5, bytesThreshold: 1 << 30 })).toBe(
+          true,
+        );
         const packs = yield* compactAll(sql, blobs);
         expect(packs.length).toBe(1);
-        const rows = yield* sql.all<{
-          location: string;
-          type: number;
-          n: number;
-        }>(
+        const rows = yield* sql.all<{ location: string; type: number; n: number }>(
           `SELECT location, type, COUNT(*) AS n FROM objects GROUP BY location, type ORDER BY location, type`,
         );
         expect(rows).toEqual([
           { location: "pack", type: 3, n: 5 },
           { location: "row", type: 2, n: 50 },
         ]);
-        expect(
-          yield* runCompactJob({ repoId: REPO, sql, blobs }),
-        ).toMatchObject({ moved: 0, more: false });
+        expect(yield* runCompactJob({ repoId: REPO, sql, blobs })).toMatchObject({
+          moved: 0,
+          more: false,
+        });
         expect(fixtures.length).toBe(55);
       }),
     );
   });
 });
 
-describe("packEntries", () => {
+describe("packEntries", { tags: ["unit", "local"] }, () => {
   test(
     "rows + multi-window pack (with straddling objects) emit a pack the parser accepts",
     async () => {
@@ -266,16 +231,11 @@ describe("packEntries", () => {
           const parsed = yield* parsePack(pack, store);
           expect(parsed.count).toBe(340);
           expect(parsed.seen.size).toBe(340);
-          for (const f of fixtures)
-            expect(parsed.seen.get(f.oid)).toBe(f.content.length);
+          for (const f of fixtures) expect(parsed.seen.get(f.oid)).toBe(f.content.length);
 
           // One ranged GET per window touched, not per object.
-          const windowGets = blobs.gets.filter(
-            (g) => g.length === WINDOW_BYTES,
-          );
-          const straddleGets = blobs.gets.filter(
-            (g) => g.length !== WINDOW_BYTES,
-          );
+          const windowGets = blobs.gets.filter((g) => g.length === WINDOW_BYTES);
+          const straddleGets = blobs.gets.filter((g) => g.length !== WINDOW_BYTES);
           expect(windowGets.length).toBe(3);
           expect(straddleGets.length).toBeLessThanOrEqual(2); // ≤ one per window edge
         }),
@@ -307,25 +267,16 @@ describe("packEntries", () => {
   test("a truly absent object fails the stream instead of emitting a short pack", async () => {
     await run(
       Effect.gen(function* () {
-        const { store, fixtures } = yield* seedRepo({
-          blobs: 2,
-          blobSize: 100,
-          trees: 0,
-        });
-        const ghost = {
-          ...manifestOf(fixtures, "row")[0]!,
-          oid: "0".repeat(40) as Oid,
-        };
-        const result = yield* Effect.result(
-          Stream.runCollect(store.packEntries([ghost])),
-        );
+        const { store, fixtures } = yield* seedRepo({ blobs: 2, blobSize: 100, trees: 0 });
+        const ghost = { ...manifestOf(fixtures, "row")[0]!, oid: "0".repeat(40) as Oid };
+        const result = yield* Effect.result(Stream.runCollect(store.packEntries([ghost])));
         expect(result._tag).toBe("Failure");
       }),
     );
   });
 });
 
-describe("readContentBatch", () => {
+describe("readContentBatch", { tags: ["unit", "local"] }, () => {
   test("returns inflated content for rows and packed objects alike", async () => {
     await run(
       Effect.gen(function* () {
@@ -345,7 +296,7 @@ describe("readContentBatch", () => {
   });
 });
 
-describe("window cache", () => {
+describe("window cache", { tags: ["unit", "local"] }, () => {
   test(
     "is bounded by WINDOW_CACHE_BYTES: re-reading the first of nine windows refetches",
     async () => {
@@ -367,11 +318,7 @@ describe("window cache", () => {
           expect(out.moved).toBe(36);
           expect(WINDOW_CACHE_BYTES / WINDOW_BYTES).toBe(8);
           const sorted = [...fixtures];
-          const order = yield* sql.all<{
-            oid: string;
-            pack_offset: number;
-            zsize: number;
-          }>(
+          const order = yield* sql.all<{ oid: string; pack_offset: number; zsize: number }>(
             `SELECT oid, pack_offset, zsize FROM objects ORDER BY pack_offset`,
           );
           const byOid = new Map(sorted.map((f) => [f.oid, f]));
@@ -405,25 +352,16 @@ describe("window cache", () => {
   );
 });
 
-describe("insertStagedBatch", () => {
+describe("insertStagedBatch", { tags: ["unit", "local"] }, () => {
   test("stages a batch with multi-row inserts; staged rows are invisible to live reads", async () => {
     await run(
       Effect.gen(function* () {
         const sql = makeTestSqlClient();
-        const store = makeObjectStore({
-          sql,
-          blobs: makeMemoryBlobStore(),
-          repoId: REPO,
-        });
+        const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: REPO });
         const objects = [];
         for (let i = 0; i < STAGE_INSERT_ROWS * 2 + 7; i++) {
           const f = yield* makeFixture(3, bytes(64, i + 1));
-          objects.push({
-            oid: f.oid,
-            type: f.type,
-            size: f.content.length,
-            zdata: f.zdata,
-          });
+          objects.push({ oid: f.oid, type: f.type, size: f.content.length, zdata: f.zdata });
         }
         yield* store.insertStagedBatch("push-A", objects);
         const staged = yield* sql.first<{ n: number }>(
@@ -439,20 +377,11 @@ describe("insertStagedBatch", () => {
     await run(
       Effect.gen(function* () {
         const sql = makeTestSqlClient();
-        const store = makeObjectStore({
-          sql,
-          blobs: makeMemoryBlobStore(),
-          repoId: REPO,
-        });
+        const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: REPO });
         const objects = [];
         for (let i = 0; i < 6; i++) {
           const f = yield* makeFixture(3, bytes(64, i + 300));
-          objects.push({
-            oid: f.oid,
-            type: f.type,
-            size: f.content.length,
-            zdata: f.zdata,
-          });
+          objects.push({ oid: f.oid, type: f.type, size: f.content.length, zdata: f.zdata });
         }
         yield* sql.run(
           `INSERT INTO pushes (push_id, started_at, state) VALUES ('push-live', ?, 'committed')`,
@@ -489,20 +418,11 @@ describe("insertStagedBatch", () => {
     await run(
       Effect.gen(function* () {
         const sql = makeTestSqlClient();
-        const store = makeObjectStore({
-          sql,
-          blobs: makeMemoryBlobStore(),
-          repoId: REPO,
-        });
+        const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: REPO });
         const objects = [];
         for (let i = 0; i < 10; i++) {
           const f = yield* makeFixture(3, bytes(64, i + 100));
-          objects.push({
-            oid: f.oid,
-            type: f.type,
-            size: f.content.length,
-            zdata: f.zdata,
-          });
+          objects.push({ oid: f.oid, type: f.type, size: f.content.length, zdata: f.zdata });
         }
         yield* store.insertStagedBatch("push-crashed", objects.slice(0, 4));
         yield* store.insertStagedBatch("push-B", objects);
@@ -510,10 +430,7 @@ describe("insertStagedBatch", () => {
           `SELECT staged_push, COUNT(*) AS n FROM objects GROUP BY staged_push`,
         );
         expect(byPush).toEqual([{ staged_push: "push-B", n: 10 }]);
-        yield* sql.run(
-          `UPDATE objects SET staged_push = NULL WHERE oid = ?`,
-          objects[0]!.oid,
-        );
+        yield* sql.run(`UPDATE objects SET staged_push = NULL WHERE oid = ?`, objects[0]!.oid);
         yield* store.insertStagedBatch("push-C", objects.slice(0, 2));
         const live = yield* sql.first<{ staged_push: string | null }>(
           `SELECT staged_push FROM objects WHERE oid = ?`,
@@ -530,7 +447,7 @@ describe("insertStagedBatch", () => {
   });
 });
 
-describe("promoted wire packs (DESIGN §22.5)", () => {
+describe("promoted wire packs (DESIGN §22.5)", { tags: ["unit", "local"] }, () => {
   /** Lays fixtures out the way a wire pack does: typeSize header + zdata per entry. */
   const layout = (fixtures: ReadonlyArray<Fixture>, base: number) => {
     const pieces: Array<Uint8Array> = [new Uint8Array(base)];
@@ -552,8 +469,7 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
         const blobs = makeMemoryBlobStore();
         const store = makeObjectStore({ sql, blobs, repoId: REPO });
         const fixtures: Array<Fixture> = [];
-        for (let i = 0; i < 40; i++)
-          fixtures.push(yield* makeFixture(3, bytes(3000, i + 1)));
+        for (let i = 0; i < 40; i++) fixtures.push(yield* makeFixture(3, bytes(3000, i + 1)));
         const packId = wirePackId("01RECEIVE00000000000000000");
         const { bytes: wire, offsets } = layout(fixtures, 137); // 137 bytes of pkt-line commands first
         yield* blobs.put(packKeyOf(REPO, packId), wire);
@@ -568,17 +484,11 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
             pack: { packId, offset: offsets.get(f.oid)! },
           })),
         );
-        const staged = yield* sql.all<{
-          location: string;
-          n: number;
-          withBlob: number;
-        }>(
+        const staged = yield* sql.all<{ location: string; n: number; withBlob: number }>(
           `SELECT location, COUNT(*) AS n, SUM(zdata IS NOT NULL) AS withBlob FROM objects GROUP BY location`,
         );
         expect(staged).toEqual([{ location: "pack", n: 40, withBlob: 0 }]);
-        yield* sql.run(
-          `UPDATE objects SET staged_push = NULL WHERE staged_push = 'push-P'`,
-        );
+        yield* sql.run(`UPDATE objects SET staged_push = NULL WHERE staged_push = 'push-P'`);
         // Single reads, batched reads, and pack emission all resolve the wire key.
         const one = yield* store.readContent(fixtures[7]!.oid);
         expect(Array.from(one)).toEqual(Array.from(fixtures[7]!.content));
@@ -588,11 +498,7 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
         expect(verifyPack(pack).error).toBeUndefined();
         const parsed = yield* parsePack(
           pack,
-          makeObjectStore({
-            sql: makeTestSqlClient(),
-            blobs: makeMemoryBlobStore(),
-            repoId: "X",
-          }),
+          makeObjectStore({ sql: makeTestSqlClient(), blobs: makeMemoryBlobStore(), repoId: "X" }),
         );
         expect(parsed.seen.size).toBe(40);
       }),
@@ -664,33 +570,20 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
   });
 });
 
-describe("prepared object view", () => {
+describe("prepared object view", { tags: ["unit", "local"] }, () => {
   test("reads only its own staged objects and live objects, with a size cap", () =>
     run(
       Effect.gen(function* () {
         const sql = makeTestSqlClient();
-        const store = makeObjectStore({
-          sql,
-          blobs: makeMemoryBlobStore(),
-          repoId: REPO,
-        });
+        const store = makeObjectStore({ sql, blobs: makeMemoryBlobStore(), repoId: REPO });
         const own = yield* makeFixture(3, new TextEncoder().encode("own"));
         const other = yield* makeFixture(3, new TextEncoder().encode("other"));
         yield* store.insertStaged("mine", { ...own, size: own.content.length });
-        yield* store.insertStaged("theirs", {
-          ...other,
-          size: other.content.length,
-        });
+        yield* store.insertStaged("theirs", { ...other, size: other.content.length });
         expect(yield* store.getMeta(own.oid)).toBeUndefined();
-        expect(
-          (yield* store.readPrepared("mine", own.oid, 3))?.content,
-        ).toEqual(own.content);
-        expect(
-          yield* store.readPrepared("mine", other.oid, 100),
-        ).toBeUndefined();
-        const tooBig = yield* Effect.result(
-          store.readPrepared("mine", own.oid, 2),
-        );
+        expect((yield* store.readPrepared("mine", own.oid, 3))?.content).toEqual(own.content);
+        expect(yield* store.readPrepared("mine", other.oid, 100)).toBeUndefined();
+        const tooBig = yield* Effect.result(store.readPrepared("mine", own.oid, 2));
         expect(tooBig._tag).toBe("Failure");
       }),
     ));

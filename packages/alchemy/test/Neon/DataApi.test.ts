@@ -1,3 +1,7 @@
+import * as SDK from "@distilled.cloud/neon";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { adopt } from "@/AdoptPolicy.ts";
 import { Auth } from "@/Neon/Auth.ts";
 import { Branch } from "@/Neon/Branch.ts";
@@ -5,10 +9,6 @@ import { DataApi } from "@/Neon/DataApi.ts";
 import { Project, waitForOperations } from "@/Neon/Project.ts";
 import { providers } from "@/Neon/Providers.ts";
 import * as Test from "@/Test/Alchemy";
-import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -18,16 +18,10 @@ test.provider(
     Effect.gen(function* () {
       const provider = yield* DataApi.Provider;
       const missingScope = {
-        branch: {
-          projectId: "uncreated-project",
-          branchId: "uncreated-branch",
-        },
+        branch: { projectId: "uncreated-project", branchId: "uncreated-branch" },
       };
       const partialScope = {
-        branch: {
-          projectId: "uncreated-project",
-          branchId: "uncreated-branch",
-        },
+        branch: { projectId: "uncreated-project", branchId: "uncreated-branch" },
       };
       yield* Effect.sync(() => {
         Reflect.deleteProperty(missingScope, "branch");
@@ -50,6 +44,7 @@ test.provider(
         ).toBeUndefined();
       }
     }),
+  { tags: ["provider:neon", "provider:neon:dataapi", "live"] },
 );
 
 test.provider(
@@ -57,25 +52,18 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const program = (
-        selection: "infer" | "selected" | "explicit",
-        rows = 10,
-      ) =>
+      const program = (selection: "infer" | "selected" | "explicit", rows = 10) =>
         Effect.gen(function* () {
           const project = yield* Project("SelectedDatabaseProject", {
             region: "aws-us-east-2",
             databaseName: "selected_app",
           });
-          const auth = yield* Auth("SelectedDatabaseAuth", {
-            project,
-            database: "selected_app",
-          });
+          const auth = yield* Auth("SelectedDatabaseAuth", { project, database: "selected_app" });
           const api = yield* DataApi("SelectedDatabaseApi", {
             branch: {
               projectId: auth.projectId,
               branchId: auth.branchId,
-              databaseName:
-                selection === "selected" ? project.databaseName : undefined,
+              databaseName: selection === "selected" ? project.databaseName : undefined,
             },
             database: selection === "explicit" ? "selected_app" : undefined,
             authProvider: "neon_auth",
@@ -103,14 +91,10 @@ test.provider(
       expect(
         yield* stack.deploy(program("infer", 50)).pipe(
           Effect.as(false),
-          Effect.catchTag("InvalidDataApiConfiguration", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("InvalidDataApiConfiguration", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(10);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(10);
       yield* stack.destroy();
       expect(
         yield* SDK.getProjectBranchDataAPI(request).pipe(
@@ -120,7 +104,16 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -129,9 +122,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const base = Effect.gen(function* () {
-        const project = yield* Project("DataAdoptionProject", {
-          region: "aws-us-east-2",
-        });
+        const project = yield* Project("DataAdoptionProject", { region: "aws-us-east-2" });
         return yield* Auth("DataAdoptionAuth", { project });
       });
       const auth = yield* stack.deploy(base);
@@ -161,14 +152,10 @@ test.provider(
           Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(10);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(10);
       const adopted = yield* stack.deploy(program(true));
       expect(adopted.database).toBe(auth.database);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(20);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(20);
       yield* stack.destroy();
       expect(
         yield* SDK.getProjectBranchDataAPI(request).pipe(
@@ -178,7 +165,16 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -188,14 +184,10 @@ test.provider(
       yield* stack.destroy();
       const program = (second: boolean) =>
         Effect.gen(function* () {
-          const project = yield* Project("DataScopeProject", {
-            region: "aws-us-east-2",
-          });
+          const project = yield* Project("DataScopeProject", { region: "aws-us-east-2" });
           const a = yield* Branch("DataScopeA", { project });
           const authA = yield* Auth("DataScopeAuthA", { branch: a });
-          const b = second
-            ? yield* Branch("DataScopeB", { project })
-            : undefined;
+          const b = second ? yield* Branch("DataScopeB", { project }) : undefined;
           const auth = b ? yield* Auth("DataScopeAuthB", { branch: b }) : authA;
           const api = yield* DataApi("DataScopeApi", {
             branch: { projectId: auth.projectId, branchId: auth.branchId },
@@ -219,10 +211,8 @@ test.provider(
         ),
       ).toBe(true);
       expect(
-        (yield* SDK.getNeonAuth({
-          project_id: first.api.projectId,
-          branch_id: first.api.branchId,
-        })).base_url,
+        (yield* SDK.getNeonAuth({ project_id: first.api.projectId, branch_id: first.api.branchId }))
+          .base_url,
       ).toBeDefined();
       yield* stack.destroy();
       expect(
@@ -237,7 +227,17 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -247,9 +247,7 @@ test.provider(
       yield* stack.destroy();
       const application = (rows: number | undefined) =>
         Effect.gen(function* () {
-          const project = yield* Project("DataApiProject", {
-            region: "aws-us-east-2",
-          });
+          const project = yield* Project("DataApiProject", { region: "aws-us-east-2" });
           const branch = yield* Branch("DataApiBranch", { project });
           const auth = yield* Auth("DataApiAuth", { branch });
           const api = yield* DataApi("DataApi", {
@@ -265,27 +263,19 @@ test.provider(
         branch_id: first.api.branchId,
         database_name: first.api.database,
       };
-      expect((yield* SDK.getProjectBranchDataAPI(request)).url).toBe(
-        first.api.url,
-      );
+      expect((yield* SDK.getProjectBranchDataAPI(request)).url).toBe(first.api.url);
       const unchanged = yield* stack.deploy(application(10));
       expect(unchanged.api.url).toBe(first.api.url);
       const updated = yield* stack.deploy(application(20));
       expect(updated.api.url).toBe(first.api.url);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(20);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(20);
       expect(
         yield* stack.deploy(application(undefined)).pipe(
           Effect.as(false),
-          Effect.catchTag("InvalidDataApiConfiguration", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("InvalidDataApiConfiguration", () => Effect.succeed(true)),
         ),
       ).toBe(true);
-      expect(
-        (yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows,
-      ).toBe(20);
+      expect((yield* SDK.getProjectBranchDataAPI(request)).settings?.db_max_rows).toBe(20);
       const http = yield* HttpClient.HttpClient;
       const denied = yield* http.get(first.api.url, {
         headers: { authorization: "Bearer invalid-user-token" },
@@ -303,5 +293,15 @@ test.provider(
       ).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    tags: [
+      "provider:neon",
+      "provider:neon:auth",
+      "provider:neon:branch",
+      "provider:neon:dataapi",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

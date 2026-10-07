@@ -29,14 +29,9 @@ describe("Prisma optional peers", (it) => {
               {
                 name: "reject-optional-prisma-runtime",
                 setup(build) {
-                  build.onResolve(
-                    { filter: /^(@prisma\/orm-|arktype(?:\/|$))/ },
-                    (args) => {
-                      throw new Error(
-                        `Unexpected optional runtime import: ${args.path}`,
-                      );
-                    },
-                  );
+                  build.onResolve({ filter: /^(@prisma\/orm-|arktype(?:\/|$))/ }, (args) => {
+                    throw new Error(`Unexpected optional runtime import: ${args.path}`);
+                  });
                 },
               },
             ],
@@ -45,5 +40,6 @@ describe("Prisma optional peers", (it) => {
         expect(result.success).toBe(true);
         expect(result.logs.filter((log) => log.level === "error")).toEqual([]);
       }),
+    { tags: ["unit", "provider:prisma", "provider:prisma:orm", "local"] },
   );
 });

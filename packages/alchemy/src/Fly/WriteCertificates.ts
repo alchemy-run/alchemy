@@ -45,6 +45,7 @@ import type { App } from "./App.ts";
  * ```
  *
  * @binding
+ * @product Certificate
  */
 export interface WriteCertificates extends Binding.Service<
   WriteCertificates,
@@ -52,9 +53,7 @@ export interface WriteCertificates extends Binding.Service<
   (app: App) => Effect.Effect<WriteCertificatesClient>
 > {}
 
-export const WriteCertificates = Binding.Service<WriteCertificates>(
-  "Fly.WriteCertificates",
-);
+export const WriteCertificates = Binding.Service<WriteCertificates>("Fly.WriteCertificates");
 
 export interface UploadCertificateRequest {
   readonly hostname: string;
@@ -69,11 +68,7 @@ export interface WriteCertificatesClient {
   /** Request a Fly-managed (Let's Encrypt) certificate. Idempotent. */
   request(
     hostname: string,
-  ): Effect.Effect<
-    CertificateDetail | undefined,
-    CreateAppAcmeCertificateError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<CertificateDetail | undefined, CreateAppAcmeCertificateError, RuntimeContext>;
   /** Upload a custom PEM. Replaces an existing custom certificate. */
   upload(
     request: UploadCertificateRequest,
@@ -85,21 +80,11 @@ export interface WriteCertificatesClient {
   /** Re-run Fly's validation checks for the hostname. */
   check(
     hostname: string,
-  ): Effect.Effect<
-    CertificateCheckResponse,
-    CheckAppCertificateError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<CertificateCheckResponse, CheckAppCertificateError, RuntimeContext>;
   /** The certificate for a hostname, or `undefined`. */
   get(
     hostname: string,
-  ): Effect.Effect<
-    CertificateDetail | undefined,
-    GetAppCertificateError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<CertificateDetail | undefined, GetAppCertificateError, RuntimeContext>;
   /** Remove the hostname's certificate. Missing counts as removed. */
-  remove(
-    hostname: string,
-  ): Effect.Effect<void, DeleteAppCertificateError, RuntimeContext>;
+  remove(hostname: string): Effect.Effect<void, DeleteAppCertificateError, RuntimeContext>;
 }

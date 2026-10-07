@@ -14,9 +14,9 @@ export interface InvokeFunctionClient {
 }
 
 import * as Data from "effect/Data";
-export class InvokeFunctionError extends Data.TaggedError(
-  "InvokeFunctionError",
-)<{ message: string }> {}
+export class InvokeFunctionError extends Data.TaggedError("InvokeFunctionError")<{
+  message: string;
+}> {}
 
 /**
  * Bind a public Function URL to any Alchemy runtime host.
@@ -29,12 +29,11 @@ export class InvokeFunctionError extends Data.TaggedError(
  * ```
  *
  * @binding
+ * @product Function
  */
 export interface InvokeFunction extends Binding.Service<
   InvokeFunction,
   "Neon.InvokeFunction",
   (fn: Function) => Effect.Effect<InvokeFunctionClient>
 > {}
-export const InvokeFunction = Binding.Service<InvokeFunction>(
-  "Neon.InvokeFunction",
-);
+export const InvokeFunction = Binding.Service<InvokeFunction>("Neon.InvokeFunction");

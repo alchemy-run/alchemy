@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
 // On the standard testing account every MCN call fails with the typed
@@ -44,10 +41,7 @@ const expectGone = (accountId: string, syncId: string) =>
     Effect.catchTag("CatalogSyncNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SyncNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -70,9 +64,7 @@ test.provider(
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* mcn
-        .listCatalogSyncs({ accountId })
-        .pipe(Effect.flip);
+      const error = yield* mcn.listCatalogSyncs({ accountId }).pipe(Effect.flip);
       expect(error._tag).toEqual("FeatureNotEnabled");
 
       const createError = yield* mcn
@@ -87,6 +79,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"] },
 );
 
 test.provider.skipIf(!entitled)(
@@ -141,7 +134,10 @@ test.provider.skipIf(!entitled)(
 
       yield* expectGone(accountId, sync.syncId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
+    timeout: 120_000,
+  },
 );
 
 // On unentitled accounts `list()` swallows the typed `FeatureNotEnabled`
@@ -154,9 +150,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicCloudNetworking.CatalogSync,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicCloudNetworking.CatalogSync);
 
       const before = yield* provider.list();
       expect(Array.isArray(before)).toBe(true);
@@ -183,7 +177,10 @@ test.provider(
 
       yield* expectGone(deployed.accountId, deployed.syncId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider.skipIf(!entitled)(
@@ -222,5 +219,8 @@ test.provider.skipIf(!entitled)(
 
       yield* expectGone(accountId, replaced.syncId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:magiccloudnetworking", "live"],
+    timeout: 120_000,
+  },
 );

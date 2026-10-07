@@ -1,19 +1,16 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { GetPaymentMethodConfiguration } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -99,7 +96,10 @@ test.provider(
       });
       expect(deactivated.active).toEqual(false);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:paymentmethodconfiguration", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
@@ -117,13 +117,9 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Stripe.PaymentMethodConfiguration,
-      );
+      const provider = yield* Provider.findProvider(Stripe.PaymentMethodConfiguration);
       const all = yield* provider.list();
-      const found = all.find(
-        (configuration) => configuration.id === deployed.id,
-      );
+      const found = all.find((configuration) => configuration.id === deployed.id);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(deployed.name);
       expect(found?.isDefault).toEqual(false);
@@ -135,9 +131,10 @@ test.provider(
       expect(inactive).toEqual("inactive");
 
       const after = yield* provider.list();
-      expect(
-        after.find((configuration) => configuration.id === deployed.id),
-      ).toBeUndefined();
+      expect(after.find((configuration) => configuration.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:stripe", "provider:stripe:paymentmethodconfiguration", "live"],
+    timeout: 120_000,
+  },
 );

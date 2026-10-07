@@ -1,9 +1,3 @@
-import { AlchemyContext } from "@/AlchemyContext";
-import { AuthProviders } from "@/Auth/AuthProvider";
-import * as CliKit from "@/Cli/CliKit";
-import * as Provider from "@/Provider";
-import * as Prisma from "@/Prisma";
-import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -13,12 +7,28 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { v4 as uuidv4 } from "uuid";
+import { AlchemyContext } from "@/AlchemyContext";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts";
+import { AuthProviders } from "@/Auth/AuthProvider";
+import * as CliKit from "@/Cli/CliKit";
+import * as Prisma from "@/Prisma";
+import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
+import * as Provider from "@/Provider";
+import { PlatformServices } from "@/Util/PlatformServices";
+import { testStackContext } from "./fixtures/StackContext.ts";
 
 const devAlchemyContext = Layer.succeed(AlchemyContext, {
   dotAlchemy: ".alchemy-test",
   dev: true,
   adopt: false,
 });
+
+// What `Stack.make` supplies to a stack's `providers` layer.
+const stackProvidedServices = Layer.mergeAll(
+  testStackContext,
+  PlatformServices,
+  Layer.effect(ArtifactStore, Effect.sync(createArtifactStore)),
+);
 
 const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -27,6 +37,7 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         // The dual registration always carries the (lazy) management-api
         // layer; it registers auth at build without resolving credentials.
         Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+        Layer.provide(stackProvidedServices),
       ),
     ),
     Effect.provide(devAlchemyContext),
@@ -44,7 +55,7 @@ const reconcileInput = (id: string, news: unknown, output?: unknown) =>
     bindings: [],
   }) as never;
 
-describe("Prisma providers", () => {
+describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect(
     "registers Prisma auth without resolving credentials",
     () =>
@@ -54,164 +65,164 @@ describe("Prisma providers", () => {
         yield* Layer.build(
           Prisma.providers().pipe(
             Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
+            Layer.provide(stackProvidedServices),
           ),
         );
 
         expect(authProviders.Prisma?.name).toBe("Prisma");
       }).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ CI: true }))),
         Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({
-              CI: true,
-            }),
-          ),
-        ),
-        Effect.provide(
-          Layer.succeed(AlchemyContext, {
-            dotAlchemy: ".alchemy-test",
-            dev: false,
-            adopt: false,
-          }),
+          Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
         ),
         Effect.scoped,
       ),
     { timeout: 30_000 },
   );
 
-  it.effect("registers every Prisma resource provider", () =>
-    Effect.gen(function* () {
-      const resourceTypes = [
-        Prisma.Project.Type,
-        Prisma.Database.Type,
-        Prisma.Connection.Type,
-        Prisma.Branch.Type,
-        Prisma.Bucket.Type,
-        Prisma.BucketAccessKey.Type,
-        Prisma.Compute.Type,
-        Prisma.App.Type,
-        Prisma.Deployment.Type,
-        Prisma.CustomDomain.Type,
-        Prisma.EnvironmentVariable.Type,
-        Prisma.SourceRepository.Type,
-      ];
-      const expectedStables = new Map([
-        [Prisma.Project.Type, ["projectId"]],
-        [Prisma.Database.Type, ["databaseId"]],
-        [Prisma.Connection.Type, ["connectionId"]],
-        [Prisma.Branch.Type, ["branchId"]],
-        [Prisma.Bucket.Type, ["bucketId"]],
-        [
+  it.effect(
+    "registers every Prisma resource provider",
+    () =>
+      Effect.gen(function* () {
+        const resourceTypes = [
+          Prisma.Project.Type,
+          Prisma.Database.Type,
+          Prisma.Connection.Type,
+          Prisma.Branch.Type,
+          Prisma.Bucket.Type,
           Prisma.BucketAccessKey.Type,
+          Prisma.Compute.Type,
+          Prisma.App.Type,
+          Prisma.Deployment.Type,
+          Prisma.CustomDomain.Type,
+          Prisma.EnvironmentVariable.Type,
+          Prisma.SourceRepository.Type,
+        ];
+        const expectedStables = new Map([
+          [Prisma.Project.Type, ["projectId"]],
+          [Prisma.Database.Type, ["databaseId"]],
+          [Prisma.Connection.Type, ["connectionId"]],
+          [Prisma.Branch.Type, ["branchId"]],
+          [Prisma.Bucket.Type, ["bucketId"]],
           [
-            "bucketAccessKeyId",
-            "bucketId",
-            "accessKeyId",
-            "secretAccessKey",
-            "endpoint",
-            "bucketName",
+            Prisma.BucketAccessKey.Type,
+            [
+              "bucketAccessKeyId",
+              "bucketId",
+              "accessKeyId",
+              "secretAccessKey",
+              "endpoint",
+              "bucketName",
+            ],
           ],
-        ],
-        [Prisma.Compute.Type, ["appId"]],
-        [Prisma.App.Type, ["appId"]],
-        [Prisma.Deployment.Type, ["deploymentId"]],
-        [Prisma.CustomDomain.Type, ["customDomainId"]],
-        [Prisma.EnvironmentVariable.Type, ["environmentVariableId"]],
-        [Prisma.SourceRepository.Type, ["sourceRepositoryId"]],
-      ]);
+          [Prisma.Compute.Type, ["appId"]],
+          [Prisma.App.Type, ["appId"]],
+          [Prisma.Deployment.Type, ["deploymentId"]],
+          [Prisma.CustomDomain.Type, ["customDomainId"]],
+          [Prisma.EnvironmentVariable.Type, ["environmentVariableId"]],
+          [Prisma.SourceRepository.Type, ["sourceRepositoryId"]],
+        ]);
 
-      const providers = yield* Effect.all(
-        resourceTypes.map((type) => Provider.findProviderByType(type as any)),
-        { concurrency: "unbounded" },
-      );
+        const providers = yield* Effect.all(
+          resourceTypes.map((type) => Provider.findProviderByType(type as any)),
+          { concurrency: "unbounded" },
+        );
 
-      expect(providers).toHaveLength(resourceTypes.length);
-      for (const provider of providers) {
-        expect(typeof provider.reconcile).toBe("function");
-        expect(typeof provider.delete).toBe("function");
-        // Lookup resolves the concrete local variant in dev.
-        expect(provider.mode).toBe("local");
-      }
-      for (let i = 0; i < resourceTypes.length; i += 1) {
-        const provider = providers[i]!;
-        expect(provider.stables).toEqual(expectedStables.get(resourceTypes[i]));
-      }
-    }).pipe(providePrismaDev),
+        expect(providers).toHaveLength(resourceTypes.length);
+        for (const provider of providers) {
+          expect(typeof provider.reconcile).toBe("function");
+          expect(typeof provider.delete).toBe("function");
+          // Lookup resolves the concrete local variant in dev.
+          expect(provider.mode).toBe("local");
+        }
+        for (let i = 0; i < resourceTypes.length; i += 1) {
+          const provider = providers[i]!;
+          expect(provider.stables).toEqual(expectedStables.get(resourceTypes[i]));
+        }
+      }).pipe(providePrismaDev),
+    {
+      tags: [
+        "provider:prisma:app",
+        "provider:prisma:branch",
+        "provider:prisma:bucket",
+        "provider:prisma:bucketaccesskey",
+        "provider:prisma:compute",
+        "provider:prisma:connection",
+        "provider:prisma:customdomain",
+        "provider:prisma:database",
+        "provider:prisma:deployment",
+        "provider:prisma:environmentvariable",
+        "provider:prisma:project",
+        "provider:prisma:sourcerepository",
+      ],
+    },
   );
 
-  it.effect("uses tokenless dev providers from Prisma.providers()", () =>
-    Effect.gen(function* () {
-      const projectProvider = yield* Provider.findProviderByType(
-        Prisma.Project.Type as any,
-      );
-      const appProvider = yield* Provider.findProviderByType(
-        Prisma.App.Type as any,
-      );
-      const envProvider = yield* Provider.findProviderByType(
-        Prisma.EnvironmentVariable.Type as any,
-      );
-      const branchProvider = yield* Provider.findProviderByType(
-        Prisma.Branch.Type as any,
-      );
-      const bucketProvider = yield* Provider.findProviderByType(
-        Prisma.Bucket.Type as any,
-      );
-      const bucketKeyProvider = yield* Provider.findProviderByType(
-        Prisma.BucketAccessKey.Type as any,
-      );
+  it.effect(
+    "uses tokenless dev providers from Prisma.providers()",
+    () =>
+      Effect.gen(function* () {
+        const projectProvider = yield* Provider.findProviderByType(Prisma.Project.Type as any);
+        const appProvider = yield* Provider.findProviderByType(Prisma.App.Type as any);
+        const envProvider = yield* Provider.findProviderByType(
+          Prisma.EnvironmentVariable.Type as any,
+        );
+        const branchProvider = yield* Provider.findProviderByType(Prisma.Branch.Type as any);
+        const bucketProvider = yield* Provider.findProviderByType(Prisma.Bucket.Type as any);
+        const bucketKeyProvider = yield* Provider.findProviderByType(
+          Prisma.BucketAccessKey.Type as any,
+        );
 
-      const project = (yield* projectProvider.reconcile(
-        reconcileInput("Project", {
-          name: "local-project",
-          createDatabase: false,
-        }),
-      )) as Prisma.Project["Attributes"];
-      const app = (yield* appProvider.reconcile(
-        reconcileInput("App", {
-          project,
-          displayName: "api",
-          regionId: "us-east-1",
-        }),
-      )) as Prisma.App["Attributes"];
-      const env = (yield* envProvider.reconcile(
-        reconcileInput("Environment", {
-          project,
-          branchId: "branch-preview",
-          class: "preview",
-          key: "TOKEN",
-          value: Redacted.make("secret"),
-        }),
-      )) as Prisma.EnvironmentVariable["Attributes"];
-      const branch = (yield* branchProvider.reconcile(
-        reconcileInput("Branch", {
-          project,
-          gitName: "main",
-          isDefault: true,
-        }),
-      )) as Prisma.Branch["Attributes"];
+        const project = (yield* projectProvider.reconcile(
+          reconcileInput("Project", { name: "local-project", createDatabase: false }),
+        )) as Prisma.Project["Attributes"];
+        const app = (yield* appProvider.reconcile(
+          reconcileInput("App", { project, displayName: "api", regionId: "us-east-1" }),
+        )) as Prisma.App["Attributes"];
+        const env = (yield* envProvider.reconcile(
+          reconcileInput("Environment", {
+            project,
+            branchId: "branch-preview",
+            class: "preview",
+            key: "TOKEN",
+            value: Redacted.make("secret"),
+          }),
+        )) as Prisma.EnvironmentVariable["Attributes"];
+        const branch = (yield* branchProvider.reconcile(
+          reconcileInput("Branch", { project, gitName: "main", isDefault: true }),
+        )) as Prisma.Branch["Attributes"];
 
-      const bucket = (yield* bucketProvider.reconcile(
-        reconcileInput("Bucket", { project, name: "uploads" }),
-      )) as Prisma.Bucket["Attributes"];
-      const bucketKey = (yield* bucketKeyProvider.reconcile(
-        reconcileInput("BucketAccessKey", { bucket, role: "read_write" }),
-      )) as Prisma.BucketAccessKey["Attributes"];
+        const bucket = (yield* bucketProvider.reconcile(
+          reconcileInput("Bucket", { project, name: "uploads" }),
+        )) as Prisma.Bucket["Attributes"];
+        const bucketKey = (yield* bucketKeyProvider.reconcile(
+          reconcileInput("BucketAccessKey", { bucket, role: "read_write" }),
+        )) as Prisma.BucketAccessKey["Attributes"];
 
-      expect(project.projectId).toBe("dev:project:Project");
-      expect(app.projectId).toBe(project.projectId);
-      expect(app.appId).toBe("dev:app:App");
-      expect(env.projectId).toBe(project.projectId);
-      expect(env.branchId).toBe("branch-preview");
-      expect(Redacted.value(env.value)).toBe("secret");
-      expect(branch.role).toBe("production");
-      expect(bucket.bucketId).toBe("dev:bucket:Bucket");
-      expect(bucket.name).toBe("uploads");
-      expect(bucket.projectId).toBe(project.projectId);
-      expect(bucketKey.bucketAccessKeyId).toBe(
-        "dev:bucket-access-key:BucketAccessKey",
-      );
-      expect(bucketKey.bucketId).toBe(bucket.bucketId);
-      expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
-    }).pipe(providePrismaDev),
+        expect(project.projectId).toBe("dev:project:Project");
+        expect(app.projectId).toBe(project.projectId);
+        expect(app.appId).toBe("dev:app:App");
+        expect(env.projectId).toBe(project.projectId);
+        expect(env.branchId).toBe("branch-preview");
+        expect(Redacted.value(env.value)).toBe("secret");
+        expect(branch.role).toBe("production");
+        expect(bucket.bucketId).toBe("dev:bucket:Bucket");
+        expect(bucket.name).toBe("uploads");
+        expect(bucket.projectId).toBe(project.projectId);
+        expect(bucketKey.bucketAccessKeyId).toBe("dev:bucket-access-key:BucketAccessKey");
+        expect(bucketKey.bucketId).toBe(bucket.bucketId);
+        expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
+      }).pipe(providePrismaDev),
+    {
+      tags: [
+        "provider:prisma:app",
+        "provider:prisma:branch",
+        "provider:prisma:bucket",
+        "provider:prisma:bucketaccesskey",
+        "provider:prisma:environmentvariable",
+        "provider:prisma:project",
+      ],
+    },
   );
 
   it.effect("managementApi rejects an unknown explicit profile", () =>
@@ -224,9 +235,7 @@ describe("Prisma providers", () => {
             Effect.provide(Prisma.managementApi()),
             Effect.provide(
               ConfigProvider.layer(
-                ConfigProvider.fromUnknown({
-                  ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
-                }),
+                ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
               ),
             ),
             Effect.provide(NodeServices.layer),
@@ -246,18 +255,14 @@ describe("Prisma providers", () => {
     "tails deployment logs from a providers()-shaped stack context",
     () =>
       Effect.gen(function* () {
-        const provider = yield* Provider.findProviderByType(
-          Prisma.Deployment.Type as any,
-        );
+        const provider = yield* Provider.findProviderByType(Prisma.Deployment.Type as any);
 
         // The tail stream must resolve everything it needs from the context
         // `providers()` produces. Point it at a closed loopback port so the
         // WebSocket fails fast: a typed PrismaLogStreamError proves the
         // context was complete, while a missing service surfaces as a defect.
         const error = yield* Stream.runDrain(
-          provider.tail!({
-            output: { deploymentId: "deployment-1" },
-          } as never),
+          provider.tail!({ output: { deploymentId: "deployment-1" } } as never),
         ).pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(PrismaLogStreamError);
@@ -265,14 +270,11 @@ describe("Prisma providers", () => {
         Effect.provide(
           Prisma.providers().pipe(
             Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+            Layer.provide(stackProvidedServices),
           ),
         ),
         Effect.provide(
-          Layer.succeed(AlchemyContext, {
-            dotAlchemy: ".alchemy-test",
-            dev: false,
-            adopt: false,
-          }),
+          Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
         ),
         Effect.provide(
           ConfigProvider.layer(
@@ -284,6 +286,6 @@ describe("Prisma providers", () => {
           ),
         ),
       ),
-    { timeout: 30_000 },
+    { tags: ["provider:prisma:deployment"], timeout: 30_000 },
   );
 });
