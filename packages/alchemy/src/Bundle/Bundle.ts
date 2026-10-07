@@ -58,7 +58,8 @@ export interface BundleExtraOptions {
   /**
    * Configures the {@link bundleAnalyzerPlugin} which emits a bundle analysis
    * report alongside the bundle output, describing chunks, modules, and the
-   * import graph reachable from each entry point.
+   * import graph reachable from each entry point. The report is written to
+   * disk only when the bundle is (see {@link BundleConfig.output}).
    *
    * - `undefined` / `false` (default): plugin is disabled.
    * - `true`: plugin is enabled with default options.
@@ -86,6 +87,10 @@ export interface BundleConfig extends BundleExtraOptions {
   readonly input?: Partial<rolldown.InputOptions>;
   /**
    * Rolldown output options overrides.
+   *
+   * The bundle stays in memory unless `dir` or `file` is set, in which case
+   * it is also written there (e.g. to inspect what ships, or for plugins
+   * that hook `writeBundle`).
    */
   readonly output?: Partial<rolldown.OutputOptions>;
 }
@@ -200,6 +205,15 @@ const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.Output
 });
 
 /**
+ * Write the bundle to disk only when the caller names a location. Every
+ * caller consumes the output in memory, and rolldown's default `dir`
+ * (`dist`, resolved against `cwd`) would otherwise leave an unused copy in
+ * the user's package on every build.
+ */
+const hasOutputLocation = (outputOptions?: rolldown.OutputOptions): boolean =>
+  outputOptions?.dir !== undefined || outputOptions?.file !== undefined;
+
+/**
  * Build a bundle using rolldown from the given input options and output options.
  * @param inputOptions - The input options for the bundle.
  * @param outputOptions - The output options for the bundle.
@@ -223,7 +237,10 @@ export const build = (
           },
         },
       });
-      const result = await bundle.write(withDceDefault(outputOptions));
+      const options = withDceDefault(outputOptions);
+      const result = hasOutputLocation(options)
+        ? await bundle.write(options)
+        : await bundle.generate(options);
       await bundle.close();
       return result.output;
     },
@@ -285,6 +302,8 @@ export const watch = (
             // resolve to their real source paths (outside `node_modules`), so
             // they stay watched and local HMR is unaffected.
             exclude: ["**/node_modules/**"],
+            // `generateBundle` still fires, so the output is captured either way.
+            skipWrite: !hasOutputLocation(outputOptions),
           },
           output: withDceDefault(outputOptions),
         });
