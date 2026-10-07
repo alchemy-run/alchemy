@@ -296,6 +296,7 @@ test.provider(
           // which autodetect reads at create time.
           const table = yield* GCP.BigQuery.Table("Events", {
             datasetId: dataset.datasetId,
+            description: "daily events",
             externalDataConfiguration: {
               sourceUris: [Output.interpolate`gs://${first.bucketName}/events/*`],
               sourceFormat: "NEWLINE_DELIMITED_JSON",
@@ -347,9 +348,29 @@ test.provider(
 
       const fetchedUpdate = yield* tableStatus(created.project, created.datasetId, created.tableId);
       expect(fetchedUpdate.creationTime).toEqual(created.creationTime);
-      expect(
-        fetchedUpdate.externalDataConfiguration?.hivePartitioningOptions?.requirePartitionFilter,
-      ).toEqual(true);
+      expect(fetchedUpdate.description).toEqual("daily events");
+      expect(fetchedUpdate.externalDataConfiguration).toMatchObject({
+        sourceUris: [`gs://${bucket.bucketName}/events/*`],
+        sourceFormat: "NEWLINE_DELIMITED_JSON",
+        hivePartitioningOptions: {
+          mode: "CUSTOM",
+          sourceUriPrefix: `gs://${bucket.bucketName}/events/{day:DATE}`,
+          requirePartitionFilter: true,
+        },
+      });
+      expect((fetchedUpdate.schema?.fields ?? []).map((field) => field.name)).toEqual(
+        expect.arrayContaining(["id", "n", "day"]),
+      );
+
+      const filtered = yield* bigquery.queryJobs({
+        projectId: created.project,
+        body: {
+          query: `SELECT SUM(n) AS total FROM ${created.datasetId}.${created.tableId} WHERE day = '2024-01-01'`,
+          useLegacySql: false,
+          location: created.location,
+        },
+      });
+      expect((filtered.rows ?? []).map((row) => row.f?.map((cell) => cell.v))).toEqual([["3"]]);
 
       yield* stack.destroy();
 
