@@ -1,24 +1,17 @@
 import * as NodeHttp from "node:http";
-import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { finished } from "node:stream";
 import type { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
-import { HOP_BY_HOP_HEADERS, proxyRequestHeaders } from "./forwarded-host.ts";
+import { proxyRequestHeaders } from "./forwarded-host.ts";
 
 /**
  * Forwards a dev or preview server request to the Worker runtime at `target`
  * and relays the Worker's response.
  *
- * Every request gets a connection of its own. A pooled connection races
- * workerd, which closes one after 5s idle (as long as Node's global agent keeps
- * it) without sending a `Keep-Alive` hint, and also closes one whose streamed
- * response it cut short. A request sent on such a connection fails with
- * `socket hang up` and answers 502. workerd runs on the same host, so a fresh
- * connection costs next to nothing; the client's connection to the Vite
- * server stays kept alive.
- *
  * When the client hangs up, the Worker request is cancelled, as it would be in
- * production, instead of waiting on a body that never ends.
+ * production. Otherwise a stream the client abandoned (a closed page's SSE
+ * subscription) keeps running in workerd.
  */
 export function forwardWorkerRequest(
   request: IncomingMessage,
@@ -34,16 +27,7 @@ export function forwardWorkerRequest(
   }
   const upstream = NodeHttp.request(target, {
     method: request.method,
-    // `connection: close` alone is not enough: Node's and Bun's agents can
-    // still hand the connection to the next request before it closes.
-    agent: false,
-    headers: {
-      ...withoutHeaders(
-        proxyRequestHeaders(request, target, proxySharedSecret),
-        CONNECTION_HEADERS,
-      ),
-      connection: "close",
-    },
+    headers: proxyRequestHeaders(request, target, proxySharedSecret),
   });
   // Watch the socket, not the response: Bun's `ServerResponse` emits no `close`
   // on a hang-up. Once the request body has been read, Bun reports no hang-up
@@ -80,11 +64,7 @@ export function forwardWorkerRequest(
   // being replaced hit exactly that.
   upstream.on("error", fail);
   upstream.on("response", (workerResponse) => {
-    // The upstream hop is closed after every response; the client's is not.
-    response.writeHead(
-      workerResponse.statusCode ?? 500,
-      withoutHeaders(workerResponse.headers, HOP_BY_HOP_HEADERS),
-    );
+    response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
     workerResponse.pipe(response);
     // `pipe` alone would leave the client's response open forever when the
     // Worker's is cut short.
@@ -98,20 +78,3 @@ export function forwardWorkerRequest(
   });
   request.pipe(upstream);
 }
-
-/**
- * Headers that manage the client's connection to the Vite server. The rest of
- * the hop-by-hop set stays: Node re-frames the request body from
- * `transfer-encoding`.
- */
-const CONNECTION_HEADERS: ReadonlySet<string> = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-connection",
-]);
-
-const withoutHeaders = (
-  headers: IncomingHttpHeaders,
-  names: ReadonlySet<string>,
-): IncomingHttpHeaders =>
-  Object.fromEntries(Object.entries(headers).filter(([name]) => !names.has(name.toLowerCase())));
