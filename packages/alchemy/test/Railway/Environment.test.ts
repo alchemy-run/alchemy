@@ -15,7 +15,13 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const readEnvironment = Query.fn((id: string, projectId: string) => {
   const env = RailwaySdk.environment({ id, projectId });
-  return { id: env.id, name: env.name, projectId: env.projectId, deletedAt: env.deletedAt };
+  return {
+    id: env.id,
+    name: env.name,
+    projectId: env.projectId,
+    isEphemeral: env.isEphemeral,
+    deletedAt: env.deletedAt,
+  };
 });
 
 const readEnvironmentDeletedAt = Query.fn((id: string) => ({
@@ -117,6 +123,39 @@ test.provider(
 
       const envGone = yield* waitUntilEnvGone(created.environment.environmentId);
       expect(envGone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "live",
+    ],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "create and delete a PR preview environment",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const preview = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* suiteProject;
+          return yield* Railway.Environment("Preview", { project, ephemeral: true });
+        }),
+      );
+
+      expect(preview.isEphemeral).toEqual(true);
+
+      const fetched = yield* readEnvironment(preview.environmentId, preview.projectId);
+      expect(fetched.isEphemeral).toEqual(true);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilEnvGone(preview.environmentId)).toEqual("gone");
     }).pipe(logLevel),
   {
     tags: [
