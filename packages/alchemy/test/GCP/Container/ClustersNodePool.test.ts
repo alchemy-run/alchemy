@@ -100,6 +100,55 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:container", "live"], timeout: 90_000 },
 );
 
+/**
+ * A throwaway zonal host cluster without Workload Identity (the node pool
+ * must not request GKE_METADATA on it). Owned by this test: a leftover from
+ * an interrupted run is reused if RUNNING, replaced otherwise, and always
+ * deleted when the test ends.
+ */
+const withHostCluster = <A, E, R>(project: string, body: Effect.Effect<A, E, R>) => {
+  const ref = {
+    projectId: project,
+    zone: HOST_ZONE,
+    clusterId: HOST_CLUSTER_ID,
+  };
+  const deleteHost = container.deleteProjectsZonesClusters(ref).pipe(
+    Effect.flatMap((operation) => waitClusterOp(project, HOST_ZONE, operation)),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
+  const ensureHost = Effect.gen(function* () {
+    const existing = yield* container
+      .getProjectsZonesClusters(ref)
+      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    if (existing?.status === "RUNNING") return;
+    if (existing !== undefined) yield* deleteHost;
+    const created = yield* container.createProjectsZonesClusters({
+      projectId: project,
+      zone: HOST_ZONE,
+      body: {
+        cluster: {
+          name: HOST_CLUSTER_ID,
+          ipAllocationPolicy: { useIpAliases: true },
+          nodePools: [
+            {
+              name: "default-pool",
+              initialNodeCount: 1,
+              config: {
+                machineType: "e2-medium",
+                diskSizeGb: 20,
+                diskType: "pd-standard",
+                spot: true,
+              },
+            },
+          ],
+        },
+      },
+    });
+    yield* waitClusterOp(project, HOST_ZONE, created);
+  });
+  return ensureHost.pipe(Effect.andThen(body), Effect.ensuring(Effect.ignore(deleteHost)));
+};
+
 test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a zonal node pool",
   (stack) =>
