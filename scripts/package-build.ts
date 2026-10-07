@@ -70,6 +70,9 @@ export const exec = (command: string, ...args: Array<string>): Step => ({
     const exitCode = yield* spawner.exitCode(
       ChildProcess.make(command, args, {
         cwd: packageDirectory,
+        // node_modules/.bin entries are `.cmd` shims on Windows, which only a
+        // shell can run.
+        shell: process.platform === "win32",
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",

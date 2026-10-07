@@ -77,8 +77,10 @@ jobs:
         run: pnpm typecheck:cloudflare-packages
 
       - name: Test
-        run: pnpm test:cloudflare-packages ${{ runner.os == 'Windows' && '--concurrency=3' || runner.os == 'macOS' && '--concurrency=2' || '' }}
+        run: pnpm test:cloudflare-packages
         env:
+          # Limit concurrent package test runs on the smaller runners.
+          pnpm_config_workspace_concurrency: ${{ runner.os == 'Windows' && '3' || runner.os == 'macOS' && '2' || '' }}
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
           TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
