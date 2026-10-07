@@ -86,6 +86,7 @@ const deployStub = (name: string): Harness => ({
     subagents: false,
     plans: false,
     reasoning: false,
+    modelSwitching: false,
   },
   start: () => unavailable(name),
   get: () => unavailable(name),

@@ -157,6 +157,8 @@ export const Capabilities = Schema.Struct({
   subagents: Schema.Boolean,
   plans: Schema.Boolean,
   reasoning: Schema.Boolean,
+  /** The session's model can change mid-session (`setModel`). */
+  modelSwitching: Schema.Boolean,
 });
 export type Capabilities = typeof Capabilities.Type;
 
@@ -221,6 +223,8 @@ export const UsageUpdated = event("usage", { usage: Usage });
 export const TurnCompleted = event("turn.completed", { turnId: Schema.String, result: TurnResult });
 export const StateChanged = event("state", { state: SessionState });
 export const ErrorEvent = event("error", { message: Schema.String });
+/** The session's model changed; it applies from the next turn (or immediately, where native). */
+export const ModelChanged = event("model.changed", { model: Schema.String });
 
 /** Everything a session reports, in log order. Discriminated by `type`. */
 export const SessionEvent = Schema.Union([
@@ -240,6 +244,7 @@ export const SessionEvent = Schema.Union([
   TurnCompleted,
   StateChanged,
   ErrorEvent,
+  ModelChanged,
 ]);
 export type SessionEvent = typeof SessionEvent.Type;
 
@@ -263,6 +268,7 @@ export const StartSession = Schema.Struct({
   checkout: Schema.optional(
     Schema.Struct({ ref: Schema.String, branch: Schema.optional(Schema.String) }),
   ),
+  /** Model for this session. @default the harness server's `model`. Change it later with `setModel`. */
   model: Schema.optional(Schema.String),
   systemPrompt: Schema.optional(Schema.String),
   /** `auto` approves every tool call; `ask` surfaces `permission.requested` events. @default "auto" */
@@ -281,6 +287,8 @@ export const SessionInfo = Schema.Struct({
   capabilities: Capabilities,
   usage: Usage,
   cwd: Schema.String,
+  /** The model the session uses, when known. */
+  model: Schema.optional(Schema.String),
   /** Cursor of the latest event. */
   cursor: Cursor,
 });
@@ -303,7 +311,7 @@ export class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported"
 
 /**
  * A running coding-agent session. Methods map 1:1 onto `AI.SessionRpcs`, so
- * exposing a session over RPC is a pure mapping (`AI.SessionHandlers`).
+ * exposing a session over RPC is a pure mapping (`AI.makeSessionHandlers`).
  */
 export interface Session {
   readonly id: string;
@@ -314,6 +322,14 @@ export interface Session {
   /** Redirect the running turn — natively, or by interrupt-and-restart. */
   readonly steer: (prompt: Prompt) => Effect.Effect<void, SessionError, RuntimeContext>;
   readonly interrupt: () => Effect.Effect<void, SessionError, RuntimeContext>;
+  /**
+   * Switch the session's model. Takes effect immediately where the harness
+   * supports it natively, otherwise from the next turn; fails with
+   * {@link Unsupported} when the harness can't switch (`capabilities.modelSwitching`).
+   */
+  readonly setModel: (
+    model: string,
+  ) => Effect.Effect<void, SessionError | Unsupported, RuntimeContext>;
   /** Answer a `permission.requested` / `question.asked` event. */
   readonly respond: (
     requestId: string,

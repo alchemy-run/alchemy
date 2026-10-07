@@ -16,7 +16,7 @@ export class Agent extends Cloudflare.RpcDurableObject<Agent>()(
     const sandbox = yield* Sandbox;
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.sync(() =>
-      AI.SessionHandlers({
+      AI.makeSessionHandlers({
         id: state.id.name ?? state.id.toString(),
         harness: sandbox
           .getTcpPort(3000)

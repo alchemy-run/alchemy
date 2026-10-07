@@ -30,7 +30,7 @@ const SessionFailure = Schema.Union([SessionError, Unsupported]);
 /**
  * The standard per-session RPC contract — one session per server instance
  * (e.g. a Durable Object whose name IS the session id). Serve it with
- * {@link SessionHandlers}; merge your own RPCs into it with `.merge(...)`.
+ * {@link makeSessionHandlers}; merge your own RPCs into it with `.merge(...)`.
  *
  * A standard contract is what lets shared UIs and clients (React hooks, a
  * desktop app) drive any user-built session host.
@@ -47,6 +47,7 @@ export class SessionRpcs extends RpcGroup.make(
   Rpc.make("prompt", { payload: { prompt: Prompt }, success: TurnInfo, error: SessionFailure }),
   Rpc.make("steer", { payload: { prompt: Prompt }, error: SessionFailure }),
   Rpc.make("interrupt", { error: SessionFailure }),
+  Rpc.make("setModel", { payload: { model: Schema.String }, error: SessionFailure }),
   Rpc.make("respond", {
     payload: { requestId: Schema.String, answer: Answer },
     error: SessionFailure,
@@ -88,6 +89,10 @@ export class HarnessRpcs extends RpcGroup.make(
     error: SessionFailure,
   }),
   Rpc.make("interrupt", { payload: { sessionId: Schema.String }, error: SessionFailure }),
+  Rpc.make("setModel", {
+    payload: { sessionId: Schema.String, model: Schema.String },
+    error: SessionFailure,
+  }),
   Rpc.make("respond", {
     payload: { sessionId: Schema.String, requestId: Schema.String, answer: Answer },
     error: SessionFailure,
@@ -125,7 +130,7 @@ export class HarnessRpcs extends RpcGroup.make(
  * scope. Use that form whenever reaching the harness does I/O (connecting to
  * a container): a Durable Object must not do I/O while it is constructed.
  */
-export const SessionHandlers = <R = never>(options: {
+export const makeSessionHandlers = <R = never>(options: {
   readonly harness: Harness | Effect.Effect<Harness, SessionError, R | Scope.Scope>;
   readonly id: string;
 }) => {
@@ -149,6 +154,7 @@ export const SessionHandlers = <R = never>(options: {
     prompt: ({ prompt }) => call((s) => s.prompt(prompt)),
     steer: ({ prompt }) => call((s) => s.steer(prompt)),
     interrupt: () => call((s) => s.interrupt()),
+    setModel: ({ model }) => call((s) => s.setModel(model)),
     respond: ({ requestId, answer }) => call((s) => s.respond(requestId, answer)),
     result: ({ turnId }) => call((s) => s.result(turnId)),
     events: ({ after }) =>
@@ -168,6 +174,7 @@ export const serveHarness = (harness: Harness) => {
     prompt: ({ sessionId, prompt }) => Effect.flatMap(get(sessionId), (s) => s.prompt(prompt)),
     steer: ({ sessionId, prompt }) => Effect.flatMap(get(sessionId), (s) => s.steer(prompt)),
     interrupt: ({ sessionId }) => Effect.flatMap(get(sessionId), (s) => s.interrupt()),
+    setModel: ({ sessionId, model }) => Effect.flatMap(get(sessionId), (s) => s.setModel(model)),
     respond: ({ sessionId, requestId, answer }) =>
       Effect.flatMap(get(sessionId), (s) => s.respond(requestId, answer)),
     result: ({ sessionId, turnId }) => Effect.flatMap(get(sessionId), (s) => s.result(turnId)),
@@ -201,6 +208,11 @@ export const remoteHarness = (client: HarnessClient): Effect.Effect<Harness, Ses
       const sessionId = info.id;
       const lift = <A>(effect: Effect.Effect<A, unknown>) =>
         effect.pipe(Effect.mapError(transportError(sessionId))) as Effect.Effect<A, SessionError>;
+      // Keep `Unsupported` typed across the wire (callers branch on it).
+      const liftUnsupported = <A>(effect: Effect.Effect<A, unknown>) =>
+        effect.pipe(
+          Effect.mapError((e) => (e instanceof Unsupported ? e : transportError(sessionId)(e))),
+        ) as Effect.Effect<A, SessionError | Unsupported>;
       return {
         id: sessionId,
         harness: name,
@@ -208,6 +220,7 @@ export const remoteHarness = (client: HarnessClient): Effect.Effect<Harness, Ses
         prompt: (prompt) => lift(client.prompt({ sessionId, prompt })),
         steer: (prompt) => lift(client.steer({ sessionId, prompt })),
         interrupt: () => lift(client.interrupt({ sessionId })),
+        setModel: (model) => liftUnsupported(client.setModel({ sessionId, model })),
         respond: (requestId, answer) => lift(client.respond({ sessionId, requestId, answer })),
         result: (turnId) => lift(client.result({ sessionId, turnId })),
         events: (options) =>

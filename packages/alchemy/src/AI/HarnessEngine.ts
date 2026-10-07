@@ -48,6 +48,8 @@ export interface DriverSession {
   /** Native mid-turn steering. Omit to degrade to interrupt-and-restart. */
   readonly steer?: (prompt: ReadonlyArray<ContentBlock>) => Effect.Effect<void, SessionError>;
   readonly interrupt: () => Effect.Effect<void, SessionError>;
+  /** Switch the model (immediately or from the next turn). Omit when unsupported. */
+  readonly setModel?: (model: string) => Effect.Effect<void, SessionError>;
   readonly respond: (requestId: string, answer: Answer) => Effect.Effect<void, SessionError>;
   /** Native fork. Omit when unsupported. */
   readonly fork?: (
@@ -62,6 +64,8 @@ export interface HarnessDriver {
   readonly capabilities: Capabilities;
   /** The working directory sessions default to. */
   readonly defaultCwd: string;
+  /** The model sessions default to, when the driver knows it. */
+  readonly defaultModel?: string;
   readonly open: (
     options: DriverSessionOptions,
   ) => Effect.Effect<DriverSession, SessionError, Scope.Scope>;
@@ -78,6 +82,7 @@ interface Entry {
   state: SessionState;
   usage: Usage;
   readonly cwd: string;
+  model: string | undefined;
   lastTurnId: string | undefined;
 }
 
@@ -123,6 +128,7 @@ export const makeHarness = (
         capabilities: driver.capabilities,
         usage: entry.usage,
         cwd: entry.cwd,
+        ...(entry.model !== undefined ? { model: entry.model } : {}),
         cursor,
       }));
 
@@ -210,6 +216,17 @@ export const makeHarness = (
                   yield* startTurn(promptBlocks(prompt));
                 }),
           interrupt: () => native.interrupt(),
+          setModel: (model) =>
+            native.setModel
+              ? native.setModel(model).pipe(
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      entry!.model = model;
+                    }),
+                  ),
+                  Effect.andThen(emit({ type: "model.changed", model })),
+                )
+              : Effect.fail(new Unsupported({ harness: driver.name, operation: "setModel" })),
           respond: (requestId, answer) =>
             native.respond(requestId, answer).pipe(
               Effect.tap(() =>
@@ -238,7 +255,15 @@ export const makeHarness = (
               yield* store.append(id, { type: "state", state: "closed" });
             }),
         };
-        entry = { session, scope, state: "idle", usage: emptyUsage, cwd, lastTurnId: undefined };
+        entry = {
+          session,
+          scope,
+          state: "idle",
+          usage: emptyUsage,
+          cwd,
+          model: options.model ?? driver.defaultModel,
+          lastTurnId: undefined,
+        };
         sessions.set(id, entry);
         yield* emit({ type: "state", state: "idle" });
         if (options.prompt !== undefined) yield* session.prompt(options.prompt);

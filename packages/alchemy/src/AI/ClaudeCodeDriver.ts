@@ -58,6 +58,7 @@ export const claudeCodeCapabilities: Capabilities = {
   subagents: true,
   plans: true,
   reasoning: true,
+  modelSwitching: true,
 };
 
 const toolKind = (name: string): ToolKind => {
@@ -127,6 +128,7 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
   name: "claude-code",
   capabilities: claudeCodeCapabilities,
   defaultCwd: options.cwd ?? "/workspace",
+  ...(options.model ? { defaultModel: options.model } : {}),
   open: (session: DriverSessionOptions) =>
     Effect.gen(function* () {
       const { query } = yield* Effect.tryPromise({
@@ -419,6 +421,16 @@ export const claudeCodeDriver = (options: ClaudeCodeOptions = {}): HarnessDriver
               new SessionError({
                 sessionId: session.id,
                 message: `interrupt failed: ${String(cause)}`,
+              }),
+          }),
+        // Streaming-input sessions switch models natively, from the next request.
+        setModel: (model) =>
+          Effect.tryPromise({
+            try: () => q.setModel(model),
+            catch: (cause) =>
+              new SessionError({
+                sessionId: session.id,
+                message: `setModel failed: ${String(cause)}`,
               }),
           }),
         respond: (requestId: string, answer: Answer) =>

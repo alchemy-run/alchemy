@@ -21,17 +21,31 @@ import { RuntimeContext } from "@/RuntimeContext.ts";
  */
 const workdir = () => fs.mkdtempSync(path.join(os.tmpdir(), "alchemy-harness-"));
 
-const roundTrip = (driver: Effect.Effect<HarnessDriver, SessionError, any>, cwd: string) =>
+const roundTrip = (
+  driver: Effect.Effect<HarnessDriver, SessionError, any>,
+  cwd: string,
+  /** Switch to this model mid-session and run a second turn. */
+  switchTo?: string,
+) =>
   Effect.gen(function* () {
     const harness = yield* makeHarness(yield* driver);
     const session = yield* harness.start({ cwd });
     const turn = yield* session.prompt("Reply with exactly the word: pong");
     const result = yield* session.result(turn.turnId);
+    let switched: { model: string | undefined; status: string } | undefined;
+    if (switchTo !== undefined) {
+      yield* session.setModel(switchTo);
+      const second = yield* session.prompt("Reply with exactly the word: ping");
+      switched = {
+        model: (yield* session.info()).model,
+        status: (yield* session.result(second.turnId)).status,
+      };
+    }
     yield* session.close();
     const types = new Set(
       Array.from(yield* Stream.runCollect(session.events())).map((e) => e.type),
     );
-    return { result, types };
+    return { result, types, switched };
   }).pipe(
     Effect.scoped,
     Effect.provide(Layer.mergeAll(MemorySessionStore, RuntimeContext.phantom, NodeServices.layer)),
@@ -43,7 +57,7 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
     () =>
       Effect.runPromise(
         Effect.gen(function* () {
-          const { result, types } = yield* roundTrip(
+          const { result, types, switched } = yield* roundTrip(
             Effect.succeed(
               claudeCodeDriver({
                 model: "claude-haiku-4-5-20251001",
@@ -52,10 +66,12 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
               }),
             ),
             workdir(),
+            "haiku",
           );
           expect(result.status).toBe("completed");
           expect(JSON.stringify(result.message).toLowerCase()).toContain("pong");
           expect(result.usage.outputTokens).toBeGreaterThan(0);
+          expect(switched).toEqual({ model: "haiku", status: "completed" });
           expect(types.has("message.delta")).toBe(true);
         }) as Effect.Effect<void>,
       ),
@@ -67,7 +83,7 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
     () =>
       Effect.runPromise(
         Effect.gen(function* () {
-          const { result, types } = yield* roundTrip(
+          const { result, types, switched } = yield* roundTrip(
             acpDriver({
               name: "opencode",
               command: process.env.OPENCODE_EXECUTABLE!,
@@ -75,10 +91,12 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
               env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY },
             }),
             workdir(),
+            "anthropic/claude-haiku-4-5",
           );
           expect(result.status).toBe("completed");
           expect(JSON.stringify(result.message).toLowerCase()).toContain("pong");
           expect(types.has("message.delta")).toBe(true);
+          expect(switched).toEqual({ model: "anthropic/claude-haiku-4-5", status: "completed" });
         }) as Effect.Effect<void>,
       ),
     { timeout: 120_000 },
@@ -89,13 +107,14 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
     () =>
       Effect.runPromise(
         Effect.gen(function* () {
-          const { result, types } = yield* roundTrip(
+          const { result, types, switched } = yield* roundTrip(
             codexDriver({
               command: "npx",
               args: ["-y", "@openai/codex"],
               env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY },
             }),
             workdir(),
+            "gpt-5-nano",
           );
           // A funded key completes with "pong"; an unfunded one fails the turn
           // with a quota error — either way the turn lifecycle round-trips.
@@ -104,6 +123,7 @@ describe("harness drivers (live, local processes)", { tags: ["live", "local"] },
             expect(JSON.stringify(result.message).toLowerCase()).toContain("pong");
           }
           expect(types.has("turn.started")).toBe(true);
+          expect(switched?.model).toBe("gpt-5-nano");
         }) as Effect.Effect<void>,
       ),
     { timeout: 180_000 },

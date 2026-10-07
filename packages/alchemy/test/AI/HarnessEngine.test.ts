@@ -23,6 +23,7 @@ const capabilities: Capabilities = {
   subagents: false,
   plans: false,
   reasoning: false,
+  modelSwitching: true,
 };
 
 /**
@@ -64,6 +65,7 @@ const echoDriver: Effect.Effect<HarnessDriver> = Effect.sync(() => ({
             Effect.flatMap((turnId) => (turnId ? finish(turnId, "interrupted", "") : Effect.void)),
           ),
         respond: () => Effect.void,
+        setModel: () => Effect.void,
       };
     }),
 }));
@@ -103,6 +105,34 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
       "turn.completed",
       "state",
     ]);
+  });
+
+  test("setModel switches the model, logs model.changed, and is Unsupported without a native switch", async () => {
+    const out = await run(
+      Effect.gen(function* () {
+        const h = yield* harness;
+        const session = yield* h.start({ id: "m1", model: "small" });
+        const before = (yield* session.info()).model;
+        yield* session.setModel("large");
+        const after = (yield* session.info()).model;
+        yield* session.close();
+        const types = Array.from(yield* Stream.runCollect(session.events())).map((e) => e.type);
+        // A driver without a native switch fails with a typed Unsupported.
+        const echo = yield* echoDriver;
+        const plain = yield* makeHarness({
+          ...echo,
+          open: (o) => Effect.map(echo.open(o), ({ setModel: _, ...rest }) => rest),
+        });
+        const unsupported = yield* (yield* plain.start({ id: "m2" }))
+          .setModel("large")
+          .pipe(Effect.flip);
+        return { before, after, types, unsupported: unsupported._tag };
+      }),
+    );
+    expect(out.before).toBe("small");
+    expect(out.after).toBe("large");
+    expect(out.types).toContain("model.changed");
+    expect(out.unsupported).toBe("Unsupported");
   });
 
   test("start is idempotent by id", async () => {
@@ -183,6 +213,8 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
         });
         const remote = yield* connectHarness(http);
         const session = yield* remote.start({ id: "h1" });
+        yield* session.setModel("over-the-wire");
+        const model = (yield* session.info()).model;
         // Tail live (the session stays open): the event stream must keep
         // flowing after the RPC handler returns.
         const live = yield* session.events().pipe(
@@ -196,13 +228,21 @@ describe("AI.makeHarness", { tags: ["unit", "local"] }, () => {
         const liveTypes = Array.from(yield* Fiber.join(live)).map((e) => e.type);
         yield* session.close();
         const events = Array.from(yield* Stream.runCollect(session.events()));
-        return { result, liveTypes, types: events.map((e) => e.type) };
+        return { result, liveTypes, model, types: events.map((e) => e.type) };
       }),
     );
     expect(out.result.message).toEqual([{ type: "text", text: "echo: over http" }]);
-    expect(out.liveTypes).toEqual(["state", "turn.started", "message.delta", "turn.completed"]);
+    expect(out.model).toBe("over-the-wire");
+    expect(out.liveTypes).toEqual([
+      "state",
+      "model.changed",
+      "turn.started",
+      "message.delta",
+      "turn.completed",
+    ]);
     expect(out.types).toEqual([
       "state",
+      "model.changed",
       "turn.started",
       "message.delta",
       "turn.completed",

@@ -45,8 +45,8 @@ export type UIMessageChunk =
  *
  * What chat messages can't express travels as typed data parts:
  * `data-plan` (plan updates), `data-diff` (file edits), `data-subagent`,
- * `data-permission` (approval requests — answer with `respond`), and
- * `data-usage`.
+ * `data-permission` (approval requests — answer with `respond`),
+ * `data-model` (the session switched models), and `data-usage`.
  *
  * Serve it as server-sent events with the protocol header:
  *
@@ -142,6 +142,9 @@ export const toUIMessageStream = <E, R>(
             break;
           case "usage":
             chunks.push({ type: "data-usage", data: event.usage });
+            break;
+          case "model.changed":
+            chunks.push({ type: "data-model", id: "model", data: { model: event.model } });
             break;
           case "error":
             chunks.push({ type: "error", errorText: event.message });

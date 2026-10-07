@@ -40,6 +40,7 @@ export const codexCapabilities: Capabilities = {
   subagents: true,
   plans: true,
   reasoning: true,
+  modelSwitching: true,
 };
 
 const turnStatus = (status: string): TurnStatus =>
@@ -296,12 +297,23 @@ export const codexDriver = (
         threads.set(threadId, routed);
         yield* Effect.addFinalizer(() => Effect.sync(() => threads.delete(threadId)));
 
+        // `turn/start` takes a model override that sticks for later turns;
+        // a switch is sent with the next turn.
+        let pendingModel: string | undefined;
         const driver: DriverSession = {
           prompt: (turnId, prompt) =>
             Effect.gen(function* () {
               routed.turn = { turnId, nativeTurnId: undefined, text: "" };
               yield* session.emit({ type: "turn.started", turnId });
-              const response = yield* run(Codex.turnStart({ threadId, input: toInput(prompt) }));
+              const model = pendingModel;
+              pendingModel = undefined;
+              const response = yield* run(
+                Codex.turnStart({
+                  threadId,
+                  input: toInput(prompt),
+                  ...(model !== undefined ? { model } : {}),
+                }),
+              );
               if (routed.turn?.turnId === turnId) routed.turn.nativeTurnId = response.turn.id;
             }).pipe(Effect.forkIn(sessionScope), Effect.asVoid),
           steer: (prompt) =>
@@ -316,6 +328,10 @@ export const codexDriver = (
             Effect.gen(function* () {
               const native = routed.turn?.nativeTurnId;
               if (native) yield* run(Codex.turnInterrupt({ threadId, turnId: native }));
+            }),
+          setModel: (model) =>
+            Effect.sync(() => {
+              pendingModel = model;
             }),
           respond: (requestId: string, answer: Answer) =>
             Effect.gen(function* () {
@@ -336,6 +352,7 @@ export const codexDriver = (
       name: "codex",
       capabilities: codexCapabilities,
       defaultCwd: options.cwd ?? "/workspace",
+      ...(options.model ? { defaultModel: options.model } : {}),
       open,
     } satisfies HarnessDriver;
   });

@@ -40,6 +40,7 @@ export const acpCapabilities: Capabilities = {
   subagents: false,
   plans: true,
   reasoning: true,
+  modelSwitching: true,
 };
 
 const toolKind = (kind: string | null | undefined): ToolKind => {
@@ -267,7 +268,25 @@ export const acpDriver = (
     const open = (options: DriverSessionOptions) =>
       Effect.gen(function* () {
         const sessionScope = yield* Scope.Scope;
-        const { sessionId } = yield* run(Acp.sessionNew({ cwd: options.cwd, mcpServers: [] }));
+        const created = yield* run(Acp.sessionNew({ cwd: options.cwd, mcpServers: [] }));
+        const sessionId = created.sessionId;
+        // ACP agents expose model choice as a session config option in the
+        // `model` category (`session/set_config_option`).
+        const modelOption = (created.configOptions ?? []).find(
+          (option) => option.category === "model" && "options" in option,
+        );
+        const setModel = (model: string) =>
+          modelOption
+            ? run(
+                Acp.sessionSetConfigOption({ sessionId, configId: modelOption.id, value: model }),
+              ).pipe(Effect.asVoid)
+            : Effect.fail(
+                new SessionError({
+                  sessionId: options.id,
+                  message: `${agent.name ?? agent.command} exposes no model option`,
+                }),
+              );
+        if (options.model !== undefined) yield* setModel(options.model);
         const routed: Routed = {
           options,
           turn: undefined,
@@ -314,6 +333,7 @@ export const acpDriver = (
               );
             }),
           interrupt: () => run(Acp.sessionCancel({ sessionId })),
+          setModel,
           respond: (requestId: string, answer: Answer) =>
             Effect.gen(function* () {
               const pending = routed.permissions.get(requestId);
