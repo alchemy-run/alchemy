@@ -32,21 +32,31 @@ interface CollectedSpan {
   attributes?: { key: string; value: Record<string, unknown> }[];
 }
 
-// The `http.server` spans for one path, across every OTLP traces push the
-// collector recorded.
-const rootSpansFor = (collected: unknown, path: string): CollectedSpan[] =>
+// Every span across all the OTLP traces pushes the collector recorded.
+const collectedSpans = (collected: unknown): CollectedSpan[] =>
   (collected as { items: { signal: string; payload: any }[] }).items
     .filter((item) => item.signal === "traces")
     .flatMap((item) => item.payload.resourceSpans ?? [])
     .flatMap((resource: any) => resource.scopeSpans ?? [])
-    .flatMap((scope: any) => (scope.spans ?? []) as CollectedSpan[])
-    .filter(
-      (span) =>
-        span.name.startsWith("http.server") &&
-        span.attributes?.some(
-          (attribute) => attribute.key === "url.path" && attribute.value.stringValue === path,
-        ),
-    );
+    .flatMap((scope: any) => (scope.spans ?? []) as CollectedSpan[]);
+
+// Name, path and status of each span, printed when an assertion fails.
+const rootSpanSummary = (collected: unknown) =>
+  collectedSpans(collected).map((span) => ({
+    name: span.name,
+    path: span.attributes?.find((attribute) => attribute.key === "url.path")?.value,
+    status: span.status?.code,
+  }));
+
+// The `http.server` spans for one path.
+const rootSpansFor = (collected: unknown, path: string): CollectedSpan[] =>
+  collectedSpans(collected).filter(
+    (span) =>
+      span.name.startsWith("http.server") &&
+      span.attributes?.some(
+        (attribute) => attribute.key === "url.path" && attribute.value.stringValue === path,
+      ),
+  );
 
 describe(
   "AWS.Lambda Telemetry",
@@ -152,12 +162,22 @@ describe(
           const late = yield* client.get(`${fnUrl}/late`);
           expect(late.status).toBe(200);
           expect(yield* late.text).toContain("lambda-late-done");
-          const lateSpans = yield* client.get(collected).pipe(
-            Effect.flatMap((response) => response.json),
-            Effect.map((body) => rootSpansFor(body, "/late")),
-          );
-          expect(lateSpans).toHaveLength(1);
+          const collectedBody = yield* client
+            .get(collected)
+            .pipe(Effect.flatMap((response) => response.json));
+          const lateSpans = rootSpansFor(collectedBody, "/late");
+          expect({
+            lateSpans: lateSpans.length,
+            roots: rootSpanSummary(collectedBody),
+          }).toMatchObject({
+            lateSpans: 1,
+          });
           expect(lateSpans[0]?.status?.code).toBe(2);
+          // The early-ended span still says which request it was.
+          expect(lateSpans[0]?.attributes).toContainEqual({
+            key: "http.request.method",
+            value: { stringValue: "GET" },
+          });
           expect(lateSpans[0]?.attributes).toContainEqual({
             key: "aws.lambda.timeout.imminent",
             value: { boolValue: true },

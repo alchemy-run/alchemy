@@ -36,6 +36,20 @@ export const isAlbEvent = (event: any): event is ALBEvent => {
   return typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 };
 
+// `HttpMiddleware.tracer` records the request on the `http.server` span only
+// when the request finishes. A span the deadline flush ends early would ship
+// without it, so record the method and path up front.
+const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const span = yield* Effect.option(Effect.currentSpan);
+    if (Option.isSome(span)) {
+      span.value.attribute("http.request.method", request.method);
+      span.value.attribute("url.path", new URL(request.url, "http://localhost").pathname);
+    }
+    return yield* self;
+  });
+
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // `HttpMiddleware.tracer` creates the `http.server` root span per request
   // (continuing an incoming `traceparent`), matching the Worker bridge's
@@ -48,7 +62,9 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // `InvocationTimeoutError` as its status — before draining the exporters.
   // The dispatcher's outer guard stands down when this one takes the
   // deadline; see `withInvocationDeadline`.
-  const safeHandler = HttpMiddleware.tracer(withInvocationDeadline(Http.safeHttpEffect(handler)));
+  const safeHandler = HttpMiddleware.tracer(
+    withInvocationDeadline(Http.safeHttpEffect(handler)).pipe(annotateRequestSpan),
+  );
   return (
     event: any,
   ):
