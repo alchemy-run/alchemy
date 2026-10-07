@@ -99,7 +99,7 @@ export default Alchemy.Stack(
     yield* GitHub.Secrets({
       ...REPO,
       secrets: {
-        // check.yml, claude.yml, website.yml previews
+        // website.yml previews
         TEST_CLOUDFLARE_ACCOUNT_ID,
         TEST_CLOUDFLARE_API_TOKEN: TEST_CLOUDFLARE_API_TOKEN.value,
         // website.yml production deploy
