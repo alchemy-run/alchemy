@@ -88,6 +88,10 @@ describe(
           assets: { notFoundHandling: "404-page" },
         }),
       () =>
+        Fly.Website.SolidYield("SY", {
+          assets: { notFoundHandling: "404-page" },
+        }),
+      () =>
         Fly.Website.StaticSite("St", {
           build: { command: "hugo --minify", output: "public" },
           deploy: { strategy: "bluegreen" },

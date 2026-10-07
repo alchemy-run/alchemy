@@ -24,6 +24,7 @@ packages:
   - demos/*
   - submodules/distilled/packages/*
   - packages/frontend-frameworks/fixtures/*
+  - packages/alchemy/test/Website/fixtures/solid-yield-app
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 
 catalog:
