@@ -6,6 +6,7 @@ import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -48,7 +49,10 @@ const harness = (response: Response) => {
   );
   const layer = Layer.mergeAll(
     Layer.succeed(HttpClient.HttpClient, client),
-    Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
+    Layer.succeed(
+      Credentials,
+      Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
+    ),
   );
   return { layer, get: () => captured! };
 };

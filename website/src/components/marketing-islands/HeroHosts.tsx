@@ -11,7 +11,7 @@ import {
 import "./HeroHosts.css";
 
 /*
- * The hero: one API cycling through nine hosts. Each turn rolls the parts
+ * The hero: one API cycling through eight providers. Each turn rolls the parts
  * of the code that change (the host, its props, the Photos Layer) the way
  * the talk deck's Roll does, then deploys it, showing the resources that host needs and the binding.
  * Clicking a host in the reel jumps to it.
@@ -167,7 +167,7 @@ export default function HeroHosts() {
 
   return (
     <>
-      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Hosts">
+      <ol ref={reelRef} className="v2-hero__reel hh-reel" aria-label="Providers">
         {HOSTS.map((x, i) => (
           <li key={x.label}>
             <button

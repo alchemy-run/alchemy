@@ -10,6 +10,22 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource-variable/caveat";
 
+/* iOS Safari enlarges text in blocks it judges too wide to read ("text
+   autosizing"). Code lines wider than their card got a bigger font than the
+   lines around them. Keep every font at its declared size. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Thin hairline scrollbars everywhere. `scrollbar-width` doesn't inherit,
+   so it's set on every element; per-component `scrollbar-width: none`
+   still wins on specificity. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--alc-hairline-3) transparent;
+}
+
 :root {
   /* ---------- Brand: muted forest greens ---------- */
   --alc-accent: #5c7a3e; /* moss — primary brand */

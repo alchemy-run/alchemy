@@ -187,6 +187,13 @@ surrounding Effect context — handy for stack-level config like
 `stage`, `appName`, or anything else you'd want to vary per
 environment.
 
+Lambda creates the function's log group on its first invocation
+and keeps events forever. Set `logging: { retention: "2 weeks" }`
+to have Alchemy create the group up front with that retention (the
+duration is rounded up to the nearest value CloudWatch Logs
+supports; `"forever"` clears an existing policy). The group is
+deleted with the function.
+
 ## Wire the function into the Stack
 
 The `Api` class is just a typed identifier — yielding it inside

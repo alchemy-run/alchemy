@@ -85,6 +85,7 @@ export const AssetConfigSchema = Schema.Struct({
   not_found_handling: Schema.optional(
     Schema.Literals(["single-page-application", "404-page", "none"]),
   ),
+  base_path: Schema.optional(Schema.String),
   redirects: Schema.optional(RedirectsSchema),
   headers: Schema.optional(HeadersSchema),
   has_static_routing: Schema.optional(Schema.Boolean),

@@ -541,6 +541,83 @@ test.provider(
 );
 
 test.provider(
+  "lock rules are added, updated, and removed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Age conditions only: an Indefinite lock would outlive the test bucket.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LockBucket", {
+            forceDestroy: true,
+            locks: [
+              {
+                id: "raw-retention",
+                enabled: true,
+                prefix: "raw/",
+                condition: { type: "Age", maxAgeSeconds: 60 },
+              },
+            ],
+          });
+        }),
+      );
+
+      expect(initial.locks).toHaveLength(1);
+      const initialLocks = yield* r2.getBucketLock({ accountId, bucketName: initial.bucketName });
+      expect(initialLocks.rules).toHaveLength(1);
+      expect(initialLocks.rules?.[0]?.id).toEqual("raw-retention");
+      expect(initialLocks.rules?.[0]?.enabled).toEqual(true);
+      expect(initialLocks.rules?.[0]?.prefix).toEqual("raw/");
+      expect(initialLocks.rules?.[0]?.condition).toEqual({ type: "Age", maxAgeSeconds: 60 });
+
+      // Update: change the rule and add a bucket-wide one.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LockBucket", {
+            forceDestroy: true,
+            locks: [
+              {
+                id: "raw-retention",
+                enabled: false,
+                prefix: "raw/",
+                condition: { type: "Age", maxAgeSeconds: 120 },
+              },
+              { id: "all-objects", enabled: true, condition: { type: "Age", maxAgeSeconds: 30 } },
+            ],
+          });
+        }),
+      );
+
+      // R2 lists rules sorted by id, not in declaration order.
+      const updatedLocks = yield* r2.getBucketLock({ accountId, bucketName: initial.bucketName });
+      expect(updatedLocks.rules).toHaveLength(2);
+      const ruleById = (ruleId: string) => updatedLocks.rules?.find((r) => r.id === ruleId);
+      expect(ruleById("raw-retention")?.enabled).toEqual(false);
+      expect(ruleById("raw-retention")?.condition).toEqual({ type: "Age", maxAgeSeconds: 120 });
+      expect(ruleById("all-objects")?.enabled).toEqual(true);
+      expect(ruleById("all-objects")?.prefix ?? "").toEqual("");
+
+      // Remove `locks` from the props: the managed rules are cleared.
+      const cleared = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LockBucket", { forceDestroy: true });
+        }),
+      );
+
+      expect(cleared.locks).toEqual([]);
+      const clearedLocks = yield* r2.getBucketLock({ accountId, bucketName: initial.bucketName });
+      expect(clearedLocks.rules ?? []).toEqual([]);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
   "cors reconciliation converges drift and adoption",
   (stack) =>
     Effect.gen(function* () {
@@ -1077,15 +1154,22 @@ const forceDeleteBucket = Effect.fn(function* (accountId: string, bucketName: st
 // no destructive request was ever issued. These run the REAL provider
 // `delete` against a recording transport and assert on the wire traffic.
 
-type Recorded = { method: string; url: string };
+type Recorded = { method: string; url: string; body: string | undefined };
 
 /** Fetch transport that records every request and answers from `respond`. */
 const recordingTransport = (respond: (call: Recorded) => Response) => {
   const calls: Recorded[] = [];
   const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const body = init?.body;
     calls.push({
       method: (input instanceof Request ? input.method : init?.method) ?? "GET",
       url: input instanceof Request ? input.url : String(input),
+      body:
+        typeof body === "string"
+          ? body
+          : body instanceof Uint8Array
+            ? new TextDecoder().decode(body)
+            : undefined,
     });
     return respond(calls[calls.length - 1]!);
   };
@@ -1119,7 +1203,10 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
         source: { type: "env" },
       } satisfies CloudflareResolvedCredentials),
     ),
-    Layer.succeed(Credentials, Effect.succeed(apiTokenCredentials({ apiToken: "test-token" }))),
+    Layer.succeed(
+      Credentials,
+      Effect.succeed(apiTokenCredentials({ apiToken: Redacted.make("test-token") })),
+    ),
     Layer.succeed(
       LocalRuntimeState,
       LocalRuntimeState.of({
@@ -1145,6 +1232,7 @@ const stubbedOutput = {
   domains: [],
   lifecycleRules: [],
   cors: [],
+  locks: undefined,
   publicDomain: undefined,
 };
 
@@ -1231,6 +1319,157 @@ describe(
         const calls = yield* recordDelete({}, { force: true });
 
         expect(objectDeletes(calls).length).toBeGreaterThan(0);
+      }),
+    );
+  },
+);
+
+// ── lock rules are managed only once declared ──────────────────────────
+//
+// A lock is protection: reconcile must never clear rules a stack did not
+// declare (another tool may have set them), and a PUT replaces the whole
+// rule set. These run the REAL provider `reconcile` against a recording
+// transport and assert on the `/lock` traffic.
+
+const retention: Cloudflare.R2.BucketLockRule = {
+  id: "raw-retention",
+  enabled: true,
+  prefix: "raw/",
+  condition: { type: "Age", maxAgeSeconds: 60 },
+};
+
+/** Answers every read reconcile makes; `GET /lock` returns `observedLocks`. */
+const reconcileResponse =
+  (observedLocks: Cloudflare.R2.BucketLockRule[]) =>
+  (call: Recorded): Response => {
+    const path = new URL(call.url).pathname;
+    const result =
+      call.method !== "GET"
+        ? {}
+        : path.endsWith("/lock")
+          ? { rules: observedLocks }
+          : path.endsWith("/domains/custom")
+            ? { domains: [] }
+            : path.endsWith("/domains/managed")
+              ? { bucketId: "bucket-id", domain: "my-bucket.r2.dev", enabled: false }
+              : path.endsWith("/lifecycle") || path.endsWith("/cors")
+                ? { rules: [] }
+                : { name: stubbedOutput.bucketName, storageClass: "Standard" };
+    return new Response(JSON.stringify({ success: true, result }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+/** Run the real provider reconcile; return its output and every `/lock` request. */
+const recordReconcile = (input: {
+  news: Cloudflare.R2.BucketProps;
+  olds: Cloudflare.R2.BucketProps;
+  observedLocks: Cloudflare.R2.BucketLockRule[];
+}) =>
+  Effect.gen(function* () {
+    const transport = recordingTransport(reconcileResponse(input.observedLocks));
+    const output = yield* Effect.gen(function* () {
+      const provider = yield* Provider<Cloudflare.R2.Bucket>("Cloudflare.R2.Bucket");
+      return yield* provider.reconcile({
+        id: "Bucket",
+        fqn: "Bucket",
+        instanceId: INSTANCE_ID,
+        news: input.news,
+        olds: input.olds,
+        output: stubbedOutput,
+        bindings: [],
+        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+      });
+    }).pipe(
+      Effect.provide(Cloudflare.R2.BucketProvider()),
+      Effect.provide(stubbedEnv(transport.layer)),
+    );
+    const lockCalls = transport.calls.filter((c) => new URL(c.url).pathname.endsWith("/lock"));
+    return { output, lockCalls };
+  });
+
+describe(
+  "lock rules are managed only once declared",
+  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:r2", "local"] },
+  () => {
+    it.effect("omitted locks never touch the lock endpoint", () =>
+      Effect.gen(function* () {
+        const { output, lockCalls } = yield* recordReconcile({
+          news: {},
+          olds: {},
+          observedLocks: [retention],
+        });
+
+        expect(lockCalls).toEqual([]);
+        expect(output.locks).toBeUndefined();
+      }),
+    );
+
+    it.effect("matching rules are not re-sent", () =>
+      Effect.gen(function* () {
+        const { output, lockCalls } = yield* recordReconcile({
+          // An omitted prefix equals the observed "".
+          news: { locks: [{ ...retention, prefix: undefined }] },
+          olds: {},
+          observedLocks: [{ ...retention, prefix: "" }],
+        });
+
+        expect(lockCalls.map((c) => c.method)).toEqual(["GET"]);
+        expect(output.locks).toEqual([{ ...retention, prefix: "" }]);
+      }),
+    );
+
+    it.effect("rules declared out of id order match R2's sorted listing", () =>
+      Effect.gen(function* () {
+        const allObjects: Cloudflare.R2.BucketLockRule = {
+          id: "all-objects",
+          enabled: true,
+          prefix: "",
+          condition: { type: "Age", maxAgeSeconds: 30 },
+        };
+        const { output, lockCalls } = yield* recordReconcile({
+          // Declared raw-retention first; R2 lists rules sorted by id.
+          news: { locks: [retention, allObjects] },
+          olds: { locks: [retention, allObjects] },
+          observedLocks: [allObjects, retention],
+        });
+
+        expect(lockCalls.map((c) => c.method)).toEqual(["GET"]);
+        expect(output.locks?.map((r) => r.id)).toEqual(["all-objects", "raw-retention"]);
+      }),
+    );
+
+    it.effect("a changed rule replaces the whole set", () =>
+      Effect.gen(function* () {
+        const changed: Cloudflare.R2.BucketLockRule = {
+          ...retention,
+          condition: { type: "Indefinite" },
+        };
+        const { lockCalls } = yield* recordReconcile({
+          news: { locks: [changed] },
+          olds: { locks: [retention] },
+          observedLocks: [retention],
+        });
+
+        const puts = lockCalls.filter((c) => c.method === "PUT");
+        expect(puts).toHaveLength(1);
+        expect(JSON.parse(puts[0]?.body ?? "null")).toEqual({ rules: [changed] });
+      }),
+    );
+
+    it.effect("removing declared locks clears every rule", () =>
+      Effect.gen(function* () {
+        const { output, lockCalls } = yield* recordReconcile({
+          news: {},
+          olds: { locks: [retention] },
+          observedLocks: [retention],
+        });
+
+        const puts = lockCalls.filter((c) => c.method === "PUT");
+        expect(puts).toHaveLength(1);
+        expect(JSON.parse(puts[0]?.body ?? "null")).toEqual({ rules: [] });
+        expect(output.locks).toEqual([]);
       }),
     );
   },

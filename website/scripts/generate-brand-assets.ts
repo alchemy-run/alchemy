@@ -92,8 +92,12 @@ const OG_PIXEL_RATIO = 2.5;
 async function main() {
   await mkdir(publicDir, { recursive: true });
 
-  // 1. Vector favicon — one file, both themes via prefers-color-scheme.
+  // 1. Vector favicons: one per theme (picked by `media` on the <link>), plus
+  //    a combined file for consumers that can only reference one URL.
   await writeFile(path.join(publicDir, "favicon.svg"), faviconVectorSvg());
+  for (const theme of ["light", "dark"] as const) {
+    await writeFile(path.join(publicDir, `favicon-${theme}.svg`), faviconMarkSvg(theme));
+  }
 
   // 2. Raster favicons, one pair per theme. Media queries don't survive
   //    rasterization, so each PNG comes from an explicit-color mark and the
@@ -137,11 +141,18 @@ async function main() {
     await rasterize(backgroundLogoSvg("light", "#ffffff"), 2048),
   );
 
-  // 6. Backwards-compat: keep the old /favicon.png reference (used by
+  // 6. Monochrome mark: white strokes, transparent vector + dark-ground raster.
+  await writeFile(path.join(publicDir, "alchemy-logo-mono.svg"), brandMarkSvg("mono"));
+  await writeFile(
+    path.join(publicDir, "alchemy-logo-mono-bg.png"),
+    await rasterize(backgroundLogoSvg("mono", YANTRA_THEMES.mono.bg), 2048),
+  );
+
+  // 7. Backwards-compat: keep the old /favicon.png reference (used by
   //    some cached nav code) pointing to the 32px raster.
   await writeFile(path.join(publicDir, "favicon.png"), await rasterize(favLight, 32));
 
-  // 7. Fallback OG: Takumi emits both PNG and outlined SVG from one layout.
+  // 8. Fallback OG: Takumi emits both PNG and outlined SVG from one layout.
   const card = OgDefault();
   const options = {
     width: OG_DEFAULT_W,
@@ -163,7 +174,7 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log(
-    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png (2048px), alchemy-logo-512-white-bg.png (2048px), og-default.{svg,png}",
+    "[brand] wrote favicon[-{light,dark}].svg, favicon.png, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png (2048px), alchemy-logo-512-white-bg.png (2048px), alchemy-logo-mono.svg, alchemy-logo-mono-bg.png (2048px), og-default.{svg,png}",
   );
 }
 

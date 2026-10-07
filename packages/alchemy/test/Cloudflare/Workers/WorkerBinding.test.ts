@@ -59,6 +59,29 @@ test(
 );
 
 test(
+  "async caller can await a toRpcAsync view and call through it",
+  Effect.gen(function* () {
+    const { asyncCallerUrl } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    // Warm the binding on the plain route so cold starts don't mask the
+    // result; the `/rpc-async` call itself is not retried, so a view that
+    // is mistaken for a thenable surfaces as the fixture's timeout 500.
+    yield* HttpClient.filterStatusOk(client)
+      .get(`${asyncCallerUrl}/?name=warmup`)
+      .pipe(coldStartRetry);
+
+    const res = yield* client.get(`${asyncCallerUrl}/rpc-async?name=carol`);
+    expect(yield* res.text).toBe("hello carol");
+    expect(res.status).toBe(200);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+test(
   "effect caller can call target's RPC method via bindWorker",
   Effect.gen(function* () {
     const { effectCallerUrl } = yield* stack;

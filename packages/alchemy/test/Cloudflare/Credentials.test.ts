@@ -7,6 +7,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
 import { cacheUntilExpiry } from "@/Cloudflare/Credentials";
 
@@ -31,7 +32,7 @@ const makeOAuthResolver = () => {
     resolutions++;
     const now = yield* Clock.currentTimeMillis;
     return oauthCredentials({
-      accessToken: `token-${resolutions}`,
+      accessToken: Redacted.make(`token-${resolutions}`),
       // each freshly resolved token is valid for 1 hour from "now"
       expiresAt: now + 60 * MINUTE_MS,
     }) as ResolvedCredentials;
@@ -99,7 +100,7 @@ describe(
         let resolutions = 0;
         const resolve = Effect.sync(() => {
           resolutions++;
-          return apiTokenCredentials({ apiToken: "static" }) as ResolvedCredentials;
+          return apiTokenCredentials({ apiToken: Redacted.make("static") }) as ResolvedCredentials;
         });
         const credentials = yield* cacheUntilExpiry(resolve);
 
@@ -118,7 +119,7 @@ describe(
           Effect.map(() => {
             resolutions++;
             return oauthCredentials({
-              accessToken: `token-${resolutions}`,
+              accessToken: Redacted.make(`token-${resolutions}`),
               expiresAt: Date.now() + 60 * MINUTE_MS,
             }) as ResolvedCredentials;
           }),

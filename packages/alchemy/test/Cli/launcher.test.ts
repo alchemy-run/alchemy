@@ -54,7 +54,9 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
         env: {
           NODE_ENV: nodeEnv,
           CI: "true",
-          npm_execpath: "",
+          // Mirror `bun run`, which starts node-shebang bins under Node but
+          // points npm_execpath at bun.
+          npm_execpath: process.execPath,
           npm_config_user_agent: `bun/${process.versions.bun}`,
           BUN_OPTIONS: "",
           BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
@@ -83,6 +85,97 @@ const runPublishedLauncher = (nodeEnv: string | undefined, jsx?: string, runtime
     expect(stdout).toContain("Deployment complete");
     expect(stdout).toContain(JSON.stringify({ cwd: yield* fs.realPath(project), args }));
   }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
+// Run the published launcher under Node with a launcher's environment and
+// report which runtime it picked. The entry and loader are stubs, and a fake
+// `bun` first on PATH reports the handoff instead of running the CLI.
+const launcherRuntime = (env: { npm_execpath: string; npm_config_user_agent: string }) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const packageDir = yield* path.fromFileUrl(new URL("../../", import.meta.url));
+    const project = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-launcher-runtime-" });
+    const bin = path.join(project, "node_modules", "alchemy", "bin");
+    yield* fs.makeDirectory(bin, { recursive: true });
+    yield* fs.copyFile(path.join(packageDir, "bin", "cli.js"), path.join(bin, "cli.js"));
+    yield* fs.symlink(
+      path.join(packageDir, "node_modules"),
+      path.join(project, "node_modules", "alchemy", "node_modules"),
+    );
+    yield* fs.writeFileString(
+      path.join(project, "node_modules", "alchemy", "package.json"),
+      JSON.stringify({ type: "module" }),
+    );
+    yield* fs.writeFileString(path.join(bin, "register-oxc.js"), "");
+    yield* fs.writeFileString(path.join(bin, "alchemy.js"), `console.log("node");\n`);
+    const fakeBin = path.join(project, "fake-bin");
+    yield* fs.makeDirectory(fakeBin);
+    const fakeBun = path.join(fakeBin, "bun");
+    yield* fs.writeFileString(fakeBun, `#!/bin/sh\necho bun\n`);
+    yield* fs.chmod(fakeBun, 0o755);
+    const handle = yield* ChildProcess.make(nodePath!, [path.join(bin, "cli.js")], {
+      cwd: project,
+      env: {
+        ...env,
+        npm_execpath: env.npm_execpath.replace("<fake-bun>", fakeBun),
+        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+      },
+      extendEnv: true,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      forceKillAfter: "1 second",
+    });
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [
+        handle.stdout.pipe(Stream.decodeText, Stream.mkString),
+        handle.stderr.pipe(Stream.decodeText, Stream.mkString),
+        handle.exitCode,
+      ],
+      { concurrency: 3 },
+    );
+    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+    return stdout.trim();
+  }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
+// Environments captured from each launcher in #2000. The user agent names the
+// package manager, so only npm_execpath may select bun.
+const launchers = [
+  {
+    name: "nub exec in a bun project",
+    npm_execpath: "",
+    npm_config_user_agent: "bun/1.4.2 nub/0.9.6 node/v25.6.1 darwin arm64",
+    runtime: "node",
+  },
+  {
+    name: "nub run in a bun project",
+    npm_execpath: "/opt/homebrew/bin/nub",
+    npm_config_user_agent: "bun/1.4.2 nub/0.9.6 node/v25.6.1 darwin arm64",
+    runtime: "node",
+  },
+  {
+    name: "npx",
+    npm_execpath: "/usr/lib/node_modules/npm/bin/npm-cli.js",
+    npm_config_user_agent: "npm/11.9.0 node/v25.6.1 darwin arm64 workspaces/false",
+    runtime: "node",
+  },
+  {
+    name: "bun run / bunx",
+    npm_execpath: "<fake-bun>",
+    npm_config_user_agent: "bun/1.4.2 npm/? node/v26.3.0 darwin arm64",
+    runtime: "bun",
+  },
+] as const;
+
+describe.sequential("launcher runtime selection", { tags: ["unit", "local"] }, () => {
+  for (const { name, runtime, ...env } of launchers) {
+    it.live.skipIf(!nodeSupportsDevMode)(`${name} runs the CLI under ${runtime}`, () =>
+      Effect.gen(function* () {
+        expect(yield* launcherRuntime(env)).toBe(runtime);
+      }),
+    );
+  }
+});
 
 describe.sequential("published Bun launcher", { tags: ["unit", "local"] }, () => {
   it.live.skipIf(!nodeSupportsDevMode)(

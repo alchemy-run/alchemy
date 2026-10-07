@@ -25,6 +25,8 @@ export type DockerBuildHashMode = "all" | "effective";
 interface DockerIgnoreRule {
   ignored: boolean;
   expression: RegExp;
+  /** The cleaned pattern is also needed when deciding whether a directory can be pruned. */
+  pattern: string;
 }
 
 interface DockerIgnore {
@@ -129,6 +131,7 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
   return {
     ignored,
     expression: new RegExp(`^${body}$`),
+    pattern,
   };
 };
 
@@ -142,6 +145,100 @@ const isDockerIgnored = (relativePath: string, rules: ReadonlyArray<DockerIgnore
     }
   }
   return ignored;
+};
+
+const hasGlob = (segment: string) => /[*?\[]/.test(segment);
+
+/**
+ * Return whether a negated rule could match the directory or any path below
+ * it. This is deliberately conservative: a false positive costs a directory
+ * read, while a false negative would change the build hash.
+ */
+const canDockerRuleMatchDescendant = (relativeDirectory: string, rule: DockerIgnoreRule) => {
+  const pattern = rule.pattern;
+  const directory = normalizeRelativePath(relativeDirectory).split("/");
+  const patternParts = pattern.split("/");
+
+  // A recursive segment can bridge any number of directory levels, but the
+  // fixed prefix before it still has to reach this tree. For example,
+  // `ignored/keep/**` cannot re-include anything below `ignored/other`.
+  const recursiveIndex = patternParts.indexOf("**");
+  if (recursiveIndex !== -1) {
+    for (let index = 0; index < recursiveIndex && index < directory.length; index++) {
+      const part = patternParts[index];
+      if (!hasGlob(part) && part !== directory[index]) return false;
+    }
+    return true;
+  }
+
+  // A pattern without a slash is a basename pattern. A descendant may always
+  // contain a matching basename, regardless of the directory being pruned.
+  if (patternParts.length === 1) return true;
+
+  const compared = Math.min(directory.length, patternParts.length);
+  for (let index = 0; index < compared; index++) {
+    const part = patternParts[index];
+    if (!hasGlob(part) && part !== directory[index]) return false;
+  }
+  return true;
+};
+
+const matchingDockerRuleIndex = (relativePath: string, rules: ReadonlyArray<DockerIgnoreRule>) => {
+  const segments = normalizeRelativePath(relativePath).split("/");
+  const candidates = segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+  let matching: number | undefined;
+  for (let index = 0; index < rules.length; index++) {
+    if (candidates.some((candidate) => rules[index].expression.test(candidate))) {
+      matching = index;
+    }
+  }
+  return matching;
+};
+
+/**
+ * Find an ignore rule that excludes every descendant of a directory. The
+ * ordinary matcher only needs to answer questions about entries, so patterns
+ * such as `node_modules/**` do not necessarily match the directory entry
+ * itself. Recognizing those forms here lets the walker skip their contents.
+ */
+const descendantIgnoreRuleIndex = (
+  relativeDirectory: string,
+  rules: ReadonlyArray<DockerIgnoreRule>,
+) => {
+  const matching = matchingDockerRuleIndex(relativeDirectory, rules);
+  let result = matching !== undefined && rules[matching].ignored ? matching : undefined;
+
+  for (let index = 0; index < rules.length; index++) {
+    const rule = rules[index];
+    if (!rule.ignored) continue;
+    if (rule.pattern === "**" && (result === undefined || index > result)) {
+      result = index;
+      continue;
+    }
+    if (!rule.pattern.endsWith("/**")) continue;
+    // Probe below the directory against the original expression. Unlike the
+    // negation analysis above, this must retain the pattern's slash scope:
+    // `foo/**` must not prune an unrelated `bar` directory.
+    if (rule.expression.test(`${relativeDirectory}/__alchemy_prune_probe__`)) {
+      result = index;
+    }
+  }
+  return result;
+};
+
+const canPruneDockerDirectory = (
+  relativeDirectory: string,
+  rules: ReadonlyArray<DockerIgnoreRule>,
+) => {
+  const ignoreIndex = descendantIgnoreRuleIndex(relativeDirectory, rules);
+  if (ignoreIndex === undefined) return false;
+
+  // Only a later negation can make walking this directory necessary. Rules
+  // before the last applicable ignore have already been superseded.
+  return !rules.some(
+    (rule, index) =>
+      index > ignoreIndex && !rule.ignored && canDockerRuleMatchDescendant(relativeDirectory, rule),
+  );
 };
 
 /**
@@ -295,7 +392,64 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     hasher.update(dockerfileContent);
   });
 
-  const entries = yield* fs.readDirectory(context, { recursive: true });
+  const entries: string[] = [];
+  const pendingDirectories = [""];
+  const rules = dockerignore?.rules ?? [];
+  const forcedPaths = [
+    dockerignore?.path,
+    normalizeRelativePath(path.relative(context, dockerfile)),
+  ].filter(
+    (entry): entry is string =>
+      entry !== undefined && entry !== ".." && !entry.startsWith("../") && !path.isAbsolute(entry),
+  );
+
+  const isForced = (relativeEntry: string) =>
+    forcedPaths.some((forcedPath) => relativeEntry === forcedPath);
+
+  const hasForcedDescendant = (relativeEntry: string) =>
+    forcedPaths.some((forcedPath) => forcedPath.startsWith(`${relativeEntry}/`));
+
+  // FileSystem.readDirectory's recursive implementation enumerates every
+  // descendant before the ignore matcher gets a chance to reject it. Walk one
+  // level at a time so an ignored directory can be discarded before its
+  // contents are read. The final sort preserves the old hash ordering.
+  while (pendingDirectories.length > 0) {
+    const relativeDirectory = pendingDirectories.pop()!;
+    const directory = path.join(context, relativeDirectory);
+    for (const name of yield* fs.readDirectory(directory)) {
+      const relativeEntry = normalizeRelativePath(
+        relativeDirectory.length === 0 ? name : path.join(relativeDirectory, name),
+      );
+      const fullPath = path.join(context, relativeEntry);
+      const forced = isForced(relativeEntry);
+      const forcedDescendant = hasForcedDescendant(relativeEntry);
+
+      const link = yield* Effect.result(fs.readLink(fullPath));
+      if (Result.isSuccess(link)) {
+        if (forced || !isDockerIgnored(relativeEntry, rules)) {
+          entries.push(relativeEntry);
+        }
+        continue;
+      }
+
+      const info = yield* fs.stat(fullPath);
+      if (info.type === "Directory") {
+        const prune = !forced && !forcedDescendant && canPruneDockerDirectory(relativeEntry, rules);
+        if (!prune) {
+          if (forced || !isDockerIgnored(relativeEntry, rules)) {
+            entries.push(relativeEntry);
+          }
+          pendingDirectories.push(relativeEntry);
+        }
+        continue;
+      }
+
+      if (forced || !isDockerIgnored(relativeEntry, rules)) {
+        entries.push(relativeEntry);
+      }
+    }
+  }
+
   for (const entry of entries.sort()) {
     const normalizedEntry = normalizeRelativePath(entry);
     if (

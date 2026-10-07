@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -13,6 +14,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
 import * as Command from "@/Command/index.ts";
+import * as Drift from "@/Drift";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
@@ -113,6 +115,161 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "live"] },
+    );
+
+    test.provider(
+      "zero-traffic upload receipts do not cause drift or hide live changes",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (marker: string, traffic?: number) =>
+            Cloudflare.Worker("ReceiptWorker", {
+              script: `export default { fetch() { return new Response(${JSON.stringify(marker)}); } };`,
+              workersDev: false,
+              version: traffic === undefined ? undefined : { traffic },
+            });
+
+          // Establish a compatible live deployment before uploading the
+          // candidate; a greenfield gradual rollout takes 100% of traffic.
+          const stable = yield* stack.deploy(program("stable"));
+          const beforeUpload = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: stable.workerName,
+          });
+          expect(beforeUpload.deployments[0]).toBeDefined();
+
+          const candidate = yield* stack.deploy(program("candidate", 0));
+          expect(candidate.workerName).toEqual(stable.workerName);
+          expect(candidate.versionId).toBeDefined();
+          expect(candidate.deploymentId).toBeUndefined();
+          const uploaded = yield* workers.getScriptVersion({
+            accountId,
+            scriptName: candidate.workerName,
+            versionId: candidate.versionId!,
+          });
+          expect(uploaded.id).toEqual(candidate.versionId);
+
+          const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+          const unchanged = yield* detectDrift();
+          expect(unchanged.resources.ReceiptWorker?.action).toBe("unchanged");
+          expect(unchanged.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+
+          const afterRead = yield* workers.listScriptDeployments({
+            accountId,
+            scriptName: candidate.workerName,
+          });
+          expect(afterRead.deployments[0]).toEqual(beforeUpload.deployments[0]);
+          expect(
+            afterRead.deployments[0]?.versions.some(
+              (version) => version.versionId === candidate.versionId,
+            ),
+          ).toBe(false);
+
+          // Change real script settings outside Alchemy. Keeping the upload
+          // receipt must not mask genuine drift in the live configuration.
+          yield* workers.createScriptSubdomain({
+            accountId,
+            scriptName: candidate.workerName,
+            enabled: true,
+            previewsEnabled: false,
+          });
+          const changed = yield* detectDrift();
+          expect(changed.resources.ReceiptWorker?.action).toBe("drifted");
+          expect(changed.resources.ReceiptWorker?.attr.versionId).toEqual(candidate.versionId);
+          expect(changed.resources.ReceiptWorker?.attr.url).toBeDefined();
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(candidate.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
+    // #1827: drift repair rebuilds the bundle from the `main` stored in
+    // state. Deploy from one checkout with an absolute `main`
+    // (`import.meta.url`), delete that checkout, then repair drift from
+    // another checkout of the same code.
+    test.provider(
+      "drift repair rebuilds a Worker after the checkout that deployed it is gone",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          // Real path: on macOS the temp dir is a symlink, and `cwd` is real.
+          const tempRoot = yield* fs.realPath(
+            yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-moved-checkout-" }),
+          );
+          const writeCheckout = (dir: string) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(pathe.join(dir, "src"), { recursive: true });
+              yield* fs.writeFileString(
+                pathe.join(dir, "package.json"),
+                JSON.stringify({ name: "moved-checkout", private: true, type: "module" }),
+              );
+              yield* fs.writeFileString(
+                pathe.join(dir, "src", "worker.ts"),
+                `export default { fetch() { return new Response("moved-checkout"); } };\n`,
+              );
+            });
+          const checkoutA = pathe.join(tempRoot, "checkout-a");
+          const checkoutB = pathe.join(tempRoot, "checkout-b");
+          yield* writeCheckout(checkoutA);
+          const mainUrl = yield* Effect.sync(
+            () => pathToFileURL(pathe.join(checkoutA, "src", "worker.ts")).href,
+          );
+          const originalCwd = yield* Effect.sync(() => process.cwd());
+
+          yield* stack.destroy();
+
+          const workerName = yield* Effect.gen(function* () {
+            yield* Effect.sync(() => process.chdir(checkoutA));
+            const worker = yield* stack.deploy(
+              Cloudflare.Worker("MovedCheckoutWorker", { main: mainUrl, workersDev: true }),
+            );
+
+            // State keeps `main` relative to the deploying checkout.
+            const row = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({
+                stack: stack.name,
+                stage: stack.stage,
+                fqn: "MovedCheckoutWorker",
+              });
+            }).pipe(Effect.provide(stack.state));
+            expect((row as { props?: { main?: unknown } } | undefined)?.props?.main).toEqual(
+              pathe.join("src", "worker.ts"),
+            );
+
+            // The deploying checkout is gone; another checkout repairs.
+            yield* writeCheckout(checkoutB);
+            yield* fs.remove(checkoutA, { recursive: true });
+            yield* Effect.sync(() => process.chdir(checkoutB));
+
+            yield* workers.createScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+              enabled: false,
+              previewsEnabled: false,
+            });
+            const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+              Effect.provide(stack.state),
+            );
+            expect(repaired.resources.MovedCheckoutWorker).toMatchObject({ action: "repaired" });
+            const subdomain = yield* workers.getScriptSubdomain({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(subdomain.enabled).toBe(true);
+            return worker.workerName;
+          }).pipe(Effect.ensuring(Effect.sync(() => process.chdir(originalCwd))));
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(workerName, accountId);
+        }).pipe(Effect.scoped, logLevel),
+      // mutates process-global cwd
+      { tags: ["live"], timeout: 180_000, exclusive: true },
     );
 
     test.provider(
@@ -905,6 +1062,116 @@ describe.concurrent(
       { tags: ["live"], timeout: 360_000 },
     );
 
+    test.provider(
+      "Issues survive code redeploys and can be disabled or removed",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+
+          const observability = {
+            enabled: true,
+            headSamplingRate: 0.5,
+            logs: { enabled: true, invocationLogs: true, headSamplingRate: 0, persist: false },
+            traces: { enabled: false, headSamplingRate: 0.1, persist: false },
+          };
+          let original: workers.GetScriptScriptAndVersionSettingResponse | undefined;
+          let scriptName = "";
+          let tailName = "";
+          for (const [issues, version] of [
+            [true, "v1"],
+            [true, "v2"],
+            [false, "v2"],
+            [true, "v2"],
+            [undefined, "v2"],
+          ] as const) {
+            const { worker, tail } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const tail = yield* Cloudflare.Worker("IssuesTail", {
+                  script: "export default { tail() {} };",
+                  bundle: false,
+                });
+                const worker = yield* Cloudflare.Worker("IssuesWorker", {
+                  script: `export default { fetch() { return new Response("${version}"); } };`,
+                  bundle: false,
+                  logpush: true,
+                  tags: ["issues-preservation"],
+                  tailConsumers: [tail],
+                  compatibility: { date: "2024-01-01", flags: ["nodejs_als"] },
+                  limits: { cpuMs: 50 },
+                  env: { PRESERVED: "issues-preservation" },
+                  observability: {
+                    ...observability,
+                    issues: issues === undefined ? undefined : { enabled: issues },
+                  },
+                });
+                return { worker, tail };
+              }),
+            );
+            tailName = tail.workerName;
+            if (scriptName) expect(worker.workerName).toBe(scriptName);
+            scriptName = worker.workerName;
+
+            const settings = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName,
+            });
+            expect(settings.observability?.issues?.enabled ?? false).toBe(issues ?? false);
+            expect(settings.observability?.enabled).toBe(true);
+            expect(settings.observability?.headSamplingRate).toBe(0.5);
+            expect(settings.observability?.logs).toMatchObject(observability.logs);
+            expect(settings.observability?.traces).toMatchObject(observability.traces);
+            expect(settings.logpush).toBe(true);
+            expect(settings.tags).toContain("issues-preservation");
+            expect(settings.tailConsumers).toEqual([{ service: tailName }]);
+            expect(settings.compatibilityDate).toBe("2024-01-01");
+            expect(settings.compatibilityFlags).toEqual(["nodejs_als"]);
+            expect(settings.limits).toMatchObject({ cpuMs: 50 });
+            expect(settings.bindings).toContainEqual({
+              type: "plain_text",
+              name: "PRESERVED",
+              text: "issues-preservation",
+            });
+            const unchanged = {
+              ...settings,
+              observability: { ...settings.observability!, issues: undefined },
+            };
+            if (original) expect(unchanged).toEqual(original);
+            else original = unchanged;
+            yield* expectUrlContains(worker.url!, version, { timeout: "30 seconds" });
+          }
+          // Exercise PATCH explicitly: a successful upload can make the fallback unnecessary.
+          for (const enabled of [true, false]) {
+            yield* workers.patchScriptSetting({
+              accountId,
+              scriptName,
+              observability: {
+                ...observability,
+                redactQueryString: true,
+                issues: { enabled },
+              },
+            });
+            const patched = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName,
+            });
+            expect(patched.observability?.issues?.enabled).toBe(enabled);
+            expect({
+              ...patched,
+              observability: { ...patched.observability, issues: undefined },
+            }).toEqual({
+              ...original,
+              observability: { ...original!.observability, redactQueryString: true },
+            });
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(scriptName, accountId);
+          yield* waitForWorkerToBeDeleted(tailName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
     // #874 regression: binding a tagged Worker identity (an Effect class) in
     // another Worker's `env` — the circular-bindings pattern — must converge.
     // The tag stays in the desired props (`news.env.TARGET` is an Effect) while
@@ -1074,6 +1341,85 @@ describe.concurrent(
             ].map((name) => waitForWorkerToBeDeleted(name, accountId)),
             { concurrency: "unbounded" },
           );
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 360_000 },
+    );
+
+    // Precreate publishes the URLs known before the first upload, so a cycle
+    // of Workers binding each other's `url` resolves on the first deploy.
+    // Worker A serves only on a custom domain (`workersDev: false`): its
+    // precreate `url` must be the domain, not `undefined`.
+    const circularUrlZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
+    test.provider.skipIf(!circularUrlZone)(
+      "circular Worker URL bindings resolve custom-domain and workers.dev URLs on the first deploy",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const domainA = `alchemy-circular-url-${suffix}.${circularUrlZone}`;
+
+          yield* stack.destroy();
+
+          const program = () =>
+            Effect.gen(function* () {
+              const a = yield* Cloudflare.Worker("CircularUrlA", {
+                main,
+                workersDev: false,
+                domain: domainA,
+              });
+              const b = yield* Cloudflare.Worker("CircularUrlB", { main });
+              yield* a.bind`B_URL`({
+                bindings: [
+                  {
+                    type: "plain_text",
+                    name: "B_URL",
+                    text: b.url.as<string>(),
+                  },
+                ],
+              });
+              yield* b.bind`A_URL`({
+                bindings: [
+                  {
+                    type: "plain_text",
+                    name: "A_URL",
+                    text: a.url.as<string>(),
+                  },
+                ],
+              });
+              return { a, b };
+            });
+
+          const deployed = yield* stack.deploy(program());
+          expect(deployed.a.url).toEqual(`https://${domainA}`);
+          expect(deployed.b.url).toMatch(/^https:\/\/.*\.workers\.dev$/);
+          for (const [worker, name, peerUrl] of [
+            [deployed.a, "B_URL", deployed.b.url],
+            [deployed.b, "A_URL", deployed.a.url],
+          ] as const) {
+            const settings = yield* workers.getScriptScriptAndVersionSetting({
+              accountId,
+              scriptName: worker.workerName,
+            });
+            expect(settings.bindings).toContainEqual(
+              expect.objectContaining({
+                type: "plain_text",
+                name,
+                text: peerUrl,
+              }),
+            );
+          }
+
+          const settled = yield* stack.plan(program());
+          for (const logicalId of ["CircularUrlA", "CircularUrlB"]) {
+            const node = (Object.values(settled.resources) as any[]).find(
+              (candidate) => candidate.resource.LogicalId === logicalId,
+            );
+            expect(node?.action).toBe("noop");
+          }
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(deployed.a.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(deployed.b.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
     );

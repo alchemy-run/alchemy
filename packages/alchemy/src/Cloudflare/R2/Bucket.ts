@@ -134,6 +134,50 @@ export type BucketCorsRule = {
   maxAgeSeconds?: number;
 };
 
+export type BucketLockCondition =
+  | {
+      /**
+       * Lock matching objects permanently. They can never be deleted or
+       * overwritten, so the bucket can never be emptied or deleted.
+       */
+      type: "Indefinite";
+    }
+  | {
+      type: "Age";
+      /**
+       * Seconds after upload during which matching objects stay locked.
+       */
+      maxAgeSeconds: number;
+    }
+  | {
+      type: "Date";
+      /**
+       * Absolute date (ISO 8601) until which matching objects stay locked.
+       */
+      date: string;
+    };
+
+export type BucketLockRule = {
+  /**
+   * Unique identifier for the rule within the bucket.
+   */
+  id: string;
+  /**
+   * Whether the rule is in effect.
+   */
+  enabled: boolean;
+  /**
+   * Object key prefix the rule applies to. Use `""` (or omit) to lock every
+   * object in the bucket.
+   * @default ""
+   */
+  prefix?: string;
+  /**
+   * How long matching objects stay locked.
+   */
+  condition: BucketLockCondition;
+};
+
 export type BucketProps = {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
@@ -185,6 +229,19 @@ export type BucketProps = {
    */
   cors?: BucketCorsRule[];
   /**
+   * Object lock rules applied to the bucket. While a rule's condition
+   * holds, R2 refuses to delete or overwrite any object whose key matches
+   * the rule's prefix, whoever signs the request (S3 API credentials
+   * included). An `Indefinite` rule never lapses: matching objects are
+   * permanent and the bucket can never be emptied, so `forceDestroy`
+   * cannot delete it.
+   *
+   * A bucket that never declared `locks` keeps whatever rules it has: they
+   * are left unmanaged. Pass an empty array, or drop `locks` after
+   * declaring it, to remove every rule.
+   */
+  locks?: BucketLockRule[];
+  /**
    * Allow alchemy to delete every object in the bucket when the bucket
    * itself is deleted.
    *
@@ -215,6 +272,11 @@ export type Bucket = Resource<
     domains: Bucket.CustomDomain[];
     lifecycleRules: Bucket.LifecycleRule[];
     cors: Bucket.CorsRule[];
+    /**
+     * Lock rules on the bucket. `undefined` while `locks` is unmanaged
+     * (omitted from the props).
+     */
+    locks: Bucket.LockRule[] | undefined;
     /**
      * Hostname of the bucket's Cloudflare-managed `r2.dev` domain.
      * Set only while `publicAccess` is enabled; `undefined` when
@@ -446,6 +508,45 @@ export type Bucket = Resource<
  * });
  * ```
  *
+ * ### Bucket Locks
+ *
+ * Lock rules make objects write-once: while a rule's condition holds, R2
+ * refuses to delete or overwrite any object under the rule's prefix,
+ * whoever signs the request. `Indefinite` locks never lapse, so a bucket
+ * with indefinitely locked objects can never be emptied or deleted. A
+ * bucket that never declares `locks` keeps its rules unmanaged; pass an
+ * empty array (or drop `locks` after declaring it) to remove them. See the
+ * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/bucket-locks/)
+ * for details.
+ *
+ * **Example:** Write-once landing zone
+ * ```typescript
+ * const lake = yield* Cloudflare.R2.Bucket("Lake", {
+ *   locks: [
+ *     {
+ *       id: "raw-write-once",
+ *       enabled: true,
+ *       prefix: "raw/",
+ *       condition: { type: "Indefinite" },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Retain logs for 90 days
+ * ```typescript
+ * const audit = yield* Cloudflare.R2.Bucket("Audit", {
+ *   locks: [
+ *     {
+ *       id: "retain-logs",
+ *       enabled: true,
+ *       prefix: "logs/",
+ *       condition: { type: "Age", maxAgeSeconds: 60 * 60 * 24 * 90 },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
  * ### Deleting a Bucket
  *
  * R2 refuses to delete a bucket that still has objects in it, and alchemy
@@ -504,6 +605,12 @@ export declare namespace Bucket {
     allowedHeaders: string[] | undefined;
     exposeHeaders: string[] | undefined;
     maxAgeSeconds: number | undefined;
+  };
+  export type LockRule = {
+    id: string;
+    enabled: boolean;
+    prefix: string;
+    condition: BucketLockCondition;
   };
   export type CustomDomain = {
     domain: string;
@@ -938,6 +1045,58 @@ export const ProviderLive = () =>
           return desiredRules;
         });
 
+      // PUT replaces the bucket's whole rule set, so `[]` clears it.
+      const reconcileLockRules = (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        desired: BucketLockRule[],
+      ) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* r2
+            .getBucketLock({
+              accountId,
+              bucketName,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.map((response) => sortLockRules((response.rules ?? []).map(toLockRule))),
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          // R2 returns rules sorted by id, not in the order they were PUT,
+          // so compare (and report) both sides in id order.
+          const desiredRules = sortLockRules(
+            desired.map((rule): Bucket.LockRule => ({
+              ...rule,
+              prefix: rule.prefix ?? "",
+            })),
+          );
+
+          if (deepEqual(observed, desiredRules)) {
+            return desiredRules;
+          }
+
+          yield* r2
+            .putBucketLock({
+              accountId,
+              bucketName,
+              jurisdiction,
+              rules: desiredRules,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
+
+          return desiredRules;
+        });
+
       return {
         stables: ["bucketName", "accountId"],
         list: () =>
@@ -1016,6 +1175,7 @@ export const ProviderLive = () =>
                     domains,
                     lifecycleRules,
                     cors,
+                    locks: undefined,
                     publicDomain,
                   };
                 }).pipe(
@@ -1038,6 +1198,7 @@ export const ProviderLive = () =>
                       domains: [] as Bucket.CustomDomain[],
                       lifecycleRules: [] as Bucket.LifecycleRule[],
                       cors: [] as Bucket.CorsRule[],
+                      locks: undefined,
                       publicDomain: undefined,
                     }),
                   ),
@@ -1082,11 +1243,14 @@ export const ProviderLive = () =>
           if (!deepEqual(olds.cors, news.cors)) {
             return { action: "update" } as const;
           }
+          if (!deepEqual(olds.locks, news.locks)) {
+            return { action: "update" } as const;
+          }
           if ((olds.publicAccess ?? false) !== (news.publicAccess ?? false)) {
             return { action: "update" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Prefer the deployed name: regenerating would target a different
           // bucket if the generator's output for this id ever drifts.
@@ -1193,6 +1357,14 @@ export const ProviderLive = () =>
             news.cors ?? [],
           );
 
+          // Locks are managed only once the props name them: clearing rules
+          // a stack never declared would drop protection someone else set.
+          // Removing `locks` after declaring it still clears them.
+          const locks =
+            news.locks !== undefined || olds?.locks !== undefined
+              ? yield* reconcileLockRules(attrs.bucketName, attrs.jurisdiction, news.locks ?? [])
+              : undefined;
+
           const publicDomain = yield* reconcileManagedDomain(
             attrs.bucketName,
             attrs.jurisdiction,
@@ -1204,6 +1376,7 @@ export const ProviderLive = () =>
             domains,
             lifecycleRules,
             cors,
+            locks,
             publicDomain,
           };
         }),
@@ -1287,6 +1460,7 @@ export const ProviderLive = () =>
                 domains: output?.domains ?? [],
                 lifecycleRules: output?.lifecycleRules ?? [],
                 cors: output?.cors ?? [],
+                locks: output?.locks,
                 publicDomain: output?.publicDomain,
               })),
               Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
@@ -1304,9 +1478,9 @@ export const ProviderLive = () =>
  * opaque id — the name IS the identity — so the `dev:` marker rides on the
  * name (a `:` can never appear in a real R2 bucket name).
  *
- * Custom domains, lifecycle rules, CORS, and the managed r2.dev domain
- * are deploy-side concerns with no local behavior; the local attributes
- * report them empty.
+ * Custom domains, lifecycle rules, CORS, lock rules, and the managed r2.dev
+ * domain are deploy-side concerns with no local behavior; the local
+ * attributes report them empty.
  */
 export const ProviderLocal = () =>
   Provider.succeed(Bucket, {
@@ -1335,6 +1509,7 @@ export const ProviderLocal = () =>
         domains: [],
         lifecycleRules: [],
         cors: [],
+        locks: undefined,
         publicDomain: undefined,
       };
     }),
@@ -1462,6 +1637,28 @@ const toLifecyclePutPayload = (
   deleteObjectsTransition: rule.deleteObjectsTransition,
   storageClassTransitions: rule.storageClassTransitions,
 });
+
+type LockRuleResponse = NonNullable<r2.GetBucketLockResponse["rules"]>[number];
+
+const sortLockRules = (rules: Bucket.LockRule[]): Bucket.LockRule[] =>
+  [...rules].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+// The condition decodes as an unchecked union; copy only the known fields so
+// the drift comparison against the desired rules is exact.
+const toLockRule = (rule: LockRuleResponse): Bucket.LockRule => {
+  const condition = rule.condition;
+  return {
+    id: rule.id,
+    enabled: rule.enabled,
+    prefix: rule.prefix ?? "",
+    condition:
+      condition.type === "Age"
+        ? { type: "Age", maxAgeSeconds: condition.maxAgeSeconds }
+        : condition.type === "Date"
+          ? { type: "Date", date: condition.date }
+          : { type: "Indefinite" },
+  };
+};
 
 // Cloudflare keys a custom domain to a single bucket at the zone level. After a
 // domain is deleted, re-attaching the same hostname can transiently 409 with

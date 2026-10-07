@@ -3,7 +3,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import { resolveConnectionOptions, resolveSsl } from "@/SQL/PostgresTls.ts";
+import { resolveConnectionOptions, resolvePoolConfig, resolveSsl } from "@/SQL/PostgresTls.ts";
 
 const url = (s: string) => Redacted.make(s);
 
@@ -115,5 +115,31 @@ describe("SQL/PostgresTls resolveConnectionOptions", { tags: ["unit", "local"] }
       const original = url(value);
       expect(resolveConnectionOptions(original).url).toBe(original);
     }
+  });
+});
+
+describe("SQL/PostgresTls resolvePoolConfig", { tags: ["unit", "local"] }, () => {
+  it("passes client options through with the URL's TLS settings", () => {
+    const config = resolvePoolConfig(url("postgres://u@127.0.0.1:5432/x?sslmode=prefer"), {
+      prepare: false,
+      maxConnections: 3,
+    });
+    expect(config.prepare).toBe(false);
+    expect(config.maxConnections).toBe(3);
+    expect(config.ssl).toBe(true);
+    expect(Redacted.value(config.url!)).toBe("postgres://u@127.0.0.1:5432/x?sslmode=prefer");
+  });
+
+  it("keeps an explicit ssl option over the URL's sslmode", () => {
+    const config = resolvePoolConfig(url("postgres://u@127.0.0.1:5432/x?sslmode=prefer"), {
+      ssl: false,
+    });
+    expect(config.ssl).toBe(false);
+  });
+
+  it("leaves the driver defaults without options", () => {
+    const config = resolvePoolConfig(url("postgres://u@db.example.com/x"));
+    expect(config.prepare).toBeUndefined();
+    expect(config.ssl).toBeUndefined();
   });
 });

@@ -1,16 +1,20 @@
 import { fileURLToPath } from "node:url";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
@@ -90,6 +94,65 @@ test.provider(
 );
 
 test.provider(
+  "Effect-native function updates when its source changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      // Work on a temp copy so editing the source never touches the
+      // checked-in fixture. The copy lives under packages/alchemy/.tmp so its
+      // imports resolve exactly like the original's.
+      const fixtureDir = yield* cloneFixture(
+        yield* path.fromFileUrl(new URL("./fixtures/source-change", import.meta.url)),
+        {
+          prefix: "alchemy-lambda-source-change-",
+          tempRoot: yield* path.fromFileUrl(new URL("../../../.tmp", import.meta.url)),
+        },
+      );
+      const entry = path.join(fixtureDir, "function.ts");
+      const source = yield* fs.readFileString(entry);
+      const fixture = yield* Effect.promise(
+        () => import(entry) as Promise<typeof import("./fixtures/source-change/function.ts")>,
+      );
+      const declaration = fixture.SourceChangeFunction.pipe(
+        Effect.provide(fixture.SourceChangeFunctionLive),
+      );
+
+      const created = yield* Effect.gen(function* () {
+        const created = yield* stack.deploy(declaration);
+        expect(yield* invokeHttpFunction(created.functionName)).toBe("source-v1");
+
+        const unchanged = yield* stack.plan(declaration);
+        expect(unchanged.resources.SourceChangeFunction).toMatchObject({
+          action: "noop",
+        });
+
+        yield* fs.writeFileString(entry, source.replace('"source-v1"', '"source-v2"'));
+
+        const changed = yield* stack.plan(declaration);
+        expect(changed.resources.SourceChangeFunction).toMatchObject({
+          action: "update",
+        });
+
+        const updated = yield* stack.deploy(declaration);
+        expect(updated.functionName).toBe(created.functionName);
+        expect(yield* invokeHttpFunction(updated.functionName)).toBe("source-v2");
+        return created;
+      }).pipe(Effect.ensuring(fs.remove(fixtureDir, { recursive: true }).pipe(Effect.ignore)));
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(created.functionName);
+      yield* assertRoleDeleted(created.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
   "applies and updates the Lambda timeout",
   (stack) =>
     Effect.gen(function* () {
@@ -140,6 +203,47 @@ test.provider(
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
+);
+
+// `logging.retention` makes Alchemy create the `/aws/lambda/<name>` log
+// group up front (Lambda would only create it on first invoke, with no
+// expiry) and keep its retention policy in sync; destroy reaps the group.
+test.provider(
+  "applies, updates, and clears log retention",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployWith = (retention: "10 days" | "forever") =>
+        stack.deploy(
+          AWS.Lambda.Function("RetentionFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+            logging: { retention },
+          }),
+        );
+      const describeGroup = (name: string) =>
+        Logs.describeLogGroups({ logGroupNamePrefix: name }).pipe(
+          Effect.map((r) => (r.logGroups ?? []).find((g) => g.logGroupName === name)),
+        );
+
+      // Never invoked: the group exists only because Alchemy created it.
+      const fn = yield* deployWith("10 days");
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      expect((yield* describeGroup(logGroupName))?.retentionInDays).toBe(14);
+
+      yield* deployWith("forever");
+      const cleared = yield* describeGroup(logGroupName);
+      expect(cleared).toBeDefined();
+      expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      expect(yield* describeGroup(logGroupName)).toBeUndefined();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 360_000 },
 );
 
 test.provider(
@@ -466,17 +570,21 @@ const assertFunctionReady = Effect.fn(function* (functionName: string, marker: s
   const observed = Configuration?.Environment?.Variables?.READINESS_MARKER;
   expect(Redacted.isRedacted(observed) ? Redacted.value(observed) : observed).toBe(marker);
 
+  expect(yield* invokeHttpFunction(functionName, "/readiness")).toBe(marker);
+});
+
+const invokeHttpFunction = Effect.fn(function* (functionName: string, path = "/") {
   const response = yield* Lambda.invoke({
     FunctionName: functionName,
     Payload: JSON.stringify({
       version: "2.0",
-      rawPath: "/readiness",
+      rawPath: path,
       rawQueryString: "",
       headers: { host: "localhost" },
       requestContext: {
         http: {
           method: "GET",
-          path: "/readiness",
+          path,
           protocol: "HTTP/1.1",
           sourceIp: "127.0.0.1",
           userAgent: "alchemy-test",
@@ -491,7 +599,7 @@ const assertFunctionReady = Effect.fn(function* (functionName: string, marker: s
     : "";
   const body = yield* Effect.try(() => JSON.parse(payload));
   expect(body.statusCode).toBe(200);
-  expect(body.body).toBe(marker);
+  return body.body as string;
 });
 
 // Out-of-band proof that the trailing destroy actually removed the function
