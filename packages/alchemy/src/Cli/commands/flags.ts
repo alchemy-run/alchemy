@@ -94,7 +94,7 @@ export const envFile = Flag.Path("env-file", { typeName: "file" }).pipe(
         return yield* new CliError.InvalidValue({
           option: "env-file",
           value: path,
-          expected: `Path is not a file: ${path}`,
+          expected: "a file or /dev/null",
           kind: "flag",
         });
       }

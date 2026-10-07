@@ -190,7 +190,7 @@ describe("--env-file flag", { tags: ["unit", "local"] }, () => {
       const result = yield* parseEnvFile(yield* fs.makeTempDirectoryScoped()).pipe(Effect.result);
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
-        expect(result.failure.message).toContain("Path is not a file");
+        expect(result.failure.message).toContain("Expected: a file or /dev/null");
       }
     }).pipe(Effect.scoped, Effect.provide(TestEnv)),
   );
