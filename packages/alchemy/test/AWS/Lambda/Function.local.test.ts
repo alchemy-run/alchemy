@@ -363,3 +363,48 @@ test.provider.skipIf(!dockerAvailable)(
     timeout: 540_000,
   },
 );
+
+test.provider.skipIf(!dockerAvailable)(
+  "logging.retention creates the log group with its policy before the first invoke",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (logging?: AWS.Lambda.FunctionProps["logging"]) =>
+        stack.deploy(
+          AWS.Lambda.Function("DevRetentionFn", {
+            main: esmHandlerPath,
+            handler: "handler",
+            bundle: false,
+            functionUrl: false,
+            logging,
+          }),
+        );
+
+      // Control: without `logging` the provider does not touch CloudWatch
+      // Logs, and the function is never invoked, so no group exists.
+      const fn = yield* deploy();
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const findGroup = Logs.describeLogGroups({ logGroupNamePrefix: logGroupName }).pipe(
+        Effect.map((page) => page.logGroups?.find((g) => g.logGroupName === logGroupName)),
+        Effect.provide(flociContext),
+      );
+      yield* Effect.addFinalizer(() =>
+        Logs.deleteLogGroup({ logGroupName }).pipe(Effect.provide(flociContext), Effect.ignore),
+      );
+      expect(yield* findGroup).toBeUndefined();
+
+      // 10 days rounds up to CloudWatch's 14.
+      yield* deploy({ retention: "10 days" });
+      expect((yield* findGroup)?.retentionInDays).toBe(14);
+
+      // "forever" clears the policy and keeps the group.
+      yield* deploy({ retention: "forever" });
+      const cleared = yield* findGroup;
+      expect(cleared).toBeDefined();
+      expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
+);

@@ -93,6 +93,21 @@ describe(
   "Docker.Context",
   { tags: ["provider:docker", "provider:docker:context", "local"], concurrent: false },
   () => {
+    // Every prop is optional: `Docker.Context("ctx")` must plan, deploy,
+    // redeploy in place, and destroy without a props object.
+    test.provider("deploys a context declared without props", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Docker.Context("bare-context"));
+        const second = yield* stack.deploy(Docker.Context("bare-context"));
+        expect(second.id).toBe(first.id);
+        yield* stack.destroy();
+        const gone = yield* docker.context.inspect(first.name).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
     test.provider("creates a context with description and endpoint", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
