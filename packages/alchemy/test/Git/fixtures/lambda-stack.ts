@@ -45,7 +45,7 @@ export default class LambdaGitHost extends Cloudflare.Worker<LambdaGitHost>()(
   Effect.gen(function* () {
     const fetch = yield* HttpRouter.toHttpEffect(GitLive);
     return { fetch };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 
 export const makeLambdaTestStack = (name: string) =>
