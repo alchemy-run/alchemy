@@ -23,9 +23,7 @@ export interface ReadBucket extends Binding.Service<
   (bucket: Bucket) => Effect.Effect<ReadBucketClient>
 > {}
 
-export const ReadBucket = Binding.Service<ReadBucket>(
-  "Cloudflare.R2.ReadBucket",
-);
+export const ReadBucket = Binding.Service<ReadBucket>("Cloudflare.R2.ReadBucket");
 
 export interface ReadBucketClient {
   raw: Effect.Effect<runtime.R2Bucket, never, RuntimeContext>;
@@ -36,9 +34,6 @@ export interface ReadBucketClient {
       onlyIf: runtime.R2Conditional | Headers;
     },
   ): Effect.Effect<ObjectBody | R2Object | null, R2Error, RuntimeContext>;
-  get(
-    key: string,
-    options?: GetOptions,
-  ): Effect.Effect<ObjectBody | null, R2Error, RuntimeContext>;
+  get(key: string, options?: GetOptions): Effect.Effect<ObjectBody | null, R2Error, RuntimeContext>;
   list(options?: ListOptions): Effect.Effect<Objects, R2Error, RuntimeContext>;
 }

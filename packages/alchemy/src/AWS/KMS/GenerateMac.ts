@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GenerateMacRequest extends Omit<
-  kms.GenerateMacRequest,
-  "KeyId"
-> {}
+export interface GenerateMacRequest extends Omit<kms.GenerateMacRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GenerateMac`.
@@ -37,9 +34,7 @@ export interface GenerateMac extends Binding.Service<
   (
     key: Key | AliasName,
   ) => Effect.Effect<
-    (
-      request: GenerateMacRequest,
-    ) => Effect.Effect<kms.GenerateMacResponse, kms.GenerateMacError>
+    (request: GenerateMacRequest) => Effect.Effect<kms.GenerateMacResponse, kms.GenerateMacError>
   >
 > {}
 

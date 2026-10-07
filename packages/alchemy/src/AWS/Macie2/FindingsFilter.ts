@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryThroughEnablement } from "./common.ts";
 
@@ -110,21 +105,14 @@ export interface FindingsFilter extends Resource<
  * });
  * ```
  */
-const FindingsFilterResource = Resource<FindingsFilter>(
-  "AWS.Macie2.FindingsFilter",
-);
+const FindingsFilterResource = Resource<FindingsFilter>("AWS.Macie2.FindingsFilter");
 
 export { FindingsFilterResource as FindingsFilter };
 
 const createName = (id: string, props: Partial<FindingsFilterProps>) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 64 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
-const buildFilterAttrs = (
-  id: string,
-  live: macie2.GetFindingsFilterResponse,
-) => ({
+const buildFilterAttrs = (id: string, live: macie2.GetFindingsFilterResponse) => ({
   id,
   arn: live.arn!,
   name: live.name!,
@@ -137,14 +125,10 @@ export const FindingsFilterProvider = () =>
     Effect.gen(function* () {
       const getFilter = (id: string) =>
         macie2.getFindingsFilter({ id }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           // Macie disabled ⇒ the filter is unreachable (and disabling deletes
           // all Macie configuration), so report it as gone.
-          Effect.catchTag("AccessDeniedException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -155,18 +139,14 @@ export const FindingsFilterProvider = () =>
           const live = yield* getFilter(output.id);
           if (!live) return undefined;
           const attrs = buildFilterAttrs(output.id, live);
-          return (yield* hasAlchemyTags(id, live.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, live.tags)) ? attrs : Unowned(attrs);
         }),
 
         list: () =>
           Effect.gen(function* () {
             const pages = yield* macie2.listFindingsFilters.pages({}).pipe(
               Stream.runCollect,
-              Effect.catchTag("AccessDeniedException", () =>
-                Effect.succeed([]),
-              ),
+              Effect.catchTag("AccessDeniedException", () => Effect.succeed([])),
             );
             const out: FindingsFilter["Attributes"][] = [];
             for (const page of pages) {
@@ -206,12 +186,9 @@ export const FindingsFilterProvider = () =>
             const drift =
               live.name !== name ||
               live.action !== desiredAction ||
-              (news.description !== undefined &&
-                live.description !== news.description) ||
-              (news.position !== undefined &&
-                live.position !== news.position) ||
-              JSON.stringify(live.findingCriteria) !==
-                JSON.stringify(news.findingCriteria);
+              (news.description !== undefined && live.description !== news.description) ||
+              (news.position !== undefined && live.position !== news.position) ||
+              JSON.stringify(live.findingCriteria) !== JSON.stringify(news.findingCriteria);
             if (drift) {
               yield* macie2.updateFindingsFilter({
                 id: filterId,
@@ -224,10 +201,7 @@ export const FindingsFilterProvider = () =>
             }
 
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
-            const { upsert, removed } = diffTags(
-              tagRecord(live.tags),
-              desiredTags,
-            );
+            const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
                 resourceArn: live.arn!,

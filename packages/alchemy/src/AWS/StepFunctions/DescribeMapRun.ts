@@ -33,6 +33,4 @@ export interface DescribeMapRun extends Binding.Service<
     ) => Effect.Effect<sfn.DescribeMapRunOutput, sfn.DescribeMapRunError>
   >
 > {}
-export const DescribeMapRun = Binding.Service<DescribeMapRun>(
-  "AWS.StepFunctions.DescribeMapRun",
-);
+export const DescribeMapRun = Binding.Service<DescribeMapRun>("AWS.StepFunctions.DescribeMapRun");

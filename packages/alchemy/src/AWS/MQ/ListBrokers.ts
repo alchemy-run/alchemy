@@ -23,9 +23,7 @@ export interface ListBrokers extends Binding.Service<
   ListBrokers,
   "AWS.MQ.ListBrokers",
   () => Effect.Effect<
-    (
-      request?: mq.ListBrokersRequest,
-    ) => Effect.Effect<mq.ListBrokersResponse, mq.ListBrokersError>
+    (request?: mq.ListBrokersRequest) => Effect.Effect<mq.ListBrokersResponse, mq.ListBrokersError>
   >
 > {}
 export const ListBrokers = Binding.Service<ListBrokers>("AWS.MQ.ListBrokers");

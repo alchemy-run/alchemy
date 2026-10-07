@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteNotificationChannel}.
  */
-export interface DeleteNotificationChannelRequest
-  extends fms.DeleteNotificationChannelRequest {}
+export interface DeleteNotificationChannelRequest extends fms.DeleteNotificationChannelRequest {}
 
 /**
  * Runtime binding for `fms:DeleteNotificationChannel`.
@@ -31,14 +30,10 @@ export interface DeleteNotificationChannel extends Binding.Service<
   () => Effect.Effect<
     (
       request?: DeleteNotificationChannelRequest,
-    ) => Effect.Effect<
-      fms.DeleteNotificationChannelResponse,
-      fms.DeleteNotificationChannelError
-    >
+    ) => Effect.Effect<fms.DeleteNotificationChannelResponse, fms.DeleteNotificationChannelError>
   >
 > {}
 
-export const DeleteNotificationChannel =
-  Binding.Service<DeleteNotificationChannel>(
-    "AWS.FMS.DeleteNotificationChannel",
-  );
+export const DeleteNotificationChannel = Binding.Service<DeleteNotificationChannel>(
+  "AWS.FMS.DeleteNotificationChannel",
+);

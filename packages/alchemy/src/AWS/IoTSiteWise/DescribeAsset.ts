@@ -7,10 +7,7 @@ import type { Asset } from "./Asset.ts";
  * Request for {@link DescribeAsset}. The bound asset's id is injected
  * automatically.
  */
-export interface DescribeAssetRequest extends Omit<
-  sitewise.DescribeAssetRequest,
-  "assetId"
-> {}
+export interface DescribeAssetRequest extends Omit<sitewise.DescribeAssetRequest, "assetId"> {}
 
 /**
  * Runtime binding for `iotsitewise:DescribeAsset` — read the bound asset's
@@ -47,12 +44,7 @@ export interface DescribeAsset extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeAssetRequest,
-    ) => Effect.Effect<
-      sitewise.DescribeAssetResponse,
-      sitewise.DescribeAssetError
-    >
+    ) => Effect.Effect<sitewise.DescribeAssetResponse, sitewise.DescribeAssetError>
   >
 > {}
-export const DescribeAsset = Binding.Service<DescribeAsset>(
-  "AWS.IoTSiteWise.DescribeAsset",
-);
+export const DescribeAsset = Binding.Service<DescribeAsset>("AWS.IoTSiteWise.DescribeAsset");

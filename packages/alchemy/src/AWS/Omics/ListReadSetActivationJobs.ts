@@ -41,7 +41,6 @@ export interface ListReadSetActivationJobs extends Binding.Service<
   >
 > {}
 
-export const ListReadSetActivationJobs =
-  Binding.Service<ListReadSetActivationJobs>(
-    "AWS.Omics.ListReadSetActivationJobs",
-  );
+export const ListReadSetActivationJobs = Binding.Service<ListReadSetActivationJobs>(
+  "AWS.Omics.ListReadSetActivationJobs",
+);

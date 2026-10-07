@@ -56,12 +56,9 @@ const DETAIL_TYPES: Record<SageMakerEventKind, string> = {
   "training-job": "SageMaker Training Job State Change",
   "processing-job": "SageMaker Processing Job State Change",
   "transform-job": "SageMaker Transform Job State Change",
-  "hyperparameter-tuning-job":
-    "SageMaker HyperParameter Tuning Job State Change",
-  "pipeline-execution":
-    "SageMaker Model Building Pipeline Execution Status Change",
-  "pipeline-step":
-    "SageMaker Model Building Pipeline Execution Step Status Change",
+  "hyperparameter-tuning-job": "SageMaker HyperParameter Tuning Job State Change",
+  "pipeline-execution": "SageMaker Model Building Pipeline Execution Status Change",
+  "pipeline-step": "SageMaker Model Building Pipeline Execution Step Status Change",
   image: "SageMaker Image State Change",
 };
 
@@ -133,12 +130,8 @@ export const consumeSageMakerEvents = <StreamReq = never, Req = never>(
     props.id ?? "SageMakerEvents",
     {
       source: ["aws.sagemaker"],
-      "detail-type": (props.kinds ?? (["endpoint"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.resourceArns !== undefined
-        ? { resources: [...props.resourceArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["endpoint"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.resourceArns !== undefined ? { resources: [...props.resourceArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

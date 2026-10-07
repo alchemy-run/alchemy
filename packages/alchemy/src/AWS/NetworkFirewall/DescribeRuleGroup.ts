@@ -36,10 +36,7 @@ export interface DescribeRuleGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeRuleGroupRequest,
-    ) => Effect.Effect<
-      NFW.DescribeRuleGroupResponse,
-      NFW.DescribeRuleGroupError
-    >
+    ) => Effect.Effect<NFW.DescribeRuleGroupResponse, NFW.DescribeRuleGroupError>
   >
 > {}
 

@@ -30,7 +30,6 @@ export interface ListCommandExecutionsForSandbox extends Binding.Service<
     >
   >
 > {}
-export const ListCommandExecutionsForSandbox =
-  Binding.Service<ListCommandExecutionsForSandbox>(
-    "AWS.CodeBuild.ListCommandExecutionsForSandbox",
-  );
+export const ListCommandExecutionsForSandbox = Binding.Service<ListCommandExecutionsForSandbox>(
+  "AWS.CodeBuild.ListCommandExecutionsForSandbox",
+);

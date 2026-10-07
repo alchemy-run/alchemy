@@ -1,18 +1,18 @@
-import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as planetscale from "@distilled.cloud/planetscale";
+import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
 import {
   diffMigrations,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
 } from "../../SQL/Migrations/index.ts";
+import { hashImports } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
@@ -184,9 +184,7 @@ export type MySQLDatabase = Resource<
 >;
 
 /** @resource */
-export const MySQLDatabase = Resource<MySQLDatabase>(
-  "Planetscale.MySQLDatabase",
-);
+export const MySQLDatabase = Resource<MySQLDatabase>("Planetscale.MySQLDatabase");
 
 export const MySQLDatabaseProvider = () =>
   Provider.succeed(MySQLDatabase, {
@@ -206,12 +204,8 @@ export const MySQLDatabaseProvider = () =>
       // engine-generated deterministically (stable across updates).
       const nameIsStable =
         output?.name !== undefined &&
-        (news.name !== undefined
-          ? news.name === output.name
-          : olds?.name === undefined);
-      const stables = nameIsStable
-        ? ["id", "organization", "region", "name"]
-        : undefined;
+        (news.name !== undefined ? news.name === output.name : olds?.name === undefined);
+      const stables = nameIsStable ? ["id", "organization", "region", "name"] : undefined;
 
       if (
         news.region?.slug !== undefined &&
@@ -223,10 +217,7 @@ export const MySQLDatabaseProvider = () =>
       // Replicas reconcile in place via a keyspace resize — never a
       // replacement. Diff against the observed keyspace replica count so
       // an adopted database whose live state already matches plans no-op.
-      if (
-        news.replicas !== undefined &&
-        news.replicas !== (output?.replicas ?? olds.replicas)
-      ) {
+      if (news.replicas !== undefined && news.replicas !== (output?.replicas ?? olds.replicas)) {
         return { action: "update", stables } as const;
       }
       if (yield* diffMigrations({ news, output })) {
@@ -253,8 +244,7 @@ export const MySQLDatabaseProvider = () =>
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { organization } = yield* yield* Credentials;
-      const databaseName =
-        output?.name ?? (yield* createDatabaseName(id, olds?.name));
+      const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
       return yield* planetscale
         .getDatabase({
           organization,
@@ -292,21 +282,16 @@ export const MySQLDatabaseProvider = () =>
                 updatedAt: data.updated_at,
                 htmlUrl: data.html_url,
                 region: { slug: data.region.slug },
-                migrationsDir:
-                  output?.migrationsDir ??
-                  (olds && migrationsInputOf(olds))?.dir,
+                migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
                 migrationsTable:
-                  output?.migrationsTable ??
-                  (olds && migrationsInputOf(olds))?.table,
+                  output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
                 migrationsHashes: output?.migrationsHashes ?? {},
                 importHashes: output?.importHashes ?? {},
                 clusterSize: output?.clusterSize ?? "",
-                requireApprovalForDeploy:
-                  data.require_approval_for_deploy ?? false,
+                requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
                 restrictBranchRegion: data.restrict_branch_region ?? false,
                 insightsRawQueries: data.insights_raw_queries ?? false,
-                productionBranchWebConsole:
-                  data.production_branch_web_console ?? false,
+                productionBranchWebConsole: data.production_branch_web_console ?? false,
                 deletionProtection: data.deletion_protected ?? false,
                 automaticMigrations: data.automatic_migrations ?? false,
                 migrationFramework: data.migration_framework ?? undefined,
@@ -442,11 +427,7 @@ export const MySQLDatabaseProvider = () =>
         yield* waitForBranchReady(organization, updated.name, branch, session);
       }
       const migrations = migrationsInput
-        ? yield* runMySQLMigrations(
-            migrationTarget,
-            migrationsInput,
-            stampedOf(output),
-          )
+        ? yield* runMySQLMigrations(migrationTarget, migrationsInput, stampedOf(output))
         : undefined;
       const importHashes = news.importFiles?.length
         ? yield* runMySQLImports(
@@ -475,8 +456,7 @@ export const MySQLDatabaseProvider = () =>
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
         restrictBranchRegion: updated.restrict_branch_region ?? false,
         insightsRawQueries: updated.insights_raw_queries ?? false,
-        productionBranchWebConsole:
-          updated.production_branch_web_console ?? false,
+        productionBranchWebConsole: updated.production_branch_web_console ?? false,
         deletionProtection: updated.deletion_protected ?? false,
         automaticMigrations: updated.automatic_migrations ?? false,
         migrationFramework: updated.migration_framework ?? undefined,
@@ -516,12 +496,10 @@ export const MySQLDatabaseProvider = () =>
                 importHashes: {},
                 clusterSize: "",
                 replicas: undefined,
-                requireApprovalForDeploy:
-                  data.require_approval_for_deploy ?? false,
+                requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
                 restrictBranchRegion: data.restrict_branch_region ?? false,
                 insightsRawQueries: data.insights_raw_queries ?? false,
-                productionBranchWebConsole:
-                  data.production_branch_web_console ?? false,
+                productionBranchWebConsole: data.production_branch_web_console ?? false,
                 deletionProtection: data.deletion_protected ?? false,
                 automaticMigrations: data.automatic_migrations ?? false,
                 migrationFramework: data.migration_framework ?? undefined,
@@ -537,10 +515,7 @@ export const MySQLDatabaseProvider = () =>
 
 const createDatabaseName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 const rootDir = Effect.sync(() => process.cwd());

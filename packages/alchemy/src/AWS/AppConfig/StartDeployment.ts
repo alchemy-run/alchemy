@@ -8,10 +8,7 @@ import type { Environment } from "./Environment.ts";
 
 export interface StartDeploymentRequest extends Omit<
   appconfig.StartDeploymentRequest,
-  | "ApplicationId"
-  | "EnvironmentId"
-  | "ConfigurationProfileId"
-  | "DeploymentStrategyId"
+  "ApplicationId" | "EnvironmentId" | "ConfigurationProfileId" | "DeploymentStrategyId"
 > {}
 
 /**
@@ -54,6 +51,4 @@ export interface StartDeployment extends Binding.Service<
     ) => Effect.Effect<appconfig.Deployment, appconfig.StartDeploymentError>
   >
 > {}
-export const StartDeployment = Binding.Service<StartDeployment>(
-  "AWS.AppConfig.StartDeployment",
-);
+export const StartDeployment = Binding.Service<StartDeployment>("AWS.AppConfig.StartDeployment");

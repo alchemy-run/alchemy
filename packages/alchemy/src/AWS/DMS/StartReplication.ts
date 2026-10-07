@@ -35,6 +35,4 @@ export interface StartReplication extends Binding.Service<
   >
 > {}
 
-export const StartReplication = Binding.Service<StartReplication>(
-  "AWS.DMS.StartReplication",
-);
+export const StartReplication = Binding.Service<StartReplication>("AWS.DMS.StartReplication");

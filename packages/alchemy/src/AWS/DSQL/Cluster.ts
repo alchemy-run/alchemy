@@ -98,11 +98,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getCluster({ identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
@@ -120,22 +116,15 @@ export const ClusterProvider = () =>
       // minute; budget ~5 min (60 * 5s) so slow provisioning still converges
       // without risking the test wall.
       const waitForActive = Effect.fn(function* (identifier: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]);
         return yield* readCluster(identifier).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(
-                new Error(`DSQL cluster '${identifier}' not found`),
-              );
+              return Effect.fail(new Error(`DSQL cluster '${identifier}' not found`));
             }
             if (!activeStatuses.has(cluster.status)) {
               return Effect.fail(
-                new Error(
-                  `DSQL cluster '${identifier}' not active (status: ${cluster.status})`,
-                ),
+                new Error(`DSQL cluster '${identifier}' not active (status: ${cluster.status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -161,10 +150,7 @@ export const ClusterProvider = () =>
         diff: Effect.fn(function* ({ olds = {}, news }) {
           if (!isResolved(news)) return undefined;
           // KMS key is create-only; changing it forces a replacement.
-          if (
-            (news.kmsEncryptionKey ?? undefined) !==
-            (olds.kmsEncryptionKey ?? undefined)
-          ) {
+          if ((news.kmsEncryptionKey ?? undefined) !== (olds.kmsEncryptionKey ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
@@ -188,16 +174,13 @@ export const ClusterProvider = () =>
 
           // 1. Observe — cloud state is authoritative; output caches the id.
           let observed =
-            output?.clusterId === undefined
-              ? undefined
-              : yield* readCluster(output.clusterId);
+            output?.clusterId === undefined ? undefined : yield* readCluster(output.clusterId);
 
           // 2. Ensure — create if missing. DSQL assigns the identifier.
           let identifier = observed?.identifier ?? output?.clusterId;
           if (observed === undefined) {
             const created = yield* dsql.createCluster({
-              deletionProtectionEnabled:
-                news.deletionProtectionEnabled ?? false,
+              deletionProtectionEnabled: news.deletionProtectionEnabled ?? false,
               kmsEncryptionKey: news.kmsEncryptionKey,
               tags: desiredTags,
             });
@@ -211,8 +194,7 @@ export const ClusterProvider = () =>
           // 3. Sync deletion protection against observed state.
           if (
             news.deletionProtectionEnabled !== undefined &&
-            news.deletionProtectionEnabled !==
-              observed.deletionProtectionEnabled
+            news.deletionProtectionEnabled !== observed.deletionProtectionEnabled
           ) {
             yield* dsql.updateCluster({
               identifier: identifier!,
@@ -252,9 +234,7 @@ export const ClusterProvider = () =>
                 identifier,
                 deletionProtectionEnabled: false,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
           yield* dsql.deleteCluster({ identifier }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -262,10 +242,7 @@ export const ClusterProvider = () =>
             // retry briefly until it settles into a deletable state.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(24),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
             }),
           );
         }),
@@ -290,9 +267,7 @@ export const ClusterProvider = () =>
               { concurrency: 4 },
             ).pipe(
               Effect.map((attrs) =>
-                attrs.filter(
-                  (a): a is NonNullable<typeof a> => a !== undefined,
-                ),
+                attrs.filter((a): a is NonNullable<typeof a> => a !== undefined),
               ),
             );
           }),

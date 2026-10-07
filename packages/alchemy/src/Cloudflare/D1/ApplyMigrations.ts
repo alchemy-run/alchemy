@@ -1,9 +1,5 @@
 import * as Effect from "effect/Effect";
-import {
-  inlineSqlParams,
-  MigrationError,
-  type SqlExecutor,
-} from "../../SQL/Migrations/index.ts";
+import { inlineSqlParams, MigrationError, type SqlExecutor } from "../../SQL/Migrations/index.ts";
 
 /**
  * The minimal query surface the migration flow needs: run (possibly
@@ -35,20 +31,11 @@ export type D1SqlExecutor<E = unknown, R = never> = (
  * batched call is the closest available unit (matching wrangler's own
  * behavior).
  */
-export const makeD1MigrationExecutor = <E>(
-  raw: D1SqlExecutor<E>,
-): SqlExecutor => ({
+export const makeD1MigrationExecutor = <E>(raw: D1SqlExecutor<E>): SqlExecutor => ({
   dialect: "sqlite",
   query: (sql, params) =>
-    raw(
-      params && params.length > 0
-        ? inlineSqlParams(sql, params, "sqlite")
-        : sql,
-    ).pipe(
-      Effect.map(
-        (result) =>
-          (result.result[0]?.results ?? []) as Array<Record<string, unknown>>,
-      ),
+    raw(params && params.length > 0 ? inlineSqlParams(sql, params, "sqlite") : sql).pipe(
+      Effect.map((result) => (result.result[0]?.results ?? []) as Array<Record<string, unknown>>),
       Effect.mapError(
         (cause) =>
           new MigrationError({
@@ -62,9 +49,7 @@ export const makeD1MigrationExecutor = <E>(
       statements
         .map((statement) => statement.trim())
         .filter((statement) => statement.length > 0)
-        .map((statement) =>
-          statement.endsWith(";") ? statement : `${statement};`,
-        )
+        .map((statement) => (statement.endsWith(";") ? statement : `${statement};`))
         .join("\n"),
     ).pipe(
       Effect.asVoid,

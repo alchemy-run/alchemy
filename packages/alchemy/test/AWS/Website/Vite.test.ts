@@ -1,9 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
@@ -20,16 +21,8 @@ const runLive = !process.env.FAST;
 // (emulator-backed) variant.
 const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 
-const viteFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "vite-app",
-);
-const staticFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "static-site",
-);
+const viteFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "vite-app");
+const staticFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "static-site");
 
 // Clone under the alchemy package so `vite` resolves from the workspace's
 // hoisted node_modules (the fixture has no node_modules).
@@ -52,19 +45,15 @@ describe.skipIf(!runLive || runEmulated)(
           const rootDir = yield* cloneFixture(viteFixtureDir, {
             prefix: "alchemy-vite-aws-live-",
             tempRoot,
-            entries: [
-              ".gitignore",
-              "package.json",
-              "index.html",
-              "src",
-              "public",
-            ],
+            entries: [".gitignore", "package.json", "index.html", "src", "public"],
           });
 
           const deployed = yield* stack.deploy(
             Effect.gen(function* () {
               const site = yield* AWS.Website.Vite("ViteSite", {
                 rootDir,
+                // Reaches the production build: Vite inlines `VITE_*` vars.
+                env: { VITE_SITE_ENV: "VITE_AWS_SITE_ENV_MARKER" },
                 forceDestroy: true,
                 invalidation: { paths: "all", wait: true },
               });
@@ -83,16 +72,26 @@ describe.skipIf(!runLive || runEmulated)(
             timeout: "180 seconds",
             label: "index",
           });
-          // publicDir passthrough landed in the bucket.
-          yield* expectUrlContains(`${url}/robots.txt`, "User-agent", {
-            label: "public asset",
-          });
-          // SPA fallback (the composite's default): misses serve the shell.
-          yield* expectUrlContains(
-            `${url}/missing/client/route`,
-            "VITE_AWS_PAGE_MARKER",
-            { label: "spa fallback" },
+          // The site env was inlined into the built client bundle.
+          const bucketName = deployed.site.bucket!.bucketName as string;
+          const listed = yield* s3.listObjectsV2({ Bucket: bucketName });
+          const bundles = (listed.Contents ?? []).flatMap((object) =>
+            object.Key?.endsWith(".js") ? [object.Key] : [],
           );
+          const sources = yield* Effect.forEach(bundles, (Key) =>
+            s3
+              .getObject({ Bucket: bucketName, Key })
+              .pipe(
+                Effect.flatMap((object) => object.Body!.pipe(Stream.decodeText, Stream.mkString)),
+              ),
+          );
+          expect(sources.some((source) => source.includes("VITE_AWS_SITE_ENV_MARKER"))).toBe(true);
+          // publicDir passthrough landed in the bucket.
+          yield* expectUrlContains(`${url}/robots.txt`, "User-agent", { label: "public asset" });
+          // SPA fallback (the composite's default): misses serve the shell.
+          yield* expectUrlContains(`${url}/missing/client/route`, "VITE_AWS_PAGE_MARKER", {
+            label: "spa fallback",
+          });
 
           yield* stack.destroy();
         }),

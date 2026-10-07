@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type RetrieverStatus = qbusiness.RetrieverStatus;
@@ -125,10 +120,7 @@ export interface Retriever extends Resource<
  */
 export const Retriever = Resource<Retriever>("AWS.QBusiness.Retriever");
 
-const createDisplayName = (
-  id: string,
-  props: { displayName?: string | undefined },
-) =>
+const createDisplayName = (id: string, props: { displayName?: string | undefined }) =>
   props.displayName
     ? Effect.succeed(props.displayName)
     : createPhysicalName({ id, maxLength: 100 });
@@ -136,14 +128,8 @@ const createDisplayName = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-  return Object.fromEntries(
-    (response?.tags ?? []).map((tag) => [tag.key, tag.value]),
-  );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
 interface RetrieverState {
@@ -151,17 +137,10 @@ interface RetrieverState {
   described: qbusiness.GetRetrieverResponse;
 }
 
-const readRetrieverById = Effect.fn(function* (
-  applicationId: string,
-  retrieverId: string,
-) {
+const readRetrieverById = Effect.fn(function* (applicationId: string, retrieverId: string) {
   const described = yield* qbusiness
     .getRetriever({ applicationId, retrieverId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const arn = described.retrieverArn;
   if (arn === undefined) return undefined;
@@ -180,25 +159,14 @@ const readRetrieverById = Effect.fn(function* (
   return state;
 });
 
-const findRetrieverByName = Effect.fn(function* (
-  applicationId: string,
-  displayName: string,
-) {
-  const summaries = yield* qbusiness.listRetrievers
-    .pages({ applicationId })
-    .pipe(
-      EffectStream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.retrievers ?? []),
-      ),
-      // The parent application may itself be gone.
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed([] as qbusiness.Retriever[]),
-      ),
-    );
-  const match = summaries.find(
-    (summary) => summary.displayName === displayName,
+const findRetrieverByName = Effect.fn(function* (applicationId: string, displayName: string) {
+  const summaries = yield* qbusiness.listRetrievers.pages({ applicationId }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.retrievers ?? [])),
+    // The parent application may itself be gone.
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as qbusiness.Retriever[])),
   );
+  const match = summaries.find((summary) => summary.displayName === displayName);
   if (!match?.retrieverId) return undefined;
   return yield* readRetrieverById(applicationId, match.retrieverId);
 });
@@ -216,9 +184,7 @@ class RetrieverNotReady extends Data.TaggedError("RetrieverNotReady")<{
  * A retriever whose asynchronous provisioning converged to the terminal
  * `FAILED` status.
  */
-export class RetrieverProvisioningFailed extends Data.TaggedError(
-  "RetrieverProvisioningFailed",
-)<{
+export class RetrieverProvisioningFailed extends Data.TaggedError("RetrieverProvisioningFailed")<{
   readonly retrieverId: string;
 }> {}
 
@@ -240,20 +206,12 @@ const waitForRetrieverActive = (applicationId: string, retrieverId: string) =>
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getRetriever({ applicationId, retrieverId })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
-        return yield* Effect.fail(
-          new RetrieverProvisioningFailed({ retrieverId }),
-        );
+        return yield* Effect.fail(new RetrieverProvisioningFailed({ retrieverId }));
       }
-      return yield* Effect.fail(
-        new RetrieverNotReady({ retrieverId, status: described?.status }),
-      );
+      return yield* Effect.fail(new RetrieverNotReady({ retrieverId, status: described?.status }));
     }),
   );
 
@@ -272,10 +230,7 @@ export const RetrieverProvider = () =>
           if (applicationId === undefined) return undefined;
           const state = output?.retrieverId
             ? yield* readRetrieverById(applicationId, output.retrieverId)
-            : yield* findRetrieverByName(
-                applicationId,
-                yield* createDisplayName(id, olds ?? {}),
-              );
+            : yield* findRetrieverByName(applicationId, yield* createDisplayName(id, olds ?? {}));
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -285,18 +240,13 @@ export const RetrieverProvider = () =>
           if (!isResolved(news)) return;
           if (olds === undefined) return;
           // The parent application and retriever type are fixed at creation.
-          if (
-            olds.applicationId !== news.applicationId ||
-            olds.type !== news.type
-          ) {
+          if (olds.applicationId !== news.applicationId || olds.type !== news.type) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("QBusiness Retriever requires props"),
-            );
+            return yield* Effect.fail(new Error("QBusiness Retriever requires props"));
           }
           const applicationId = news.applicationId;
           const displayName = yield* createDisplayName(id, news);
@@ -324,19 +274,12 @@ export const RetrieverProvider = () =>
             });
             if (!created.retrieverId) {
               return yield* Effect.fail(
-                new Error(
-                  `CreateRetriever for '${displayName}' returned no retrieverId`,
-                ),
+                new Error(`CreateRetriever for '${displayName}' returned no retrieverId`),
               );
             }
-            yield* session.note(
-              `Creating retriever ${displayName} (${created.retrieverId})...`,
-            );
+            yield* session.note(`Creating retriever ${displayName} (${created.retrieverId})...`);
             yield* waitForRetrieverActive(applicationId, created.retrieverId);
-            state = yield* readRetrieverById(
-              applicationId,
-              created.retrieverId,
-            );
+            state = yield* readRetrieverById(applicationId, created.retrieverId);
             if (state === undefined) {
               return yield* Effect.fail(
                 new Error(`failed to read created retriever ${displayName}`),
@@ -346,18 +289,13 @@ export const RetrieverProvider = () =>
 
           // Sync mutable settings via UpdateRetriever — only when drifted.
           const described = state.described;
-          const desiredNativeIndexId =
-            news.configuration.nativeIndexConfiguration?.indexId;
-          const observedNativeIndexId =
-            described.configuration?.nativeIndexConfiguration?.indexId;
-          const desiredKendraIndexId =
-            news.configuration.kendraIndexConfiguration?.indexId;
-          const observedKendraIndexId =
-            described.configuration?.kendraIndexConfiguration?.indexId;
+          const desiredNativeIndexId = news.configuration.nativeIndexConfiguration?.indexId;
+          const observedNativeIndexId = described.configuration?.nativeIndexConfiguration?.indexId;
+          const desiredKendraIndexId = news.configuration.kendraIndexConfiguration?.indexId;
+          const observedKendraIndexId = described.configuration?.kendraIndexConfiguration?.indexId;
           const needsUpdate =
             displayName !== described.displayName ||
-            (news.roleArn !== undefined &&
-              news.roleArn !== described.roleArn) ||
+            (news.roleArn !== undefined && news.roleArn !== described.roleArn) ||
             desiredNativeIndexId !== observedNativeIndexId ||
             desiredKendraIndexId !== observedKendraIndexId;
           if (needsUpdate) {
@@ -368,10 +306,7 @@ export const RetrieverProvider = () =>
               configuration: news.configuration,
               roleArn: news.roleArn,
             });
-            yield* waitForRetrieverActive(
-              applicationId,
-              state.attrs.retrieverId,
-            );
+            yield* waitForRetrieverActive(applicationId, state.attrs.retrieverId);
             yield* session.note(`Updated retriever ${displayName}`);
           }
 
@@ -395,10 +330,7 @@ export const RetrieverProvider = () =>
 
           yield* session.note(state.attrs.retrieverArn);
 
-          const final = yield* readRetrieverById(
-            applicationId,
-            state.attrs.retrieverId,
-          );
+          const final = yield* readRetrieverById(applicationId, state.attrs.retrieverId);
           if (!final) {
             return yield* Effect.fail(
               new Error(`failed to read reconciled retriever ${displayName}`),
@@ -412,9 +344,7 @@ export const RetrieverProvider = () =>
               applicationId: output.applicationId,
               retrieverId: output.retrieverId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

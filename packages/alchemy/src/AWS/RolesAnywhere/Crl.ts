@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readRolesAnywhereTags,
-  syncRolesAnywhereTags,
-  toWireTags,
-} from "./internal.ts";
+import { readRolesAnywhereTags, syncRolesAnywhereTags, toWireTags } from "./internal.ts";
 
 export interface CrlProps {
   /**
@@ -117,13 +113,8 @@ export const CrlProvider = () =>
   Provider.effect(
     Crl,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Partial<CrlProps>,
-      ) {
-        return (
-          props.crlName ?? (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Partial<CrlProps>) {
+        return props.crlName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Find a CRL by its user-facing name across all pages. */
@@ -137,9 +128,7 @@ export const CrlProvider = () =>
       const getById = (crlId: string) =>
         rolesanywhere.getCrl({ crlId }).pipe(
           Effect.map((r) => r.crl),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -149,10 +138,7 @@ export const CrlProvider = () =>
           if (!isResolved(news)) return undefined;
           // updateCrl only accepts name + crlData — the trust anchor
           // association is immutable, so a change forces a replacement.
-          if (
-            olds?.trustAnchorArn !== undefined &&
-            olds.trustAnchorArn !== news.trustAnchorArn
-          ) {
+          if (olds?.trustAnchorArn !== undefined && olds.trustAnchorArn !== news.trustAnchorArn) {
             return { action: "replace" } as const;
           }
         }),
@@ -173,14 +159,10 @@ export const CrlProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredEnabled = news.enabled ?? true;
           const desiredPem = news.crlData.trim();
-          const encodePem = Effect.sync(() =>
-            new TextEncoder().encode(desiredPem),
-          );
+          const encodePem = Effect.sync(() => new TextEncoder().encode(desiredPem));
 
           // 1. Observe — cloud state is authoritative; output caches the id.
-          let live = output?.crlId
-            ? yield* getById(output.crlId)
-            : yield* findByName(name);
+          let live = output?.crlId ? yield* getById(output.crlId) : yield* findByName(name);
 
           // 2. Ensure — import if missing.
           if (live === undefined) {
@@ -225,9 +207,7 @@ export const CrlProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* rolesanywhere
             .deleteCrl({ crlId: output.crlId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

@@ -64,11 +64,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeCacheSubnetGroups({ CacheSubnetGroupName: name })
-          .pipe(
-            Effect.catchTag("CacheSubnetGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.CacheSubnetGroups?.[0];
       });
       const attrs = Effect.fn(function* (group: elasticache.CacheSubnetGroup) {
@@ -106,9 +102,7 @@ export const SubnetGroupProvider = () =>
           );
           if (!group?.ARN) return undefined;
           const result = yield* attrs(group);
-          return (yield* hasAlchemyTags(id, result.tags))
-            ? result
-            : Unowned(result);
+          return (yield* hasAlchemyTags(id, result.tags)) ? result : Unowned(result);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const props = news!;
@@ -126,18 +120,11 @@ export const SubnetGroupProvider = () =>
                 SubnetIds: props.subnetIds,
                 Tags: tagsToWire(desiredTags),
               })
-              .pipe(
-                Effect.catchTag(
-                  "CacheSubnetGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("CacheSubnetGroupAlreadyExistsFault", () => Effect.void));
             group = yield* readGroup(name);
           }
           if (!group)
-            return yield* Effect.fail(
-              new Error(`Subnet group '${name}' not found after create`),
-            );
+            return yield* Effect.fail(new Error(`Subnet group '${name}' not found after create`));
           const observedSubnets = (group.Subnets ?? [])
             .map((subnet) => subnet.SubnetIdentifier)
             .filter((id): id is string => id !== undefined);
@@ -177,16 +164,10 @@ export const SubnetGroupProvider = () =>
               CacheSubnetGroupName: output.subnetGroupName,
             })
             .pipe(
-              Effect.catchTag(
-                "CacheSubnetGroupNotFoundFault",
-                () => Effect.void,
-              ),
+              Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.void),
               Effect.retry({
                 while: (error) => error._tag === "CacheSubnetGroupInUse",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(8)]),
               }),
             );
         }),

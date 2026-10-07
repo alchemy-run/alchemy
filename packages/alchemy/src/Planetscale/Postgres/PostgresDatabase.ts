@@ -1,18 +1,18 @@
-import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as planetscale from "@distilled.cloud/planetscale";
+import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
 import {
   diffMigrations,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
 } from "../../SQL/Migrations/index.ts";
+import { hashImports } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
@@ -25,13 +25,11 @@ import {
 } from "../Util.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterArch,
   toPostgresClusterSku,
   type PostgresClusterSize,
 } from "./PostgresClusterSize.ts";
-import {
-  runPostgresImports,
-  runPostgresMigrations,
-} from "./PostgresMigrations.ts";
+import { runPostgresImports, runPostgresMigrations } from "./PostgresMigrations.ts";
 
 /**
  * Properties for creating or updating a PostgreSQL PlanetScale database.
@@ -130,9 +128,7 @@ export type PostgresDatabase = Resource<
 >;
 
 /** @resource */
-export const PostgresDatabase = Resource<PostgresDatabase>(
-  "Planetscale.PostgresDatabase",
-);
+export const PostgresDatabase = Resource<PostgresDatabase>("Planetscale.PostgresDatabase");
 
 export const PostgresDatabaseProvider = () =>
   Provider.succeed(PostgresDatabase, {
@@ -152,18 +148,10 @@ export const PostgresDatabaseProvider = () =>
       // engine-generated deterministically (stable across updates).
       const nameIsStable =
         output?.name !== undefined &&
-        (news.name !== undefined
-          ? news.name === output.name
-          : olds?.name === undefined);
-      const stables = nameIsStable
-        ? ["id", "organization", "region", "name"]
-        : undefined;
+        (news.name !== undefined ? news.name === output.name : olds?.name === undefined);
+      const stables = nameIsStable ? ["id", "organization", "region", "name"] : undefined;
 
-      if (
-        news.region?.slug &&
-        output?.region?.slug &&
-        news.region.slug !== output.region.slug
-      ) {
+      if (news.region?.slug && output?.region?.slug && news.region.slug !== output.region.slug) {
         return yield* replaceDatabase(news, output, "region");
       }
 
@@ -201,8 +189,7 @@ export const PostgresDatabaseProvider = () =>
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { organization } = yield* yield* Credentials;
-      const databaseName =
-        output?.name ?? (yield* createDatabaseName(id, olds?.name));
+      const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
 
       const data = yield* planetscale
         .getDatabase({
@@ -236,8 +223,7 @@ export const PostgresDatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-      const arch: "x86" | "arm" =
-        branch!.cluster_architecture === "aarch64" ? "arm" : "x86";
+      const arch = toPostgresClusterArch(branch!.cluster_architecture);
       const clusterSize = branch!.cluster_name;
 
       return {
@@ -251,10 +237,8 @@ export const PostgresDatabaseProvider = () =>
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
         region: { slug: data.region.slug },
-        migrationsDir:
-          output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
-        migrationsTable:
-          output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
+        migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable: output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
         migrationsHashes: output?.migrationsHashes ?? {},
         importHashes: output?.importHashes ?? {},
         clusterSize,
@@ -383,11 +367,7 @@ export const PostgresDatabaseProvider = () =>
         yield* waitForBranchReady(organization, updated.name, branch, session);
       }
       const migrations = migrationsInput
-        ? yield* runPostgresMigrations(
-            migrationTarget,
-            migrationsInput,
-            stampedOf(output),
-          )
+        ? yield* runPostgresMigrations(migrationTarget, migrationsInput, stampedOf(output))
         : undefined;
       const importHashes = news.importFiles?.length
         ? yield* runPostgresImports(
@@ -415,8 +395,7 @@ export const PostgresDatabaseProvider = () =>
         arch: news.arch ?? output?.arch ?? "x86",
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
         restrictBranchRegion: updated.restrict_branch_region ?? false,
-        productionBranchWebConsole:
-          updated.production_branch_web_console ?? false,
+        productionBranchWebConsole: updated.production_branch_web_console ?? false,
         deletionProtection: updated.deletion_protected ?? false,
       } satisfies PostgresDatabaseAttributes;
     }),
@@ -428,16 +407,12 @@ export const PostgresDatabaseProvider = () =>
     list: Effect.fn(function* () {
       const { organization } = yield* yield* Credentials;
 
-      const databases = yield* planetscale.listDatabases
-        .pages({ organization })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              page.data.filter((db) => db.kind === "postgresql"),
-            ),
-          ),
-        );
+      const databases = yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.data.filter((db) => db.kind === "postgresql")),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         databases,
@@ -450,12 +425,9 @@ export const PostgresDatabaseProvider = () =>
                 database: data.name,
                 branch: defaultBranch,
               })
-              .pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-            const arch: "x86" | "arm" =
-              branch?.cluster_architecture === "aarch64" ? "arm" : "x86";
+            const arch = toPostgresClusterArch(branch?.cluster_architecture);
             const clusterSize = branch?.cluster_name ?? "";
 
             const attrs: PostgresDatabase["Attributes"] = {
@@ -475,11 +447,9 @@ export const PostgresDatabaseProvider = () =>
               migrationsHashes: {},
               importHashes: {},
               arch,
-              requireApprovalForDeploy:
-                data.require_approval_for_deploy ?? false,
+              requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
               restrictBranchRegion: data.restrict_branch_region ?? false,
-              productionBranchWebConsole:
-                data.production_branch_web_console ?? false,
+              productionBranchWebConsole: data.production_branch_web_console ?? false,
               deletionProtection: data.deletion_protected ?? false,
             };
             return attrs;
@@ -493,10 +463,7 @@ export const PostgresDatabaseProvider = () =>
 
 const createDatabaseName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 const rootDir = Effect.sync(() => process.cwd());

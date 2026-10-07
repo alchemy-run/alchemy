@@ -31,6 +31,7 @@ import * as ApiShield from "./ApiShield/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Argo from "./Argo/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
+import * as Basin from "./Basin/index.ts";
 import * as BotManagement from "./BotManagement/index.ts";
 import * as Cache from "./Cache/index.ts";
 import * as Calls from "./Calls/index.ts";
@@ -70,6 +71,7 @@ import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Iam from "./Iam/index.ts";
 import * as Images from "./Images/index.ts";
 import * as Intel from "./Intel/index.ts";
+import * as K2 from "./K2/index.ts";
 import * as KeylessCertificate from "./KeylessCertificate/index.ts";
 import * as KV from "./KV/index.ts";
 import * as LeakedCredentialCheck from "./LeakedCredentialCheck/index.ts";
@@ -126,9 +128,7 @@ import * as Zone from "./Zone/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Cloudflare",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Cloudflare") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
@@ -178,6 +178,7 @@ export const providers = () =>
       ApiToken.UserApiToken,
       Argo.SmartRouting,
       Argo.TieredCaching,
+      Basin.Table,
       Bookmark.Bookmark,
       BotManagement.BotManagement,
       Cache.OriginCloudRegion,
@@ -257,6 +258,8 @@ export const providers = () =>
       Images.Variant,
       Intel.IndicatorFeed,
       Intel.IndicatorFeedPermission,
+      K2.Stream,
+      K2.Subscription,
       KeylessCertificate.KeylessCertificate,
       KeyPair,
       KV.Namespace,
@@ -344,6 +347,7 @@ export const providers = () =>
       Spectrum.Application,
       Speed.TestSchedule,
       Ssl.CertificatePack,
+      Ssl.CertificateTransparencyAlerting,
       Ssl.UniversalSsl,
       Stream.LiveInput,
       Stream.LiveInputOutput,
@@ -512,6 +516,8 @@ export const providers = () =>
           Images.VariantProvider(),
           Intel.IndicatorFeedPermissionProvider(),
           Intel.IndicatorFeedProvider(),
+          K2.StreamProvider(),
+          K2.SubscriptionProvider(),
           KeylessCertificate.KeylessCertificateProvider(),
           KV.NamespaceProvider(),
           LeakedCredentialCheck.LeakedCredentialCheckProvider(),
@@ -595,6 +601,7 @@ export const providers = () =>
           Spectrum.ApplicationProvider(),
           Speed.TestScheduleProvider(),
           Ssl.CertificatePackProvider(),
+          Ssl.CertificateTransparencyAlertingProvider(),
           Ssl.UniversalSslProvider(),
           Stream.LiveInputOutputProvider(),
           Stream.LiveInputProvider(),
@@ -614,6 +621,7 @@ export const providers = () =>
           Tunnel.WarpConnectorProvider(),
         ),
         Layer.mergeAll(
+          Basin.TableProvider(),
           Turnstile.WidgetProvider(),
           UrlNorm.UrlNormalizationProvider(),
           Vectorize.IndexProvider(),

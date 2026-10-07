@@ -1,5 +1,5 @@
-import { Task } from "@/AWS/ECS/Task.ts";
 import * as Effect from "effect/Effect";
+import { Task } from "@/AWS/ECS/Task.ts";
 import { isolatedProject } from "../../../IsolatedProject.ts";
 
 /**
@@ -20,9 +20,7 @@ export const project = isolatedProject("ecs-task", import.meta.filename);
  * The `{ run }` impl logs a marker and completes, so a successful boot is
  * observable as the Fargate task stopping with container exit code 0.
  */
-export class IsolatedProjectTask extends Task<IsolatedProjectTask>()(
-  "EcsIsolatedProjectTask",
-) {}
+export class IsolatedProjectTask extends Task<IsolatedProjectTask>()("EcsIsolatedProjectTask") {}
 
 export default IsolatedProjectTask.make(
   {

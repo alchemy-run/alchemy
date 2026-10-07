@@ -4,16 +4,12 @@ import * as Output from "../../Output.ts";
 import { defaultProviderMode } from "../../ProviderMode.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import type { PermissionGroupRef } from "../ApiToken/Common.ts";
+import type { PermissionGroupRef, Policy } from "../ApiToken/Common.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { WorkerBinding } from "../Workers/WorkerBinding.ts";
 import type { Bucket } from "./Bucket.ts";
-import type {
-  S3Credentials,
-  S3CredentialsAccess,
-  S3CredentialsValue,
-} from "./S3Credentials.ts";
+import type { S3Credentials, S3CredentialsAccess, S3CredentialsValue } from "./S3Credentials.ts";
 
 /**
  * Deploy-time half of `Cloudflare.R2.S3Credentials`, shared by async Worker
@@ -23,8 +19,8 @@ import type {
  * Binds `bindingName` on the host Worker to the JSON-encoded
  * {@link S3CredentialsValue} for `bucket`:
  *
- * - **live** — mints (or extends) the Worker's scoped
- *   {@link AccountApiToken} with the permission groups for `access` and
+ * - **live** — mints (or extends) the Worker's {@link AccountApiToken} with
+ *   a policy scoped to `bucket` (see {@link s3CredentialsPolicy}) and
  *   injects a `secret_text` binding. R2 derives S3 credentials from any API
  *   token: the access key id is the token id and the secret access key is
  *   the SHA-256 of the token value.
@@ -59,17 +55,15 @@ export const bindS3Credentials = Effect.fn(function* (
   // One binding id per bucket + access level: bindings sharing an id
   // collapse to one, which would drop a write grant when a read binding
   // targets the same bucket (and vice versa).
-  yield* token.bind`Cloudflare.R2.S3Credentials(${bucket.LogicalId}, ${access})`(
-    {
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: PERMISSION_GROUPS[access],
-          resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
-        },
-      ],
-    },
-  );
+  yield* token.bind`Cloudflare.R2.S3Credentials(${bucket.LogicalId}, ${access})`({
+    policies: [
+      Output.all(bucket.bucketName, bucket.jurisdiction).pipe(
+        Output.map(([bucketName, jurisdiction]) =>
+          s3CredentialsPolicy(accountId, bucketName, jurisdiction, access),
+        ),
+      ),
+    ],
+  });
   const binding = Output.all(
     token.tokenId,
     token.value,
@@ -103,20 +97,35 @@ export type BucketInput = Bucket | Effect.Effect<Bucket, never, any>;
 
 /** Resolve a {@link BucketInput} to the bucket resource. */
 export const resolveBucket = (bucket: BucketInput) =>
-  (Effect.isEffect(bucket)
-    ? bucket
-    : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
+  (Effect.isEffect(bucket) ? bucket : Effect.succeed(bucket)) as Effect.Effect<Bucket>;
+
+/**
+ * The token policy behind deployed `S3Credentials`: `access` to the objects of
+ * one bucket. Bucket-scoped groups on the bucket resource, because the
+ * account-level R2 groups would reach every bucket in the account.
+ *
+ * @see https://developers.cloudflare.com/r2/api/tokens/#bucket
+ */
+export const s3CredentialsPolicy = (
+  accountId: string,
+  bucketName: string,
+  jurisdiction: Bucket.Jurisdiction,
+  access: S3CredentialsAccess,
+): Policy => ({
+  effect: "allow",
+  permissionGroups: PERMISSION_GROUPS[access],
+  resources: {
+    [`com.cloudflare.edge.r2.bucket.${accountId}_${jurisdiction}_${bucketName}`]: "*",
+  },
+});
 
 const PERMISSION_GROUPS: Record<S3CredentialsAccess, PermissionGroupRef[]> = {
-  read: ["Workers R2 Storage Read"],
-  write: ["Workers R2 Storage Write"],
-  "read-write": ["Workers R2 Storage Read", "Workers R2 Storage Write"],
+  read: ["Workers R2 Storage Bucket Item Read"],
+  write: ["Workers R2 Storage Bucket Item Write"],
+  "read-write": ["Workers R2 Storage Bucket Item Read", "Workers R2 Storage Bucket Item Write"],
 };
 
-const liveEndpoint = (
-  accountId: string,
-  jurisdiction: Bucket.Jurisdiction,
-): string =>
+const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdiction): string =>
   jurisdiction === "default"
     ? `https://${accountId}.r2.cloudflarestorage.com`
     : `https://${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;
@@ -129,10 +138,7 @@ const liveEndpoint = (
 const isLocal = (host: Worker, bucket: Bucket) =>
   Effect.gen(function* () {
     const runDefault = yield* defaultProviderMode;
-    return (
-      (host.Mode ?? runDefault) === "local" &&
-      (bucket.Mode ?? runDefault) === "local"
-    );
+    return (host.Mode ?? runDefault) === "local" && (bucket.Mode ?? runDefault) === "local";
   });
 
 /**

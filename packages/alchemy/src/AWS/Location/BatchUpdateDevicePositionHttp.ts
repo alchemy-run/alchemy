@@ -1,7 +1,7 @@
 import * as location from "@distilled.cloud/aws/location";
 import * as Layer from "effect/Layer";
-import { makeLocationTrackerHttpBinding } from "./BindingHttp.ts";
 import { BatchUpdateDevicePosition } from "./BatchUpdateDevicePosition.ts";
+import { makeLocationTrackerHttpBinding } from "./BindingHttp.ts";
 
 export const BatchUpdateDevicePositionHttp = Layer.effect(
   BatchUpdateDevicePosition,
