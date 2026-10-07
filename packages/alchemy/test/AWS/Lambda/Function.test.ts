@@ -14,10 +14,7 @@ import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import {
-  SourceChangeFunction,
-  SourceChangeFunctionLive,
-} from "./fixtures/function-source-change.ts";
+import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
@@ -104,11 +101,24 @@ test.provider(
       const path = yield* Path.Path;
       yield* stack.destroy();
 
-      const sourceChangeFunctionPath = yield* path.fromFileUrl(
-        new URL("./fixtures/function-source-change.ts", import.meta.url),
+      // Work on a temp copy so editing the source never touches the
+      // checked-in fixture. The copy lives under packages/alchemy/.tmp so its
+      // imports resolve exactly like the original's.
+      const fixtureDir = yield* cloneFixture(
+        yield* path.fromFileUrl(new URL("./fixtures/source-change", import.meta.url)),
+        {
+          prefix: "alchemy-lambda-source-change-",
+          tempRoot: yield* path.fromFileUrl(new URL("../../../.tmp", import.meta.url)),
+        },
       );
-      const source = yield* fs.readFileString(sourceChangeFunctionPath);
-      const declaration = SourceChangeFunction.pipe(Effect.provide(SourceChangeFunctionLive));
+      const entry = path.join(fixtureDir, "function.ts");
+      const source = yield* fs.readFileString(entry);
+      const fixture = yield* Effect.promise(
+        () => import(entry) as Promise<typeof import("./fixtures/source-change/function.ts")>,
+      );
+      const declaration = fixture.SourceChangeFunction.pipe(
+        Effect.provide(fixture.SourceChangeFunctionLive),
+      );
 
       const created = yield* Effect.gen(function* () {
         const created = yield* stack.deploy(declaration);
@@ -119,10 +129,7 @@ test.provider(
           action: "noop",
         });
 
-        yield* fs.writeFileString(
-          sourceChangeFunctionPath,
-          source.replace('"source-v1"', '"source-v2"'),
-        );
+        yield* fs.writeFileString(entry, source.replace('"source-v1"', '"source-v2"'));
 
         const changed = yield* stack.plan(declaration);
         expect(changed.resources.SourceChangeFunction).toMatchObject({
@@ -133,9 +140,7 @@ test.provider(
         expect(updated.functionName).toBe(created.functionName);
         expect(yield* invokeHttpFunction(updated.functionName)).toBe("source-v2");
         return created;
-      }).pipe(
-        Effect.ensuring(fs.writeFileString(sourceChangeFunctionPath, source).pipe(Effect.orDie)),
-      );
+      }).pipe(Effect.ensuring(fs.remove(fixtureDir, { recursive: true }).pipe(Effect.ignore)));
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(created.functionName);

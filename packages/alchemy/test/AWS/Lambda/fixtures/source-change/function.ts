@@ -1,8 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
+// Package import (not the @/ alias): the test bundles a temp copy of this
+// file from packages/alchemy/.tmp, where the alias does not resolve.
+import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-export class SourceChangeFunction extends Lambda.Function<Lambda.Function>()(
+export class SourceChangeFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "SourceChangeFunction",
 ) {}
 
@@ -11,8 +13,7 @@ export const SourceChangeFunctionLive = SourceChangeFunction.make(
     main: import.meta.url,
     functionUrl: false,
     build: {
-      external: (moduleId) =>
-        moduleId.endsWith("function-source-change-dependency.ts"),
+      external: (moduleId) => moduleId.endsWith("dependency.ts"),
     },
   },
   Effect.gen(function* () {
@@ -22,9 +23,7 @@ export const SourceChangeFunctionLive = SourceChangeFunction.make(
           () => process.env.LOAD_SOURCE_CHANGE_DEPENDENCY === "true",
         );
         if (loadDependency) {
-          yield* Effect.tryPromise(
-            () => import("./function-source-change-dependency.ts"),
-          ).pipe(Effect.orDie);
+          yield* Effect.tryPromise(() => import("./dependency.ts")).pipe(Effect.orDie);
         }
         return HttpServerResponse.text("source-v1");
       }),
