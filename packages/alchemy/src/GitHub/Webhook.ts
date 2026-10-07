@@ -1,9 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isResolved } from "../Diff.ts";
 import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Octokit } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import type { WebhookEventName } from "./RepositoryEventSource.ts";
 
@@ -58,6 +59,15 @@ export interface WebhookProps {
    * @default false
    */
   insecureSsl?: boolean;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Webhook extends Resource<
@@ -109,9 +119,8 @@ export interface Webhook extends Resource<
  * {@link import("./RepositoryEventSource.ts").events | events(repository, handler)}
  * inside a Cloudflare Worker, which provisions the webhook, wires the
  * delivery URL to the Worker, and forwards verified events to your handler.
- * @resource
- * @section Creating a Webhook
- * @example Forward push events to a URL
+ * ### Creating a Webhook
+ * **Example:** Forward push events to a URL
  * ```typescript
  * yield* GitHub.Webhook("ci-webhook", {
  *   owner: "my-org",
@@ -122,7 +131,7 @@ export interface Webhook extends Resource<
  * });
  * ```
  *
- * @example Point a webhook at a Worker
+ * **Example:** Point a webhook at a Worker
  * ```typescript
  * const worker = yield* Cloudflare.Worker("Api", { ... });
  *
@@ -133,6 +142,9 @@ export interface Webhook extends Resource<
  *   events: ["*"],
  * });
  * ```
+ *
+ * @resource
+ * @product Webhook
  */
 export const Webhook = Resource<Webhook>("GitHub.Webhook");
 
@@ -140,8 +152,27 @@ export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
     stables: ["webhookId"],
 
+    // A webhook belongs to (host, owner, repository) — its server-assigned
+    // id is meaningless in any other repo, so moving it replaces the
+    // resource: the engine creates the new webhook first, then `delete`
+    // removes the old one from the old repo. Everything else (url, events,
+    // secret, active) is mutated in place by `reconcile`. Replacement is
+    // safe here — a webhook is declarative config that is fully
+    // re-creatable from props.
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
+      if (
+        news.owner !== olds.owner ||
+        news.repository !== olds.repository ||
+        (yield* gitHubBaseUrlChanged(olds, news))
+      ) {
+        return { action: "replace" };
+      }
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(news.baseUrl);
 
       const config = {
         url: news.url as string,
@@ -226,14 +257,11 @@ export const WebhookProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const hooks = await octokit.paginate(
-                  octokit.rest.repos.listWebhooks,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const hooks = await octokit.paginate(octokit.rest.repos.listWebhooks, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return hooks.map(toAttrs);
               } catch (error: any) {
                 // Repos where the token lacks admin access reject the webhooks
@@ -254,7 +282,7 @@ export const WebhookProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise(async () => {
         try {

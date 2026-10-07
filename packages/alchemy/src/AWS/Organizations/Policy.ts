@@ -1,12 +1,14 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
+import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
-import type { PolicyDocument } from "../IAM/Policy.ts";
 import {
   collectPages,
   createName,
@@ -33,9 +35,14 @@ export interface PolicyProps {
    */
   type: organizations.PolicyType;
   /**
-   * Typed policy document.
+   * Policy content. For `SERVICE_CONTROL_POLICY` / `RESOURCE_CONTROL_POLICY`
+   * pass a typed {@link ServiceControlPolicyDocument} (the SCP-legal IAM
+   * dialect — no `Principal`/`NotPrincipal`). Other policy types (tag,
+   * backup, AI-services opt-out, ...) use their own JSON grammars — pass
+   * them as a raw JSON `string`. The string form also serves as the
+   * escape hatch for adopted or hand-authored documents.
    */
-  document: PolicyDocument;
+  document: ServiceControlPolicyDocument | string;
   /**
    * Optional tags applied to the policy.
    */
@@ -46,13 +53,37 @@ export interface Policy extends Resource<
   "AWS.Organizations.Policy",
   PolicyProps,
   {
+    /**
+     * ID of the policy (e.g. `p-examplepolicyid`).
+     */
     policyId: PolicyId;
+    /**
+     * ARN of the policy.
+     */
     policyArn: PolicyArn;
+    /**
+     * Policy name.
+     */
     name: string;
+    /**
+     * Policy description.
+     */
     description: string | undefined;
+    /**
+     * Organizations policy type.
+     */
     type: organizations.PolicyType | undefined;
+    /**
+     * Whether the policy is an AWS-managed policy (e.g. `FullAWSAccess`).
+     */
     awsManaged: boolean | undefined;
-    document: PolicyDocument;
+    /**
+     * Parsed policy document as currently stored by AWS Organizations.
+     */
+    document: ServiceControlPolicyDocument;
+    /**
+     * Tags on the policy.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -61,6 +92,60 @@ export interface Policy extends Resource<
 
 /**
  * An AWS Organizations policy such as an SCP or tag policy.
+ *
+ * Attach it to a root, OU, or account with {@link PolicyAttachment}. Changing
+ * `type` or `name` replaces the policy; document and description changes
+ * update in place.
+ * ### Creating Policies
+ * **Example:** Service Control Policy (Typed Document)
+ * ```typescript
+ * const denyLeaveOrg = yield* Policy("DenyLeaveOrg", {
+ *   type: "SERVICE_CONTROL_POLICY",
+ *   description: "Prevent member accounts from leaving the organization",
+ *   document: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Deny",
+ *         Action: ["organizations:LeaveOrganization"],
+ *         Resource: "*",
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Tag Policy (Raw JSON)
+ * ```typescript
+ * const tagPolicy = yield* Policy("RequireEnvTag", {
+ *   type: "TAG_POLICY",
+ *   document: JSON.stringify({
+ *     tags: {
+ *       environment: {
+ *         tag_key: { "@@assign": "environment" },
+ *         tag_value: { "@@assign": ["dev", "staging", "prod"] },
+ *       },
+ *     },
+ *   }),
+ * });
+ * ```
+ *
+ * ### Attaching Policies
+ * **Example:** Attach an SCP to the Organization Root
+ * ```typescript
+ * const root = yield* Root("Root", {});
+ *
+ * const scpEnabled = yield* RootPolicyType("ScpEnabled", {
+ *   rootId: root.rootId,
+ *   policyType: "SERVICE_CONTROL_POLICY",
+ * });
+ *
+ * yield* PolicyAttachment("DenyLeaveOrgOnRoot", {
+ *   policyId: denyLeaveOrg.policyId,
+ *   targetId: scpEnabled.rootId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const Policy = Resource<Policy>("AWS.Organizations.Policy");
@@ -93,9 +178,7 @@ export const PolicyProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         // `listPolicies` REQUIRES a `Filter` (one policy type per call), so we
         // fan out across every policy-type filter and hydrate each summary via
@@ -110,17 +193,13 @@ export const PolicyProvider = () =>
               (type) =>
                 retryOrganizations(
                   collectPages(
-                    (NextToken) =>
-                      organizations.listPolicies({ Filter: type, NextToken }),
+                    (NextToken) => organizations.listPolicies({ Filter: type, NextToken }),
                     (page) => page.Policies,
                   ),
                 ).pipe(
                   // Not an org management/delegated account → nothing to list.
                   Effect.catchTag(
-                    [
-                      "AWSOrganizationsNotInUseException",
-                      "AccessDeniedException",
-                    ],
+                    ["AWSOrganizationsNotInUseException", "AccessDeniedException"],
                     () => Effect.succeed([] as organizations.PolicySummary[]),
                   ),
                 ),
@@ -132,11 +211,9 @@ export const PolicyProvider = () =>
               .map((summary) => summary.Id)
               .filter((policyId): policyId is string => policyId != null);
 
-            const hydrated = yield* Effect.forEach(
-              ids,
-              (policyId) => readPolicyById(policyId),
-              { concurrency: 10 },
-            );
+            const hydrated = yield* Effect.forEach(ids, (policyId) => readPolicyById(policyId), {
+              concurrency: 10,
+            });
 
             return hydrated.filter(
               (policy): policy is Policy["Attributes"] => policy !== undefined,
@@ -145,7 +222,10 @@ export const PolicyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
           const desiredDescription = news.description ?? "";
-          const desiredContent = JSON.stringify(news.document);
+          const desiredContent =
+            typeof news.document === "string"
+              ? news.document
+              : stringifyPolicyDocument(news.document);
 
           // Observe — locate the policy by ID if known, else by type+name.
           // Both `name` (after generation) and `type` are stable, so `diff`
@@ -169,32 +249,28 @@ export const PolicyProvider = () =>
                   Type: news.type,
                   Content: desiredContent,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "DuplicatePolicyException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("DuplicatePolicyException", () => Effect.void)),
             );
             state = yield* readPolicyByName({
               type: news.type,
               name,
             });
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`policy '${name}' not found after create`),
-              );
+              return yield* Effect.fail(new Error(`policy '${name}' not found after create`));
             }
           }
 
           // Sync description + content — diff observed cloud state against
-          // desired. `updatePolicy` requires `Name`; we keep the existing
-          // policy name (rename triggers replacement at the diff level).
+          // desired. Documents are compared in canonical form
+          // (`normalizePolicyDocument`: sorted keys, no whitespace) so an
+          // unchanged re-deploy — regardless of key order or string-vs-typed
+          // authoring — skips the `updatePolicy` call entirely.
+          // `updatePolicy` requires `Name`; we keep the existing policy name
+          // (rename triggers replacement at the diff level).
           const observedDescription = state.description ?? "";
-          const observedContent = JSON.stringify(state.document);
           if (
             observedDescription !== desiredDescription ||
-            observedContent !== desiredContent
+            normalizePolicyDocument(state.document) !== normalizePolicyDocument(desiredContent)
           ) {
             yield* retryOrganizations(
               organizations.updatePolicy({
@@ -231,11 +307,18 @@ export const PolicyProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOrganizations(
-            organizations
-              .deletePolicy({ PolicyId: output.policyId })
-              .pipe(
-                Effect.catchTag("PolicyNotFoundException", () => Effect.void),
-              ),
+            organizations.deletePolicy({ PolicyId: output.policyId }).pipe(
+              // Detaching a policy (the attachment's delete) propagates
+              // asynchronously — deletePolicy issued right after the detach
+              // can still observe the policy as attached. Retry through the
+              // typed dependency-violation tag, bounded.
+              Effect.retry({
+                while: (error) => error._tag === "PolicyInUseException",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 8,
+              }),
+              Effect.catchTag("PolicyNotFoundException", () => Effect.void),
+            ),
           );
         }),
       };
@@ -255,16 +338,13 @@ const POLICY_TYPE_FILTERS = [
   "SECURITYHUB_POLICY",
 ] as const satisfies readonly organizations.PolicyType[];
 
-const toName = (id: string, props: { name?: string } = {}) =>
-  createName(id, props.name, 128);
+const toName = (id: string, props: { name?: string } = {}) => createName(id, props.name, 128);
 
 const readPolicyById = Effect.fn(function* (policyId: string) {
   const described = yield* retryOrganizations(
     organizations.describePolicy({ PolicyId: policyId }).pipe(
       Effect.map((response) => response.Policy),
-      Effect.catchTag("PolicyNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
     ),
   );
 
@@ -284,7 +364,7 @@ const readPolicyById = Effect.fn(function* (policyId: string) {
     description: summary.Description,
     type: summary.Type,
     awsManaged: summary.AwsManaged,
-    document: JSON.parse(described?.Content ?? "{}") as PolicyDocument,
+    document: JSON.parse(described?.Content ?? "{}") as ServiceControlPolicyDocument,
     tags,
   } satisfies Policy["Attributes"];
 });

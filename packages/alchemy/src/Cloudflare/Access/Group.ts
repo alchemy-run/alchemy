@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -21,8 +20,21 @@ import type { Providers } from "../Providers.ts";
  * `CreateAccessGroupForAccountRequest` so the full Cloudflare rule surface is
  * available without re-declaring the union.
  */
-export type GroupRule =
-  zeroTrust.CreateAccessGroupForAccountRequest["include"][number];
+export type GroupRule = zeroTrust.CreateAccessGroupForAccountRequest["include"][number];
+
+/**
+ * One arm of the exclude-side rule union, and its require-side twin.
+ * Cloudflare's spec types the exclude/require rule lists separately from
+ * include — a few rule kinds (e.g. the GitHub-organization rule) carry the
+ * raw wire shape there — so these props use the SDK's own unions rather
+ * than reusing {@link GroupRule}.
+ */
+export type GroupExcludeRule = NonNullable<
+  zeroTrust.CreateAccessGroupForAccountRequest["exclude"]
+>[number];
+export type GroupRequireRule = NonNullable<
+  zeroTrust.CreateAccessGroupForAccountRequest["require"]
+>[number];
 
 export type GroupProps = {
   /**
@@ -42,12 +54,12 @@ export type GroupProps = {
    * Rules combined with logical NOT. A user matching any Exclude rule does
    * not match the group, even if they satisfied an Include rule.
    */
-  exclude?: GroupRule[];
+  exclude?: GroupExcludeRule[];
   /**
    * Rules combined with logical AND. A user must satisfy every Require rule
    * in addition to an Include rule.
    */
-  require?: GroupRule[];
+  require?: GroupRequireRule[];
   /**
    * Whether this is the default group for the Zero Trust organization.
    *
@@ -78,18 +90,15 @@ export type Group = Resource<
  * Access rule criteria. Groups are referenced from Access policies via a
  * `{ group: { id } }` rule, letting many policies share one membership
  * definition.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Group
- * @example Allow a single email domain
+ * ### Creating a Group
+ * **Example:** Allow a single email domain
  * ```typescript
  * const group = yield* Cloudflare.Access.Group("ExampleDomain", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
  * });
  * ```
  *
- * @example Combine include, exclude and require rules
+ * **Example:** Combine include, exclude and require rules
  * ```typescript
  * const group = yield* Cloudflare.Access.Group("UsEngineers", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
@@ -98,8 +107,8 @@ export type Group = Resource<
  * });
  * ```
  *
- * @section Referencing a Group from a Policy
- * @example Allow members of the group
+ * ### Referencing a Group from a Policy
+ * **Example:** Allow members of the group
  * ```typescript
  * const group = yield* Cloudflare.Access.Group("Team", {
  *   include: [{ emailDomain: { domain: "example.com" } }],
@@ -110,12 +119,15 @@ export type Group = Resource<
  *   include: [{ group: { id: group.groupId } }],
  * });
  * ```
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const Group = Resource<Group>("Cloudflare.Access.Group");
 
 export const isGroup = (value: unknown): value is Group =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Group";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Group";
 
 export const GroupProvider = () =>
   Provider.succeed(Group, {
@@ -139,9 +151,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
           );
         if (direct && direct.id) {
           return {
@@ -164,26 +174,21 @@ export const GroupProvider = () =>
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessGroupsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (g): g is (typeof page.result)[number] & { id: string } =>
-                    g.id != null,
-                )
-                .map((g) => ({
-                  groupId: g.id,
-                  accountId,
-                  name: g.name ?? "",
-                  isDefault: g.isDefault ?? undefined,
-                })),
-            ),
+      return yield* zeroTrust.listAccessGroupsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((g): g is (typeof page.result)[number] & { id: string } => g.id != null)
+              .map((g) => ({
+                groupId: g.id,
+                accountId,
+                name: g.name ?? "",
+                isDefault: g.isDefault ?? undefined,
+              })),
           ),
-        );
+        ),
+      );
     }),
     reconcile: Effect.fn(function* ({ id, news = {} as GroupProps, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -202,9 +207,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
           );
       }
       if (!observed) {

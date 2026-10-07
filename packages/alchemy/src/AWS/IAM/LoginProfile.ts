@@ -27,8 +27,11 @@ export interface LoginProfile extends Resource<
   "AWS.IAM.LoginProfile",
   LoginProfileProps,
   {
+    /** The IAM user the login profile belongs to. */
     userName: string;
+    /** When the login profile was created. */
     createDate: Date | undefined;
+    /** Whether the user must set a new password on next sign-in. */
     passwordResetRequired: boolean | undefined;
   },
   never,
@@ -40,9 +43,8 @@ export interface LoginProfile extends Resource<
  *
  * `LoginProfile` manages AWS Management Console access for an IAM user. The
  * password is write-only, so AWS never returns it during later reads.
- * @resource
- * @section Managing Console Access
- * @example Create a Console Login Profile
+ * ### Managing Console Access
+ * **Example:** Create a Console Login Profile
  * ```typescript
  * const user = yield* User("ConsoleUser", {
  *   userName: "console-user",
@@ -54,6 +56,8 @@ export interface LoginProfile extends Resource<
  *   passwordResetRequired: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const LoginProfile = Resource<LoginProfile>("AWS.IAM.LoginProfile");
 
@@ -74,11 +78,7 @@ export const LoginProfileProvider = () =>
         .getLoginProfile({
           UserName: output.userName,
         })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
       if (!response?.LoginProfile) {
         return undefined;
       }
@@ -92,11 +92,7 @@ export const LoginProfileProvider = () =>
       // Observe — read the live login profile (or absence) for the user.
       const observed = yield* iam
         .getLoginProfile({ UserName: news.userName })
-        .pipe(
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
 
       // Ensure / Sync — the password is write-only, so we always send the
       // desired value. Use `createLoginProfile` when the profile is
@@ -165,20 +161,16 @@ export const LoginProfileProvider = () =>
             Effect.map((response) => ({
               userName: response.LoginProfile.UserName,
               createDate: response.LoginProfile.CreateDate,
-              passwordResetRequired:
-                response.LoginProfile.PasswordResetRequired,
+              passwordResetRequired: response.LoginProfile.PasswordResetRequired,
             })),
             // The user has no console login profile, or was deleted between
             // enumeration and the per-user probe.
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
       const result: LoginProfile["Attributes"][] = profiles.filter(
-        (profile): profile is NonNullable<typeof profile> =>
-          profile !== undefined,
+        (profile): profile is NonNullable<typeof profile> => profile !== undefined,
       );
       return result;
     }),

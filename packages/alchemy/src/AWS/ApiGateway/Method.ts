@@ -1,10 +1,12 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireMillis } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import type { RestApi } from "./RestApi.ts";
 
@@ -12,10 +14,15 @@ import type { RestApi } from "./RestApi.ts";
  * Integration configuration for an API Gateway method (passed to `putIntegration`).
  */
 export interface MethodIntegrationProps {
+  /** Integration type: `AWS`, `AWS_PROXY`, `HTTP`, `HTTP_PROXY`, or `MOCK`. */
   type: ag.IntegrationType;
+  /** HTTP method used to call the backend (always `POST` for Lambda integrations). */
   integrationHttpMethod?: string;
+  /** Integration endpoint URI (Lambda invocation ARN or HTTP URL). */
   uri?: Input<string>;
+  /** `VPC_LINK` for private integrations, otherwise `INTERNET`. */
   connectionType?: ag.ConnectionType;
+  /** ID of the `VpcLink` when `connectionType` is `VPC_LINK`. */
   connectionId?: string;
   /**
    * IAM role ARN used by API Gateway for integration credentials.
@@ -23,15 +30,29 @@ export interface MethodIntegrationProps {
    * This is not a secret value; API Gateway stores an ARN or passthrough marker.
    */
   credentials?: string;
+  /** Maps integration request parameters from method request parameters. */
   requestParameters?: { [key: string]: string | undefined };
+  /** Request body mapping templates keyed by content type. */
   requestTemplates?: { [key: string]: string | undefined };
+  /** How unmapped content types pass through (`WHEN_NO_MATCH`, `WHEN_NO_TEMPLATES`, `NEVER`). */
   passthroughBehavior?: string;
+  /** Cache namespace for integration responses. */
   cacheNamespace?: string;
+  /** Request parameters whose values form the cache key. */
   cacheKeyParameters?: string[];
+  /** Payload encoding conversion (`CONVERT_TO_BINARY` or `CONVERT_TO_TEXT`). */
   contentHandling?: ag.ContentHandlingStrategy;
-  timeoutInMillis?: number;
+  /**
+   * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
+   * a bare number is milliseconds). Sent to the API in milliseconds
+   * (`timeoutInMillis`).
+   */
+  timeout?: Duration.Input;
+  /** TLS settings for HTTP integrations (e.g. `insecureSkipVerification`). */
   tlsConfig?: ag.TlsConfig;
+  /** How the integration response is transferred to the client. */
   responseTransferMode?: ag.ResponseTransferMode;
+  /** Target resource of the integration, where the API distinguishes one from `uri`. */
   integrationTarget?: string;
 }
 
@@ -68,12 +89,19 @@ export interface MethodProps {
    * @default "NONE"
    */
   authorizationType?: string;
+  /** ID of the `Authorizer` when `authorizationType` is `CUSTOM` or `COGNITO_USER_POOLS`. */
   authorizerId?: string;
+  /** Require callers to present an API key. */
   apiKeyRequired?: boolean;
+  /** Friendly operation name (e.g. for SDK generation). */
   operationName?: string;
+  /** Accepted request parameters; `true` marks a parameter required. */
   requestParameters?: { [key: string]: boolean | undefined };
+  /** Request body models keyed by content type. */
   requestModels?: { [key: string]: string | undefined };
+  /** ID of a request validator applied to this method. */
   requestValidatorId?: string;
+  /** OAuth scopes for `COGNITO_USER_POOLS` authorization. */
   authorizationScopes?: string[];
   /** When set, `putIntegration` is applied after `putMethod`. */
   integration?: MethodIntegrationProps;
@@ -107,14 +135,13 @@ export interface MethodType extends Resource<
  * REST API resource path. Most methods also carry an `integration` — the
  * downstream target that actually handles the request (a Lambda function,
  * an HTTP endpoint, a mock response, etc.).
- * @resource
- * @section Binding to a RestApi
+ * ### Binding to a RestApi
  * Pass the `RestApi` value on `restApi`. This threads the API id through
  * and registers the method as a `RestApiBinding` on the API, so that any
  * `Deployment` of the same API is automatically ordered after this method
  * completes. You do not need to manage `Deployment.triggers` yourself.
  *
- * @example GET on the API root with a mock integration
+ * **Example:** GET on the API root with a mock integration
  * ```typescript
  * yield* ApiGateway.Method("GetRoot", {
  *   restApi: api,
@@ -124,13 +151,13 @@ export interface MethodType extends Resource<
  * });
  * ```
  *
- * @section Lambda proxy integration
+ * ### Lambda proxy integration
  * For Lambda-backed APIs, the integration `uri` follows the
  * `arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/<function-arn>/invocations`
  * shape. Use `Output.map` to resolve the function ARN before building the
  * URI, since the function's ARN is only known at deploy time.
  *
- * @example ANY method with Lambda AWS_PROXY integration
+ * **Example:** ANY method with Lambda AWS_PROXY integration
  * ```typescript
  * import * as Output from "alchemy/Output";
  *
@@ -152,12 +179,12 @@ export interface MethodType extends Resource<
  * });
  * ```
  *
- * @section Methods on sub-paths
+ * ### Methods on sub-paths
  * Attach a method to a nested path by creating an `ApiGateway.Resource` and
  * passing its `resourceId` explicitly. `restApi` is still required so the
  * method binds for deployment ordering.
  *
- * @example Method on `/items`
+ * **Example:** Method on `/items`
  * ```typescript
  * const items = yield* ApiGateway.Resource("Items", {
  *   restApi: api,
@@ -173,9 +200,15 @@ export interface MethodType extends Resource<
  *   integration: { type: "MOCK" },
  * });
  * ```
+ *
+ * @resource
  */
 export const MethodResource = Resource<MethodType>("AWS.ApiGateway.Method");
 
+/**
+ * `Input`-accepting mirror of {@link MethodProps} used by the `Method`
+ * wrapper function — see {@link MethodProps} for per-field documentation.
+ */
 export interface MethodInputProps {
   restApi?: RestApi;
   restApiId?: Input<string>;
@@ -249,7 +282,7 @@ const putIntegrationRequest = (
   cacheNamespace: integration.cacheNamespace,
   cacheKeyParameters: integration.cacheKeyParameters,
   contentHandling: integration.contentHandling,
-  timeoutInMillis: integration.timeoutInMillis,
+  timeoutInMillis: toWireMillis(integration.timeout),
   tlsConfig: integration.tlsConfig,
   responseTransferMode: integration.responseTransferMode,
   integrationTarget: integration.integrationTarget,
@@ -270,11 +303,7 @@ const putMethod = (news: Input.ResolveProps<MethodProps>) =>
     authorizationScopes: news.authorizationScopes,
   });
 
-const deleteIntegrationSafe = (p: {
-  restApiId: string;
-  resourceId: string;
-  httpMethod: string;
-}) =>
+const deleteIntegrationSafe = (p: { restApiId: string; resourceId: string; httpMethod: string }) =>
   ag
     .deleteIntegration({
       restApiId: p.restApiId,
@@ -283,11 +312,7 @@ const deleteIntegrationSafe = (p: {
     })
     .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
 
-const deleteMethodSafe = (p: {
-  restApiId: string;
-  resourceId: string;
-  httpMethod: string;
-}) =>
+const deleteMethodSafe = (p: { restApiId: string; resourceId: string; httpMethod: string }) =>
   ag
     .deleteMethod({
       restApiId: p.restApiId,
@@ -296,11 +321,7 @@ const deleteMethodSafe = (p: {
     })
     .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
 
-const readMethodSnapshot = (p: {
-  restApiId: string;
-  resourceId: string;
-  httpMethod: string;
-}) =>
+const readMethodSnapshot = (p: { restApiId: string; resourceId: string; httpMethod: string }) =>
   Effect.gen(function* () {
     const method = yield* ag
       .getMethod({
@@ -308,9 +329,7 @@ const readMethodSnapshot = (p: {
         resourceId: p.resourceId,
         httpMethod: p.httpMethod,
       })
-      .pipe(
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
     if (!method?.httpMethod) return undefined;
 
     const integ = yield* ag
@@ -319,9 +338,7 @@ const readMethodSnapshot = (p: {
         resourceId: p.resourceId,
         httpMethod: p.httpMethod,
       })
-      .pipe(
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
     const integration: MethodIntegrationProps | undefined = integ?.type
       ? {
@@ -337,7 +354,10 @@ const readMethodSnapshot = (p: {
           cacheNamespace: integ.cacheNamespace,
           cacheKeyParameters: integ.cacheKeyParameters,
           contentHandling: integ.contentHandling,
-          timeoutInMillis: integ.timeoutInMillis,
+          // Wire milliseconds — a plain number is a valid `Duration.Input`,
+          // so the observed snapshot stays directly comparable to a desired
+          // spec normalized via `toWireMillis`.
+          timeout: integ.timeoutInMillis,
           tlsConfig: integ.tlsConfig,
           responseTransferMode: integ.responseTransferMode,
           integrationTarget: integ.integrationTarget,
@@ -411,19 +431,15 @@ export const MethodProvider = () =>
                     .pages({ restApiId: api.id, embed: ["methods"] })
                     .pipe(
                       Stream.runCollect,
-                      Effect.map((chunk) =>
-                        Array.from(chunk).flatMap((page) => page.items ?? []),
-                      ),
+                      Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
                     );
 
                   const keys = resources.flatMap((resource) =>
                     resource.id
-                      ? Object.keys(resource.resourceMethods ?? {}).map(
-                          (httpMethod) => ({
-                            resourceId: resource.id as string,
-                            httpMethod,
-                          }),
-                        )
+                      ? Object.keys(resource.resourceMethods ?? {}).map((httpMethod) => ({
+                          resourceId: resource.id as string,
+                          httpMethod,
+                        }))
                       : [],
                   );
 
@@ -439,8 +455,7 @@ export const MethodProvider = () =>
                   );
 
                   return snaps.filter(
-                    (snap): snap is NonNullable<typeof snap> =>
-                      snap !== undefined,
+                    (snap): snap is NonNullable<typeof snap> => snap !== undefined,
                   );
                 }),
               { concurrency: 5 },
@@ -481,10 +496,7 @@ export const MethodProvider = () =>
               !deepEqual(news.requestParameters, observed.requestParameters) ||
               !deepEqual(news.requestModels, observed.requestModels) ||
               news.requestValidatorId !== observed.requestValidatorId ||
-              !deepEqual(
-                news.authorizationScopes,
-                observed.authorizationScopes,
-              ));
+              !deepEqual(news.authorizationScopes, observed.authorizationScopes));
 
           if (observed === undefined || needsRecreate) {
             if (needsRecreate) {
@@ -503,12 +515,7 @@ export const MethodProvider = () =>
             });
             if (news.integration) {
               yield* ag.putIntegration(
-                putIntegrationRequest(
-                  restApiId,
-                  resourceId,
-                  httpMethod,
-                  news.integration,
-                ),
+                putIntegrationRequest(restApiId, resourceId, httpMethod, news.integration),
               );
             }
             yield* session.note(
@@ -562,16 +569,16 @@ export const MethodProvider = () =>
           }
 
           // Sync integration — putIntegration is an upsert; deleteIntegration
-          // tolerates missing integrations.
-          if (!deepEqual(news.integration, observed.integration)) {
+          // tolerates missing integrations. Normalize the desired timeout to
+          // wire milliseconds so it compares against the observed snapshot.
+          const desiredIntegration = news.integration && {
+            ...news.integration,
+            timeout: toWireMillis(news.integration.timeout),
+          };
+          if (!deepEqual(desiredIntegration, observed.integration)) {
             if (news.integration) {
               yield* ag.putIntegration(
-                putIntegrationRequest(
-                  restApiId,
-                  resourceId,
-                  httpMethod,
-                  news.integration,
-                ),
+                putIntegrationRequest(restApiId, resourceId, httpMethod, news.integration),
               );
             } else {
               yield* deleteIntegrationSafe({

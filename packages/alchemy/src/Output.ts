@@ -1,10 +1,8 @@
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
-import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
@@ -12,41 +10,55 @@ import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
-import { isPrimitive } from "./Util/data.ts";
+import { isPlainData, isPrimitive, type Primitive } from "./Util/data.ts";
 
 const inspect = Symbol.for("nodejs.util.inspect.custom");
 
 export const of = <R extends ResourceLike>(
   resource: Ref<R> | R,
-): R extends ResourceLike
-  ? ResourceExpr<R["Attributes"]>
-  : RefExpr<R["Attributes"]> => {
+): R extends ResourceLike ? ResourceExpr<R["Attributes"]> : RefExpr<R["Attributes"]> => {
   if (isRef(resource)) {
     const metadata = getRefMetadata(resource);
     return new RefExpr(
       metadata.stack,
       metadata.stage,
       metadata.id,
-      // Surface the target's resource type as a statically-known
-      // property so duck-typing classifiers (Worker env bindings)
-      // identify the ref exactly like a locally-declared resource.
-      metadata.type !== undefined ? { Type: metadata.type } : undefined,
+      // Surface the target's resource type and logical id as
+      // statically-known properties so duck-typing classifiers (Worker
+      // env bindings) and label/bind templates (`${resource.LogicalId}`,
+      // `host.bind\`...\``) identify the ref exactly like a
+      // locally-declared resource.
+      {
+        LogicalId: metadata.id,
+        ...(metadata.type !== undefined ? { Type: metadata.type } : {}),
+      },
     ) as any;
   }
   return new ResourceExpr(resource) as any;
 };
 
 export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
-  isOutput(t)
-    ? t
-    : Effect.isEffect(t)
-      ? new EffectExpr(VoidExpr, () => t)
-      : new LiteralExpr(t);
+  isOutput(t) ? t : Effect.isEffect(t) ? new EffectExpr(VoidExpr, () => t) : new LiteralExpr(t);
+
+/**
+ * Lift a plan-time Effect into an {@link Output}.
+ *
+ * The effect runs when the stack resolves the Output during plan/deploy —
+ * with the stack's services (cloud credentials, region, ...) provided — and
+ * never inside a deployed runtime: constructing the Output is inert, so
+ * helpers built on `fromEffect` (e.g. AMI lookups) are safe to call from
+ * composition code that is re-executed inside a Function/Worker/Instance
+ * bundle.
+ *
+ * The effect must not fail (`E = never`) — die with a descriptive error for
+ * unresolvable lookups.
+ */
+export const fromEffect = <A, Req = never>(
+  effect: Effect.Effect<A, never, Req>,
+): ToOutput<A, Req> => new EffectExpr(VoidExpr, () => effect) as any;
 
 export const isOutput = (value: any): value is Output<any> =>
-  value &&
-  (typeof value === "object" || typeof value === "function") &&
-  ExprSymbol in value;
+  value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
 export interface Output<A = any, Req = any> extends Pipeable {
   /** @internal phantom */
@@ -56,11 +68,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
   /** @internal phantom */
   readonly req: Req;
   /** @internal phantom */
-  [Symbol.iterator](): Iterator<
-    Effect.Effect<void, never, Req>,
-    Accessor<A>,
-    void
-  >;
+  [Symbol.iterator](): Iterator<Effect.Effect<void, never, Req>, Accessor<A>, void>;
   bind(id: string): Effect.Effect<Effect.Effect<A>, never, RuntimeContext>;
   asEffect(): Effect.Effect<Accessor<A>, never, Req>;
   as<T>(): Output<T, Req>;
@@ -68,25 +76,31 @@ export interface Output<A = any, Req = any> extends Pipeable {
 
 export interface Accessor<A> extends Effect.Effect<A> {}
 
-export type ToOutput<A, Req = never> = [Extract<A, object>] extends [never]
-  ? Output<A, Req>
-  : [Extract<A, any[]>] extends [never]
-    ? ObjectExpr<
-        {
-          [attr in keyof A]: A[attr];
-        },
-        Req
-      >
-    : ArrayExpr<Extract<A, any[]>, Req>;
+export type ToOutput<A, Req = never> =
+  // Branded primitives (`string & Brand<"...">`) are assignable to `object`
+  // via the brand intersection, so they must short-circuit to a plain Output
+  // before the object check — otherwise they explode into an ObjectExpr
+  // mapped over every String/Number method. Date is opaque for the same
+  // reason (mirrors AttrOutput in Resource.ts).
+  [A] extends [Primitive | Date]
+    ? Output<A, Req>
+    : [Extract<A, object>] extends [never]
+      ? Output<A, Req>
+      : [Extract<A, any[]>] extends [never]
+        ? ObjectExpr<
+            {
+              [attr in keyof A]: A[attr];
+            },
+            Req
+          >
+        : ArrayExpr<Extract<A, any[]>, Req>;
 
 export const ExprSymbol = Symbol.for("alchemy/Expr");
 
 const exprKind = (node: any): unknown => node?.[ExprSymbol]?.kind ?? node?.kind;
 
 export const isExpr = (value: any): value is Expr<any> =>
-  value &&
-  (typeof value === "object" || typeof value === "function") &&
-  ExprSymbol in value;
+  value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
 export type Expr<A = any, Req = any> =
   | AllExpr<Expr<A, Req>[]>
@@ -111,11 +125,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     return this as any;
   }
 
-  [Symbol.iterator](): Iterator<
-    Effect.Effect<void, never, Req>,
-    Accessor<A>,
-    void
-  > {
+  [Symbol.iterator](): Iterator<Effect.Effect<void, never, Req>, Accessor<A>, void> {
     // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
     return new SingleShotGen(this.asEffect());
   }
@@ -128,9 +138,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     // `set`/`get` store keys verbatim, so canonicalize here (the caller's job).
     const key = sanitizeKey(id);
     return RuntimeContext.pipe(
-      Effect.flatMap((ctx) =>
-        Effect.map(ctx.set(key, this), (k) => ctx.get<A>(k)),
-      ),
+      Effect.flatMap((ctx) => Effect.map(ctx.set(key, this), (k) => ctx.get<A>(k))),
     );
   }
 
@@ -176,11 +184,10 @@ export const isPropExpr = <A = any, Prop extends keyof A = keyof A, Req = any>(
   node: any,
 ): node is PropExpr<A, Prop, Req> => exprKind(node) === "PropExpr";
 
-export class PropExpr<
-  A = any,
-  Id extends keyof A = keyof A,
-  Req = any,
-> extends BaseExpr<A[Id], Req> {
+export class PropExpr<A = any, Id extends keyof A = keyof A, Req = any> extends BaseExpr<
+  A[Id],
+  Req
+> {
   readonly kind = "PropExpr";
   constructor(
     public readonly expr: Expr<A, Req>,
@@ -213,13 +220,9 @@ export class LiteralExpr<A> extends BaseExpr<A, never> {
 export const VoidExpr = new LiteralExpr(void 0);
 
 export const map: {
-  <A, B>(
-    fn: (value: A) => B,
-  ): <Req>(output: Output<A, Req>) => ToOutput<B, Req>;
+  <A, B>(fn: (value: A) => B): <Req>(output: Output<A, Req>) => ToOutput<B, Req>;
   <A, B, Req>(output: Output<A, Req>, fn: (value: A) => B): ToOutput<B, Req>;
-} = (<A, B, Req>(
-  ...args: [fn: (value: A) => B] | [output: Output<A, Req>, fn: (value: A) => B]
-) =>
+} = (<A, B, Req>(...args: [fn: (value: A) => B] | [output: Output<A, Req>, fn: (value: A) => B]) =>
   args.length === 1
     ? <Req>(output: Output<A, Req>): ToOutput<B, Req> =>
         new ApplyExpr(output as Expr<A, Req>, args[0]) as any
@@ -272,10 +275,7 @@ export const isFlatMapExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
 ): node is FlatMapExpr<In, Out, Req, Req2> => exprKind(node) === "FlatMapExpr";
 
-export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
-  B,
-  Req | Req2
-> {
+export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req | Req2> {
   readonly kind = "FlatMapExpr";
   constructor(
     public readonly expr: Expr<A, Req>,
@@ -293,10 +293,7 @@ export const isEffectExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
 ): node is EffectExpr<In, Out, Req, Req2> => exprKind(node) === "EffectExpr";
 
-export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
-  B,
-  Req
-> {
+export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req> {
   readonly kind = "EffectExpr";
   constructor(
     public readonly expr: Expr<A, Req>,
@@ -310,9 +307,8 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   }
 }
 
-export const isNamedExpr = <A = any, Req = any>(
-  node: any,
-): node is NamedExpr<A, Req> => exprKind(node) === "NamedExpr";
+export const isNamedExpr = <A = any, Req = any>(node: any): node is NamedExpr<A, Req> =>
+  exprKind(node) === "NamedExpr";
 
 /**
  * Wraps another `Expr` and overrides its `toString()` / inspect output.
@@ -335,35 +331,29 @@ export class NamedExpr<A, Req = never> extends BaseExpr<A, Req> {
   }
 }
 
-export const named = <A, Req>(
-  expr: Output<A, Req>,
-  name: string,
-): Output<A, Req> => new NamedExpr(expr as Expr<A, Req>, name) as any;
+export const named = <A, Req>(expr: Output<A, Req>, name: string): Output<A, Req> =>
+  new NamedExpr(expr as Expr<A, Req>, name) as any;
 
 export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
   new AllExpr(outs as any) as unknown as All<Outs>;
 
 export type All<Outs extends (Output | Expr)[]> = number extends Outs["length"]
-  ? [Outs[number]] extends [
-      Output<infer V, infer Req> | Expr<infer V, infer Req>,
-    ]
+  ? [Outs[number]] extends [Output<infer V, infer Req> | Expr<infer V, infer Req>]
     ? Output<V, Req>
     : never
   : Tuple<Outs>;
 
-type Tuple<
-  Outs extends (Output | Expr)[],
-  Values extends any[] = [],
-  Req = never,
-> = Outs extends [infer H, ...infer Tail extends (Output | Expr)[]]
+type Tuple<Outs extends (Output | Expr)[], Values extends any[] = [], Req = never> = Outs extends [
+  infer H,
+  ...infer Tail extends (Output | Expr)[],
+]
   ? H extends Output<infer V, infer Req2>
     ? Tuple<Tail, [...Values, V], Req | Req2>
     : never
   : Output<Values, Req>;
 
-export const isAllExpr = <Outs extends Expr[] = Expr[]>(
-  node: any,
-): node is AllExpr<Outs> => exprKind(node) === "AllExpr";
+export const isAllExpr = <Outs extends Expr[] = Expr[]>(node: any): node is AllExpr<Outs> =>
+  exprKind(node) === "AllExpr";
 
 export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   readonly kind = "AllExpr";
@@ -376,8 +366,7 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
 }
 
-export const isRefExpr = <A = any>(node: any): node is RefExpr<A> =>
-  exprKind(node) === "RefExpr";
+export const isRefExpr = <A = any>(node: any): node is RefExpr<A> => exprKind(node) === "RefExpr";
 
 export class RefExpr<A> extends BaseExpr<A, never> {
   readonly kind = "RefExpr";
@@ -421,9 +410,7 @@ export class StackRefExpr<A> extends BaseExpr<A, never> {
     return proxy(this);
   }
   [inspect](): string {
-    return `stackRef(${this.stack}${
-      this.stage ? `, { stage: ${this.stage} }` : ""
-    })`;
+    return `stackRef(${this.stack}${this.stage ? `, { stage: ${this.stage} }` : ""})`;
   }
 }
 
@@ -446,16 +433,13 @@ export const filter = <Outs extends any[]>(...outs: Outs) =>
   outs.filter(isOutput) as unknown as Filter<Outs>;
 
 export type Filter<Outs extends any[]> = number extends Outs["length"]
-  ? Output<
-      Extract<Outs[number], Output>["value"],
-      Extract<Outs[number], Output>["req"]
-    >
+  ? Output<Extract<Outs[number], Output>["value"], Extract<Outs[number], Output>["req"]>
   : FilterTuple<Outs>;
 
-export type FilterTuple<
-  Outs extends (Output | Expr)[],
-  Values extends any[] = [],
-> = Outs extends [infer H, ...infer Tail extends (Output | Expr)[]]
+export type FilterTuple<Outs extends (Output | Expr)[], Values extends any[] = []> = Outs extends [
+  infer H,
+  ...infer Tail extends (Output | Expr)[],
+]
   ? H extends Output<infer V>
     ? FilterTuple<Tail, [...Values, V]>
     : FilterTuple<Tail, Values>
@@ -464,14 +448,22 @@ export type FilterTuple<
 export const interpolate = <Args extends any[]>(
   template: TemplateStringsArray,
   ...args: Args
-): All<Args> extends Output<any, infer Req> ? Output<string, Req> : never =>
-  all(...args.map((arg) => (isOutput(arg) ? arg : literal(arg)))).pipe(
+): All<Args> extends Output<any, infer Req> ? Output<string, Req> : never => {
+  const outs = args.map((arg) => (isOutput(arg) ? arg : literal(arg)));
+  const expr = all(...outs).pipe(
     map((args) =>
-      template
-        .map((str, i) => str + (args[i] == null ? "" : String(args[i])))
-        .join(""),
+      template.map((str, i) => str + (args[i] == null ? "" : String(args[i]))).join(""),
     ),
-  ) as any;
+  );
+  // The binding id of a mapped Output embeds the mapper's source, which the
+  // runtime bundler reprints differently from the deploying process, so the
+  // two sides would derive different keys. Name it from the template and its
+  // arguments instead, which are identical on both sides.
+  const name = template
+    .map((str, i) => (i < outs.length ? `${str}\${${(outs[i] as any)[inspect]()}}` : str))
+    .join("");
+  return named(expr as Output<string, any>, `interpolate(${name})`) as any;
+};
 
 function proxy(self: any): any {
   const target = Object.assign(() => {}, self);
@@ -483,7 +475,16 @@ function proxy(self: any): any {
   }
   const proxy = new Proxy(target, {
     has: (_, prop) =>
-      prop === ExprSymbol || prop === inspect ? true : prop in self,
+      prop === ExprSymbol || prop === inspect
+        ? true
+        : // Statically-known literal props (`Type`, `LogicalId` on
+          // resource/ref exprs) are visible to `in` checks so duck-typing
+          // code paths (e.g. `"LogicalId" in arg`) treat them like real
+          // properties, matching what `get` serves.
+          ((isResourceExpr(self) || isRefExpr(self)) &&
+            self.stables !== undefined &&
+            prop in self.stables) ||
+          prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
         ? (hint: string) => {
@@ -516,13 +517,10 @@ function proxy(self: any): any {
           ? self
           : prop === inspect
             ? target[inspect]
-            : (isResourceExpr(self) || isRefExpr(self)) &&
-                self.stables &&
-                prop in self.stables
+            : (isResourceExpr(self) || isRefExpr(self)) && self.stables && prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
               : prop in self
-                ? typeof self[prop as keyof typeof self] === "function" &&
-                  !("kind" in self)
+                ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
                   ? new PropExpr(proxy, prop as never)
                   : self[prop as keyof typeof self]
                 : new PropExpr(proxy, prop as never),
@@ -533,10 +531,7 @@ function proxy(self: any): any {
         // `Output.map` / `Output.mapEffect` / `Output.flatMap` functions.
         if (self.identifier === "map" || self.identifier === "apply") {
           return new ApplyExpr(self.expr, args[0]);
-        } else if (
-          self.identifier === "mapEffect" ||
-          self.identifier === "effect"
-        ) {
+        } else if (self.identifier === "mapEffect" || self.identifier === "effect") {
           return new EffectExpr(self.expr, args[0]);
         } else if (self.identifier === "flatMap") {
           return new FlatMapExpr(self.expr, args[0]);
@@ -555,9 +550,7 @@ export class MissingSourceError extends Data.TaggedError("MissingSourceError")<{
   srcId: string;
 }> {}
 
-export class InvalidReferenceError extends Data.TaggedError(
-  "InvalidReferenceError",
-)<{
+export class InvalidReferenceError extends Data.TaggedError("InvalidReferenceError")<{
   message: string;
   stack: string;
   stage: string;
@@ -569,16 +562,21 @@ export const evaluate: <A, Req = never>(
   upstream: {
     [Id in string]: any;
   },
+  // Ancestor-path cycle guard — a plain-data value that appears on its own
+  // ancestor chain is cut to `undefined` (it could never serialize anyway).
+  // Immutable per-level so legitimately-shared diamond references survive
+  // (#1082).
+  ancestors?: ReadonlySet<object>,
 ) => Effect.Effect<
   A,
   InvalidReferenceError | MissingSourceError | Config.ConfigError,
   State.State | Req
-> = (expr, upstream) =>
+> = (expr, upstream, ancestors = new Set()) =>
   Effect.gen(function* () {
     if (isResource(expr)) {
       const srcId = expr.FQN;
       const src = upstream[srcId as keyof typeof upstream];
-      if (!src) {
+      if (!Object.hasOwn(upstream, srcId)) {
         // type-safety should prevent this but let the caller decide how to handle it
         return yield* new MissingSourceError({
           message: `Source ${srcId} not found`,
@@ -590,7 +588,7 @@ export const evaluate: <A, Req = never>(
       if (isResourceExpr(expr)) {
         const srcId = expr.src.FQN;
         const src = upstream[srcId as keyof typeof upstream];
-        if (!src) {
+        if (!Object.hasOwn(upstream, srcId)) {
           // type-safety should prevent this but let the caller decide how to handle it
           return yield* new MissingSourceError({
             message: `Source ${srcId} not found`,
@@ -611,9 +609,7 @@ export const evaluate: <A, Req = never>(
         const value = yield* evaluate(expr.expr, upstream);
         return yield* evaluate(expr.f(value), upstream);
       } else if (isAllExpr(expr)) {
-        return yield* Effect.all(
-          expr.outs.map((out) => evaluate(out, upstream)),
-        );
+        return yield* Effect.all(expr.outs.map((out) => evaluate(out, upstream)));
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
       } else if (isNamedExpr(expr)) {
@@ -659,56 +655,83 @@ export const evaluate: <A, Req = never>(
         return output;
       }
     }
-    if (Array.isArray(expr)) {
-      return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
-    } else if (Config.isConfig(expr)) {
+    if (Config.isConfig(expr)) {
       // Resolve Config against the deploy environment — see resolveInput in
-      // Plan.ts for rationale. `Config.redacted` resolves to a `Redacted`,
-      // which stays opaque via the branch below.
-      return yield* evaluate(yield* expr, upstream);
-    } else if (Duration.isDuration(expr) || Redacted.isRedacted(expr)) {
-      // Opaque value — see resolveInput in Plan.ts for rationale.
-      return expr;
-    } else if (typeof expr === "object" && expr !== null) {
+      // Plan.ts for rationale. `Config.Redacted` resolves to a `Redacted`,
+      // which stays opaque via the leaf fallthrough below.
+      return yield* evaluate(yield* expr, upstream, ancestors);
+    } else if (isPlainData(expr)) {
+      if (ancestors.has(expr)) {
+        return undefined;
+      }
+      const nested = new Set(ancestors).add(expr);
+      if (Array.isArray(expr)) {
+        return yield* Effect.all(expr.map((item) => evaluate(item, upstream, nested)));
+      }
       return Object.fromEntries(
         yield* Effect.all(
           Object.entries(expr).map(([key, value]) =>
-            evaluate(value, upstream).pipe(Effect.map((value) => [key, value])),
+            evaluate(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
           ),
         ),
       );
     }
+    // Everything else is a leaf returned by identity: Duration, Redacted,
+    // Date, and effect runtime values (a Worker's `exports` carries each
+    // DO's `constructor` Effect and captured `services` Context). Rebuilding
+    // a class instance entry-by-entry strips its prototype, and effect
+    // ≥4.0.0-beta.103's Context is cyclic (#1082). This sits after
+    // `Config.isConfig` on purpose — Configs are Effects but must resolve.
     return expr;
   }) as Effect.Effect<any>;
 
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;
 
+/**
+ * Cycle guard shared by the upstream walkers. Marks `value` as visited in
+ * `seen`; returns true when it was already visited (the caller returns `{}`
+ * — the first visit already contributed the subtree's resources to the
+ * FQN-keyed union, so skipping repeats is lossless).
+ */
+const alreadySeen = (value: object, seen: WeakSet<object>): boolean => {
+  if (seen.has(value)) {
+    return true;
+  }
+  seen.add(value);
+  return false;
+};
+
+// The dependency rule (#1082): a Resource or Output IS a dependency; plain
+// data (arrays, plain objects) is traversed to find them; every other value
+// — class instances like effect's Effect/Layer/Context, Dates, SDK objects,
+// functions — is a leaf. See `isPlainData` in Util/data.ts for why leaves
+// must never be walked.
+
 export const upstreamAny = (
   value: any,
+  seen: WeakSet<object> = new WeakSet(),
 ): {
   [ID in string]: Resource;
 } => {
   if (isResource(value)) {
     return { [value.FQN]: value as Resource };
   } else if (isExpr(value)) {
-    return upstream(value);
-  } else if (Array.isArray(value)) {
-    return Object.assign({}, ...value.map(resolveUpstream));
-  } else if (
-    value &&
-    (typeof value === "object" || typeof value === "function")
-  ) {
-    return Object.assign(
-      {},
-      ...Object.values(value).map((value) => resolveUpstream(value)),
-    );
+    return upstream(value, seen);
+  } else if (isPlainData(value)) {
+    if (alreadySeen(value, seen)) {
+      return {};
+    }
+    return Object.assign({}, ...Object.values(value).map((value) => resolveUpstream(value, seen)));
   }
   return {};
 };
 
 // TODO(sam): add a type
-export const upstream = <E extends Output<any, any>>(expr: E): any => {
+export const upstream = <E extends Output<any, any>>(
+  expr: E,
+  seen: WeakSet<object> = new WeakSet(),
+): any => {
   if (isResource(expr)) {
     return {
       [(expr as unknown as Resource).FQN]: expr,
@@ -718,42 +741,37 @@ export const upstream = <E extends Output<any, any>>(expr: E): any => {
       [expr.src.FQN]: expr.src,
     };
   } else if (isPropExpr(expr)) {
-    return upstream(expr.expr);
+    return upstream(expr.expr, seen);
   } else if (isAllExpr(expr)) {
-    return Object.assign({}, ...expr.outs.map((out) => upstream(out)));
-  } else if (
-    isEffectExpr(expr) ||
-    isApplyExpr(expr) ||
-    isFlatMapExpr(expr) ||
-    isNamedExpr(expr)
-  ) {
-    return upstream(expr.expr);
-  } else if (Array.isArray(expr)) {
-    return expr.map(upstream).reduce(toObject, {});
-  } else if (typeof expr === "object" && expr !== null) {
+    return Object.assign({}, ...expr.outs.map((out) => upstream(out, seen)));
+  } else if (isEffectExpr(expr) || isApplyExpr(expr) || isFlatMapExpr(expr) || isNamedExpr(expr)) {
+    return upstream(expr.expr, seen);
+  } else if (isPlainData(expr)) {
+    if (alreadySeen(expr, seen)) {
+      return {};
+    }
     return Object.values(expr)
-      .map((v) => upstream(v))
+      .map((v) => upstream(v as any, seen))
       .reduce(toObject, {});
   }
   return {};
 };
 
 // TODO(sam): add a type
-export const resolveUpstream = <const A>(value: A): any => {
+export const resolveUpstream = <const A>(value: A, seen: WeakSet<object> = new WeakSet()): any => {
   if (isPrimitive(value)) {
     return {} as any;
   } else if (isResource(value)) {
     return { [(value as unknown as Resource).FQN]: value } as any;
   } else if (isOutput(value)) {
-    return upstream(value) as any;
-  } else if (Array.isArray(value)) {
+    return upstream(value, seen) as any;
+  } else if (isPlainData(value)) {
+    if (alreadySeen(value, seen)) {
+      return {} as any;
+    }
     return Object.fromEntries(
-      value.map((v) => resolveUpstream(v)).flatMap(Object.entries),
-    ) as any;
-  } else if (typeof value === "object" || typeof value === "function") {
-    return Object.fromEntries(
-      Object.values(value as any)
-        .map(resolveUpstream)
+      Object.values(value)
+        .map((v) => resolveUpstream(v, seen))
         .flatMap(Object.entries),
     ) as any;
   }
@@ -778,8 +796,7 @@ export const toEnvKey = <const ID extends string, const Suffix extends string>(
 export const toUpper = <const S extends string>(str: S) =>
   str.toUpperCase() as string extends S ? S : Uppercase<S>;
 
-const replace = <const S extends string>(str: S) =>
-  str.replace(/-/g, "_") as Replace<S>;
+const replace = <const S extends string>(str: S) => str.replace(/-/g, "_") as Replace<S>;
 
 type Replace<S extends string, Accum extends string = ""> = string extends S
   ? S

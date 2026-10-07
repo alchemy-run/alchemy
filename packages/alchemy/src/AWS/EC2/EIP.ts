@@ -10,13 +10,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type EIPArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
+export type EIPArn = `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
 
 export type AllocationId<ID extends string = string> = `eipalloc-${ID}`;
-export const AllocationId = <ID extends string>(
-  id: ID,
-): ID & AllocationId<ID> => `eipalloc-${id}` as ID & AllocationId<ID>;
+export const AllocationId = <ID extends string>(id: ID): ID & AllocationId<ID> =>
+  `eipalloc-${id}` as ID & AllocationId<ID>;
 
 export interface EIPProps {
   /**
@@ -114,11 +112,10 @@ export interface EIP extends Resource<
  * `networkBorderGroup`, `customerOwnedIpv4Pool`) are immutable and replace the
  * address when changed.
  *
- * @resource
- * @section Allocating Elastic IPs
+ * ### Allocating Elastic IPs
  * By default an Elastic IP is allocated for use within a VPC (`domain: "vpc"`),
  * which is the only domain available to modern accounts.
- * @example VPC-Scoped Elastic IP
+ * **Example:** VPC-Scoped Elastic IP
  * ```typescript
  * const eip = yield* AWS.EC2.EIP("MyEip", {
  *   domain: "vpc",
@@ -129,10 +126,10 @@ export interface EIP extends Resource<
  * `domain` defaults to `"vpc"`, so it can be omitted, and `tags` help you find
  * the address in the console and on the bill.
  *
- * @section Bring-Your-Own-IP and Address Pools
+ * ### Bring-Your-Own-IP and Address Pools
  * If you have onboarded an address range to AWS (BYOIP) or use Outposts, you can
  * draw the address from a specific pool instead of Amazon's general pool.
- * @example Allocate from a Public IPv4 (BYOIP) Pool
+ * **Example:** Allocate from a Public IPv4 (BYOIP) Pool
  * ```typescript
  * const eip = yield* AWS.EC2.EIP("ByoipEip", {
  *   publicIpv4Pool: "ipv4pool-ec2-0abcdef1234567890",
@@ -143,7 +140,7 @@ export interface EIP extends Resource<
  * Amazon address, and `networkBorderGroup` restricts which zone group AWS
  * advertises it from (useful for Local and Wavelength Zones).
  *
- * @example Allocate from a Customer-Owned Pool (Outposts)
+ * **Example:** Allocate from a Customer-Owned Pool (Outposts)
  * ```typescript
  * const eip = yield* AWS.EC2.EIP("CoIpEip", {
  *   customerOwnedIpv4Pool: "ipv4pool-coip-0abcdef1234567890",
@@ -153,8 +150,8 @@ export interface EIP extends Resource<
  * Outposts-associated pool, for workloads that must use your own on-premises
  * address space.
  *
- * @section Using an Elastic IP
- * @example Attach to a NAT Gateway
+ * ### Using an Elastic IP
+ * **Example:** Attach to a NAT Gateway
  * ```typescript
  * const eip = yield* AWS.EC2.EIP("NatEip", {});
  *
@@ -165,6 +162,8 @@ export interface EIP extends Resource<
  * ```
  * Downstream resources consume the reserved address through its `allocationId`;
  * here the EIP becomes the fixed public IP of a NAT gateway.
+ *
+ * @resource
  */
 export const EIP = Resource<EIP>("AWS.EC2.EIP");
 
@@ -172,10 +171,7 @@ export const EIPProvider = () =>
   Provider.effect(
     EIP,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -193,10 +189,7 @@ export const EIPProvider = () =>
             // in the account/region in a single response.
             const result = yield* ec2.describeAddresses({});
             return (result.Addresses ?? [])
-              .filter(
-                (a): a is ec2.Address & { AllocationId: string } =>
-                  a.AllocationId != null,
-              )
+              .filter((a): a is ec2.Address & { AllocationId: string } => a.AllocationId != null)
               .map((address): EIP["Attributes"] => ({
                 allocationId: address.AllocationId as AllocationId,
                 eipArn:
@@ -221,9 +214,7 @@ export const EIPProvider = () =>
 
           const address = result.Addresses?.[0];
           if (!address) {
-            return yield* Effect.fail(
-              new Error(`EIP ${output.allocationId} not found`),
-            );
+            return yield* Effect.fail(new Error(`EIP ${output.allocationId} not found`));
           }
 
           return {
@@ -325,8 +316,7 @@ export const EIPProvider = () =>
 
           return {
             allocationId,
-            eipArn:
-              `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
+            eipArn: `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
             publicIp: address.PublicIp!,
             publicIpv4Pool: address.PublicIpv4Pool,
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",
@@ -348,10 +338,7 @@ export const EIPProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag(
-                "InvalidAllocationID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidAllocationID.NotFound", () => Effect.void),
               Effect.catchTag("AuthFailure", () => Effect.void),
               Effect.tapError(Effect.logDebug),
               // Retry when EIP is still in use (e.g., NAT Gateway being deleted)
@@ -365,14 +352,9 @@ export const EIPProvider = () =>
                     e._tag === "InvalidIPAddress.InUse"
                   );
                 },
-                schedule: Schedule.max([
-                  Schedule.exponential(1000, 1.5),
-                  Schedule.recurs(20),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.exponential(1000, 1.5), Schedule.recurs(20)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `EIP still in use, waiting for release... (attempt ${attempt})`,
-                    ),
+                    session.note(`EIP still in use, waiting for release... (attempt ${attempt})`),
                   ),
                 ),
               }),

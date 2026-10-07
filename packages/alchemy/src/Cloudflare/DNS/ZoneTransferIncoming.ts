@@ -1,7 +1,6 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -80,11 +79,8 @@ export type ZoneTransferIncoming = Resource<
  * must be created with `type: "secondary"`. The configuration is a
  * per-zone singleton: `zoneId` is the identity (replacement on change),
  * everything else is mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Configuring incoming transfers
- * @example Transfer a secondary zone in from a primary
+ * ### Configuring incoming transfers
+ * **Example:** Transfer a secondary zone in from a primary
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
@@ -99,6 +95,10 @@ export type ZoneTransferIncoming = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/setup/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferIncoming"],
@@ -107,9 +107,7 @@ export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(TypeId, {
 /**
  * Returns true if the given value is a ZoneTransferIncoming resource.
  */
-export const isZoneTransferIncoming = (
-  value: unknown,
-): value is ZoneTransferIncoming =>
+export const isZoneTransferIncoming = (value: unknown): value is ZoneTransferIncoming =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ZoneTransferIncomingProvider = () =>
@@ -128,16 +126,12 @@ export const ZoneTransferIncomingProvider = () =>
         (zoneId) =>
           getIncoming(zoneId).pipe(
             Effect.map((observed) =>
-              observed === undefined
-                ? undefined
-                : toAttributes(observed, zoneId),
+              observed === undefined ? undefined : toAttributes(observed, zoneId),
             ),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is ZoneTransferIncomingAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is ZoneTransferIncomingAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
@@ -145,22 +139,15 @@ export const ZoneTransferIncomingProvider = () =>
       const n = news as ZoneTransferIncomingProps;
       // zoneId is the resource's identity (per-zone singleton).
       // Input<string> — compare only once concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* getIncoming(zoneId);
       if (observed === undefined) return undefined;
@@ -211,9 +198,7 @@ export const ZoneTransferIncomingProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* dns
         .deleteZoneTransferIncoming({ zoneId: output.zoneId })
-        .pipe(
-          Effect.catchTag("IncomingZoneTransferNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("IncomingZoneTransferNotFound", () => Effect.void));
     }),
   });
 
@@ -222,18 +207,13 @@ type ObservedIncoming =
   | dns.CreateZoneTransferIncomingResponse
   | dns.UpdateZoneTransferIncomingResponse;
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 /** Read the incoming configuration, mapping "not linked" to undefined. */
 const getIncoming = (zoneId: string) =>
   dns
     .getZoneTransferIncoming({ zoneId })
-    .pipe(
-      Effect.catchTag("IncomingZoneTransferNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("IncomingZoneTransferNotFound", () => Effect.succeed(undefined)));
 
 const samePeers = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&

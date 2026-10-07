@@ -41,10 +41,7 @@ export const arrayEqualsUnordered = <T extends string | number>(
 /**
  * Shallow equality of two string records (same keys, same values).
  */
-export const recordsEqual = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
+export const recordsEqual = (a: Record<string, string>, b: Record<string, string>): boolean => {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;

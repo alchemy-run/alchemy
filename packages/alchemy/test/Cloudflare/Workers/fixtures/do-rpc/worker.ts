@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { WorkerEnvironmentKVObject } from "./object.ts";
 
 /** The regions a DO can be hinted toward, as `/colo` accepts them. */
@@ -39,9 +39,7 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           return yield* HttpServerResponse.json({ value });
         }
 
-        // Create a DO instance under a `locationHint` and report the colo it
-        // actually landed in. The name must be one no request has addressed
-        // before: a hint only steers *creation*.
+        // Observe native option access while performing real Durable Object RPCs.
         if (request.method === "GET" && url.pathname === "/colo") {
           const name = url.searchParams.get("name") ?? "default";
           // Match the query param against the hints Cloudflare accepts rather
@@ -50,12 +48,83 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           const hint = LOCATION_HINTS.find(
             (candidate) => candidate === url.searchParams.get("hint"),
           );
+          let locationHintRead = false;
           const object = objects.getByName(
             name,
-            hint ? { locationHint: hint } : undefined,
+            hint
+              ? {
+                  get locationHint() {
+                    locationHintRead = true;
+                    return hint;
+                  },
+                }
+              : undefined,
           );
+          const id = yield* object.identity().pipe(Effect.orDie);
           const colo = yield* object.colo().pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({ colo });
+          return yield* HttpServerResponse.json({ id, colo, locationHintRead });
+        }
+
+        // The same name addresses a different object inside a jurisdiction,
+        // so the two ids differ when `jurisdiction()` is honoured.
+        if (request.method === "GET" && url.pathname === "/jurisdiction") {
+          const name = url.searchParams.get("name") ?? "default";
+          const global = yield* objects.getByName(name).identity().pipe(Effect.orDie);
+          const eu = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          const euAgain = yield* objects
+            .jurisdiction("eu")
+            .getByName(name)
+            .identity()
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ global, eu, euAgain });
+        }
+
+        // Every way of addressing an instance, reported as the id each one
+        // actually reached.
+        if (request.method === "GET" && url.pathname === "/addressing") {
+          const name = url.searchParams.get("name") ?? "default";
+          const id = objects.idFromName(name);
+          const uniqueId = objects.newUniqueId();
+          const byName = yield* objects.getByName(name).identity().pipe(Effect.orDie);
+          const byId = yield* objects.get(id).identity().pipe(Effect.orDie);
+          const byIdString = yield* objects
+            .get(objects.idFromString(id.toString()))
+            .identity()
+            .pipe(Effect.orDie);
+          const unique = yield* objects.get(uniqueId).identity().pipe(Effect.orDie);
+          const otherUnique = yield* objects
+            .get(objects.newUniqueId())
+            .identity()
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            idFromName: id.toString(),
+            byName,
+            byId,
+            byIdString,
+            uniqueId: uniqueId.toString(),
+            unique,
+            otherUnique,
+          });
+        }
+
+        // Calling a method the object does not define fails instead of
+        // resolving to `undefined` (e.g. an untyped caller, or a stub newer
+        // than the deployed object).
+        if (request.method === "GET" && url.pathname === "/unknown-rpc") {
+          const object = objects.getByName("unknown-rpc") as unknown as {
+            missing: () => Effect.Effect<unknown, Error>;
+          };
+          const missing = yield* object.missing().pipe(
+            Effect.match({
+              onFailure: (error) => String(error.message),
+              onSuccess: (value) => `unexpected success: ${String(value)}`,
+            }),
+          );
+          return yield* HttpServerResponse.json({ missing });
         }
 
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the

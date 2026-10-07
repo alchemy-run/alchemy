@@ -13,9 +13,7 @@ import {
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
-export const isKinesisStreamEvent = (
-  event: any,
-): event is lambda.KinesisStreamEvent =>
+export const isKinesisStreamEvent = (event: any): event is lambda.KinesisStreamEvent =>
   Array.isArray(event?.Records) &&
   event.Records.length > 0 &&
   event.Records[0].eventSource === "aws:kinesis";
@@ -44,22 +42,20 @@ export const StreamEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.StreamEventSource(${stream}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "kinesis:DescribeStream",
-                      "kinesis:GetRecords",
-                      "kinesis:GetShardIterator",
-                      "kinesis:ListShards",
-                    ],
-                    Resource: [stream.streamArn],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.Lambda.StreamEventSource(${stream}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: [
+                    "kinesis:DescribeStream",
+                    "kinesis:GetRecords",
+                    "kinesis:GetShardIterator",
+                    "kinesis:ListShards",
+                  ],
+                  Resource: [stream.streamArn],
+                },
+              ],
+            });
 
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${stream.LogicalId})`,
@@ -67,16 +63,15 @@ export const StreamEventSource = Layer.effect(
                 functionName: host.functionName,
                 eventSourceArn: stream.streamArn,
                 batchSize: props.batchSize,
-                maximumBatchingWindowInSeconds:
-                  props.maximumBatchingWindowInSeconds,
+                maximumBatchingWindow: props.maximumBatchingWindow,
                 enabled: true,
                 startingPosition: props.startingPosition ?? "LATEST",
                 startingPositionTimestamp: props.startingPositionTimestamp,
                 parallelizationFactor: props.parallelizationFactor,
                 bisectBatchOnFunctionError: props.bisectBatchOnFunctionError,
-                maximumRecordAgeInSeconds: props.maximumRecordAgeInSeconds,
+                maximumRecordAge: props.maximumRecordAge,
                 maximumRetryAttempts: props.maximumRetryAttempts,
-                tumblingWindowInSeconds: props.tumblingWindowInSeconds,
+                tumblingWindow: props.tumblingWindow,
                 functionResponseTypes: props.functionResponseTypes,
                 destinationConfig: props.destinationConfig,
                 filterCriteria: props.filterCriteria,
@@ -95,13 +90,12 @@ export const StreamEventSource = Layer.effect(
           return (event: any) => {
             if (isKinesisStreamEvent(event)) {
               const records = event.Records.filter(
-                (record) =>
-                  record.eventSourceARN?.startsWith(streamArn) === true,
+                (record) => record.eventSourceARN?.startsWith(streamArn) === true,
               );
               if (records.length > 0) {
-                return process(
-                  Stream.fromArray(records as KinesisEventRecord[]),
-                ).pipe(Effect.orDie);
+                return process(Stream.fromArray(records as KinesisEventRecord[])).pipe(
+                  Effect.orDie,
+                );
               }
             }
           };

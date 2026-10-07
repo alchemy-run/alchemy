@@ -6,6 +6,7 @@
  * runner then walks the tree and executes every test as an Effect.
  */
 import type * as Effect from "effect/Effect";
+import { mergeTags, type Tags } from "./Tags.ts";
 
 /** Execution mode attached to a suite or test at registration time. */
 export type Mode = "run" | "skip" | "only" | "todo";
@@ -31,9 +32,19 @@ export type HookBody = () => Effect.Effect<unknown, unknown, never>;
 export interface Hook {
   readonly body: HookBody;
   readonly timeout?: number | undefined;
+  /**
+   * Take the whole-process write lock for this hook. Use for beforeAll
+   * deploys / afterAll destroys that consume a scarce cloud quota so they
+   * never overlap exclusive tests.
+   */
+  readonly exclusive?: boolean;
 }
 
 export interface TestCase {
+  /** Deduplicated labels, including tags inherited from suites. */
+  readonly tags: ReadonlyArray<string>;
+  /** Inherited tags requiring explicit selection. */
+  readonly optInTags: ReadonlyArray<string>;
   readonly type: "test";
   readonly name: string;
   readonly mode: Mode;
@@ -46,16 +57,22 @@ export interface TestCase {
    * everything in ONE bun process, so such mutations are visible everywhere.
    */
   readonly exclusive?: boolean;
+  /** Override the run-wide retry budget for this test. */
+  readonly retry?: number | undefined;
   readonly timeout?: number | undefined;
   readonly body: TestBody | undefined;
   readonly parent: Suite;
 }
 
 export interface Suite {
+  /** Deduplicated labels, including tags inherited from parent suites. */
+  readonly tags: ReadonlyArray<string>;
+  /** Inherited tags requiring explicit selection. */
+  readonly optInTags: ReadonlyArray<string>;
   readonly type: "suite";
   readonly name: string;
   mode: Mode;
-  /** When true, children run one at a time (describe.sequential). */
+  /** When true, children run one at a time (the default; describe.concurrent opts out). */
   sequential: boolean;
   readonly children: Array<Suite | TestCase>;
   readonly beforeAll: Array<Hook>;
@@ -75,11 +92,15 @@ export const makeSuite = (
   name: string,
   parent: Suite | undefined,
   mode: Mode = "run",
+  tags?: Tags,
+  optInTags?: Tags,
 ): Suite => ({
+  tags: mergeTags(parent?.tags ?? [], tags),
+  optInTags: mergeTags(parent?.optInTags ?? [], optInTags),
   type: "suite",
   name,
   mode,
-  sequential: false,
+  sequential: true,
   children: [],
   beforeAll: [],
   afterAll: [],
@@ -88,10 +109,7 @@ export const makeSuite = (
   parent,
 });
 
-export const makeFileSuite = (file: string): FileSuite => ({
-  ...makeSuite(file, undefined),
-  file,
-});
+export const makeFileSuite = (file: string): FileSuite => ({ ...makeSuite(file, undefined), file });
 
 /** Full title path from the file root down to (and including) this node. */
 export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
@@ -109,14 +127,10 @@ export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {
   return parts;
 };
 
-export const fullTitle = (node: Suite | TestCase): string =>
-  titlePath(node).join(" > ");
+export const fullTitle = (node: Suite | TestCase): string => titlePath(node).join(" > ");
 
 /** Walk every test in a suite subtree (depth-first, registration order). */
-export const forEachTest = (
-  suite: Suite,
-  f: (test: TestCase) => void,
-): void => {
+export const forEachTest = (suite: Suite, f: (test: TestCase) => void): void => {
   for (const child of suite.children) {
     if (child.type === "test") f(child);
     else forEachTest(child, f);

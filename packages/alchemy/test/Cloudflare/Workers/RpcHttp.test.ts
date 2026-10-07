@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as RpcClient from "effect/rpc/RpcClient";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import { WorkerRpcs } from "./fixtures/rpc-http/group.ts";
 import Stack from "./fixtures/rpc-http/stack.ts";
 
@@ -24,10 +24,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // windows with one shared budget.
 const clientLayer = Test.rpcClientLayer;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cap exponential backoff at 3s so readiness retries poll densely instead of
 // sleeping tens of seconds past the propagation window (an uncapped
@@ -51,8 +48,6 @@ const retryReadyN =
       Effect.retry({ schedule: readinessSchedule, times }),
     );
 
-const retryReady = retryReadyN(15);
-
 const stack = beforeAll(
   deploy(Stack).pipe(
     // Ping the Worker to ensure it's ready.
@@ -60,16 +55,9 @@ const stack = beforeAll(
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
         const client = yield* RpcClient.make(WorkerRpcs);
-        const result = yield* client.Ping({ message: "warmup" }).pipe(
-          Effect.tapError(Console.log),
-          Effect.retry({
-            schedule: Schedule.min([
-              Schedule.exponential("500 millis"),
-              Schedule.spaced("3 seconds"),
-            ]),
-            times: 12,
-          }),
-        );
+        const result = yield* client
+          .Ping({ message: "warmup" })
+          .pipe(Effect.tapError(Console.log), retryReadyN(20));
         expect(result.echo).toBe("warmup");
         expect(result.n).toBeGreaterThan(0);
       }).pipe(Effect.scoped, Effect.provide(clientLayer(url))),
@@ -77,17 +65,23 @@ const stack = beforeAll(
     // Gate on the worker→DO pathway too: under full-suite parallel load the
     // DO namespace binding propagates noticeably slower than the worker
     // itself, and the `*DO` tests below would otherwise race that window.
+    // While the binding is still propagating, the worker's internal DO client
+    // fails with an `HttpError` that the fixture's `Effect.orDie` turns into a
+    // server-sent Defect — so this gate has to both promote defects AND carry
+    // enough budget (~2 min of capped backoff) to outlast the slow windows a
+    // full-suite run produces; a 15-attempt/~40s budget was observed to
+    // exhaust and fail the whole file.
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
         const client = yield* RpcClient.make(WorkerRpcs);
-        yield* client.PingDO({ message: "warmup" }).pipe(retryReady);
-        yield* client.CountDO({ upto: 1 }).pipe(Stream.runCollect, retryReady);
+        yield* client.PingDO({ message: "warmup" }).pipe(retryReadyN(40));
+        yield* client.CountDO({ upto: 1 }).pipe(Stream.runCollect, retryReadyN(40));
       }).pipe(Effect.scoped, Effect.provide(clientLayer(url))),
     ),
     // Let edge propagation settle before the (mostly un-retried) bodies run.
     Effect.tap(() => Effect.sleep("5 seconds")),
   ),
-  { timeout: 180_000 },
+  { timeout: 300_000 },
 );
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
@@ -130,7 +124,10 @@ test(
       expect(result.n).toBeGreaterThan(0);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -152,7 +149,10 @@ test(
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -172,12 +172,13 @@ test(
           times: 10,
         }),
       );
-      expect(values).toEqual(
-        messages.map((message, index) => ({ index, message })),
-      );
+      expect(values).toEqual(messages.map((message, index) => ({ index, message })));
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -217,7 +218,10 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 test(
@@ -254,13 +258,14 @@ test(
 
       expect(results).toHaveLength(N);
       for (let i = 0; i < N; i++) {
-        expect(results[i]).toEqual(
-          Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1),
-        );
+        expect(results[i]).toEqual(Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1));
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 // === Durable Object pathway ===
@@ -284,7 +289,10 @@ test(
       expect(result.n).toBeGreaterThan(0);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -297,13 +305,14 @@ test(
       // First DO streaming call can race edge propagation and hit a Cloudflare
       // HTML error page (or a `Worker not found.` defect); retry the whole
       // collect through a bounded, defect-promoting schedule.
-      const values = yield* client
-        .CountDO({ upto: 5 })
-        .pipe(Stream.runCollect, retryReadyN(10));
+      const values = yield* client.CountDO({ upto: 5 }).pipe(Stream.runCollect, retryReadyN(10));
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -317,15 +326,14 @@ test(
       // First streaming call can race edge propagation and hit a Cloudflare
       // HTML error page (or a `Worker not found.` defect); retry the whole
       // collect through a bounded, defect-promoting schedule.
-      const values = yield* client
-        .EchoDO({ messages })
-        .pipe(Stream.runCollect, retryReadyN(10));
-      expect(values).toEqual(
-        messages.map((message, index) => ({ index, message })),
-      );
+      const values = yield* client.EchoDO({ messages }).pipe(Stream.runCollect, retryReadyN(10));
+      expect(values).toEqual(messages.map((message, index) => ({ index, message })));
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -340,9 +348,7 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client
-            .PingDO({ message: `m-${i}` })
-            .pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
+          client.PingDO({ message: `m-${i}` }).pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: 16 },
       );
 
@@ -352,7 +358,10 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 test(
@@ -369,21 +378,18 @@ test(
         (i) =>
           client
             .CountDO({ upto: 3 + (i % 3) })
-            .pipe(
-              Stream.runCollect,
-              Effect.timeout("10 seconds"),
-              retryReadyN(5),
-            ),
+            .pipe(Stream.runCollect, Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: N },
       );
 
       expect(results).toHaveLength(N);
       for (let i = 0; i < N; i++) {
-        expect(results[i]).toEqual(
-          Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1),
-        );
+        expect(results[i]).toEqual(Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1));
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );

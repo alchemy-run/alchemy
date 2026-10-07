@@ -1,8 +1,9 @@
 import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
-import { Octokit } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, octokitFor } from "./Octokit.ts";
 import * as GitHub from "./Providers.ts";
 
 export interface CommentProps {
@@ -37,6 +38,15 @@ export interface CommentProps {
    * @default false
    */
   allowDelete?: boolean;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Comment extends Resource<
@@ -73,9 +83,8 @@ export interface Comment extends Resource<
  * Authentication is resolved in order: explicit `token` prop,
  * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
- * @resource
- * @section Creating Comments
- * @example Comment on an Issue
+ * ### Creating Comments
+ * **Example:** Comment on an Issue
  * ```typescript
  * const comment = yield* GitHub.Comment("issue-comment", {
  *   owner: "my-org",
@@ -85,7 +94,7 @@ export interface Comment extends Resource<
  * });
  * ```
  *
- * @example Comment on a Pull Request
+ * **Example:** Comment on a Pull Request
  * ```typescript
  * const prComment = yield* GitHub.Comment("pr-comment", {
  *   owner: "my-org",
@@ -95,11 +104,11 @@ export interface Comment extends Resource<
  * });
  * ```
  *
- * @section Updating Comments
+ * ### Updating Comments
  * Deploy with the same logical ID and a different `body` to update the
  * existing comment in place rather than creating a new one.
  *
- * @example Update Comment Content
+ * **Example:** Update Comment Content
  * ```typescript
  * const comment = yield* GitHub.Comment("status-comment", {
  *   owner: "my-org",
@@ -109,8 +118,8 @@ export interface Comment extends Resource<
  * });
  * ```
  *
- * @section Deleting Comments
- * @example Allow Comment Deletion
+ * ### Deleting Comments
+ * **Example:** Allow Comment Deletion
  * ```typescript
  * const comment = yield* GitHub.Comment("temp-comment", {
  *   owner: "my-org",
@@ -121,11 +130,11 @@ export interface Comment extends Resource<
  * });
  * ```
  *
- * @section CI Preview Comments
+ * ### CI Preview Comments
  * A common pattern is posting a preview-deployment URL on every pull request.
  * The comment auto-updates on each push because the logical ID stays the same.
  *
- * @example PR Preview Comment
+ * **Example:** PR Preview Comment
  * ```typescript
  * if (process.env.PULL_REQUEST) {
  *   yield* GitHub.Comment("preview-comment", {
@@ -140,6 +149,9 @@ export interface Comment extends Resource<
  *   });
  * }
  * ```
+ *
+ * @resource
+ * @product Issue
  */
 export const Comment = Resource<Comment>("GitHub.Comment");
 
@@ -153,8 +165,27 @@ export const CommentProvider = () =>
     // enumerate every comment without first knowing the issue/PR. With no
     // ambient scope to enumerate from, this collapses to the empty list.
     list: () => Effect.succeed([]),
+
+    // A comment belongs to (host, owner, repository, issueNumber) — its
+    // server-assigned id is meaningless anywhere else, so moving it replaces
+    // the resource: a fresh comment is posted on the new issue, and the old
+    // one is deleted only when `allowDelete` is set (the provider's `delete`
+    // no-ops otherwise, preserving discussion history — the default).
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
+      if (
+        news.owner !== olds.owner ||
+        news.repository !== olds.repository ||
+        news.issueNumber !== olds.issueNumber ||
+        (yield* gitHubBaseUrlChanged(olds, news))
+      ) {
+        return { action: "replace" };
+      }
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(news.baseUrl);
       const body = dedent(news.body);
 
       // Observe — GitHub assigns `comment_id` server-side. Probe for live
@@ -220,7 +251,7 @@ export const CommentProvider = () =>
         return;
       }
 
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise(async () => {
         try {

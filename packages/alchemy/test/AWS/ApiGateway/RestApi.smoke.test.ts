@@ -1,13 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
+import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,6 +16,8 @@ test.provider.skipIf(!!process.env.FAST)(
   "REST API proxies to Lambda (primitives)",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const { region, accountId } = yield* AWSEnvironment.current;
 
       const out = yield* stack.deploy(
@@ -77,8 +80,7 @@ test.provider.skipIf(!!process.env.FAST)(
             principal: "apigateway.amazonaws.com",
             sourceArn: Output.map(
               api.restApiId,
-              (id: string) =>
-                `arn:aws:execute-api:${region}:${accountId}:${id}/*/*/*`,
+              (id: string) => `arn:aws:execute-api:${region}:${accountId}:${id}/*/*/*`,
             ),
           });
 
@@ -88,7 +90,7 @@ test.provider.skipIf(!!process.env.FAST)(
               `https://${id}.execute-api.${region}.amazonaws.com/${sn}/`,
           );
 
-          return { invokeUrl };
+          return { invokeUrl, restApiId: api.restApiId };
         }),
       );
 
@@ -106,9 +108,7 @@ test.provider.skipIf(!!process.env.FAST)(
             Schedule.exponential(500).pipe(
               Schedule.modifyDelay(({ duration: d }) =>
                 Effect.succeed(
-                  Duration.isGreaterThan(d, Duration.seconds(10))
-                    ? Duration.seconds(10)
-                    : d,
+                  Duration.isGreaterThan(d, Duration.seconds(10)) ? Duration.seconds(10) : d,
                 ),
               ),
             ),
@@ -121,6 +121,10 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(yield* response.text).toBe("Hello, world!");
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(out.restApiId);
     }),
-  { timeout: 600_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apigateway", "provider:aws:lambda", "live"],
+    timeout: 600_000,
+  },
 );

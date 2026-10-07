@@ -11,13 +11,17 @@ const normalizeBasePath = (basePath: string | undefined) =>
   basePath === undefined || basePath === "" ? "(none)" : basePath;
 
 export interface BasePathMappingProps {
+  /** The custom domain name to map (e.g. `api.example.com`). */
   domainName: string;
+  /** Domain name ID, required for private custom domain names. */
   domainNameId?: string;
   /**
    * Base path segment; omit or empty string for root mapping (`(none)` in API Gateway).
    */
   basePath?: string;
+  /** ID of the REST API the path maps to. */
   restApiId: Input<string>;
+  /** Name of the API stage requests are routed to. */
   stage?: string;
 }
 
@@ -39,8 +43,8 @@ export interface BasePathMapping extends Resource<
 /**
  * Maps a custom domain name path to a REST API stage.
  *
- * @section Custom domain
- * @example Root mapping
+ * ### Custom domain
+ * **Example:** Root mapping
  * ```typescript
  * yield* ApiGateway.BasePathMapping("Root", {
  *   domainName: domain.domainName,
@@ -49,9 +53,7 @@ export interface BasePathMapping extends Resource<
  * });
  * ```
  */
-const BasePathMappingResource = Resource<BasePathMapping>(
-  "AWS.ApiGateway.BasePathMapping",
-);
+const BasePathMappingResource = Resource<BasePathMapping>("AWS.ApiGateway.BasePathMapping");
 
 export { BasePathMappingResource as BasePathMapping };
 
@@ -66,8 +68,7 @@ export const BasePathMappingProvider = () =>
           const news = newsIn as Input.ResolveProps<BasePathMappingProps>;
           if (
             news.domainName !== olds.domainName ||
-            normalizeBasePath(news.basePath) !==
-              normalizeBasePath(olds.basePath)
+            normalizeBasePath(news.basePath) !== normalizeBasePath(olds.basePath)
           ) {
             return { action: "replace" } as const;
           }
@@ -80,11 +81,7 @@ export const BasePathMappingProvider = () =>
               basePath: output.basePath,
               domainNameId: output.domainNameId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!b?.restApiId) return undefined;
           return {
             domainName: output.domainName,
@@ -112,11 +109,7 @@ export const BasePathMappingProvider = () =>
               basePath,
               domainNameId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create the mapping if it isn't there.
           if (!observed?.restApiId) {
@@ -127,9 +120,7 @@ export const BasePathMappingProvider = () =>
               restApiId: news.restApiId as string,
               stage: news.stage,
             });
-            yield* session.note(
-              `Created base path mapping ${news.domainName} / ${basePath}`,
-            );
+            yield* session.note(`Created base path mapping ${news.domainName} / ${basePath}`);
             observed = yield* ag.getBasePathMapping({
               domainName,
               basePath,
@@ -188,8 +179,7 @@ export const BasePathMappingProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.items ?? []).filter(
-                    (d): d is ag.DomainName & { domainName: string } =>
-                      d.domainName != null,
+                    (d): d is ag.DomainName & { domainName: string } => d.domainName != null,
                   ),
                 ),
               ),

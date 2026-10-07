@@ -4,15 +4,13 @@ import * as Path from "effect/Path";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
-import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 
 /**
  * The AWS-managed base image MicroVM Dockerfiles build on. The MicroVM build
  * runs the Dockerfile server-side and snapshots the result with Firecracker.
  */
-export const MICROVM_BASE_DOCKER_IMAGE =
-  "public.ecr.aws/lambda/microvms:al2023-minimal";
+export const MICROVM_BASE_DOCKER_IMAGE = "public.ecr.aws/lambda/microvms:al2023-minimal";
 
 /** The default port the in-VM HTTP server listens on. */
 export const DEFAULT_MICROVM_PORT = 8080;
@@ -69,6 +67,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   isExternal = false,
   external = [],
   port,
+  build,
 }: {
   main: string;
   runtime: "bun" | "node";
@@ -76,6 +75,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   isExternal?: boolean;
   external?: string[];
   port: number;
+  build?: Bundle.BundleConfig;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
@@ -84,38 +84,38 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   const realMain = yield* fs.realPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
-  const buildBundle = Effect.fn(function* (
-    entry: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ) {
+  const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {
     return yield* Bundle.build(
       {
+        ...build?.input,
         input: entry,
         cwd,
         external: [
           "@aws-sdk/*",
           ...(runtime === "bun" ? ["bun", "bun:*"] : []),
           ...external,
+          ...((build?.input?.external as string[] | undefined) ?? []),
         ],
         platform: "node",
         resolve: {
           conditionNames:
-            runtime === "bun"
-              ? ["bun", "import", "module", "default"]
-              : ["node", "import", "module", "default"],
+            runtime === "bun" ? [...Bundle.BUN_CONDITION_NAMES] : [...Bundle.NODE_CONDITION_NAMES],
+          ...build?.input?.resolve,
         },
-        plugins,
+        plugins: [build?.input?.plugins, plugins],
         treeshake: true,
       },
       {
+        ...build?.output,
         format: "esm",
-        sourcemap: false,
-        minify: false,
+        sourcemap: build?.output?.sourcemap ?? false,
+        minify: build?.output?.minify ?? false,
         entryFileNames: "index.mjs",
         // Emit chunks as `.mjs` too so Node treats them as ESM unconditionally
         // (no `package.json` `"type":"module"` needed in the image).
         chunkFileNames: "[name]-[hash].mjs",
       },
+      build,
     );
   });
 
@@ -125,72 +125,24 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
         realMain,
         virtualEntryPlugin(
           (importPath) => `
-${
-  runtime === "bun"
-    ? `import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-const HttpServer = BunHttpServer;`
-    : `import { NodeServices } from "@effect/platform-node";
-import { NodeHttpServer } from "alchemy/Http";
-const HttpServer = NodeHttpServer;`
-}
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import { MinimumLogLevel } from "effect/References";
-
+import { bootstrap } from ${JSON.stringify(
+            runtime === "bun"
+              ? "alchemy/Runtime/Bootstrap/MicrovmBun"
+              : "alchemy/Runtime/Bootstrap/MicrovmNode",
+          )};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(Stack, {
-  name: ${JSON.stringify(stack.name)},
-  stage: ${JSON.stringify(stack.stage)},
-  bindings: {},
-  resources: {}
-});
-
-const serverEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.default),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(HttpServer({ port: Number(process.env.PORT ?? ${port}) })),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("MicroVM bootstrap starting on port ${port}...");
-await Effect.runPromise(serverEffect).catch((err) => {
-  console.error("MicroVM bootstrap failed:", err);
-  process.exit(1);
-})`,
+await bootstrap(entrypoint, ${JSON.stringify({
+            port,
+            stack: { name: stack.name, stage: stack.stage },
+          })});
+`,
         ),
       );
 
   const files = bundleOutput.files.map((f) => ({
     path: f.path,
-    content:
-      typeof f.content === "string"
-        ? new TextEncoder().encode(f.content)
-        : f.content,
+    content: typeof f.content === "string" ? new TextEncoder().encode(f.content) : f.content,
   }));
 
   return { files, hash: bundleOutput.hash };
@@ -206,22 +158,7 @@ export interface ArtifactFile {
  * package the MicroVM code artifact (Dockerfile + bundled program, or a build
  * context) before uploading it to S3.
  */
-export const zipFiles = Effect.fn(function* (
-  files: ReadonlyArray<ArtifactFile>,
-) {
-  const zip = new (yield* Effect.promise(() => import("jszip"))).default();
-  const date = new Date("1980-01-01T00:00:00.000Z");
-  for (const file of files) {
-    zip.file(file.path, file.content, { date });
-  }
-  return yield* Effect.promise(() =>
-    zip.generateAsync({
-      type: "nodebuffer",
-      compression: "DEFLATE",
-      platform: "UNIX",
-    }),
-  );
-});
+export { zipFiles } from "../../Util/zip.ts";
 
 /**
  * Recursively read a build-context directory into a flat list of files

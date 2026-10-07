@@ -1,13 +1,9 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Effect from "effect/Effect";
-import * as Binding from "../../Binding.ts";
 import * as Layer from "effect/Layer";
-import { isFunction } from "../Lambda/Function.ts";
-import {
-  BatchGetItem,
-  type BatchGetItemRequest,
-  type BatchGetItemTables,
-} from "./BatchGetItem.ts";
+import * as Binding from "../../Binding.ts";
+import { isBindingHost } from "../Lambda/Function.ts";
+import { BatchGetItem, type BatchGetItemRequest, type BatchGetItemTables } from "./BatchGetItem.ts";
 
 export const BatchGetItemHttp = Layer.effect(
   BatchGetItem,
@@ -28,9 +24,7 @@ export const BatchGetItemHttp = Layer.effect(
         const TableName = tableNames.get(tableId);
         if (!TableName) {
           return yield* Effect.die(
-            new Error(
-              `BatchGetItem request references unbound table '${tableId}'`,
-            ),
+            new Error(`BatchGetItem request references unbound table '${tableId}'`),
           );
         }
         return yield* TableName;
@@ -38,18 +32,16 @@ export const BatchGetItemHttp = Layer.effect(
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
-        if (isFunction(host)) {
-          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchGetItem(${sortedTables}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["dynamodb:BatchGetItem"],
-                  Resource: sortedTables.map((table) => table.tableArn),
-                },
-              ],
-            },
-          );
+        if (isBindingHost(host)) {
+          yield* host.bind`Allow(${host}, AWS.DynamoDB.BatchGetItem(${sortedTables}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["dynamodb:BatchGetItem"],
+                Resource: sortedTables.map((table) => table.tableArn),
+              },
+            ],
+          });
         }
       }
 
@@ -74,10 +66,6 @@ export const BatchGetItemHttp = Layer.effect(
 );
 
 const sortTables = (tables: BatchGetItemTables) =>
-  [
-    ...new Map(
-      tables.map((table) => [table.LogicalId, table] as const),
-    ).values(),
-  ].sort((a, b) =>
+  [...new Map(tables.map((table) => [table.LogicalId, table] as const)).values()].sort((a, b) =>
     a.LogicalId.localeCompare(b.LogicalId),
   ) as BatchGetItemTables;

@@ -1,14 +1,25 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  generateLocalId,
+  isLiveId,
+  LOCAL_PROVIDERS_URL,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { LocalEdge } from "./LocalEdge.ts";
+import { routePatternHost, routePatternUrl } from "./RoutePattern.ts";
 
 export interface WorkerRouteProps {
   /**
@@ -46,6 +57,12 @@ export interface WorkerRouteAttributes {
   pattern: string;
   /** Worker script the route runs, or `undefined` for an opt-out route. */
   script: string | undefined;
+  /**
+   * Origin serving the route's hostname — `https://<host>` when deployed,
+   * the local edge listener under `alchemy dev` — or `undefined` for a
+   * wildcard host.
+   */
+  url?: string;
 }
 
 export type WorkerRoute = Resource<
@@ -71,11 +88,13 @@ export type WorkerRoute = Resource<
  * scans the zone for an existing route with the same pattern and
  * reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Workers
- * @category Workers & Compute
- * @section Routing a hostname to a Worker
- * @example Route all requests on a subdomain to a Worker
+ *
+ * Under `alchemy dev` the route is emulated locally instead: requests to a
+ * custom-domain Worker on the same hostname (or to the route's `url`, a
+ * local listener for the hostname) are matched against every route and
+ * forwarded to the target Worker, most specific pattern first.
+ * ### Routing a hostname to a Worker
+ * **Example:** Route all requests on a subdomain to a Worker
  * ```typescript
  * const worker = yield* Cloudflare.Worker("Api", {
  *   main: "./src/api.ts",
@@ -97,8 +116,8 @@ export type WorkerRoute = Resource<
  * });
  * ```
  *
- * @section Disabling Workers on a path
- * @example Opt a path out of a wildcard route
+ * ### Disabling Workers on a path
+ * **Example:** Opt a path out of a wildcard route
  * ```typescript
  * // No `script` — matching requests bypass Workers entirely.
  * yield* Cloudflare.Workers.WorkerRoute("AssetsBypass", {
@@ -106,14 +125,76 @@ export type WorkerRoute = Resource<
  *   pattern: "example.com/assets/*",
  * });
  * ```
+ *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  */
 export const WorkerRoute = Resource<WorkerRoute>("Cloudflare.Workers.Route");
 
 export const isWorkerRoute = (value: unknown): value is WorkerRoute =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Workers.Route";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Workers.Route";
 
 export const WorkerRouteProvider = () =>
+  ProviderLayer.dual(WorkerRoute, {
+    live: () => WorkerRouteProviderLive(),
+    local: () => WorkerRouteProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+  });
+
+/**
+ * `alchemy dev` emulation: the route is registered with the local edge,
+ * which matches its pattern in front of the local Workers exactly like
+ * Cloudflare's zone routing (see `LocalEdge`). No cloud call is made.
+ */
+export const WorkerRouteProviderLocal = () =>
+  RpcProvider.effect(
+    WorkerRoute,
+    LOCAL_PROVIDERS_URL,
+    Effect.gen(function* () {
+      const edge = yield* LocalEdge;
+      const register = Effect.fn(function* (attrs: WorkerRouteAttributes) {
+        yield* edge.setRoutes(attrs.routeId, [{ pattern: attrs.pattern, script: attrs.script }]);
+        const host = routePatternHost(attrs.pattern);
+        const url = host === undefined ? undefined : yield* edge.url(host);
+        return { ...attrs, url: url?.origin };
+      });
+      return {
+        stables: ["routeId", "zoneId"],
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!output) return undefined;
+          // A real route id on a local row: replace to mint a local one.
+          if (isLiveId(output.routeId)) return { action: "replace" } as const;
+          if (!isResolved(news)) return undefined;
+          if (output.zoneId !== news.zoneId) return { action: "replace" } as const;
+          if (output.pattern !== news.pattern || output.script !== news.script) {
+            return { action: "update" } as const;
+          }
+          // Unchanged: re-register so a fresh dev session's edge serves it
+          // without the plan reporting an update — unless the hostname's
+          // listener moved (a new session picks a new port).
+          const registered = yield* register(output);
+          return registered.url === output.url
+            ? ({ action: "noop" } as const)
+            : ({ action: "update" } as const);
+        }),
+        reconcile: Effect.fn(function* ({ news, output }) {
+          const attrs: WorkerRouteAttributes = {
+            routeId:
+              output?.routeId && !isLiveId(output.routeId) ? output.routeId : generateLocalId(),
+            zoneId: news.zoneId as string,
+            pattern: news.pattern,
+            script: news.script as string | undefined,
+          };
+          return yield* register(attrs);
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          yield* edge.removeRoutes(output.routeId);
+        }),
+      };
+    }),
+  );
+
+export const WorkerRouteProviderLive = () =>
   Provider.succeed(WorkerRoute, {
     stables: ["routeId", "zoneId"],
 
@@ -122,11 +203,7 @@ export const WorkerRouteProvider = () =>
       const n = news as WorkerRouteProps;
       // zoneId is Input<string>; by diff time both sides are concrete
       // strings when statically knowable.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -161,9 +238,7 @@ export const WorkerRouteProvider = () =>
       const script = news.script as string | undefined;
 
       // 1. Observe by cached id first.
-      let observed = output?.routeId
-        ? yield* observeById(zoneId, output.routeId)
-        : undefined;
+      let observed = output?.routeId ? yield* observeById(zoneId, output.routeId) : undefined;
 
       // 2. Fall back to scanning the zone for the pattern. Ownership has
       //    already been verified upstream — `read` reports existing
@@ -177,20 +252,18 @@ export const WorkerRouteProvider = () =>
       //    crashed previous reconcile) created the route between our
       //    observation and now — treat it as a race and converge via PUT.
       if (!observed) {
-        observed = yield* workers
-          .createRoute({ zoneId, pattern: news.pattern, script })
-          .pipe(
-            Effect.map(normalizeRoute),
-            Effect.catchTag("InvalidRoute", (originalError) =>
-              Effect.gen(function* () {
-                const match = yield* findByPattern(zoneId, news.pattern);
-                if (!match) {
-                  return yield* Effect.fail(originalError);
-                }
-                return match;
-              }),
-            ),
-          );
+        observed = yield* workers.createRoute({ zoneId, pattern: news.pattern, script }).pipe(
+          Effect.map(normalizeRoute),
+          Effect.catchTag("InvalidRoute", (originalError) =>
+            Effect.gen(function* () {
+              const match = yield* findByPattern(zoneId, news.pattern);
+              if (!match) {
+                return yield* Effect.fail(originalError);
+              }
+              return match;
+            }),
+          ),
+        );
       }
 
       // 4. Sync — PUT resends the full desired body when the observed
@@ -235,9 +308,7 @@ export const WorkerRouteProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((route) =>
-                  toAttributes(normalizeRoute(route), zone.id),
-                ),
+                (page.result ?? []).map((route) => toAttributes(normalizeRoute(route), zone.id)),
               ),
             ),
             Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
@@ -271,14 +342,12 @@ const normalizeRoute = (raw: {
   script: raw.script == null || raw.script === "" ? undefined : raw.script,
 });
 
-const toAttributes = (
-  observed: ObservedRoute,
-  zoneId: string,
-): WorkerRouteAttributes => ({
+const toAttributes = (observed: ObservedRoute, zoneId: string): WorkerRouteAttributes => ({
   routeId: observed.id,
   zoneId,
   pattern: observed.pattern,
   script: observed.script,
+  url: routePatternUrl(observed.pattern),
 });
 
 const observeById = (zoneId: string, routeId: string) =>
@@ -289,9 +358,7 @@ const observeById = (zoneId: string, routeId: string) =>
     // (10007, how some API versions tag a GET on a missing route). Both
     // are in `getRoute`'s typed union; swallow them so the reconciler
     // falls through to the find-by-pattern path.
-    Effect.catchTag(["RouteNotFound", "WorkerNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["RouteNotFound", "WorkerNotFound"], () => Effect.succeed(undefined)),
   );
 
 /**

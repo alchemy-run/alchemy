@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
+import * as Effect from "effect/Effect";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -7,22 +7,20 @@ import * as Output from "../../Output.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
-import {
-  Distribution,
-  type DistributionBehavior,
-} from "../CloudFront/Distribution.ts";
+import { CachePolicy } from "../CloudFront/CachePolicy.ts";
+import { Distribution, type DistributionBehavior } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
 import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
 import { KvEntries } from "../CloudFront/KvEntries.ts";
 import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
-import { MANAGED_CACHING_OPTIMIZED_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
+import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
-import {
-  CF_BLOCK_CLOUDFRONT_URL_INJECTION,
-  CF_ROUTER_INJECTION,
-} from "./cfcode.ts";
-import type { RouterProps } from "./shared.ts";
+import { Records as Route53Records } from "../Route53/Records.ts";
+import type { Bucket } from "../S3/Bucket.ts";
+import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
 
 /**
  * Shared CloudFront front door with KV-based dynamic routing.
@@ -36,49 +34,77 @@ import type { RouterProps } from "./shared.ts";
  * the Router's KV store. The Router's CF function matches incoming requests to
  * routes by host pattern and path prefix, then delegates to `routeSite()` for
  * static site routing or directly sets URL/S3 origins.
- * @resource
- * @section Creating Routers
- * @example Basic Router
+ * ### Creating Routers
+ * **Example:** Basic Router
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   domain: { name: "example.com", hostedZoneId },
  * });
  * ```
  *
- * @section Inline Routes
- * @example URL And Bucket Routes
+ * ### Inline Routes
+ * **Example:** URL And Bucket Routes
  * ```typescript
  * const router = yield* Router("WebsiteRouter", {
  *   routes: {
- *     "/*": { url: api.functionUrl },
+ *     "/api/*": { url: api.functionUrl },
+ *     "/*": { bucket: assetsBucket },
  *   },
  * });
  * ```
+ *
+ * ### Attaching Sites
+ * **Example:** Serve A StaticSite Through The Router
+ * ```typescript
+ * const router = yield* Router("WebsiteRouter", {
+ *   invalidation: { paths: "all", wait: true },
+ * });
+ *
+ * // The site registers itself in the Router's KV store; no new
+ * // distribution is created.
+ * const docs = yield* AWS.Website.StaticSite("DocsSite", {
+ *   path: "./docs/dist",
+ *   domain: {
+ *     router,
+ *     path: "/docs",
+ *   },
+ * });
+ * ```
+ *
+ * @resource
  */
-export const Router = (id: string, props: RouterProps) =>
-  Effect.gen(function* () {
-    const domain = props.domain;
+export const Router = Effect.fn("AWS.Website.Router")(
+  function* (id: string, props: RouterProps) {
+    const domain = normalizeWebsiteDomain(props.domain);
 
     if (domain && domain.dns === false && !domain.cert) {
+      return yield* Effect.die("Router domain configuration with `dns: false` requires `cert`.");
+    }
+    if (props.cloudfrontUrl === false && !domain) {
       return yield* Effect.die(
-        "Router domain configuration with `dns: false` requires `cert`.",
+        `"cloudfrontUrl: false" requires a "domain" — without one the Router would be unreachable (the CloudFront default domain is its only URL).`,
+      );
+    }
+    if (domain?.redirects?.length && domain.name.includes("*")) {
+      return yield* Effect.die(
+        `"domain.redirects" requires a concrete (non-wildcard) "domain.name" to redirect to.`,
       );
     }
 
-    const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
+    // The managed certificate (when the Router owns one) doubles as a bind
+    // target for attached-site hostnames — keep the resource handle distinct
+    // from the viewer-certificate value, which may be a user-provided ARN.
+    const managedCertificate =
+      domain && !domain.cert
+        ? yield* Certificate("Certificate", {
             domainName: domain.name,
-            subjectAlternativeNames: [
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
+            subjectAlternativeNames: [...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             hostedZoneId: domain.hostedZoneId,
             tags: props.tags,
-          });
+          })
+        : undefined;
+    const certificate =
+      managedCertificate ?? (domain?.cert ? { certificateArn: domain.cert } : undefined);
 
     const stack = yield* Stack;
     const stage = yield* Stage;
@@ -96,7 +122,13 @@ export const Router = (id: string, props: RouterProps) =>
       code: buildRouterRequestFunctionCode({
         kvNamespace,
         userInjection: props.edge?.viewerRequest?.injection,
-        blockCloudfrontUrl: !!domain,
+        hostRedirect: domain
+          ? {
+              to: domain.name,
+              hosts: domain.redirects ?? [],
+              cloudfrontDefault: props.cloudfrontUrl === false,
+            }
+          : undefined,
       }),
       keyValueStoreArns: [kvStore.keyValueStoreArn],
     });
@@ -104,9 +136,7 @@ export const Router = (id: string, props: RouterProps) =>
     const viewerResponse = props.edge?.viewerResponse
       ? yield* CloudFrontFunction("ViewerResponse", {
           comment: `${id} viewer response`,
-          code: buildRouterResponseFunctionCode(
-            props.edge.viewerResponse.injection,
-          ),
+          code: buildRouterResponseFunctionCode(props.edge.viewerResponse.injection),
           keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
             ? [props.edge.viewerResponse.keyValueStoreArn as any]
             : undefined,
@@ -129,6 +159,7 @@ export const Router = (id: string, props: RouterProps) =>
     ];
 
     const inlineRouteEntries: Record<string, Input<string>> = {};
+    const routeBuckets: Bucket[] = [];
 
     if (props.routes) {
       let routeIndex = 0;
@@ -141,24 +172,24 @@ export const Router = (id: string, props: RouterProps) =>
 
         if (typeof route === "string" || "url" in (route as any)) {
           const url = typeof route === "string" ? route : (route as any).url;
-          const host = typeof url === "string" ? new URL(url).host : url;
-          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
-            host,
-            (resolvedHost) =>
-              JSON.stringify({
-                host: resolvedHost,
-                origin: (route as any).origin,
-                rewrite: (route as any).rewrite,
-              }),
+          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(url, (resolvedUrl) =>
+            JSON.stringify({
+              host: new URL(resolvedUrl).host,
+              origin: (route as any).origin,
+              rewrite: (route as any).rewrite,
+            }),
           );
           yield* KvRoutesUpdate(`Route${routeIndex}`, {
             store: kvStore.keyValueStoreArn as any,
             namespace: kvNamespace,
             key: "routes",
-            entry: `url,${routeNs},,${normalizePattern(pattern)}`,
+            entry: `url,${kvNamespace}:${routeNs},,${normalizePattern(pattern)}`,
           });
         } else {
           const bucketRoute = route as any;
+          if (typeof bucketRoute.bucket !== "string") {
+            routeBuckets.push(bucketRoute.bucket as Bucket);
+          }
           const bucketDomain =
             typeof bucketRoute.bucket === "string"
               ? bucketRoute.bucket
@@ -176,7 +207,7 @@ export const Router = (id: string, props: RouterProps) =>
             store: kvStore.keyValueStoreArn as any,
             namespace: kvNamespace,
             key: "routes",
-            entry: `bucket,${routeNs},,${normalizePattern(pattern)}`,
+            entry: `bucket,${kvNamespace}:${routeNs},,${normalizePattern(pattern)}`,
           });
         }
       }
@@ -190,6 +221,28 @@ export const Router = (id: string, props: RouterProps) =>
       });
     }
 
+    // One behavior serves every attached site — static AND server-rendered
+    // — so the cache policy must not cache responses that carry no
+    // Cache-Control (SSR pages), while still honoring the immutable
+    // Cache-Control the asset uploader sets. Managed CachingOptimized
+    // would cache header-less SSR responses for a day. The
+    // AllViewerExceptHostHeader origin-request policy forwards viewer
+    // headers/cookies/query to server origins (required for Lambda URLs,
+    // whose Host must stay the function URL's own domain).
+    const cachePolicy = yield* CachePolicy("CachePolicy", {
+      comment: `${id} router cache policy`,
+      minTTL: 0,
+      defaultTTL: 0,
+      maxTTL: "365 days",
+      parametersInCacheKeyAndForwardedToOrigin: {
+        EnableAcceptEncodingGzip: true,
+        EnableAcceptEncodingBrotli: true,
+        QueryStringsConfig: { QueryStringBehavior: "all" },
+        HeadersConfig: { HeaderBehavior: "none" },
+        CookiesConfig: { CookieBehavior: "none" },
+      },
+    });
+
     const distribution = yield* Distribution("Distribution", {
       aliases: domain
         ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
@@ -197,12 +250,12 @@ export const Router = (id: string, props: RouterProps) =>
       origins: [
         {
           id: "default",
-          domainName: "placeholder.sst.dev",
+          domainName: "placeholder.alchemy.run",
           customOriginConfig: {
             httpPort: 80,
             httpsPort: 443,
             originProtocolPolicy: "https-only",
-            originReadTimeout: 20,
+            originReadTimeout: "20 seconds",
             originSslProtocols: ["TLSv1.2"],
           },
         },
@@ -210,18 +263,11 @@ export const Router = (id: string, props: RouterProps) =>
       defaultCacheBehavior: {
         targetOriginId: "default",
         viewerProtocolPolicy: "redirect-to-https",
-        allowedMethods: [
-          "DELETE",
-          "GET",
-          "HEAD",
-          "OPTIONS",
-          "PATCH",
-          "POST",
-          "PUT",
-        ],
+        allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
         cachedMethods: ["GET", "HEAD"],
         compress: true,
-        cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        cachePolicyId: cachePolicy.cachePolicyId,
+        originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
         functionAssociations,
       },
       viewerCertificate: certificate
@@ -234,17 +280,37 @@ export const Router = (id: string, props: RouterProps) =>
       tags: props.tags,
     });
 
+    // Inline bucket routes are served through the router's distribution with
+    // OAC-signed requests (see `setS3Origin` in cfcode.ts) — each bucket must
+    // allow this distribution or every request 403s.
+    yield* Effect.forEach(routeBuckets, (routeBucket) => {
+      const bucketPolicy: PolicyStatement = {
+        Effect: "Allow",
+        Principal: {
+          Service: "cloudfront.amazonaws.com",
+        },
+        Action: ["s3:GetObject"],
+        Resource: [Output.interpolate`${routeBucket.bucketArn}/*` as any],
+        Condition: {
+          StringEquals: {
+            "AWS:SourceArn": distribution.distributionArn as any,
+          },
+        },
+      };
+      return routeBucket.bind`AWS.S3.Policy(CloudFront, ${routeBucket})`({
+        policyStatements: [bucketPolicy],
+      });
+    });
+
     const records =
-      domain?.hostedZoneId && domain.dns !== false
+      domain && domain.dns !== false
         ? yield* Effect.forEach(
-            [
-              domain.name,
-              ...(domain.aliases ?? []),
-              ...(domain.redirects ?? []),
-            ],
+            [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
             (name, index) =>
               Route53Record(`AliasRecord${index + 1}`, {
-                hostedZoneId: domain.hostedZoneId!,
+                // Optional — the Record provider infers the most specific
+                // public zone containing `name` when omitted.
+                hostedZoneId: domain.hostedZoneId,
                 name,
                 type: "A",
                 aliasTarget: {
@@ -256,14 +322,30 @@ export const Router = (id: string, props: RouterProps) =>
           )
         : [];
 
+    // Bind target for attached-site hostnames: a record set (initially
+    // empty) that same-stack sites bind their concrete hostnames onto, each
+    // becoming an A-alias record pointing at this distribution (see
+    // `WebsiteRouterBindTargets`).
+    const siteRecords =
+      domain && domain.dns !== false
+        ? yield* Route53Records("SiteAliasRecords", {
+            // Optional — the Records provider infers the zone from the
+            // first bound hostname when omitted.
+            hostedZoneId: domain.hostedZoneId,
+            type: "A",
+            aliasTarget: {
+              hostedZoneId: distribution.hostedZoneId,
+              dnsName: distribution.domainName,
+            },
+          })
+        : undefined;
+
     const invalidation =
       props.invalidation === false || !props.invalidation
         ? undefined
         : yield* Invalidation("Invalidation", {
             distributionId: distribution.distributionId,
-            version: createHash("sha256")
-              .update(JSON.stringify(inlineRouteEntries))
-              .digest("hex"),
+            version: createHash("sha256").update(JSON.stringify(inlineRouteEntries)).digest("hex"),
             wait: props.invalidation.wait,
             paths:
               props.invalidation.paths === "all" || !props.invalidation.paths
@@ -273,6 +355,23 @@ export const Router = (id: string, props: RouterProps) =>
                   : ["/*"],
           });
 
+    // Precedence: the canonical domain, then aliases in declaration order,
+    // then the distribution's own URL (only while `cloudfrontUrl` is
+    // enabled). Redirect hostnames never appear.
+    //
+    // `distribution.url` rather than an interpolated
+    // `https://${distribution.domainName}`: the distribution knows its own
+    // address, which is `https://{id}.cloudfront.net` on AWS and
+    // `http://localhost:{port}` under `alchemy dev`, where that AWS hostname
+    // resolves to nothing.
+    const urls: Input<string>[] = domain
+      ? [
+          Output.interpolate`https://${domain.name}`,
+          ...(domain.aliases ?? []).map((alias) => `https://${alias}`),
+          ...(props.cloudfrontUrl !== false ? [distribution.url] : []),
+        ]
+      : [distribution.url];
+
     return {
       certificate,
       distribution,
@@ -281,24 +380,63 @@ export const Router = (id: string, props: RouterProps) =>
       kvStoreArn: kvStore.keyValueStoreArn as Input<string>,
       kvNamespace,
       distributionId: distribution.distributionId as Input<string>,
-      url: domain
-        ? Output.interpolate`https://${domain.name}`
-        : Output.interpolate`https://${distribution.domainName}`,
+      distributionArn: distribution.distributionArn as Input<string>,
+      /**
+       * Same-stack bind targets for attached-site hostnames (see
+       * `WebsiteRouterBindTargets` in shared.ts): a site declaring
+       * `domain: { name, router }` binds its concrete hostnames onto the
+       * distribution (alias), the managed certificate (SAN), and the
+       * Route 53 record set. Only populated when the Router owns a
+       * `domain` — without one there is no viewer certificate to cover
+       * bound aliases.
+       */
+      bindTargets: domain
+        ? {
+            distribution,
+            certificate: managedCertificate,
+            records: siteRecords,
+          }
+        : undefined,
+      /**
+       * The most significant URL the Router serves at — always `urls[0]`.
+       */
+      url: urls[0],
+      /**
+       * Every URL the Router serves at, most significant first —
+       * `[https://<domain.name>?, ...aliases, <CloudFront default
+       * domain>?]` (the default domain only while `cloudfrontUrl` is
+       * enabled). Redirect hostnames never appear — they serve no content.
+       */
+      urls,
     };
-  }).pipe(Namespace.push(id));
+  },
+  (effect, id: string, _props: RouterProps) => effect.pipe(Namespace.push(id)),
+);
 
 const buildRouterRequestFunctionCode = ({
   kvNamespace,
   userInjection,
-  blockCloudfrontUrl,
+  hostRedirect,
 }: {
   kvNamespace: string;
   userInjection?: string;
-  blockCloudfrontUrl: boolean;
+  hostRedirect?: {
+    to: string;
+    hosts: string[];
+    cloudfrontDefault: boolean;
+  };
 }) => `import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}
-  ${blockCloudfrontUrl ? CF_BLOCK_CLOUDFRONT_URL_INJECTION : ""}
+  ${
+    hostRedirect
+      ? buildHostRedirectInjection({
+          to: hostRedirect.to,
+          hosts: hostRedirect.hosts,
+          cloudfrontDefault: hostRedirect.cloudfrontDefault,
+        })
+      : ""
+  }
   ${CF_ROUTER_INJECTION}
 
   async function getRoutes() {

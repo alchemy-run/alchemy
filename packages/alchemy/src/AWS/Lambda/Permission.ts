@@ -1,6 +1,7 @@
 import type * as lambda from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -82,9 +83,8 @@ export interface Permission extends Resource<
 /**
  * A Lambda permission that grants an AWS service or another account permission to
  * invoke a function.
- * @resource
- * @section Granting Permissions
- * @example S3 Notification Permission
+ * ### Granting Permissions
+ * **Example:** S3 Notification Permission
  * ```typescript
  * const perm = yield* Permission("S3Invoke", {
  *   action: "lambda:InvokeFunction",
@@ -95,7 +95,7 @@ export interface Permission extends Resource<
  * });
  * ```
  *
- * @example Cross Account Invoke
+ * **Example:** Cross Account Invoke
  * ```typescript
  * const perm = yield* Permission("CrossAccount", {
  *   action: "lambda:InvokeFunction",
@@ -104,7 +104,7 @@ export interface Permission extends Resource<
  * });
  * ```
  *
- * @example Public Function URL
+ * **Example:** Public Function URL
  * ```typescript
  * const perm = yield* Permission("PublicUrl", {
  *   action: "lambda:InvokeFunctionUrl",
@@ -113,6 +113,8 @@ export interface Permission extends Resource<
  *   functionUrlAuthType: "NONE",
  * });
  * ```
+ *
+ * @resource
  */
 export const Permission = Resource<Permission>("AWS.Lambda.Permission");
 
@@ -128,6 +130,48 @@ export const PermissionProvider = () =>
         });
 
       type PermissionAttrs = { statementId: string; functionName: string };
+
+      // Lambda serializes resource-policy mutations per function. Parallel
+      // Permission resources (for example several API Gateway routes) can
+      // therefore receive a transient ResourceConflictException even when
+      // their statement ids are distinct. Keep the retry bounded well below
+      // the provider/test timeout.
+      type PolicyMutationError = Lambda.AddPermissionError | Lambda.RemovePermissionError;
+      const retryPolicyMutation = {
+        while: (error: PolicyMutationError) => error._tag === "ResourceConflictException",
+        schedule: Schedule.spaced("500 millis"),
+        times: 8,
+      } as const;
+
+      const addPermission = (request: Lambda.AddPermissionRequest) =>
+        Lambda.addPermission(request).pipe(Effect.retry(retryPolicyMutation));
+
+      const removePermission = (request: Lambda.RemovePermissionRequest) =>
+        Lambda.removePermission(request).pipe(Effect.retry(retryPolicyMutation));
+
+      const hasStatement = Effect.fn(function* (functionName: string, statementId: string) {
+        const { Policy } = yield* Lambda.getPolicy({
+          FunctionName: functionName,
+        }).pipe(
+          // A function without a resource policy is reported as not found.
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Policy: undefined })),
+        );
+        if (!Policy) return false;
+        return yield* Effect.try({
+          try: () => {
+            const policy = JSON.parse(Policy) as {
+              Statement?: { Sid?: string } | { Sid?: string }[];
+            };
+            const statements = Array.isArray(policy.Statement)
+              ? policy.Statement
+              : policy.Statement
+                ? [policy.Statement]
+                : [];
+            return statements.some((statement) => statement.Sid === statementId);
+          },
+          catch: (cause) => new Error("invalid Lambda resource policy", { cause }),
+        });
+      });
 
       return {
         stables: ["statementId", "functionName"],
@@ -176,15 +220,11 @@ export const PermissionProvider = () =>
                       ? [policy.Statement]
                       : [];
                   return statements
-                    .filter(
-                      (s): s is { Sid: string } => typeof s.Sid === "string",
-                    )
-                    .map(
-                      (s): PermissionAttrs => ({
-                        statementId: s.Sid,
-                        functionName,
-                      }),
-                    );
+                    .filter((s): s is { Sid: string } => typeof s.Sid === "string")
+                    .map((s): PermissionAttrs => ({
+                      statementId: s.Sid,
+                      functionName,
+                    }));
                 }).pipe(
                   // Functions with no resource policy / removed out of band
                   // between list and getPolicy — skip them.
@@ -206,14 +246,20 @@ export const PermissionProvider = () =>
           // Observe — derive identity. The statementId is deterministic from
           // the logical id, so we always use it whether this is a first
           // reconciliation, an adoption, or a re-run after a partial create.
-          const statementId =
-            output?.statementId ?? (yield* createStatementId(id));
+          const statementId = output?.statementId ?? (yield* createStatementId(id));
 
-          // Ensure + sync — addPermission has no "update" API, so we
-          // unconditionally re-add. Tolerate `ResourceConflictException`
-          // (statement already exists) by removing and re-adding so the
-          // permission ends up matching `news`.
-          yield* Lambda.addPermission({
+          // Observe the deterministic Sid before mutating. An existing Sid is
+          // a true create/update collision and must be replaced; a
+          // ResourceConflictException from an absent Sid is instead Lambda's
+          // transient per-function policy mutation lock and is retried.
+          if (yield* hasStatement(news.functionName, statementId)) {
+            yield* removePermission({
+              FunctionName: news.functionName,
+              StatementId: statementId,
+            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          }
+
+          yield* addPermission({
             FunctionName: news.functionName,
             StatementId: statementId,
             Action: news.action,
@@ -224,37 +270,9 @@ export const PermissionProvider = () =>
             FunctionUrlAuthType: news.functionUrlAuthType,
             InvokedViaFunctionUrl: news.invokedViaFunctionUrl,
             PrincipalOrgID: news.principalOrgID,
-          }).pipe(
-            Effect.catchTag("ResourceConflictException", () =>
-              Effect.gen(function* () {
-                yield* Lambda.removePermission({
-                  FunctionName: news.functionName,
-                  StatementId: statementId,
-                }).pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
-                yield* Lambda.addPermission({
-                  FunctionName: news.functionName,
-                  StatementId: statementId,
-                  Action: news.action,
-                  Principal: news.principal,
-                  SourceArn: news.sourceArn,
-                  SourceAccount: news.sourceAccount,
-                  EventSourceToken: news.eventSourceToken,
-                  FunctionUrlAuthType: news.functionUrlAuthType,
-                  InvokedViaFunctionUrl: news.invokedViaFunctionUrl,
-                  PrincipalOrgID: news.principalOrgID,
-                });
-              }),
-            ),
-          );
+          });
 
-          yield* session.note(
-            `Permission ${statementId} on ${news.functionName}`,
-          );
+          yield* session.note(`Permission ${statementId} on ${news.functionName}`);
 
           return {
             statementId,
@@ -262,12 +280,10 @@ export const PermissionProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* Lambda.removePermission({
+          yield* removePermission({
             FunctionName: output.functionName,
             StatementId: output.statementId,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

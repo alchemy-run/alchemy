@@ -1,7 +1,7 @@
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { Annotation, AnnotationProvider } from "./Annotation.ts";
 import { ApiToken, ApiTokenProvider } from "./ApiToken.ts";
@@ -16,16 +16,14 @@ import { VirtualField, VirtualFieldProvider } from "./VirtualField.ts";
 
 export { Credentials } from "@distilled.cloud/axiom/Credentials";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Axiom",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Axiom") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
  * Axiom providers and credentials. Wires up Dataset, ApiToken, Notifier,
  * Monitor, Dashboard, VirtualField, View and Annotation resources, and
- * registers the Axiom AuthProvider so `alchemy login` can configure it.
+ * registers the Axiom AuthProvider so `alchemy profile edit` can configure it.
  */
 export const providers = () =>
   Layer.effect(
@@ -56,7 +54,7 @@ export const providers = () =>
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(AxiomAuth),
-    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );

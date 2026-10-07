@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as Effect from "effect/Effect";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -41,7 +41,7 @@ test.provider(
           const namespace = yield* Cloudflare.KV.Namespace("RefNamespace");
           const worker = yield* Cloudflare.Worker("ref-binding-worker", {
             script,
-            subdomain: { enabled: true },
+            workersDev: true,
             env: {
               KV: yield* Cloudflare.KV.Namespace.ref("RefNamespace"),
             },
@@ -56,5 +56,8 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:kv", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
 );

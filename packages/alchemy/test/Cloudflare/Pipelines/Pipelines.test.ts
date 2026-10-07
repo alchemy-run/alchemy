@@ -1,7 +1,5 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
+import crypto from "node:crypto";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
@@ -9,14 +7,14 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import crypto from "node:crypto";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -52,7 +50,10 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  // Account-owned tokens verify against the account route.
+  const verified = token.startsWith("cfat_")
+    ? yield* retryAuthBlip(accounts.verifyToken({ accountId: creds.accountId }))
+    : yield* retryAuthBlip(user.verifyToken({}));
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
@@ -63,17 +64,13 @@ const r2Credentials = Effect.gen(function* () {
 });
 
 const getStream = (accountId: string, streamId: string) =>
-  pipelines
-    .getStream({ accountId, streamId })
-    .pipe(Effect.retry(forbiddenBlips));
+  pipelines.getStream({ accountId, streamId }).pipe(Effect.retry(forbiddenBlips));
 
 const getSink = (accountId: string, sinkId: string) =>
   pipelines.getSink({ accountId, sinkId }).pipe(Effect.retry(forbiddenBlips));
 
 const getPipeline = (accountId: string, pipelineId: string) =>
-  pipelines
-    .getV1Pipeline({ accountId, pipelineId })
-    .pipe(Effect.retry(forbiddenBlips));
+  pipelines.getV1Pipeline({ accountId, pipelineId }).pipe(Effect.retry(forbiddenBlips));
 
 const expectStreamGone = (accountId: string, streamId: string) =>
   getStream(accountId, streamId).pipe(
@@ -81,10 +78,7 @@ const expectStreamGone = (accountId: string, streamId: string) =>
     Effect.catchTag("StreamNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "StreamNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -94,10 +88,7 @@ const expectSinkGone = (accountId: string, sinkId: string) =>
     Effect.catchTag("SinkNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SinkNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -107,10 +98,7 @@ const expectPipelineGone = (accountId: string, pipelineId: string) =>
     Effect.catchTag("PipelineNotExists", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "PipelineNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -122,21 +110,19 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Create — engine-generated name, default http/workerBinding.
-      const initial = yield* retryAuthBlip(
-        stack.deploy(Cloudflare.Pipelines.Stream("Stream", {})),
-      );
+      // Create — engine-generated name, default http/workerBinding. The
+      // secure default is no public HTTP endpoint.
+      const initial = yield* retryAuthBlip(stack.deploy(Cloudflare.Pipelines.Stream("Stream", {})));
 
       expect(initial.streamId).toBeTruthy();
       expect(initial.accountId).toEqual(accountId);
-      expect(initial.httpEnabled).toEqual(true);
-      expect(initial.httpAuthentication).toEqual(false);
+      expect(initial.httpEnabled).toEqual(false);
       expect(initial.workerBindingEnabled).toEqual(true);
-      expect(initial.endpoint).toBeTruthy();
 
       const live = yield* getStream(accountId, initial.streamId);
       expect(live.id).toEqual(initial.streamId);
       expect(live.name).toEqual(initial.name);
+      expect(live.http.enabled).toEqual(false);
 
       // Patch http in place — same streamId.
       const updated = yield* retryAuthBlip(
@@ -152,6 +138,8 @@ test.provider(
       );
 
       expect(updated.streamId).toEqual(initial.streamId);
+      expect(updated.httpEnabled).toEqual(true);
+      expect(updated.endpoint).toBeTruthy();
       expect(updated.httpAuthentication).toEqual(true);
       expect(updated.corsOrigins).toEqual(["https://example.com"]);
 
@@ -182,7 +170,10 @@ test.provider(
       // Destroy again — delete must be idempotent.
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:pipelines", "live"],
+    timeout: 300_000,
+  },
 );
 
 interface EtlOpts {
@@ -203,7 +194,9 @@ const etl = (
   opts: EtlOpts = {},
 ) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {});
+    const bucket = yield* Cloudflare.R2.Bucket("SinkBucket", {
+      forceDestroy: true,
+    });
     const stream = yield* Cloudflare.Pipelines.Stream("Stream", {});
     const sink = yield* Cloudflare.Pipelines.Sink("Sink", {
       type: "r2",
@@ -243,10 +236,7 @@ test.provider(
       expect(liveSink.name).toEqual(initial.sink.name);
       expect(liveSink.config?.bucket).toEqual(initial.bucket.bucketName);
 
-      const livePipeline = yield* getPipeline(
-        accountId,
-        initial.pipeline.pipelineId,
-      );
+      const livePipeline = yield* getPipeline(accountId, initial.pipeline.pipelineId);
       expect(livePipeline.name).toEqual(initial.pipeline.name);
       expect(livePipeline.sql).toEqual(initial.pipeline.sql);
       expect(livePipeline.status).toBeTruthy();
@@ -266,9 +256,7 @@ test.provider(
 
       expect(replaced.sink.sinkId).not.toEqual(initial.sink.sinkId);
       expect(replaced.sink.path).toEqual("ingest");
-      expect(replaced.pipeline.pipelineId).not.toEqual(
-        initial.pipeline.pipelineId,
-      );
+      expect(replaced.pipeline.pipelineId).not.toEqual(initial.pipeline.pipelineId);
       expect(replaced.pipeline.sql).toContain("WHERE 1 = 1");
       expect(replaced.stream.streamId).toEqual(initial.stream.streamId);
 
@@ -287,5 +275,13 @@ test.provider(
       // Destroy again — deletes must be idempotent.
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 600_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

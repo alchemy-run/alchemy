@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import QueueWorker from "./round-trip-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class CountMismatch extends Data.TaggedError("CountMismatch")<{
   expected: number;
@@ -81,17 +78,11 @@ test.provider.skipIf(!!process.env.FAST)(
       // accumulate state from prior runs (the DO survives across
       // deploys when the namespace logical id is stable).
       const name = `roundtrip-${Math.random().toString(36).slice(2, 8)}`;
-      const secondaryName = `roundtrip-secondary-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+      const secondaryName = `roundtrip-secondary-${Math.random().toString(36).slice(2, 8)}`;
       const messages = ["alpha", "beta", "gamma", "delta"];
       const secondaryMessages = ["one", "two"];
 
-      const sendMessage = (
-        pathname: string,
-        counterName: string,
-        text: string,
-      ) =>
+      const sendMessage = (pathname: string, counterName: string, text: string) =>
         HttpClient.execute(
           HttpClientRequest.post(
             `${baseUrl}${pathname}?name=${encodeURIComponent(counterName)}`,
@@ -103,15 +94,10 @@ test.provider.skipIf(!!process.env.FAST)(
               : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
           ),
           Effect.retry({
-            // Cap the exponential at 3s — uncapped, the sleeps double each
-            // attempt and a handful of misses burns minutes of the test
-            // timeout on a single send.
+            // Bound fresh workers.dev readiness to roughly 25 seconds.
             schedule: Schedule.max([
-              Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("3 seconds"),
-              ]),
-              Schedule.recurs(15),
+              Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
+              Schedule.recurs(10),
             ]),
           }),
         );
@@ -129,11 +115,7 @@ test.provider.skipIf(!!process.env.FAST)(
       }
 
       for (const text of secondaryMessages) {
-        const sendResponse = yield* sendMessage(
-          "/send-secondary",
-          secondaryName,
-          text,
-        );
+        const sendResponse = yield* sendMessage("/send-secondary", secondaryName, text);
         expect(sendResponse.status).toBe(202);
         const sent = (yield* sendResponse.json) as {
           sent: { name: string; text: string };
@@ -148,9 +130,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // otherwise surface as a decode error), and edge propagation can
       // 404 the first calls; both are transient and must be retried.
       const readSnapshot = (counterName: string, expected: number) =>
-        HttpClient.get(
-          `${baseUrl}/count?name=${encodeURIComponent(counterName)}`,
-        ).pipe(
+        HttpClient.get(`${baseUrl}/count?name=${encodeURIComponent(counterName)}`).pipe(
           Effect.flatMap(HttpClientResponse.filterStatusOk),
           Effect.flatMap((res) => res.json),
           Effect.flatMap((body) => {
@@ -165,25 +145,21 @@ test.provider.skipIf(!!process.env.FAST)(
                 );
           }),
           Effect.retry({
-            // Cap the exponential at 4s so 40 attempts sample for ~2.5 minutes.
-            // Uncapped, the doubling sleeps pass the whole 240s test budget
-            // after ~9 attempts and the test dies in a single long sleep even
-            // though the consumer would have caught up moments later.
+            // Bound consumer catch-up to roughly 35 seconds.
             schedule: Schedule.max([
-              Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("4 seconds"),
-              ]),
-              Schedule.recurs(40),
+              Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("4 seconds")]),
+              Schedule.recurs(10),
             ]),
           }),
         );
 
       // Poll the DO snapshot until each consumer has caught up.
-      const snapshot = yield* readSnapshot(name, messages.length);
-      const secondarySnapshot = yield* readSnapshot(
-        secondaryName,
-        secondaryMessages.length,
+      const [snapshot, secondarySnapshot] = yield* Effect.all(
+        [
+          readSnapshot(name, messages.length),
+          readSnapshot(secondaryName, secondaryMessages.length),
+        ],
+        { concurrency: "unbounded" },
       );
 
       // The DO observed every message. Cloudflare Queues are
@@ -194,17 +170,21 @@ test.provider.skipIf(!!process.env.FAST)(
       // expected message was observed at least once (set containment),
       // not exact multiset equality — the latter flakes whenever
       // Cloudflare redelivers a message.
-      expect([...new Set(snapshot.lastBodies)].sort()).toEqual(
-        [...messages].sort(),
-      );
-      expect(secondarySnapshot.count).toBeGreaterThanOrEqual(
-        secondaryMessages.length,
-      );
+      expect([...new Set(snapshot.lastBodies)].sort()).toEqual([...messages].sort());
+      expect(secondarySnapshot.count).toBeGreaterThanOrEqual(secondaryMessages.length);
       expect([...new Set(secondarySnapshot.lastBodies)].sort()).toEqual(
         [...secondaryMessages].sort(),
       );
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 120_000,
+  },
 );

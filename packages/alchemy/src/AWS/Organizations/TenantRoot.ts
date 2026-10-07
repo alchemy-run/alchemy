@@ -1,6 +1,7 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import type { PolicyDocument } from "../IAM/Policy.ts";
+import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
 import * as IdentityCenter from "../IdentityCenter/index.ts";
 import type { Account, AccountProps } from "./Account.ts";
 import { Account as OrganizationAccount } from "./Account.ts";
@@ -8,10 +9,7 @@ import type { DelegatedAdministrator } from "./DelegatedAdministrator.ts";
 import { DelegatedAdministrator as OrganizationsDelegatedAdministrator } from "./DelegatedAdministrator.ts";
 import type { Organization, OrganizationProps } from "./Organization.ts";
 import { Organization as AwsOrganization } from "./Organization.ts";
-import type {
-  OrganizationalUnit,
-  OrganizationalUnitProps,
-} from "./OrganizationalUnit.ts";
+import type { OrganizationalUnit, OrganizationalUnitProps } from "./OrganizationalUnit.ts";
 import { OrganizationalUnit as AwsOrganizationalUnit } from "./OrganizationalUnit.ts";
 import type { Policy } from "./Policy.ts";
 import { Policy as OrganizationsPolicy } from "./Policy.ts";
@@ -26,12 +24,12 @@ import { TrustedServiceAccess as OrganizationsTrustedServiceAccess } from "./Tru
 
 export type TenantTargetKey = "root" | string;
 
-export interface TenantAccountSpec extends Omit<
-  AccountProps,
-  "parentId" | "name" | "email"
-> {
+export interface TenantAccountSpec extends Omit<AccountProps, "parentId" | "name" | "email"> {
+  /** Stable key identifying the account within the tenant (used in logical IDs and `targetKeys`). */
   key: string;
+  /** Friendly account name. */
   name: string;
+  /** Globally unique email address for the account. */
   email: string;
 }
 
@@ -39,63 +37,127 @@ export interface TenantOrganizationalUnitSpec extends Omit<
   OrganizationalUnitProps,
   "parentId" | "name"
 > {
+  /** Stable key identifying the OU within the tenant (used in logical IDs and `targetKeys`). */
   key: string;
+  /**
+   * OU name.
+   * @default the spec `key`
+   */
   name?: string;
+  /** Member accounts vended directly under this OU. */
   accounts?: TenantAccountSpec[];
+  /** Nested child OUs. */
   children?: TenantOrganizationalUnitSpec[];
 }
 
 export interface TenantPolicySpec {
+  /** Stable key identifying the policy within the tenant. */
   key: string;
+  /** Policy name. If omitted, Alchemy generates one. */
   name?: string;
+  /** Policy description. */
   description?: string;
+  /**
+   * Organizations policy type.
+   * @default "SERVICE_CONTROL_POLICY"
+   */
   type?: organizations.PolicyType;
-  document: PolicyDocument;
+  /**
+   * Policy content — a typed {@link ServiceControlPolicyDocument} for
+   * SCP/RCP policies, or a raw JSON `string` for other policy types
+   * (tag, backup, ...) and as the escape hatch.
+   */
+  document: ServiceControlPolicyDocument | string;
+  /** Keys of the roots/OUs/accounts to attach the policy to (`"root"` or a spec key). */
   targetKeys: TenantTargetKey[];
+  /** Tags applied to the policy, merged with tenant-wide tags. */
   tags?: Record<string, string>;
 }
 
 export interface TenantIdentityCenterGroupSpec {
+  /** Stable key identifying the group within the tenant. */
   key: string;
+  /** Display name of the Identity Center group. */
   displayName: string;
+  /** Group description. */
   description?: string;
 }
 
 export interface TenantIdentityCenterPermissionSetSpec {
+  /** Stable key identifying the permission set within the tenant. */
   key: string;
+  /** Name of the permission set. */
   name: string;
+  /** Permission set description. */
   description?: string;
-  sessionDuration?: string;
+  /**
+   * Optional session duration, e.g. `"8 hours"` or `Duration.hours(8)`.
+   * Sent to Identity Center as an ISO-8601 string such as `PT8H` (a bare
+   * number is milliseconds).
+   */
+  sessionDuration?: Duration.Input;
+  /** URL the user lands on after federating into the account. */
   relayState?: string;
 }
 
 export interface TenantIdentityCenterAssignmentSpec {
+  /** Stable key for the assignment. Defaults to a key derived from the other fields. */
   key?: string;
+  /** Key of the permission set to assign. */
   permissionSetKey: string;
+  /** Key of the account the principal is granted access to. */
   accountKey: string;
+  /**
+   * Kind of principal being assigned.
+   * @default "GROUP"
+   */
   principalType?: "USER" | "GROUP";
+  /** Key of the Identity Center group to assign (when `principalType` is `GROUP`). */
   groupKey?: string;
+  /** Explicit principal ID (e.g. an existing user) instead of a group key. */
   principalId?: string;
 }
 
 export interface TenantIdentityCenterSpec {
+  /**
+   * Whether to adopt the org's existing Identity Center instance
+   * (`existing`) or create an account instance (`account`).
+   * @default "existing"
+   */
   mode?: "existing" | "account";
+  /** ARN of an existing Identity Center instance to use explicitly. */
   instanceArn?: string;
+  /** Name for the Identity Center instance. */
   name?: string;
+  /** Account key to register as the Identity Center delegated administrator. */
   delegatedAdminAccountKey?: string;
+  /** Identity Center groups to create. */
   groups?: TenantIdentityCenterGroupSpec[];
+  /** Permission sets to create. */
   permissionSets?: TenantIdentityCenterPermissionSetSpec[];
+  /** Account assignments binding groups/users to permission sets. */
   assignments?: TenantIdentityCenterAssignmentSpec[];
 }
 
 export interface TenantRootProps {
+  /** Organization settings (feature set). Defaults to `featureSet: "ALL"`. */
   organization?: OrganizationProps;
+  /** Root import settings (explicit root ID, tags). */
   root?: RootProps;
+  /**
+   * Policy types to enable on the root.
+   * @default ["SERVICE_CONTROL_POLICY"]
+   */
   policyTypes?: organizations.PolicyType[];
+  /** Service principals granted trusted access (Identity Center's is added automatically). */
   trustedServicePrincipals?: string[];
+  /** OU tree to create under the root. Defaults to a security/infrastructure/workloads baseline. */
   organizationalUnits?: TenantOrganizationalUnitSpec[];
+  /** Organizations policies to create and attach via `targetKeys`. */
   policies?: TenantPolicySpec[];
+  /** IAM Identity Center groups, permission sets, and assignments. */
   identityCenter?: TenantIdentityCenterSpec;
+  /** Tags applied to every taggable resource in the tenant. */
   tags?: Record<string, string>;
 }
 
@@ -174,9 +236,8 @@ const toLogicalIdSegment = (value: string) =>
  * tenant root. The broader `RootRoot` concept is an Alchemy control-plane
  * abstraction over many such tenant roots deployed into separate management
  * accounts, not a nested AWS Organizations feature.
- * @resource
- * @section Creating A Tenant Root
- * @example Tenant With Baseline Accounts
+ * ### Creating A Tenant Root
+ * **Example:** Tenant With Baseline Accounts
  * ```typescript
  * const tenant = yield* TenantRoot("CustomerA", {
  *   identityCenter: {
@@ -188,7 +249,7 @@ const toLogicalIdSegment = (value: string) =>
  *       {
  *         key: "admin",
  *         name: "AdministratorAccess",
- *         sessionDuration: "PT8H",
+ *         sessionDuration: "8 hours",
  *       },
  *     ],
  *     assignments: [
@@ -201,11 +262,10 @@ const toLogicalIdSegment = (value: string) =>
  *   },
  * });
  * ```
+ *
+ * @resource
  */
-export const TenantRoot = Effect.fn(function* (
-  id: string,
-  props: TenantRootProps = {},
-) {
+export const TenantRoot = Effect.fn(function* (id: string, props: TenantRootProps = {}) {
   const sharedTags = props.tags ?? {};
   const organization = yield* AwsOrganization(`${id}Organization`, {
     featureSet: "ALL",
@@ -219,13 +279,10 @@ export const TenantRoot = Effect.fn(function* (
   const policyTypes = yield* Effect.forEach(
     props.policyTypes ?? ["SERVICE_CONTROL_POLICY"],
     (policyType) =>
-      OrganizationsRootPolicyType(
-        `${id}${toLogicalIdSegment(policyType)}PolicyType`,
-        {
-          rootId: root.rootId,
-          policyType,
-        },
-      ),
+      OrganizationsRootPolicyType(`${id}${toLogicalIdSegment(policyType)}PolicyType`, {
+        rootId: root.rootId,
+        policyType,
+      }),
     { concurrency: "unbounded" },
   );
 
@@ -273,25 +330,20 @@ export const TenantRoot = Effect.fn(function* (
   const policies: Record<string, Policy> = {};
   const policyAttachments: PolicyAttachment[] = [];
   for (const policySpec of props.policies ?? []) {
-    const policy = yield* OrganizationsPolicy(
-      `${id}${toLogicalIdSegment(policySpec.key)}Policy`,
-      {
-        name: policySpec.name,
-        description: policySpec.description,
-        type: policySpec.type ?? "SERVICE_CONTROL_POLICY",
-        document: policySpec.document,
-        tags: mergeTags(sharedTags, policySpec.tags),
-      },
-    );
+    const policy = yield* OrganizationsPolicy(`${id}${toLogicalIdSegment(policySpec.key)}Policy`, {
+      name: policySpec.name,
+      description: policySpec.description,
+      type: policySpec.type ?? "SERVICE_CONTROL_POLICY",
+      document: policySpec.document,
+      tags: mergeTags(sharedTags, policySpec.tags),
+    });
     policies[policySpec.key] = policy;
 
     for (const targetKey of policySpec.targetKeys) {
       const target = targets[targetKey];
       if (!target) {
         return yield* Effect.fail(
-          new Error(
-            `Unknown tenant policy target '${targetKey}' for policy '${policySpec.key}'`,
-          ),
+          new Error(`Unknown tenant policy target '${targetKey}' for policy '${policySpec.key}'`),
         );
       }
 
@@ -340,14 +392,11 @@ const createOrganizationalUnits = ({
 }): Effect.Effect<void, unknown, unknown> =>
   Effect.gen(function* () {
     for (const spec of specs) {
-      const ou = yield* AwsOrganizationalUnit(
-        `${id}${toLogicalIdSegment(spec.key)}Ou`,
-        {
-          parentId,
-          name: spec.name ?? spec.key,
-          tags: mergeTags(sharedTags, spec.tags),
-        },
-      );
+      const ou = yield* AwsOrganizationalUnit(`${id}${toLogicalIdSegment(spec.key)}Ou`, {
+        parentId,
+        name: spec.name ?? spec.key,
+        tags: mergeTags(sharedTags, spec.tags),
+      });
       organizationalUnits[spec.key] = ou;
       targets[spec.key] = { targetId: ou.ouId as any };
 
@@ -400,9 +449,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
     const account = accounts[spec.delegatedAdminAccountKey];
     if (!account) {
       return yield* Effect.fail(
-        new Error(
-          `Unknown delegated admin account '${spec.delegatedAdminAccountKey}'`,
-        ),
+        new Error(`Unknown delegated admin account '${spec.delegatedAdminAccountKey}'`),
       );
     }
     delegatedAdministrators.push(
@@ -453,9 +500,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
     const permissionSet = permissionSets[assignmentSpec.permissionSetKey];
     if (!permissionSet) {
       return yield* Effect.fail(
-        new Error(
-          `Unknown assignment permission set '${assignmentSpec.permissionSetKey}'`,
-        ),
+        new Error(`Unknown assignment permission set '${assignmentSpec.permissionSetKey}'`),
       );
     }
     const principalId =
@@ -480,9 +525,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
         instanceArn: instance.instanceArn,
         permissionSetArn: permissionSet.permissionSetArn,
         principalId,
-        principalType: assignmentSpec.groupKey
-          ? "GROUP"
-          : (assignmentSpec.principalType ?? "USER"),
+        principalType: assignmentSpec.groupKey ? "GROUP" : (assignmentSpec.principalType ?? "USER"),
         targetId: account.accountId,
       },
     );
@@ -496,10 +539,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
   };
 });
 
-const mergeTags = (
-  shared: Record<string, string>,
-  tags: Record<string, string> | undefined,
-) => ({
+const mergeTags = (shared: Record<string, string>, tags: Record<string, string> | undefined) => ({
   ...shared,
   ...tags,
 });

@@ -3,13 +3,26 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MetricStream } from "./MetricStream.ts";
 
-export interface GetMetricStreamRequest extends Omit<
-  cloudwatch.GetMetricStreamInput,
-  "Name"
-> {}
+export interface GetMetricStreamRequest extends Omit<cloudwatch.GetMetricStreamInput, "Name"> {}
 
 /**
- * Runtime binding for `cloudwatch:GetMetricStream`.
+ * Runtime binding for `cloudwatch:GetMetricStream` — read the
+ * configuration and state of the bound {@link MetricStream}; the stream
+ * name is injected automatically.
+ *
+ * Provide `CloudWatch.GetMetricStreamHttp` on the hosting Lambda Function
+ * to satisfy the requirement.
+ * ### Reading Metric Streams
+ * **Example:** Read a Bound Metric Stream
+ * ```typescript
+ * // init — grants cloudwatch:GetMetricStream on the stream
+ * const getMetricStream = yield* AWS.CloudWatch.GetMetricStream(metricStream);
+ *
+ * // runtime
+ * const result = yield* getMetricStream();
+ * const state = result.State; // "running" | "stopped"
+ * ```
+ *
  * @binding
  */
 export interface GetMetricStream extends Binding.Service<
@@ -20,13 +33,8 @@ export interface GetMetricStream extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetMetricStreamRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricStreamOutput,
-      cloudwatch.GetMetricStreamError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricStreamOutput, cloudwatch.GetMetricStreamError>
   >
 > {}
 
-export const GetMetricStream = Binding.Service<GetMetricStream>(
-  "AWS.CloudWatch.GetMetricStream",
-);
+export const GetMetricStream = Binding.Service<GetMetricStream>("AWS.CloudWatch.GetMetricStream");

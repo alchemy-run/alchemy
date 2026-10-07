@@ -5,7 +5,23 @@ import * as Binding from "../../Binding.ts";
 export interface ListMetricsRequest extends cloudwatch.ListMetricsInput {}
 
 /**
- * Runtime binding for `cloudwatch:ListMetrics`.
+ * Runtime binding for `cloudwatch:ListMetrics` — enumerate the metrics
+ * visible in the account/region, optionally filtered by namespace, metric
+ * name, or dimensions.
+ *
+ * Provide `CloudWatch.ListMetricsHttp` on the hosting Lambda Function to
+ * satisfy the requirement.
+ * ### Listing Metrics
+ * **Example:** List Metrics in a Namespace
+ * ```typescript
+ * // init — grants cloudwatch:ListMetrics
+ * const listMetrics = yield* AWS.CloudWatch.ListMetrics();
+ *
+ * // runtime
+ * const result = yield* listMetrics({ Namespace: "MyApp/Payments" });
+ * const names = (result.Metrics ?? []).map((metric) => metric.MetricName);
+ * ```
+ *
  * @binding
  */
 export interface ListMetrics extends Binding.Service<
@@ -14,13 +30,8 @@ export interface ListMetrics extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListMetricsRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListMetricsOutput,
-      cloudwatch.ListMetricsError
-    >
+    ) => Effect.Effect<cloudwatch.ListMetricsOutput, cloudwatch.ListMetricsError>
   >
 > {}
 
-export const ListMetrics = Binding.Service<ListMetrics>(
-  "AWS.CloudWatch.ListMetrics",
-);
+export const ListMetrics = Binding.Service<ListMetrics>("AWS.CloudWatch.ListMetrics");

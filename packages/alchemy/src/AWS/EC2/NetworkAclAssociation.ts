@@ -1,20 +1,19 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
 
-export type NetworkAclAssociationId<ID extends string = string> =
-  `aclassoc-${ID}`;
+export type NetworkAclAssociationId<ID extends string = string> = `aclassoc-${ID}`;
 export const NetworkAclAssociationId = <ID extends string>(
   id: ID,
-): ID & NetworkAclAssociationId<ID> =>
-  `aclassoc-${id}` as ID & NetworkAclAssociationId<ID>;
+): ID & NetworkAclAssociationId<ID> => `aclassoc-${id}` as ID & NetworkAclAssociationId<ID>;
 
 export interface NetworkAclAssociationProps {
   /**
@@ -58,12 +57,11 @@ export interface NetworkAclAssociation extends Resource<
  * delete, the subnet is reverted to the VPC's default network ACL so it is never
  * left without one.
  *
- * @resource
- * @section Associating Subnets
+ * ### Associating Subnets
  * A subnet starts out attached to the VPC's default ACL; this resource moves it
  * onto a custom ACL so the rules you defined with `NetworkAclEntry` take effect
  * for that subnet.
- * @example Move a Subnet onto a Custom Network ACL
+ * **Example:** Move a Subnet onto a Custom Network ACL
  * ```typescript
  * const association = yield* AWS.EC2.NetworkAclAssociation("PrivateSubnetNaclAssoc", {
  *   networkAclId: privateNetworkAcl.networkAclId,
@@ -73,6 +71,8 @@ export interface NetworkAclAssociation extends Resource<
  * This detaches the subnet from the default ACL and attaches it to your custom
  * ACL; destroying the association automatically reverts the subnet to the
  * default ACL, which is the safe way to "remove" a custom ACL from a subnet.
+ *
+ * @resource
  */
 export const NetworkAclAssociation = Resource<NetworkAclAssociation>(
   "AWS.EC2.NetworkAclAssociation",
@@ -90,9 +90,7 @@ export const NetworkAclAssociationProvider = () =>
           .pipe(
             Effect.map((r) => {
               const acl = r.NetworkAcls?.[0];
-              const assoc = acl?.Associations?.find(
-                (a) => a.SubnetId === subnetId,
-              );
+              const assoc = acl?.Associations?.find((a) => a.SubnetId === subnetId);
               return assoc
                 ? {
                     associationId: assoc.NetworkAclAssociationId!,
@@ -110,43 +108,53 @@ export const NetworkAclAssociationProvider = () =>
         // carries an Associations[] of {subnet, acl, associationId}; flatten
         // every page's associations to enumerate them all in the region.
         list: () =>
-          ec2.describeNetworkAcls.pages({}).pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.NetworkAcls ?? []).flatMap((acl) =>
-                  (acl.Associations ?? [])
+          Effect.gen(function* () {
+            // Associations on the default VPC's default network ACL are
+            // furniture AWS auto-provisions for its subnets; never
+            // census/nuke them. Associations to user-created (non-default)
+            // ACLs inside the default VPC are still listed.
+            const defaultVpc = yield* getDefaultVpcScope;
+            return yield* ec2.describeNetworkAcls.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.NetworkAcls ?? [])
                     .filter(
-                      (
-                        a,
-                      ): a is ec2.NetworkAclAssociation & {
-                        NetworkAclAssociationId: string;
-                        NetworkAclId: string;
-                        SubnetId: string;
-                      } =>
-                        a.NetworkAclAssociationId != null &&
-                        a.NetworkAclId != null &&
-                        a.SubnetId != null,
+                      (acl) =>
+                        defaultVpc.vpcId === undefined ||
+                        !(acl.VpcId === defaultVpc.vpcId && acl.IsDefault),
                     )
-                    .map((a) => ({
-                      associationId:
-                        a.NetworkAclAssociationId as NetworkAclAssociationId,
-                      networkAclId: a.NetworkAclId as NetworkAclId,
-                      subnetId: a.SubnetId as SubnetId,
-                    })),
+                    .flatMap((acl) =>
+                      (acl.Associations ?? [])
+                        .filter(
+                          (
+                            a,
+                          ): a is ec2.NetworkAclAssociation & {
+                            NetworkAclAssociationId: string;
+                            NetworkAclId: string;
+                            SubnetId: string;
+                          } =>
+                            a.NetworkAclAssociationId != null &&
+                            a.NetworkAclId != null &&
+                            a.SubnetId != null,
+                        )
+                        .map((a) => ({
+                          associationId: a.NetworkAclAssociationId as NetworkAclAssociationId,
+                          networkAclId: a.NetworkAclId as NetworkAclId,
+                          subnetId: a.SubnetId as SubnetId,
+                        })),
+                    ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
 
         read: Effect.fn(function* ({ olds }) {
           if (!olds) return undefined;
           const assoc = yield* findAssociation(olds.subnetId as string);
           if (!assoc) {
             return yield* Effect.fail(
-              new Error(
-                `Network ACL Association not found for subnet ${olds.subnetId}`,
-              ),
+              new Error(`Network ACL Association not found for subnet ${olds.subnetId}`),
             );
           }
           return {
@@ -172,9 +180,7 @@ export const NetworkAclAssociationProvider = () =>
           const currentAssoc = yield* findAssociation(news.subnetId as string);
           if (!currentAssoc) {
             return yield* Effect.fail(
-              new Error(
-                `No existing Network ACL Association found for subnet ${news.subnetId}`,
-              ),
+              new Error(`No existing Network ACL Association found for subnet ${news.subnetId}`),
             );
           }
 
@@ -183,8 +189,7 @@ export const NetworkAclAssociationProvider = () =>
           // ReplaceNetworkAclAssociation atomically swaps it.
           if (currentAssoc.networkAclId === (news.networkAclId as string)) {
             return {
-              associationId:
-                currentAssoc.associationId as NetworkAclAssociationId,
+              associationId: currentAssoc.associationId as NetworkAclAssociationId,
               networkAclId: news.networkAclId as NetworkAclId,
               subnetId: news.subnetId as SubnetId,
             };
@@ -218,9 +223,7 @@ export const NetworkAclAssociationProvider = () =>
             })
             .pipe(
               // If subnet is already deleted, association is gone too
-              Effect.catchTag("InvalidSubnetID.NotFound", () =>
-                Effect.succeed({ Subnets: [] }),
-              ),
+              Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
             );
           const vpcId = subnetResult.Subnets?.[0]?.VpcId;
 
@@ -230,14 +233,16 @@ export const NetworkAclAssociationProvider = () =>
             return;
           }
 
-          const defaultAclResult = yield* ec2.describeNetworkAcls({
-            Filters: [
-              { Name: "vpc-id", Values: [vpcId] },
-              { Name: "default", Values: ["true"] },
-            ],
-          });
+          const defaultAcl = yield* ec2.describeNetworkAcls
+            .items({
+              Filters: [
+                { Name: "vpc-id", Values: [vpcId] },
+                { Name: "default", Values: ["true"] },
+              ],
+            })
+            .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
 
-          const defaultAclId = defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
+          const defaultAclId = defaultAcl?.NetworkAclId;
 
           if (defaultAclId && defaultAclId !== (olds.networkAclId as string)) {
             // Replace with default NACL
@@ -247,18 +252,11 @@ export const NetworkAclAssociationProvider = () =>
                 NetworkAclId: defaultAclId,
                 DryRun: false,
               })
-              .pipe(
-                Effect.catchTag(
-                  "InvalidAssociationID.NotFound",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("InvalidAssociationID.NotFound", () => Effect.void));
 
             yield* session.note(`Network ACL Association reverted to default`);
           } else {
-            yield* session.note(
-              `Already using default Network ACL, nothing to do`,
-            );
+            yield* session.note(`Already using default Network ACL, nothing to do`);
           }
         }),
       });

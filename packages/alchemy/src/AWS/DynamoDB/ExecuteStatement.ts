@@ -3,17 +3,15 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface ExecuteStatementRequest
-  extends DynamoDB.ExecuteStatementInput {}
+export interface ExecuteStatementRequest extends DynamoDB.ExecuteStatementInput {}
 
 /**
  * Runtime binding for DynamoDB PartiQL `ExecuteStatement`.
  *
  * This binding scopes IAM to a specific table, but the statement text is still
  * user-provided. Statements must only reference the bound table or its indexes.
- * @binding
- * @section PartiQL
- * @example Execute a Statement Against One Table
+ * ### PartiQL
+ * **Example:** Execute a Statement Against One Table
  * ```typescript
  * const executeStatement = yield* AWS.DynamoDB.ExecuteStatement(table);
  *
@@ -22,6 +20,8 @@ export interface ExecuteStatementRequest
  *   Parameters: [{ S: "user#1" }],
  * });
  * ```
+ *
+ * @binding
  */
 export interface ExecuteStatement extends Binding.Service<
   ExecuteStatement,
@@ -31,13 +31,8 @@ export interface ExecuteStatement extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecuteStatementRequest,
-    ) => Effect.Effect<
-      DynamoDB.ExecuteStatementOutput,
-      DynamoDB.ExecuteStatementError
-    >
+    ) => Effect.Effect<DynamoDB.ExecuteStatementOutput, DynamoDB.ExecuteStatementError>
   >
 > {}
 
-export const ExecuteStatement = Binding.Service<ExecuteStatement>(
-  "AWS.DynamoDB.ExecuteStatement",
-);
+export const ExecuteStatement = Binding.Service<ExecuteStatement>("AWS.DynamoDB.ExecuteStatement");

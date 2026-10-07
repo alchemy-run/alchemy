@@ -1,4 +1,5 @@
 import * as AWS from "alchemy/AWS";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -17,7 +18,7 @@ export class Database extends Context.Service<
     query<Row extends Record<string, unknown> = Record<string, unknown>>(
       statement: string,
       values?: ReadonlyArray<unknown>,
-    ): Effect.Effect<ReadonlyArray<Row>, SqlError>;
+    ): Effect.Effect<ReadonlyArray<Row>, SqlError, RuntimeContext>;
   }
 >()("Sql") {}
 
@@ -40,7 +41,7 @@ export const DatabaseAurora = Layer.effect(
       query: <Row extends Record<string, unknown>>(
         statement: string,
         values: ReadonlyArray<unknown> = [],
-      ): Effect.Effect<ReadonlyArray<Row>, SqlError> =>
+      ): Effect.Effect<ReadonlyArray<Row>, SqlError, RuntimeContext> =>
         connect.pipe(
           Effect.catch((cause) =>
             Effect.fail(
@@ -60,9 +61,7 @@ export const DatabaseAurora = Layer.effect(
                   user: connection.username,
                   password: connection.password,
                   // Example-only SSL posture for private Aurora connections.
-                  ssl: connection.ssl
-                    ? { rejectUnauthorized: false }
-                    : undefined,
+                  ssl: connection.ssl ? { rejectUnauthorized: false } : undefined,
                 });
 
                 await client.connect();

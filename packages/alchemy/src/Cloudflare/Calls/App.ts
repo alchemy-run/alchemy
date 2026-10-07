@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -63,24 +62,21 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * backend authenticates management calls with the create-only `secret`
  * (a bearer token). The only configurable property is the human-readable
  * `name`, which is mutable in place.
- * @resource
- * @product Calls
- * @category Media
- * @section Creating an App
- * @example App with a generated name
+ * ### Creating an App
+ * **Example:** App with a generated name
  * ```typescript
  * const app = yield* Cloudflare.Calls.App("realtime", {});
  * ```
  *
- * @example App with an explicit name
+ * **Example:** App with an explicit name
  * ```typescript
  * const app = yield* Cloudflare.Calls.App("realtime", {
  *   name: "my-realtime-app",
  * });
  * ```
  *
- * @section Using the credentials
- * @example Passing the appId and secret to a backend
+ * ### Using the credentials
+ * **Example:** Passing the appId and secret to a backend
  * ```typescript
  * // appId is public — it appears in client session URLs:
  * const appId = app.appId;
@@ -91,6 +87,10 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * ```
  *
  * @see https://developers.cloudflare.com/realtime/
+ *
+ * @resource
+ * @product Calls
+ * @category Media
  */
 export const App = Resource<App>(TypeId);
 
@@ -113,9 +113,7 @@ export const AppProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((app) =>
-              toAttributes(app, accountId, Redacted.make("")),
-            ),
+            (page.result ?? []).map((app) => toAttributes(app, accountId, Redacted.make(""))),
           ),
         ),
       );
@@ -132,9 +130,7 @@ export const AppProvider = () =>
       // be re-hydrated without prior state — no cold read / adoption path.
       if (!output?.appId) return undefined;
       const observed = yield* getApp(output.accountId, output.appId);
-      return observed
-        ? toAttributes(observed, output.accountId, output.secret)
-        : undefined;
+      return observed ? toAttributes(observed, output.accountId, output.secret) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -151,11 +147,7 @@ export const AppProvider = () =>
         // the create-only secret. Names are not unique on Cloudflare's
         // side, so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createSfu({ accountId, name });
-        return toAttributes(
-          created,
-          accountId,
-          Redacted.make(created.secret ?? ""),
-        );
+        return toAttributes(created, accountId, Redacted.make(created.secret ?? ""));
       }
 
       // Sync — the only mutable aspect is `name`; diff observed cloud

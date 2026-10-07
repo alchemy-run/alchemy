@@ -2,15 +2,20 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Octokit } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface RepositoryProps {
   /**
    * Repository owner — a user or organization login.
    *
-   * Changing the owner replaces the repository (the old one is deleted and a
-   * new one created under the new owner).
+   * Changing the owner replaces the repository: a NEW, EMPTY repository is
+   * created under the new owner — history, issues, and pull requests are
+   * not carried over. The old repository is retained on GitHub under the
+   * default `retain` removal policy; it is only deleted when the resource
+   * opted into deletion via `destroy()`. To actually move a repository
+   * between owners with its history, transfer it in the GitHub UI/API
+   * first, then update `owner` here and deploy with `--adopt`.
    */
   owner: string;
 
@@ -135,6 +140,15 @@ export interface RepositoryProps {
    * Only used at create time.
    */
   licenseTemplate?: string;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Repository extends Resource<
@@ -211,9 +225,8 @@ export interface Repository extends Resource<
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope (and `delete_repo` when deletion is opted in via `destroy()`).
- * @resource
- * @section Creating a Repository
- * @example Basic Repository
+ * ### Creating a Repository
+ * **Example:** Basic Repository
  * ```typescript
  * const repo = yield* GitHub.Repository("api", {
  *   owner: "my-org",
@@ -223,7 +236,7 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @example Private Repository with Settings
+ * **Example:** Private Repository with Settings
  * ```typescript
  * const repo = yield* GitHub.Repository("internal-tools", {
  *   owner: "my-org",
@@ -235,7 +248,7 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @example Initialize from Templates
+ * **Example:** Initialize from Templates
  * The `autoInit`, `gitignoreTemplate`, and `licenseTemplate` props seed the
  * first commit. They are only honored at create time — changing them on a
  * later deploy has no effect on an existing repository.
@@ -249,8 +262,8 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @section Topics and Merge Configuration
- * @example Repository with Topics and Merge Policy
+ * ### Topics and Merge Configuration
+ * **Example:** Repository with Topics and Merge Policy
  * ```typescript
  * const repo = yield* GitHub.Repository("sdk", {
  *   owner: "my-org",
@@ -263,8 +276,8 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @section Renaming a Repository
- * @example Rename in Place
+ * ### Renaming a Repository
+ * **Example:** Rename in Place
  * Keep the same logical ID and change `name` to rename the live repository
  * instead of replacing it — the repository's history, issues, and pull
  * requests are preserved. Only changing `owner` triggers a replacement.
@@ -282,8 +295,8 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @section Archiving a Repository
- * @example Make a Repository Read-Only
+ * ### Archiving a Repository
+ * **Example:** Make a Repository Read-Only
  * Archiving sets the repository to read-only. Set `archived` back to `false`
  * on a later deploy to un-archive it.
  * ```typescript
@@ -294,11 +307,11 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @section Wiring with Other Resources
+ * ### Wiring with Other Resources
  * The repository's outputs can drive other GitHub resources so the whole
  * repository configuration lives in one program.
  *
- * @example Seed a Variable into the Repository
+ * **Example:** Seed a Variable into the Repository
  * ```typescript
  * const repo = yield* GitHub.Repository("api", {
  *   owner: "my-org",
@@ -314,7 +327,7 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @example Store a Secret in the Repository
+ * **Example:** Store a Secret in the Repository
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
@@ -332,8 +345,8 @@ export interface Repository extends Resource<
  * });
  * ```
  *
- * @section Deleting a Repository
- * @example Allow Repository Deletion
+ * ### Deleting a Repository
+ * **Example:** Allow Repository Deletion
  * ```typescript
  * import { destroy } from "alchemy/RemovalPolicy";
  *
@@ -342,6 +355,9 @@ export interface Repository extends Resource<
  *   name: "ephemeral-preview",
  * }).pipe(destroy());
  * ```
+ *
+ * @resource
+ * @product Repository
  */
 export const Repository = Resource<Repository>("GitHub.Repository", {
   defaultRemovalPolicy: "retain",
@@ -351,18 +367,26 @@ export const RepositoryProvider = () =>
   Provider.succeed(Repository, {
     stables: ["repoId", "nodeId"],
 
-    // The only structural change is the owner: a repository cannot be moved
-    // between owners by an update, so changing it replaces the resource.
-    // A `name` change is a rename, handled in `reconcile`, not a replacement.
+    // Structural changes are the owner (we deliberately do NOT call GitHub's
+    // transfer API — user-to-user transfers require out-of-band acceptance
+    // and cannot converge deterministically) and the host (the same repo
+    // name on a different GitHub instance is a different repository). A
+    // `name` change is a rename, handled in `reconcile`, not a replacement.
+    //
+    // Replacement is guarded by the resource's default `retain` removal
+    // policy: the engine creates the new repository and RETAINS the old one
+    // on GitHub (Apply honors `retain` for the replaced old generation), so
+    // history is never destroyed unless the user opted into `destroy()`.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
-      if (olds !== undefined && news.owner !== olds.owner) {
+      if (olds === undefined) return;
+      if (news.owner !== olds.owner || (yield* gitHubBaseUrlChanged(olds, news))) {
         return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news, olds }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(news.baseUrl);
 
       const getRepo = (repo: string) =>
         Effect.tryPromise({
@@ -386,11 +410,7 @@ export const RepositoryProvider = () =>
       // back to the prior name so we converge by renaming rather than creating
       // a duplicate.
       let observed = yield* getRepo(news.name);
-      if (
-        observed === undefined &&
-        olds?.name !== undefined &&
-        olds.name !== news.name
-      ) {
+      if (observed === undefined && olds?.name !== undefined && olds.name !== news.name) {
         observed = yield* getRepo(olds.name);
       }
 
@@ -443,12 +463,8 @@ export const RepositoryProvider = () =>
                     // understands the boolean `private` flag.
                     await octokit.rest.repos.createForAuthenticatedUser({
                       ...createInput,
-                      private: news.visibility
-                        ? news.visibility !== "public"
-                        : undefined,
-                    } as Parameters<
-                      typeof octokit.rest.repos.createForAuthenticatedUser
-                    >[0]);
+                      private: news.visibility ? news.visibility !== "public" : undefined,
+                    } as Parameters<typeof octokit.rest.repos.createForAuthenticatedUser>[0]);
               return data;
             } catch (error: any) {
               // A 422 means the name already exists — treat as a create race
@@ -465,9 +481,7 @@ export const RepositoryProvider = () =>
         }
         if (observed === undefined) {
           return yield* Effect.fail(
-            new Error(
-              `Failed to create or locate GitHub repository ${news.owner}/${news.name}`,
-            ),
+            new Error(`Failed to create or locate GitHub repository ${news.owner}/${news.name}`),
           );
         }
       }
@@ -502,8 +516,7 @@ export const RepositoryProvider = () =>
         // retries rather than hard-failing — the branch may be created right
         // after this deploy.
         default_branch:
-          news.defaultBranch !== undefined &&
-          observed.default_branch !== news.defaultBranch
+          news.defaultBranch !== undefined && observed.default_branch !== news.defaultBranch
             ? news.defaultBranch
             : undefined,
       };
@@ -523,11 +536,9 @@ export const RepositoryProvider = () =>
             // not exist yet. Drop it and retry so the rest of the settings
             // still converge.
             if (error.status === 422 && updateInput.default_branch) {
-              const { default_branch, ...withoutBranch } = updateInput;
+              const { default_branch: _default_branch, ...withoutBranch } = updateInput;
               const { data } = await octokit.rest.repos.update(
-                withoutBranch as Parameters<
-                  typeof octokit.rest.repos.update
-                >[0],
+                withoutBranch as Parameters<typeof octokit.rest.repos.update>[0],
               );
               return data;
             }
@@ -588,21 +599,19 @@ export const RepositoryProvider = () =>
         catch: (e) => e as Error,
       });
 
-      return repos.map((repo) =>
-        attrsOf(repo as Parameters<typeof attrsOf>[0]),
-      );
+      return repos.map((repo) => attrsOf(repo as Parameters<typeof attrsOf>[0]));
     }),
 
     // Read by the numeric repository ID, which is stable across renames. This
     // refreshes the output attributes (including the current name) so that a
     // subsequent delete targets the live repository even when a prior rename's
     // state persistence failed.
-    read: Effect.fn(function* ({ output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       if (output === undefined) {
         return undefined;
       }
 
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       return yield* Effect.tryPromise({
         try: async () => {
@@ -621,7 +630,7 @@ export const RepositoryProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       // Resolve the current repository name via the stable numeric ID. A rename
       // whose state persistence failed leaves `olds.name` stale; deleting by

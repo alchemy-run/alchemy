@@ -243,11 +243,8 @@ export type GatewayDynamicRouting = Resource<
  * new version and deploys it; the reconciler also re-deploys when the live
  * deployed version drifts from the desired graph. Renames are applied in
  * place; only moving the route to a different gateway forces a replacement.
- * @resource
- * @product AI Gateway
- * @category AI
- * @section Creating a Route
- * @example Route all traffic to one model
+ * ### Creating a Route
+ * **Example:** Route all traffic to one model
  * ```typescript
  * const gateway = yield* Cloudflare.AI.Gateway("Gateway");
  *
@@ -274,8 +271,8 @@ export type GatewayDynamicRouting = Resource<
  * });
  * ```
  *
- * @section Updating a Route
- * @example Change the model — creates and deploys a new version
+ * ### Updating a Route
+ * **Example:** Change the model — creates and deploys a new version
  * ```typescript
  * const route = yield* Cloudflare.AI.GatewayDynamicRouting("Llama", {
  *   gatewayId: gateway.gatewayId,
@@ -301,6 +298,10 @@ export type GatewayDynamicRouting = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ai-gateway/features/dynamic-routing/
+ *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  */
 export const GatewayDynamicRouting = Resource<GatewayDynamicRouting>(TypeId, {
   aliases: ["Cloudflare.AiGateway.DynamicRouting"],
@@ -309,9 +310,7 @@ export const GatewayDynamicRouting = Resource<GatewayDynamicRouting>(TypeId, {
 /**
  * Returns true if the given value is a GatewayDynamicRouting resource.
  */
-export const isDynamicRouting = (
-  value: unknown,
-): value is GatewayDynamicRouting =>
+export const isDynamicRouting = (value: unknown): value is GatewayDynamicRouting =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const DynamicRoutingProvider = () =>
@@ -338,8 +337,7 @@ export const DynamicRoutingProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const gatewayId =
-        output?.gatewayId ?? (olds?.gatewayId as string | undefined);
+      const gatewayId = output?.gatewayId ?? (olds?.gatewayId as string | undefined);
       if (gatewayId === undefined) return undefined;
 
       if (output?.routeId) {
@@ -366,11 +364,7 @@ export const DynamicRoutingProvider = () =>
       // Observe — the routeId cached on `output` is a hint, not a
       // guarantee: a missing route falls through and we recreate.
       const observed = output?.routeId
-        ? yield* getRoute(
-            output.accountId ?? accountId,
-            gatewayId,
-            output.routeId,
-          )
+        ? yield* getRoute(output.accountId ?? accountId, gatewayId, output.routeId)
         : undefined;
 
       // Ensure — create if missing. Route names are unique per gateway:
@@ -389,9 +383,7 @@ export const DynamicRoutingProvider = () =>
           .pipe(
             Effect.catchTag("RouteAlreadyExists", (error) =>
               findByName(accountId, gatewayId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
+                Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
               ),
             ),
             Effect.map((route) => route.id),
@@ -491,14 +483,10 @@ export const DynamicRoutingProvider = () =>
       // Routes are scoped under a gateway and there is no account-wide
       // route list, so fan out: enumerate every account gateway, then
       // exhaustively list each gateway's routes.
-      const gateways = yield* aiGateway.listAiGateways
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.result ?? []),
-          ),
-        );
+      const gateways = yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
+      );
       const rows = yield* Effect.forEach(
         gateways,
         (gateway) =>
@@ -542,14 +530,10 @@ const listRoutes = (accountId: string, gatewayId: string) =>
       }
       if (routes.length < perPage) break;
     }
-    const hydrated = yield* Effect.forEach(
-      ids,
-      (id) => getRoute(accountId, gatewayId, id),
-      { concurrency: 10 },
-    );
-    return hydrated
-      .filter((r) => r !== undefined)
-      .map((route) => toAttributes(route, accountId));
+    const hydrated = yield* Effect.forEach(ids, (id) => getRoute(accountId, gatewayId, id), {
+      concurrency: 10,
+    });
+    return hydrated.filter((r) => r !== undefined).map((route) => toAttributes(route, accountId));
   });
 
 /**
@@ -583,9 +567,8 @@ const createRouteName = (id: string, name: string | undefined) =>
  * distilled schema types it `unknown` because the public spec wrongly
  * declares it a string).
  */
-const elementsOf = (
-  route: aiGateway.GetDynamicRoutingResponse,
-): RouteElement[] => (route.version.data ?? []) as RouteElement[];
+const elementsOf = (route: aiGateway.GetDynamicRoutingResponse): RouteElement[] =>
+  (route.version.data ?? []) as RouteElement[];
 
 const toAttributes = (
   route: aiGateway.GetDynamicRoutingResponse,

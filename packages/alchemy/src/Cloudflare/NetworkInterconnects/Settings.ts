@@ -1,7 +1,6 @@
 import * as cni from "@distilled.cloud/cloudflare/network-interconnects";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -55,18 +54,15 @@ export type NetworkInterconnectSettings = Resource<
  * CNI is an enterprise feature — on accounts without the Network
  * Interconnect entitlement the endpoint fails with the typed `Forbidden`
  * error.
- * @resource
- * @product Network Interconnects
- * @category Network
- * @section Managing the default ASN
- * @example Pin the account's default ASN
+ * ### Managing the default ASN
+ * **Example:** Pin the account's default ASN
  * ```typescript
  * yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings("CniSettings", {
  *   defaultAsn: 65000,
  * });
  * ```
  *
- * @example Use a private 32-bit ASN
+ * **Example:** Use a private 32-bit ASN
  * ```typescript
  * yield* Cloudflare.NetworkInterconnects.NetworkInterconnectSettings("CniSettings", {
  *   defaultAsn: 4200000001,
@@ -74,9 +70,12 @@ export type NetworkInterconnectSettings = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/network-interconnect/
+ *
+ * @resource
+ * @product Network Interconnects
+ * @category Network
  */
-export const NetworkInterconnectSettings =
-  Resource<NetworkInterconnectSettings>(TypeId);
+export const NetworkInterconnectSettings = Resource<NetworkInterconnectSettings>(TypeId);
 
 /**
  * Returns true if the given value is a NetworkInterconnectSettings resource.

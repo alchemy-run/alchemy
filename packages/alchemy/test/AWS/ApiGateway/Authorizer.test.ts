@@ -1,12 +1,13 @@
+import * as ag from "@distilled.cloud/aws/api-gateway";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import * as ag from "@distilled.cloud/aws/api-gateway";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
+import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,6 +20,8 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
   "create and update Lambda TOKEN authorizer",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const uri = authorizerUri!;
 
       const { api, authorizer } = yield* stack.deploy(
@@ -31,7 +34,7 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
             type: "TOKEN",
             authorizerUri: uri,
             identitySource: "method.request.header.Authorization",
-            authorizerResultTtlInSeconds: 60,
+            authorizerResultTtl: "60 seconds",
           });
           return { api, authorizer };
         }),
@@ -47,7 +50,7 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
             type: "TOKEN",
             authorizerUri: uri,
             identitySource: "method.request.header.Authorization",
-            authorizerResultTtlInSeconds: 120,
+            authorizerResultTtl: "120 seconds",
           });
         }),
       );
@@ -59,7 +62,9 @@ test.provider.skipIf(!!process.env.FAST || !authorizerUri)(
       expect(remote.authorizerResultTtlInSeconds).toEqual(120);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(api.restApiId);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -76,19 +81,16 @@ test.provider.skipIf(!!process.env.FAST)(
           const api = yield* AWS.ApiGateway.RestApi("AgAuthorizerListApi", {
             endpointConfiguration: { types: ["REGIONAL"] },
           });
-          const authorizer = yield* AWS.ApiGateway.Authorizer(
-            "AgAuthorizerList",
-            {
-              restApiId: api.restApiId,
-              type: "TOKEN",
-              authorizerUri: Output.map(
-                fn.functionArn,
-                (arn: string) =>
-                  `arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${arn}/invocations`,
-              ),
-              identitySource: "method.request.header.Authorization",
-            },
-          );
+          const authorizer = yield* AWS.ApiGateway.Authorizer("AgAuthorizerList", {
+            restApiId: api.restApiId,
+            type: "TOKEN",
+            authorizerUri: Output.map(
+              fn.functionArn,
+              (arn: string) =>
+                `arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+            ),
+            identitySource: "method.request.header.Authorization",
+          });
           return { authorizer };
         }),
       );
@@ -96,11 +98,13 @@ test.provider.skipIf(!!process.env.FAST)(
       const provider = yield* Provider.findProvider(AWS.ApiGateway.Authorizer);
       const all = yield* provider.list();
 
-      expect(all.some((a) => a.authorizerId === authorizer.authorizerId)).toBe(
-        true,
-      );
+      expect(all.some((a) => a.authorizerId === authorizer.authorizerId)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertRestApiDeleted(authorizer.restApiId);
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:apigateway", "provider:aws:lambda", "live"],
+    timeout: 300_000,
+  },
 );

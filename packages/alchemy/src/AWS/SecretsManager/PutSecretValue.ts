@@ -10,6 +10,30 @@ export interface PutSecretValueRequest extends Omit<
 
 /**
  * Runtime binding for `secretsmanager:PutSecretValue`.
+ *
+ * Bind this operation to a `Secret` to get a callable that writes a new
+ * secret version (string or binary); the new version becomes `AWSCURRENT`.
+ * Provide the implementation with
+ * `Effect.provide(AWS.SecretsManager.PutSecretValueHttp)`.
+ * ### Writing Secret Values
+ * **Example:** Rotate a Secret's Value
+ * ```typescript
+ * // init — bind the operation to the secret
+ * const putSecretValue = yield* AWS.SecretsManager.PutSecretValue(secret);
+ *
+ * // runtime — write a new version; the response carries its VersionId
+ * const result = yield* putSecretValue({
+ *   SecretString: newPassword,
+ * });
+ * ```
+ *
+ * **Example:** Store a Binary Payload
+ * ```typescript
+ * yield* putSecretValue({
+ *   SecretBinary: new TextEncoder().encode(JSON.stringify(credentials)),
+ * });
+ * ```
+ *
  * @binding
  */
 export interface PutSecretValue extends Binding.Service<
@@ -20,13 +44,8 @@ export interface PutSecretValue extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutSecretValueRequest,
-    ) => Effect.Effect<
-      secretsmanager.PutSecretValueResponse,
-      secretsmanager.PutSecretValueError
-    >
+    ) => Effect.Effect<secretsmanager.PutSecretValueResponse, secretsmanager.PutSecretValueError>
   >
 > {}
 
-export const PutSecretValue = Binding.Service<PutSecretValue>(
-  "AWS.SecretsManager.PutSecretValue",
-);
+export const PutSecretValue = Binding.Service<PutSecretValue>("AWS.SecretsManager.PutSecretValue");

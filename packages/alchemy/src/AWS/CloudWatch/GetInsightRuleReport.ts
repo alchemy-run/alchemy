@@ -9,7 +9,28 @@ export interface GetInsightRuleReportRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `cloudwatch:GetInsightRuleReport`.
+ * Runtime binding for `cloudwatch:GetInsightRuleReport` — fetch the
+ * top-contributor report for the bound {@link InsightRule}; the rule name
+ * is injected automatically.
+ *
+ * Provide `CloudWatch.GetInsightRuleReportHttp` on the hosting Lambda
+ * Function to satisfy the requirement.
+ * ### Reading Insight Rules
+ * **Example:** Fetch the Top Contributors for a Rule
+ * ```typescript
+ * // init — grants cloudwatch:GetInsightRuleReport on the rule
+ * const getInsightRuleReport = yield* AWS.CloudWatch.GetInsightRuleReport(rule);
+ *
+ * // runtime
+ * const now = yield* Effect.sync(() => Date.now());
+ * const result = yield* getInsightRuleReport({
+ *   StartTime: new Date(now - 3_600_000),
+ *   EndTime: new Date(now),
+ *   Period: 300,
+ * });
+ * const contributors = result.Contributors ?? [];
+ * ```
+ *
  * @binding
  */
 export interface GetInsightRuleReport extends Binding.Service<
@@ -20,10 +41,7 @@ export interface GetInsightRuleReport extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetInsightRuleReportRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetInsightRuleReportOutput,
-      cloudwatch.GetInsightRuleReportError
-    >
+    ) => Effect.Effect<cloudwatch.GetInsightRuleReportOutput, cloudwatch.GetInsightRuleReportError>
   >
 > {}
 

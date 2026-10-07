@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as rdc from "@distilled.cloud/cloudflare/r2-data-catalog";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 interface CatalogOpts {
   compaction?: Cloudflare.R2.Compaction;
@@ -23,13 +20,15 @@ interface CatalogOpts {
 }
 
 // One program deploying both the R2 bucket and the catalog enabled on it.
-// `bucketName` references the bucket's output attribute, so the engine
-// orders catalog-after-bucket on deploy (and the reverse on destroy).
+// `bucket` references the bucket resource, so the engine orders
+// catalog-after-bucket on deploy (and the reverse on destroy).
 const program = (opts: CatalogOpts = {}) =>
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {});
+    const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", {
+      forceDestroy: true,
+    });
     const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
-      bucketName: bucket.bucketName,
+      bucket,
       ...opts,
     });
     return { bucket, catalog };
@@ -61,15 +60,12 @@ const expectGone = (accountId: string, bucketName: string) =>
     Effect.catchTag("WarehouseNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CatalogStillActive",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
 test.provider(
-  "enable, sync maintenance config, register credential, destroy",
+  "register credential before initial maintenance config, update, destroy",
   (stack) =>
     Effect.gen(function* () {
       const env = yield* yield* CloudflareEnvironment;
@@ -77,66 +73,49 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Create — enable the catalog on a fresh bucket.
-      const initial = yield* stack.deploy(program());
+      // Create — when API-token credentials are available, reproduce the
+      // greenfield case where the catalog needs both a credential and a
+      // non-default maintenance config in the same reconciliation.
+      const initial = yield* stack.deploy(
+        program(
+          env.type === "apiToken"
+            ? {
+                compaction: { state: "enabled", targetSizeMb: "256" },
+                token: env.apiToken,
+              }
+            : {},
+        ),
+      );
 
       expect(initial.catalog.catalogId).toBeTruthy();
       expect(initial.catalog.bucketName).toEqual(initial.bucket.bucketName);
       expect(initial.catalog.accountId).toEqual(accountId);
       expect(initial.catalog.status).toEqual("active");
-      expect(initial.catalog.name).toEqual(
-        `${accountId}_${initial.bucket.bucketName}`,
-      );
+      expect(initial.catalog.name).toEqual(`${accountId}_${initial.bucket.bucketName}`);
       expect(initial.catalog.catalogUri).toEqual(
         `https://catalog.cloudflarestorage.com/${accountId}/${initial.bucket.bucketName}`,
       );
-      expect(initial.catalog.credentialStatus).toEqual("absent");
+      expect(initial.catalog.credentialStatus).toEqual(
+        env.type === "apiToken" ? "present" : "absent",
+      );
 
       const live = yield* getCatalog(accountId, initial.bucket.bucketName);
       expect(live.id).toEqual(initial.catalog.catalogId);
       expect(live.status).toEqual("active");
 
-      // Update — sync maintenance config in place (same catalog id).
-      const updated = yield* stack.deploy(
-        program({
-          compaction: { state: "disabled", targetSizeMb: "256" },
-          snapshotExpiration: {
-            state: "disabled",
-            maxSnapshotAge: "3d",
-            minSnapshotsToKeep: 5,
-          },
-        }),
-      );
-
-      expect(updated.catalog.catalogId).toEqual(initial.catalog.catalogId);
-      expect(updated.catalog.compaction).toEqual({
-        state: "disabled",
-        targetSizeMb: "256",
-      });
-      expect(updated.catalog.snapshotExpiration).toEqual({
-        state: "disabled",
-        maxSnapshotAge: "3d",
-        minSnapshotsToKeep: 5,
-      });
-
-      const liveUpdated = yield* getCatalog(
-        accountId,
-        initial.bucket.bucketName,
-      );
-      expect(liveUpdated.maintenanceConfig?.compaction).toEqual({
-        state: "disabled",
-        targetSizeMb: "256",
-      });
-      expect(liveUpdated.maintenanceConfig?.snapshotExpiration).toEqual({
-        state: "disabled",
-        maxSnapshotAge: "3d",
-        minSnapshotsToKeep: 5,
-      });
-
-      // Update — register a maintenance credential (write-only; observable
-      // only as credential_status flipping to "present").
       if (env.type === "apiToken") {
-        const withCredential = yield* stack.deploy(
+        expect(initial.catalog.compaction).toEqual({
+          state: "enabled",
+          targetSizeMb: "256",
+        });
+        expect(live.credentialStatus).toEqual("present");
+        expect(live.maintenanceConfig?.compaction).toEqual({
+          state: "enabled",
+          targetSizeMb: "256",
+        });
+
+        // Update — sync maintenance config in place (same catalog id).
+        const updated = yield* stack.deploy(
           program({
             compaction: { state: "disabled", targetSizeMb: "256" },
             snapshotExpiration: {
@@ -147,23 +126,84 @@ test.provider(
             token: env.apiToken,
           }),
         );
-        expect(withCredential.catalog.catalogId).toEqual(
-          initial.catalog.catalogId,
-        );
-        expect(withCredential.catalog.credentialStatus).toEqual("present");
 
-        const liveCredential = yield* getCatalog(
-          accountId,
-          initial.bucket.bucketName,
-        );
-        expect(liveCredential.credentialStatus).toEqual("present");
+        expect(updated.catalog.catalogId).toEqual(initial.catalog.catalogId);
+        expect(updated.catalog.compaction).toEqual({
+          state: "disabled",
+          targetSizeMb: "256",
+        });
+        expect(updated.catalog.snapshotExpiration).toEqual({
+          state: "disabled",
+          maxSnapshotAge: "3d",
+          minSnapshotsToKeep: 5,
+        });
+
+        const liveUpdated = yield* getCatalog(accountId, initial.bucket.bucketName);
+        expect(liveUpdated.credentialStatus).toEqual("present");
+        expect(liveUpdated.maintenanceConfig?.compaction).toEqual({
+          state: "disabled",
+          targetSizeMb: "256",
+        });
+        expect(liveUpdated.maintenanceConfig?.snapshotExpiration).toEqual({
+          state: "disabled",
+          maxSnapshotAge: "3d",
+          minSnapshotsToKeep: 5,
+        });
       }
 
       yield* stack.destroy();
 
       yield* expectGone(accountId, initial.bucket.bucketName);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 240_000,
+  },
+);
+
+test.provider(
+  "switching between bucket forms keeps the same catalog",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // The deprecated `bucketName` string form.
+      const legacy = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", { forceDestroy: true });
+          const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
+            bucketName: bucket.bucketName,
+          });
+          return { bucket, catalog };
+        }),
+      );
+
+      // The bucket resource, then a plain bucket name: neither is a change.
+      const viaResource = yield* stack.deploy(program());
+      expect(viaResource.catalog.catalogId).toEqual(legacy.catalog.catalogId);
+
+      const viaName = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("CatalogBucket", { forceDestroy: true });
+          const catalog = yield* Cloudflare.R2.DataCatalog("Catalog", {
+            bucket: legacy.bucket.bucketName,
+          });
+          return { bucket, catalog };
+        }),
+      );
+      expect(viaName.catalog.catalogId).toEqual(legacy.catalog.catalogId);
+      expect(viaName.catalog.bucketName).toEqual(legacy.bucket.bucketName);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, legacy.bucket.bucketName);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -196,7 +236,10 @@ test.provider(
 
       yield* expectGone(accountId, deployed.bucket.bucketName);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -207,9 +250,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        program({ compaction: { targetSizeMb: "128" } }),
-      );
+      const initial = yield* stack.deploy(program({ compaction: { targetSizeMb: "128" } }));
       expect(initial.catalog.status).toEqual("active");
 
       // Disable the catalog out-of-band. A redeploy with identical props is a
@@ -228,9 +269,7 @@ test.provider(
           }),
         );
 
-      const healed = yield* stack.deploy(
-        program({ compaction: { targetSizeMb: "64" } }),
-      );
+      const healed = yield* stack.deploy(program({ compaction: { targetSizeMb: "64" } }));
 
       // The warehouse id is stable across disable/enable cycles — this is a
       // re-enable of the same catalog, not a replacement.
@@ -246,5 +285,8 @@ test.provider(
 
       yield* expectGone(accountId, initial.bucket.bucketName);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
+    timeout: 240_000,
+  },
 );

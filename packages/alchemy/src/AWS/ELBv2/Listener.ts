@@ -40,7 +40,11 @@ export interface ListenerProps {
   /**
    * The default (and any additional SNI) certificate ARNs. The first entry is
    * the default certificate; the rest are attached as SNI certificates.
-   * Prefer this over the legacy single {@link certificateArn}.
+   * Declarative over the full SNI list: certificates attached out of band
+   * (including via standalone `ListenerCertificate` resources) are removed on
+   * reconcile. Omit this prop and use `certificateArn` +
+   * `ListenerCertificate` attachments to manage SNI certificates
+   * independently. Prefer this over the legacy single {@link certificateArn}.
    */
   certificates?: string[];
   /**
@@ -63,16 +67,27 @@ export interface ListenerProps {
     /** Whether to advertise the trust-store CA names in the TLS handshake. */
     advertiseTrustStoreCaNames?: "on" | "off";
   };
+  /**
+   * Raw listener attributes, synced via `modifyListenerAttributes` — e.g.
+   * `tcp.idle_timeout.seconds` (NLB TCP listeners) or
+   * `routing.http.response.server.enabled` (ALB HTTP/HTTPS listeners).
+   */
+  attributes?: Record<string, string>;
 }
 
 export interface Listener extends Resource<
   "AWS.ELBv2.Listener",
   ListenerProps,
   {
+    /** The ARN of the listener. */
     listenerArn: ListenerArn;
+    /** The ARN of the load balancer the listener is attached to. */
     loadBalancerArn: LoadBalancerArn;
+    /** The ARN of the target group from the default forward action, if any. */
     targetGroupArn: TargetGroupArn | undefined;
+    /** The port the listener accepts connections on. */
     port: number;
+    /** The protocol for connections (e.g. `HTTP`, `HTTPS`, `TCP`, `TLS`). */
     protocol: string;
   },
   never,
@@ -84,9 +99,8 @@ export interface Listener extends Resource<
  * connection requests using its configured protocol and port, then routes them
  * to target groups via its default actions (and any attached
  * {@link ListenerRule}s).
- * @resource
- * @section Creating a Listener
- * @example Basic HTTP forward listener
+ * ### Creating a Listener
+ * **Example:** Basic HTTP forward listener
  * ```typescript
  * const listener = yield* Listener("http", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -96,7 +110,7 @@ export interface Listener extends Resource<
  * });
  * ```
  *
- * @example HTTPS listener with certificate and SSL policy
+ * **Example:** HTTPS listener with certificate and SSL policy
  * ```typescript
  * const listener = yield* Listener("https", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -110,8 +124,8 @@ export interface Listener extends Resource<
  * });
  * ```
  *
- * @section Default Actions
- * @example Redirect HTTP to HTTPS
+ * ### Default Actions
+ * **Example:** Redirect HTTP to HTTPS
  * ```typescript
  * const redirect = yield* Listener("redirect", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -123,7 +137,7 @@ export interface Listener extends Resource<
  * });
  * ```
  *
- * @example Fixed response
+ * **Example:** Fixed response
  * ```typescript
  * const maintenance = yield* Listener("maintenance", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -134,7 +148,7 @@ export interface Listener extends Resource<
  * });
  * ```
  *
- * @example Weighted forward with stickiness
+ * **Example:** Weighted forward with stickiness
  * ```typescript
  * const weighted = yield* Listener("weighted", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -145,15 +159,15 @@ export interface Listener extends Resource<
  *         { targetGroupArn: blue.targetGroupArn, weight: 90 },
  *         { targetGroupArn: green.targetGroupArn, weight: 10 },
  *       ],
- *       stickiness: { enabled: true, durationSeconds: 3600 },
+ *       stickiness: { enabled: true, duration: "1 hour" },
  *     },
  *   ],
  *   port: 80,
  * });
  * ```
  *
- * @section Mutual TLS
- * @example mTLS verify mode with a trust store
+ * ### Mutual TLS
+ * **Example:** mTLS verify mode with a trust store
  * ```typescript
  * const mtls = yield* Listener("mtls", {
  *   loadBalancerArn: lb.loadBalancerArn,
@@ -166,6 +180,8 @@ export interface Listener extends Resource<
  *   mutualAuthentication: { mode: "verify", trustStoreArn: trustStore.trustStoreArn },
  * });
  * ```
+ *
+ * @resource
  */
 export const Listener = Resource<Listener>("AWS.ELBv2.Listener");
 
@@ -178,9 +194,7 @@ const desiredDefaultActions = (props: ListenerProps): elbv2.Action[] => {
     return serializeActions([
       {
         type: "forward",
-        targetGroups: [
-          { targetGroupArn: props.targetGroupArn as TargetGroupArn },
-        ],
+        targetGroups: [{ targetGroupArn: props.targetGroupArn as TargetGroupArn }],
       },
     ]);
   }
@@ -192,8 +206,7 @@ const defaultForwardTargetGroup = (
   actions: elbv2.Action[] | undefined,
 ): TargetGroupArn | undefined => {
   const forward = (actions ?? []).find((a) => a.Type === "forward");
-  return (forward?.TargetGroupArn ??
-    forward?.ForwardConfig?.TargetGroups?.[0]?.TargetGroupArn) as
+  return (forward?.TargetGroupArn ?? forward?.ForwardConfig?.TargetGroups?.[0]?.TargetGroupArn) as
     | TargetGroupArn
     | undefined;
 };
@@ -213,10 +226,8 @@ const desiredMutualAuth = (
     ? {
         Mode: props.mutualAuthentication.mode,
         TrustStoreArn: props.mutualAuthentication.trustStoreArn,
-        IgnoreClientCertificateExpiry:
-          props.mutualAuthentication.ignoreClientCertificateExpiry,
-        AdvertiseTrustStoreCaNames:
-          props.mutualAuthentication.advertiseTrustStoreCaNames,
+        IgnoreClientCertificateExpiry: props.mutualAuthentication.ignoreClientCertificateExpiry,
+        AdvertiseTrustStoreCaNames: props.mutualAuthentication.advertiseTrustStoreCaNames,
       }
     : undefined;
 
@@ -237,11 +248,7 @@ export const ListenerProvider = () =>
         .describeListeners({
           ListenerArns: [output.listenerArn],
         })
-        .pipe(
-          Effect.catchTag("ListenerNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
       const listener = described?.Listeners?.[0];
       if (!listener?.ListenerArn) {
         return undefined;
@@ -249,9 +256,7 @@ export const ListenerProvider = () =>
       return {
         listenerArn: listener.ListenerArn as ListenerArn,
         loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
-        targetGroupArn:
-          defaultForwardTargetGroup(listener.DefaultActions) ??
-          output.targetGroupArn,
+        targetGroupArn: defaultForwardTargetGroup(listener.DefaultActions) ?? output.targetGroupArn,
         port: listener.Port!,
         protocol: listener.Protocol!,
       };
@@ -260,52 +265,38 @@ export const ListenerProvider = () =>
     // LoadBalancerArn. Enumerate every load balancer first, then exhaustively
     // page listeners per LB with bounded concurrency.
     list: Effect.fn(function* () {
-      const loadBalancerArns = yield* elbv2.describeLoadBalancers
-        .pages({})
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.LoadBalancers ?? []).flatMap((lb) =>
-                lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
-              ),
+      const loadBalancerArns = yield* elbv2.describeLoadBalancers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.LoadBalancers ?? []).flatMap((lb) =>
+              lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
             ),
           ),
-        );
+        ),
+      );
       const rows = yield* Effect.forEach(
         loadBalancerArns,
         (loadBalancerArn) =>
-          elbv2.describeListeners
-            .pages({ LoadBalancerArn: loadBalancerArn })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.Listeners ?? [])
-                    .filter(
-                      (l): l is typeof l & { ListenerArn: string } =>
-                        l.ListenerArn != null,
-                    )
-                    .map((listener) => ({
-                      listenerArn: listener.ListenerArn as ListenerArn,
-                      loadBalancerArn:
-                        listener.LoadBalancerArn as LoadBalancerArn,
-                      targetGroupArn: defaultForwardTargetGroup(
-                        listener.DefaultActions,
-                      ),
-                      port: listener.Port!,
-                      protocol: listener.Protocol!,
-                    })),
-                ),
-              ),
-              // The LB may vanish between enumeration and per-LB listing.
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed([]),
-              ),
-              Effect.catchTag("ListenerNotFoundException", () =>
-                Effect.succeed([]),
+          elbv2.describeListeners.pages({ LoadBalancerArn: loadBalancerArn }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.Listeners ?? [])
+                  .filter((l): l is typeof l & { ListenerArn: string } => l.ListenerArn != null)
+                  .map((listener) => ({
+                    listenerArn: listener.ListenerArn as ListenerArn,
+                    loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
+                    targetGroupArn: defaultForwardTargetGroup(listener.DefaultActions),
+                    port: listener.Port!,
+                    protocol: listener.Protocol!,
+                  })),
               ),
             ),
+            // The LB may vanish between enumeration and per-LB listing.
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed([])),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       const result: Listener["Attributes"][] = rows.flat();
@@ -326,11 +317,7 @@ export const ListenerProvider = () =>
           .describeListeners({
             ListenerArns: [output.listenerArn],
           })
-          .pipe(
-            Effect.catchTag("ListenerNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
         listener = described?.Listeners?.[0];
       }
       if (!listener?.ListenerArn) {
@@ -339,12 +326,8 @@ export const ListenerProvider = () =>
             LoadBalancerArn: loadBalancerArn,
           })
           .pipe(
-            Effect.catchTag("LoadBalancerNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("ListenerNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)),
           );
         listener = listed?.Listeners?.find((l) => l.Port === news.port);
       }
@@ -355,8 +338,7 @@ export const ListenerProvider = () =>
           LoadBalancerArn: loadBalancerArn,
           Port: news.port,
           Protocol: desiredProtocol,
-          Certificates:
-            certs.length > 0 ? [{ CertificateArn: certs[0] }] : undefined,
+          Certificates: certs.length > 0 ? [{ CertificateArn: certs[0] }] : undefined,
           SslPolicy: news.sslPolicy,
           AlpnPolicy: news.alpnPolicy,
           MutualAuthentication: mutualAuthentication,
@@ -364,9 +346,7 @@ export const ListenerProvider = () =>
         });
         listener = created.Listeners?.[0];
         if (!listener?.ListenerArn) {
-          return yield* Effect.die(
-            new Error("createListener returned no listener"),
-          );
+          return yield* Effect.die(new Error("createListener returned no listener"));
         }
       } else {
         // Sync — modifyListener fully replaces these mutable fields.
@@ -374,8 +354,7 @@ export const ListenerProvider = () =>
           ListenerArn: listener.ListenerArn,
           Port: news.port,
           Protocol: desiredProtocol,
-          Certificates:
-            certs.length > 0 ? [{ CertificateArn: certs[0] }] : undefined,
+          Certificates: certs.length > 0 ? [{ CertificateArn: certs[0] }] : undefined,
           SslPolicy: news.sslPolicy,
           AlpnPolicy: news.alpnPolicy,
           MutualAuthentication: mutualAuthentication,
@@ -386,33 +365,47 @@ export const ListenerProvider = () =>
 
       const listenerArn = listener.ListenerArn!;
 
-      // Sync additional SNI certificates — observed ↔ desired. The default
-      // certificate (certs[0]) is carried by modifyListener and is excluded
-      // from the SNI set.
-      const desiredSni = new Set(certs.slice(1));
-      const observedCerts = yield* elbv2
-        .describeListenerCertificates({ ListenerArn: listenerArn })
-        .pipe(
-          Effect.catchTag("ListenerNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
-      const observedSni = (observedCerts?.Certificates ?? [])
-        .filter((c) => !c.IsDefault && c.CertificateArn)
-        .map((c) => c.CertificateArn!);
-      const toAdd = [...desiredSni].filter((arn) => !observedSni.includes(arn));
-      const toRemove = observedSni.filter((arn) => !desiredSni.has(arn));
-      if (toAdd.length > 0) {
-        yield* elbv2.addListenerCertificates({
+      // Sync attributes — always apply when desired attrs are non-empty; AWS
+      // rejects an empty list anyway (same convention as LoadBalancer and
+      // TargetGroup attributes).
+      if (news.attributes && Object.keys(news.attributes).length > 0) {
+        yield* elbv2.modifyListenerAttributes({
           ListenerArn: listenerArn,
-          Certificates: toAdd.map((arn) => ({ CertificateArn: arn })),
+          Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
+            Key,
+            Value,
+          })),
         });
       }
-      if (toRemove.length > 0) {
-        yield* elbv2.removeListenerCertificates({
-          ListenerArn: listenerArn,
-          Certificates: toRemove.map((arn) => ({ CertificateArn: arn })),
-        });
+
+      // Sync additional SNI certificates — observed ↔ desired. The default
+      // certificate (certs[0]) is carried by modifyListener and is excluded
+      // from the SNI set. Only the explicit plural `certificates` prop is
+      // declarative over the FULL list: pruning is skipped otherwise so that
+      // standalone `ListenerCertificate` attachments (managed outside this
+      // resource) are not torn off on every reconcile.
+      if (news.certificates !== undefined) {
+        const desiredSni = new Set(certs.slice(1));
+        const observedCerts = yield* elbv2
+          .describeListenerCertificates({ ListenerArn: listenerArn })
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+        const observedSni = (observedCerts?.Certificates ?? [])
+          .filter((c) => !c.IsDefault && c.CertificateArn)
+          .map((c) => c.CertificateArn!);
+        const toAdd = [...desiredSni].filter((arn) => !observedSni.includes(arn));
+        const toRemove = observedSni.filter((arn) => !desiredSni.has(arn));
+        if (toAdd.length > 0) {
+          yield* elbv2.addListenerCertificates({
+            ListenerArn: listenerArn,
+            Certificates: toAdd.map((arn) => ({ CertificateArn: arn })),
+          });
+        }
+        if (toRemove.length > 0) {
+          yield* elbv2.removeListenerCertificates({
+            ListenerArn: listenerArn,
+            Certificates: toRemove.map((arn) => ({ CertificateArn: arn })),
+          });
+        }
       }
 
       yield* session.note(listenerArn);

@@ -1,19 +1,23 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Etag from "effect/unstable/http/Etag";
-import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as Cloudflare from "@/Cloudflare";
 import { decodeTask, Task, TaskApi, TaskNotFound } from "./api.ts";
 import TasksObject, { TaskDOApi } from "./object.ts";
 
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: {
+    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+    compressResponse: (response) => Effect.succeed(response),
+  },
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () =>
-    Effect.die("HttpPlatform.fileWebResponse not supported"),
+  fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
 });
 
 const corsLayer = HttpRouter.cors({
@@ -22,7 +26,7 @@ const corsLayer = HttpRouter.cors({
   allowedHeaders: ["Content-Type"],
 });
 
-const Bucket = Cloudflare.R2.Bucket("Tasks");
+const Bucket = Cloudflare.R2.Bucket("Tasks", { forceDestroy: true });
 
 export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWorker>()(
   "HttpApiTestWorker",
@@ -66,22 +70,21 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
             title: payload.title,
             completed: false,
           });
-          return tasks
-            .put(task.id, JSON.stringify(task))
-            .pipe(Effect.orDie, Effect.as(task));
+          return tasks.put(task.id, JSON.stringify(task)).pipe(Effect.orDie, Effect.as(task));
         })
         .handle("getTaskDO", ({ params }) =>
           getTaskDO().pipe(
             Effect.flatMap((client) =>
-              client.TasksDO.getTask({ params }).pipe(Effect.orDie),
+              client.TasksDO.getTask({ params }).pipe(
+                // Forward the DO's domain 404; transport failures are defects.
+                Effect.catchIf((e) => e._tag !== "TaskNotFound", Effect.die),
+              ),
             ),
           ),
         )
         .handle("createTaskDO", ({ payload }) =>
           getTaskDO().pipe(
-            Effect.flatMap((client) =>
-              client.TasksDO.createTask({ payload }).pipe(Effect.orDie),
-            ),
+            Effect.flatMap((client) => client.TasksDO.createTask({ payload }).pipe(Effect.orDie)),
           ),
         ),
     );

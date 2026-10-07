@@ -8,7 +8,9 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface UsagePlanKeyProps {
+  /** ID of the usage plan to add the key to. */
   usagePlanId: Input<string>;
+  /** ID of the API key to associate. */
   keyId: Input<string>;
   /**
    * @default "API_KEY"
@@ -33,8 +35,8 @@ export interface UsagePlanKey extends Resource<
 /**
  * Associates an API key with a usage plan.
  *
- * @section Usage plan keys
- * @example Associate key with plan
+ * ### Usage plan keys
+ * **Example:** Associate key with plan
  * ```typescript
  * yield* ApiGateway.UsagePlanKey("PlanKey", {
  *   usagePlanId: plan.id,
@@ -42,9 +44,7 @@ export interface UsagePlanKey extends Resource<
  * });
  * ```
  */
-const UsagePlanKeyResource = Resource<UsagePlanKey>(
-  "AWS.ApiGateway.UsagePlanKey",
-);
+const UsagePlanKeyResource = Resource<UsagePlanKey>("AWS.ApiGateway.UsagePlanKey");
 
 export { UsagePlanKeyResource as UsagePlanKey };
 
@@ -57,10 +57,7 @@ export const UsagePlanKeyProvider = () =>
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as UsagePlanKeyProps;
-          if (
-            news.usagePlanId !== olds.usagePlanId ||
-            news.keyId !== olds.keyId
-          ) {
+          if (news.usagePlanId !== olds.usagePlanId || news.keyId !== olds.keyId) {
             return { action: "replace" } as const;
           }
         }),
@@ -71,11 +68,7 @@ export const UsagePlanKeyProvider = () =>
               usagePlanId: output.usagePlanId,
               keyId: output.keyId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!k?.id) return undefined;
           return {
             usagePlanId: output.usagePlanId,
@@ -89,8 +82,7 @@ export const UsagePlanKeyProvider = () =>
             return yield* Effect.die("UsagePlanKey props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<UsagePlanKeyProps>;
-          const usagePlanId = (output?.usagePlanId ??
-            news.usagePlanId) as string;
+          const usagePlanId = (output?.usagePlanId ?? news.usagePlanId) as string;
           const keyId = (output?.keyId ?? news.keyId) as string;
 
           // Observe — fetch the live link. UsagePlanKey is a pure
@@ -99,11 +91,7 @@ export const UsagePlanKeyProvider = () =>
           // exists there's nothing to sync.
           let observed = yield* ag
             .getUsagePlanKey({ usagePlanId, keyId })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create the link if missing.
           if (!observed?.id) {
@@ -112,9 +100,7 @@ export const UsagePlanKeyProvider = () =>
               keyId: news.keyId as string,
               keyType: news.keyType ?? "API_KEY",
             });
-            yield* session.note(
-              `Linked key ${news.keyId} to usage plan ${news.usagePlanId}`,
-            );
+            yield* session.note(`Linked key ${news.keyId} to usage plan ${news.usagePlanId}`);
             observed = yield* ag.getUsagePlanKey({
               usagePlanId,
               keyId: created.id ?? keyId,
@@ -138,9 +124,7 @@ export const UsagePlanKeyProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.items ?? [])
-                    .filter(
-                      (p): p is ag.UsagePlan & { id: string } => p.id != null,
-                    )
+                    .filter((p): p is ag.UsagePlan & { id: string } => p.id != null)
                     .map((p) => p.id),
                 ),
               ),
@@ -153,10 +137,7 @@ export const UsagePlanKeyProvider = () =>
                   Effect.map((chunk) =>
                     Array.from(chunk).flatMap((page) =>
                       (page.items ?? [])
-                        .filter(
-                          (k): k is ag.UsagePlanKey & { id: string } =>
-                            k.id != null,
-                        )
+                        .filter((k): k is ag.UsagePlanKey & { id: string } => k.id != null)
                         .map((k) => ({
                           usagePlanId,
                           keyId: k.id,

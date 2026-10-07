@@ -2,8 +2,8 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import { retryOrganizations } from "./common.ts";
 
 export interface OrganizationResourcePolicyProps {
@@ -17,8 +17,17 @@ export interface OrganizationResourcePolicy extends Resource<
   "AWS.Organizations.OrganizationResourcePolicy",
   OrganizationResourcePolicyProps,
   {
+    /**
+     * ID of the resource policy.
+     */
     resourcePolicyId: string;
+    /**
+     * ARN of the resource policy.
+     */
     resourcePolicyArn: string;
+    /**
+     * Parsed resource policy document as stored by AWS Organizations.
+     */
     document: PolicyDocument;
   },
   never,
@@ -26,7 +35,39 @@ export interface OrganizationResourcePolicy extends Resource<
 > {}
 
 /**
- * The singleton AWS Organizations resource policy.
+ * The singleton AWS Organizations resource policy — an org-level
+ * resource-based policy that grants other principals (typically delegated
+ * administrator accounts) permission to call Organizations APIs.
+ *
+ * There is at most one per organization; Alchemy adopts and reconciles the
+ * existing policy if one is already in place.
+ * ### Setting the Resource Policy
+ * **Example:** Allow a Member Account to Describe the Organization
+ * ```typescript
+ * const security = yield* Account("Security", {
+ *   name: "security",
+ *   email: "aws-security@example.com",
+ *   parentId: root.rootId,
+ * });
+ *
+ * yield* OrganizationResourcePolicy("OrgResourcePolicy", {
+ *   document: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: security.accountId },
+ *         Action: [
+ *           "organizations:DescribeOrganization",
+ *           "organizations:ListAccounts",
+ *         ],
+ *         Resource: "*",
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
  * @resource
  */
 export const OrganizationResourcePolicy = Resource<OrganizationResourcePolicy>(
@@ -37,9 +78,7 @@ const readResourcePolicy = () =>
   retryOrganizations(
     organizations.describeResourcePolicy({}).pipe(
       Effect.map((response) => response.ResourcePolicy),
-      Effect.catchTag("ResourcePolicyNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.succeed(undefined)),
       Effect.map((policy) => {
         const summary = policy?.ResourcePolicySummary;
         return summary?.Id && summary.Arn
@@ -84,9 +123,7 @@ export const OrganizationResourcePolicyProvider = () =>
           // desired so the call only fires when there's drift. Reading by
           // ID isn't possible (resource is a singleton with a server-issued
           // ID), so we compare the JSON-stringified document.
-          const observedContent = state
-            ? JSON.stringify(state.document)
-            : undefined;
+          const observedContent = state ? JSON.stringify(state.document) : undefined;
 
           if (observedContent !== desiredContent) {
             yield* retryOrganizations(
@@ -99,9 +136,7 @@ export const OrganizationResourcePolicyProvider = () =>
 
           if (!state) {
             return yield* Effect.fail(
-              new Error(
-                "organization resource policy not found after reconcile",
-              ),
+              new Error("organization resource policy not found after reconcile"),
             );
           }
 
@@ -112,12 +147,7 @@ export const OrganizationResourcePolicyProvider = () =>
           yield* retryOrganizations(
             organizations
               .deleteResourcePolicy({})
-              .pipe(
-                Effect.catchTag(
-                  "ResourcePolicyNotFoundException",
-                  () => Effect.void,
-                ),
-              ),
+              .pipe(Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.void)),
           );
         }),
       };

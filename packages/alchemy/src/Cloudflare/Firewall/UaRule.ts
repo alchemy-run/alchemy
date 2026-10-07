@@ -2,7 +2,6 @@ import * as firewall from "@distilled.cloud/cloudflare/firewall";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -16,11 +15,7 @@ type UaRuleTypeId = typeof UaRuleTypeId;
 /**
  * The action a User Agent Blocking rule applies to a matched request.
  */
-export type UaRuleMode =
-  | "block"
-  | "challenge"
-  | "js_challenge"
-  | "managed_challenge";
+export type UaRuleMode = "block" | "challenge" | "js_challenge" | "managed_challenge";
 
 export interface UaRuleProps {
   /**
@@ -71,13 +66,7 @@ export interface UaRuleAttributes {
   paused: boolean;
 }
 
-export type UaRule = Resource<
-  UaRuleTypeId,
-  UaRuleProps,
-  UaRuleAttributes,
-  never,
-  Providers
->;
+export type UaRule = Resource<UaRuleTypeId, UaRuleProps, UaRuleAttributes, never, Providers>;
 
 /**
  * A Cloudflare User Agent Blocking rule — block or challenge every request
@@ -95,11 +84,8 @@ export type UaRule = Resource<
  * state, `read` scans the zone for an existing rule with the same
  * User-Agent string and reports it as `Unowned`, so the engine refuses to
  * take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Firewall
- * @category Application Security
- * @section Blocking a User-Agent
- * @example Block a scraper outright
+ * ### Blocking a User-Agent
+ * **Example:** Block a scraper outright
  * ```typescript
  * yield* Cloudflare.Firewall.UaRule("BlockScraper", {
  *   zoneId: zone.zoneId,
@@ -109,8 +95,8 @@ export type UaRule = Resource<
  * });
  * ```
  *
- * @section Challenging a User-Agent
- * @example Managed challenge instead of a hard block
+ * ### Challenging a User-Agent
+ * **Example:** Managed challenge instead of a hard block
  * ```typescript
  * yield* Cloudflare.Firewall.UaRule("ChallengeOldClient", {
  *   zoneId: zone.zoneId,
@@ -119,8 +105,8 @@ export type UaRule = Resource<
  * });
  * ```
  *
- * @section Pausing a rule
- * @example Temporarily disable a rule without deleting it
+ * ### Pausing a rule
+ * **Example:** Temporarily disable a rule without deleting it
  * ```typescript
  * yield* Cloudflare.Firewall.UaRule("BlockScraper", {
  *   zoneId: zone.zoneId,
@@ -131,6 +117,10 @@ export type UaRule = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/tools/user-agent-blocking/
+ *
+ * @resource
+ * @product Firewall
+ * @category Application Security
  */
 export const UaRule = Resource<UaRule>(UaRuleTypeId);
 
@@ -176,11 +166,7 @@ export const UaRuleProvider = () =>
       // No prior props to compare against — let the engine decide.
       if (o.zoneId === undefined) return undefined;
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -216,9 +202,7 @@ export const UaRuleProvider = () =>
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the User-Agent scan
       //    and then to create.
-      let observed = output?.uaRuleId
-        ? yield* getUaRule(zoneId, output.uaRuleId)
-        : undefined;
+      let observed = output?.uaRuleId ? yield* getUaRule(zoneId, output.uaRuleId) : undefined;
 
       // 2. Fall back to scanning the zone for a User-Agent match.
       //    Ownership has already been verified upstream — `read` reports
@@ -257,10 +241,8 @@ export const UaRuleProvider = () =>
       const dirty =
         (observed.configuration?.value ?? "") !== news.userAgent ||
         observed.mode !== news.mode ||
-        (news.description !== undefined &&
-          (observed.description ?? "") !== news.description) ||
-        (news.paused !== undefined &&
-          (observed.paused ?? false) !== news.paused);
+        (news.description !== undefined && (observed.description ?? "") !== news.description) ||
+        (news.paused !== undefined && (observed.paused ?? false) !== news.paused);
       if (dirty) {
         observed = yield* firewall.updateUaRule({
           zoneId,
@@ -311,16 +293,12 @@ const findByUserAgent = (zoneId: string, userAgent: string) =>
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk).find(
-        (rule): rule is ObservedUaRule =>
-          rule.configuration?.value === userAgent,
+        (rule): rule is ObservedUaRule => rule.configuration?.value === userAgent,
       ),
     ),
   );
 
-const toAttributes = (
-  rule: ObservedUaRule,
-  zoneId: string,
-): UaRuleAttributes => ({
+const toAttributes = (rule: ObservedUaRule, zoneId: string): UaRuleAttributes => ({
   // Distilled types every field as optional/nullable — Cloudflare always
   // echoes them for a persisted rule.
   uaRuleId: rule.id ?? "",

@@ -2,7 +2,6 @@ import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -127,11 +126,8 @@ export type BucketEventNotification = Resource<
  * either triggers a replacement, while rule changes are applied in place
  * (the provider converges the pair's configuration to exactly the
  * declared rule set).
- * @resource
- * @product R2
- * @category Storage & Databases
- * @section Notifying a Queue
- * @example Notify on every upload and delete
+ * ### Notifying a Queue
+ * **Example:** Notify on every upload and delete
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  * const queue = yield* Cloudflare.Queues.Queue("UploadEvents");
@@ -147,7 +143,7 @@ export type BucketEventNotification = Resource<
  * });
  * ```
  *
- * @example Scope notifications to a key prefix and suffix
+ * **Example:** Scope notifications to a key prefix and suffix
  * ```typescript
  * yield* Cloudflare.R2.BucketEventNotification("ImageNotifications", {
  *   bucketName: bucket.bucketName,
@@ -163,8 +159,8 @@ export type BucketEventNotification = Resource<
  * });
  * ```
  *
- * @section Multiple rules
- * @example Separate rules per key range
+ * ### Multiple rules
+ * **Example:** Separate rules per key range
  * ```typescript
  * // Rules must cover non-overlapping key ranges — Cloudflare rejects
  * // overlapping prefixes/suffixes even when the actions are disjoint.
@@ -179,9 +175,12 @@ export type BucketEventNotification = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/r2/buckets/event-notifications/
+ *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  */
-export const BucketEventNotification =
-  Resource<BucketEventNotification>(TypeId);
+export const BucketEventNotification = Resource<BucketEventNotification>(TypeId);
 
 export declare namespace BucketEventNotification {
   export type Rule = {
@@ -197,9 +196,7 @@ export declare namespace BucketEventNotification {
 /**
  * Returns true if the given value is an BucketEventNotification resource.
  */
-export const isBucketEventNotification = (
-  value: unknown,
-): value is BucketEventNotification =>
+export const isBucketEventNotification = (value: unknown): value is BucketEventNotification =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const BucketEventNotificationProvider = () =>
@@ -239,30 +236,16 @@ export const BucketEventNotificationProvider = () =>
       // The (bucket, queue) pair is the configuration's identity; cold
       // reads derive it from the last-persisted props.
       const bucketName =
-        output?.bucketName ??
-        (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
+        output?.bucketName ?? (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
       const queueId =
-        output?.queueId ??
-        (typeof olds?.queueId === "string" ? olds.queueId : undefined);
+        output?.queueId ?? (typeof olds?.queueId === "string" ? olds.queueId : undefined);
       if (bucketName === undefined || queueId === undefined) return undefined;
-      const jurisdiction =
-        output?.jurisdiction ?? olds?.jurisdiction ?? "default";
+      const jurisdiction = output?.jurisdiction ?? olds?.jurisdiction ?? "default";
 
-      const observed = yield* getConfiguration(
-        acct,
-        bucketName,
-        queueId,
-        jurisdiction,
-      );
+      const observed = yield* getConfiguration(acct, bucketName, queueId, jurisdiction);
       if (!observed) return undefined;
 
-      const attrs = toAttributes(
-        observed,
-        acct,
-        bucketName,
-        queueId,
-        jurisdiction,
-      );
+      const attrs = toAttributes(observed, acct, bucketName, queueId, jurisdiction);
       // Event notification configs carry no ownership markers. With no
       // prior output we cannot prove we created this configuration —
       // brand it `Unowned` so takeover is gated behind the adopt policy.
@@ -279,12 +262,7 @@ export const BucketEventNotificationProvider = () =>
 
       // 1. Observe — the configuration may or may not exist; `output` is
       //    only a cache of the identity, never proof of existence.
-      const observed = yield* getConfiguration(
-        acct,
-        bucketName,
-        queueId,
-        jurisdiction,
-      );
+      const observed = yield* getConfiguration(acct, bucketName, queueId, jurisdiction);
 
       // 2/3. Ensure + sync — skip the API entirely when the observed rules
       //    already match the desired set.
@@ -303,11 +281,7 @@ export const BucketEventNotificationProvider = () =>
             })
             .pipe(
               Effect.catchTag(
-                [
-                  "EventNotificationConfigNotFound",
-                  "BucketNotFound",
-                  "QueueNotFound",
-                ],
+                ["EventNotificationConfigNotFound", "BucketNotFound", "QueueNotFound"],
                 () => Effect.void,
               ),
             );
@@ -329,8 +303,7 @@ export const BucketEventNotificationProvider = () =>
             // A freshly-created bucket or queue can briefly 404 on the
             // event-notification endpoint — ride out the consistency lag.
             Effect.retry({
-              while: (e) =>
-                e._tag === "BucketNotFound" || e._tag === "QueueNotFound",
+              while: (e) => e._tag === "BucketNotFound" || e._tag === "QueueNotFound",
               schedule: r2EventNotificationConsistencySchedule,
             }),
           );
@@ -380,11 +353,7 @@ export const BucketEventNotificationProvider = () =>
         })
         .pipe(
           Effect.catchTag(
-            [
-              "EventNotificationConfigNotFound",
-              "BucketNotFound",
-              "QueueNotFound",
-            ],
+            ["EventNotificationConfigNotFound", "BucketNotFound", "QueueNotFound"],
             () => Effect.void,
           ),
         );
@@ -404,8 +373,7 @@ export const BucketEventNotificationProvider = () =>
           if (bucketName == null) {
             return Effect.succeed([] as BucketEventNotificationAttributes[]);
           }
-          const jurisdiction = (bucket.jurisdiction ??
-            "default") as Bucket.Jurisdiction;
+          const jurisdiction = (bucket.jurisdiction ?? "default") as Bucket.Jurisdiction;
           return r2
             .listBucketEventNotifications({
               accountId,
@@ -415,23 +383,18 @@ export const BucketEventNotificationProvider = () =>
             .pipe(
               Effect.map((res) =>
                 (res.queues ?? [])
-                  .filter(
-                    (q): q is typeof q & { queueId: string } =>
-                      q.queueId != null,
-                  )
-                  .map(
-                    (q): BucketEventNotificationAttributes => ({
-                      bucketName,
-                      // The endpoint echoes the queue ID in dashed-UUID
-                      // form; normalise to the undashed form
-                      // `Queue.queueId` uses so list items match `read`.
-                      queueId: q.queueId.replace(/-/g, ""),
-                      queueName: q.queueName ?? undefined,
-                      accountId,
-                      jurisdiction,
-                      rules: (q.rules ?? []).map(toRuleAttributes),
-                    }),
-                  ),
+                  .filter((q): q is typeof q & { queueId: string } => q.queueId != null)
+                  .map((q): BucketEventNotificationAttributes => ({
+                    bucketName,
+                    // The endpoint echoes the queue ID in dashed-UUID
+                    // form; normalise to the undashed form
+                    // `Queue.queueId` uses so list items match `read`.
+                    queueId: q.queueId.replace(/-/g, ""),
+                    queueName: q.queueName ?? undefined,
+                    accountId,
+                    jurisdiction,
+                    rules: (q.rules ?? []).map(toRuleAttributes),
+                  })),
               ),
               // A bucket with no event-notification config (or a bucket
               // that vanished mid-enumeration) is not an error — skip it.
@@ -500,9 +463,7 @@ const getConfiguration = (
       jurisdiction,
     })
     .pipe(
-      Effect.map(
-        (config): r2.GetBucketEventNotificationResponse | undefined => config,
-      ),
+      Effect.map((config): r2.GetBucketEventNotificationResponse | undefined => config),
       // "Gone" comes in several typed flavors: the bucket has no event
       // notification config at all (`NoEventNotificationConfig`, code
       // 11015), no config for this queue (`EventNotificationConfigNotFound`,
@@ -518,13 +479,9 @@ const getConfiguration = (
       ),
     );
 
-type ObservedRule = NonNullable<
-  r2.GetBucketEventNotificationResponse["rules"]
->[number];
+type ObservedRule = NonNullable<r2.GetBucketEventNotificationResponse["rules"]>[number];
 
-const toRuleAttributes = (
-  rule: ObservedRule,
-): BucketEventNotification.Rule => ({
+const toRuleAttributes = (rule: ObservedRule): BucketEventNotification.Rule => ({
   // Distilled widens generated string enums to open unions; the API only
   // returns the known action variants.
   actions: [...rule.actions] as BucketEventNotificationAction[],

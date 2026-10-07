@@ -55,13 +55,21 @@ export interface AccessEntry extends Resource<
   "AWS.EKS.AccessEntry",
   AccessEntryProps,
   {
+    /** The ARN of the access entry. */
     accessEntryArn: string;
+    /** The name of the EKS cluster the entry grants access to. */
     clusterName: string;
+    /** The IAM principal ARN the entry maps into the cluster. */
     principalArn: string;
+    /** The Kubernetes groups the principal is mapped to. */
     kubernetesGroups: string[];
+    /** The Kubernetes username the principal is mapped to. */
     username: string | undefined;
+    /** The access entry type (e.g. `STANDARD`, `EC2_LINUX`, `FARGATE_LINUX`). */
     type: string | undefined;
+    /** The EKS access policies associated with the entry. */
     accessPolicies: AccessPolicyAssociation[];
+    /** The tags applied to the access entry. */
     tags: Record<string, string>;
   },
   never,
@@ -74,9 +82,8 @@ export interface AccessEntry extends Resource<
  * `AccessEntry` owns both the entry itself and the exact set of associated EKS
  * access policies, making cluster access explicit and updatable after initial
  * cluster bootstrap.
- * @resource
- * @section Managing Cluster Access
- * @example Grant Read Access to a Role
+ * ### Managing Cluster Access
+ * **Example:** Grant Read Access to a Role
  * ```typescript
  * const viewer = yield* AccessEntry("ViewerAccess", {
  *   clusterName: cluster.clusterName,
@@ -92,6 +99,8 @@ export interface AccessEntry extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @resource
  */
 export const AccessEntry = Resource<AccessEntry>("AWS.EKS.AccessEntry");
 
@@ -132,8 +141,7 @@ export const AccessEntryProvider = () =>
             Effect.flatMap((principalArns) =>
               Effect.forEach(
                 principalArns,
-                (principalArn) =>
-                  readAccessEntry({ clusterName, principalArn }),
+                (principalArn) => readAccessEntry({ clusterName, principalArn }),
                 { concurrency: 5 },
               ),
             ),
@@ -141,9 +149,7 @@ export const AccessEntryProvider = () =>
         { concurrency: 5 },
       );
 
-      return perCluster
-        .flat()
-        .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+      return perCluster.flat().filter((entry): entry is NonNullable<typeof entry> => entry != null);
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const state = yield* readAccessEntry({
@@ -188,9 +194,7 @@ export const AccessEntryProvider = () =>
 
         if (!state) {
           return yield* Effect.fail(
-            new Error(
-              `AccessEntry '${principalArn}' could not be read after creation`,
-            ),
+            new Error(`AccessEntry '${principalArn}' could not be read after creation`),
           );
         }
       }
@@ -215,9 +219,7 @@ export const AccessEntryProvider = () =>
       if (upsert.length > 0) {
         yield* eks.tagResource({
           resourceArn: state.accessEntryArn,
-          tags: Object.fromEntries(
-            upsert.map((tag) => [tag.Key, tag.Value] as const),
-          ),
+          tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value] as const)),
         });
       }
       if (removed.length > 0) {
@@ -269,9 +271,7 @@ export const AccessEntryProvider = () =>
           finalState
             ? Effect.succeed(finalState)
             : Effect.fail(
-                new Error(
-                  `AccessEntry '${principalArn}' could not be read after reconcile`,
-                ),
+                new Error(`AccessEntry '${principalArn}' could not be read after reconcile`),
               ),
         ),
       );
@@ -288,22 +288,15 @@ export const AccessEntryProvider = () =>
 
 const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-const comparePolicyAssociation = (
-  a: AccessPolicyAssociation,
-  b: AccessPolicyAssociation,
-) =>
+const comparePolicyAssociation = (a: AccessPolicyAssociation, b: AccessPolicyAssociation) =>
   a.policyArn.localeCompare(b.policyArn) ||
   JSON.stringify(a.accessScope).localeCompare(JSON.stringify(b.accessScope));
 
 const normalizeAccessPolicies = (
-  policies:
-    | ReadonlyArray<AccessPolicyAssociation | eks.AssociatedAccessPolicy>
-    | undefined,
+  policies: ReadonlyArray<AccessPolicyAssociation | eks.AssociatedAccessPolicy> | undefined,
 ): AccessPolicyAssociation[] =>
   (policies ?? [])
     .flatMap((policy) =>
@@ -338,9 +331,7 @@ const listAccessPolicies = Effect.fn(function* ({
       nextToken,
     });
 
-    policies.push(
-      ...normalizeAccessPolicies(response.associatedAccessPolicies),
-    );
+    policies.push(...normalizeAccessPolicies(response.associatedAccessPolicies));
 
     if (!response.nextToken) {
       break;
@@ -364,18 +355,10 @@ const readAccessEntry = Effect.fn(function* ({
       clusterName,
       principalArn,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
   const accessEntry = response?.accessEntry;
-  if (
-    !accessEntry?.accessEntryArn ||
-    !accessEntry.clusterName ||
-    !accessEntry.principalArn
-  ) {
+  if (!accessEntry?.accessEntryArn || !accessEntry.clusterName || !accessEntry.principalArn) {
     return undefined;
   }
 

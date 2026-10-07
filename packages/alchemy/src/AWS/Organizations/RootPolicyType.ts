@@ -21,9 +21,21 @@ export interface RootPolicyType extends Resource<
   "AWS.Organizations.RootPolicyType",
   RootPolicyTypeProps,
   {
+    /**
+     * ID of the root the policy type is enabled on.
+     */
     rootId: string;
+    /**
+     * ARN of the root.
+     */
     rootArn: string | undefined;
+    /**
+     * The enabled policy type.
+     */
     policyType: organizations.PolicyType;
+    /**
+     * Enablement status (`ENABLED`, `PENDING_ENABLE`, or `PENDING_DISABLE`).
+     */
     status: organizations.PolicyTypeStatus | undefined;
   },
   never,
@@ -32,11 +44,38 @@ export interface RootPolicyType extends Resource<
 
 /**
  * Enables a policy type on an organization root.
+ *
+ * A policy type (SCP, tag policy, ...) must be enabled on the root before any
+ * {@link Policy} of that type can be attached via {@link PolicyAttachment}.
+ * Existence-only resource: changing `rootId` or `policyType` replaces it.
+ * ### Enabling Policy Types
+ * **Example:** Enable Service Control Policies
+ * ```typescript
+ * const root = yield* Root("Root", {});
+ *
+ * const scpEnabled = yield* RootPolicyType("ScpEnabled", {
+ *   rootId: root.rootId,
+ *   policyType: "SERVICE_CONTROL_POLICY",
+ * });
+ * ```
+ *
+ * **Example:** Enable Tag Policies Before Attaching One
+ * ```typescript
+ * const tagPoliciesEnabled = yield* RootPolicyType("TagPoliciesEnabled", {
+ *   rootId: root.rootId,
+ *   policyType: "TAG_POLICY",
+ * });
+ *
+ * yield* PolicyAttachment("RequireEnvTagOnRoot", {
+ *   policyId: tagPolicy.policyId,
+ *   // depend on the enablement so attachment happens after it
+ *   targetId: tagPoliciesEnabled.rootId,
+ * });
+ * ```
+ *
  * @resource
  */
-export const RootPolicyType = Resource<RootPolicyType>(
-  "AWS.Organizations.RootPolicyType",
-);
+export const RootPolicyType = Resource<RootPolicyType>("AWS.Organizations.RootPolicyType");
 
 export const RootPolicyTypeProvider = () =>
   Provider.effect(
@@ -46,10 +85,7 @@ export const RootPolicyTypeProvider = () =>
         stables: ["rootId", "rootArn", "policyType"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            olds?.rootId !== news.rootId ||
-            olds?.policyType !== news.policyType
-          ) {
+          if (olds?.rootId !== news.rootId || olds?.policyType !== news.policyType) {
             return { action: "replace" } as const;
           }
         }),
@@ -102,8 +138,7 @@ export const RootPolicyTypeProvider = () =>
             Effect.catchTags({
               AWSOrganizationsNotInUseException: () =>
                 Effect.succeed<RootPolicyType["Attributes"][]>([]),
-              AccessDeniedException: () =>
-                Effect.succeed<RootPolicyType["Attributes"][]>([]),
+              AccessDeniedException: () => Effect.succeed<RootPolicyType["Attributes"][]>([]),
             }),
           ),
         reconcile: Effect.fn(function* ({ news, session }) {
@@ -123,12 +158,7 @@ export const RootPolicyTypeProvider = () =>
                   RootId: news.rootId,
                   PolicyType: news.policyType,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "PolicyTypeAlreadyEnabledException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("PolicyTypeAlreadyEnabledException", () => Effect.void)),
             );
 
             state = yield* readRootPolicyType(news);
@@ -173,10 +203,7 @@ const readRoot = (rootId: string) =>
     Effect.map((roots) => roots.find((root) => root.Id === rootId)),
   );
 
-const readRootPolicyType = Effect.fn(function* ({
-  rootId,
-  policyType,
-}: RootPolicyTypeProps) {
+const readRootPolicyType = Effect.fn(function* ({ rootId, policyType }: RootPolicyTypeProps) {
   const root = yield* readRoot(rootId);
   const summary = root?.PolicyTypes?.find((item) => item.Type === policyType);
   return summary

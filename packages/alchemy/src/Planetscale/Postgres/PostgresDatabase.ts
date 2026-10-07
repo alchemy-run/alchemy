@@ -1,30 +1,35 @@
+import * as planetscale from "@distilled.cloud/planetscale";
 import { Credentials } from "@distilled.cloud/planetscale/Credentials";
-import * as planetscale from "@distilled.cloud/planetscale/Operations";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { havePropsChanged, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { hashImports, hashMigrations } from "../../Sql/SqlFile.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+} from "../../SQL/Migrations/index.ts";
+import { hashImports } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_MIGRATIONS_TABLE,
+  deleteUnprotectedDatabase,
   PlanetscaleConflict,
+  replaceDatabase,
   waitForBranchReady,
   waitForDatabaseReady,
 } from "../Util.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterArch,
   toPostgresClusterSku,
   type PostgresClusterSize,
 } from "./PostgresClusterSize.ts";
-import {
-  runPostgresImports,
-  runPostgresMigrations,
-} from "./PostgresMigrations.ts";
+import { runPostgresImports, runPostgresMigrations } from "./PostgresMigrations.ts";
 
 /**
  * Properties for creating or updating a PostgreSQL PlanetScale database.
@@ -32,8 +37,14 @@ import {
 export interface PostgresDatabaseProps extends BaseDatabaseProps {
   /**
    * The PostgreSQL database cluster size. Required.
-   * Short sizes are expanded using the target region and architecture.
+   *
+   * Short NAS sizes (`"PS_10"`) are expanded using the target region and
+   * architecture. [PlanetScale Metal](https://planetscale.com/docs/metal)
+   * requires the full SKU (e.g. `"M1_10_AWS_ARM_D_METAL_10"`) because
+   * Metal also encodes CPU series, architecture, and NVMe drive size.
+   *
    * @see https://planetscale.com/docs/postgres/pricing
+   * @see {@link PostgresClusterSize}
    */
   clusterSize: PostgresClusterSize;
 
@@ -62,16 +73,24 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  * A PostgreSQL PlanetScale database. For MySQL, use {@link MySQLDatabase}
  * instead.
  *
- * @section Creating a PostgreSQL Database
- * @example Basic PostgreSQL database
+ * ### Creating a PostgreSQL Database
+ * **Example:** Basic PostgreSQL database
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", {
  *   clusterSize: "PS_10",
  * });
  * ```
  *
- * @section Migrations and seed data
- * @example Apply migrations and seed files
+ * **Example:** PlanetScale Metal (NVMe)
+ * ```typescript
+ * const db = yield* Planetscale.PostgresDatabase("MyDb", {
+ *   clusterSize: "M1_10_AWS_ARM_D_METAL_10",
+ *   arch: "arm",
+ * });
+ * ```
+ *
+ * ### Migrations and seed data
+ * **Example:** Apply migrations and seed files
  * ```typescript
  * const db = yield* Planetscale.PostgresDatabase("MyDb", {
  *   clusterSize: "PS_10",
@@ -80,8 +99,17 @@ export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
- * @section Adoption
- * @example Adopting an existing database
+ * ### Deletion protection
+ * **Example:** Refuse deletes of a production database
+ * ```typescript
+ * const db = yield* Planetscale.PostgresDatabase("MyDb", {
+ *   clusterSize: "PS_10",
+ *   deletionProtection: true,
+ * });
+ * ```
+ *
+ * ### Adoption
+ * **Example:** Adopting an existing database
  * ```typescript
  * import { adopt } from "alchemy/AdoptPolicy";
  *
@@ -100,9 +128,7 @@ export type PostgresDatabase = Resource<
 >;
 
 /** @resource */
-export const PostgresDatabase = Resource<PostgresDatabase>(
-  "Planetscale.PostgresDatabase",
-);
+export const PostgresDatabase = Resource<PostgresDatabase>("Planetscale.PostgresDatabase");
 
 export const PostgresDatabaseProvider = () =>
   Provider.succeed(PostgresDatabase, {
@@ -110,50 +136,64 @@ export const PostgresDatabaseProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
-      if (
-        news.region?.slug &&
-        output?.region?.slug &&
-        news.region.slug !== output.region.slug
-      ) {
-        return { action: "replace" } as const;
+      // Database names are rename-mutable (reconcile folds `new_name`
+      // into the settings sync), so `name` cannot live in the
+      // provider-level stables. Almost no update is a rename though —
+      // for those, advertise `name` as stable on the update so
+      // downstream consumers (branches, roles) still resolve
+      // `database.name` at plan time instead of seeing `undefined` and
+      // falsely planning a replacement. The name only changes when the
+      // `name` prop itself changes: an explicit name renames iff it
+      // differs from the observed name, and an omitted name is
+      // engine-generated deterministically (stable across updates).
+      const nameIsStable =
+        output?.name !== undefined &&
+        (news.name !== undefined ? news.name === output.name : olds?.name === undefined);
+      const stables = nameIsStable ? ["id", "organization", "region", "name"] : undefined;
+
+      if (news.region?.slug && output?.region?.slug && news.region.slug !== output.region.slug) {
+        return yield* replaceDatabase(news, output, "region");
       }
 
       if (news.replicas !== olds.replicas) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "replicas");
       }
 
       const oldArch = output?.arch ?? olds.arch ?? "x86";
       if (news.arch && news.arch !== oldArch) {
-        return { action: "replace" } as const;
+        return yield* replaceDatabase(news, output, "arch");
       }
 
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update" } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update" } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
         if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
       }
 
-      // Otherwise allow the engine to apply the default update logic.
-      return undefined;
+      // Remaining prop changes (rename, settings, clusterSize, …) are
+      // in-place updates. Decide them here instead of falling back to
+      // the engine's default deep-compare so the conditional `name`
+      // stable above is attached — the default path uses the
+      // provider-level stables, which strip `name` from downstream plan
+      // resolution.
+      if (havePropsChanged(olds, news)) {
+        return { action: "update", stables } as const;
+      }
+
+      // Nothing changed. Still advertise the conditional `name` stable so
+      // a `--force` deploy (which upgrades this noop to an update) keeps
+      // `name` resolvable downstream instead of falsely replacing
+      // consumers such as roles and passwords (#1832).
+      return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { organization } = yield* yield* Credentials;
-      const databaseName =
-        output?.name ?? (yield* createDatabaseName(id, olds?.name));
+      const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
 
       const data = yield* planetscale
         .getDatabase({
@@ -187,8 +227,7 @@ export const PostgresDatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-      const arch: "x86" | "arm" =
-        branch!.cluster_architecture === "aarch64" ? "arm" : "x86";
+      const arch = toPostgresClusterArch(branch!.cluster_architecture);
       const clusterSize = branch!.cluster_name;
 
       return {
@@ -202,8 +241,8 @@ export const PostgresDatabaseProvider = () =>
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
         region: { slug: data.region.slug },
-        migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
-        migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
+        migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable: output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
         migrationsHashes: output?.migrationsHashes ?? {},
         importHashes: output?.importHashes ?? {},
         clusterSize,
@@ -211,6 +250,7 @@ export const PostgresDatabaseProvider = () =>
         requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
         restrictBranchRegion: data.restrict_branch_region ?? false,
         productionBranchWebConsole: data.production_branch_web_console ?? false,
+        deletionProtection: data.deletion_protected ?? false,
       };
     }),
 
@@ -308,6 +348,7 @@ export const PostgresDatabaseProvider = () =>
         require_approval_for_deploy: news.requireApprovalForDeploy,
         restrict_branch_region: news.restrictBranchRegion,
         production_branch_web_console: news.productionBranchWebConsole,
+        deletion_protected: news.deletionProtection,
         default_branch: news.defaultBranch,
       });
 
@@ -325,20 +366,13 @@ export const PostgresDatabaseProvider = () =>
         database: updated.name,
         branch,
       };
-      if (news.migrationsDir || news.importFiles?.length) {
+      const migrationsInput = migrationsInputOf(news);
+      if (migrationsInput || news.importFiles?.length) {
         yield* waitForBranchReady(organization, updated.name, branch, session);
       }
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
-        ? yield* runPostgresMigrations(
-            migrationTarget,
-            news.migrationsDir,
-            migrationsTable,
-          )
-        : (output?.migrationsHashes ?? {});
+      const migrations = migrationsInput
+        ? yield* runPostgresMigrations(migrationTarget, migrationsInput, stampedOf(output))
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* runPostgresImports(
             migrationTarget,
@@ -360,40 +394,29 @@ export const PostgresDatabaseProvider = () =>
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
         clusterSize: clusterSize,
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         arch: news.arch ?? output?.arch ?? "x86",
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
         restrictBranchRegion: updated.restrict_branch_region ?? false,
-        productionBranchWebConsole:
-          updated.production_branch_web_console ?? false,
+        productionBranchWebConsole: updated.production_branch_web_console ?? false,
+        deletionProtection: updated.deletion_protected ?? false,
       } satisfies PostgresDatabaseAttributes;
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* planetscale
-        .deleteDatabase({
-          organization: output.organization,
-          database: output.name,
-        })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* deleteUnprotectedDatabase(output.organization, output.name);
     }),
 
     list: Effect.fn(function* () {
       const { organization } = yield* yield* Credentials;
 
-      const databases = yield* planetscale.listDatabases
-        .pages({ organization })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              page.data.filter((db) => db.kind === "postgresql"),
-            ),
-          ),
-        );
+      const databases = yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.data.filter((db) => db.kind === "postgresql")),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         databases,
@@ -406,12 +429,9 @@ export const PostgresDatabaseProvider = () =>
                 database: data.name,
                 branch: defaultBranch,
               })
-              .pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-            const arch: "x86" | "arm" =
-              branch?.cluster_architecture === "aarch64" ? "arm" : "x86";
+            const arch = toPostgresClusterArch(branch?.cluster_architecture);
             const clusterSize = branch?.cluster_name ?? "";
 
             const attrs: PostgresDatabase["Attributes"] = {
@@ -431,11 +451,10 @@ export const PostgresDatabaseProvider = () =>
               migrationsHashes: {},
               importHashes: {},
               arch,
-              requireApprovalForDeploy:
-                data.require_approval_for_deploy ?? false,
+              requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
               restrictBranchRegion: data.restrict_branch_region ?? false,
-              productionBranchWebConsole:
-                data.production_branch_web_console ?? false,
+              productionBranchWebConsole: data.production_branch_web_console ?? false,
+              deletionProtection: data.deletion_protected ?? false,
             };
             return attrs;
           }),
@@ -448,10 +467,7 @@ export const PostgresDatabaseProvider = () =>
 
 const createDatabaseName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 const rootDir = Effect.sync(() => process.cwd());

@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/index.ts";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { Hyperdrive } from "./db.ts";
 import { relations, Widgets } from "./schema.ts";
 import DrizzleWorkflow from "./workflow.ts";
@@ -33,7 +33,7 @@ export default class DrizzleWorkflowWorker extends Cloudflare.Worker<DrizzleWork
     // inside a fetch event — where the per-event scope is provided — not
     // here at init.
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     return {
       fetch: Effect.gen(function* () {

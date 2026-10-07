@@ -1,6 +1,25 @@
 import type * as iam from "@distilled.cloud/aws/iam";
 import * as Redacted from "effect/Redacted";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import type { PolicyDocument } from "./Policy.ts";
+
+/**
+ * Convert an optional `Duration.Input` prop to whole wire seconds.
+ *
+ * @deprecated Import {@link toWireSeconds} from `Util/Duration.ts` directly.
+ * Kept as an alias because several other AWS services still import it from
+ * here.
+ */
+export const durationToSeconds = toWireSeconds;
+
+/**
+ * Convert an optional `Duration.Input` prop to whole wire days.
+ *
+ * @deprecated Import {@link toWireDays} from `Util/Duration.ts` directly.
+ * Kept as an alias because several other AWS services still import it from
+ * here.
+ */
+export const durationToDays = toWireDays;
 
 export const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,
@@ -22,9 +41,7 @@ const decodePolicyString = (value: string) => {
   }
 };
 
-export const parsePolicyDocument = (
-  value: string | undefined,
-): PolicyDocument | undefined => {
+export const parsePolicyDocument = (value: string | undefined): PolicyDocument | undefined => {
   if (!value) {
     return undefined;
   }
@@ -33,15 +50,12 @@ export const parsePolicyDocument = (
   return JSON.parse(decoded) as PolicyDocument;
 };
 
-export const stringifyPolicyDocument = (value: PolicyDocument) =>
-  JSON.stringify(value);
+export const stringifyPolicyDocument = (value: PolicyDocument) => JSON.stringify(value);
 
 export const normalizeIamPath = (value: string | undefined) => {
   const path = value ?? "/";
   const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
-  return withLeadingSlash.endsWith("/")
-    ? withLeadingSlash
-    : `${withLeadingSlash}/`;
+  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
 };
 
 export const policyArnFromParts = ({
@@ -54,36 +68,20 @@ export const policyArnFromParts = ({
   policyName: string;
 }) => `arn:aws:iam::${accountId}:policy${normalizeIamPath(path)}${policyName}`;
 
-export const oldestNondefaultPolicyVersion = (
-  versions: iam.PolicyVersion[] | undefined,
-) =>
+export const oldestNondefaultPolicyVersion = (versions: iam.PolicyVersion[] | undefined) =>
   [...(versions ?? [])]
     .filter((version) => !version.IsDefaultVersion && version.VersionId)
-    .sort(
-      (a, b) => (a.CreateDate?.getTime() ?? 0) - (b.CreateDate?.getTime() ?? 0),
-    )[0];
+    .sort((a, b) => (a.CreateDate?.getTime() ?? 0) - (b.CreateDate?.getTime() ?? 0))[0];
 
 export const toRedactedString = (
   value: string | Redacted.Redacted<string> | undefined,
 ): Redacted.Redacted<string> | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? Redacted.make(value)
-      : value;
+  value === undefined ? undefined : typeof value === "string" ? Redacted.make(value) : value;
 
 export const toRedactedBytes = (
-  value:
-    | Uint8Array<ArrayBufferLike>
-    | Redacted.Redacted<Uint8Array<ArrayBufferLike>>
-    | undefined,
+  value: Uint8Array<ArrayBufferLike> | Redacted.Redacted<Uint8Array<ArrayBufferLike>> | undefined,
 ): Redacted.Redacted<Uint8Array<ArrayBufferLike>> | undefined =>
-  value === undefined
-    ? undefined
-    : value instanceof Uint8Array
-      ? Redacted.make(value)
-      : value;
+  value === undefined ? undefined : value instanceof Uint8Array ? Redacted.make(value) : value;
 
-export const unwrapRedactedString = (
-  value: string | Redacted.Redacted<string>,
-): string => (typeof value === "string" ? value : Redacted.value(value));
+export const unwrapRedactedString = (value: string | Redacted.Redacted<string>): string =>
+  typeof value === "string" ? value : Redacted.value(value);

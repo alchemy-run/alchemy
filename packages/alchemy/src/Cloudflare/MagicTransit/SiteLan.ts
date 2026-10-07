@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -153,11 +152,8 @@ export type MagicSiteLan = Resource<
  *
  * `siteId` and `haLink` are create-only — changing either triggers a
  * replacement. Everything else is updated in place.
- * @resource
- * @product Magic Transit
- * @category Network
- * @section Creating a LAN
- * @example Untagged LAN with DHCP
+ * ### Creating a LAN
+ * **Example:** Untagged LAN with DHCP
  * ```typescript
  * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
@@ -166,7 +162,7 @@ export type MagicSiteLan = Resource<
  * });
  * ```
  *
- * @example LAN with static addressing and a routed subnet
+ * **Example:** LAN with static addressing and a routed subnet
  * ```typescript
  * const lan = yield* Cloudflare.MagicTransit.MagicSiteLan("hq-lan", {
  *   siteId: site.siteId,
@@ -180,6 +176,10 @@ export type MagicSiteLan = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/connector/
+ *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  */
 export const MagicSiteLan = Resource<MagicSiteLan>(TypeId);
 
@@ -214,9 +214,7 @@ export const MagicSiteLanProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const siteId =
-        output?.siteId ??
-        (typeof olds?.siteId === "string" ? olds.siteId : undefined);
+      const siteId = output?.siteId ?? (typeof olds?.siteId === "string" ? olds.siteId : undefined);
       if (!siteId) return undefined;
 
       if (output?.lanId) {
@@ -239,9 +237,7 @@ export const MagicSiteLanProvider = () =>
       const name = yield* createLanName(id, news.name);
 
       // Observe — the id on `output` is a hint; fall back to a name scan.
-      let observed = output?.lanId
-        ? yield* getLan(accountId, siteId, output.lanId)
-        : undefined;
+      let observed = output?.lanId ? yield* getLan(accountId, siteId, output.lanId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, siteId, name);
       }
@@ -263,18 +259,14 @@ export const MagicSiteLanProvider = () =>
           staticAddressing: news.staticAddressing,
           bondId: news.bondId,
         });
-        observed =
-          created.result.find((lan) => lan.name === name) ??
-          created.result.at(0);
+        observed = created.result.find((lan) => lan.name === name) ?? created.result.at(0);
         if (!observed) {
           // Defensive: converge via the list if the create response shape
           // is unexpected.
           observed = yield* findByName(accountId, siteId, name);
         }
         if (observed) return toAttributes(observed, siteId, accountId);
-        return yield* Effect.fail(
-          new Error(`Magic WAN site LAN ${name} not visible after create`),
-        );
+        return yield* Effect.fail(new Error(`Magic WAN site LAN ${name} not visible after create`));
       }
 
       // Sync — the update API is a PUT; send the full desired state, but
@@ -282,22 +274,17 @@ export const MagicSiteLanProvider = () =>
       const dirty =
         (observed.name ?? undefined) !== name ||
         (observed.physport ?? undefined) !== news.physport ||
-        (news.vlanTag !== undefined &&
-          (observed.vlanTag ?? undefined) !== news.vlanTag) ||
-        (news.isBreakout !== undefined &&
-          (observed.isBreakout ?? false) !== news.isBreakout) ||
+        (news.vlanTag !== undefined && (observed.vlanTag ?? undefined) !== news.vlanTag) ||
+        (news.isBreakout !== undefined && (observed.isBreakout ?? false) !== news.isBreakout) ||
         (news.isPrioritized !== undefined &&
           (observed.isPrioritized ?? false) !== news.isPrioritized) ||
         (news.nat !== undefined &&
-          (observed.nat?.staticPrefix ?? undefined) !==
-            news.nat.staticPrefix) ||
+          (observed.nat?.staticPrefix ?? undefined) !== news.nat.staticPrefix) ||
         (news.routedSubnets !== undefined &&
           !sameRoutedSubnets(observed.routedSubnets, news.routedSubnets)) ||
         (news.staticAddressing !== undefined &&
-          (observed.staticAddressing?.address ?? undefined) !==
-            news.staticAddressing.address) ||
-        (news.bondId !== undefined &&
-          (observed.bondId ?? undefined) !== news.bondId);
+          (observed.staticAddressing?.address ?? undefined) !== news.staticAddressing.address) ||
+        (news.bondId !== undefined && (observed.bondId ?? undefined) !== news.bondId);
       if (dirty) {
         const updated = yield* magicTransit.updateSiteLan({
           accountId,
@@ -348,9 +335,7 @@ export const MagicSiteLanProvider = () =>
               .filter((id): id is string => typeof id === "string"),
           ),
         ),
-        Effect.catchTag("MagicWanUnauthorized", () =>
-          Effect.succeed([] as string[]),
-        ),
+        Effect.catchTag("MagicWanUnauthorized", () => Effect.succeed([] as string[])),
       );
 
       const rows = yield* Effect.forEach(
@@ -360,9 +345,7 @@ export const MagicSiteLanProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((lan) =>
-                  toAttributes(lan, siteId, accountId),
-                ),
+                (page.result ?? []).map((lan) => toAttributes(lan, siteId, accountId)),
               ),
             ),
             Effect.catchTag("MagicWanUnauthorized", () =>
@@ -429,12 +412,8 @@ const sameRoutedSubnets = (
   observed: ObservedLan["routedSubnets"],
   desired: MagicSiteLanRoutedSubnet[],
 ): boolean => {
-  const key = (s: { prefix: string; nextHop: string }) =>
-    `${s.prefix}>${s.nextHop}`;
-  return (
-    [...(observed ?? [])].map(key).sort().join(",") ===
-    [...desired].map(key).sort().join(",")
-  );
+  const key = (s: { prefix: string; nextHop: string }) => `${s.prefix}>${s.nextHop}`;
+  return [...(observed ?? [])].map(key).sort().join(",") === [...desired].map(key).sort().join(",");
 };
 
 const toAttributes = (

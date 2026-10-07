@@ -1,4 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,11 +7,26 @@ import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
-
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { RestApi } from "./RestApi.ts";
+import type { Providers } from "../Providers.ts";
 import { retryOnApiStatusUpdating, stageArn, syncTags } from "./common.ts";
+import type { RestApi } from "./RestApi.ts";
+
+/**
+ * Per-method override settings for a stage. Mirrors the API's
+ * `MethodSetting` struct, with the cache TTL expressed as a
+ * {@link Duration.Input} (`cacheTtl`) instead of the raw wire field
+ * `cacheTtlInSeconds`.
+ */
+export interface StageMethodSetting extends Omit<ag.MethodSetting, "cacheTtlInSeconds"> {
+  /**
+   * Time-to-live for cached responses (e.g. `"5 minutes"` or
+   * `Duration.seconds(300)`; a bare number is milliseconds). Sent to the
+   * API as whole seconds (`cacheTtlInSeconds`).
+   */
+  cacheTtl?: Duration.Input;
+}
 
 export interface StageProps {
   /**
@@ -22,6 +38,7 @@ export interface StageProps {
    * ID of the REST API. Usually derived from `restApi.restApiId`.
    */
   restApiId?: Input<string>;
+  /** Name of the stage (e.g. `prod`); forms the URL path segment. */
   stageName: string;
   /**
    * The `deploymentId` this stage points at. Pass `deployment.deploymentId`
@@ -29,19 +46,29 @@ export interface StageProps {
    * before creating the stage.
    */
   deploymentId: Input<string>;
+  /** Description of the stage. */
   description?: string;
+  /** Enable a dedicated cache cluster for the stage. */
   cacheClusterEnabled?: boolean;
+  /** Cache cluster size in GB (e.g. `"0.5"`). */
   cacheClusterSize?: ag.CacheClusterSize;
+  /** Stage variables available to integrations (e.g. `${stageVariables.foo}`). */
   variables?: { [key: string]: string | undefined };
+  /** Version of the associated API documentation to serve. */
   documentationVersion?: string;
+  /** Canary release settings for the stage. */
   canarySettings?: ag.CanarySettings;
+  /** Enable AWS X-Ray tracing for the stage. */
   tracingEnabled?: boolean;
   /**
    * Map of resource path pattern to method settings; keys use `{resourcePath}/{httpMethod}`.
    */
-  methodSettings?: { [key: string]: ag.MethodSetting | undefined };
+  methodSettings?: { [key: string]: StageMethodSetting | undefined };
+  /** Access log destination ARN and log format for the stage. */
   accessLogSettings?: ag.AccessLogSettings;
+  /** ARN of an AWS WAF web ACL to associate with the stage. */
   webAclArn?: string;
+  /** User-defined tags for the stage. */
   tags?: Record<string, string>;
 }
 
@@ -78,9 +105,8 @@ export interface ApiGatewayStage extends Resource<
  * ```
  * https://<restApiId>.execute-api.<region>.amazonaws.com/<stageName>/
  * ```
- * @resource
- * @section Stages
- * @example A dev stage pointing at the latest deployment
+ * ### Stages
+ * **Example:** A dev stage pointing at the latest deployment
  * ```typescript
  * const stage = yield* ApiGateway.Stage("Dev", {
  *   restApi: api,
@@ -89,8 +115,8 @@ export interface ApiGatewayStage extends Resource<
  * });
  * ```
  *
- * @section Stage variables
- * @example Override values per stage
+ * ### Stage variables
+ * **Example:** Override values per stage
  * ```typescript
  * const stage = yield* ApiGateway.Stage("Prod", {
  *   restApi: api,
@@ -103,12 +129,12 @@ export interface ApiGatewayStage extends Resource<
  * });
  * ```
  *
- * @section Canary deployments
+ * ### Canary deployments
  * Point `canarySettings` at a different `Deployment` to split traffic
  * between the stable and canary versions. `percentTraffic` is the
  * percent of requests routed to the canary deployment.
  *
- * @example Shift 10% of traffic to a canary deployment
+ * **Example:** Shift 10% of traffic to a canary deployment
  * ```typescript
  * const stage = yield* ApiGateway.Stage("Prod", {
  *   restApi: api,
@@ -120,6 +146,8 @@ export interface ApiGatewayStage extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const StageResource = Resource<ApiGatewayStage>("AWS.ApiGateway.Stage");
 
@@ -135,7 +163,7 @@ interface StageInputProps {
   documentationVersion?: Input<string>;
   canarySettings?: Input<ag.CanarySettings>;
   tracingEnabled?: Input<boolean>;
-  methodSettings?: Input<{ [key: string]: ag.MethodSetting | undefined }>;
+  methodSettings?: Input<{ [key: string]: StageMethodSetting | undefined }>;
   accessLogSettings?: Input<ag.AccessLogSettings>;
   webAclArn?: Input<string>;
   tags?: Input<Record<string, string>>;
@@ -160,13 +188,10 @@ export const Stage = StageImpl;
 
 const toTagRecord = (tags: ag.Stage["tags"]) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (e): e is [string, string] => e[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((e): e is [string, string] => e[1] !== undefined),
   );
 
-const encodeJsonPointerSegment = (s: string) =>
-  s.replace(/~/g, "~0").replace(/\//g, "~1");
+const encodeJsonPointerSegment = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
 const snapshotStage = (s: ag.Stage, restApiId: string, stageName: string) => ({
   restApiId,
@@ -212,10 +237,8 @@ const methodSettingFieldToPath: Record<keyof ag.MethodSetting, string> = {
   cachingEnabled: "caching/enabled",
   cacheTtlInSeconds: "caching/ttlInSeconds",
   cacheDataEncrypted: "caching/dataEncrypted",
-  requireAuthorizationForCacheControl:
-    "caching/requireAuthorizationForCacheControl",
-  unauthorizedCacheControlHeaderStrategy:
-    "caching/unauthorizedCacheControlHeaderStrategy",
+  requireAuthorizationForCacheControl: "caching/requireAuthorizationForCacheControl",
+  unauthorizedCacheControlHeaderStrategy: "caching/unauthorizedCacheControlHeaderStrategy",
 };
 
 function methodSettingScalarPatch(
@@ -242,6 +265,30 @@ function methodSettingScalarPatch(
     value: typeof nv === "boolean" ? String(nv) : String(nv),
   };
 }
+
+/**
+ * Convert the user-facing {@link StageMethodSetting} map (with `cacheTtl` as
+ * a `Duration.Input`) to the wire `ag.MethodSetting` shape used for diffing
+ * against the observed stage. Own-key semantics are preserved: `cacheTtl`
+ * explicitly set to `undefined` still produces an own `cacheTtlInSeconds`
+ * key so `buildMethodSettingPatches` emits a `remove` op for it.
+ */
+const toWireMethodSettings = (
+  settings: { [key: string]: StageMethodSetting | undefined } | undefined,
+): { [key: string]: ag.MethodSetting | undefined } | undefined => {
+  if (settings === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(settings).map(([key, setting]) => {
+      if (setting === undefined) return [key, undefined] as const;
+      const { cacheTtl, ...rest } = setting;
+      const wire: ag.MethodSetting = { ...rest };
+      if ("cacheTtl" in setting) {
+        wire.cacheTtlInSeconds = toWireSeconds(cacheTtl);
+      }
+      return [key, wire] as const;
+    }),
+  );
+};
 
 /**
  * AWS API Gateway's `getStage` response populates `methodSettings` with
@@ -272,10 +319,7 @@ const buildMethodSettingPatches = (
   prev: { [key: string]: ag.MethodSetting | undefined } | undefined,
   next: { [key: string]: ag.MethodSetting | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const key of keys) {
     const p = prev?.[key];
@@ -311,10 +355,7 @@ const buildVariablePatches = (
   prev: { [key: string]: string | undefined } | undefined,
   next: { [key: string]: string | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const k of keys) {
     const pv = prev?.[k];
@@ -336,10 +377,7 @@ const buildAccessLogPatches = (
 ): ag.PatchOperation[] => {
   const patches: ag.PatchOperation[] = [];
   if (prev?.destinationArn !== next?.destinationArn) {
-    if (
-      next?.destinationArn === undefined &&
-      prev?.destinationArn !== undefined
-    ) {
+    if (next?.destinationArn === undefined && prev?.destinationArn !== undefined) {
       patches.push({ op: "remove", path: "/accessLogSettings/destinationArn" });
     } else if (next?.destinationArn !== undefined) {
       patches.push({
@@ -367,10 +405,7 @@ const buildCanaryOverridePatches = (
   prev: { [key: string]: string | undefined } | undefined,
   next: { [key: string]: string | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const k of keys) {
     const pv = prev?.[k];
@@ -399,10 +434,7 @@ const buildCanaryPatches = (
 ): ag.PatchOperation[] => {
   const patches: ag.PatchOperation[] = [];
   if (prev?.percentTraffic !== next?.percentTraffic) {
-    if (
-      next?.percentTraffic === undefined &&
-      prev?.percentTraffic !== undefined
-    ) {
+    if (next?.percentTraffic === undefined && prev?.percentTraffic !== undefined) {
       patches.push({ op: "remove", path: "/canarySettings/percentTraffic" });
     } else if (next?.percentTraffic !== undefined) {
       patches.push({
@@ -435,10 +467,7 @@ const buildCanaryPatches = (
     }
   }
   patches.push(
-    ...buildCanaryOverridePatches(
-      prev?.stageVariableOverrides,
-      next?.stageVariableOverrides,
-    ),
+    ...buildCanaryOverridePatches(prev?.stageVariableOverrides, next?.stageVariableOverrides),
   );
   return patches;
 };
@@ -511,15 +540,11 @@ const buildStagePatches = (
   }
   patches.push(...buildVariablePatches(prev.variables, news.variables));
   patches.push(
-    ...buildMethodSettingPatches(prev.methodSettings, news.methodSettings),
+    ...buildMethodSettingPatches(prev.methodSettings, toWireMethodSettings(news.methodSettings)),
   );
-  patches.push(
-    ...buildAccessLogPatches(prev.accessLogSettings, news.accessLogSettings),
-  );
+  patches.push(...buildAccessLogPatches(prev.accessLogSettings, news.accessLogSettings));
   if (!deepEqual(news.canarySettings, prev.canarySettings)) {
-    patches.push(
-      ...buildCanaryPatches(prev.canarySettings, news.canarySettings),
-    );
+    patches.push(...buildCanaryPatches(prev.canarySettings, news.canarySettings));
   }
   return patches;
 };
@@ -533,10 +558,7 @@ export const StageProvider = () =>
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as Input.ResolveProps<StageProps>;
-          if (
-            news.restApiId !== olds.restApiId ||
-            news.stageName !== olds.stageName
-          ) {
+          if (news.restApiId !== olds.restApiId || news.stageName !== olds.stageName) {
             return { action: "replace" } as const;
           }
         }),
@@ -547,11 +569,7 @@ export const StageProvider = () =>
               restApiId: output.restApiId,
               stageName: output.stageName,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!s?.stageName) return undefined;
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
@@ -566,9 +584,7 @@ export const StageProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .map((api) => api.id)
-                    .filter((id): id is string => id != null),
+                  (page.items ?? []).map((api) => api.id).filter((id): id is string => id != null),
                 ),
               ),
             );
@@ -578,17 +594,12 @@ export const StageProvider = () =>
                 ag.getStages({ restApiId }).pipe(
                   Effect.map((res) =>
                     (res.item ?? [])
-                      .filter(
-                        (s): s is ag.Stage & { stageName: string } =>
-                          s.stageName != null,
-                      )
+                      .filter((s): s is ag.Stage & { stageName: string } => s.stageName != null)
                       .map((s) => snapshotStage(s, restApiId, s.stageName)),
                   ),
                   // The parent api may vanish between enumeration and the
                   // per-api list (race); treat as no stages.
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("NotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -610,11 +621,7 @@ export const StageProvider = () =>
           // mutable settings come from the cloud read on every reconcile.
           let observed = yield* ag
             .getStage({ restApiId, stageName })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create the stage if missing. `createStage` only sets
           // a subset of the configurable surface; the rest is applied via
@@ -647,11 +654,7 @@ export const StageProvider = () =>
           // already handles every mutable aspect (deploymentId, description,
           // cache, variables, methodSettings, accessLog, canary, tracing,
           // webAcl).
-          const observedSnapshot = snapshotStage(
-            observed,
-            restApiId,
-            stageName,
-          );
+          const observedSnapshot = snapshotStage(observed, restApiId, stageName);
           const patches = buildStagePatches(observedSnapshot, news);
           if (patches.length > 0) {
             yield* retryOnApiStatusUpdating(

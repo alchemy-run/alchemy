@@ -1,11 +1,10 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -85,29 +84,26 @@ export type NotificationWebhook = Resource<
  * {@link NotificationPolicy | notification policies}. Cloudflare sends a
  * test POST to the URL when the webhook is created or updated, so the
  * endpoint must be live and respond with a 2xx.
- * @resource
- * @product Alerting
- * @category Observability & Analytics
- * @section Creating a Webhook destination
- * @example Generic webhook with a generated name
+ * ### Creating a Webhook destination
+ * **Example:** Generic webhook with a generated name
  * ```typescript
  * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   url: "https://alerts.example.com/cf",
  * });
  * ```
  *
- * @example Webhook with an auth secret
+ * **Example:** Webhook with an auth secret
  * The secret is sent in the `cf-webhook-auth` header on every dispatch.
  * ```typescript
  * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   name: "production-alerts",
  *   url: "https://alerts.example.com/cf",
- *   secret: alchemy.secret.env.WEBHOOK_SECRET,
+ *   secret: yield* Config.Redacted("WEBHOOK_SECRET"),
  * });
  * ```
  *
- * @section Using with a Notification policy
- * @example Dispatch policy notifications to the webhook
+ * ### Using with a Notification policy
+ * **Example:** Dispatch policy notifications to the webhook
  * ```typescript
  * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
@@ -116,15 +112,17 @@ export type NotificationWebhook = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/notifications/get-started/configure-webhooks/
+ *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  */
 export const NotificationWebhook = Resource<NotificationWebhook>(TypeId);
 
 /**
  * Returns true if the given value is a NotificationWebhook resource.
  */
-export const isNotificationWebhook = (
-  value: unknown,
-): value is NotificationWebhook =>
+export const isNotificationWebhook = (value: unknown): value is NotificationWebhook =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const NotificationWebhookProvider = () =>
@@ -181,8 +179,7 @@ export const NotificationWebhookProvider = () =>
       // Inputs are resolved to concrete values by the engine before
       // reconcile runs.
       const url = news.url as string;
-      const secret =
-        news.secret === undefined ? undefined : Redacted.value(news.secret);
+      const secret = news.secret === undefined ? undefined : Redacted.value(news.secret);
 
       // 1. Observe — by cached id first, then by deterministic name.
       let observed: ObservedWebhook | undefined;
@@ -197,9 +194,11 @@ export const NotificationWebhookProvider = () =>
       //    the URL from an arbitrary PoP; when the destination is a
       //    just-deployed Worker that PoP may not have the fresh
       //    workers.dev subdomain yet and the test POST 404s even though
-      //    the URL serves elsewhere. A short bounded retry rides out edge
-      //    propagation; a genuinely broken endpoint still fails after the
-      //    budget is exhausted.
+      //    the URL serves elsewhere. A bounded retry (~2 min, capped
+      //    backoff) rides out edge propagation — fresh workers.dev URLs
+      //    have been observed to 404 for well over a minute under heavy
+      //    account-wide deploy load; a genuinely broken endpoint still
+      //    fails after the budget is exhausted.
       if (!observed) {
         const created = yield* alerting
           .createDestinationWebhook({
@@ -212,16 +211,14 @@ export const NotificationWebhookProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
               schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(5),
+                Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+                Schedule.recurs(24),
               ]),
             }),
           );
         if (!created.id) {
           return yield* Effect.fail(
-            new Error(
-              "Cloudflare did not return an id for the created webhook destination",
-            ),
+            new Error("Cloudflare did not return an id for the created webhook destination"),
           );
         }
         const fresh = yield* observeWebhook(accountId, created.id);
@@ -231,8 +228,7 @@ export const NotificationWebhookProvider = () =>
       // 3. Sync — PUT the full desired body when any observable field
       //    drifts, or when the (write-only, unobservable) secret prop
       //    changed between olds and news.
-      const oldSecret =
-        olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
+      const oldSecret = olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
       const secretChanged = secret !== oldSecret;
       if (observed.name !== name || observed.url !== url || secretChanged) {
         // The update PUT fires the same test POST as create — ride out edge
@@ -248,10 +244,7 @@ export const NotificationWebhookProvider = () =>
           .pipe(
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
-              schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
             }),
           );
         const fresh = yield* observeWebhook(accountId, observed.id);
@@ -278,9 +271,7 @@ export const NotificationWebhookProvider = () =>
         .pipe(
           Effect.catchTag("InternalServerError", (e) =>
             observeWebhook(output.accountId, output.webhookId).pipe(
-              Effect.flatMap((observed) =>
-                observed === undefined ? Effect.void : Effect.fail(e),
-              ),
+              Effect.flatMap((observed) => (observed === undefined ? Effect.void : Effect.fail(e))),
             ),
           ),
         );
@@ -295,8 +286,7 @@ interface ObservedWebhook {
   readonly createdAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowWebhook = (raw: {
   id?: string | null;
@@ -322,13 +312,11 @@ const observeWebhook = (accountId: string, webhookId: string) =>
   );
 
 const findWebhookByName = (accountId: string, name: string) =>
-  alerting.listDestinationWebhooks({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((w) => w.name === name)
-        .map(narrowWebhook)
-        .find((w) => w !== undefined),
-    ),
+  alerting.listDestinationWebhooks.items({ accountId }).pipe(
+    Stream.filter((w) => w.name === name && w.id != null),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((w) => (w === undefined ? undefined : narrowWebhook(w))),
   );
 
 const toWebhookAttributes = (

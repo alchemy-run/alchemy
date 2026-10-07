@@ -1,9 +1,9 @@
 import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -41,13 +41,7 @@ export interface ExpressionAttributes {
   payload: string;
 }
 
-export type Expression = Resource<
-  TypeId,
-  ExpressionProps,
-  ExpressionAttributes,
-  never,
-  Providers
->;
+export type Expression = Resource<TypeId, ExpressionProps, ExpressionAttributes, never, Providers>;
 
 /**
  * A custom scan expression ("payload") for WAF Content Scanning — tells the
@@ -64,11 +58,8 @@ export type Expression = Resource<
  * state, `read` scans the zone for an expression with the same payload text
  * and reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Content Scanning
- * @category Application Security
- * @section Creating expressions
- * @example Scan a JSON-embedded file field
+ * ### Creating expressions
+ * **Example:** Scan a JSON-embedded file field
  * ```typescript
  * const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
@@ -80,7 +71,7 @@ export type Expression = Resource<
  * });
  * ```
  *
- * @example Scan a base64-encoded form field
+ * **Example:** Scan a base64-encoded form field
  * ```typescript
  * yield* Cloudflare.ContentScanning.Expression("ScanBase64Document", {
  *   zoneId: scanning.zoneId,
@@ -89,6 +80,10 @@ export type Expression = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/#add-custom-scan-expressions
+ *
+ * @resource
+ * @product Content Scanning
+ * @category Application Security
  */
 export const Expression = Resource<Expression>(TypeId);
 
@@ -102,9 +97,7 @@ export const isExpression = (value: unknown): value is Expression =>
  * Cloudflare accepted the create call but the expression did not appear in
  * the returned list — an API anomaly that should never happen in practice.
  */
-export class ExpressionCreateAnomaly extends Data.TaggedError(
-  "ExpressionCreateAnomaly",
-)<{
+export class ExpressionCreateAnomaly extends Data.TaggedError("ExpressionCreateAnomaly")<{
   readonly zoneId: string;
   readonly payload: string;
 }> {}
@@ -129,14 +122,10 @@ export const ExpressionProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((expression) =>
-                  toAttributes(zone.id, expression),
-                ),
+                (page.result ?? []).map((expression) => toAttributes(zone.id, expression)),
               ),
             ),
-            Effect.catchTag("ContentScanningNotEnabled", () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag("ContentScanningNotEnabled", () => Effect.succeed([])),
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
             Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
           ),
@@ -195,11 +184,9 @@ export const ExpressionProvider = () =>
       //    a guarantee: a missing expression falls through to the payload
       //    scan and then to create. (Scanning must be enabled here — a
       //    disabled zone fails with the typed ContentScanningNotEnabled.)
-      const expressions = yield* contentScanning
-        .listPayloads({ zoneId })
-        .pipe(Effect.map((r) => r.result));
-      let observed = output?.expressionId
-        ? expressions.find((e) => e.id === output.expressionId)
+      const expressionId = output?.expressionId;
+      let observed: ObservedExpression | undefined = expressionId
+        ? yield* findExpression(zoneId, (e) => e.id === expressionId)
         : undefined;
 
       // 2. Fall back to matching by payload text. Ownership has already
@@ -207,7 +194,7 @@ export const ExpressionProvider = () =>
       //    `Unowned` and the engine gates takeover behind the adopt policy
       //    before reconcile ever runs.
       if (!observed) {
-        observed = expressions.find((e) => e.payload === news.payload);
+        observed = yield* findExpression(zoneId, (e) => e.payload === news.payload);
       }
 
       // 3. Ensure — create when missing. The create call returns the full
@@ -250,24 +237,28 @@ export const ExpressionProvider = () =>
 type ObservedExpression = { id?: string | null; payload?: string | null };
 
 /**
+ * Find the first expression on the zone matching `predicate`, terminating
+ * pagination as soon as a match is seen. Unlike {@link listExpressions},
+ * "not observable" errors propagate (reconcile requires scanning enabled).
+ */
+const findExpression = (zoneId: string, predicate: (e: ObservedExpression) => boolean) =>
+  contentScanning.listPayloads
+    .items({ zoneId })
+    .pipe(Stream.filter(predicate), Stream.runHead, Effect.map(Option.getOrUndefined));
+
+/**
  * List the zone's custom scan expressions, mapping "not observable"
  * (scanning disabled on the zone, or the zone itself gone) to `undefined`.
  */
 const listExpressions = (zoneId: string) =>
-  contentScanning.listPayloads({ zoneId }).pipe(
-    Effect.map(
-      (response): readonly ObservedExpression[] | undefined => response.result,
-    ),
-    Effect.catchTag("ContentScanningNotEnabled", () =>
-      Effect.succeed(undefined),
-    ),
+  contentScanning.listPayloads.items({ zoneId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk): readonly ObservedExpression[] | undefined => Array.from(chunk)),
+    Effect.catchTag("ContentScanningNotEnabled", () => Effect.succeed(undefined)),
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
   );
 
-const toAttributes = (
-  zoneId: string,
-  expression: ObservedExpression,
-): ExpressionAttributes => ({
+const toAttributes = (zoneId: string, expression: ObservedExpression): ExpressionAttributes => ({
   // Cloudflare always echoes both fields for a persisted expression.
   expressionId: expression.id ?? "",
   zoneId,

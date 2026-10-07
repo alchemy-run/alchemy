@@ -1,7 +1,6 @@
 import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -47,16 +46,10 @@ export interface Attributes {
    * managed it. Restored on destroy, so deleting the resource puts the
    * zone back the way it was found.
    */
-  initialValue: string;
+  initialValue: ContentScanningStatus;
 }
 
-export type ContentScanning = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type ContentScanning = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * WAF Content Scanning (malicious uploads detection) on a Cloudflare zone —
@@ -71,11 +64,8 @@ export type ContentScanning = Resource<
  * Content Scanning is an Enterprise paid add-on. Reading the status works
  * on every plan, but enabling it on a zone without the add-on fails with
  * the typed `ContentScanningNotEntitled` error.
- * @resource
- * @product Content Scanning
- * @category Application Security
- * @section Enabling Content Scanning
- * @example Turn on malicious-upload scanning for a zone
+ * ### Enabling Content Scanning
+ * **Example:** Turn on malicious-upload scanning for a zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -84,7 +74,7 @@ export type ContentScanning = Resource<
  * });
  * ```
  *
- * @example Pin Content Scanning off
+ * **Example:** Pin Content Scanning off
  * ```typescript
  * yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
@@ -92,8 +82,8 @@ export type ContentScanning = Resource<
  * });
  * ```
  *
- * @section Custom scan expressions
- * @example Scan a JSON-embedded file field
+ * ### Custom scan expressions
+ * **Example:** Scan a JSON-embedded file field
  * ```typescript
  * const scanning = yield* Cloudflare.ContentScanning.ContentScanning("UploadScanning", {
  *   zoneId: zone.zoneId,
@@ -106,6 +96,10 @@ export type ContentScanning = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/detections/malicious-uploads/
+ *
+ * @resource
+ * @product Content Scanning
+ * @category Application Security
  */
 export const ContentScanning = Resource<ContentScanning>(TypeId, {
   aliases: ["Cloudflare.ContentScanning"],
@@ -131,9 +125,7 @@ export const ContentScanningProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           contentScanning.getContentScanning({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, statusOf(observed)),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, statusOf(observed))),
             // Plan-gated or partial zones reject the route; skip them.
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
           ),
@@ -146,8 +138,7 @@ export const ContentScanningProvider = () =>
       // zoneId is Input<string>; compare only once both sides are concrete.
       if (!isResolved(news)) return undefined;
       const oldZoneId =
-        output?.zoneId ??
-        (olds !== undefined && isResolved(olds) ? olds.zoneId : undefined);
+        output?.zoneId ?? (olds !== undefined && isResolved(olds) ? olds.zoneId : undefined);
       if (oldZoneId !== undefined && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
@@ -157,19 +148,16 @@ export const ContentScanningProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
-      const observed = yield* contentScanning
-        .getContentScanning({ zoneId })
-        .pipe(
-          // Zone deleted out-of-band — the setting is gone with it.
-          Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-        );
+      const observed = yield* contentScanning.getContentScanning({ zoneId }).pipe(
+        // Zone deleted out-of-band — the setting is gone with it.
+        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+      );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
       // default — there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed status at adoption time becomes
       // the `initialValue` restored on destroy.
-      const initialValue =
-        output !== undefined ? output.initialValue : statusOf(observed);
+      const initialValue = output !== undefined ? output.initialValue : statusOf(observed);
       return toAttributes(zoneId, observed, initialValue);
     }),
 
@@ -184,12 +172,10 @@ export const ContentScanningProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed status is
       //    the zone's original.
-      const initialValue =
-        output !== undefined ? output.initialValue : statusOf(observed);
+      const initialValue = output !== undefined ? output.initialValue : statusOf(observed);
 
       // 3. Sync — PUT only when the observed status differs.
-      const desired: ContentScanningStatus =
-        news.enabled === false ? "disabled" : "enabled";
+      const desired: ContentScanningStatus = news.enabled === false ? "disabled" : "enabled";
       if (statusOf(observed) === desired) {
         return toAttributes(zoneId, observed, initialValue);
       }
@@ -222,18 +208,13 @@ export const ContentScanningProvider = () =>
  * `disabled`.
  */
 const statusOf = (
-  setting:
-    | contentScanning.GetContentScanningResponse
-    | contentScanning.PutContentScanningResponse,
-): ContentScanningStatus =>
-  setting.value === "enabled" ? "enabled" : "disabled";
+  setting: contentScanning.GetContentScanningResponse | contentScanning.PutContentScanningResponse,
+): ContentScanningStatus => (setting.value === "enabled" ? "enabled" : "disabled");
 
 const toAttributes = (
   zoneId: string,
-  setting:
-    | contentScanning.GetContentScanningResponse
-    | contentScanning.PutContentScanningResponse,
-  initialValue: string,
+  setting: contentScanning.GetContentScanningResponse | contentScanning.PutContentScanningResponse,
+  initialValue: ContentScanningStatus,
 ): Attributes => ({
   zoneId,
   enabled: statusOf(setting) === "enabled",

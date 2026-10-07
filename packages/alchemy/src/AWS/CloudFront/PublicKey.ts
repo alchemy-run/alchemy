@@ -1,6 +1,8 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -71,15 +73,16 @@ export interface PublicKey extends Resource<
  *
  * The key body is immutable after creation — changing `encodedKey` triggers
  * a replacement (CloudFront returns no API to rotate a key in place).
- * @resource
- * @section Creating Public Keys
- * @example PEM-encoded RSA public key
+ * ### Creating Public Keys
+ * **Example:** PEM-encoded RSA public key
  * ```typescript
  * const key = yield* PublicKey("SignedUrlKey", {
  *   encodedKey: Redacted.make(yield* fs.readFileString("./public_key.pem")),
  *   comment: "RSA-2048 signed URL key for /private",
  * });
  * ```
+ *
+ * @resource
  */
 export const PublicKey = Resource<PublicKey>("AWS.CloudFront.PublicKey");
 
@@ -90,23 +93,22 @@ export const PublicKeyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getPublicKeyConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)));
         if (!config?.PublicKeyConfig) return undefined;
         return { config: config.PublicKeyConfig, etag: config.ETag };
       });
 
       const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listPublicKeys({});
-        const summary = listed.PublicKeyList?.Items?.find(
-          (item) => item.Name === name,
+        const summary = yield* cloudfront.listPublicKeys.pages({}).pipe(
+          Stream.map((page) => page.PublicKeyList?.Items ?? []),
+          Stream.flattenIterable,
+          Stream.filter((item) => item.Name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
         );
         if (!summary?.Id) return undefined;
         return yield* getById(summary.Id).pipe(
-          Effect.map((found) =>
-            found ? { id: summary.Id, ...found } : undefined,
-          ),
+          Effect.map((found) => (found ? { id: summary.Id, ...found } : undefined)),
         );
       });
 
@@ -154,9 +156,7 @@ export const PublicKeyProvider = () =>
               (publicKeyId) =>
                 getById(publicKeyId).pipe(
                   Effect.map((found) =>
-                    found
-                      ? toAttrs(publicKeyId, found.config, found.etag)
-                      : undefined,
+                    found ? toAttrs(publicKeyId, found.config, found.etag) : undefined,
                   ),
                 ),
               { concurrency: 10 },
@@ -165,10 +165,7 @@ export const PublicKeyProvider = () =>
           }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
           // Compare only when the old key is known — an Output-valued
@@ -185,8 +182,7 @@ export const PublicKeyProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.publicKeyId) {
             const found = yield* getById(output.publicKeyId);
-            if (found)
-              return toAttrs(output.publicKeyId, found.config, found.etag);
+            if (found) return toAttrs(output.publicKeyId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);
@@ -200,9 +196,7 @@ export const PublicKeyProvider = () =>
           // or by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.publicKeyId
             ? yield* getById(output.publicKeyId).pipe(
-                Effect.map((found) =>
-                  found ? { id: output.publicKeyId, ...found } : undefined,
-                ),
+                Effect.map((found) => (found ? { id: output.publicKeyId, ...found } : undefined)),
               )
             : undefined;
           if (!observed) {
@@ -241,16 +235,10 @@ export const PublicKeyProvider = () =>
                 ),
               );
             if (!created.PublicKey?.Id) {
-              return yield* Effect.fail(
-                new Error("createPublicKey returned no identifier"),
-              );
+              return yield* Effect.fail(new Error("createPublicKey returned no identifier"));
             }
             yield* session.note(created.PublicKey.Id);
-            return toAttrs(
-              created.PublicKey.Id,
-              created.PublicKey.PublicKeyConfig,
-              created.ETag,
-            );
+            return toAttrs(created.PublicKey.Id, created.PublicKey.PublicKeyConfig, created.ETag);
           }
 
           // Sync — patch the comment via `updatePublicKey`. The key body
@@ -268,16 +256,10 @@ export const PublicKeyProvider = () =>
             ),
           });
           if (!updated.PublicKey?.Id) {
-            return yield* Effect.fail(
-              new Error("updatePublicKey returned no identifier"),
-            );
+            return yield* Effect.fail(new Error("updatePublicKey returned no identifier"));
           }
           yield* session.note(observed.id);
-          return toAttrs(
-            updated.PublicKey.Id,
-            updated.PublicKey.PublicKeyConfig,
-            updated.ETag,
-          );
+          return toAttrs(updated.PublicKey.Id, updated.PublicKey.PublicKeyConfig, updated.ETag);
         }),
         delete: Effect.fn(function* ({ output }) {
           const current = yield* getById(output.publicKeyId);
@@ -287,7 +269,19 @@ export const PublicKeyProvider = () =>
               Id: output.publicKeyId,
               IfMatch: current.etag,
             })
-            .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.void));
+            .pipe(
+              Effect.catchTag("NoSuchPublicKey", () => Effect.void),
+              // Key groups and their public keys are independent resources in
+              // the engine graph, so their deletes may be scheduled together.
+              // CloudFront can continue reporting the key as associated for a
+              // short period after the group is deleted. Treat that typed
+              // dependency violation as eventual consistency, while keeping
+              // every other error immediately visible.
+              Effect.retry({
+                while: (error) => error._tag === "PublicKeyInUse",
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
+              }),
+            );
         }),
       };
     }),

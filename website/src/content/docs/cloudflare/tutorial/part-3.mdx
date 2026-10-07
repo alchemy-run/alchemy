@@ -16,9 +16,7 @@ support. Configure providers (and state) once at the top of the file
 with `Test.make({...})` — the same `Cloudflare.providers()` /
 `Cloudflare.state()` you used in your `Stack`:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```typescript
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -41,9 +39,7 @@ Effect-aware test runner pieces.
 Use `beforeAll` with `deploy` to deploy your stack once before any
 tests run:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -68,9 +64,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 Write your first test. Use `yield* stack` to get the outputs you
 returned from your Stack in Part 2:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -113,16 +107,14 @@ and skips unchanged resources.
 The basic test just checks that a URL exists. Let's verify the Worker
 actually handles requests:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-+import * as HttpBody from "effect/unstable/http/HttpBody";
-+import * as HttpClient from "effect/unstable/http/HttpClient";
++import * as HttpBody from "effect/http/HttpBody";
++import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -168,6 +160,32 @@ const stack = beforeAll(deploy(Stack));
 `HttpClient` is provided automatically by the test harness — no
 extra setup needed.
 
+## Allow the Bucket to be destroyed with objects in it
+
+The PUT test writes `hello.txt` into the Bucket, so the Bucket is no
+longer empty when the tests finish. R2 refuses to delete a Bucket
+that still contains objects, and Alchemy keeps that protection by
+default: destroying a non-empty Bucket fails with `BucketNotEmpty` and
+leaves the Bucket and its objects in place.
+
+This Bucket only ever holds test data, so opt in to deleting its
+objects on destroy with `forceDestroy: true`:
+
+```diff lang="typescript"
+// src/bucket.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+-export const Bucket = Cloudflare.R2.Bucket("Bucket");
++export const Bucket = Cloudflare.R2.Bucket("Bucket", {
++  forceDestroy: true,
++});
+```
+
+With `forceDestroy: true`, Alchemy empties the Bucket before deleting
+it. Reserve it for Buckets whose contents are disposable (test
+fixtures, caches, previews); leave it off for Buckets that hold data
+you need to keep.
+
 ## Destroy after tests on CI
 
 Right now the stack stays deployed after tests finish. That's great
@@ -177,15 +195,13 @@ stack. But on CI you want to clean up.
 Add `afterAll` with `destroy`, using `skipIf` to only tear down when
 `CI` is set:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -216,6 +232,7 @@ You now have:
 - `beforeAll(deploy(Stack))` to deploy once before tests
 - `yield* stack` to access outputs in each test
 - HTTP assertions using Effect's `HttpClient`
+- `forceDestroy: true` so destroy can delete a Bucket that tests wrote to
 - `afterAll.skipIf(!process.env.CI)(destroy(Stack))` for automatic
   cleanup on CI with fast iteration locally
 

@@ -1,7 +1,6 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -37,13 +36,7 @@ export type SubdomainAttributes = {
   initialSubdomain: string | undefined;
 };
 
-export type Subdomain = Resource<
-  TypeId,
-  SubdomainProps,
-  SubdomainAttributes,
-  never,
-  Providers
->;
+export type Subdomain = Resource<TypeId, SubdomainProps, SubdomainAttributes, never, Providers>;
 
 /**
  * The account-wide `workers.dev` subdomain singleton
@@ -64,11 +57,8 @@ export type Subdomain = Resource<
  * URL of every deployed Worker on the account that relies on
  * `workers.dev`. Only manage this resource on accounts where that is
  * acceptable.
- * @resource
- * @product Workers
- * @category Workers & Compute
- * @section Managing the subdomain
- * @example Pin the account's workers.dev subdomain
+ * ### Managing the subdomain
+ * **Example:** Pin the account's workers.dev subdomain
  * ```typescript
  * const sub = yield* Cloudflare.Workers.Subdomain("Subdomain", {
  *   subdomain: "my-team",
@@ -77,6 +67,10 @@ export type Subdomain = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/workers/configuration/routing/workers-dev/
+ *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  */
 export const Subdomain = Resource<Subdomain>(TypeId);
 
@@ -113,8 +107,7 @@ export const SubdomainProvider = () =>
       return {
         accountId: acct,
         subdomain: observed,
-        initialSubdomain:
-          output !== undefined ? output.initialSubdomain : observed,
+        initialSubdomain: output !== undefined ? output.initialSubdomain : observed,
       };
     }),
 
@@ -146,8 +139,7 @@ export const SubdomainProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed name is
       //    the account's original (undefined = none existed).
-      const initialSubdomain =
-        output !== undefined ? output.initialSubdomain : observed;
+      const initialSubdomain = output !== undefined ? output.initialSubdomain : observed;
 
       // 3. Sync — claim/rename only when the observed name differs.
       if (observed === news.subdomain) {

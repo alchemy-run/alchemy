@@ -1,10 +1,11 @@
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import path from "pathe";
 import * as DynamoDB from "@/AWS/DynamoDB";
 import * as Lambda from "@/AWS/Lambda";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import path from "pathe";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -15,25 +16,44 @@ export class DynamoDBTestFunction extends Lambda.Function<Lambda.Function>()(
 export default DynamoDBTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const sourceTable = yield* DynamoDB.Table("TestTable", {
       partitionKey: "pk",
       sortKey: "sk",
-      attributes: { pk: "S", sk: "S" },
+      attributes: {
+        pk: "S",
+        sk: "S",
+        category: "S",
+        subcategory: "S",
+        rank: "S",
+      },
+      globalSecondaryIndexes: [
+        {
+          // Multi-attribute keys: composite partition key (category +
+          // subcategory) and composite sort key (rank + sk). Sparse — only
+          // items written with all four attributes appear in the index.
+          indexName: "MultiAttrIndex",
+          partitionKey: ["category", "subcategory"],
+          sortKey: ["rank", "sk"],
+          projection: { ProjectionType: "ALL" },
+        },
+      ],
     });
     const restoreTargetTable = yield* DynamoDB.Table("RestoreTargetTable", {
       partitionKey: "pk",
       sortKey: "sk",
       attributes: { pk: "S", sk: "S" },
     });
+    const exportBucket = yield* S3.Bucket("ExportBucket", {
+      forceDestroy: true,
+    });
 
     const getItem = yield* DynamoDB.GetItem(sourceTable);
     const batchGetItem = yield* DynamoDB.BatchGetItem(sourceTable);
     const batchWriteItem = yield* DynamoDB.BatchWriteItem(sourceTable);
-    const batchExecuteStatement =
-      yield* DynamoDB.BatchExecuteStatement(sourceTable);
+    const batchExecuteStatement = yield* DynamoDB.BatchExecuteStatement(sourceTable);
     const describeTable = yield* DynamoDB.DescribeTable(sourceTable);
     const describeTimeToLive = yield* DynamoDB.DescribeTimeToLive(sourceTable);
     const executeStatement = yield* DynamoDB.ExecuteStatement(sourceTable);
@@ -53,6 +73,21 @@ export default DynamoDBTestFunction.make(
     );
     const transactGetItems = yield* DynamoDB.TransactGetItems(sourceTable);
     const transactWriteItems = yield* DynamoDB.TransactWriteItems(sourceTable);
+    const createBackup = yield* DynamoDB.CreateBackup(sourceTable);
+    const describeBackup = yield* DynamoDB.DescribeBackup(sourceTable);
+    const listBackups = yield* DynamoDB.ListBackups(sourceTable);
+    const deleteBackup = yield* DynamoDB.DeleteBackup(sourceTable);
+    const describeContinuousBackups = yield* DynamoDB.DescribeContinuousBackups(sourceTable);
+    const restoreTableFromBackup = yield* DynamoDB.RestoreTableFromBackup(
+      sourceTable,
+      restoreTargetTable,
+    );
+    const exportTableToPointInTime = yield* DynamoDB.ExportTableToPointInTime(
+      sourceTable,
+      exportBucket,
+    );
+    const describeExport = yield* DynamoDB.DescribeExport(sourceTable);
+    const listExports = yield* DynamoDB.ListExports(sourceTable);
 
     return {
       fetch: Effect.gen(function* () {
@@ -69,12 +104,20 @@ export default DynamoDBTestFunction.make(
             pk: string;
             sk: string;
             data?: string;
+            category?: string;
+            subcategory?: string;
+            rank?: string;
           };
           const result = yield* putItem({
             Item: {
               pk: { S: body.pk },
               sk: { S: body.sk },
               ...(body.data ? { data: { S: body.data } } : {}),
+              // Natural attributes indexed by the multi-attribute-key GSI —
+              // no synthetic concatenated keys.
+              ...(body.category ? { category: { S: body.category } } : {}),
+              ...(body.subcategory ? { subcategory: { S: body.subcategory } } : {}),
+              ...(body.rank ? { rank: { S: body.rank } } : {}),
             },
           });
           return yield* HttpServerResponse.json({ success: true, result });
@@ -162,8 +205,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/batch-write") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.BatchWriteItemRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.BatchWriteItemRequest;
           const result = yield* batchWriteItem(body);
           return yield* HttpServerResponse.json({
             unprocessedItems: result.UnprocessedItems ?? {},
@@ -171,8 +213,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/batch-get") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.BatchGetItemRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.BatchGetItemRequest;
           const result = yield* batchGetItem(body);
           return yield* HttpServerResponse.json({
             responses: result.Responses ?? {},
@@ -181,8 +222,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/transact-write") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.TransactWriteItemsRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.TransactWriteItemsRequest;
           const result = yield* transactWriteItems(body);
           return yield* HttpServerResponse.json({
             success: true,
@@ -191,8 +231,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/transact-get") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.TransactGetItemsRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.TransactGetItemsRequest;
           const result = yield* transactGetItems(body);
           return yield* HttpServerResponse.json({
             responses: result.Responses ?? [],
@@ -233,10 +272,7 @@ export default DynamoDBTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/batch-execute-statement"
-        ) {
+        if (request.method === "POST" && pathname === "/batch-execute-statement") {
           const body = (yield* request.json) as unknown as {
             first: { pk: string; sk: string };
             second: { pk: string; sk: string };
@@ -295,6 +331,39 @@ export default DynamoDBTestFunction.make(
           });
         }
 
+        if (request.method === "GET" && pathname === "/query-multi") {
+          const category = url.searchParams.get("category");
+          const subcategory = url.searchParams.get("subcategory");
+          const rank = url.searchParams.get("rank");
+          if (!category || !subcategory) {
+            return HttpServerResponse.text("Missing category or subcategory", {
+              status: 400,
+            });
+          }
+          // Multi-attribute-key GSI query: every partition attribute must be
+          // an equality condition; sort attributes narrow left-to-right.
+          const result = yield* query({
+            IndexName: "MultiAttrIndex",
+            KeyConditionExpression: rank
+              ? "#c = :c AND #s = :s AND #r = :r"
+              : "#c = :c AND #s = :s",
+            ExpressionAttributeNames: {
+              "#c": "category",
+              "#s": "subcategory",
+              ...(rank ? { "#r": "rank" } : {}),
+            },
+            ExpressionAttributeValues: {
+              ":c": { S: category },
+              ":s": { S: subcategory },
+              ...(rank ? { ":r": { S: rank } } : {}),
+            },
+          });
+          return yield* HttpServerResponse.json({
+            items: result.Items,
+            count: result.Count,
+          });
+        }
+
         if (request.method === "GET" && pathname === "/list-tables") {
           const result = yield* listTables();
           return yield* HttpServerResponse.json({
@@ -307,6 +376,104 @@ export default DynamoDBTestFunction.make(
           return yield* HttpServerResponse.json({
             tags: result.Tags,
           });
+        }
+
+        if (request.method === "POST" && pathname === "/create-backup") {
+          const body = (yield* request.json) as unknown as { name: string };
+          const result = yield* createBackup({ BackupName: body.name });
+          return yield* HttpServerResponse.json({
+            backupArn: result.BackupDetails?.BackupArn,
+            status: result.BackupDetails?.BackupStatus,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/describe-backup") {
+          const arn = url.searchParams.get("arn");
+          if (!arn) {
+            return HttpServerResponse.text("Missing arn", { status: 400 });
+          }
+          const result = yield* describeBackup({ BackupArn: arn });
+          return yield* HttpServerResponse.json({
+            status: result.BackupDescription?.BackupDetails?.BackupStatus,
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/list-backups") {
+          const result = yield* listBackups();
+          return yield* HttpServerResponse.json({
+            backupArns: (result.BackupSummaries ?? []).map((summary) => summary.BackupArn),
+          });
+        }
+
+        if (request.method === "DELETE" && pathname === "/delete-backup") {
+          const body = (yield* request.json) as unknown as { arn: string };
+          const result = yield* deleteBackup({ BackupArn: body.arn }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              status: output.BackupDescription?.BackupDetails?.BackupStatus,
+            })),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.method === "GET" && pathname === "/describe-continuous-backups") {
+          const result = yield* describeContinuousBackups();
+          return yield* HttpServerResponse.json({
+            continuousBackupsStatus: result.ContinuousBackupsDescription?.ContinuousBackupsStatus,
+            pitrStatus:
+              result.ContinuousBackupsDescription?.PointInTimeRecoveryDescription
+                ?.PointInTimeRecoveryStatus,
+          });
+        }
+
+        if (request.method === "POST" && pathname === "/restore-from-backup") {
+          const body = (yield* request.json) as unknown as { arn: string };
+          const result = yield* restoreTableFromBackup({
+            BackupArn: body.arn,
+          }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              status: output.TableDescription?.TableStatus,
+            })),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.method === "POST" && pathname === "/export-table") {
+          const result = yield* exportTableToPointInTime({
+            ExportFormat: "DYNAMODB_JSON",
+          }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              exportArn: output.ExportDescription?.ExportArn,
+            })),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
+          );
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.method === "GET" && pathname === "/list-exports") {
+          const result = yield* listExports();
+          return yield* HttpServerResponse.json({
+            exportArns: (result.ExportSummaries ?? []).map((summary) => summary.ExportArn),
+          });
+        }
+
+        if (request.method === "GET" && pathname === "/describe-export") {
+          const arn = url.searchParams.get("arn");
+          if (!arn) {
+            return HttpServerResponse.text("Missing arn", { status: 400 });
+          }
+          const result = yield* describeExport({ ExportArn: arn }).pipe(
+            Effect.map((output) => ({
+              ok: true as const,
+              status: output.ExportDescription?.ExportStatus,
+            })),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
+          );
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "GET" && pathname === "/scan") {
@@ -334,6 +501,15 @@ export default DynamoDBTestFunction.make(
         DynamoDB.BatchExecuteStatementHttp,
         DynamoDB.BatchGetItemHttp,
         DynamoDB.BatchWriteItemHttp,
+        DynamoDB.CreateBackupHttp,
+        DynamoDB.DeleteBackupHttp,
+        DynamoDB.DescribeBackupHttp,
+        DynamoDB.DescribeContinuousBackupsHttp,
+        DynamoDB.DescribeExportHttp,
+        DynamoDB.ExportTableToPointInTimeHttp,
+        DynamoDB.ListBackupsHttp,
+        DynamoDB.ListExportsHttp,
+        DynamoDB.RestoreTableFromBackupHttp,
         DynamoDB.DescribeTableHttp,
         DynamoDB.DescribeTimeToLiveHttp,
         DynamoDB.ExecuteStatementHttp,

@@ -2,11 +2,10 @@ import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -97,11 +96,8 @@ export type VpcService = Resource<
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
- * @resource
- * @product Workers VPC
- * @category Network
- * @section Creating a VPC Service
- * @example Hostname through a tunnel
+ * ### Creating a VPC Service
+ * **Example:** Hostname through a tunnel
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("MyTunnel");
  * const service = yield* Cloudflare.VpcService.VpcService("Internal", {
@@ -112,18 +108,24 @@ export type VpcService = Resource<
  * });
  * ```
  *
- * @example IPv4 with explicit ports
+ * **Example:** IPv4 with explicit ports
  * ```typescript
  * const service = yield* Cloudflare.VpcService.VpcService("DevServer", {
  *   httpPort: 5173,
  *   host: { ipv4: "192.168.1.100", network: { tunnelId: tunnel.tunnelId } },
  * });
  * ```
+ *
+ * @resource
+ * @product Workers VPC
+ * @category Network
  */
-export const VpcService = Resource<VpcService>(
-  "Cloudflare.VpcService.VpcService",
-  { aliases: ["Cloudflare.VpcService"] },
-);
+export const VpcService = Resource<VpcService>("Cloudflare.VpcService.VpcService", {
+  aliases: ["Cloudflare.VpcService"],
+});
+
+export const isVpcService = (value: unknown): value is VpcService =>
+  isResourceOfType(value, "Cloudflare.VpcService.VpcService");
 
 const createServiceName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -149,24 +151,19 @@ export const VpcServiceProvider = () =>
     stables: ["serviceId", "accountId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* connectivity.listDirectoryServices
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (s): s is typeof s & { serviceId: string } =>
-                    s.serviceId != null,
-                )
-                .map((s) => formatVpcService(s, accountId)),
-            ),
+      return yield* connectivity.listDirectoryServices.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((s): s is typeof s & { serviceId: string } => s.serviceId != null)
+              .map((s) => formatVpcService(s, accountId)),
           ),
-          // VPC/Workers connectivity is plan-gated; an un-entitled
-          // account rejects the list route. Treat as nothing to enumerate.
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        // VPC/Workers connectivity is plan-gated; an un-entitled
+        // account rejects the list route. Treat as nothing to enumerate.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -174,17 +171,21 @@ export const VpcServiceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createServiceName(id, news.name);
-      const oldName = output?.serviceName
-        ? output.serviceName
-        : yield* createServiceName(id, olds?.name);
+      const oldName = output?.serviceName ?? (yield* createServiceName(id, olds?.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "update" } as const;
       }
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createServiceName(id, news.name);
+      // Prefer the deployed name: regenerating would rename the deployed
+      // service if the generator's output for this id ever drifts. An
+      // explicit user-provided name still wins (renames apply in place).
+      const name = news.name ?? output?.serviceName ?? (yield* createServiceName(id, news.name));
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached service; fall back to a name
@@ -201,9 +202,7 @@ export const VpcServiceProvider = () =>
       }
       if (!observed) {
         const match = yield* findServiceByName(name);
-        observed = match as
-          | connectivity.GetDirectoryServiceResponse
-          | undefined;
+        observed = match as connectivity.GetDirectoryServiceResponse | undefined;
       }
 
       // Ensure — create if missing. Cloudflare rejects a duplicate
@@ -334,11 +333,7 @@ export const formatVpcService = (
     httpsPort: service.httpsPort ?? undefined,
     host,
     accountId,
-    createdAt: service.createdAt
-      ? new Date(service.createdAt).getTime()
-      : undefined,
-    updatedAt: service.updatedAt
-      ? new Date(service.updatedAt).getTime()
-      : undefined,
+    createdAt: service.createdAt ? new Date(service.createdAt).getTime() : undefined,
+    updatedAt: service.updatedAt ? new Date(service.updatedAt).getTime() : undefined,
   };
 };

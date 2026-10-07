@@ -1,5 +1,5 @@
+import * as planetscale from "@distilled.cloud/planetscale";
 import { Credentials } from "@distilled.cloud/planetscale/Credentials";
-import * as planetscale from "@distilled.cloud/planetscale/Operations";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -82,7 +82,7 @@ export interface MySQLPasswordAttributes {
   /** Resolved branch name. */
   branch: string;
   /** The role granted. */
-  role: "reader" | "writer" | "admin" | "readwriter";
+  role: "reader" | "writer" | "admin" | "readwriter" | (string & {});
   /** Whether this password is for a read replica. */
   replica: boolean | undefined;
   /** TTL in seconds (if set). */
@@ -96,8 +96,8 @@ export interface MySQLPasswordAttributes {
  *
  * For PostgreSQL databases, use {@link PostgresRole} instead.
  *
- * @section Creating a Password
- * @example Reader password
+ * ### Creating a Password
+ * **Example:** Reader password
  * ```typescript
  * const reader = yield* Planetscale.MySQLPassword("AppReader", {
  *   database: "my-db",
@@ -105,7 +105,7 @@ export interface MySQLPasswordAttributes {
  * });
  * ```
  *
- * @example Writer password with TTL
+ * **Example:** Writer password with TTL
  * ```typescript
  * const writer = yield* Planetscale.MySQLPassword("AppWriter", {
  *   database: "my-db",
@@ -114,7 +114,7 @@ export interface MySQLPasswordAttributes {
  * });
  * ```
  *
- * @example Admin password with IP allowlist
+ * **Example:** Admin password with IP allowlist
  * ```typescript
  * const admin = yield* Planetscale.MySQLPassword("Admin", {
  *   database: "my-db",
@@ -132,9 +132,7 @@ export type MySQLPassword = Resource<
 >;
 
 /** @resource */
-export const MySQLPassword = Resource<MySQLPassword>(
-  "Planetscale.MySQLPassword",
-);
+export const MySQLPassword = Resource<MySQLPassword>("Planetscale.MySQLPassword");
 
 export const MySQLPasswordProvider = () =>
   Provider.succeed(MySQLPassword, {
@@ -152,9 +150,7 @@ export const MySQLPasswordProvider = () =>
       if (news.ttl !== olds.ttl) return { action: "replace" } as const;
 
       const newDb = resolveDatabaseName(news.database);
-      const oldDb = olds.database
-        ? resolveDatabaseName(olds.database)
-        : undefined;
+      const oldDb = olds.database ? resolveDatabaseName(olds.database) : undefined;
       if (oldDb && newDb !== oldDb) {
         return { action: "replace" } as const;
       }
@@ -204,10 +200,8 @@ export const MySQLPasswordProvider = () =>
       // database/branch changes), so we can pull from `output` first
       // and fall back to `news` for greenfield.
       const { organization: envOrg } = yield* yield* Credentials;
-      const organization =
-        output?.organization ?? resolveDatabaseOrg(news.database) ?? envOrg;
-      const databaseName =
-        output?.database ?? resolveDatabaseName(news.database);
+      const organization = output?.organization ?? resolveDatabaseOrg(news.database) ?? envOrg;
+      const databaseName = output?.database ?? resolveDatabaseName(news.database);
       const branchName = output?.branch ?? resolveBranchName(news.branch);
 
       // 1. Observe — read live state. The PlanetScale API has no
@@ -298,63 +292,57 @@ export const MySQLPasswordProvider = () =>
     list: Effect.fn(function* () {
       const { organization } = yield* yield* Credentials;
 
-      const databases = yield* planetscale.listDatabases
-        .pages({ organization })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              page.data.filter((db) => db.kind === "mysql"),
-            ),
-          ),
-        );
+      const databases = yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.data.filter((db) => db.kind === "mysql")),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         databases,
         (db) =>
-          planetscale.listBranches
-            .pages({ organization, database: db.name })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((branchPages) =>
-                Array.from(branchPages).flatMap((page) =>
-                  page.data.filter((branch) => branch.kind === "mysql"),
-                ),
-              ),
-              Effect.catchTag("NotFound", () =>
-                Effect.succeed([{ name: db.default_branch ?? "main" }]),
-              ),
-              Effect.flatMap((branches) =>
-                Effect.forEach(
-                  branches,
-                  (branch) =>
-                    planetscale.listPasswords
-                      .pages({
-                        organization,
-                        database: db.name,
-                        branch: branch.name,
-                      })
-                      .pipe(
-                        Stream.runCollect,
-                        Effect.map((passwordPages): MySQLPasswordAttributes[] =>
-                          Array.from(passwordPages).flatMap((page) =>
-                            page.data.map((password) =>
-                              buildAttributes(password, Redacted.make(""), {
-                                organization,
-                                database: db.name,
-                                branch: branch.name,
-                              }),
-                            ),
-                          ),
-                        ),
-                        Effect.catchTag("NotFound", () =>
-                          Effect.succeed([] as MySQLPasswordAttributes[]),
-                        ),
-                      ),
-                  { concurrency: 10 },
-                ).pipe(Effect.map((perBranch) => perBranch.flat())),
+          planetscale.listBranches.pages({ organization, database: db.name }).pipe(
+            Stream.runCollect,
+            Effect.map((branchPages) =>
+              Array.from(branchPages).flatMap((page) =>
+                page.data.filter((branch) => branch.kind === "mysql"),
               ),
             ),
+            Effect.catchTag("NotFound", () =>
+              Effect.succeed([{ name: db.default_branch ?? "main" }]),
+            ),
+            Effect.flatMap((branches) =>
+              Effect.forEach(
+                branches,
+                (branch) =>
+                  planetscale.listPasswords
+                    .pages({
+                      organization,
+                      database: db.name,
+                      branch: branch.name,
+                    })
+                    .pipe(
+                      Stream.runCollect,
+                      Effect.map((passwordPages): MySQLPasswordAttributes[] =>
+                        Array.from(passwordPages).flatMap((page) =>
+                          page.data.map((password) =>
+                            buildAttributes(password, Redacted.make(""), {
+                              organization,
+                              database: db.name,
+                              branch: branch.name,
+                            }),
+                          ),
+                        ),
+                      ),
+                      Effect.catchTag("NotFound", () =>
+                        Effect.succeed([] as MySQLPasswordAttributes[]),
+                      ),
+                    ),
+                { concurrency: 10 },
+              ).pipe(Effect.map((perBranch) => perBranch.flat())),
+            ),
+          ),
         { concurrency: 10 },
       );
 
@@ -375,26 +363,19 @@ const resolveDatabaseName = (database: string | MySQLDatabase): string => {
   return typeof ref === "string" ? ref : ref.name;
 };
 
-const resolveDatabaseOrg = (
-  database: string | MySQLDatabase,
-): string | undefined => {
+const resolveDatabaseOrg = (database: string | MySQLDatabase): string | undefined => {
   const ref = database as unknown as DatabaseRef;
   return typeof ref === "string" ? undefined : ref.organization;
 };
 
-const resolveBranchName = (
-  branch: string | MySQLBranch | undefined,
-): string => {
+const resolveBranchName = (branch: string | MySQLBranch | undefined): string => {
   const ref = branch as unknown as BranchRef | undefined;
   return !ref ? "main" : typeof ref === "string" ? ref : ref.name;
 };
 
 const createPasswordName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 // Normalize the API's nullable `cidrs` field into the `string[] | undefined`
@@ -402,8 +383,7 @@ const createPasswordName = (id: string, name: string | undefined) =>
 // API returning `null` vs `[]` vs an actual list.
 const normalizeCidrs = (
   cidrs: readonly string[] | null | undefined,
-): readonly string[] | undefined =>
-  cidrs == null || cidrs.length === 0 ? undefined : cidrs;
+): readonly string[] | undefined => (cidrs == null || cidrs.length === 0 ? undefined : cidrs);
 
 const buildAttributes = (
   password: {
@@ -412,7 +392,7 @@ const buildAttributes = (
     expires_at: string | null;
     access_host_url: string;
     username: string;
-    role: "reader" | "writer" | "admin" | "readwriter";
+    role: "reader" | "writer" | "admin" | "readwriter" | (string & {});
     replica: boolean;
     ttl_seconds: number | null;
     cidrs: readonly string[] | null;

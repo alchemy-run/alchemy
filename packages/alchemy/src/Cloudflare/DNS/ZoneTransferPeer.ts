@@ -2,7 +2,6 @@ import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -92,11 +91,8 @@ export type ZoneTransferPeer = Resource<
  * account. Cloudflare's create API only accepts a name; the provider
  * follows up with an update when `ip`, `port`, `tsigId`, or
  * `ixfrEnable` are declared, all of which remain mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating a Peer
- * @example Primary nameserver to transfer from
+ * ### Creating a Peer
+ * **Example:** Primary nameserver to transfer from
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
@@ -104,7 +100,7 @@ export type ZoneTransferPeer = Resource<
  * });
  * ```
  *
- * @example Peer with TSIG authentication
+ * **Example:** Peer with TSIG authentication
  * ```typescript
  * const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
@@ -118,6 +114,10 @@ export type ZoneTransferPeer = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferPeer = Resource<ZoneTransferPeer>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferPeer"],
@@ -202,10 +202,8 @@ export const ZoneTransferPeerProvider = () =>
         observed.name !== desired.name ||
         (desired.ip !== undefined && undef(observed.ip) !== desired.ip) ||
         (desired.port !== undefined && undef(observed.port) !== desired.port) ||
-        (desired.tsigId !== undefined &&
-          undef(observed.tsigId) !== desired.tsigId) ||
-        (desired.ixfrEnable !== undefined &&
-          undef(observed.ixfrEnable) !== desired.ixfrEnable);
+        (desired.tsigId !== undefined && undef(observed.tsigId) !== desired.tsigId) ||
+        (desired.ixfrEnable !== undefined && undef(observed.ixfrEnable) !== desired.ixfrEnable);
 
       if (!dirty) {
         return toAttributes(observed, acct);
@@ -237,8 +235,7 @@ type ObservedPeer =
   | dns.CreateZoneTransferPeerResponse
   | dns.UpdateZoneTransferPeerResponse;
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 /** Read a peer by id, mapping "gone" (404) to `undefined`. */
 const getPeer = (accountId: string, peerId: string) =>
@@ -251,10 +248,11 @@ const getPeer = (accountId: string, peerId: string) =>
  * pick the lexicographically-first id for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listZoneTransferPeers({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((p) => p.name === name)
+  dns.listZoneTransferPeers.items({ accountId }).pipe(
+    Stream.filter((p) => p.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),
@@ -265,10 +263,7 @@ const createPeerName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  peer: ObservedPeer,
-  accountId: string,
-): ZoneTransferPeerAttributes => ({
+const toAttributes = (peer: ObservedPeer, accountId: string): ZoneTransferPeerAttributes => ({
   peerId: peer.id,
   accountId,
   name: peer.name,

@@ -39,7 +39,7 @@ export type UserApiToken = Resource<
  *
  * User-owned tokens are tied to the authenticated user's identity. They can
  * be created by any authenticated user (including OAuth-derived sessions
- * from `alchemy login`) without needing the account-level
+ * from `alchemy profile edit`) without needing the account-level
  * `API Tokens > Write` permission, but they are also revoked if the user
  * leaves the account.
  *
@@ -48,11 +48,8 @@ export type UserApiToken = Resource<
  *
  * Policy `resources` are passed through verbatim — no `accountId` rewriting
  * is performed because user tokens aren't bound to a single account.
- * @resource
- * @product API Tokens
- * @category Account & Identity
- * @section Creating a Token
- * @example A token bound to the authenticated user
+ * ### Creating a Token
+ * **Example:** A token bound to the authenticated user
  * ```typescript
  * const token = yield* Cloudflare.ApiToken.UserApiToken("personal-token", {
  *   name: "my-personal-token",
@@ -66,8 +63,8 @@ export type UserApiToken = Resource<
  * });
  * ```
  *
- * @section Attaching Policies via Bindings
- * @example Let a downstream capability contribute its own policies
+ * ### Attaching Policies via Bindings
+ * **Example:** Let a downstream capability contribute its own policies
  * A token can be created with no `policies` of its own; the policies are
  * supplied through its binding contract (see {@link ApiTokenBinding}).
  * ```typescript
@@ -84,8 +81,8 @@ export type UserApiToken = Resource<
  * });
  * ```
  *
- * @section Exposing a Token to a Worker
- * @example Read the token value at runtime
+ * ### Exposing a Token to a Worker
+ * **Example:** Read the token value at runtime
  * Bind the token's value output in the Worker's Init phase to get a runtime
  * accessor. Binding it injects a `secret_text` Worker binding; the returned
  * accessor reads it back (as `Redacted`) at runtime.
@@ -101,11 +98,14 @@ export type UserApiToken = Resource<
  *   }),
  * };
  * ```
+ *
+ * @resource
+ * @product API Tokens
+ * @category Account & Identity
  */
-export const UserApiToken = Resource<UserApiToken>(
-  "Cloudflare.ApiToken.UserApiToken",
-  { aliases: ["Cloudflare.UserApiToken"] },
-);
+export const UserApiToken = Resource<UserApiToken>("Cloudflare.ApiToken.UserApiToken", {
+  aliases: ["Cloudflare.UserApiToken"],
+});
 
 type UserApiTokenAttributes = UserApiToken["Attributes"];
 
@@ -116,12 +116,8 @@ export const UserApiTokenProvider = () =>
       if (!isResolved(news)) return undefined;
       const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
       const newName = yield* resolveName(id, news.name);
-      const oldPolicyFp = policyFingerprint(
-        resolvePolicies(olds?.policies ?? []),
-      );
-      const newPolicyFp = policyFingerprint(
-        resolvePolicies(news.policies ?? []),
-      );
+      const oldPolicyFp = policyFingerprint(resolvePolicies(olds?.policies ?? []));
+      const newPolicyFp = policyFingerprint(resolvePolicies(news.policies ?? []));
       const oldCondFp = conditionFingerprint(olds?.condition);
       const newCondFp = conditionFingerprint(news.condition);
       if (
@@ -168,9 +164,7 @@ export const UserApiTokenProvider = () =>
           notBefore: news.notBefore,
         });
         if (!result.value) {
-          return yield* Effect.die(
-            `Cloudflare did not return a value for token "${name}".`,
-          );
+          return yield* Effect.die(`Cloudflare did not return a value for token "${name}".`);
         }
         return buildAttributes(result, Redacted.make(result.value));
       }
@@ -210,9 +204,7 @@ export const UserApiTokenProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((token) =>
-              buildAttributes(token, Redacted.make("")),
-            ),
+            (page.result ?? []).map((token) => buildAttributes(token, Redacted.make(""))),
           ),
         ),
         // User-scoped tokens require user-level auth; an account-scoped token

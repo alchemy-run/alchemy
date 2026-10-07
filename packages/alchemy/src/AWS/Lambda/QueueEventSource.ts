@@ -2,12 +2,12 @@ import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-
 import * as Namespace from "../../Namespace.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import {
   QueueEventSource as SQSQueueEventSource,
   type QueueEventSourceProps,
+  type QueueEventSourceService,
   type SQSRecord,
 } from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
@@ -21,9 +21,6 @@ export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
 /** @binding */
 export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
-  // @ts-expect-error - the impl resolves plan-time services (EventSourceMapping)
-  // whereas QueueEventSourceService erases the requirement channel to `never`.
-  // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
     const host = yield* Lambda.Function;
     const Mapping = yield* EventSourceMapping;
@@ -43,28 +40,21 @@ export const QueueEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "sqs:ReceiveMessage",
-                      "sqs:DeleteMessage",
-                      "sqs:GetQueueAttributes",
-                    ],
-                    Resource: [queue.queueArn],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.Lambda.QueueEventSource(${queue}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+                  Resource: [queue.queueArn],
+                },
+              ],
+            });
 
             yield* Mapping(`${queue.LogicalId}-EventSource`, {
               functionName: host.functionName,
               eventSourceArn: queue.queueArn,
               batchSize: props.batchSize,
-              maximumBatchingWindowInSeconds:
-                props.maximumBatchingWindowInSeconds,
+              maximumBatchingWindow: props.maximumBatchingWindow,
               enabled: true,
             });
           }),
@@ -75,13 +65,11 @@ export const QueueEventSource = Layer.effect(
         Effect.gen(function* () {
           return (event: any) => {
             if (isSQSEvent(event)) {
-              return process(Stream.fromArray(event.Records)).pipe(
-                Effect.orDie,
-              );
+              return process(Stream.fromArray(event.Records)).pipe(Effect.orDie);
             }
           };
         }),
       );
-    });
+    }) as QueueEventSourceService;
   }),
 );

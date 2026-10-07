@@ -1,16 +1,20 @@
+import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
+import type { HttpClient } from "effect/http/HttpClient";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
+import * as Stream from "effect/Stream";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { Credentials } from "../Credentials.ts";
+import type { Providers } from "../Providers.ts";
 import type { Region } from "../Region.ts";
 import {
   extractValue,
   getKvsEtag,
   isKvsPreconditionFailed,
+  cappedKvsRetrySchedule,
   retryForKvsReadiness,
   withKvsRegionFn,
 } from "./common.ts";
@@ -30,9 +34,21 @@ export interface KvRoutesUpdate extends Resource<
   "AWS.CloudFront.KvRoutesUpdate",
   KvRoutesUpdateProps,
   {
+    /**
+     * The ARN of the key value store holding the routes.
+     */
     store: string;
+    /**
+     * The namespace prefix the routes were written under.
+     */
     namespace: string;
+    /**
+     * The key the route table was written to.
+     */
     key: string;
+    /**
+     * The serialized route table value that was written.
+     */
     entry: string;
   },
   never,
@@ -44,9 +60,8 @@ export interface KvRoutesUpdate extends Resource<
  *
  * The routes array is stored at key `{namespace}:{key}` and supports automatic
  * chunking when the serialized array exceeds 1000 characters.
- * @resource
- * @section Managing Routes
- * @example Add A Route Entry
+ * ### Managing Routes
+ * **Example:** Add A Route Entry
  * ```typescript
  * const update = yield* KvRoutesUpdate("MyRoute", {
  *   store: store.keyValueStoreArn,
@@ -55,10 +70,10 @@ export interface KvRoutesUpdate extends Resource<
  *   entry: "site,mysite,*,/",
  * });
  * ```
+ *
+ * @resource
  */
-export const KvRoutesUpdate = Resource<KvRoutesUpdate>(
-  "AWS.CloudFront.KvRoutesUpdate",
-);
+export const KvRoutesUpdate = Resource<KvRoutesUpdate>("AWS.CloudFront.KvRoutesUpdate");
 
 const CHUNK_SIZE = 1000;
 
@@ -69,11 +84,7 @@ export const KvRoutesUpdateProvider = () =>
       const getRoutes = Effect.fn(function* (store: string, fullKey: string) {
         const res = yield* kvs
           .getKey({ KvsARN: store, Key: fullKey })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
         if (!res) {
           return { routes: [] as string[], chunkNum: 1 };
@@ -167,15 +178,12 @@ export const KvRoutesUpdateProvider = () =>
 
       const deleteOp = (
         props: KvRoutesUpdateProps,
-      ): Effect.Effect<
-        void,
-        kvs.UpdateKeysError,
-        Credentials | Region | HttpClient
-      > =>
+      ): Effect.Effect<void, kvs.UpdateKeysError, Credentials | Region | HttpClient> =>
         Effect.gen(function* () {
           const fullKey = `${props.namespace}:${props.key}`;
           const etag = yield* getKvsEtag(props.store);
           const { routes, chunkNum } = yield* getRoutes(props.store, fullKey);
+          if (!routes.includes(props.entry)) return;
           const filtered = routes.filter((r) => r !== props.entry);
           if (filtered.length === 0) {
             yield* deleteKey(props.store, etag, fullKey, chunkNum);
@@ -185,12 +193,8 @@ export const KvRoutesUpdateProvider = () =>
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "ValidationException" &&
-              isKvsPreconditionFailed(error),
-            schedule: Schedule.max([
-              Schedule.exponential("100 millis"),
-              Schedule.recurs(24),
-            ]),
+              error._tag === "ValidationException" && isKvsPreconditionFailed(error),
+            schedule: cappedKvsRetrySchedule,
           }),
         );
 
@@ -199,11 +203,7 @@ export const KvRoutesUpdateProvider = () =>
         fullKey: string,
         entryToAdd: string,
         entryToRemove: string | undefined,
-      ): Effect.Effect<
-        void,
-        kvs.UpdateKeysError,
-        HttpClient | Region | Credentials
-      > =>
+      ): Effect.Effect<void, kvs.UpdateKeysError, HttpClient | Region | Credentials> =>
         Effect.gen(function* () {
           const etag = yield* getKvsEtag(store);
           const { routes, chunkNum } = yield* getRoutes(store, fullKey);
@@ -218,12 +218,8 @@ export const KvRoutesUpdateProvider = () =>
         }).pipe(
           Effect.retry({
             while: (error) =>
-              error._tag === "ValidationException" &&
-              isKvsPreconditionFailed(error),
-            schedule: Schedule.max([
-              Schedule.exponential("100 millis"),
-              Schedule.recurs(24),
-            ]),
+              error._tag === "ValidationException" && isKvsPreconditionFailed(error),
+            schedule: cappedKvsRetrySchedule,
           }),
         );
 
@@ -264,15 +260,8 @@ export const KvRoutesUpdateProvider = () =>
                 // as upsert-by-replace.
                 const fullKey = `${news.namespace}:${news.key}`;
                 const previousEntry =
-                  !movedLocation && output !== undefined
-                    ? output.entry
-                    : undefined;
-                yield* upsertEntry(
-                  news.store,
-                  fullKey,
-                  news.entry,
-                  previousEntry,
-                );
+                  !movedLocation && output !== undefined ? output.entry : undefined;
+                yield* upsertEntry(news.store, fullKey, news.entry, previousEntry);
 
                 return {
                   store: news.store,
@@ -292,10 +281,23 @@ export const KvRoutesUpdateProvider = () =>
                 namespace: output.namespace,
                 key: output.key,
                 entry: output.entry,
-              }),
-            ).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+              }).pipe(
+                Effect.catchTag("ConflictException", (error) =>
+                  // The data plane reports ConflictException for deleted stores.
+                  // Confirm absence through the control plane before ignoring it.
+                  cloudfront.listKeyValueStores.pages({}).pipe(
+                    Stream.flatMap((page) =>
+                      Stream.fromIterable(page.KeyValueStoreList?.Items ?? []),
+                    ),
+                    Stream.filter((store) => store.ARN === output.store),
+                    Stream.runHead,
+                    Effect.flatMap((store) =>
+                      Option.isNone(store) ? Effect.void : Effect.fail(error),
+                    ),
+                  ),
+                ),
+              ),
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }),
         ),
       };

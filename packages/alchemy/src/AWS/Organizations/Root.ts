@@ -35,10 +35,25 @@ export interface Root extends Resource<
   "AWS.Organizations.Root",
   RootProps,
   {
+    /**
+     * ID of the root (e.g. `r-examplerootid`).
+     */
     rootId: RootId;
+    /**
+     * ARN of the root.
+     */
     rootArn: RootArn;
+    /**
+     * Friendly name of the root (usually `Root`).
+     */
     rootName: string;
+    /**
+     * Policy types and their enablement status on this root.
+     */
     policyTypes: organizations.PolicyTypeSummary[];
+    /**
+     * Tags on the root.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -49,7 +64,31 @@ export interface Root extends Resource<
  * The organization root.
  *
  * `Root` is an import-style resource. It discovers the existing root returned by
- * AWS Organizations and can reconcile root tags.
+ * AWS Organizations and can reconcile root tags. Use `root.rootId` as the
+ * `parentId` for top-level {@link OrganizationalUnit}s and {@link Account}s,
+ * and as the `targetId`/`rootId` for {@link PolicyAttachment} and
+ * {@link RootPolicyType}.
+ * ### Importing the Root
+ * **Example:** Adopt the Organization Root
+ * ```typescript
+ * const organization = yield* Organization("Org", { featureSet: "ALL" });
+ * const root = yield* Root("Root", {});
+ * ```
+ *
+ * **Example:** Parent OUs and Accounts Under the Root
+ * ```typescript
+ * const workloads = yield* OrganizationalUnit("Workloads", {
+ *   parentId: root.rootId,
+ *   name: "workloads",
+ * });
+ *
+ * const sandbox = yield* Account("Sandbox", {
+ *   name: "sandbox",
+ *   email: "aws-sandbox@example.com",
+ *   parentId: root.rootId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const Root = Resource<Root>("AWS.Organizations.Root");
@@ -70,9 +109,7 @@ export const RootProvider = () =>
             const roots = yield* retryOrganizations(
               organizations.listRoots.pages({}).pipe(
                 Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.Roots ?? []),
-                ),
+                Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Roots ?? [])),
               ),
             ).pipe(
               Effect.catchTags({
@@ -91,29 +128,24 @@ export const RootProvider = () =>
               } => root.Id != null && root.Arn != null && root.Name != null,
             );
 
-            const attrs: (Root["Attributes"] | undefined)[] =
-              yield* Effect.forEach(
-                valid,
-                Effect.fn(function* (root) {
-                  if (!root.Id || !root.Arn || !root.Name) return undefined;
-                  const tags = yield* readResourceTags(root.Id).pipe(
-                    Effect.catchTag("TargetNotFoundException", () =>
-                      Effect.succeed({}),
-                    ),
-                  );
-                  return {
-                    rootId: root.Id,
-                    rootArn: root.Arn,
-                    rootName: root.Name,
-                    policyTypes: root.PolicyTypes ?? [],
-                    tags,
-                  };
-                }),
-                { concurrency: 10 },
-              );
-            return attrs.filter(
-              (attr): attr is Root["Attributes"] => attr !== undefined,
+            const attrs: (Root["Attributes"] | undefined)[] = yield* Effect.forEach(
+              valid,
+              Effect.fn(function* (root) {
+                if (!root.Id || !root.Arn || !root.Name) return undefined;
+                const tags = yield* readResourceTags(root.Id).pipe(
+                  Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+                );
+                return {
+                  rootId: root.Id,
+                  rootArn: root.Arn,
+                  rootName: root.Name,
+                  policyTypes: root.PolicyTypes ?? [],
+                  tags,
+                };
+              }),
+              { concurrency: 10 },
             );
+            return attrs.filter((attr): attr is Root["Attributes"] => attr !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
@@ -175,18 +207,11 @@ const listRoots = () =>
     (page) => page.Roots,
   );
 
-const readRoot = Effect.fn(function* ({
-  rootId,
-  name,
-}: {
-  rootId?: string;
-  name?: string;
-}) {
+const readRoot = Effect.fn(function* ({ rootId, name }: { rootId?: string; name?: string }) {
   const roots = yield* retryOrganizations(listRoots());
   const root = roots.find(
     (candidate) =>
-      (rootId ? candidate.Id === rootId : true) &&
-      (name ? candidate.Name === name : true),
+      (rootId ? candidate.Id === rootId : true) && (name ? candidate.Name === name : true),
   );
 
   if (!root?.Id || !root.Arn || !root.Name) {

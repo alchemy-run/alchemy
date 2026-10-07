@@ -2,7 +2,6 @@ import * as tokenValidation from "@distilled.cloud/cloudflare/token-validation";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -109,7 +108,7 @@ export interface TokenConfigurationAttributes {
   /** Where the token is looked for on incoming requests. */
   tokenSources: string[];
   /** The token format. */
-  tokenType: "JWT";
+  tokenType: "JWT" | (string & {});
   /** The JWKS key set currently active on the configuration. */
   keys: JwkKey[];
   /** ISO8601 creation timestamp. */
@@ -143,11 +142,8 @@ export type TokenConfiguration = Resource<
  * Title, description, and token sources are patched in place; the key set
  * is rotated in place via the credentials endpoint. Only `zoneId` and
  * `tokenType` force a replacement.
- * @resource
- * @product Token Validation
- * @category Application Security
- * @section Creating a Configuration
- * @example JWT configuration with an RSA key
+ * ### Creating a Configuration
+ * **Example:** JWT configuration with an RSA key
  * ```typescript
  * const config = yield* Cloudflare.TokenValidation.TokenConfiguration("ApiJwt", {
  *   zoneId: zone.zoneId,
@@ -164,8 +160,8 @@ export type TokenConfiguration = Resource<
  * });
  * ```
  *
- * @section Rotating Keys
- * @example Replace the key set in place
+ * ### Rotating Keys
+ * **Example:** Replace the key set in place
  * ```typescript
  * // Changing `keys` PUTs the full key set to the credentials endpoint —
  * // the configuration (and its UUID) stays in place.
@@ -176,8 +172,8 @@ export type TokenConfiguration = Resource<
  * });
  * ```
  *
- * @section Enforcing Validation
- * @example Reference the configuration from a rule
+ * ### Enforcing Validation
+ * **Example:** Reference the configuration from a rule
  * ```typescript
  * yield* Cloudflare.TokenValidation.Rule("RequireJwt", {
  *   zoneId: zone.zoneId,
@@ -188,15 +184,17 @@ export type TokenConfiguration = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/security/jwt-validation/
+ *
+ * @resource
+ * @product Token Validation
+ * @category Application Security
  */
 export const TokenConfiguration = Resource<TokenConfiguration>(TypeId);
 
 /**
  * Returns true if the given value is a TokenConfiguration resource.
  */
-export const isTokenConfiguration = (
-  value: unknown,
-): value is TokenConfiguration =>
+export const isTokenConfiguration = (value: unknown): value is TokenConfiguration =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const TokenConfigurationProvider = () =>
@@ -213,14 +211,10 @@ export const TokenConfigurationProvider = () =>
         (zone) =>
           tokenValidation.listConfigurations.items({ zoneId: zone.id }).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).map((c) => toAttributes(c, zone.id)),
-            ),
+            Effect.map((chunk) => Array.from(chunk).map((c) => toAttributes(c, zone.id))),
             // JWT validation is entitlement-gated and freshly minted tokens
             // can briefly 403 — skip zones we can't enumerate.
-            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -345,9 +339,7 @@ type ObservedConfiguration = tokenValidation.GetConfigurationResponse;
 const getConfiguration = (zoneId: string, configId: string) =>
   tokenValidation.getConfiguration({ zoneId, configId }).pipe(
     Effect.map((c): ObservedConfiguration | undefined => c),
-    Effect.catchTag("TokenConfigurationNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("TokenConfigurationNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -385,10 +377,7 @@ const sameKeys = (
 ) => {
   const observedIds = observed.map((key) => keyIdentity(key as JwkKey)).sort();
   const desiredIds = desired.map(keyIdentity).sort();
-  return (
-    observedIds.length === desiredIds.length &&
-    observedIds.join(" ") === desiredIds.join(" ")
-  );
+  return observedIds.length === desiredIds.length && observedIds.join(" ") === desiredIds.join(" ");
 };
 
 const toAttributes = (

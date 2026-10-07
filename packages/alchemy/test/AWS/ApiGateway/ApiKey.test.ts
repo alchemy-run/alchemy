@@ -1,33 +1,42 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
+import { assertApiKeyDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-test.provider.skipIf(!!process.env.FAST)("create and delete API key", (stack) =>
-  Effect.gen(function* () {
-    const key = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* AWS.ApiGateway.ApiKey("AgApiKey", {
-          generateDistinctId: true,
-          enabled: true,
-        });
-      }),
-    );
+test.provider.skipIf(!!process.env.FAST)(
+  "create and delete API key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    expect(key.id).toBeDefined();
+      const key = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.ApiGateway.ApiKey("AgApiKey", {
+            generateDistinctId: true,
+            enabled: true,
+          });
+        }),
+      );
 
-    yield* stack.destroy();
-  }),
+      expect(key.id).toBeDefined();
+
+      yield* stack.destroy();
+      yield* assertApiKeyDeleted(key.id);
+    }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
   "custom API key value is not returned in outputs",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const key = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* AWS.ApiGateway.ApiKey("AgApiKeySecret", {
@@ -37,12 +46,12 @@ test.provider.skipIf(!!process.env.FAST)(
       );
 
       expect(key.id).toBeDefined();
-      expect(Object.keys(key as Record<string, unknown>)).not.toContain(
-        "value",
-      );
+      expect(Object.keys(key as Record<string, unknown>)).not.toContain("value");
 
       yield* stack.destroy();
+      yield* assertApiKeyDeleted(key.id);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -66,5 +75,7 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(all.some((k) => k.id === key.id)).toBe(true);
 
       yield* stack.destroy();
+      yield* assertApiKeyDeleted(key.id);
     }),
+  { tags: ["provider:aws", "provider:aws:apigateway", "live"] },
 );

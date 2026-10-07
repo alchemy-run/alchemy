@@ -1,16 +1,14 @@
-import * as Axiom from "@/Axiom";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Axiom from "@/Axiom";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Axiom credentials are resolved via the AuthProvider (env method reads
 // AXIOM_TOKEN / AXIOM_API_KEY). When neither is present the suite can't talk
@@ -32,14 +30,17 @@ test.provider.skipIf(!hasAxiomCreds)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Axiom.Dataset("ListDataset", {
+          const dataset = yield* Axiom.Dataset("ListDataset", {
             name: DATASET_NAME,
           });
           return yield* Axiom.Monitor("ListMonitor", {
             name: MONITOR_NAME,
             description: "alchemy list() lifecycle op test",
             type: "Threshold",
-            aplQuery: `['${DATASET_NAME}'] | summarize count()`,
+            // Reference the dataset's OUTPUT so the monitor create waits for
+            // the dataset create (a bare name string carries no graph edge —
+            // Axiom rejects a monitor whose APL targets a missing dataset).
+            aplQuery: Output.interpolate`['${dataset.name}'] | summarize count()`,
             intervalMinutes: 5,
             rangeMinutes: 5,
             operator: "Above",
@@ -64,5 +65,8 @@ test.provider.skipIf(!hasAxiomCreds)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:axiom", "provider:axiom:dataset", "provider:axiom:monitor", "live"],
+    timeout: 120_000,
+  },
 );

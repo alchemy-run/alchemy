@@ -12,19 +12,16 @@ import type { Providers } from "../Providers.ts";
 /**
  * EventBridge Scheduler validates that the target's execution role is
  * assumable by `scheduler.amazonaws.com`. A freshly-created IAM role can take
- * well over a minute to propagate, surfacing as a `ValidationException` with
- * the message "The execution role you provide must allow AWS EventBridge
- * Scheduler to assume the role." Retry (bounded) until propagation completes.
+ * well over a minute to propagate, surfacing as the typed
+ * `ExecutionRoleNotAssumable` error ("The execution role you provide must
+ * allow AWS EventBridge Scheduler to assume the role"). Retry (bounded) until
+ * propagation completes.
  */
 const retryUntilRoleAssumable = <A, E extends { _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(effect, {
-    while: (e) => {
-      if (e._tag !== "ValidationException") return false;
-      const message = (e as { Message?: unknown }).Message;
-      return typeof message === "string" && message.includes("assume the role");
-    },
+    while: (e) => e._tag === "ExecutionRoleNotAssumable",
     schedule: Schedule_.spaced("5 seconds"),
     times: 24,
   });
@@ -86,9 +83,8 @@ export interface ScheduleProps {
  * `Schedule` is the canonical time-based delivery primitive. High-level helpers
  * like `every`, `cron`, and `at` can synthesize the target role and scheduler
  * target configuration on top of this resource.
- * @resource
- * @section Creating Schedules
- * @example Hourly Schedule
+ * ### Creating Schedules
+ * **Example:** Hourly Schedule
  * ```typescript
  * const schedule = yield* Schedule("HourlyJob", {
  *   scheduleExpression: "rate(1 hour)",
@@ -101,14 +97,28 @@ export interface ScheduleProps {
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export interface Schedule extends Resource<
   "AWS.Scheduler.Schedule",
   ScheduleProps,
   {
+    /**
+     * ARN of the schedule.
+     */
     scheduleArn: string;
+    /**
+     * Name of the schedule.
+     */
     scheduleName: string;
+    /**
+     * Name of the schedule group containing the schedule.
+     */
     groupName: string;
+    /**
+     * Current state of the schedule (`ENABLED` or `DISABLED`).
+     */
     state: string | undefined;
   },
   never,
@@ -122,9 +132,7 @@ export const ScheduleProvider = () =>
     Schedule,
     Effect.gen(function* () {
       const toName = (id: string, props: ScheduleProps) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       return {
         stables: ["scheduleArn", "scheduleName", "groupName"],
@@ -139,22 +147,15 @@ export const ScheduleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const scheduleName =
-            output?.scheduleName ?? (yield* toName(id, olds));
+          const scheduleName = output?.scheduleName ?? (yield* toName(id, olds));
           const groupName =
-            output?.groupName ??
-            (olds.groupName as string | undefined) ??
-            "default";
+            output?.groupName ?? (olds.groupName as string | undefined) ?? "default";
           const described = yield* scheduler
             .getSchedule({
               Name: scheduleName,
               GroupName: groupName !== "default" ? groupName : undefined,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -168,14 +169,10 @@ export const ScheduleProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const scheduleName =
-            output?.scheduleName ?? (yield* toName(id, news));
+          const scheduleName = output?.scheduleName ?? (yield* toName(id, news));
           const groupName =
-            output?.groupName ??
-            (news.groupName as string | undefined) ??
-            "default";
-          const groupNameParam =
-            groupName !== "default" ? groupName : undefined;
+            output?.groupName ?? (news.groupName as string | undefined) ?? "default";
+          const groupNameParam = groupName !== "default" ? groupName : undefined;
 
           const desiredConfig = {
             ScheduleExpression: news.scheduleExpression,
@@ -197,11 +194,7 @@ export const ScheduleProvider = () =>
           // Observe — fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create if missing. EventBridge Scheduler does not support
           // tagging individual schedules (only schedule groups), so ownership
@@ -221,11 +214,7 @@ export const ScheduleProvider = () =>
               );
             observed = yield* scheduler
               .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
 
           if (!observed?.Arn) {
@@ -267,8 +256,7 @@ export const ScheduleProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.Schedules ?? []).filter(
-                    (s): s is scheduler.ScheduleSummary & { Name: string } =>
-                      s.Name != null,
+                    (s): s is scheduler.ScheduleSummary & { Name: string } => s.Name != null,
                   ),
                 ),
               ),
@@ -296,28 +284,21 @@ export const ScheduleProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   );
               },
               { concurrency: 10 },
             );
 
-            return rows.filter(
-              (row): row is Schedule["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Schedule["Attributes"] => row !== undefined);
           }),
         delete: Effect.fn(function* ({ output }) {
           yield* scheduler
             .deleteSchedule({
               Name: output.scheduleName,
-              GroupName:
-                output.groupName !== "default" ? output.groupName : undefined,
+              GroupName: output.groupName !== "default" ? output.groupName : undefined,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

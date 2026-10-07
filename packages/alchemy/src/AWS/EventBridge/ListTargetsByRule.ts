@@ -8,7 +8,25 @@ export interface ListTargetsByRuleRequest extends Omit<
   "Rule" | "EventBusName"
 > {}
 
-/** @binding */
+/**
+ * Lists the targets attached to an EventBridge rule
+ * (`events:ListTargetsByRule`).
+ *
+ * Bind this operation to a {@link Rule} inside a function runtime to get a
+ * callable that automatically injects the rule and bus names. Provide the
+ * `ListTargetsByRuleHttp` layer on the Function to satisfy the binding.
+ * ### Listing Targets
+ * **Example:** List a Rule's Targets
+ * ```typescript
+ * // init — bind the rule (provide AWS.EventBridge.ListTargetsByRuleHttp on the Function)
+ * const listTargets = yield* AWS.EventBridge.ListTargetsByRule(rule);
+ *
+ * // runtime — enumerate the rule's targets
+ * const { Targets } = yield* listTargets();
+ * ```
+ *
+ * @binding
+ */
 export interface ListTargetsByRule extends Binding.Service<
   ListTargetsByRule,
   "AWS.EventBridge.ListTargetsByRule",
@@ -17,10 +35,7 @@ export interface ListTargetsByRule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTargetsByRuleRequest,
-    ) => Effect.Effect<
-      eventbridge.ListTargetsByRuleResponse,
-      eventbridge.ListTargetsByRuleError
-    >
+    ) => Effect.Effect<eventbridge.ListTargetsByRuleResponse, eventbridge.ListTargetsByRuleError>
   >
 > {}
 export const ListTargetsByRule = Binding.Service<ListTargetsByRule>(

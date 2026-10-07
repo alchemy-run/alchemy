@@ -8,7 +8,27 @@ export interface UpdateTimeToLiveRequest extends Omit<
   "TableName"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `dynamodb:UpdateTimeToLive`.
+ *
+ * Bind this operation to a `Table` inside a function runtime to get a callable
+ * that enables or disables TTL expiry on an attribute. Provide the
+ * `UpdateTimeToLiveHttp` layer on the Function to satisfy the binding.
+ * ### Time to Live
+ * **Example:** Enable TTL on an Attribute
+ * ```typescript
+ * const updateTimeToLive = yield* AWS.DynamoDB.UpdateTimeToLive(table);
+ *
+ * yield* updateTimeToLive({
+ *   TimeToLiveSpecification: {
+ *     AttributeName: "expiresAt",
+ *     Enabled: true,
+ *   },
+ * });
+ * ```
+ *
+ * @binding
+ */
 export interface UpdateTimeToLive extends Binding.Service<
   UpdateTimeToLive,
   "AWS.DynamoDB.UpdateTimeToLive",
@@ -17,12 +37,7 @@ export interface UpdateTimeToLive extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateTimeToLiveRequest,
-    ) => Effect.Effect<
-      DynamoDB.UpdateTimeToLiveOutput,
-      DynamoDB.UpdateTimeToLiveError
-    >
+    ) => Effect.Effect<DynamoDB.UpdateTimeToLiveOutput, DynamoDB.UpdateTimeToLiveError>
   >
 > {}
-export const UpdateTimeToLive = Binding.Service<UpdateTimeToLive>(
-  "AWS.DynamoDB.UpdateTimeToLive",
-);
+export const UpdateTimeToLive = Binding.Service<UpdateTimeToLive>("AWS.DynamoDB.UpdateTimeToLive");

@@ -43,6 +43,30 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "GCP",
+    href: "/gcp",
+    prefixes: ["/gcp", "/providers/gcp"],
+    slot: "primary",
+  },
+  {
+    label: "Hetzner",
+    href: "/hetzner",
+    prefixes: ["/hetzner", "/providers/hetzner"],
+    slot: "primary",
+  },
+  {
+    label: "Fly",
+    href: "/fly",
+    prefixes: ["/fly", "/providers/fly"],
+    slot: "primary",
+  },
+  {
+    label: "Railway",
+    href: "/railway",
+    prefixes: ["/railway", "/providers/railway"],
+    slot: "primary",
+  },
+  {
     label: "PlanetScale",
     href: "/planetscale",
     prefixes: ["/planetscale", "/providers/planetscale"],
@@ -53,6 +77,20 @@ export const DOCS_TABS: DocsTab[] = [
     href: "/neon",
     prefixes: ["/neon", "/providers/neon"],
     slot: "primary",
+  },
+  {
+    label: "Prisma",
+    href: "/prisma",
+    prefixes: ["/prisma", "/providers/prisma"],
+    slot: "primary",
+  },
+  {
+    label: "Better Auth",
+    href: "/better-auth",
+    prefixes: ["/better-auth", "/providers/betterauth"],
+    slot: "more",
+    category: "Auth",
+    hint: "sessions · plugins · database layers",
   },
   {
     label: "Axiom",
@@ -71,6 +109,22 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "repos · secrets · events",
   },
   {
+    label: "Git",
+    href: "/git",
+    prefixes: ["/git", "/providers/git"],
+    slot: "more",
+    category: "Source & CI",
+    hint: "self-hosted git · clone · push · pull requests",
+  },
+  {
+    label: "Stripe",
+    href: "/stripe",
+    prefixes: ["/stripe", "/providers/stripe"],
+    slot: "more",
+    category: "Payments",
+    hint: "products · prices · webhooks",
+  },
+  {
     label: "Docker",
     href: "/docker",
     prefixes: ["/docker", "/providers/docker"],
@@ -84,15 +138,15 @@ export const DOCS_TABS: DocsTab[] = [
     prefixes: ["/kubernetes", "/providers/kubernetes"],
     slot: "more",
     category: "Containers",
-    hint: "namespaces · deployments · services",
+    hint: "deployments · jobs · manifests · helm",
   },
   {
-    label: "Drizzle",
-    href: "/drizzle",
-    prefixes: ["/drizzle", "/providers/drizzle"],
+    label: "SQL",
+    href: "/sql",
+    prefixes: ["/sql", "/drizzle", "/providers/drizzle", "/providers/sql"],
     slot: "more",
     category: "Data",
-    hint: "schema · migrations · orm",
+    hint: "effect-sql · drizzle · migrations",
   },
   {
     label: "Command",
@@ -101,6 +155,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "more",
     category: "Toolchain",
     hint: "build · dev · exec",
+  },
+  {
+    label: "ACME",
+    href: "/acme",
+    prefixes: ["/acme", "/providers/acme"],
+    slot: "more",
+    category: "Certificates",
+    hint: "accounts · DNS-01 · certificate issuance",
   },
   // A provider's reference pages belong to its hub tab (the prefixes
   // above claim /providers/{provider} first) — the Reference tab owns
@@ -112,6 +174,8 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "end",
   },
   { label: "Blog", href: "/blog", prefixes: ["/blog"], slot: "end" },
+  // A marketing page, so it never becomes the active tab.
+  { label: "Compare", href: "/compare", prefixes: ["/compare"], slot: "end" },
 ];
 
 const matches = (pathname: string, prefix: string) =>

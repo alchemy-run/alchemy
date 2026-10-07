@@ -2,22 +2,32 @@ import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListEventBusesRequest
-  extends eventbridge.ListEventBusesRequest {}
+export interface ListEventBusesRequest extends eventbridge.ListEventBusesRequest {}
 
-/** @binding */
+/**
+ * Lists the event buses in the account (`events:ListEventBuses`).
+ *
+ * An account-level operation — bind it with no resource argument. Provide the
+ * `ListEventBusesHttp` layer on the Function to satisfy the binding.
+ * ### Listing Event Buses
+ * **Example:** List All Event Buses
+ * ```typescript
+ * // init — no resource argument (provide AWS.EventBridge.ListEventBusesHttp on the Function)
+ * const listEventBuses = yield* AWS.EventBridge.ListEventBuses();
+ *
+ * // runtime — list buses, optionally filtered by name prefix
+ * const { EventBuses } = yield* listEventBuses({ NamePrefix: "my-app" });
+ * ```
+ *
+ * @binding
+ */
 export interface ListEventBuses extends Binding.Service<
   ListEventBuses,
   "AWS.EventBridge.ListEventBuses",
   () => Effect.Effect<
     (
       request?: ListEventBusesRequest,
-    ) => Effect.Effect<
-      eventbridge.ListEventBusesResponse,
-      eventbridge.ListEventBusesError
-    >
+    ) => Effect.Effect<eventbridge.ListEventBusesResponse, eventbridge.ListEventBusesError>
   >
 > {}
-export const ListEventBuses = Binding.Service<ListEventBuses>(
-  "AWS.EventBridge.ListEventBuses",
-);
+export const ListEventBuses = Binding.Service<ListEventBuses>("AWS.EventBridge.ListEventBuses");

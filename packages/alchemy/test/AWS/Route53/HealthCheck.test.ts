@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { HealthCheck } from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { HealthCheck } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,10 +14,7 @@ const assertCheckGone = (id: string) =>
     Effect.catchTag("NoSuchHealthCheck", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -35,7 +32,7 @@ test.provider(
             fullyQualifiedDomainName: "example.com",
             resourcePath: "/",
             port: 80,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
             failureThreshold: 3,
             tags: { env: "test" },
           });
@@ -51,6 +48,8 @@ test.provider(
       });
       expect(observed.HealthCheck.HealthCheckConfig.FailureThreshold).toBe(3);
       expect(observed.HealthCheck.HealthCheckConfig.ResourcePath).toBe("/");
+      // Duration.Input prop round-trips to the wire as integer seconds.
+      expect(observed.HealthCheck.HealthCheckConfig.RequestInterval).toBe(30);
 
       const tags = yield* route53.listTagsForResource({
         ResourceType: "healthcheck",
@@ -70,7 +69,7 @@ test.provider(
             fullyQualifiedDomainName: "example.com",
             resourcePath: "/health",
             port: 80,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
             failureThreshold: 5,
             tags: { env: "prod" },
           });
@@ -83,9 +82,7 @@ test.provider(
         HealthCheckId: check.id,
       });
       expect(observed2.HealthCheck.HealthCheckConfig.FailureThreshold).toBe(5);
-      expect(observed2.HealthCheck.HealthCheckConfig.ResourcePath).toBe(
-        "/health",
-      );
+      expect(observed2.HealthCheck.HealthCheckConfig.ResourcePath).toBe("/health");
 
       const tags2 = yield* route53.listTagsForResource({
         ResourceType: "healthcheck",
@@ -99,7 +96,7 @@ test.provider(
       yield* stack.destroy();
       yield* assertCheckGone(check.id);
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -114,7 +111,7 @@ test.provider(
             type: "HTTP",
             fullyQualifiedDomainName: "example.com",
             port: 80,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
           });
         }),
       );
@@ -127,7 +124,7 @@ test.provider(
             type: "HTTPS",
             fullyQualifiedDomainName: "example.com",
             port: 443,
-            requestInterval: 30,
+            requestInterval: "30 seconds",
           });
         }),
       );
@@ -141,5 +138,5 @@ test.provider(
       yield* stack.destroy();
       yield* assertCheckGone(replaced.id);
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 180_000 },
 );

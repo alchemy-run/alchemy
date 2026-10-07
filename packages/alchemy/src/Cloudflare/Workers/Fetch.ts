@@ -1,14 +1,12 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
-import * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import * as Url from "effect/unstable/http/Url";
 import * as Binding from "../../Binding.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { fetchWithFetcher } from "./FetcherRequest.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
 
 /**
@@ -26,7 +24,8 @@ export interface Fetch extends Binding.Service<
       request: HttpClientRequest.HttpClientRequest,
     ) => Effect.Effect<
       HttpClientResponse.HttpClientResponse,
-      HttpClientError.RequestError
+      HttpClientError.RequestError,
+      RuntimeContext
     >
   >
 > {}
@@ -40,98 +39,31 @@ export const FetchBinding = Layer.effect(
 
     return Effect.fn(function* (worker: Worker) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        // Deploy-time only: register the service binding for the *target*
+        // worker on the host Worker.
         const host = yield* Binding.Host;
         if (isWorker(host)) {
-          yield* host.bind`${host}`({
+          yield* host.bind`${worker}`({
             bindings: [
               {
                 type: "service",
-                name: host.LogicalId,
-                service: host.workerName,
+                name: worker.LogicalId,
+                service: worker.workerName,
               },
             ],
           });
         }
       }
-      const fetcher = (env as Record<string, runtime.Fetcher>)[
-        worker.LogicalId
-      ];
+      // Lazy — the `WorkerEnvironment` bindings are only populated at exec
+      // phase, so the fetcher must be resolved per call, not at bind time.
+      const fetcher = Effect.sync(
+        () => (env as Record<string, runtime.Fetcher>)[worker.LogicalId]!,
+      ) as Effect.Effect<runtime.Fetcher, never, RuntimeContext>;
 
       return (request: HttpClientRequest.HttpClientRequest) =>
-        doFetch(fetcher, request);
+        Effect.flatMap(fetcher, (f) =>
+          fetchWithFetcher(f, request, "Service binding fetch failed"),
+        );
     });
   }),
 );
-
-const doFetch = (
-  fetcher: runtime.Fetcher,
-  request: HttpClientRequest.HttpClientRequest,
-): Effect.Effect<
-  HttpClientResponse.HttpClientResponse,
-  HttpClientError.RequestError
-> => {
-  const urlResult = Url.make(
-    request.url,
-    request.urlParams,
-    request.hash.pipe(Option.getOrUndefined),
-  );
-  if (Result.isFailure(urlResult)) {
-    return Effect.fail(
-      new HttpClientError.InvalidUrlError({
-        request,
-        cause: urlResult.failure,
-        description: "Failed to construct URL",
-      }),
-    );
-  }
-  const url = urlResult.success;
-
-  const send = (body: BodyInit | undefined) =>
-    Effect.mapError(
-      Effect.map(
-        Effect.tryPromise({
-          try: () =>
-            fetcher.fetch(
-              url.toString() as runtime.RequestInfo,
-              {
-                method: request.method,
-                headers: request.headers as unknown as runtime.HeadersInit,
-                body,
-                duplex: request.body._tag === "Stream" ? "half" : undefined,
-              } as runtime.RequestInit,
-            ) as unknown as Promise<Response>,
-          catch: (cause) => cause,
-        }),
-        (response) => HttpClientResponse.fromWeb(request, response),
-      ),
-      (cause) =>
-        new HttpClientError.TransportError({
-          request,
-          cause,
-          description: "Service binding fetch failed",
-        }),
-    );
-
-  switch (request.body._tag) {
-    case "Raw":
-    case "Uint8Array":
-      return send(request.body.body as BodyInit);
-    case "FormData":
-      return send(request.body.formData);
-    case "Stream":
-      return Effect.flatMap(
-        Effect.mapError(
-          Stream.toReadableStreamEffect(request.body.stream),
-          (cause) =>
-            new HttpClientError.EncodeError({
-              request,
-              cause,
-              description: "Failed to encode stream body",
-            }),
-        ),
-        send,
-      );
-    default:
-      return send(undefined);
-  }
-};

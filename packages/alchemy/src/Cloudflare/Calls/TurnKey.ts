@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -54,13 +53,7 @@ export type TurnKeyAttributes = {
   modified: string;
 };
 
-export type TurnKey = Resource<
-  TypeId,
-  TurnKeyProps,
-  TurnKeyAttributes,
-  never,
-  Providers
->;
+export type TurnKey = Resource<TypeId, TurnKeyProps, TurnKeyAttributes, never, Providers>;
 
 /**
  * A Cloudflare Realtime (formerly "Calls") TURN key.
@@ -70,24 +63,21 @@ export type TurnKey = Resource<
  * short-lived TURN credentials that WebRTC clients use to relay traffic
  * through Cloudflare's network. The only configurable property is the
  * human-readable `name`, which is mutable in place.
- * @resource
- * @product Calls
- * @category Media
- * @section Creating a TURN key
- * @example TURN key with a generated name
+ * ### Creating a TURN key
+ * **Example:** TURN key with a generated name
  * ```typescript
  * const turnKey = yield* Cloudflare.Calls.TurnKey("turn", {});
  * ```
  *
- * @example TURN key with an explicit name
+ * **Example:** TURN key with an explicit name
  * ```typescript
  * const turnKey = yield* Cloudflare.Calls.TurnKey("turn", {
  *   name: "my-turn-key",
  * });
  * ```
  *
- * @section Using the key
- * @example Minting TURN credentials server-side
+ * ### Using the key
+ * **Example:** Minting TURN credentials server-side
  * ```typescript
  * // keyId is public — it appears in the credential-minting URL:
  * const keyId = turnKey.keyId;
@@ -98,6 +88,10 @@ export type TurnKey = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/realtime/turn/
+ *
+ * @resource
+ * @product Calls
+ * @category Media
  */
 export const TurnKey = Resource<TurnKey>(TypeId);
 
@@ -123,9 +117,7 @@ export const TurnKeyProvider = () =>
       // adoption path.
       if (!output?.keyId) return undefined;
       const observed = yield* getTurnKey(output.accountId, output.keyId);
-      return observed
-        ? toAttributes(observed, output.accountId, output.key)
-        : undefined;
+      return observed ? toAttributes(observed, output.accountId, output.key) : undefined;
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -160,11 +152,7 @@ export const TurnKeyProvider = () =>
         // the create-only key. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createTurn({ accountId, name });
-        return toAttributes(
-          created,
-          accountId,
-          Redacted.make(created.key ?? ""),
-        );
+        return toAttributes(created, accountId, Redacted.make(created.key ?? ""));
       }
 
       // Sync — the only mutable aspect is `name`; diff observed cloud
@@ -201,10 +189,7 @@ const createTurnKeyName = (id: string, name: string | undefined) =>
   });
 
 const toAttributes = (
-  turnKey:
-    | calls.GetTurnResponse
-    | calls.CreateTurnResponse
-    | calls.UpdateTurnResponse,
+  turnKey: calls.GetTurnResponse | calls.CreateTurnResponse | calls.UpdateTurnResponse,
   accountId: string,
   key: Redacted.Redacted<string>,
 ): TurnKeyAttributes => ({

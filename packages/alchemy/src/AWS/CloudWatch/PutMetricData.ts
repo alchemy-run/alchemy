@@ -5,7 +5,38 @@ import * as Binding from "../../Binding.ts";
 export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
 
 /**
- * Runtime binding for `cloudwatch:PutMetricData`.
+ * Runtime binding for `cloudwatch:PutMetricData` — publish custom metric
+ * datums from inside a function runtime.
+ *
+ * Provide `CloudWatch.PutMetricDataHttp` on the hosting Lambda Function to
+ * satisfy the requirement. For high-volume publishing prefer the batching
+ * {@link MetricSink}, which packs datums into 1000-datum `PutMetricData`
+ * calls.
+ * ### Publishing Metrics
+ * **Example:** Publish a Custom Metric from a Lambda Function
+ * ```typescript
+ * export default MyFunction.make(
+ *   { main: import.meta.url, functionUrl: true },
+ *   Effect.gen(function* () {
+ *     // init — grants cloudwatch:PutMetricData to the function
+ *     const putMetricData = yield* AWS.CloudWatch.PutMetricData();
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime — publish a datum on every request
+ *         yield* putMetricData({
+ *           Namespace: "MyApp/Payments",
+ *           MetricData: [
+ *             { MetricName: "PaymentProcessed", Value: 1, Unit: "Count" },
+ *           ],
+ *         });
+ *         return HttpServerResponse.text("ok");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(AWS.CloudWatch.PutMetricDataHttp)),
+ * );
+ * ```
+ *
  * @binding
  */
 export interface PutMetricData extends Binding.Service<
@@ -14,13 +45,8 @@ export interface PutMetricData extends Binding.Service<
   () => Effect.Effect<
     (
       request: PutMetricDataRequest,
-    ) => Effect.Effect<
-      cloudwatch.PutMetricDataResponse,
-      cloudwatch.PutMetricDataError
-    >
+    ) => Effect.Effect<cloudwatch.PutMetricDataResponse, cloudwatch.PutMetricDataError>
   >
 > {}
 
-export const PutMetricData = Binding.Service<PutMetricData>(
-  "AWS.CloudWatch.PutMetricData",
-);
+export const PutMetricData = Binding.Service<PutMetricData>("AWS.CloudWatch.PutMetricData");

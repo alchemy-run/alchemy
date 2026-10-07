@@ -5,15 +5,12 @@ import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
-import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import type { PlatformProps } from "../../Platform.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import type { ResourceBinding } from "../../Resource.ts";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-} from "../../Server/Process.ts";
+import { createHostRuntimeContext, type HostRuntimeContext } from "../../Server/Process.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
@@ -21,31 +18,60 @@ import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
+/**
+ * Binding contract accepted by EC2-hosted runtimes: environment variables and
+ * IAM policy statements attached by capability bindings.
+ */
 export interface Ec2HostedBinding {
+  /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
+  /** IAM policy statements attached to the instance profile role. */
   policyStatements?: PolicyStatement[];
 }
 
+/**
+ * Shared props for EC2-backed hosted runtimes (an Instance that bundles and
+ * runs an application entrypoint).
+ */
 export interface Ec2HostedProps extends PlatformProps {
+  /** AMI ID to launch the instance from. */
   imageId: string;
+  /** EC2 instance type, e.g. `t3.micro`. */
   instanceType: string;
+  /** Name of an EC2 key pair for SSH access. */
   keyName?: Input<string>;
+  /** Existing instance profile to attach instead of a managed one. */
   instanceProfileName?: string;
+  /** Additional user-data script prepended to the runtime bootstrap. */
   userData?: string;
+  /** Subnet to launch the instance into. */
   subnetId?: any;
+  /** Security groups attached to the instance. */
   securityGroupIds?: readonly any[];
+  /** Whether to associate a public IP address. */
   associatePublicIpAddress?: boolean;
+  /** Static private IP address within the subnet. */
   privateIpAddress?: string;
+  /** Availability Zone to launch into. */
   availabilityZone?: string;
+  /** Tags applied to the instance. */
   tags?: Record<string, string>;
+  /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
+  /** Named export of the handler within `main`. */
   handler?: string;
+  /** Port the hosted HTTP server listens on. */
   port?: number;
+  /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  /**
+   * Overrides for the rolldown bundling of `main`. Unused code is
+   * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+   * pure so unused parts prune more aggressively. List extra packages
+   * with `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
+  /** Managed policy ARNs attached to the instance role. */
   roleManagedPolicyArns?: string[];
 }
 
@@ -90,9 +116,7 @@ export const createEc2HostedSupport = ({
   stackName: string;
   stage: string;
   fs: FileSystem.FileSystem;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
   resourceType: string;
 }) => {
   const alchemyEnv = {
@@ -129,15 +153,10 @@ export const createEc2HostedSupport = ({
   const normalizeSecurityGroups = (groups?: readonly string[]) =>
     [...(groups ?? [])].sort((a, b) => a.localeCompare(b));
 
-  const bundleProgram = Effect.fn(function* (
-    id: string,
-    props: Ec2HostedProps,
-  ) {
+  const bundleProgram = Effect.fn(function* (id: string, props: Ec2HostedProps) {
     if (!props.main) {
       return yield* Effect.fail(
-        new Error(
-          `${resourceType} '${id}' requires 'main' when bundling a hosted process`,
-        ),
+        new Error(`${resourceType} '${id}' requires 'main' when bundling a hosted process`),
       );
     }
 
@@ -164,7 +183,7 @@ export const createEc2HostedSupport = ({
             ...((props.build?.input?.external as string[] | undefined) ?? []),
           ],
           resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
+            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
@@ -176,6 +195,7 @@ export const createEc2HostedSupport = ({
           minify: props.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
         },
+        props.build,
       );
     });
 
@@ -185,68 +205,10 @@ export const createEc2HostedSupport = ({
           realMain,
           virtualEntryPlugin(
             (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Ec2";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
-// handler is actually served and host.run loops stay alive.
-const program = handler.pipe(
-  Effect.flatMap((instance) => instance.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Instance bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Instance bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `,
           ),
         );
@@ -268,8 +230,7 @@ await Effect.runPromise(program).catch((err) => {
   });
 
   const quoteEnvValue = (value: any) => {
-    const text =
-      typeof value === "string" ? value : JSON.stringify(value ?? null);
+    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
     return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
   };
 
@@ -311,7 +272,8 @@ export HOME=/root
 # unzip (needed below) — install if missing.
 command -v unzip >/dev/null 2>&1 || {
   (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
-    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) || true
+    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
+    || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
 }
 
 # AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
@@ -349,7 +311,10 @@ Type=simple
 WorkingDirectory=${appDir}
 ExecStartPre=/usr/local/bin/${unitName}-setup.sh
 EnvironmentFile=-${appDir}/env
-ExecStart=/root/.bun/bin/bun ${appDir}/index.mjs
+# --no-install: the uploaded bundle is self-contained; bun must never fall
+# into its auto-install path (which hangs startup on network package
+# resolution) — fail fast if the bundle is incomplete instead.
+ExecStart=/root/.bun/bin/bun --no-install ${appDir}/index.mjs
 Restart=always
 RestartSec=5
 
@@ -366,10 +331,7 @@ systemctl enable --now ${unitName}.service
     if (!userData) {
       return hosted;
     }
-    return `${hosted}\n\n# User supplied bootstrap\n${userData.replace(
-      /^#!\/bin\/bash\s*/,
-      "",
-    )}`;
+    return `${hosted}\n\n# User supplied bootstrap\n${userData.replace(/^#!\/bin\/bash\s*/, "")}`;
   };
 
   const listAttachedPolicyArns = (roleName: string) =>
@@ -436,10 +398,7 @@ systemctl enable --now ${unitName}.service
           iam.getRole({ RoleName: roleName }).pipe(
             Effect.filterOrFail(
               (existing) => hasTags(tags, existing.Role?.Tags),
-              () =>
-                new Error(
-                  `Role '${roleName}' already exists and is not managed by alchemy`,
-                ),
+              () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
             ),
           ),
         ),
@@ -591,8 +550,7 @@ systemctl enable --now ${unitName}.service
         roleName: output?.roleName,
         roleArn: output?.roleArn,
         policyName: output?.policyName,
-        instanceProfileName:
-          news.instanceProfileName ?? output?.instanceProfileName,
+        instanceProfileName: news.instanceProfileName ?? output?.instanceProfileName,
         instanceProfileArn: output?.instanceProfileArn,
         managedIam: output?.managedIam ?? false,
         runtimeUnitName: output?.runtimeUnitName,
@@ -601,10 +559,7 @@ systemctl enable --now ${unitName}.service
       } satisfies Ec2HostedRuntimeState;
     }
 
-    if (
-      news.instanceProfileName &&
-      (news.roleManagedPolicyArns?.length ?? 0) > 0
-    ) {
+    if (news.instanceProfileName && (news.roleManagedPolicyArns?.length ?? 0) > 0) {
       return yield* Effect.fail(
         new Error(
           `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
@@ -613,8 +568,7 @@ systemctl enable --now ${unitName}.service
     }
 
     const { region } = yield* AWSEnvironment.current;
-    const runtimeUnitName =
-      output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
+    const runtimeUnitName = output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
     const assetPrefix = output?.assetPrefix ?? `ec2/${runtimeUnitName}`;
     const bundleKey = `${assetPrefix}/bundle.zip`;
     const envKey = `${assetPrefix}/env`;
@@ -635,8 +589,7 @@ systemctl enable --now ${unitName}.service
           roleName,
           managedPolicyArns: news.roleManagedPolicyArns ?? [],
         }));
-      const profileName =
-        output?.instanceProfileName ?? (yield* createManagedProfileName(id));
+      const profileName = output?.instanceProfileName ?? (yield* createManagedProfileName(id));
       const profile = yield* ensureManagedInstanceProfile({
         id,
         profileName,
@@ -671,6 +624,11 @@ systemctl enable --now ${unitName}.service
     const env = {
       ...bindingEnv,
       ...alchemyEnv,
+      // Lambda injects AWS_REGION natively; an EC2 systemd service does not
+      // get one, and the runtime's `Region.fromEnv()` (and any composition
+      // code that reads the region, e.g. EC2.Network's runtime AZ branch)
+      // dies without it.
+      AWS_REGION: region,
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
@@ -723,9 +681,9 @@ systemctl enable --now ${unitName}.service
     }
 
     if (output.managedIam && output.instanceProfileName && output.roleName) {
-      const attachedPolicyArns = yield* listAttachedPolicyArns(
-        output.roleName,
-      ).pipe(Effect.catch(() => Effect.succeed([])));
+      const attachedPolicyArns = yield* listAttachedPolicyArns(output.roleName).pipe(
+        Effect.catch(() => Effect.succeed([])),
+      );
       yield* iam
         .removeRoleFromInstanceProfile({
           InstanceProfileName: output.instanceProfileName,
@@ -753,16 +711,13 @@ systemctl enable --now ${unitName}.service
     }
 
     if (output.assetPrefix) {
-      for (const key of [
-        `${output.assetPrefix}/bundle.zip`,
-        `${output.assetPrefix}/env`,
-      ]) {
+      for (const key of [`${output.assetPrefix}/bundle.zip`, `${output.assetPrefix}/env`]) {
         yield* s3
           .deleteObject({
             Bucket: yield* Assets.BucketName,
             Key: key,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          .pipe(Effect.catchTag("NoSuchKey", () => Effect.void));
       }
     }
 
@@ -778,10 +733,7 @@ systemctl enable --now ${unitName}.service
     privateIpAddress,
   }: Pick<
     Ec2HostedProps,
-    | "subnetId"
-    | "securityGroupIds"
-    | "associatePublicIpAddress"
-    | "privateIpAddress"
+    "subnetId" | "securityGroupIds" | "associatePublicIpAddress" | "privateIpAddress"
   >) => {
     const groups = normalizeSecurityGroups(securityGroupIds);
     const usePrimaryNetworkInterface =
@@ -852,9 +804,7 @@ systemctl enable --now ${unitName}.service
         : network.groups.length > 0
           ? network.groups
           : undefined,
-      PrivateIpAddress: network.usePrimaryNetworkInterface
-        ? undefined
-        : news.privateIpAddress,
+      PrivateIpAddress: network.usePrimaryNetworkInterface ? undefined : news.privateIpAddress,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [
@@ -870,6 +820,7 @@ systemctl enable --now ${unitName}.service
   return {
     normalizeSecurityGroups,
     buildLaunchTemplateData,
+    bundleProgram,
     resolveHostedRuntime,
     cleanupHostedRuntime,
   };

@@ -9,7 +9,23 @@ export interface ListTagsForResourceRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `cloudwatch:ListTagsForResource`.
+ * Runtime binding for `cloudwatch:ListTagsForResource` — read the tags on
+ * a bound CloudWatch resource (alarm, dashboard, metric stream, insight
+ * rule, or mute rule); the resource ARN is injected automatically.
+ *
+ * Provide `CloudWatch.ListTagsForResourceHttp` on the hosting Lambda
+ * Function to satisfy the requirement.
+ * ### Reading Tags
+ * **Example:** Read the Tags on an Alarm
+ * ```typescript
+ * // init — grants cloudwatch:ListTagsForResource on the alarm's ARN
+ * const listTagsForResource = yield* AWS.CloudWatch.ListTagsForResource(alarm);
+ *
+ * // runtime
+ * const result = yield* listTagsForResource();
+ * const tags = result.Tags ?? [];
+ * ```
+ *
  * @binding
  */
 export interface ListTagsForResource extends Binding.Service<
@@ -20,10 +36,7 @@ export interface ListTagsForResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTagsForResourceRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListTagsForResourceOutput,
-      cloudwatch.ListTagsForResourceError
-    >
+    ) => Effect.Effect<cloudwatch.ListTagsForResourceOutput, cloudwatch.ListTagsForResourceError>
   >
 > {}
 

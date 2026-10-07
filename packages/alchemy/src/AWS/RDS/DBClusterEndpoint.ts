@@ -5,8 +5,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DBClusterEndpointProps {
   /**
@@ -39,15 +39,45 @@ export interface DBClusterEndpoint extends Resource<
   "AWS.RDS.DBClusterEndpoint",
   DBClusterEndpointProps,
   {
+    /**
+     * Identifier of the custom endpoint.
+     */
     dbClusterEndpointIdentifier: string;
+    /**
+     * ARN of the custom endpoint.
+     */
     dbClusterEndpointArn: string | undefined;
+    /**
+     * Cluster that owns the endpoint.
+     */
     dbClusterIdentifier: string | undefined;
+    /**
+     * DNS address applications connect to.
+     */
     endpoint: string | undefined;
+    /**
+     * Status of the endpoint (e.g. `available`).
+     */
     status: string | undefined;
+    /**
+     * Endpoint type (`CUSTOM` for managed endpoints).
+     */
     endpointType: string | undefined;
+    /**
+     * Traffic routing type of the custom endpoint (`READER`, `ANY`).
+     */
     customEndpointType: string | undefined;
+    /**
+     * Instances explicitly attached to the endpoint.
+     */
     staticMembers: string[];
+    /**
+     * Instances excluded from the endpoint.
+     */
     excludedMembers: string[];
+    /**
+     * Tags on the endpoint.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -55,12 +85,34 @@ export interface DBClusterEndpoint extends Resource<
 > {}
 
 /**
- * A custom Aurora cluster endpoint.
+ * A custom Aurora cluster endpoint — a DNS name that routes to a chosen
+ * subset of a cluster's instances, on top of the built-in writer and reader
+ * endpoints of a `DBCluster`.
+ *
+ * Use it to pin analytics traffic to specific readers or to keep a stable
+ * address across instance replacements. Changing the identifier or owning
+ * cluster replaces the endpoint; type and membership update in place.
+ * ### Creating Custom Endpoints
+ * **Example:** Reader Endpoint for a Cluster
+ * ```typescript
+ * const readers = yield* DBClusterEndpoint("Readers", {
+ *   dbClusterIdentifier: cluster.dbClusterIdentifier,
+ *   endpointType: "READER",
+ * });
+ * ```
+ *
+ * **Example:** Pin Specific Instances
+ * ```typescript
+ * const analytics = yield* DBClusterEndpoint("Analytics", {
+ *   dbClusterIdentifier: cluster.dbClusterIdentifier,
+ *   endpointType: "ANY",
+ *   staticMembers: [reporting.dbInstanceIdentifier],
+ * });
+ * ```
+ *
  * @resource
  */
-export const DBClusterEndpoint = Resource<DBClusterEndpoint>(
-  "AWS.RDS.DBClusterEndpoint",
-);
+export const DBClusterEndpoint = Resource<DBClusterEndpoint>("AWS.RDS.DBClusterEndpoint");
 
 const toAttrs = ({
   endpoint,
@@ -95,11 +147,7 @@ export const DBClusterEndpointProvider = () =>
           .describeDBClusterEndpoints({
             DBClusterEndpointIdentifier: identifier,
           })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusterEndpoints?.[0];
       });
 
@@ -125,10 +173,8 @@ export const DBClusterEndpointProvider = () =>
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (
-            (yield* toIdentifier(
-              id,
-              olds ?? ({} as DBClusterEndpointProps),
-            )) !== (yield* toIdentifier(id, news))
+            (yield* toIdentifier(id, olds ?? ({} as DBClusterEndpointProps))) !==
+            (yield* toIdentifier(id, news))
           ) {
             return { action: "replace" } as const;
           }
@@ -154,9 +200,7 @@ export const DBClusterEndpointProvider = () =>
           return toAttrs({ endpoint, tags: output?.tags ?? {} });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbClusterEndpointIdentifier ??
-            (yield* toIdentifier(id, news));
+          const identifier = output?.dbClusterEndpointIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -179,18 +223,11 @@ export const DBClusterEndpointProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBClusterEndpointAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBClusterEndpointAlreadyExistsFault", () => Effect.void));
             observed = yield* readEndpoint(identifier);
             if (!observed?.DBClusterEndpointIdentifier) {
               return yield* Effect.fail(
-                new Error(
-                  `DB cluster endpoint '${identifier}' not found after create`,
-                ),
+                new Error(`DB cluster endpoint '${identifier}' not found after create`),
               );
             }
           } else {
@@ -204,9 +241,7 @@ export const DBClusterEndpointProvider = () =>
             observed = yield* readEndpoint(identifier);
             if (!observed?.DBClusterEndpointIdentifier) {
               return yield* Effect.fail(
-                new Error(
-                  `DB cluster endpoint '${identifier}' not found after update`,
-                ),
+                new Error(`DB cluster endpoint '${identifier}' not found after update`),
               );
             }
           }
@@ -239,12 +274,7 @@ export const DBClusterEndpointProvider = () =>
             .deleteDBClusterEndpoint({
               DBClusterEndpointIdentifier: output.dbClusterEndpointIdentifier,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBClusterEndpointNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBClusterEndpointNotFoundFault", () => Effect.void));
         }),
       };
     }),

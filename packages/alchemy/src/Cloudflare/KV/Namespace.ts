@@ -3,10 +3,13 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
@@ -40,17 +43,14 @@ export type Namespace = Resource<
  * KV provides eventually-consistent, low-latency reads with global
  * replication. Create a namespace as a resource, then bind it to a Worker
  * to get/put values at runtime.
- * @resource
- * @product KV
- * @category Storage & Databases
- * @section Creating a Namespace
- * @example Basic KV namespace
+ * ### Creating a Namespace
+ * **Example:** Basic KV namespace
  * ```typescript
  * const kv = yield* Cloudflare.KV.Namespace("MyKV");
  * ```
  *
- * @section Binding to a Worker
- * @example Using KV inside a Worker
+ * ### Binding to a Worker
+ * **Example:** Using KV inside a Worker
  * ```typescript
  * const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
@@ -66,12 +66,16 @@ export type Namespace = Resource<
  * token) in the worker's runtime layer. Use `Cloudflare.KV.ReadNamespace`
  * / `Cloudflare.KV.WriteNamespace` for least-privilege read- or
  * write-only access.
+ *
+ * @resource
+ * @product KV
+ * @category Storage & Databases
  */
 export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
   aliases: ["Cloudflare.KVNamespace"],
 });
 
-export const NamespaceProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Namespace, {
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
@@ -80,8 +84,11 @@ export const NamespaceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const title = yield* createTitle(id, news.title);
       const oldTitle = output?.title ?? (yield* createTitle(id, olds.title));
+      // Auto-generated titles are engine-owned: the deployed title stays
+      // authoritative even if the generator would title this id differently
+      // today. Only an explicit user-provided title can force a rename.
+      const title = news.title ?? oldTitle;
       if (title !== oldTitle) {
         return { action: "update" } as const;
       }
@@ -107,11 +114,7 @@ export const NamespaceProvider = () =>
             accountId: acct,
             namespaceId: output.namespaceId,
           })
-          .pipe(
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -201,9 +204,7 @@ export const NamespaceProvider = () =>
               supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
               accountId: output.accountId,
             })),
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
           );
       }
       const title = yield* createTitle(id, olds?.title);
@@ -218,6 +219,50 @@ export const NamespaceProvider = () =>
       }
       return undefined;
     }),
+  });
+
+/**
+ * Local (dev) provider — the namespace is purely virtual: a `dev:` id keyed
+ * into the local workerd KV simulator. `toRuntimeBinding` lowers a
+ * `kv_namespace` binding whose id is `dev:`-prefixed onto the local KV
+ * service; data persists under `.alchemy/local/kv`.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Namespace, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const accountId = yield* localAccountId;
+      if (!output?.namespaceId) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff (title renames
+      // update in place).
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const accountId = yield* localAccountId;
+      return {
+        title: yield* createTitle(id, news.title),
+        namespaceId: output?.namespaceId ?? generateLocalId(),
+        supportsUrlEncoding: true,
+        accountId: output?.accountId ?? accountId,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev id; dropping the
+      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+    }),
+  });
+
+export const NamespaceProvider = () =>
+  ProviderLayer.dual(Namespace, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
   });
 
 const createTitle = (id: string, title: string | undefined) =>

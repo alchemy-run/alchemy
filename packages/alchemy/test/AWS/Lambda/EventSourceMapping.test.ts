@@ -1,9 +1,11 @@
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { EventSourceMapping } from "@/AWS/Lambda";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import EventSourceMappingFunctionLive, {
   EventSourceMappingFunction,
 } from "./fixtures/event-source-mapping-handler.ts";
@@ -23,9 +25,7 @@ test.provider(
       yield* stack.destroy();
 
       const fn = yield* stack.deploy(
-        EventSourceMappingFunction.pipe(
-          Effect.provide(EventSourceMappingFunctionLive),
-        ),
+        EventSourceMappingFunction.pipe(Effect.provide(EventSourceMappingFunctionLive)),
       );
 
       const provider = yield* Provider.findProvider(EventSourceMapping);
@@ -40,6 +40,28 @@ test.provider(
       expect(mine.state).toBeTruthy();
 
       yield* stack.destroy();
+
+      // Out-of-band proof the destroy removed both the mapping and the host
+      // function from the cloud (bounded retry for delete propagation).
+      yield* Lambda.getEventSourceMapping({ UUID: mine.uuid }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(new Error(`Event source mapping ${mine.uuid} still exists`)),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+        }),
+      );
+      yield* Lambda.getFunction({ FunctionName: fn.functionName }).pipe(
+        Effect.flatMap(() => Effect.fail(new Error(`Function ${fn.functionName} still exists`))),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+        }),
+      );
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 240_000,
+  },
 );

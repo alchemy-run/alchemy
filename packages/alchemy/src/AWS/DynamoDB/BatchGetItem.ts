@@ -9,10 +9,7 @@ type BatchGetItemKeysAndAttributes = NonNullable<
   DynamoDB.BatchGetItemInput["RequestItems"]
 >[string];
 
-export interface BatchGetItemRequest extends Omit<
-  DynamoDB.BatchGetItemInput,
-  "RequestItems"
-> {
+export interface BatchGetItemRequest extends Omit<DynamoDB.BatchGetItemInput, "RequestItems"> {
   RequestItems: Record<string, BatchGetItemKeysAndAttributes>;
 }
 
@@ -22,9 +19,8 @@ export interface BatchGetItemRequest extends Omit<
  * Bind this operation to one or more tables and key the request by each bound
  * table's `LogicalId`. The binding resolves those logical IDs to physical table
  * names at runtime.
- * @binding
- * @section Reading Data
- * @example Read Items Across Multiple Tables
+ * ### Reading Data
+ * **Example:** Read Items Across Multiple Tables
  * ```typescript
  * const batchGetItem = yield* BatchGetItem(sourceTable, archiveTable);
  *
@@ -39,6 +35,8 @@ export interface BatchGetItemRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchGetItem extends Binding.Service<
   BatchGetItem,
@@ -51,6 +49,4 @@ export interface BatchGetItem extends Binding.Service<
     ) => Effect.Effect<DynamoDB.BatchGetItemOutput, DynamoDB.BatchGetItemError>
   >
 > {}
-export const BatchGetItem = Binding.Service<BatchGetItem>(
-  "AWS.DynamoDB.BatchGetItem",
-);
+export const BatchGetItem = Binding.Service<BatchGetItem>("AWS.DynamoDB.BatchGetItem");

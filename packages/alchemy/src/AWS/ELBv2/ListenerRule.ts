@@ -1,4 +1,5 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -20,6 +21,27 @@ import type { Listener, ListenerArn } from "./Listener.ts";
 export type RuleArn =
   `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:listener-rule/${string}`;
 
+/**
+ * The requested rule priority is already taken by another rule on the same
+ * listener. Surfaced instead of the raw `PriorityInUseException` so the
+ * failure names the conflicting priority and the fix: rules composed with an
+ * auto-derived priority (e.g. `AWS.ECS.Service` shared load balancer rules)
+ * should set an explicit `priority` to resolve the collision. The engine
+ * never probes for a free slot — priorities stay deterministic.
+ */
+export class ListenerRulePriorityInUse extends Data.TaggedError("ListenerRulePriorityInUse")<{
+  readonly listenerArn: string;
+  readonly priority: number;
+  readonly message: string;
+}> {}
+
+const priorityInUse = (listenerArn: string, priority: number) =>
+  new ListenerRulePriorityInUse({
+    listenerArn,
+    priority,
+    message: `Listener rule priority ${priority} is already in use on ${listenerArn}. Set an explicit \`priority\` on the rule to resolve the conflict.`,
+  });
+
 export interface ListenerRuleProps {
   /** The listener this rule attaches to. Changing it replaces the rule. */
   listenerArn: Input<ListenerArn> | Listener;
@@ -40,9 +62,13 @@ export interface ListenerRule extends Resource<
   "AWS.ELBv2.ListenerRule",
   ListenerRuleProps,
   {
+    /** The ARN of the rule. */
     ruleArn: RuleArn;
+    /** The ARN of the listener the rule is attached to. */
     listenerArn: ListenerArn;
+    /** The rule's evaluation priority (lower numbers evaluate first). */
     priority: number;
+    /** Whether this is the listener's default rule. */
     isDefault: boolean;
   },
   never,
@@ -54,9 +80,8 @@ export interface ListenerRule extends Resource<
  * and route requests to target groups (or other actions) based on conditions
  * such as host header, path pattern, HTTP header, query string, request method,
  * and source IP.
- * @resource
- * @section Creating a Rule
- * @example Path-based routing
+ * ### Creating a Rule
+ * **Example:** Path-based routing
  * ```typescript
  * const rule = yield* ListenerRule("api", {
  *   listenerArn: listener.listenerArn,
@@ -68,7 +93,7 @@ export interface ListenerRule extends Resource<
  * });
  * ```
  *
- * @example Host-header routing
+ * **Example:** Host-header routing
  * ```typescript
  * const rule = yield* ListenerRule("admin", {
  *   listenerArn: listener.listenerArn,
@@ -80,8 +105,8 @@ export interface ListenerRule extends Resource<
  * });
  * ```
  *
- * @section Conditions
- * @example Combining query-string and HTTP-header conditions
+ * ### Conditions
+ * **Example:** Combining query-string and HTTP-header conditions
  * ```typescript
  * const rule = yield* ListenerRule("beta", {
  *   listenerArn: listener.listenerArn,
@@ -93,6 +118,8 @@ export interface ListenerRule extends Resource<
  *   actions: [{ type: "fixedResponse", statusCode: "200", messageBody: "beta" }],
  * });
  * ```
+ *
+ * @resource
  */
 export const ListenerRule = Resource<ListenerRule>("AWS.ELBv2.ListenerRule");
 
@@ -113,11 +140,7 @@ export const ListenerRuleProvider = () =>
       }
       const described = yield* elbv2
         .describeRules({ RuleArns: [output.ruleArn] })
-        .pipe(
-          Effect.catchTag("RuleNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("RuleNotFoundException", () => Effect.succeed(undefined)));
       const rule = described?.Rules?.[0];
       if (!rule?.RuleArn) {
         return undefined;
@@ -132,61 +155,49 @@ export const ListenerRuleProvider = () =>
     // Rules belong to a listener, which belongs to a load balancer. Enumerate
     // every load balancer, then every listener, then every rule.
     list: Effect.fn(function* () {
-      const loadBalancerArns = yield* elbv2.describeLoadBalancers
-        .pages({})
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.LoadBalancers ?? []).flatMap((lb) =>
-                lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
-              ),
+      const loadBalancerArns = yield* elbv2.describeLoadBalancers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.LoadBalancers ?? []).flatMap((lb) =>
+              lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
             ),
           ),
-        );
+        ),
+      );
       const listenerArns = yield* Effect.forEach(
         loadBalancerArns,
         (loadBalancerArn) =>
-          elbv2.describeListeners
-            .pages({ LoadBalancerArn: loadBalancerArn })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.Listeners ?? []).flatMap((l) =>
-                    l.ListenerArn ? [l.ListenerArn as ListenerArn] : [],
-                  ),
+          elbv2.describeListeners.pages({ LoadBalancerArn: loadBalancerArn }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.Listeners ?? []).flatMap((l) =>
+                  l.ListenerArn ? [l.ListenerArn as ListenerArn] : [],
                 ),
               ),
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed([]),
-              ),
-              Effect.catchTag("ListenerNotFoundException", () =>
-                Effect.succeed([]),
-              ),
             ),
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed([])),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
       const rows = yield* Effect.forEach(
         listenerArns.flat(),
         (listenerArn) =>
-          elbv2.describeRules({ ListenerArn: listenerArn }).pipe(
-            Effect.map((res) =>
-              (res.Rules ?? [])
-                .filter(
-                  (r): r is typeof r & { RuleArn: string } =>
-                    r.RuleArn != null && !r.IsDefault,
-                )
-                .map((rule) => ({
-                  ruleArn: rule.RuleArn as RuleArn,
-                  listenerArn,
-                  priority: Number(rule.Priority ?? 0),
-                  isDefault: rule.IsDefault ?? false,
-                })),
+          elbv2.describeRules.items({ ListenerArn: listenerArn }).pipe(
+            Stream.filter(
+              (r): r is typeof r & { RuleArn: string } => r.RuleArn != null && !r.IsDefault,
             ),
-            Effect.catchTag("ListenerNotFoundException", () =>
-              Effect.succeed([]),
-            ),
+            Stream.map((rule) => ({
+              ruleArn: rule.RuleArn as RuleArn,
+              listenerArn,
+              priority: Number(rule.Priority ?? 0),
+              isDefault: rule.IsDefault ?? false,
+            })),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed([])),
             Effect.catchTag("RuleNotFoundException", () => Effect.succeed([])),
           ),
         { concurrency: 10 },
@@ -208,26 +219,28 @@ export const ListenerRuleProvider = () =>
       if (output?.ruleArn) {
         const described = yield* elbv2
           .describeRules({ RuleArns: [output.ruleArn] })
-          .pipe(
-            Effect.catchTag("RuleNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("RuleNotFoundException", () => Effect.succeed(undefined)));
         rule = described?.Rules?.[0];
       }
 
       // Ensure — create if missing.
       if (!rule?.RuleArn) {
-        const created = yield* elbv2.createRule({
-          ListenerArn: listenerArn,
-          Priority: news.priority,
-          Conditions: conditions,
-          Actions: actions,
-          Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-            Key,
-            Value,
-          })),
-        });
+        const created = yield* elbv2
+          .createRule({
+            ListenerArn: listenerArn,
+            Priority: news.priority,
+            Conditions: conditions,
+            Actions: actions,
+            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          })
+          .pipe(
+            Effect.catchTag("PriorityInUseException", () =>
+              Effect.fail(priorityInUse(listenerArn, news.priority)),
+            ),
+          );
         rule = created.Rules?.[0];
         if (!rule?.RuleArn) {
           return yield* Effect.die(new Error("createRule returned no rule"));
@@ -243,11 +256,15 @@ export const ListenerRuleProvider = () =>
 
         // Sync priority — not mutable via modifyRule.
         if (Number(rule.Priority) !== news.priority) {
-          yield* elbv2.setRulePriorities({
-            RulePriorities: [
-              { RuleArn: rule.RuleArn, Priority: news.priority },
-            ],
-          });
+          yield* elbv2
+            .setRulePriorities({
+              RulePriorities: [{ RuleArn: rule.RuleArn, Priority: news.priority }],
+            })
+            .pipe(
+              Effect.catchTag("PriorityInUseException", () =>
+                Effect.fail(priorityInUse(listenerArn, news.priority)),
+              ),
+            );
         }
       }
 

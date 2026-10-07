@@ -5,12 +5,13 @@
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-
 import type { LogEntry } from "./Model.ts";
 
 export type TestStatus = "pass" | "fail" | "skip" | "todo";
 
 export interface TestMeta {
+  readonly tags: ReadonlyArray<string>;
+  readonly optInTags: ReadonlyArray<string>;
   /** Stable id: `<file> > <describe chain> > <name>`. */
   readonly id: string;
   readonly file: string;
@@ -30,6 +31,15 @@ export interface TestResult {
 }
 
 export interface RunSummary {
+  readonly dryRun?: boolean;
+  /** Coverage within the command's path, name, .only and global tag filters. */
+  readonly plan?:
+    | {
+        readonly found: number;
+        readonly selected: number;
+        readonly excluded: number;
+      }
+    | undefined;
   readonly files: number;
   readonly passed: number;
   readonly failed: number;
@@ -37,9 +47,33 @@ export interface RunSummary {
   readonly todo: number;
   readonly durationMs: number;
   readonly failures: ReadonlyArray<{ meta: TestMeta; result: TestResult }>;
+  /**
+   * Files that failed as a whole (import error, or a `beforeAll`/`afterAll`
+   * hook failure) rather than through an individual test. Counted in
+   * {@link failed} alongside `failures`.
+   */
+  readonly fileFailures: ReadonlyArray<{ file: string; error: string }>;
 }
 
 export type TestEvent =
+  | {
+      readonly _tag: "PlanPreview";
+      readonly phases: ReadonlyArray<
+        ReadonlyArray<{
+          readonly tags: ReadonlyArray<string>;
+          readonly concurrency: number | "unbounded";
+          readonly tests: number;
+          readonly files: number;
+          readonly skipped: number;
+        }>
+      >;
+    }
+  | {
+      readonly _tag: "PlanPhaseStart";
+      readonly phase: number;
+      readonly phases: number;
+      readonly tests: number;
+    }
   | { readonly _tag: "CollectStart"; readonly files: ReadonlyArray<string> }
   | {
       /** Import progress: one per file during the collection phase. */
@@ -121,9 +155,7 @@ export interface ReporterService {
    */
   readonly waitForExit: (summary: RunSummary) => Effect.Effect<void>;
   /** Called once by the runner when interactive control becomes available. */
-  readonly attachController?: (
-    controller: RunController,
-  ) => Effect.Effect<void>;
+  readonly attachController?: (controller: RunController) => Effect.Effect<void>;
 }
 
 export class Reporter extends Context.Service<Reporter, ReporterService>()(

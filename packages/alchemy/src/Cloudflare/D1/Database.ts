@@ -1,40 +1,53 @@
+import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  runMigrations,
+  stampedOf,
+  type MigrationsInput,
+} from "../../SQL/Migrations/index.ts";
+import { hashImports, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Credentials } from "../Credentials.ts";
+import { localAccountId } from "../LocalAccount.ts";
+import { generateLocalId, LOCAL_PROVIDERS_URL, localRuntimeServices } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { applyMigrations } from "./ApplyMigrations.ts";
+import { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
+import { withLocalD1Executor } from "./LocalD1Gateway.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
-export type PrimaryLocationHint =
-  | "wnam"
-  | "enam"
-  | "weur"
-  | "eeur"
-  | "apac"
-  | "oc";
-
-const DEFAULT_MIGRATIONS_TABLE = "d1_migrations";
+export type PrimaryLocationHint = "wnam" | "enam" | "weur" | "eeur" | "apac" | "oc";
 
 export type CloneSource = Database | { databaseId: string } | { name: string };
 
 export type DatabaseProps = {
   /**
    * Name of the database. If omitted, a unique name will be generated.
+   *
+   * D1 names are unique per account. When an explicit name is kept across a
+   * replacement (e.g. `primaryLocationHint` or `jurisdiction` changes), the
+   * existing database and its data are deleted before the new one is created.
+   * Generated names get a new name on replacement, so the new database is
+   * created first.
+   *
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -56,9 +69,7 @@ export type DatabaseProps = {
    *
    * @default { mode: "disabled" }
    */
-  readReplication?: {
-    mode: "auto" | "disabled";
-  };
+  readReplication?: { mode: "auto" | "disabled" };
   /**
    * Jurisdiction in which the database data is guaranteed to be stored.
    * Cannot be changed after creation.
@@ -67,24 +78,21 @@ export type DatabaseProps = {
    */
   jurisdiction?: Jurisdiction;
   /**
-   * Directory containing `.sql` migration files. Files are sorted by their
-   * numeric prefix (e.g. `0001_init.sql`, `0002_add_users.sql`) and applied
-   * in order. Pending migrations are detected on each deploy and applied as
-   * part of `update`. Equivalent to wrangler's `migrations_dir`.
-   */
-  migrationsDir?: string;
-  /**
-   * Name of the table used to track applied migrations. Useful for
-   * compatibility with frameworks that expect a specific name (e.g.
-   * `drizzle_migrations`).
+   * SQL migrations to apply on deploy. Accepts a directory path, a
+   * `Drizzle.Schema` resource, or a `{ dir, table? }` object.
    *
-   * The table schema is the wrangler-compatible
-   * `(id TEXT PRIMARY KEY, name TEXT, applied_at TEXT)`. A pre-existing
-   * legacy 2-column table is migrated in place.
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated with `drizzle-kit migrate` or
+   * `wrangler d1 migrations apply` is adopted by a ONE-WAY conversion on
+   * first deploy: the old tool's applied history is copied into Alchemy's
+   * table (validated against the local files) and the old table is left
+   * frozen — never written, never dropped. From then on Alchemy owns the
+   * migration state.
    *
-   * @default "d1_migrations"
+   * Pending migrations are detected on each deploy and applied in order as
+   * part of `update`.
    */
-  migrationsTable?: string;
+  migrations?: MigrationsInput;
   /**
    * Paths to additional `.sql` files to import after migrations are
    * applied. Each file is uploaded via Cloudflare's D1 import API and
@@ -130,16 +138,13 @@ export type Database = Resource<
  *
  * D1 is a serverless relational database that runs at the edge. Create a
  * database as a resource, then bind it to a Worker to run SQL queries.
- * @resource
- * @product D1
- * @category Storage & Databases
- * @section Creating a Database
- * @example Basic database
+ * ### Creating a Database
+ * **Example:** Basic database
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db");
  * ```
  *
- * @example Database with location hint
+ * **Example:** Database with location hint
  * The primary copy of the data is stored in the chosen region; reads can be
  * served closer to users when read replication is enabled.
  * ```typescript
@@ -148,7 +153,7 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Database with read replication
+ * **Example:** Database with read replication
  * Read replication is the only mutable property after creation — toggling it
  * triggers an update rather than a replacement.
  * ```typescript
@@ -157,57 +162,69 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Database in a specific jurisdiction
+ * **Example:** Database in a specific jurisdiction
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
  *   jurisdiction: "eu",
  * });
  * ```
  *
- * @section Migrations
- * Point `migrationsDir` at a folder of `.sql` files. Files are sorted by
- * numeric prefix (e.g. `0001_`, `0002_`) and applied in order. Already-applied
+ * ### Migrations
+ * Point `migrations` at a folder of migration files. Already-applied
  * migrations are skipped on subsequent deploys; new files are detected
  * automatically and applied as part of the next update.
  *
- * Migration tracking uses the wrangler-compatible
- * `(id TEXT PRIMARY KEY, name TEXT, applied_at TEXT)` schema. The resource
- * also detects and upgrades a legacy 2-column tracking table in place if one
- * already exists.
+ * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table —
+ * one format, owned by Alchemy. A database previously migrated with
+ * drizzle-kit, Prisma, or wrangler is adopted by a one-way conversion on
+ * first deploy: the old tool's applied history is copied into Alchemy's
+ * table and the old table is left frozen (never written, never dropped).
+ * No baselining required. Legacy Alchemy tracking tables are detected by
+ * column shape and upgraded in place.
  *
- * @example Apply migrations from a directory
+ * **Example:** Apply migrations from a directory
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
- *   migrationsDir: "./migrations",
+ *   migrations: "./migrations",
  * });
  * ```
  *
- * @example Custom migrations table (e.g. for Drizzle)
+ * **Example:** Drizzle migrations (adopts an existing drizzle-kit-migrated database)
  * ```typescript
+ * const schema = yield* Drizzle.Schema("app-schema", {
+ *   schema: "./src/schema.ts",
+ *   dialect: "sqlite",
+ * });
  * const db = yield* Cloudflare.D1.Database("my-db", {
- *   migrationsDir: "./migrations",
- *   migrationsTable: "drizzle_migrations",
+ *   migrations: schema,
  * });
  * ```
  *
- * @section Importing SQL
+ * **Example:** Custom bookkeeping table name
+ * ```typescript
+ * const db = yield* Cloudflare.D1.Database("my-db", {
+ *   migrations: { dir: "./migrations", table: "my_migrations" },
+ * });
+ * ```
+ *
+ * ### Importing SQL
  * Use `importFiles` to seed the database with raw `.sql` files via Cloudflare's
  * D1 import API. Each file is hashed; only files whose contents change are
  * re-imported on subsequent deploys.
  *
- * @example Seed a database with SQL files
+ * **Example:** Seed a database with SQL files
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
  *   importFiles: ["./seed/users.sql", "./seed/posts.sql"],
  * });
  * ```
  *
- * @section Cloning a Database
+ * ### Cloning a Database
  * `clone` performs a full export → import from a source database during
  * creation. It accepts a `D1Database` resource, a `{ databaseId }`, or a
  * `{ name }` to look up by name.
  *
- * @example Clone by passing the source resource directly
+ * **Example:** Clone by passing the source resource directly
  * ```typescript
  * const source = yield* Cloudflare.D1.Database("source-db");
  * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
@@ -215,22 +232,22 @@ export type Database = Resource<
  * });
  * ```
  *
- * @example Clone by databaseId
+ * **Example:** Clone by databaseId
  * ```typescript
  * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: { databaseId: "abcdef12-3456-7890-abcd-ef1234567890" },
  * });
  * ```
  *
- * @example Clone by name
+ * **Example:** Clone by name
  * ```typescript
  * const cloned = yield* Cloudflare.D1.Database("cloned-db", {
  *   clone: { name: "source-db" },
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Using D1 inside a Worker
+ * ### Binding to a Worker
+ * **Example:** Using D1 inside a Worker
  * ```typescript
  * const db = yield* Cloudflare.D1.QueryDatabase(MyDatabase);
  *
@@ -246,10 +263,14 @@ export type Database = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/d1/
+ *
+ * @resource
+ * @product D1
+ * @category Storage & Databases
  */
 export const Database = Resource<Database>("Cloudflare.D1Database");
 
-export const DatabaseProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Database, {
     stables: ["databaseId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
@@ -258,47 +279,37 @@ export const DatabaseProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createDatabaseName(id, news.name);
-      const oldName = output?.databaseName
-        ? output.databaseName
-        : yield* createDatabaseName(id, olds.name);
-      const oldJurisdiction =
-        output?.jurisdiction ?? olds.jurisdiction ?? "default";
+      const oldName = output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
+      const oldJurisdiction = output?.jurisdiction ?? olds.jurisdiction ?? "default";
       if (
         oldName !== name ||
         oldJurisdiction !== (news.jurisdiction ?? "default") ||
         (olds.primaryLocationHint !== news.primaryLocationHint &&
           news.primaryLocationHint !== undefined)
       ) {
-        return { action: "replace" } as const;
+        // D1 names are unique per account, so a replacement that keeps an
+        // explicit name cannot coexist with its predecessor: create-first
+        // would adopt the existing database by name and garbage collection
+        // would then delete it. Delete the old generation first instead.
+        // Generated names change with the new instance id, so they stay
+        // create-first.
+        return news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       const oldReplicationMode =
-        output?.readReplication?.mode ??
-        olds.readReplication?.mode ??
-        "disabled";
+        output?.readReplication?.mode ?? olds.readReplication?.mode ?? "disabled";
       const newReplicationMode = news.readReplication?.mode ?? "disabled";
       if (oldReplicationMode !== newReplicationMode) {
         return { action: "update" } as const;
       }
       // Detect migration/import file drift.
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        const oldHashes = output?.migrationsHashes ?? {};
-        if (!recordsEqual(newHashes, oldHashes)) {
-          return { action: "update" } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update" } as const;
-        }
-      } else if (
-        output?.migrationsHashes &&
-        Object.keys(output.migrationsHashes).length > 0
-      ) {
-        // migrationsDir was removed but state still tracks migrations: nothing
-        // to do remotely (we never un-apply), but no diff needed either.
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update" } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -320,8 +331,7 @@ export const DatabaseProvider = () =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
               .filter(
-                (db): db is (typeof page.result)[number] & { uuid: string } =>
-                  db.uuid != null,
+                (db): db is (typeof page.result)[number] & { uuid: string } => db.uuid != null,
               )
               .map((db) => ({
                 databaseId: db.uuid,
@@ -342,10 +352,7 @@ export const DatabaseProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.databaseId) {
         return yield* d1
-          .getDatabase({
-            accountId: output.accountId,
-            databaseId: output.databaseId,
-          })
+          .getDatabase({ accountId: output.accountId, databaseId: output.databaseId })
           .pipe(
             Effect.map((db) => ({
               databaseId: db.uuid ?? output.databaseId,
@@ -361,14 +368,15 @@ export const DatabaseProvider = () =>
               migrationsHashes: output.migrationsHashes,
               importHashes: output.importHashes,
             })),
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)),
           );
       }
       const name = yield* createDatabaseName(id, olds?.name);
-      const dbs = yield* d1.listDatabases({ accountId, name });
-      const match = dbs.result.find((db) => db.name === name);
+      const match = yield* d1.listDatabases.items({ accountId, name }).pipe(
+        Stream.filter((db) => db.name === name),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
       if (match) {
         return {
           databaseId: match.uuid!,
@@ -376,8 +384,8 @@ export const DatabaseProvider = () =>
           jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
           readReplication: olds?.readReplication,
           accountId,
-          migrationsDir: olds?.migrationsDir,
-          migrationsTable: olds?.migrationsTable,
+          migrationsDir: (olds && migrationsInputOf(olds))?.dir,
+          migrationsTable: (olds && migrationsInputOf(olds))?.table,
           migrationsHashes: {},
           importHashes: {},
         };
@@ -404,19 +412,15 @@ export const DatabaseProvider = () =>
         | undefined;
       if (output?.databaseId) {
         observed = yield* d1
-          .getDatabase({
-            accountId: acct,
-            databaseId: output.databaseId,
-          })
-          .pipe(
-            Effect.catchTag("DatabaseNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .getDatabase({ accountId: acct, databaseId: output.databaseId })
+          .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)));
       }
       if (!observed) {
-        const dbs = yield* d1.listDatabases({ accountId: acct, name });
-        observed = dbs.result.find((db) => db.name === name);
+        observed = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(
+          Stream.filter((db) => db.name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -436,11 +440,11 @@ export const DatabaseProvider = () =>
           .pipe(
             Effect.catchTag("InvalidProperty", () =>
               Effect.gen(function* () {
-                const dbs = yield* d1.listDatabases({
-                  accountId: acct,
-                  name,
-                });
-                const match = dbs.result.find((db) => db.name === name);
+                const match = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(
+                  Stream.filter((db) => db.name === name),
+                  Stream.runHead,
+                  Effect.map(Option.getOrUndefined),
+                );
                 if (match) {
                   return match;
                 }
@@ -461,8 +465,7 @@ export const DatabaseProvider = () =>
       // database resource itself. Always patch with the desired mode
       // so adoption converges drifted state.
       const desiredReplicationMode = news.readReplication?.mode ?? "disabled";
-      const observedReplicationMode =
-        observed?.readReplication?.mode ?? "disabled";
+      const observedReplicationMode = observed?.readReplication?.mode ?? "disabled";
       if (
         isFirstCreation
           ? desiredReplicationMode !== "disabled"
@@ -480,11 +483,7 @@ export const DatabaseProvider = () =>
       // Clone is a one-shot seed performed only on first creation.
       // Re-running it on an existing database would clobber data.
       if (isFirstCreation && news.clone) {
-        const sourceId = yield* resolveCloneSource(
-          news.clone,
-          acct,
-          d1.listDatabases,
-        );
+        const sourceId = yield* resolveCloneSource(news.clone, acct);
         yield* cloneDatabase({
           accountId: acct,
           sourceDatabaseId: sourceId,
@@ -492,23 +491,25 @@ export const DatabaseProvider = () =>
         });
       }
 
-      // Sync migrations — `applyMigrations` is itself idempotent (it
-      // skips already-applied entries), so this works for both first
-      // create and ongoing updates.
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
-        ? yield* runMigrations(
-            acct,
-            databaseId,
-            news.migrationsDir,
-            migrationsTable,
-          )
-        : isFirstCreation
-          ? {}
-          : (output?.migrationsHashes ?? {});
+      // Sync migrations — the shared pipeline is idempotent
+      // (already-applied entries are skipped), so this works for both
+      // first create and ongoing updates. Foreign (drizzle/prisma/
+      // wrangler) or legacy history is converted into
+      // __alchemy_migrations on first contact.
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* runMigrations({
+            input: migrationsInput,
+            stamped: stampedOf(output),
+            withExecutor: (apply) =>
+              Effect.gen(function* () {
+                const queryDb = yield* d1.queryDatabase;
+                yield* apply(
+                  makeD1MigrationExecutor((sql) => queryDb({ accountId: acct, databaseId, sql })),
+                );
+              }),
+          })
+        : undefined;
 
       // Sync imports — `runImports` skips files whose hash matches
       // previously-imported state. On first create the previous map
@@ -529,20 +530,149 @@ export const DatabaseProvider = () =>
         jurisdiction: (output?.jurisdiction ?? jurisdiction) as Jurisdiction,
         readReplication: news.readReplication,
         accountId: acct,
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        // On first creation prior state is meaningless; otherwise removing
+        // `migrations` keeps the stamp and hashes for a later re-add.
+        ...migrationsAttrs({
+          input: migrationsInput,
+          run: migrations,
+          output: isFirstCreation ? undefined : output,
+        }),
         importHashes,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* d1
-        .deleteDatabase({
-          accountId: output.accountId,
-          databaseId: output.databaseId,
-        })
+        .deleteDatabase({ accountId: output.accountId, databaseId: output.databaseId })
         .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
     }),
+  });
+
+/**
+ * Local (dev) provider — the database is purely virtual: a `dev:` id keyed
+ * into the local workerd D1 simulator (DO SQLite under `.alchemy/local/d1`).
+ * `toRuntimeBinding` lowers a `d1` binding whose id is `dev:`-prefixed onto
+ * the local D1 service.
+ *
+ * Migrations ARE applied locally: reconcile boots an ephemeral gateway
+ * workerd (see `LocalD1Gateway.ts`) and drives the same executor-agnostic
+ * migration flow the live provider uses, against the simulator's storage.
+ *
+ * RPC-backed: under `alchemy dev` (an `RpcProviderProxy` in context) the
+ * whole lifecycle runs in the Cloudflare sidecar process — where
+ * `localRuntimeServices()` is real and shared with the Worker/Queue/
+ * Container local providers — instead of in the user's process where that
+ * layer is gated empty (the root cause of #1007). In-process runs (no
+ * proxy: `sidecar: false` tests, a plain deploy deleting a local-mode row)
+ * build the provider directly with the un-gated runtime from the `dual`
+ * registration.
+ */
+export const ProviderLocal = () =>
+  RpcProvider.effect(
+    Database,
+    LOCAL_PROVIDERS_URL,
+    Effect.gen(function* () {
+      // The local runtime services (workerd `Runtime`, binding plugins) and
+      // the HTTP client are resolved once at layer build and closed over —
+      // lifecycle effects run with the engine's call-time context, which
+      // doesn't include them.
+      const runtimeContext = yield* Effect.context<RuntimeServices | HttpClient.HttpClient>();
+
+      return {
+        stables: ["accountId"],
+        diff: Effect.fn(function* ({ news = {}, output }) {
+          const accountId = yield* localAccountId;
+          if (!output?.databaseId) return { action: "update" } as const;
+          if (!isResolved(news)) return undefined;
+          if (output.accountId !== accountId) {
+            return { action: "replace" } as const;
+          }
+          // Detect migration/import file drift — same rules as the live
+          // provider.
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
+          }
+          if (news.importFiles?.length) {
+            const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
+            if (!recordsEqual(newHashes, output.importHashes ?? {})) {
+              return { action: "update" } as const;
+            }
+          }
+          // Fall through to the engine's default prop diff.
+        }),
+        read: Effect.fn(function* ({ output }) {
+          // Purely virtual — the persisted state row is the source of truth.
+          return output ?? undefined;
+        }),
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          const accountId = yield* localAccountId;
+          const databaseId = output?.databaseId ?? generateLocalId();
+
+          // Sync migrations — the shared pipeline, driven through the
+          // ephemeral local gateway so the SAME bookkeeping applies
+          // locally as in the cloud.
+          const migrationsInput = migrationsInputOf(news);
+          const migrations = migrationsInput
+            ? yield* runMigrations({
+                input: migrationsInput,
+                stamped: stampedOf(output),
+                withExecutor: (apply) =>
+                  withLocalD1Executor(databaseId, (executor) =>
+                    apply(makeD1MigrationExecutor(executor)),
+                  ).pipe(Effect.provideContext(runtimeContext)),
+              })
+            : undefined;
+
+          // Sync imports — locally an import file is just multi-statement
+          // SQL, executed through the same gateway. Files whose hash matches
+          // previously-imported state are skipped (mirroring `runImports`).
+          const importHashes: Record<string, string> = { ...output?.importHashes };
+          if (news.importFiles?.length) {
+            const importRootDir = yield* rootDir;
+            const pending: Array<{ path: string; sql: string; hash: string }> = [];
+            for (const filePath of news.importFiles) {
+              const file = yield* readSqlFile(importRootDir, filePath);
+              if (importHashes[filePath] === file.hash) continue;
+              pending.push({ path: filePath, sql: file.sql, hash: file.hash });
+            }
+            if (pending.length > 0) {
+              yield* withLocalD1Executor(databaseId, (executor) =>
+                Effect.forEach(pending, (file) => executor(file.sql), { discard: true }),
+              ).pipe(Effect.provideContext(runtimeContext));
+              for (const file of pending) {
+                importHashes[file.path] = file.hash;
+              }
+            }
+          }
+
+          return {
+            databaseId,
+            databaseName: yield* createDatabaseName(id, news.name),
+            jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
+            readReplication: news.readReplication,
+            accountId: output?.accountId ?? accountId,
+            ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
+            importHashes,
+          };
+        }),
+        delete: Effect.fn(function* () {
+          // The simulator's on-disk data is keyed by the dev id; dropping
+          // the state row is enough — orphaned data is reclaimed with
+          // `.alchemy`.
+        }),
+      };
+    }),
+  );
+
+export const DatabaseProvider = () =>
+  ProviderLayer.dual(Database, {
+    // The local provider's reconcile boots an ephemeral workerd gateway to
+    // apply migrations, so it needs the shared local runtime layer. Under
+    // `alchemy dev` the provider is an RPC stub (this gated layer is empty
+    // and unused) and the provider group (`../Local.ts`) supplies the real
+    // runtime; without the proxy the provider builds in-process and this
+    // layer is real.
+    local: () => ProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    live: () => ProviderLive(),
   });
 
 const createDatabaseName = (id: string, name: string | undefined) =>
@@ -556,18 +686,7 @@ const rootDir = Effect.sync(() => process.cwd());
  * Resolve a clone source spec into a concrete database UUID. Looks up by
  * name through `listDatabases` when only a name is provided.
  */
-const resolveCloneSource = (
-  source: CloneSource,
-  accountId: string,
-  listDbs: (input: {
-    accountId: string;
-    name?: string;
-  }) => Effect.Effect<
-    d1.ListDatabasesResponse,
-    d1.ListDatabasesError,
-    Credentials | HttpClient
-  >,
-) =>
+const resolveCloneSource = (source: CloneSource, accountId: string) =>
   Effect.gen(function* () {
     if ("databaseId" in source && source.databaseId) {
       // At lifecycle time, Output<string> attributes have resolved to strings.
@@ -575,43 +694,17 @@ const resolveCloneSource = (
     }
     if ("name" in source && source.name) {
       const name = source.name as unknown as string;
-      const dbs = yield* listDbs({ accountId, name });
-      const match = dbs.result.find((db) => db.name === name);
+      const match = yield* d1.listDatabases.items({ accountId, name }).pipe(
+        Stream.filter((db) => db.name === name),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
       if (!match?.uuid) {
-        return yield* Effect.die(
-          `Source database "${name}" not found for cloning`,
-        );
+        return yield* Effect.die(`Source database "${name}" not found for cloning`);
       }
       return match.uuid;
     }
-    return yield* Effect.die(
-      "Invalid clone source: must provide databaseId or name",
-    );
-  });
-
-/**
- * Read all migration files from `migrationsDir`, run pending migrations,
- * and return the per-file content hashes for state tracking.
- */
-const runMigrations = (
-  accountId: string,
-  databaseId: string,
-  migrationsDir: string,
-  migrationsTable: string,
-) =>
-  Effect.gen(function* () {
-    const files = yield* listSqlFiles(migrationsDir);
-    if (files.length > 0) {
-      yield* applyMigrations({
-        accountId,
-        databaseId,
-        migrationsTable,
-        migrationsFiles: files,
-      });
-    }
-    const hashes: Record<string, string> = {};
-    for (const file of files) hashes[file.id] = file.hash;
-    return hashes;
+    return yield* Effect.die("Invalid clone source: must provide databaseId or name");
   });
 
 /**
@@ -633,41 +726,13 @@ const runImports = (
         hashes[filePath] = file.hash;
         continue;
       }
-      yield* importD1Database({
-        accountId,
-        databaseId,
-        sqlData: file.sql,
-        filename: file.id,
-      });
+      yield* importD1Database({ accountId, databaseId, sqlData: file.sql, filename: file.id });
       hashes[filePath] = file.hash;
     }
     // Drop entries for files no longer listed.
     const tracked = new Set(importFiles);
     for (const key of Object.keys(hashes)) {
       if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
-  });
-
-/**
- * Hash all `.sql` files in `migrationsDir` without applying them; used by
- * `diff` to detect drift relative to previously-applied state.
- */
-const hashMigrations = (migrationsDir: string) =>
-  listSqlFiles(migrationsDir).pipe(
-    Effect.map((files) => {
-      const hashes: Record<string, string> = {};
-      for (const file of files) hashes[file.id] = file.hash;
-      return hashes;
-    }),
-  );
-
-const hashImports = (importFiles: ReadonlyArray<string>, rootDir: string) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = {};
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      hashes[filePath] = file.hash;
     }
     return hashes;
   });

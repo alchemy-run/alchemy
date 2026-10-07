@@ -2,7 +2,6 @@ import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -63,18 +62,15 @@ export type ZoneTransferAcl = Resource<
  *
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. Both `name` and `ipRange` are mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating an ACL
- * @example Allow a primary nameserver range
+ * ### Creating an ACL
+ * **Example:** Allow a primary nameserver range
  * ```typescript
  * const acl = yield* Cloudflare.DNS.ZoneTransferAcl("PrimaryNs", {
  *   ipRange: "192.0.2.48/28",
  * });
  * ```
  *
- * @example ACL with an explicit name
+ * **Example:** ACL with an explicit name
  * ```typescript
  * const acl = yield* Cloudflare.DNS.ZoneTransferAcl("PrimaryNs", {
  *   name: "primary-nameservers",
@@ -83,6 +79,10 @@ export type ZoneTransferAcl = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferAcl = Resource<ZoneTransferAcl>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferAcl"],
@@ -107,14 +107,12 @@ export const ZoneTransferAclProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map(
-              (acl): ZoneTransferAclAttributes => ({
-                aclId: acl.id,
-                accountId,
-                name: acl.name,
-                ipRange: acl.ipRange,
-              }),
-            ),
+            (page.result ?? []).map((acl): ZoneTransferAclAttributes => ({
+              aclId: acl.id,
+              accountId,
+              name: acl.name,
+              ipRange: acl.ipRange,
+            })),
           ),
         ),
       );
@@ -209,10 +207,11 @@ const getAcl = (accountId: string, aclId: string) =>
  * pick the lexicographically-first id for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listZoneTransferAcls({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((a) => a.name === name)
+  dns.listZoneTransferAcls.items({ accountId }).pipe(
+    Stream.filter((a) => a.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),
@@ -223,10 +222,7 @@ const createAclName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const toAttributes = (
-  acl: ObservedAcl,
-  accountId: string,
-): ZoneTransferAclAttributes => ({
+const toAttributes = (acl: ObservedAcl, accountId: string): ZoneTransferAclAttributes => ({
   aclId: acl.id,
   accountId,
   name: acl.name,

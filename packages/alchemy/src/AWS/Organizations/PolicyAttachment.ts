@@ -21,10 +21,26 @@ export interface PolicyAttachment extends Resource<
   "AWS.Organizations.PolicyAttachment",
   PolicyAttachmentProps,
   {
+    /**
+     * ID of the attached policy.
+     */
     policyId: string;
+    /**
+     * ID of the root, OU, or account the policy is attached to.
+     */
     targetId: string;
+    /**
+     * ARN of the attachment target.
+     */
     targetArn: string | undefined;
+    /**
+     * Friendly name of the attachment target.
+     */
     targetName: string | undefined;
+    /**
+     * Kind of the attachment target (`ROOT`, `ORGANIZATIONAL_UNIT`, or
+     * `ACCOUNT`).
+     */
     targetType: organizations.TargetType | undefined;
   },
   never,
@@ -32,12 +48,53 @@ export interface PolicyAttachment extends Resource<
 > {}
 
 /**
- * Attaches an Organizations policy to a root, OU, or account.
+ * Attaches an Organizations {@link Policy} to a root, OU, or account.
+ *
+ * Existence-only resource: changing either `policyId` or `targetId` replaces
+ * the attachment. The policy's type must already be enabled on the root (see
+ * {@link RootPolicyType}).
+ * ### Attaching Policies
+ * **Example:** Attach an SCP to an Organizational Unit
+ * ```typescript
+ * const workloads = yield* OrganizationalUnit("Workloads", {
+ *   parentId: root.rootId,
+ *   name: "workloads",
+ * });
+ *
+ * const denyRegions = yield* Policy("DenyOtherRegions", {
+ *   type: "SERVICE_CONTROL_POLICY",
+ *   document: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Deny",
+ *         NotAction: ["iam:*", "organizations:*", "sts:*"],
+ *         Resource: "*",
+ *         Condition: {
+ *           StringNotEquals: { "aws:RequestedRegion": ["us-east-1", "us-west-2"] },
+ *         },
+ *       },
+ *     ],
+ *   },
+ * });
+ *
+ * yield* PolicyAttachment("DenyRegionsOnWorkloads", {
+ *   policyId: denyRegions.policyId,
+ *   targetId: workloads.ouId,
+ * });
+ * ```
+ *
+ * **Example:** Attach a Policy to a Member Account
+ * ```typescript
+ * yield* PolicyAttachment("DenyRegionsOnDev", {
+ *   policyId: denyRegions.policyId,
+ *   targetId: devAccount.accountId,
+ * });
+ * ```
+ *
  * @resource
  */
-export const PolicyAttachment = Resource<PolicyAttachment>(
-  "AWS.Organizations.PolicyAttachment",
-);
+export const PolicyAttachment = Resource<PolicyAttachment>("AWS.Organizations.PolicyAttachment");
 
 export const PolicyAttachmentProvider = () =>
   Provider.effect(
@@ -47,10 +104,7 @@ export const PolicyAttachmentProvider = () =>
         stables: ["policyId", "targetId"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            olds?.policyId !== news.policyId ||
-            olds?.targetId !== news.targetId
-          ) {
+          if (olds?.policyId !== news.policyId || olds?.targetId !== news.targetId) {
             return { action: "replace" } as const;
           }
         }),
@@ -83,8 +137,7 @@ export const PolicyAttachmentProvider = () =>
                 Effect.gen(function* () {
                   const policies = yield* retryOrganizations(
                     collectPages(
-                      (NextToken) =>
-                        organizations.listPolicies({ Filter, NextToken }),
+                      (NextToken) => organizations.listPolicies({ Filter, NextToken }),
                       (page) => page.Policies,
                     ),
                   );
@@ -103,8 +156,7 @@ export const PolicyAttachmentProvider = () =>
             return perType.flat();
           }).pipe(
             Effect.catchTags({
-              AccessDeniedException: () =>
-                Effect.succeed([] as PolicyAttachment["Attributes"][]),
+              AccessDeniedException: () => Effect.succeed([] as PolicyAttachment["Attributes"][]),
               AWSOrganizationsNotInUseException: () =>
                 Effect.succeed([] as PolicyAttachment["Attributes"][]),
             }),
@@ -125,12 +177,7 @@ export const PolicyAttachmentProvider = () =>
                   PolicyId: news.policyId,
                   TargetId: news.targetId,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "DuplicatePolicyAttachmentException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("DuplicatePolicyAttachmentException", () => Effect.void)),
             );
             state = yield* readAttachment(news);
             if (!state) {
@@ -187,8 +234,7 @@ const POLICY_TYPES = [
 const listAttachmentsForPolicy = (policyId: string) =>
   retryOrganizations(
     collectPages(
-      (NextToken) =>
-        organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
+      (NextToken) => organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
       (page) => page.Targets,
     ),
   ).pipe(
@@ -218,14 +264,10 @@ const listAttachmentsForPolicy = (policyId: string) =>
     ),
   );
 
-const readAttachment = Effect.fn(function* ({
-  policyId,
-  targetId,
-}: PolicyAttachmentProps) {
+const readAttachment = Effect.fn(function* ({ policyId, targetId }: PolicyAttachmentProps) {
   const targets = yield* retryOrganizations(
     collectPages(
-      (NextToken) =>
-        organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
+      (NextToken) => organizations.listTargetsForPolicy({ PolicyId: policyId, NextToken }),
       (page) => page.Targets,
     ),
   );

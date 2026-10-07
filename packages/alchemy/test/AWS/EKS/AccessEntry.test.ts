@@ -1,10 +1,10 @@
+import * as iam from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AccessEntry } from "@/AWS/EKS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,21 +17,24 @@ const { test } = Test.make({ providers: AWS.providers() });
 // still verifies the cluster-fan-out + pagination + mapping against the live
 // API and asserts every returned row is well-formed (the array is empty when
 // the account has no clusters).
-test.provider("list returns the account/region access entries", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(AccessEntry);
-    const all = yield* provider.list();
+test.provider(
+  "list returns the account/region access entries",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(AccessEntry);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const entry of all) {
-      expect(typeof entry.accessEntryArn).toBe("string");
-      expect(typeof entry.clusterName).toBe("string");
-      expect(typeof entry.principalArn).toBe("string");
-      expect(Array.isArray(entry.kubernetesGroups)).toBe(true);
-      expect(Array.isArray(entry.accessPolicies)).toBe(true);
-      expect(entry.tags).toBeDefined();
-    }
-  }),
+      expect(Array.isArray(all)).toBe(true);
+      for (const entry of all) {
+        expect(typeof entry.accessEntryArn).toBe("string");
+        expect(typeof entry.clusterName).toBe("string");
+        expect(typeof entry.principalArn).toBe("string");
+        expect(Array.isArray(entry.kubernetesGroups)).toBe(true);
+        expect(Array.isArray(entry.accessPolicies)).toBe(true);
+        expect(entry.tags).toBeDefined();
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:eks", "live"] },
 );
 
 // Full deploy-then-list assertion. SKIPPED by default because an EKS cluster
@@ -48,29 +51,39 @@ test.provider.skipIf(!clusterName)(
   "list enumerates the deployed access entry",
   (stack) =>
     Effect.gen(function* () {
-      const cleanup = Effect.gen(function* () {
-        yield* iam
-          .deleteRole({ RoleName: principalRoleName })
-          .pipe(Effect.catch(() => Effect.void));
-      });
+      // Idempotent delete: safe when the role never existed (pre-clean) or was
+      // already removed (post-clean after a partial prior run).
+      const deletePrincipalRole = iam
+        .deleteRole({ RoleName: principalRoleName })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
 
       yield* stack.destroy();
-      yield* cleanup;
 
+      // acquireRelease guarantees the out-of-band role is deleted on success,
+      // failure, AND interruption; the deterministic name + pre-clean above
+      // means a re-run reclaims any orphan from a previously-killed run.
       yield* Effect.gen(function* () {
-        const role = yield* iam.createRole({
-          RoleName: principalRoleName,
-          AssumeRolePolicyDocument: JSON.stringify({
-            Version: "2012-10-17",
-            Statement: [
-              {
-                Effect: "Allow",
-                Principal: { Service: "ec2.amazonaws.com" },
-                Action: "sts:AssumeRole",
-              },
-            ],
-          }),
-        });
+        const role = yield* Effect.acquireRelease(
+          // Pre-clean a leftover from a killed run, then create.
+          deletePrincipalRole.pipe(
+            Effect.andThen(
+              iam.createRole({
+                RoleName: principalRoleName,
+                AssumeRolePolicyDocument: JSON.stringify({
+                  Version: "2012-10-17",
+                  Statement: [
+                    {
+                      Effect: "Allow",
+                      Principal: { Service: "ec2.amazonaws.com" },
+                      Action: "sts:AssumeRole",
+                    },
+                  ],
+                }),
+              }),
+            ),
+          ),
+          () => deletePrincipalRole.pipe(Effect.catch(() => Effect.void)),
+        );
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
@@ -84,12 +97,13 @@ test.provider.skipIf(!clusterName)(
         const provider = yield* Provider.findProvider(AccessEntry);
         const all = yield* provider.list();
 
-        expect(
-          all.some((entry) => entry.accessEntryArn === deployed.accessEntryArn),
-        ).toBe(true);
+        expect(all.some((entry) => entry.accessEntryArn === deployed.accessEntryArn)).toBe(true);
 
         yield* stack.destroy();
-      }).pipe(Effect.ensuring(cleanup));
+      }).pipe(Effect.scoped);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:eks", "provider:aws:iam", "live"],
+    timeout: 240_000,
+  },
 );

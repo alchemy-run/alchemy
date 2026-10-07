@@ -1,16 +1,21 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+
+/** Internal: the ALB is still visible after `deleteLoadBalancer`. */
+class LoadBalancerStillDeleting extends Data.TaggedError("LoadBalancerStillDeleting")<{}> {}
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
-import type { AccountID } from "../Environment.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
+import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type LoadBalancerName = string;
@@ -74,15 +79,25 @@ export interface LoadBalancer extends Resource<
   "AWS.ELBv2.LoadBalancer",
   LoadBalancerProps,
   {
+    /** The ARN of the load balancer. */
     loadBalancerArn: LoadBalancerArn;
+    /** The name of the load balancer. */
     loadBalancerName: LoadBalancerName;
+    /** The public DNS name of the load balancer. */
     dnsName: string;
+    /** The Route 53 hosted zone ID for alias records targeting the load balancer. */
     canonicalHostedZoneId: string;
+    /** The ID of the VPC the load balancer resides in. */
     vpcId: string;
+    /** Whether the load balancer is `internet-facing` or `internal`. */
     scheme: string;
+    /** The load balancer type (`application`, `network`, or `gateway`). */
     type: string;
+    /** The IDs of the security groups attached to the load balancer. */
     securityGroups: string[];
+    /** The IDs of the subnets the load balancer spans. */
     subnets: string[];
+    /** The tags applied to the load balancer. */
     tags: Record<string, string>;
   },
   never,
@@ -91,9 +106,8 @@ export interface LoadBalancer extends Resource<
 
 /**
  * An ELBv2 (Application / Network / Gateway) load balancer.
- * @resource
- * @section Creating a Load Balancer
- * @example Internet-facing Application Load Balancer
+ * ### Creating a Load Balancer
+ * **Example:** Internet-facing Application Load Balancer
  * ```typescript
  * const lb = yield* LoadBalancer("web", {
  *   type: "application",
@@ -103,7 +117,7 @@ export interface LoadBalancer extends Resource<
  * });
  * ```
  *
- * @example Network Load Balancer with static EIPs
+ * **Example:** Network Load Balancer with static EIPs
  * ```typescript
  * const nlb = yield* LoadBalancer("edge", {
  *   type: "network",
@@ -115,8 +129,8 @@ export interface LoadBalancer extends Resource<
  * });
  * ```
  *
- * @section Attributes
- * @example Idle timeout and deletion protection
+ * ### Attributes
+ * **Example:** Idle timeout and deletion protection
  * ```typescript
  * const lb = yield* LoadBalancer("web", {
  *   type: "application",
@@ -127,6 +141,8 @@ export interface LoadBalancer extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const LoadBalancer = Resource<LoadBalancer>("AWS.ELBv2.LoadBalancer");
 
@@ -183,9 +199,7 @@ export const LoadBalancerProvider = () =>
               LoadBalancerArns: [output.loadBalancerArn],
             })
             .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
             );
           const loadBalancer = described?.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
@@ -209,14 +223,10 @@ export const LoadBalancerProvider = () =>
           Effect.gen(function* () {
             // Enumerate every load balancer in the account/region, paginating
             // exhaustively.
-            const loadBalancers = yield* elbv2.describeLoadBalancers
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) => page.LoadBalancers ?? []),
-                ),
-              );
+            const loadBalancers = yield* elbv2.describeLoadBalancers.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.LoadBalancers ?? [])),
+            );
             const owned = loadBalancers.filter(
               (lb): lb is elbv2.LoadBalancer & { LoadBalancerArn: string } =>
                 lb.LoadBalancerArn != null,
@@ -252,8 +262,7 @@ export const LoadBalancerProvider = () =>
                             (desc.Tags ?? [])
                               .filter(
                                 (t): t is { Key: string; Value: string } =>
-                                  typeof t.Key === "string" &&
-                                  typeof t.Value === "string",
+                                  typeof t.Key === "string" && typeof t.Value === "string",
                               )
                               .map((t) => [t.Key, t.Value]),
                           ),
@@ -273,9 +282,8 @@ export const LoadBalancerProvider = () =>
               type: lb.Type!,
               securityGroups: lb.SecurityGroups ?? [],
               subnets:
-                lb.AvailabilityZones?.flatMap((zone) =>
-                  zone.SubnetId ? [zone.SubnetId] : [],
-                ) ?? [],
+                lb.AvailabilityZones?.flatMap((zone) => (zone.SubnetId ? [zone.SubnetId] : [])) ??
+                [],
               tags: tagsByArn.get(lb.LoadBalancerArn) ?? {},
             }));
           }),
@@ -292,9 +300,7 @@ export const LoadBalancerProvider = () =>
               Names: [name],
             })
             .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
             );
           let loadBalancer = described?.LoadBalancers?.[0];
 
@@ -327,29 +333,19 @@ export const LoadBalancerProvider = () =>
             });
             loadBalancer = created.LoadBalancers?.[0];
             if (!loadBalancer?.LoadBalancerArn) {
-              return yield* Effect.die(
-                new Error("createLoadBalancer returned no load balancer"),
-              );
+              return yield* Effect.die(new Error("createLoadBalancer returned no load balancer"));
             }
           }
 
-          const loadBalancerArn =
-            loadBalancer.LoadBalancerArn as LoadBalancerArn;
+          const loadBalancerArn = loadBalancer.LoadBalancerArn as LoadBalancerArn;
 
           // Sync subnets — diff observed against desired. Only applies to
           // application/network LBs that manage subnets in place.
           const observedSubnets =
-            loadBalancer.AvailabilityZones?.flatMap((z) =>
-              z.SubnetId ? [z.SubnetId] : [],
-            ) ?? [];
+            loadBalancer.AvailabilityZones?.flatMap((z) => (z.SubnetId ? [z.SubnetId] : [])) ?? [];
           if (news.subnets) {
             const desiredSubnets = news.subnets as string[];
-            if (
-              !deepEqual(
-                [...observedSubnets].sort(),
-                [...desiredSubnets].sort(),
-              )
-            ) {
+            if (!deepEqual([...observedSubnets].sort(), [...desiredSubnets].sort())) {
               yield* elbv2.setSubnets({
                 LoadBalancerArn: loadBalancerArn,
                 Subnets: desiredSubnets,
@@ -380,10 +376,7 @@ export const LoadBalancerProvider = () =>
           }
 
           // Sync IP address type — diff observed against desired.
-          if (
-            news.ipAddressType &&
-            news.ipAddressType !== loadBalancer.IpAddressType
-          ) {
+          if (news.ipAddressType && news.ipAddressType !== loadBalancer.IpAddressType) {
             yield* elbv2.setIpAddressType({
               LoadBalancerArn: loadBalancerArn,
               IpAddressType: news.ipAddressType,
@@ -397,12 +390,10 @@ export const LoadBalancerProvider = () =>
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyLoadBalancerAttributes({
               LoadBalancerArn: loadBalancerArn,
-              Attributes: Object.entries(news.attributes).map(
-                ([Key, Value]) => ({
-                  Key,
-                  Value,
-                }),
-              ),
+              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             });
           }
 
@@ -454,11 +445,27 @@ export const LoadBalancerProvider = () =>
             .deleteLoadBalancer({
               LoadBalancerArn: output.loadBalancerArn,
             })
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void));
+
+          // `deleteLoadBalancer` returns immediately, but the ALB's ENIs
+          // linger for a minute or two afterwards and block deletion of any
+          // subnet or security group they occupy. Wait until the balancer is
+          // fully gone so downstream network resources tear down on the first
+          // attempt instead of spinning on dependency-violation retries.
+          yield* elbv2
+            .describeLoadBalancers({
+              LoadBalancerArns: [output.loadBalancerArn],
+            })
             .pipe(
-              Effect.catchTag(
-                "LoadBalancerNotFoundException",
-                () => Effect.void,
-              ),
+              Effect.flatMap(() => Effect.fail(new LoadBalancerStillDeleting())),
+              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.void),
+              Effect.retry({
+                while: (e) => e._tag === "LoadBalancerStillDeleting",
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(48)]),
+              }),
+              // Best-effort: if it is somehow still visible after ~4 min, let
+              // the downstream deletes retry rather than fail the teardown.
+              Effect.catchTag("LoadBalancerStillDeleting", () => Effect.void),
             );
         }),
       };

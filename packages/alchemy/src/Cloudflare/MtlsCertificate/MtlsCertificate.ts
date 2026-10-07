@@ -2,8 +2,8 @@ import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -98,13 +98,7 @@ export type Attributes = {
   type: Type | undefined;
 };
 
-export type MtlsCertificate = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type MtlsCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * An account-level Cloudflare mTLS certificate.
@@ -118,11 +112,8 @@ export type MtlsCertificate = Resource<
  *
  * Certificates are immutable: there is no update API, so changing any
  * property triggers a replacement.
- * @resource
- * @product mTLS Certificates
- * @category SSL/TLS & Certificates
- * @section Uploading Certificates
- * @example CA certificate
+ * ### Uploading Certificates
+ * **Example:** CA certificate
  * ```typescript
  * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("client-ca", {
  *   ca: true,
@@ -130,16 +121,16 @@ export type MtlsCertificate = Resource<
  * });
  * ```
  *
- * @example Leaf certificate with private key
+ * **Example:** Leaf certificate with private key
  * ```typescript
  * const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("origin-client-cert", {
  *   ca: false,
  *   certificates: leafPem,
- *   privateKey: alchemy.secret.env.ORIGIN_CLIENT_KEY,
+ *   privateKey: yield* Config.Redacted("ORIGIN_CLIENT_KEY"),
  * });
  * ```
  *
- * @example Named certificate
+ * **Example:** Named certificate
  * ```typescript
  * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("client-ca", {
  *   name: "my-client-ca",
@@ -148,8 +139,8 @@ export type MtlsCertificate = Resource<
  * });
  * ```
  *
- * @section Referencing from Hyperdrive
- * @example Verify the origin with an uploaded CA
+ * ### Referencing from Hyperdrive
+ * **Example:** Verify the origin with an uploaded CA
  * ```typescript
  * const ca = yield* Cloudflare.MtlsCertificate.MtlsCertificate("db-ca", {
  *   ca: true,
@@ -165,7 +156,37 @@ export type MtlsCertificate = Resource<
  * });
  * ```
  *
+ * ### Binding to a Worker
+ * **Example:** Present a leaf certificate on subrequests
+ * ```typescript
+ * const cert = yield* Cloudflare.MtlsCertificate.MtlsCertificate("origin-client-cert", {
+ *   ca: false,
+ *   certificates: leafPem,
+ *   privateKey: yield* Config.Redacted("ORIGIN_CLIENT_KEY"),
+ * });
+ *
+ * // `env.ORIGIN_CERT` is a `Fetcher`: `env.ORIGIN_CERT.fetch(url)` presents
+ * // the certificate to the origin.
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { ORIGIN_CERT: cert },
+ * });
+ * ```
+ *
+ * **Example:** Present a leaf certificate from an Effect Worker
+ * ```typescript
+ * // Inside the Worker's Effect; provide `Cloudflare.MtlsCertificate.FetchBinding`.
+ * const fetchOrigin = yield* Cloudflare.MtlsCertificate.Fetch(cert);
+ * const response = yield* fetchOrigin(
+ *   HttpClientRequest.get("https://origin.example.com/"),
+ * );
+ * ```
+ *
  * @see https://developers.cloudflare.com/ssl/client-certificates/
+ *
+ * @resource
+ * @product mTLS Certificates
+ * @category SSL/TLS & Certificates
  */
 export const MtlsCertificate = Resource<MtlsCertificate>(TypeId, {
   aliases: ["Cloudflare.MtlsCertificate"],
@@ -186,10 +207,11 @@ export const MtlsCertificateProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createCertificateName(id, news.name);
-      const oldName = output?.name
-        ? output.name
-        : yield* createCertificateName(id, olds.name);
+      const oldName = output?.name ?? (yield* createCertificateName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         (news.ca ?? undefined) !== (olds.ca ?? undefined) ||
@@ -213,9 +235,7 @@ export const MtlsCertificateProvider = () =>
           })
           .pipe(
             Effect.map((cert) => toAttributes(cert, acct)),
-            Effect.catchTag("CertificateNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
           );
       }
       // Cold read — recover by listing and matching on the deterministic
@@ -237,11 +257,7 @@ export const MtlsCertificateProvider = () =>
               // Cloudflare-managed certificates (e.g. the gateway/access
               // managed CAs) reject deletion with `Unauthorized`; only
               // enumerate user-uploaded `custom` certificates for teardown.
-              .filter(
-                (cert) =>
-                  cert.type !== "gateway_managed" &&
-                  cert.type !== "access_managed",
-              )
+              .filter((cert) => cert.type !== "gateway_managed" && cert.type !== "access_managed")
               .map((cert) => toAttributes(cert, accountId)),
           ),
         ),
@@ -249,8 +265,7 @@ export const MtlsCertificateProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name =
-        output?.name ?? (yield* createCertificateName(id, news.name));
+      const name = output?.name ?? (yield* createCertificateName(id, news.name));
 
       // Observe — the certificate id is the stable identifier; fall through
       // a CertificateNotFound to the list+name match so we recover from
@@ -261,11 +276,7 @@ export const MtlsCertificateProvider = () =>
               accountId,
               mtlsCertificateId: output.mtlsCertificateId,
             })
-            .pipe(
-              Effect.catchTag("CertificateNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            )
+            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)))
         : yield* findByName(accountId, name);
 
       // Ensure — upload if missing. Cloudflare rejects uploading a
@@ -284,10 +295,7 @@ export const MtlsCertificateProvider = () =>
           .pipe(
             Effect.catchTag("CertificateAlreadyExists", (originalError) =>
               Effect.gen(function* () {
-                const match = yield* findByContent(
-                  accountId,
-                  news.certificates,
-                );
+                const match = yield* findByContent(accountId, news.certificates);
                 if (!match) return yield* Effect.fail(originalError);
                 return match;
               }),
@@ -304,10 +312,19 @@ export const MtlsCertificateProvider = () =>
           mtlsCertificateId: output.mtlsCertificateId,
         })
         .pipe(
-          Effect.catchTag(
-            ["CertificateNotFound", "CertificateAlreadyDeleted"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
+          // Cloudflare releases a Worker's `mtls_certificate` binding
+          // eventually: for a short while after the Worker is deleted the
+          // delete still fails with `CertificateInUse`, even though the
+          // certificate's association list is already empty. Treat it as a
+          // dependency violation and retry, bounded to about 45 seconds.
+          Effect.retry({
+            while: (e) => e._tag === "CertificateInUse",
+            schedule: Schedule.max([
+              Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+              Schedule.recurs(10),
+            ]),
+          }),
         );
     }),
   });
@@ -326,19 +343,11 @@ const findByName = (accountId: string, name: string) =>
 const findByContent = (accountId: string, certificates: string) =>
   Effect.gen(function* () {
     const list = yield* mtls.listMtlsCertificates({ accountId });
-    return list.result.find(
-      (c) => c.certificates?.trim() === certificates.trim(),
-    );
+    return list.result.find((c) => c.certificates?.trim() === certificates.trim());
   });
 
-const unwrap = (
-  value: Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value)
-      : value;
+const unwrap = (value: Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 type CertificateShape = {
   id?: string | null;
@@ -352,11 +361,7 @@ type CertificateShape = {
   type?: Type | null;
 };
 
-const toAttributes = (
-  cert: CertificateShape,
-  accountId: string,
-  news?: Props,
-): Attributes => ({
+const toAttributes = (cert: CertificateShape, accountId: string, news?: Props): Attributes => ({
   mtlsCertificateId: cert.id!,
   accountId,
   name: cert.name ?? undefined,

@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -89,26 +88,23 @@ export type Certificate = Resource<
  * property triggers a replacement. Deployment is asynchronous — the
  * certificate starts in `pending_deployment` and becomes `active` within a
  * few minutes; deletion likewise passes through `pending_deletion`.
- * @resource
- * @product Origin TLS Client Auth
- * @category SSL/TLS & Certificates
- * @section Uploading a certificate
- * @example Zone client certificate
+ * ### Uploading a certificate
+ * **Example:** Zone client certificate
  * ```typescript
  * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
+ *   privateKey: yield* Config.Redacted("AOP_CLIENT_KEY"),
  * });
  * ```
  *
- * @section Enabling Authenticated Origin Pulls
- * @example Upload the certificate and turn AOP on
+ * ### Enabling Authenticated Origin Pulls
+ * **Example:** Upload the certificate and turn AOP on
  * ```typescript
  * const cert = yield* Cloudflare.OriginTlsClientAuth.Certificate("AopCert", {
  *   zoneId: zone.zoneId,
  *   certificate: clientCertPem,
- *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
+ *   privateKey: yield* Config.Redacted("AOP_CLIENT_KEY"),
  * });
  *
  * yield* Cloudflare.OriginTlsClientAuth.Setting("Aop", {
@@ -118,6 +114,10 @@ export type Certificate = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
+ *
+ * @resource
+ * @product Origin TLS Client Auth
+ * @category SSL/TLS & Certificates
  */
 export const Certificate = Resource<Certificate>(TypeId);
 
@@ -137,18 +137,13 @@ export const CertificateProvider = () =>
       const o = olds as CertificateProps;
       const n = news as CertificateProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       if (
         (o.certificate !== undefined &&
           normalizePem(o.certificate) !== normalizePem(n.certificate)) ||
-        (o.privateKey !== undefined &&
-          unwrap(o.privateKey) !== unwrap(n.privateKey))
+        (o.privateKey !== undefined && unwrap(o.privateKey) !== unwrap(n.privateKey))
       ) {
         // There is no update API for zone client certificates — every change
         // is a replacement.
@@ -223,8 +218,7 @@ export const CertificateProvider = () =>
             // deploy.
             Effect.retry({
               while: (e) =>
-                e._tag === "CertificateAlreadyExists" ||
-                e._tag === "ZoneClientCertConflict",
+                e._tag === "CertificateAlreadyExists" || e._tag === "ZoneClientCertConflict",
               schedule: Schedule.spaced("5 seconds"),
               times: 10,
             }),
@@ -287,15 +281,11 @@ export const CertificateProvider = () =>
           // leaking the certificate.
           Effect.retry({
             while: (e) =>
-              e._tag === "CertificatePendingDeployment" ||
-              e._tag === "ZoneClientCertConflict",
+              e._tag === "CertificatePendingDeployment" || e._tag === "ZoneClientCertConflict",
             schedule: Schedule.spaced("5 seconds"),
             times: 12,
           }),
-          Effect.catchTag(
-            ["CertificateNotFound", "CertificateAlreadyDeleted"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
         );
     }),
   });
@@ -321,9 +311,7 @@ const findByContent = (zoneId: string, certificate: string) =>
     // Cloudflare returns `result: null` (not `[]`) for a zone whose cert store
     // is empty — treat it as no matches.
     return (list.result ?? []).find(
-      (c) =>
-        isLive(c.status) &&
-        normalizePem(c.certificate ?? "") === normalizePem(certificate),
+      (c) => isLive(c.status) && normalizePem(c.certificate ?? "") === normalizePem(certificate),
     );
   });
 
@@ -341,10 +329,7 @@ type CertificateShape = {
   uploadedOn?: string | null;
 };
 
-const toAttributes = (
-  cert: CertificateShape,
-  zoneId: string,
-): CertificateAttributes => ({
+const toAttributes = (cert: CertificateShape, zoneId: string): CertificateAttributes => ({
   certificateId: cert.id!,
   zoneId,
   status: cert.status ?? undefined,

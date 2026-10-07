@@ -10,8 +10,9 @@ export interface ListManagedMicrovmImageVersionsRequest
  *
  * Lists versions of an AWS-managed base MicroVM image. Bind with no resource:
  * `yield* AWS.Lambda.ListManagedMicrovmImageVersions()`.
+ * ### Managed Base Images
+ *
  * @binding
- * @section Managed Base Images
  */
 export interface ListManagedMicrovmImageVersions extends Binding.Service<
   ListManagedMicrovmImageVersions,
@@ -25,7 +26,6 @@ export interface ListManagedMicrovmImageVersions extends Binding.Service<
     >
   >
 > {}
-export const ListManagedMicrovmImageVersions =
-  Binding.Service<ListManagedMicrovmImageVersions>(
-    "AWS.Lambda.ListManagedMicrovmImageVersions",
-  );
+export const ListManagedMicrovmImageVersions = Binding.Service<ListManagedMicrovmImageVersions>(
+  "AWS.Lambda.ListManagedMicrovmImageVersions",
+);

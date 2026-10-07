@@ -1,5 +1,7 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -74,14 +76,15 @@ export interface OriginAccessControl extends Resource<
  *
  * `OriginAccessControl` is the recommended CloudFront access model for private
  * S3 origins and newer signed-origin integrations.
- * @resource
- * @section Creating Origin Access Controls
- * @example S3 Origin Access Control
+ * ### Creating Origin Access Controls
+ * **Example:** S3 Origin Access Control
  * ```typescript
  * const oac = yield* OriginAccessControl("SiteOriginAccess", {
  *   originType: "s3",
  * });
  * ```
+ *
+ * @resource
  */
 export const OriginAccessControl = Resource<OriginAccessControl>(
   "AWS.CloudFront.OriginAccessControl",
@@ -92,11 +95,13 @@ export const OriginAccessControlProvider = () =>
     OriginAccessControl,
     Effect.gen(function* () {
       const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listOriginAccessControls({});
-        const summary =
-          listed.OriginAccessControlList?.Items?.find(
-            (item) => item.Name === name,
-          ) ?? undefined;
+        const summary = yield* cloudfront.listOriginAccessControls.pages({}).pipe(
+          Stream.map((page) => page.OriginAccessControlList?.Items ?? []),
+          Stream.flattenIterable,
+          Stream.filter((item) => item.Name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
         if (!summary?.Id) {
           return undefined;
         }
@@ -122,11 +127,7 @@ export const OriginAccessControlProvider = () =>
           .getOriginAccessControlConfig({
             Id: output.originAccessControlId,
           })
-          .pipe(
-            Effect.catchTag("NoSuchOriginAccessControl", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)));
 
         if (!config?.OriginAccessControlConfig) {
           return undefined;
@@ -144,61 +145,48 @@ export const OriginAccessControlProvider = () =>
       return {
         stables: ["originAccessControlId"],
         list: () =>
-          Effect.gen(function* () {
-            const items: ReturnType<typeof toAttrs>[] = [];
-            let marker: string | undefined = undefined;
-            do {
-              const listed: cloudfront.ListOriginAccessControlsResult =
-                yield* cloudfront.listOriginAccessControls({ Marker: marker });
-              for (const summary of listed.OriginAccessControlList?.Items ??
-                []) {
-                if (!summary.Id) continue;
+          cloudfront.listOriginAccessControls.pages({}).pipe(
+            Stream.map((page) => page.OriginAccessControlList?.Items ?? []),
+            Stream.flattenIterable,
+            Stream.filter((summary) => summary.Id !== undefined),
+            Stream.mapEffect((summary) =>
+              Effect.gen(function* () {
                 // Fetch per-item config for the fresh ETag (the list summary
                 // omits it). Tolerate a concurrent delete between list and get.
                 const config = yield* cloudfront
-                  .getOriginAccessControlConfig({ Id: summary.Id })
+                  .getOriginAccessControlConfig({ Id: summary.Id! })
                   .pipe(
-                    Effect.catchTag("NoSuchOriginAccessControl", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)),
                   );
-                items.push(
-                  toAttrs(
-                    {
-                      Id: summary.Id,
-                      OriginAccessControlConfig:
-                        config?.OriginAccessControlConfig ?? {
-                          Name: summary.Name,
-                          Description: summary.Description,
-                          OriginAccessControlOriginType:
-                            summary.OriginAccessControlOriginType,
-                          SigningBehavior: summary.SigningBehavior,
-                          SigningProtocol: summary.SigningProtocol,
-                        },
+                return toAttrs(
+                  {
+                    Id: summary.Id!,
+                    OriginAccessControlConfig: config?.OriginAccessControlConfig ?? {
+                      Name: summary.Name,
+                      Description: summary.Description,
+                      OriginAccessControlOriginType: summary.OriginAccessControlOriginType,
+                      SigningBehavior: summary.SigningBehavior,
+                      SigningProtocol: summary.SigningProtocol,
                     },
-                    config?.ETag,
-                    summary.Name,
-                  ),
+                  },
+                  config?.ETag,
+                  summary.Name,
                 );
-              }
-              marker = listed.OriginAccessControlList?.NextMarker;
-            } while (marker);
-            return items;
-          }),
+              }),
+            ),
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          ),
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const existing =
-            (yield* getCurrent(output)) ??
-            (yield* getByName(yield* createName(id, olds ?? {})));
+            (yield* getCurrent(output)) ?? (yield* getByName(yield* createName(id, olds ?? {})));
 
           if (!existing?.OriginAccessControl?.Id) {
             return undefined;
@@ -215,8 +203,7 @@ export const OriginAccessControlProvider = () =>
 
           // Observe — locate the OAC by id (cached on `output`) or by
           // name. Trust observed cloud state, not stale `olds`.
-          const observed =
-            (yield* getCurrent(output)) ?? (yield* getByName(name));
+          const observed = (yield* getCurrent(output)) ?? (yield* getByName(name));
 
           // Ensure — create the OAC if it's missing. Tolerate
           // `OriginAccessControlAlreadyExists` (race with a peer
@@ -260,8 +247,7 @@ export const OriginAccessControlProvider = () =>
 
           // Sync — patch the observed config to the desired state. The
           // freshly observed ETag handles optimistic concurrency.
-          const observedConfig =
-            observed.OriginAccessControl.OriginAccessControlConfig;
+          const observedConfig = observed.OriginAccessControl.OriginAccessControlConfig;
           const updated = yield* cloudfront.updateOriginAccessControl({
             Id: observed.OriginAccessControl.Id,
             IfMatch: observed.ETag,
@@ -269,17 +255,9 @@ export const OriginAccessControlProvider = () =>
               Name: observedConfig?.Name ?? name,
               Description: news.description,
               OriginAccessControlOriginType:
-                news.originType ??
-                observedConfig?.OriginAccessControlOriginType ??
-                "s3",
-              SigningBehavior:
-                news.signingBehavior ??
-                observedConfig?.SigningBehavior ??
-                "always",
-              SigningProtocol:
-                news.signingProtocol ??
-                observedConfig?.SigningProtocol ??
-                "sigv4",
+                news.originType ?? observedConfig?.OriginAccessControlOriginType ?? "s3",
+              SigningBehavior: news.signingBehavior ?? observedConfig?.SigningBehavior ?? "always",
+              SigningProtocol: news.signingProtocol ?? observedConfig?.SigningProtocol ?? "sigv4",
             },
           });
 
@@ -290,11 +268,7 @@ export const OriginAccessControlProvider = () =>
           }
 
           yield* session.note(observed.OriginAccessControl.Id);
-          return toAttrs(
-            updated.OriginAccessControl,
-            updated.ETag,
-            observedConfig?.Name ?? name,
-          );
+          return toAttrs(updated.OriginAccessControl, updated.ETag, observedConfig?.Name ?? name);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* cloudfront
@@ -302,9 +276,7 @@ export const OriginAccessControlProvider = () =>
               Id: output.originAccessControlId,
               IfMatch: output.etag,
             })
-            .pipe(
-              Effect.catchTag("NoSuchOriginAccessControl", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.void));
         }),
       };
     }),
@@ -327,8 +299,7 @@ const toAttrs = (
   originAccessControlId: oac.Id,
   name: oac.OriginAccessControlConfig?.Name ?? fallbackName,
   description: oac.OriginAccessControlConfig?.Description,
-  originType:
-    oac.OriginAccessControlConfig?.OriginAccessControlOriginType ?? "s3",
+  originType: oac.OriginAccessControlConfig?.OriginAccessControlOriginType ?? "s3",
   signingBehavior: oac.OriginAccessControlConfig?.SigningBehavior ?? "always",
   signingProtocol: oac.OriginAccessControlConfig?.SigningProtocol ?? "sigv4",
   etag,

@@ -1,5 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -7,14 +9,14 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type LogGroupName = string;
-export type LogGroupArn =
-  `arn:aws:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
+export type LogGroupArn = `arn:aws:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
 export type LogGroupClass = logs.LogGroupClass;
 
 export interface LogGroupProps {
@@ -23,9 +25,13 @@ export interface LogGroupProps {
    */
   logGroupName?: string;
   /**
-   * Retention in days. If omitted, CloudWatch keeps logs indefinitely.
+   * How long CloudWatch retains log events. If omitted, logs are kept
+   * indefinitely. Accepts any `Duration.Input` (e.g. `"7 days"`,
+   * `Duration.days(7)`; a bare number is milliseconds); the wire unit is
+   * whole days (`retentionInDays`) and must resolve to one of the retention
+   * values CloudWatch accepts (1, 3, 5, 7, 14, 30, ...).
    */
-  retentionInDays?: number;
+  retention?: Duration.Input;
   /**
    * Optional KMS key identifier used to encrypt the log group.
    */
@@ -63,15 +69,79 @@ export interface LogGroup extends Resource<
 > {}
 
 /**
- * A CloudWatch Logs log group.
- * @resource
- * @section Creating Log Groups
- * @example ECS Task Log Group
+ * A CloudWatch Logs log group — the container for log streams and the unit
+ * that retention, encryption, metric filters, and subscriptions attach to.
+ * ### Creating Log Groups
+ * **Example:** ECS Task Log Group
  * ```typescript
  * const logs = yield* LogGroup("TaskLogs", {
- *   retentionInDays: 7,
+ *   retention: "7 days",
  * });
  * ```
+ *
+ * **Example:** Encrypted Log Group with Deletion Protection
+ * ```typescript
+ * const key = yield* AWS.KMS.Key("LogsKey");
+ * const logs = yield* LogGroup("AuditLogs", {
+ *   retention: "30 days",
+ *   kmsKeyId: key.keyArn,
+ *   deletionProtectionEnabled: true,
+ * });
+ * ```
+ *
+ * ### Writing Custom Log Events
+ * Declare a `LogStream` and use the `PutLogEvents` binding inside a Lambda
+ * function (or the batching `LogEventSink` for high-volume streams).
+ *
+ * **Example:** Custom Audit Trail from a Lambda Function
+ * ```typescript
+ * // init
+ * const logGroup = yield* AWS.Logs.LogGroup("AuditLogs", {
+ *   retention: "30 days",
+ * });
+ * const stream = yield* AWS.Logs.LogStream("AuditStream", {
+ *   logGroupName: logGroup.logGroupName,
+ *   logStreamName: "audit",
+ * });
+ * const putLogEvents = yield* AWS.Logs.PutLogEvents(logGroup);
+ *
+ * // runtime
+ * yield* putLogEvents({
+ *   logStreamName: "audit",
+ *   logEvents: [{ timestamp, message: "user.login id=123" }],
+ * });
+ * ```
+ *
+ * ### Consuming Log Events
+ * **Example:** React to Error Logs
+ * ```typescript
+ * // Subscribe a Lambda handler to matching events (creates the
+ * // subscription filter + invoke permission automatically).
+ * yield* AWS.Logs.consumeLogEvents(
+ *   logGroup,
+ *   { filterPattern: "?ERROR ?Error" },
+ *   (events) =>
+ *     Stream.runForEach(events, (event) =>
+ *       Effect.log(`${event.logStream}: ${event.message}`),
+ *     ),
+ * );
+ * ```
+ *
+ * ### Metrics
+ * **Example:** Count Errors with a Metric Filter
+ * ```typescript
+ * yield* AWS.Logs.MetricFilter("ErrorCount", {
+ *   logGroupName: logGroup.logGroupName,
+ *   filterPattern: '"ERROR"',
+ *   metricTransformations: [{
+ *     metricName: "ErrorCount",
+ *     metricNamespace: "MyApp",
+ *     metricValue: "1",
+ *   }],
+ * });
+ * ```
+ *
+ * @resource
  */
 export const LogGroup = Resource<LogGroup>("AWS.Logs.LogGroup");
 
@@ -79,16 +149,24 @@ export const LogGroupProvider = () =>
   Provider.effect(
     LogGroup,
     Effect.gen(function* () {
-      const toLogGroupName = (
-        id: string,
-        props: { logGroupName?: string } = {},
-      ) =>
+      const toLogGroupName = (id: string, props: { logGroupName?: string } = {}) =>
         props.logGroupName
           ? Effect.succeed(props.logGroupName)
           : createPhysicalName({ id, maxLength: 512 });
-      const toLogGroupClass = (
-        props: { logGroupClass?: LogGroupClass } = {},
-      ): LogGroupClass => props.logGroupClass ?? "STANDARD";
+      const toLogGroupClass = (props: { logGroupClass?: LogGroupClass } = {}): LogGroupClass =>
+        props.logGroupClass ?? "STANDARD";
+      // describeLogGroups returns ARNs with a trailing `:*` while reconcile
+      // constructs them without — normalize so refresh/adoption never reports
+      // phantom drift and interpolated IAM ARNs (`${arn}:*`) stay correct.
+      const normalizeLogGroupArn = (arn: string): LogGroupArn =>
+        (arn.endsWith(":*") ? arn.slice(0, -2) : arn) as LogGroupArn;
+      const observe = Effect.fn(function* (logGroupName: string) {
+        return yield* logs.describeLogGroups.items({ logGroupNamePrefix: logGroupName }).pipe(
+          Stream.filter((group) => group.logGroupName === logGroupName),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
+      });
 
       return {
         stables: ["logGroupArn", "logGroupName"],
@@ -101,9 +179,7 @@ export const LogGroupProvider = () =>
             const { accountId, region } = yield* AWSEnvironment.current;
             const groups = yield* logs.describeLogGroups.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.logGroups ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.logGroups ?? [])),
             );
 
             return yield* Effect.forEach(
@@ -119,30 +195,25 @@ export const LogGroupProvider = () =>
                 Effect.gen(function* () {
                   const tagArn =
                     `arn:aws:logs:${region}:${accountId}:log-group:${group.logGroupName}` as LogGroupArn;
-                  const tags = yield* logs
-                    .listTagsForResource({ resourceArn: tagArn })
-                    .pipe(
-                      Effect.map(
-                        (r): Record<string, string> =>
-                          Object.fromEntries(
-                            Object.entries(r.tags ?? {}).filter(
-                              (entry): entry is [string, string] =>
-                                typeof entry[1] === "string",
-                            ),
-                          ),
+                  const tags = yield* logs.listTagsForResource({ resourceArn: tagArn }).pipe(
+                    Effect.map((r): Record<string, string> =>
+                      Object.fromEntries(
+                        Object.entries(r.tags ?? {}).filter(
+                          (entry): entry is [string, string] => typeof entry[1] === "string",
+                        ),
                       ),
-                      Effect.catchTag("ResourceNotFoundException", () =>
-                        Effect.succeed({} as Record<string, string>),
-                      ),
-                    );
+                    ),
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed({} as Record<string, string>),
+                    ),
+                  );
                   return {
                     logGroupName: group.logGroupName,
-                    logGroupArn: group.arn as LogGroupArn,
+                    logGroupArn: normalizeLogGroupArn(group.arn),
                     retentionInDays: group.retentionInDays,
                     kmsKeyId: group.kmsKeyId,
                     logGroupClass: group.logGroupClass ?? "STANDARD",
-                    deletionProtectionEnabled:
-                      group.deletionProtectionEnabled ?? false,
+                    deletionProtectionEnabled: group.deletionProtectionEnabled ?? false,
                     tags,
                   };
                 }),
@@ -151,10 +222,7 @@ export const LogGroupProvider = () =>
           }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toLogGroupName(id, olds ?? {})) !==
-            (yield* toLogGroupName(id, news ?? {}))
-          ) {
+          if ((yield* toLogGroupName(id, olds ?? {})) !== (yield* toLogGroupName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (toLogGroupClass(olds ?? {}) !== toLogGroupClass(news ?? {})) {
@@ -162,21 +230,14 @@ export const LogGroupProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const logGroupName =
-            output?.logGroupName ?? (yield* toLogGroupName(id, olds ?? {}));
-          const described = yield* logs.describeLogGroups({
-            logGroupNamePrefix: logGroupName,
-            limit: 1,
-          });
-          const match = (described.logGroups ?? []).find(
-            (group) => group.logGroupName === logGroupName,
-          );
+          const logGroupName = output?.logGroupName ?? (yield* toLogGroupName(id, olds ?? {}));
+          const match = yield* observe(logGroupName);
           if (!match?.arn) {
             return undefined;
           }
           return {
             logGroupName,
-            logGroupArn: match.arn as LogGroupArn,
+            logGroupArn: normalizeLogGroupArn(match.arn),
             retentionInDays: match.retentionInDays,
             kmsKeyId: match.kmsKeyId,
             logGroupClass: match.logGroupClass ?? "STANDARD",
@@ -186,23 +247,24 @@ export const LogGroupProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const logGroupName =
-            output?.logGroupName ?? (yield* toLogGroupName(id, news));
-          const arn = (output?.logGroupArn ??
-            `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn;
+          const logGroupName = output?.logGroupName ?? (yield* toLogGroupName(id, news));
+          // `output.logGroupArn` may be state written by an older provider
+          // version (or anything else) that persisted `describeLogGroups`'
+          // trailing `:*` form — normalize before it reaches the tagging
+          // APIs, which reject that suffix with "Invalid resourceArn".
+          const arn = normalizeLogGroupArn(
+            (output?.logGroupArn ??
+              `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn,
+          );
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
+          // Wire unit is whole days (retentionInDays).
+          const desiredRetention = toWireDays(news.retention);
 
           // Observe - fetch live state. `describeLogGroups` returns
           // retention/kms info so we can diff against desired without
           // trusting `olds` or `output`.
-          const described = yield* logs.describeLogGroups({
-            logGroupNamePrefix: logGroupName,
-            limit: 1,
-          });
-          let observed = (described.logGroups ?? []).find(
-            (group) => group.logGroupName === logGroupName,
-          );
+          let observed = yield* observe(logGroupName);
 
           // Ensure - create if missing. `createLogGroup` accepts tags and
           // kmsKeyId on first create; tolerate `ResourceAlreadyExistsException`
@@ -216,19 +278,8 @@ export const LogGroupProvider = () =>
                 logGroupClass: news.logGroupClass,
                 deletionProtectionEnabled: news.deletionProtectionEnabled,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
-            const reread = yield* logs.describeLogGroups({
-              logGroupNamePrefix: logGroupName,
-              limit: 1,
-            });
-            observed = (reread.logGroups ?? []).find(
-              (group) => group.logGroupName === logGroupName,
-            );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+            observed = yield* observe(logGroupName);
           }
 
           // Sync KMS key - create accepts kmsKeyId, but updates require the
@@ -239,12 +290,7 @@ export const LogGroupProvider = () =>
               if (observedKmsKeyId !== undefined) {
                 yield* logs
                   .disassociateKmsKey({ logGroupName })
-                  .pipe(
-                    Effect.catchTag(
-                      "ResourceNotFoundException",
-                      () => Effect.void,
-                    ),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
               }
             } else {
               yield* logs.associateKmsKey({
@@ -256,10 +302,8 @@ export const LogGroupProvider = () =>
 
           // Sync deletion protection - destroy disables it before deletion, but
           // normal deploys should still converge the live flag to desired state.
-          const desiredDeletionProtection =
-            news.deletionProtectionEnabled ?? false;
-          const observedDeletionProtection =
-            observed?.deletionProtectionEnabled ?? false;
+          const desiredDeletionProtection = news.deletionProtectionEnabled ?? false;
+          const observedDeletionProtection = observed?.deletionProtectionEnabled ?? false;
           if (desiredDeletionProtection !== observedDeletionProtection) {
             yield* logs.putLogGroupDeletionProtection({
               logGroupIdentifier: logGroupName,
@@ -269,49 +313,38 @@ export const LogGroupProvider = () =>
 
           // Sync retention - observed to desired.
           const observedRetention = observed?.retentionInDays;
-          if (news.retentionInDays !== observedRetention) {
-            if (news.retentionInDays === undefined) {
+          if (desiredRetention !== observedRetention) {
+            if (desiredRetention === undefined) {
               yield* logs
                 .deleteRetentionPolicy({
                   logGroupName,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             } else {
               yield* logs.putRetentionPolicy({
                 logGroupName,
-                retentionInDays: news.retentionInDays,
+                retentionInDays: desiredRetention,
               });
             }
           }
 
           // Sync tags - list observed tags then diff against desired so
           // adoption rewrites ownership tags correctly.
-          const observedTags = yield* logs
-            .listTagsForResource({ resourceArn: arn })
-            .pipe(
-              Effect.map(
-                (r): Record<string, string> =>
-                  Object.fromEntries(
-                    Object.entries(r.tags ?? {}).filter(
-                      (entry): entry is [string, string] =>
-                        typeof entry[1] === "string",
-                    ),
-                  ),
+          const observedTags = yield* logs.listTagsForResource({ resourceArn: arn }).pipe(
+            Effect.map((r): Record<string, string> =>
+              Object.fromEntries(
+                Object.entries(r.tags ?? {}).filter(
+                  (entry): entry is [string, string] => typeof entry[1] === "string",
+                ),
               ),
-              Effect.catch(() => Effect.succeed({} as Record<string, string>)),
-            );
+            ),
+            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          );
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* logs.tagResource({
               resourceArn: arn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value]),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
             });
           }
           if (removed.length > 0) {
@@ -326,7 +359,7 @@ export const LogGroupProvider = () =>
           return {
             logGroupName,
             logGroupArn: arn,
-            retentionInDays: news.retentionInDays,
+            retentionInDays: desiredRetention,
             kmsKeyId: news.kmsKeyId,
             logGroupClass: observed?.logGroupClass ?? toLogGroupClass(news),
             deletionProtectionEnabled: desiredDeletionProtection,
@@ -363,6 +396,26 @@ export const LogGroupProvider = () =>
               }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
+
+          const remaining = yield* Effect.repeat(
+            logs.describeLogGroups.items({ logGroupNamePrefix: output.logGroupName }).pipe(
+              Stream.filter((group) => group.logGroupName === output.logGroupName),
+              Stream.runHead,
+              Effect.map(Option.isSome),
+            ),
+            {
+              schedule: Schedule.fixed("250 millis"),
+              until: (present) => !present,
+              times: 20,
+            },
+          );
+          if (remaining) {
+            yield* Effect.die(
+              new Error(
+                `CloudWatch log group ${output.logGroupName} remained observable after delete`,
+              ),
+            );
+          }
         }),
       };
     }),

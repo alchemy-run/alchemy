@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
+import * as Effect from "effect/Effect";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
 import type { EventBus } from "./EventBus.ts";
@@ -14,22 +14,39 @@ interface EventDescriptor {
 
 export interface LambdaRouteTargetProps extends Pick<
   RuleTarget,
-  | "Input"
-  | "InputPath"
-  | "InputTransformer"
-  | "RetryPolicy"
-  | "DeadLetterConfig"
+  "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
 > {}
 
-/** @binding */
+/**
+ * Routes matching events from an EventBridge bus to a Lambda function.
+ *
+ * Creates a {@link Rule} targeting the function and a Lambda permission
+ * allowing `events.amazonaws.com` to invoke it. Usually reached through the
+ * `events(...)` builder rather than called directly.
+ * **Example:** Route Matching Events to a Lambda Function
+ * ```typescript
+ * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toLambda(fn);
+ * ```
+ *
+ * **Example:** Transform the Event Payload Before Invoking
+ * ```typescript
+ * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toLambda(fn, {
+ *   InputTransformer: {
+ *     InputPathsMap: { orderId: "$.detail.orderId" },
+ *     InputTemplate: '{"orderId": <orderId>}',
+ *   },
+ * });
+ * ```
+ *
+ * @binding
+ */
 export const toLambda = (
   descriptor: EventDescriptor,
   fn: LambdaFunction,
   props: LambdaRouteTargetProps = {},
 ) =>
   Effect.gen(function* () {
-    const routeId =
-      descriptor.id ?? createRouteId(descriptor, `${fn.LogicalId}Lambda`);
+    const routeId = descriptor.id ?? createRouteId(descriptor, `${fn.LogicalId}Lambda`);
 
     const rule = yield* Rule(routeId, {
       description: descriptor.props?.description,

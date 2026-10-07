@@ -2,7 +2,6 @@ import * as waitingRooms from "@distilled.cloud/cloudflare/waiting-rooms";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -23,17 +22,13 @@ export type QueueingMethod = "fifo" | "random" | "passthrough" | "reject";
 /**
  * HTTP status code returned to a user while in the queue.
  */
-export type QueueingStatusCode = "200" | "202" | "429";
+export type QueueingStatusCode = 200 | 202 | 429;
 
 /**
  * Which Turnstile widget type the waiting room uses for detecting bot
  * traffic.
  */
-export type TurnstileMode =
-  | "off"
-  | "invisible"
-  | "visible_non_interactive"
-  | "visible_managed";
+export type TurnstileMode = "off" | "invisible" | "visible_non_interactive" | "visible_managed";
 
 /**
  * What to do when Turnstile detects a bot: `log` only records it in
@@ -246,11 +241,8 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  * Waiting rooms carry no ownership markers, so when state is lost `read`
  * matches by name and reports the room as `Unowned` — the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Waiting Rooms
- * @category Performance & Reliability
- * @section Creating a Waiting Room
- * @example Basic waiting room on a host
+ * ### Creating a Waiting Room
+ * **Example:** Basic waiting room on a host
  * ```typescript
  * const room = yield* Cloudflare.WaitingRoom.WaitingRoom("checkout", {
  *   zoneId: zone.zoneId,
@@ -261,7 +253,7 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  * });
  * ```
  *
- * @example Queue all traffic during an incident
+ * **Example:** Queue all traffic during an incident
  * ```typescript
  * yield* Cloudflare.WaitingRoom.WaitingRoom("incident-gate", {
  *   zoneId: zone.zoneId,
@@ -269,12 +261,12 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  *   totalActiveUsers: 500,
  *   newUsersPerMinute: 200,
  *   queueAll: true,
- *   queueingStatusCode: "429",
+ *   queueingStatusCode: 429,
  * });
  * ```
  *
- * @section Customizing behavior
- * @example Short sessions with a custom cookie suffix
+ * ### Customizing behavior
+ * **Example:** Short sessions with a custom cookie suffix
  * ```typescript
  * yield* Cloudflare.WaitingRoom.WaitingRoom("flash-sale", {
  *   zoneId: zone.zoneId,
@@ -289,6 +281,10 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  * ```
  *
  * @see https://developers.cloudflare.com/waiting-room/
+ *
+ * @resource
+ * @product Waiting Rooms
+ * @category Performance & Reliability
  */
 export const WaitingRoom = Resource<WaitingRoom>(TypeId, {
   aliases: ["Cloudflare.WaitingRoom"],
@@ -308,13 +304,8 @@ export const WaitingRoomProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -410,12 +401,8 @@ export const WaitingRoomProvider = () =>
             ),
             // Plan-gated / partial-permission zones reject the route, and a
             // zone deleted out-of-band has no rooms; skip both.
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as Attributes[]),
-            ),
-            Effect.catchTag("InvalidRoute", () =>
-              Effect.succeed([] as Attributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as Attributes[])),
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([] as Attributes[])),
           ),
         { concurrency: 10 },
       );
@@ -445,9 +432,7 @@ const findByName = (zoneId: string, name: string) =>
   waitingRooms.listWaitingRoomsForZone.items({ zoneId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (room): room is ObservedRoom => room.name === name,
-      ),
+      Array.from(chunk).find((room): room is ObservedRoom => room.name === name),
     ),
     // Zone deleted out-of-band — nothing to find.
     Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
@@ -502,7 +487,7 @@ const DEFAULTS = {
   disableSessionRenewal: false,
   queueAll: false,
   queueingMethod: "fifo",
-  queueingStatusCode: "200",
+  queueingStatusCode: 200,
   suspended: false,
   jsonResponseEnabled: false,
   defaultTemplateLanguage: "en-US",
@@ -526,10 +511,7 @@ const isDirty = (
   if (observed.totalActiveUsers !== desired.totalActiveUsers) return true;
   if (observed.newUsersPerMinute !== desired.newUsersPerMinute) return true;
 
-  const defaulted = <K extends keyof typeof DEFAULTS>(
-    key: K,
-    observedValue: unknown,
-  ): boolean => {
+  const defaulted = <K extends keyof typeof DEFAULTS>(key: K, observedValue: unknown): boolean => {
     const want = desired[key as keyof typeof desired] ?? DEFAULTS[key];
     return (observedValue ?? DEFAULTS[key]) !== want;
   };
@@ -569,9 +551,7 @@ const isDirty = (
   }
   if (desired.cookieAttributes !== undefined) {
     const o = observed.cookieAttributes ?? {};
-    if (
-      (o.samesite ?? "auto") !== (desired.cookieAttributes.samesite ?? "auto")
-    ) {
+    if ((o.samesite ?? "auto") !== (desired.cookieAttributes.samesite ?? "auto")) {
       return true;
     }
     if ((o.secure ?? "auto") !== (desired.cookieAttributes.secure ?? "auto")) {
@@ -585,8 +565,7 @@ const isDirty = (
       o.length !== d.length ||
       o.some(
         (route, i) =>
-          (route.host ?? "") !== (d[i]?.host ?? "") ||
-          (route.path ?? "/") !== (d[i]?.path ?? "/"),
+          (route.host ?? "") !== (d[i]?.host ?? "") || (route.path ?? "/") !== (d[i]?.path ?? "/"),
       )
     ) {
       return true;
@@ -621,7 +600,7 @@ const toAttributes = (
   sessionDuration: room.sessionDuration ?? 5,
   queueAll: room.queueAll ?? false,
   queueingMethod: (room.queueingMethod ?? "fifo") as QueueingMethod,
-  queueingStatusCode: (room.queueingStatusCode ?? "200") as QueueingStatusCode,
+  queueingStatusCode: room.queueingStatusCode ?? 200,
   suspended: room.suspended ?? false,
   createdOn: room.createdOn ?? undefined,
   modifiedOn: room.modifiedOn ?? undefined,

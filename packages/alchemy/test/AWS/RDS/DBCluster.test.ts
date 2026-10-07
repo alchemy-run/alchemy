@@ -1,3 +1,7 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster } from "@/AWS/RDS/DBCluster.ts";
@@ -5,8 +9,6 @@ import type { DBClusterProps } from "@/AWS/RDS/DBCluster.ts";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,44 +33,141 @@ const base: DBClusterProps = {
   engine: "aurora-postgresql",
 };
 
-test.provider("diff: backup retention is an in-place update", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, backupRetentionPeriod: 1 },
-      { ...base, backupRetentionPeriod: 7 },
-    );
-    expect(result).toBeUndefined();
-  }),
+test.provider(
+  "diff: backup retention is an in-place update",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* callDiff(
+        { ...base, backupRetentionPeriod: "1 day" },
+        { ...base, backupRetentionPeriod: "7 days" },
+      );
+      expect(result).toBeUndefined();
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
-test.provider("diff: changing databaseName forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, databaseName: "app" },
-      { ...base, databaseName: "other" },
-    );
-    expect(result).toEqual({ action: "replace" });
-  }),
+test.provider(
+  "diff: changing databaseName forces replacement",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* callDiff(
+        { ...base, databaseName: "app" },
+        { ...base, databaseName: "other" },
+      );
+      expect(result).toEqual({ action: "replace" });
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
-test.provider("diff: changing kmsKeyId forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, kmsKeyId: "key-a" },
-      { ...base, kmsKeyId: "key-b" },
-    );
-    expect(result).toEqual({ action: "replace" });
-  }),
+test.provider(
+  "diff: changing kmsKeyId forces replacement",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* callDiff(
+        { ...base, kmsKeyId: "key-a" },
+        { ...base, kmsKeyId: "key-b" },
+      );
+      expect(result).toEqual({ action: "replace" });
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
-test.provider("diff: changing engineMode forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, engineMode: "provisioned" },
-      { ...base, engineMode: "serverless" },
-    );
-    expect(result).toEqual({ action: "replace" });
-  }),
+test.provider(
+  "diff: changing engineMode forces replacement",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* callDiff(
+        { ...base, engineMode: "provisioned" },
+        { ...base, engineMode: "serverless" },
+      );
+      expect(result).toEqual({ action: "replace" });
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
+);
+
+// Render a deploy failure (whatever engine wrapper it arrives in) to a string
+// we can assert AWS's parameter-validation message against.
+const renderFailure = (attempt: Result.Result<unknown, unknown>): string => {
+  if (!Result.isFailure(attempt)) {
+    return "";
+  }
+  const failure = attempt.failure;
+  const json = (() => {
+    try {
+      return JSON.stringify(failure);
+    } catch {
+      return "";
+    }
+  })();
+  return `${String(failure)} ${json}`;
+};
+
+// Live wire probes for this PR's Redacted/Duration prop conversions. Both
+// drive the full engine + provider `reconcile` path into a real
+// `createDBCluster` call that AWS rejects at parameter-validation time, so
+// nothing is ever provisioned and the probe completes in seconds.
+//
+// Probe 1 proves `masterUserPassword: Redacted.Redacted<string>` is
+// serialized to the actual secret characters on the wire — AWS's validator
+// can only reject the password if it saw the real '@'/' ' characters, not a
+// "<redacted>" placeholder.
+//
+// Probe 2 proves `backupRetentionPeriod: Duration.Input` ("60 days") reaches
+// the wire as integer days — AWS can only reject 60 > 35 if the converted
+// number arrived.
+//
+// (The in-range live round-trip — create with "1 day", read back 1, modify to
+// "3 days", read back 3 — is covered by the RDS_TEST_LIFECYCLE-gated test
+// below, which needs ~15+ minutes of Aurora provisioning.)
+test.provider(
+  "wire probe: Redacted password + Duration retention reach createDBCluster",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const badPassword = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBCluster("AuditProbeCluster", {
+              dbClusterIdentifier: "alchemy-audit-probe",
+              engine: "aurora-postgresql",
+              masterUsername: "alchemy",
+              // '@' and ' ' are forbidden password characters — AWS rejects
+              // the create before provisioning anything.
+              masterUserPassword: Redacted.make("bad@pass word1"),
+              backupRetentionPeriod: "3 days",
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(badPassword)).toBe(true);
+      // Typed tag (patched into distilled rds createDBCluster) + AWS's own
+      // validation text naming the password parameter.
+      expect(renderFailure(badPassword)).toContain("InvalidParameterValue");
+      expect(renderFailure(badPassword)).toContain("MasterUserPassword");
+
+      const badRetention = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* DBCluster("AuditProbeCluster", {
+              dbClusterIdentifier: "alchemy-audit-probe",
+              engine: "aurora-postgresql",
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make("ValidPassw0rd"),
+              // 60 days is above the 1-35 day API maximum — AWS echoes the
+              // converted integer back in the validation error.
+              backupRetentionPeriod: "60 days",
+            });
+          }),
+        ),
+      );
+      expect(Result.isFailure(badRetention)).toBe(true);
+      expect(renderFailure(badRetention)).toContain("InvalidParameterValue");
+      expect(renderFailure(badRetention)).toMatch(/retention/i);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: 120_000 },
 );
 
 // Read-only `list()` test (no deploy). An Aurora DB cluster takes MANY minutes
@@ -78,20 +177,23 @@ test.provider("diff: changing engineMode forces replacement", () =>
 // `DBCluster["Attributes"]` shape, call it, and assert it returns a well-typed
 // array (likely empty in a clean test account). This proves the paginated
 // `describeDBClusters` -> Attributes mapping compiles and runs.
-test.provider("list returns a typed DBCluster Attributes array", () =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DBCluster);
-    const all = yield* provider.list();
+test.provider(
+  "list returns a typed DBCluster Attributes array",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(DBCluster);
+      const all = yield* provider.list();
 
-    expect(Array.isArray(all)).toBe(true);
-    for (const cluster of all) {
-      expect(typeof cluster.dbClusterIdentifier).toBe("string");
-      expect(typeof cluster.dbClusterArn).toBe("string");
-      expect(typeof cluster.engine).toBe("string");
-      expect(typeof cluster.tags).toBe("object");
-      expect(Array.isArray(cluster.vpcSecurityGroupIds)).toBe(true);
-    }
-  }),
+      expect(Array.isArray(all)).toBe(true);
+      for (const cluster of all) {
+        expect(typeof cluster.dbClusterIdentifier).toBe("string");
+        expect(typeof cluster.dbClusterArn).toBe("string");
+        expect(typeof cluster.engine).toBe("string");
+        expect(typeof cluster.tags).toBe("object");
+        expect(Array.isArray(cluster.vpcSecurityGroupIds)).toBe(true);
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"] },
 );
 
 // Full deploy-based `list()` test, gated behind AWS_TEST_RDS_DBCLUSTER=1.
@@ -110,10 +212,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
           return yield* DBCluster("ListCluster", {
             engine: "aurora-postgresql",
             engineMode: "provisioned",
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 0.5,
-              MaxCapacity: 1,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 1 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
           });
@@ -123,13 +222,11 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
       const provider = yield* Provider.findProvider(DBCluster);
       const all = yield* provider.list();
 
-      expect(
-        all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier),
-      ).toBe(true);
+      expect(all.some((c) => c.dbClusterIdentifier === cluster.dbClusterIdentifier)).toBe(true);
 
       yield* stack.destroy();
     }),
-  { timeout: 1_800_000 },
+  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: 1_800_000 },
 );
 
 // Full cluster lifecycle gated behind RDS_TEST_LIFECYCLE=1. Creates a
@@ -166,13 +263,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 0.5,
-              MaxCapacity: 1,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 1 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 1,
+            backupRetentionPeriod: "1 day",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: false,
           });
@@ -191,13 +285,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 1,
-              MaxCapacity: 2,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 1, MaxCapacity: 2 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: true,
           });
@@ -217,13 +308,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
-            serverlessV2ScalingConfiguration: {
-              MinCapacity: 1,
-              MaxCapacity: 2,
-            },
+            serverlessV2ScalingConfiguration: { MinCapacity: 1, MaxCapacity: 2 },
             manageMasterUserPassword: true,
             masterUsername: "alchemy",
-            backupRetentionPeriod: 3,
+            backupRetentionPeriod: "3 days",
             enableCloudwatchLogsExports: ["postgresql"],
             deletionProtection: false,
           });
@@ -232,5 +320,5 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       yield* stack.destroy();
     }),
-  { timeout: 2_400_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"], timeout: 2_400_000 },
 );

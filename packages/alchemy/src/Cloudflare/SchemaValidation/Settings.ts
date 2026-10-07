@@ -1,7 +1,6 @@
 import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -45,7 +44,7 @@ export interface SettingsAttributes {
   /** The default mitigation action for non-conforming requests. */
   validationDefaultMitigationAction: MitigationAction;
   /** The zone-wide override (`"none"` = validation disabled), if set. */
-  validationOverrideMitigationAction: "none" | null;
+  validationOverrideMitigationAction: "none" | (string & {}) | null;
   /**
    * The default action the zone had before Alchemy first managed these
    * settings. Restored on destroy.
@@ -55,16 +54,10 @@ export interface SettingsAttributes {
    * The override the zone had before Alchemy first managed these settings.
    * Restored on destroy.
    */
-  initialOverrideMitigationAction: "none" | null;
+  initialOverrideMitigationAction: "none" | (string & {}) | null;
 }
 
-export type Settings = Resource<
-  TypeId,
-  SettingsProps,
-  SettingsAttributes,
-  never,
-  Providers
->;
+export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never, Providers>;
 
 /**
  * Zone-level schema validation settings
@@ -79,11 +72,8 @@ export type Settings = Resource<
  *
  * The `log` action is plan-gated (API Shield entitlement) on some zones —
  * setting it there fails with the typed `UnentitledMitigationAction` error.
- * @resource
- * @product Schema Validation
- * @category Application Security
- * @section Managing the zone default
- * @example Block non-conforming requests
+ * ### Managing the zone default
+ * **Example:** Block non-conforming requests
  * ```typescript
  * yield* Cloudflare.SchemaValidation.Settings("Validation", {
  *   zoneId: zone.zoneId,
@@ -91,8 +81,8 @@ export type Settings = Resource<
  * });
  * ```
  *
- * @section Kill switch
- * @example Temporarily disable validation zone-wide
+ * ### Kill switch
+ * **Example:** Temporarily disable validation zone-wide
  * ```typescript
  * yield* Cloudflare.SchemaValidation.Settings("Validation", {
  *   zoneId: zone.zoneId,
@@ -103,6 +93,10 @@ export type Settings = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
+ *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  */
 export const Settings = Resource<Settings>(TypeId);
 
@@ -115,11 +109,7 @@ export const isSettings = (value: unknown): value is Settings =>
 export const SettingsProvider = () =>
   Provider.succeed(Settings, {
     nuke: { singleton: true },
-    stables: [
-      "zoneId",
-      "initialDefaultMitigationAction",
-      "initialOverrideMitigationAction",
-    ],
+    stables: ["zoneId", "initialDefaultMitigationAction", "initialOverrideMitigationAction"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -133,9 +123,7 @@ export const SettingsProvider = () =>
           schemaValidation.getSetting({ zoneId }).pipe(
             // A cold read adopts freely; the observed state is the
             // initial state (nothing has been managed yet).
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, observedState(observed)),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, observedState(observed))),
             // A scoped token may lack access to some zones; skip them.
             Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
           ),
@@ -148,22 +136,15 @@ export const SettingsProvider = () =>
       const o = olds as SettingsProps;
       const n = news as SettingsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
       const observed = yield* schemaValidation.getSetting({ zoneId });
       // The settings are a singleton that always exists with a Cloudflare
@@ -222,11 +203,7 @@ export const SettingsProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const {
-        zoneId,
-        initialDefaultMitigationAction,
-        initialOverrideMitigationAction,
-      } = output;
+      const { zoneId, initialDefaultMitigationAction, initialOverrideMitigationAction } = output;
       // The singleton cannot be deleted — restore the pre-management
       // state. Skip the call when it already matches (idempotent re-delete
       // after a crashed run).
@@ -249,9 +226,7 @@ export const SettingsProvider = () =>
     }),
   });
 
-type SettingResponse =
-  | schemaValidation.GetSettingResponse
-  | schemaValidation.PutSettingResponse;
+type SettingResponse = schemaValidation.GetSettingResponse | schemaValidation.PutSettingResponse;
 
 const observedState = (setting: SettingResponse) => ({
   // Distilled widens the generated enum to an open union (`string & {}`).
@@ -264,7 +239,7 @@ const toAttributes = (
   setting: SettingResponse,
   initial: {
     defaultAction: MitigationAction;
-    overrideAction: "none" | null;
+    overrideAction: "none" | (string & {}) | null;
   },
 ): SettingsAttributes => {
   const current = observedState(setting);

@@ -1,7 +1,6 @@
 import * as pageShield from "@distilled.cloud/cloudflare/page-shield";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -77,13 +76,7 @@ export interface SettingsAttributes {
   initialUseConnectionUrlPath: boolean;
 }
 
-export type Settings = Resource<
-  TypeId,
-  SettingsProps,
-  SettingsAttributes,
-  never,
-  Providers
->;
+export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never, Providers>;
 
 /**
  * The Page Shield configuration of a Cloudflare zone
@@ -105,11 +98,8 @@ export type Settings = Resource<
  *
  * Only one `Settings` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- * @resource
- * @product Page Shield
- * @category Application Security
- * @section Managing Page Shield
- * @example Enable Page Shield on a zone
+ * ### Managing Page Shield
+ * **Example:** Enable Page Shield on a zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -118,7 +108,7 @@ export type Settings = Resource<
  * });
  * ```
  *
- * @example Analyze connection URL paths too
+ * **Example:** Analyze connection URL paths too
  * ```typescript
  * yield* Cloudflare.PageShield.Settings("PageShield", {
  *   zoneId: zone.zoneId,
@@ -126,7 +116,7 @@ export type Settings = Resource<
  * });
  * ```
  *
- * @example Report CSP violations to the zone instead of Cloudflare
+ * **Example:** Report CSP violations to the zone instead of Cloudflare
  * ```typescript
  * yield* Cloudflare.PageShield.Settings("PageShield", {
  *   zoneId: zone.zoneId,
@@ -135,6 +125,10 @@ export type Settings = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/page-shield/
+ *
+ * @resource
+ * @product Page Shield
+ * @category Application Security
  */
 export const Settings = Resource<Settings>(TypeId);
 
@@ -199,9 +193,7 @@ export const SettingsProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* pageShield.getPageShield({ zoneId });
       // The configuration is a singleton that always exists with a
@@ -212,8 +204,7 @@ export const SettingsProvider = () =>
         output !== undefined
           ? {
               enabled: output.initialEnabled,
-              useCloudflareReportingEndpoint:
-                output.initialUseCloudflareReportingEndpoint,
+              useCloudflareReportingEndpoint: output.initialUseCloudflareReportingEndpoint,
               useConnectionUrlPath: output.initialUseConnectionUrlPath,
             }
           : observed;
@@ -235,8 +226,7 @@ export const SettingsProvider = () =>
         output !== undefined
           ? {
               enabled: output.initialEnabled,
-              useCloudflareReportingEndpoint:
-                output.initialUseCloudflareReportingEndpoint,
+              useCloudflareReportingEndpoint: output.initialUseCloudflareReportingEndpoint,
               useConnectionUrlPath: output.initialUseConnectionUrlPath,
             }
           : observed;
@@ -257,8 +247,7 @@ export const SettingsProvider = () =>
       const { zoneId } = output;
       const initial: DesiredSettings = {
         enabled: output.initialEnabled,
-        useCloudflareReportingEndpoint:
-          output.initialUseCloudflareReportingEndpoint,
+        useCloudflareReportingEndpoint: output.initialUseCloudflareReportingEndpoint,
         useConnectionUrlPath: output.initialUseConnectionUrlPath,
       };
       // Observe, then restore the pre-management flags; skip the call

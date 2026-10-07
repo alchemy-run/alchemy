@@ -2,7 +2,6 @@ import * as registrar from "@distilled.cloud/cloudflare/registrar";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -98,13 +97,7 @@ export interface DomainAttributes {
   initialSettings: DomainSettings;
 }
 
-export type Domain = Resource<
-  TypeId,
-  DomainProps,
-  DomainAttributes,
-  never,
-  Providers
->;
+export type Domain = Resource<TypeId, DomainProps, DomainAttributes, never, Providers>;
 
 /**
  * The mutable Cloudflare Registrar settings (`auto_renew`, `locked`,
@@ -125,11 +118,8 @@ export type Domain = Resource<
  * Note: updating registrar settings requires an API token with Registrar
  * write permission; without it the update fails with the typed
  * `RegistrarUpdateNotAllowed` error.
- * @resource
- * @product Registrar
- * @category Domains & DNS
- * @section Managing a registered domain
- * @example Pin auto-renew and the transfer lock
+ * ### Managing a registered domain
+ * **Example:** Pin auto-renew and the transfer lock
  * ```typescript
  * yield* Cloudflare.Registrar.Domain("ApexDomain", {
  *   domainName: "example.com",
@@ -138,7 +128,7 @@ export type Domain = Resource<
  * });
  * ```
  *
- * @example Enable WHOIS privacy only
+ * **Example:** Enable WHOIS privacy only
  * ```typescript
  * // autoRenew and locked are omitted, so they are left untouched.
  * yield* Cloudflare.Registrar.Domain("ApexDomain", {
@@ -147,8 +137,8 @@ export type Domain = Resource<
  * });
  * ```
  *
- * @section Reading registration state
- * @example Use the registration expiry downstream
+ * ### Reading registration state
+ * **Example:** Use the registration expiry downstream
  * ```typescript
  * const domain = yield* Cloudflare.Registrar.Domain("ApexDomain", {
  *   domainName: "example.com",
@@ -158,6 +148,10 @@ export type Domain = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/registrar/
+ *
+ * @resource
+ * @product Registrar
+ * @category Domains & DNS
  */
 export const Domain = Resource<Domain>(TypeId);
 
@@ -198,9 +192,7 @@ export const DomainProvider = () =>
       // observed settings at adoption time become the `initialSettings`
       // restored on destroy.
       const initialSettings =
-        output !== undefined
-          ? output.initialSettings
-          : captureSettings(observed);
+        output !== undefined ? output.initialSettings : captureSettings(observed);
       return toAttributes(domainName, acct, observed, initialSettings);
     }),
 
@@ -227,9 +219,7 @@ export const DomainProvider = () =>
       //    otherwise this is our first touch and the observed settings are
       //    the registration's originals.
       const initialSettings =
-        output !== undefined
-          ? output.initialSettings
-          : captureSettings(observed);
+        output !== undefined ? output.initialSettings : captureSettings(observed);
 
       // 3. Sync — diff the observed settings against the declared props and
       //    PUT only on a delta. Omitted props are left untouched.
@@ -279,12 +269,7 @@ export const DomainProvider = () =>
                   typeof domain.name === "string",
               )
               .map((domain) =>
-                toAttributes(
-                  domain.name,
-                  accountId,
-                  domain,
-                  captureSettings(domain),
-                ),
+                toAttributes(domain.name, accountId, domain, captureSettings(domain)),
               ),
           ),
         ),
@@ -308,9 +293,7 @@ const findDomain = (accountId: string, domainName: string) =>
   registrar.listDomains.items({ accountId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).find(
-        (domain): domain is ObservedDomain => domain.name === domainName,
-      ),
+      Array.from(chunk).find((domain): domain is ObservedDomain => domain.name === domainName),
     ),
   );
 
@@ -332,24 +315,15 @@ const settingsDelta = (
 ): DomainSettings | undefined => {
   const delta: DomainSettings = {};
   let dirty = false;
-  if (
-    desired.autoRenew !== undefined &&
-    desired.autoRenew !== (observed.autoRenew ?? undefined)
-  ) {
+  if (desired.autoRenew !== undefined && desired.autoRenew !== (observed.autoRenew ?? undefined)) {
     delta.autoRenew = desired.autoRenew;
     dirty = true;
   }
-  if (
-    desired.locked !== undefined &&
-    desired.locked !== (observed.locked ?? undefined)
-  ) {
+  if (desired.locked !== undefined && desired.locked !== (observed.locked ?? undefined)) {
     delta.locked = desired.locked;
     dirty = true;
   }
-  if (
-    desired.privacy !== undefined &&
-    desired.privacy !== (observed.privacy ?? undefined)
-  ) {
+  if (desired.privacy !== undefined && desired.privacy !== (observed.privacy ?? undefined)) {
     delta.privacy = desired.privacy;
     dirty = true;
   }

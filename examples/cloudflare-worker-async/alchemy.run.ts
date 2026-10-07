@@ -6,7 +6,7 @@ import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1.Database("DB");
 
-export const Bucket = Cloudflare.R2.Bucket("Bucket");
+export const Bucket = Cloudflare.R2.Bucket("Bucket", { forceDestroy: true });
 
 // Queue producer + consumer wiring (both sides exercised by the same worker).
 // The Worker sends a message via `env.QUEUE.send(...)` from POST /queue/send,
@@ -16,14 +16,6 @@ export const Queue = Cloudflare.Queues.Queue("Queue");
 
 export const Counter = Cloudflare.DurableObject<CounterClass>("Counter", {
   className: "Counter",
-});
-
-export const ClaudeCode = Cloudflare.Container("ClaudeCode", {
-  dockerfile: `
-    FROM alpine:latest
-    RUN curl -fsSL https://claude.ai/install.sh | bash
-  `,
-  context: ".",
 });
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
@@ -36,9 +28,7 @@ export const Worker = Cloudflare.Worker("Worker", {
   env: {
     // Self-contained default so the example deploys without external secrets;
     // the integ test asserts this value round-trips through env.API_KEY.
-    API_KEY: Config.redacted("SOME_API_KEY").pipe(
-      Config.withDefault("SOME_API_KEY"),
-    ),
+    API_KEY: Config.Redacted("SOME_API_KEY").pipe(Config.withDefault("SOME_API_KEY")),
     DB,
     Bucket,
     Queue,

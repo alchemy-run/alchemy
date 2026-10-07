@@ -12,12 +12,9 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * and `DNS Write` permissions, scoped to the single zone passed to `bind`, and
  * binds its value into the Worker so runtime code can authenticate.
  *
- * @binding
- * @product DNS
- * @category Domains & DNS
  *
- * @section Managing DNS records at runtime
- * @example Full CRUD from inside a Worker
+ * ### Managing DNS records at runtime
+ * **Example:** Full CRUD from inside a Worker
  * Bind the client in the Worker's Init phase and provide
  * {@link ReadWriteDnsBinding}. The zone is fixed by `ReadWriteDnsBinding(zone)` — the
  * provisioned token only grants access to that zone, so calls take no
@@ -26,7 +23,7 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * const Zone = Cloudflare.Zone.Zone("MyZone", { name: "example.com" });
  *
@@ -53,6 +50,10 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  *   }).pipe(Effect.provide(Cloudflare.DNS.ReadWriteDnsBinding)),
  * ) {}
  * ```
+ *
+ * @binding
+ * @product DNS
+ * @category Domains & DNS
  */
 export interface ReadWriteDns extends Binding.Service<
   ReadWriteDns,
@@ -60,9 +61,7 @@ export interface ReadWriteDns extends Binding.Service<
   (zone: Zone) => Effect.Effect<ReadWriteDnsClient>
 > {}
 
-export const ReadWriteDns = Binding.Service<ReadWriteDns>(
-  "Cloudflare.DNS.ReadWriteDns",
-);
+export const ReadWriteDns = Binding.Service<ReadWriteDns>("Cloudflare.DNS.ReadWriteDns");
 
 /** Combined read + write DNS record operations. */
 export interface ReadWriteDnsClient extends ReadDnsClient, WriteDnsClient {}

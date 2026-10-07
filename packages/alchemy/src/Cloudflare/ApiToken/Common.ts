@@ -1,7 +1,5 @@
-import {
-  PERMISSION_GROUPS_BY_NAME,
-  type PermissionGroupName,
-} from "./PermissionGroups.ts";
+import type { TokensCreateRequestPoliciesItemPermissionGroupsItemMeta } from "@distilled.cloud/cloudflare/accounts";
+import { PERMISSION_GROUPS_BY_NAME, type PermissionGroupName } from "./PermissionGroups.ts";
 
 /**
  * Resource keys recognized by Cloudflare API token policies.
@@ -23,9 +21,13 @@ export type ResourceKey =
  * name (resolved against the static catalog) or an explicit `{ id }` for
  * names that aren't in the catalog or have multiple scopes.
  */
-export type PermissionGroupRef =
-  | PermissionGroupName
-  | { id: string; meta?: { key?: string; value?: string } };
+export type PermissionGroupRef = PermissionGroupName | { id: string; meta?: PermissionGroupMeta };
+
+/**
+ * Descriptive attributes of a permission group, as Cloudflare documents them
+ * on token policies. Optional; Cloudflare does not store them on the token.
+ */
+export type PermissionGroupMeta = TokensCreateRequestPoliciesItemPermissionGroupsItemMeta;
 
 /**
  * Value of a resource entry in an {@link Policy}. Usually `"*"`, but
@@ -96,15 +98,12 @@ export type ApiTokenBinding = {
 export const collectPolicies = (
   props: Policy[] | undefined,
   bindings: { data: ApiTokenBinding }[],
-): Policy[] => [
-  ...(props ?? []),
-  ...bindings.flatMap((binding) => binding.data.policies ?? []),
-];
+): Policy[] => [...(props ?? []), ...bindings.flatMap((binding) => binding.data.policies ?? [])];
 
 export type ResolvedPolicy = {
   effect: "allow" | "deny";
-  permissionGroups: { id: string; meta?: { key?: string; value?: string } }[];
-  resources: Record<string, unknown>;
+  permissionGroups: { id: string; meta?: PermissionGroupMeta }[];
+  resources: Record<string, ResourceScope>;
 };
 
 export const resolvePermissionGroup = (ref: PermissionGroupRef) => {
@@ -122,9 +121,7 @@ export const resolvePermissionGroup = (ref: PermissionGroupRef) => {
   return ref.meta ? { id: ref.id, meta: ref.meta } : { id: ref.id };
 };
 
-const resolveResources = (
-  resources: Policy["resources"],
-): Record<string, ResourceScope> => {
+const resolveResources = (resources: Policy["resources"]): Record<string, ResourceScope> => {
   const out: Record<string, ResourceScope> = {};
   for (const [key, value] of Object.entries(resources)) {
     if (value === undefined) continue;
@@ -153,9 +150,7 @@ export const policyFingerprint = (policies: ResolvedPolicy[]): string =>
     })),
   );
 
-export const conditionFingerprint = (
-  condition: Condition | undefined,
-): string =>
+export const conditionFingerprint = (condition: Condition | undefined): string =>
   JSON.stringify({
     in: [...(condition?.requestIp?.in ?? [])].sort(),
     notIn: [...(condition?.requestIp?.notIn ?? [])].sort(),

@@ -1,4 +1,5 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,6 +7,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface AuthorizerProps {
@@ -50,9 +52,11 @@ export interface AuthorizerProps {
    */
   identityValidationExpression?: string;
   /**
-   * Cache TTL for authorizer results, in seconds.
+   * Cache TTL for authorizer results (e.g. `"5 minutes"` or
+   * `Duration.seconds(300)`; a bare number is milliseconds). Sent to the
+   * API as whole seconds (`authorizerResultTtlInSeconds`).
    */
-  authorizerResultTtlInSeconds?: number;
+  authorizerResultTtl?: Duration.Input;
 }
 
 /** @resource */
@@ -72,8 +76,8 @@ export interface Authorizer extends Resource<
 /**
  * REST API Lambda, Cognito, or gateway authorizer.
  *
- * @section Authorizers
- * @example Lambda TOKEN authorizer
+ * ### Authorizers
+ * **Example:** Lambda TOKEN authorizer
  * ```typescript
  * const authorizer = yield* ApiGateway.Authorizer("Auth", {
  *   restApiId: api.restApiId,
@@ -127,11 +131,7 @@ export const AuthorizerProvider = () =>
               restApiId: output.restApiId,
               authorizerId: output.authorizerId,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!a?.id) return undefined;
           return {
             authorizerId: a.id,
@@ -157,11 +157,7 @@ export const AuthorizerProvider = () =>
                   restApiId,
                   authorizerId: output.authorizerId,
                 })
-                .pipe(
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
             : undefined;
 
           // Ensure — create if missing.
@@ -176,10 +172,9 @@ export const AuthorizerProvider = () =>
               authorizerCredentials: news.authorizerCredentials,
               identitySource: news.identitySource,
               identityValidationExpression: news.identityValidationExpression,
-              authorizerResultTtlInSeconds: news.authorizerResultTtlInSeconds,
+              authorizerResultTtlInSeconds: toWireSeconds(news.authorizerResultTtl),
             });
-            if (!created.id)
-              return yield* Effect.die("createAuthorizer missing id");
+            if (!created.id) return yield* Effect.die("createAuthorizer missing id");
             yield* session.note(`Created authorizer ${created.id}`);
             observed = yield* ag.getAuthorizer({
               restApiId: news.restApiId as string,
@@ -207,39 +202,24 @@ export const AuthorizerProvider = () =>
           }
           if (news.authorizerCredentials !== observed.authorizerCredentials) {
             patches.push({
-              op:
-                news.authorizerCredentials === undefined ? "remove" : "replace",
+              op: news.authorizerCredentials === undefined ? "remove" : "replace",
               path: "/authorizerCredentials",
               value: news.authorizerCredentials,
             });
           }
-          if (
-            news.identityValidationExpression !==
-            observed.identityValidationExpression
-          ) {
+          if (news.identityValidationExpression !== observed.identityValidationExpression) {
             patches.push({
-              op:
-                news.identityValidationExpression === undefined
-                  ? "remove"
-                  : "replace",
+              op: news.identityValidationExpression === undefined ? "remove" : "replace",
               path: "/identityValidationExpression",
               value: news.identityValidationExpression,
             });
           }
-          if (
-            news.authorizerResultTtlInSeconds !==
-            observed.authorizerResultTtlInSeconds
-          ) {
+          const desiredTtlSeconds = toWireSeconds(news.authorizerResultTtl);
+          if (desiredTtlSeconds !== observed.authorizerResultTtlInSeconds) {
             patches.push({
-              op:
-                news.authorizerResultTtlInSeconds === undefined
-                  ? "remove"
-                  : "replace",
+              op: desiredTtlSeconds === undefined ? "remove" : "replace",
               path: "/authorizerResultTtlInSeconds",
-              value:
-                news.authorizerResultTtlInSeconds === undefined
-                  ? undefined
-                  : String(news.authorizerResultTtlInSeconds),
+              value: desiredTtlSeconds === undefined ? undefined : String(desiredTtlSeconds),
             });
           }
           if (patches.length > 0) {
@@ -271,9 +251,7 @@ export const AuthorizerProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .map((api) => api.id)
-                    .filter((id): id is string => id != null),
+                  (page.items ?? []).map((api) => api.id).filter((id): id is string => id != null),
                 ),
               ),
             );
@@ -283,10 +261,7 @@ export const AuthorizerProvider = () =>
                 ag.getAuthorizers({ restApiId }).pipe(
                   Effect.map((res) =>
                     (res.items ?? [])
-                      .filter(
-                        (a): a is ag.Authorizer & { id: string } =>
-                          a.id != null,
-                      )
+                      .filter((a): a is ag.Authorizer & { id: string } => a.id != null)
                       .map((a) => ({
                         authorizerId: a.id,
                         restApiId,

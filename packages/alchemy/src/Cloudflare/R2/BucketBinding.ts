@@ -51,9 +51,7 @@ export const makeBucketBinding = <Client>(options: {
  * used by both sides are exposed here.
  */
 export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
-  const raw = Effect.sync(
-    () => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId]!,
-  );
+  const raw = Effect.sync(() => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId]!);
   const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, R2Error> =>
     Effect.tryPromise({
       try: fn,
@@ -64,27 +62,41 @@ export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
         }),
     });
 
-  const use = <T>(
-    fn: (raw: runtime.R2Bucket) => Promise<T>,
-  ): Effect.Effect<T, R2Error> =>
+  const use = <T>(fn: (raw: runtime.R2Bucket) => Promise<T>): Effect.Effect<T, R2Error> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
+  return {
+    raw,
+    use,
+    tryPromise,
+    ...makeR2ObjectWrappers(tryPromise),
+  };
+};
+
+/**
+ * The `R2Object`/`R2ObjectBody` → Effect-client wrappers, shared by the
+ * Worker-binding helpers above and the local platform-proxy helpers
+ * (`LocalR2Gateway.ts`), which differ only in how `raw`/`use` obtain the
+ * native bucket.
+ */
+export const makeR2ObjectWrappers = (
+  tryPromise: <T>(fn: () => Promise<T>) => Effect.Effect<T, R2Error>,
+) => {
   const wrapR2Object = (object: runtime.R2Object): R2Object => ({
     ...object,
-    writeHttpMetadata: (headers: Headers) =>
-      Effect.sync(() => object.writeHttpMetadata(headers)),
+    writeHttpMetadata: (headers: Headers) => Effect.sync(() => object.writeHttpMetadata(headers)),
   });
   const wrapR2ObjectBody = (object: runtime.R2ObjectBody): ObjectBody => ({
     ...wrapR2Object(object),
     body: Stream.fromReadableStream({
-      evaluate: () =>
-        object.body as any as ReadableStream<Uint8Array<ArrayBufferLike>>,
+      evaluate: () => object.body as any as ReadableStream<Uint8Array<ArrayBufferLike>>,
       onError: (error: any) =>
         new R2Error({
           message: error.message ?? "Unknown error",
           cause: error,
         }),
     }),
+    readable: object.body as any as ReadableStream<Uint8Array>,
     bodyUsed: object.bodyUsed,
     arrayBuffer: () => tryPromise(() => object.arrayBuffer()),
     bytes: () => tryPromise(() => object.bytes()),
@@ -106,9 +118,6 @@ export const makeHelpers = (env: Record<string, any>, bucket: Bucket) => {
         : wrapR2Object(object);
 
   return {
-    raw,
-    use,
-    tryPromise,
     wrapR2Object,
     wrapR2ObjectOrBody,
   };

@@ -2,7 +2,6 @@ import * as firewall from "@distilled.cloud/cloudflare/firewall";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -124,11 +123,8 @@ export type Lockdown = Resource<
  * state, `read` scans the zone for an existing rule with the same URL set
  * and reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Firewall
- * @category Application Security
- * @section Locking down a URL
- * @example Allow a single office IP to reach an admin panel
+ * ### Locking down a URL
+ * **Example:** Allow a single office IP to reach an admin panel
  * ```typescript
  * yield* Cloudflare.Firewall.Lockdown("AdminLockdown", {
  *   zoneId: zone.zoneId,
@@ -138,7 +134,7 @@ export type Lockdown = Resource<
  * });
  * ```
  *
- * @example Allow a CIDR range across multiple URLs
+ * **Example:** Allow a CIDR range across multiple URLs
  * ```typescript
  * yield* Cloudflare.Firewall.Lockdown("StaffOnly", {
  *   zoneId: zone.zoneId,
@@ -150,8 +146,8 @@ export type Lockdown = Resource<
  * });
  * ```
  *
- * @section Pausing a rule
- * @example Temporarily disable a lockdown without deleting it
+ * ### Pausing a rule
+ * **Example:** Temporarily disable a lockdown without deleting it
  * ```typescript
  * yield* Cloudflare.Firewall.Lockdown("AdminLockdown", {
  *   zoneId: zone.zoneId,
@@ -162,6 +158,10 @@ export type Lockdown = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/tools/zone-lockdown/
+ *
+ * @resource
+ * @product Firewall
+ * @category Application Security
  */
 export const Lockdown = Resource<Lockdown>(LockdownTypeId);
 
@@ -181,11 +181,7 @@ export const LockdownProvider = () =>
       // No prior props to compare against — let the engine decide.
       if (o.zoneId === undefined) return undefined;
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -221,9 +217,7 @@ export const LockdownProvider = () =>
       // 1. Observe — the lockdown id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the URL scan and
       //    then to create.
-      let observed = output?.lockdownId
-        ? yield* getLockdown(zoneId, output.lockdownId)
-        : undefined;
+      let observed = output?.lockdownId ? yield* getLockdown(zoneId, output.lockdownId) : undefined;
 
       // 2. Fall back to scanning the zone for a rule with the same URL
       //    set. Ownership has already been verified upstream — `read`
@@ -263,11 +257,9 @@ export const LockdownProvider = () =>
       const dirty =
         !sameStringSet(observed.urls, news.urls) ||
         !sameConfigurationSet(observed.configurations, news.configurations) ||
-        (news.description !== undefined &&
-          (observed.description ?? "") !== news.description) ||
+        (news.description !== undefined && (observed.description ?? "") !== news.description) ||
         (news.paused !== undefined && observed.paused !== news.paused) ||
-        (news.priority !== undefined &&
-          (observed.priority ?? undefined) !== news.priority);
+        (news.priority !== undefined && (observed.priority ?? undefined) !== news.priority);
       if (dirty) {
         observed = yield* firewall.updateLockdown({
           zoneId,
@@ -296,9 +288,7 @@ export const LockdownProvider = () =>
         (zone) =>
           firewall.listLockdowns.items({ zoneId: zone.id }).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).map((rule) => toAttributes(rule, zone.id)),
-            ),
+            Effect.map((chunk) => Array.from(chunk).map((rule) => toAttributes(rule, zone.id))),
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
           ),
         { concurrency: 10 },
@@ -344,33 +334,24 @@ const findByUrls = (zoneId: string, urls: readonly string[]) =>
   firewall.listLockdowns.items({ zoneId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
-      Array.from(chunk).find((rule): rule is ObservedLockdown =>
-        sameStringSet(rule.urls, urls),
-      ),
+      Array.from(chunk).find((rule): rule is ObservedLockdown => sameStringSet(rule.urls, urls)),
     ),
   );
 
 const sameStringSet = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length &&
-  [...a].sort().join("\n") === [...b].sort().join("\n");
+  a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
 
-const configurationKey = (c: {
-  target?: string | null;
-  value?: string | null;
-}) => `${c.target ?? ""}=${c.value ?? ""}`;
+const configurationKey = (c: { target?: string | null; value?: string | null }) =>
+  `${c.target ?? ""}=${c.value ?? ""}`;
 
 const sameConfigurationSet = (
   a: readonly { target?: string | null; value?: string | null }[],
   b: readonly LockdownConfiguration[],
 ) =>
   a.length === b.length &&
-  a.map(configurationKey).sort().join("\n") ===
-    b.map(configurationKey).sort().join("\n");
+  a.map(configurationKey).sort().join("\n") === b.map(configurationKey).sort().join("\n");
 
-const toAttributes = (
-  rule: ObservedLockdown,
-  zoneId: string,
-): LockdownAttributes => ({
+const toAttributes = (rule: ObservedLockdown, zoneId: string): LockdownAttributes => ({
   lockdownId: rule.id,
   zoneId,
   urls: [...rule.urls],

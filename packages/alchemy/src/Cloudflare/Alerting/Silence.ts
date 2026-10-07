@@ -1,10 +1,10 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -55,13 +55,7 @@ export interface SilenceAttributes {
   updatedAt: string | undefined;
 }
 
-export type Silence = Resource<
-  TypeId,
-  SilenceProps,
-  SilenceAttributes,
-  never,
-  Providers
->;
+export type Silence = Resource<TypeId, SilenceProps, SilenceAttributes, never, Providers>;
 
 /**
  * A Cloudflare Notifications silence window.
@@ -75,11 +69,8 @@ export type Silence = Resource<
  * Note: the create API returns no id, so the provider resolves the created
  * silence by listing and matching on `(policyId, startTime, endTime)`. Two
  * silences sharing the exact same policy and window are indistinguishable.
- * @resource
- * @product Alerting
- * @category Observability & Analytics
- * @section Creating a silence
- * @example Silence a policy during a maintenance window
+ * ### Creating a silence
+ * **Example:** Silence a policy during a maintenance window
  * ```typescript
  * const policy = yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
@@ -93,8 +84,8 @@ export type Silence = Resource<
  * });
  * ```
  *
- * @section Updating the window
- * @example Extend the silence end time in place
+ * ### Updating the window
+ * **Example:** Extend the silence end time in place
  * Window times are mutable — changing them updates the existing silence.
  * ```typescript
  * yield* Cloudflare.Alerting.Silence("MaintenanceWindow", {
@@ -105,6 +96,10 @@ export type Silence = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/notifications/
+ *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  */
 export const Silence = Resource<Silence>(TypeId);
 
@@ -147,8 +142,7 @@ export const SilenceProvider = () =>
       const o = olds as SilenceProps;
       const n = news as SilenceProps;
       const oldPolicyId =
-        output?.policyId ??
-        (typeof o.policyId === "string" ? o.policyId : undefined);
+        output?.policyId ?? (typeof o.policyId === "string" ? o.policyId : undefined);
       if (
         oldPolicyId !== undefined &&
         typeof n.policyId === "string" &&
@@ -176,12 +170,7 @@ export const SilenceProvider = () =>
       const o = olds as SilenceProps | undefined;
       const policyId = typeof o?.policyId === "string" ? o.policyId : undefined;
       if (policyId && o?.startTime && o?.endTime) {
-        const match = yield* findSilence(
-          acct,
-          policyId,
-          o.startTime,
-          o.endTime,
-        );
+        const match = yield* findSilence(acct, policyId, o.startTime, o.endTime);
         if (match) return Unowned(toSilenceAttributes(match, acct));
       }
       return undefined;
@@ -199,12 +188,7 @@ export const SilenceProvider = () =>
         observed = yield* observeSilence(accountId, output.silenceId);
       }
       if (!observed) {
-        observed = yield* findSilence(
-          accountId,
-          policyId,
-          news.startTime,
-          news.endTime,
-        );
+        observed = yield* findSilence(accountId, policyId, news.startTime, news.endTime);
       }
 
       // 2. Ensure — create when missing. The create response carries no
@@ -227,33 +211,18 @@ export const SilenceProvider = () =>
           })
           .pipe(
             Effect.catchTag("SilenceAlreadyExists", (error) =>
-              findSilence(
-                accountId,
-                policyId,
-                news.startTime,
-                news.endTime,
-              ).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.void : Effect.fail(error),
-                ),
+              findSilence(accountId, policyId, news.startTime, news.endTime).pipe(
+                Effect.flatMap((existing) => (existing ? Effect.void : Effect.fail(error))),
               ),
             ),
           );
-        observed = yield* findSilence(
-          accountId,
-          policyId,
-          news.startTime,
-          news.endTime,
-        ).pipe(
+        observed = yield* findSilence(accountId, policyId, news.startTime, news.endTime).pipe(
           Effect.flatMap((found) =>
             found ? Effect.succeed(found) : Effect.fail(new SilencePending()),
           ),
           Effect.retry({
             while: (e) => e._tag === "SilencePending",
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
           }),
         );
         return toSilenceAttributes(observed, accountId);
@@ -306,8 +275,7 @@ interface ObservedSilence {
   readonly updatedAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowSilence = (raw: {
   id?: string | null;
@@ -339,24 +307,18 @@ const observeSilence = (accountId: string, silenceId: string) =>
  * Timestamps are compared as instants so formatting differences (trailing
  * `Z` vs `+00:00`, fractional seconds) don't defeat the match.
  */
-const findSilence = (
-  accountId: string,
-  policyId: string,
-  startTime: string,
-  endTime: string,
-) =>
-  alerting.listSilences({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter(
-          (s) =>
-            s.policyId === policyId &&
-            sameInstant(undef(s.startTime), startTime) &&
-            sameInstant(undef(s.endTime), endTime),
-        )
-        .map(narrowSilence)
-        .find((s) => s !== undefined),
+const findSilence = (accountId: string, policyId: string, startTime: string, endTime: string) =>
+  alerting.listSilences.items({ accountId }).pipe(
+    Stream.filter(
+      (s) =>
+        s.id != null &&
+        s.policyId === policyId &&
+        sameInstant(undef(s.startTime), startTime) &&
+        sameInstant(undef(s.endTime), endTime),
     ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.map((s) => (s === undefined ? undefined : narrowSilence(s))),
   );
 
 /** Compare two ISO8601 timestamps by the instant they denote. */
@@ -368,10 +330,7 @@ const sameInstant = (a: string | undefined, b: string | undefined): boolean => {
   return ta === tb;
 };
 
-const toSilenceAttributes = (
-  observed: ObservedSilence,
-  accountId: string,
-): SilenceAttributes => ({
+const toSilenceAttributes = (observed: ObservedSilence, accountId: string): SilenceAttributes => ({
   silenceId: observed.id,
   accountId,
   policyId: observed.policyId ?? "",

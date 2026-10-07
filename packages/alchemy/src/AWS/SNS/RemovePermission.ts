@@ -3,12 +3,28 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface RemovePermissionRequest extends Omit<
-  sns.RemovePermissionInput,
-  "TopicArn"
-> {}
+export interface RemovePermissionRequest extends Omit<sns.RemovePermissionInput, "TopicArn"> {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:RemovePermission`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to remove
+ * a policy statement previously added with {@link AddPermission} by its
+ * label. The binding grants the host function `sns:RemovePermission` on the
+ * topic. Provide the `RemovePermissionHttp` layer on the Function to
+ * implement the binding.
+ * ### Managing Topic Permissions
+ * **Example:** Remove a Permission by Label
+ * ```typescript
+ * // init (provide SNS.RemovePermissionHttp on the Function)
+ * const removePermission = yield* SNS.RemovePermission(topic);
+ *
+ * // runtime
+ * yield* removePermission({ Label: "PartnerPublish" });
+ * ```
+ *
+ * @binding
+ */
 export interface RemovePermission extends Binding.Service<
   RemovePermission,
   "AWS.SNS.RemovePermission",
@@ -21,6 +37,4 @@ export interface RemovePermission extends Binding.Service<
   >
 > {}
 
-export const RemovePermission = Binding.Service<RemovePermission>(
-  "AWS.SNS.RemovePermission",
-);
+export const RemovePermission = Binding.Service<RemovePermission>("AWS.SNS.RemovePermission");

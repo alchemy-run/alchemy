@@ -1,14 +1,15 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { unwrapRedacted } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -44,11 +45,12 @@ export interface ObservabilityDestinationProps {
   url: string;
   /**
    * Extra HTTP headers sent with each push (e.g. authentication tokens).
+   * Pass credentials as `Redacted` values to keep them out of plan output.
    * Cloudflare always adds a `content-type: application/json` header of
    * its own. Mutable — updated in place.
    * @default {}
    */
-  headers?: Record<string, string>;
+  headers?: Record<string, string | Redacted.Redacted<string>>;
   /**
    * Which Workers Logs dataset to export. Cannot be changed after
    * creation — updating this property triggers a replacement.
@@ -97,9 +99,10 @@ export interface ObservabilityDestinationAttributes {
   logpushDataset: ObservabilityDataset;
   /**
    * The underlying Logpush destination string (the URL with the
-   * configured headers encoded as query parameters).
+   * configured headers encoded as query parameters). Redacted because it
+   * embeds the header values, including any credentials.
    */
-  destinationConf: string;
+  destinationConf: Redacted.Redacted<string>;
   /**
    * Names of the Worker scripts currently opted in to this destination.
    */
@@ -133,11 +136,8 @@ export type ObservabilityDestination = Resource<
  * account for a destination with the same name and reports it as
  * `Unowned`, so the engine refuses to take it over unless `--adopt` (or
  * `adopt(true)`) is set.
- * @resource
- * @product Workers
- * @category Workers & Compute
- * @section Exporting Workers traces
- * @example Push traces to an OTLP collector
+ * ### Exporting Workers traces
+ * **Example:** Push traces to an OTLP collector
  * ```typescript
  * const traces = yield* Cloudflare.Workers.ObservabilityDestination("Traces", {
  *   url: "https://otel.example.com/v1/traces",
@@ -146,8 +146,8 @@ export type ObservabilityDestination = Resource<
  * });
  * ```
  *
- * @section Exporting Workers logs
- * @example Push logs, skipping the create-time preflight
+ * ### Exporting Workers logs
+ * **Example:** Push logs, skipping the create-time preflight
  * ```typescript
  * const logs = yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
  *   name: "my-app-logs",
@@ -157,8 +157,8 @@ export type ObservabilityDestination = Resource<
  * });
  * ```
  *
- * @section Pausing an export
- * @example Disable the destination without deleting it
+ * ### Pausing an export
+ * **Example:** Disable the destination without deleting it
  * ```typescript
  * yield* Cloudflare.Workers.ObservabilityDestination("Logs", {
  *   name: "my-app-logs",
@@ -167,16 +167,17 @@ export type ObservabilityDestination = Resource<
  *   enabled: false,
  * });
  * ```
+ *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  */
-export const ObservabilityDestination =
-  Resource<ObservabilityDestination>(TypeId);
+export const ObservabilityDestination = Resource<ObservabilityDestination>(TypeId);
 
 /**
  * Returns true if the given value is an ObservabilityDestination resource.
  */
-export const isObservabilityDestination = (
-  value: unknown,
-): value is ObservabilityDestination =>
+export const isObservabilityDestination = (value: unknown): value is ObservabilityDestination =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const ObservabilityDestinationProvider = () =>
@@ -191,9 +192,11 @@ export const ObservabilityDestinationProvider = () =>
       }
       // The slug is derived from the name at creation and the update API
       // cannot rename — a name change is a replacement.
-      const oldName =
-        output?.name ?? olds?.name ?? (yield* createDestinationName(id));
-      const newName = news.name ?? (yield* createDestinationName(id));
+      const oldName = output?.name ?? olds?.name ?? (yield* createDestinationName(id));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = news.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }
@@ -201,6 +204,12 @@ export const ObservabilityDestinationProvider = () =>
       const oldDataset = output?.logpushDataset ?? olds?.logpushDataset;
       if (oldDataset !== undefined && oldDataset !== news.logpushDataset) {
         return { action: "replace" } as const;
+      }
+      // State written by earlier versions holds `destinationConf` as a plain
+      // string. Reconcile to re-read it as `Redacted`; without header or URL
+      // drift this issues no PATCH.
+      if (output !== undefined && !Redacted.isRedacted(output.destinationConf)) {
+        return { action: "update" } as const;
       }
       return undefined;
     }),
@@ -226,19 +235,19 @@ export const ObservabilityDestinationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = news.name ?? (yield* createDestinationName(id));
-      // Inputs have been resolved to concrete strings by Plan.
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name = news.name ?? output?.name ?? (yield* createDestinationName(id));
+      // Inputs have been resolved to concrete values by Plan.
       const url = news.url as string;
-      const headers = (news.headers ?? {}) as Record<string, string>;
+      const headers = unwrapRedacted(news.headers ?? {});
       const enabled = news.enabled ?? true;
 
       // 1. Observe — the slug cached on `output` is a hint, not a
       //    guarantee; fall back to the name (Cloudflare enforces name
       //    uniqueness, and ownership of a name match has already been
       //    verified upstream by `read` + the adopt policy).
-      let observed = output?.slug
-        ? yield* findBySlug(accountId, output.slug)
-        : undefined;
+      let observed = output?.slug ? yield* findBySlug(accountId, output.slug) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
@@ -262,16 +271,14 @@ export const ObservabilityDestinationProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag(
-              "ObservabilityDestinationCreateFailed",
-              (originalError) =>
-                Effect.gen(function* () {
-                  const match = yield* findByName(accountId, name);
-                  if (!match) {
-                    return yield* Effect.fail(originalError);
-                  }
-                  return match;
-                }),
+            Effect.catchTag("ObservabilityDestinationCreateFailed", (originalError) =>
+              Effect.gen(function* () {
+                const match = yield* findByName(accountId, name);
+                if (!match) {
+                  return yield* Effect.fail(originalError);
+                }
+                return match;
+              }),
             ),
           );
         observed = isObservedDestination(created)
@@ -300,8 +307,7 @@ export const ObservabilityDestinationProvider = () =>
             // workers.dev sink) can transiently fail that probe while the
             // route propagates, so ride out preflight failures briefly.
             Effect.retry({
-              while: (e) =>
-                e._tag === "ObservabilityDestinationPreflightFailed",
+              while: (e) => e._tag === "ObservabilityDestinationPreflightFailed",
               schedule: Schedule.min([
                 Schedule.exponential("1 second"),
                 Schedule.spaced("5 seconds"),
@@ -322,12 +328,7 @@ export const ObservabilityDestinationProvider = () =>
           accountId: output.accountId,
           slug: output.slug,
         })
-        .pipe(
-          Effect.catchTag(
-            "ObservabilityDestinationNotFound",
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("ObservabilityDestinationNotFound", () => Effect.void));
     }),
 
     // Account collection. Observability destinations are account-scoped and
@@ -337,29 +338,22 @@ export const ObservabilityDestinationProvider = () =>
     // write-only on the API, so — like `read` — they never appear here.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* workers.listObservabilityDestinations
-        .items({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).map((observed) =>
-              toAttributes(observed, accountId),
-            ),
-          ),
-        );
+      return yield* workers.listObservabilityDestinations.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).map((observed) => toAttributes(observed, accountId)),
+        ),
+      );
     }),
   });
 
-type ObservedDestination =
-  workers.ListObservabilityDestinationsResponse["result"][number];
+type ObservedDestination = workers.ListObservabilityDestinationsResponse["result"][number];
 
 const isObservedDestination = (
   value: ObservedDestination | workers.CreateObservabilityDestinationResponse,
-): value is ObservedDestination =>
-  Predicate.hasProperty(value.configuration, "headers");
+): value is ObservedDestination => Predicate.hasProperty(value.configuration, "headers");
 
-const createDestinationName = (id: string) =>
-  createPhysicalName({ id, lowercase: true });
+const createDestinationName = (id: string) => createPhysicalName({ id, lowercase: true });
 
 /**
  * Locate a destination by its stable slug. There is no get-by-slug API,
@@ -411,10 +405,7 @@ const freshObserved = (accountId: string, slug: string) =>
  * it unless the user explicitly pinned one, so an empty desired set is
  * not perpetually "dirty".
  */
-const sameHeaders = (
-  observed: Record<string, unknown>,
-  desired: Record<string, string>,
-) => {
+const sameHeaders = (observed: Record<string, unknown>, desired: Record<string, string>) => {
   const normalized = Object.fromEntries(
     Object.entries(observed)
       .filter(([key]) => key !== "content-type" || "content-type" in desired)
@@ -438,6 +429,6 @@ const toAttributes = (
   url: observed.configuration.url,
   // Distilled widens generated string enums to open unions (`string & {}`).
   logpushDataset: observed.configuration.logpushDataset as ObservabilityDataset,
-  destinationConf: observed.configuration.destinationConf,
+  destinationConf: Redacted.make(observed.configuration.destinationConf),
   scripts: [...observed.scripts],
 });

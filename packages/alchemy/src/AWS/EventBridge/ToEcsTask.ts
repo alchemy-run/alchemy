@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
-import * as IAM from "../IAM/index.ts";
 import type { Cluster } from "../ECS/Cluster.ts";
+import * as IAM from "../IAM/index.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
 
@@ -14,11 +14,7 @@ interface EventDescriptor {
 
 export interface EcsRouteTargetProps extends Pick<
   RuleTarget,
-  | "Input"
-  | "InputPath"
-  | "InputTransformer"
-  | "RetryPolicy"
-  | "DeadLetterConfig"
+  "Input" | "InputPath" | "InputTransformer" | "RetryPolicy" | "DeadLetterConfig"
 > {
   task: {
     taskDefinitionArn: string;
@@ -31,14 +27,35 @@ export interface EcsRouteTargetProps extends Pick<
   taskCount?: number;
 }
 
+/**
+ * Routes matching events from an EventBridge bus to an ECS task run.
+ *
+ * Creates a {@link Rule} targeting the ECS cluster plus an IAM role that lets
+ * EventBridge call `ecs:RunTask` with the given task definition (Fargate
+ * launch type). Usually reached through the `events(...)` builder rather than
+ * called directly.
+ * **Example:** Run a Fargate Task for Matching Events
+ * ```typescript
+ * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toEcsTask(cluster, {
+ *   task: {
+ *     taskDefinitionArn: yield* taskDefinition.taskDefinitionArn,
+ *     taskRoleArn: yield* taskRole.roleArn,
+ *     executionRoleArn: yield* executionRole.roleArn,
+ *   },
+ *   subnets: subnetIds,
+ *   assignPublicIp: true,
+ * });
+ * ```
+ *
+ * @binding
+ */
 export const toEcsTask = (
   descriptor: EventDescriptor,
   cluster: Cluster,
   props: EcsRouteTargetProps,
 ) =>
   Effect.gen(function* () {
-    const routeId =
-      descriptor.id ?? createRouteId(descriptor, `${cluster.LogicalId}Ecs`);
+    const routeId = descriptor.id ?? createRouteId(descriptor, `${cluster.LogicalId}Ecs`);
 
     const role = yield* IAM.Role(`${routeId}${cluster.LogicalId}Role`, {
       assumeRolePolicyDocument: {

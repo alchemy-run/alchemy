@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -67,11 +66,8 @@ export type ZoneTransferTsig = Resource<
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. All fields are mutable in place; the secret is redacted and
  * never persisted in attributes.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating a TSIG
- * @example HMAC-SHA512 key
+ * ### Creating a TSIG
+ * **Example:** HMAC-SHA512 key
  * ```typescript
  * const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
@@ -79,8 +75,8 @@ export type ZoneTransferTsig = Resource<
  * });
  * ```
  *
- * @section Using with a Peer
- * @example Authenticate transfers from a primary nameserver
+ * ### Using with a Peer
+ * **Example:** Authenticate transfers from a primary nameserver
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
@@ -90,6 +86,10 @@ export type ZoneTransferTsig = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferTsig = Resource<ZoneTransferTsig>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferTsig"],
@@ -154,11 +154,7 @@ export const ZoneTransferTsigProvider = () =>
       // Sync — PUT with the full body; skip the call on no delta. The
       // observed secret comes back from the GET, so the comparison is
       // exact (not a guess from `olds`).
-      if (
-        observed.name === name &&
-        observed.algo === news.algo &&
-        observed.secret === secret
-      ) {
+      if (observed.name === name && observed.algo === news.algo && observed.secret === secret) {
         return toAttributes(observed, output?.accountId ?? accountId);
       }
       const updated = yield* dns.updateZoneTransferTsig({
@@ -213,10 +209,11 @@ const getTsig = (accountId: string, tsigId: string) =>
  * pick the lexicographically-first id for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listZoneTransferTsigs({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((t) => t.name === name)
+  dns.listZoneTransferTsigs.items({ accountId }).pipe(
+    Stream.filter((t) => t.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),

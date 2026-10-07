@@ -1,31 +1,54 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
-
+import type { Providers } from "../Providers.ts";
 import { syncTags } from "./common.ts";
 
 export interface DomainNameProps {
+  /** The custom domain name (e.g. `api.example.com`). */
   domainName: string;
+  /** Display name of a self-managed edge certificate. */
   certificateName?: string;
+  /** PEM body of a self-managed edge certificate. */
   certificateBody?: string;
-  certificatePrivateKey?: string;
+  /**
+   * The private key of the server certificate (self-managed certificates).
+   * Secret key material — wrap with `Redacted.make` so state encoding
+   * preserves redaction.
+   */
+  certificatePrivateKey?: Redacted.Redacted<string>;
+  /** PEM chain of a self-managed edge certificate. */
   certificateChain?: string;
+  /** ARN of an ACM certificate for EDGE endpoints (must live in us-east-1). */
   certificateArn?: string;
+  /** Display name of the regional certificate. */
   regionalCertificateName?: string;
+  /** ARN of an ACM certificate for REGIONAL endpoints (same region as the API). */
   regionalCertificateArn?: string;
+  /** Endpoint type for the domain (EDGE, REGIONAL, or PRIVATE). */
   endpointConfiguration?: ag.EndpointConfiguration;
+  /**
+   * Minimum TLS version served (e.g. `TLS_1_2`).
+   * @default "TLS_1_2"
+   */
   securityPolicy?: ag.SecurityPolicy;
+  /** Access mode of the domain name endpoint. */
   endpointAccessMode?: ag.EndpointAccessMode;
+  /** Mutual TLS (client certificate) authentication configuration. */
   mutualTlsAuthentication?: ag.MutualTlsAuthenticationInput;
+  /** ARN of the certificate proving domain ownership when mutual TLS is enabled. */
   ownershipVerificationCertificateArn?: string;
+  /** Resource policy (JSON) for private custom domain names. */
   policy?: string;
+  /** Routing mode of the domain name (base-path vs routing-rule based). */
   routingMode?: ag.RoutingMode;
+  /** User-defined tags for the domain name. */
   tags?: Record<string, string>;
 }
 
@@ -49,8 +72,8 @@ export interface DomainName extends Resource<
 /**
  * Custom domain name for an Amazon API Gateway REST API.
  *
- * @section Custom domain
- * @example Regional custom domain
+ * ### Custom domain
+ * **Example:** Regional custom domain
  * ```typescript
  * const domain = yield* ApiGateway.DomainName("ApiDomain", {
  *   domainName: "api.example.com",
@@ -64,9 +87,12 @@ const DomainNameResource = Resource<DomainName>("AWS.ApiGateway.DomainName");
 
 export { DomainNameResource as DomainName };
 
+/** Unwrap an optional redacted secret for the wire / diff comparison. */
+const redactedValue = (value: Redacted.Redacted<string> | undefined) =>
+  value === undefined ? undefined : Redacted.value(value);
+
 const retryDomainNameMutation = Effect.retry({
-  while: (e: any) =>
-    e._tag === "ConflictException" || e._tag === "TooManyRequestsException",
+  while: (e: any) => e._tag === "ConflictException" || e._tag === "TooManyRequestsException",
   schedule: Schedule.spaced("1 second"),
   times: 8,
 });
@@ -83,9 +109,7 @@ export const DomainNameProvider = () =>
           if (news.domainName !== olds.domainName) {
             return { action: "replace" } as const;
           }
-          if (
-            !deepEqual(news.endpointConfiguration, olds.endpointConfiguration)
-          ) {
+          if (!deepEqual(news.endpointConfiguration, olds.endpointConfiguration)) {
             return { action: "replace" } as const;
           }
           if (news.endpointAccessMode !== olds.endpointAccessMode) {
@@ -94,7 +118,9 @@ export const DomainNameProvider = () =>
           if (news.certificateBody !== olds.certificateBody) {
             return { action: "replace" } as const;
           }
-          if (news.certificatePrivateKey !== olds.certificatePrivateKey) {
+          if (
+            redactedValue(news.certificatePrivateKey) !== redactedValue(olds.certificatePrivateKey)
+          ) {
             return { action: "replace" } as const;
           }
           if (news.certificateChain !== olds.certificateChain) {
@@ -106,12 +132,7 @@ export const DomainNameProvider = () =>
           if (news.regionalCertificateName !== olds.regionalCertificateName) {
             return { action: "replace" } as const;
           }
-          if (
-            !deepEqual(
-              news.mutualTlsAuthentication,
-              olds.mutualTlsAuthentication,
-            )
-          ) {
+          if (!deepEqual(news.mutualTlsAuthentication, olds.mutualTlsAuthentication)) {
             return { action: "replace" } as const;
           }
           if (news.policy !== olds.policy) {
@@ -121,8 +142,7 @@ export const DomainNameProvider = () =>
             return { action: "replace" } as const;
           }
           if (
-            news.ownershipVerificationCertificateArn !==
-            olds.ownershipVerificationCertificateArn
+            news.ownershipVerificationCertificateArn !== olds.ownershipVerificationCertificateArn
           ) {
             return { action: "replace" } as const;
           }
@@ -133,10 +153,7 @@ export const DomainNameProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.items ?? [])
-                  .filter(
-                    (d): d is ag.DomainName & { domainName: string } =>
-                      d.domainName != null,
-                  )
+                  .filter((d): d is ag.DomainName & { domainName: string } => d.domainName != null)
                   .map((d) => ({
                     domainName: d.domainName,
                     regionalDomainName: d.regionalDomainName,
@@ -153,11 +170,7 @@ export const DomainNameProvider = () =>
           if (!output?.domainName) return undefined;
           const d = yield* ag
             .getDomainName({ domainName: output.domainName })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!d?.domainName) return undefined;
           return {
             domainName: d.domainName,
@@ -184,11 +197,7 @@ export const DomainNameProvider = () =>
           // diffing, only re-read the cloud state.
           let observed = yield* ag
             .getDomainName({ domainName })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
           // Ensure — create the domain name if it's missing.
           if (!observed?.domainName) {
@@ -196,7 +205,7 @@ export const DomainNameProvider = () =>
               domainName: news.domainName,
               certificateName: news.certificateName,
               certificateBody: news.certificateBody,
-              certificatePrivateKey: news.certificatePrivateKey,
+              certificatePrivateKey: redactedValue(news.certificatePrivateKey),
               certificateChain: news.certificateChain,
               certificateArn: news.certificateArn,
               regionalCertificateName: news.regionalCertificateName,
@@ -206,8 +215,7 @@ export const DomainNameProvider = () =>
               securityPolicy: news.securityPolicy,
               endpointAccessMode: news.endpointAccessMode,
               mutualTlsAuthentication: news.mutualTlsAuthentication,
-              ownershipVerificationCertificateArn:
-                news.ownershipVerificationCertificateArn,
+              ownershipVerificationCertificateArn: news.ownershipVerificationCertificateArn,
               policy: news.policy,
               routingMode: news.routingMode,
             });
@@ -226,10 +234,7 @@ export const DomainNameProvider = () =>
           }
           if (news.regionalCertificateArn !== observed.regionalCertificateArn) {
             patches.push({
-              op:
-                news.regionalCertificateArn === undefined
-                  ? "remove"
-                  : "replace",
+              op: news.regionalCertificateArn === undefined ? "remove" : "replace",
               path: "/regionalCertificateArn",
               value: news.regionalCertificateArn,
             });

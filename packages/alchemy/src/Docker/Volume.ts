@@ -4,12 +4,8 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  createInternalTags,
-  hasAlchemyTags,
-  stripInternalTags,
-} from "../Tags.ts";
-import { Docker, dockerPhysicalName } from "./Docker.ts";
+import { createInternalTags, hasAlchemyTags, stripInternalTags } from "../Tags.ts";
+import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface VolumeLabel {
@@ -32,6 +28,8 @@ export interface VolumeProps {
   driverOpts?: Record<string, string>;
   /** Custom metadata labels. */
   labels?: Record<string, string>;
+  /** Docker context name or context resource. */
+  context?: Docker.ContextRef;
 }
 
 export interface Volume extends Resource<
@@ -63,22 +61,21 @@ export interface Volume extends Resource<
  * Pre-existing same-name volumes are treated as foreign until the engine is
  * allowed to adopt them with `--adopt` or `adopt(true)`.
  *
- * @resource
  *
- * @section Creating Volumes
- * @example Basic volume
+ * ### Creating Volumes
+ * **Example:** Basic volume
  * ```typescript
  * const data = yield* Docker.Volume("data", {
  *   name: "app-data",
  * });
  * ```
  *
- * @example PostgreSQL data volume
+ * **Example:** PostgreSQL data volume
  * ```typescript
  * const data = yield* Docker.Volume("postgres-data");
  * ```
  *
- * @example Driver options and labels
+ * **Example:** Driver options and labels
  * ```typescript
  * const data = yield* Docker.Volume("db-data", {
  *   driver: "local",
@@ -92,6 +89,18 @@ export interface Volume extends Resource<
  *   },
  * });
  * ```
+ *
+ * ### Docker Context
+ * **Example:** Create a volume in a named Docker context
+ * ```typescript
+ * const data = yield* Docker.Volume("data", {
+ *   name: "app-data",
+ *   context: "remote-build",
+ * });
+ * ```
+ *
+ * @resource
+ * @product Volume
  */
 export const Volume = Resource<Volume>("Docker.Volume");
 
@@ -104,16 +113,11 @@ export const VolumeProvider = () =>
       return Volume.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const context = dockerContextName(olds?.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.volume
-            .inspect(name)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .inspect(name, context)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!info) return undefined;
           const attrs = toVolumeAttributes(info);
           if (output) return attrs;
@@ -122,11 +126,18 @@ export const VolumeProvider = () =>
           const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, output, news }) {
+        diff: Effect.fn(function* ({ id, instanceId, output, news, olds }) {
           if (!isResolved(news)) return undefined;
+          if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
           const args = yield* makeVolumeArgs(id, news, instanceId);
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const desiredName = news?.name ?? output?.name ?? args.name;
           if (
-            output?.name !== args.name ||
+            output?.name !== desiredName ||
             output?.driver !== args.driver ||
             !Equal.equals(output?.driverOpts ?? {}, args.opt ?? {}) ||
             // Compare only user labels; internal `alchemy::*` branding lives on
@@ -136,47 +147,42 @@ export const VolumeProvider = () =>
             return { action: "replace" as const, deleteFirst: true };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
+          const context = dockerContextName(news?.context);
           const args = yield* makeVolumeArgs(id, news, instanceId);
+          // Prefer the deployed name: regenerating would target a different
+          // volume if the generator's output for this id ever drifts.
+          const name = news?.name ?? output?.name ?? args.name;
           const internalTags = yield* createInternalTags(id);
           const result = yield* docker.volume.create({
             ...args,
+            name,
             label: { ...internalTags, ...args.label },
+            context,
           });
-          return toVolumeAttributes(
-            yield* docker.volume.inspect(result.stdout),
-          );
+          return toVolumeAttributes(yield* docker.volume.inspect(result.stdout, context));
         }),
-        delete: Effect.fn(({ output }) =>
+        delete: Effect.fn(({ olds, output }) =>
           docker.volume
-            .remove(output.name)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            ),
+            .remove(output.name, dockerContextName(olds?.context))
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });
     }),
   );
 
-const makeVolumeArgs = (id: string, props: VolumeProps, instanceId: string) =>
+// Every prop is optional, so `Docker.Volume("data")` arrives with no props.
+const makeVolumeArgs = (id: string, props: VolumeProps | undefined, instanceId: string) =>
   dockerPhysicalName(id, props, instanceId).pipe(
-    Effect.map(
-      (name): Parameters<Docker["Service"]["volume"]["create"]>[0] => ({
-        name,
-        driver: props.driver ?? "local",
-        opt: props.driverOpts,
-        label: props.labels,
-      }),
-    ),
+    Effect.map((name): Parameters<Docker["Service"]["volume"]["create"]>[0] => ({
+      name,
+      driver: props?.driver ?? "local",
+      opt: props?.driverOpts,
+      label: props?.labels,
+    })),
   );
 
-export const toVolumeAttributes = (
-  info: Docker.Volume,
-): Volume["Attributes"] => ({
+export const toVolumeAttributes = (info: Docker.Volume): Volume["Attributes"] => ({
   id: info.Name,
   name: info.Name,
   driver: info.Driver,

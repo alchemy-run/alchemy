@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 /**
@@ -29,34 +29,33 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 
 const HOOK_TIMEOUT = 300_000;
-const TEST_TIMEOUT = 120_000;
+// Must cover the ~150s `ready` readiness budget plus the round-trip itself.
+const TEST_TIMEOUT = 240_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
   body: string;
-}> {}
+}> {
+  override get message() {
+    return `status=${this.status} body=${this.body.slice(0, 500)}`;
+  }
+}
 
 // Bounded spaced schedule — caps total cold-start wait so a real failure
-// surfaces fast instead of riding to the vitest timeout.
-const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
+// surfaces fast instead of riding to the test timeout. ~150s: fresh
+// workers.dev URLs 404 well past a minute under full-suite deploy load.
+const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(75)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -70,9 +69,7 @@ const body = <T>(res: HttpClientResponse.HttpClientResponse) =>
 
 const createRepo = (base: string, name: string) =>
   untilOk(
-    HttpClient.execute(
-      HttpClientRequest.post(`${base}/create?name=${encodeURIComponent(name)}`),
-    ),
+    HttpClient.execute(HttpClientRequest.post(`${base}/create?name=${encodeURIComponent(name)}`)),
   ).pipe(
     Effect.flatMap(
       body<{
@@ -97,9 +94,7 @@ const getRepo = (base: string, name: string) =>
 const deleteRepo = (base: string, name: string) =>
   untilOk(
     HttpClient.execute(
-      HttpClientRequest.make("DELETE")(
-        `${base}/delete?name=${encodeURIComponent(name)}`,
-      ),
+      HttpClientRequest.make("DELETE")(`${base}/delete?name=${encodeURIComponent(name)}`),
     ),
   ).pipe(Effect.flatMap(body<{ deleted: boolean }>));
 
@@ -112,6 +107,14 @@ const deleteRepo = (base: string, name: string) =>
 const exercise = (label: string, base: string) =>
   Effect.gen(function* () {
     const repo = `${label}-repo`;
+
+    // Pre-clean: an interrupted earlier run can leave the deterministic
+    // repo behind (Artifacts repos live outside the account nuke's view),
+    // and a leaked repo makes create fail "already exists" forever after.
+    // getRepo also rides out worker cold-start via its readiness retry.
+    if ((yield* getRepo(base, repo)).found) {
+      yield* deleteRepo(base, repo);
+    }
 
     const created = yield* createRepo(base, repo);
     expect(created.name).toBe(repo);
@@ -133,15 +136,12 @@ const exercise = (label: string, base: string) =>
 // return empty URLs. The tests below are `skipIf`-gated on the same flag, so
 // they never read these placeholder URLs.
 const stack = beforeAll(
-  ARTIFACTS_ENABLED
-    ? deploy(Stack)
-    : Effect.succeed({ effectWorkerUrl: "", asyncWorkerUrl: "" }),
+  ARTIFACTS_ENABLED ? deploy(Stack) : Effect.succeed({ effectWorkerUrl: "", asyncWorkerUrl: "" }),
   { timeout: HOOK_TIMEOUT },
 );
-afterAll.skipIf(!ARTIFACTS_ENABLED || !!process.env.NO_DESTROY)(
-  destroy(Stack),
-  { timeout: HOOK_TIMEOUT },
-);
+afterAll.skipIf(!ARTIFACTS_ENABLED || !!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: HOOK_TIMEOUT,
+});
 
 // Effect-native worker: `Cloudflare.Artifacts.ReadWriteNamespace(Repos)` + `ReadWriteNamespaceBinding`.
 test.skipIf(!ARTIFACTS_ENABLED)(
@@ -150,7 +150,15 @@ test.skipIf(!ARTIFACTS_ENABLED)(
     const out = yield* stack;
     yield* exercise("effect", out.effectWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:artifacts",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // Async worker: namespace declared on `env: { REPOS }`, used from plain async fetch.
@@ -160,5 +168,13 @@ test.skipIf(!ARTIFACTS_ENABLED)(
     const out = yield* stack;
     yield* exercise("async", out.asyncWorkerUrl);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:artifacts",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: TEST_TIMEOUT,
+  },
 );

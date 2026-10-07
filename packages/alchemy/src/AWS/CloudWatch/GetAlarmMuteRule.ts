@@ -9,7 +9,23 @@ export interface GetAlarmMuteRuleRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `cloudwatch:GetAlarmMuteRule`.
+ * Runtime binding for `cloudwatch:GetAlarmMuteRule` — read the
+ * configuration of the bound {@link AlarmMuteRule}; the rule name is
+ * injected automatically.
+ *
+ * Provide `CloudWatch.GetAlarmMuteRuleHttp` on the hosting Lambda Function
+ * to satisfy the requirement.
+ * ### Reading Mute Rules
+ * **Example:** Read a Bound Mute Rule
+ * ```typescript
+ * // init — grants cloudwatch:GetAlarmMuteRule on the rule
+ * const getAlarmMuteRule = yield* AWS.CloudWatch.GetAlarmMuteRule(muteRule);
+ *
+ * // runtime
+ * const result = yield* getAlarmMuteRule();
+ * const schedule = result.Rule?.Schedule;
+ * ```
+ *
  * @binding
  */
 export interface GetAlarmMuteRule extends Binding.Service<
@@ -20,10 +36,7 @@ export interface GetAlarmMuteRule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetAlarmMuteRuleRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetAlarmMuteRuleOutput,
-      cloudwatch.GetAlarmMuteRuleError
-    >
+    ) => Effect.Effect<cloudwatch.GetAlarmMuteRuleOutput, cloudwatch.GetAlarmMuteRuleError>
   >
 > {}
 

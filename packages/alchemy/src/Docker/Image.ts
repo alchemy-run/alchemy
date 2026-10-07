@@ -5,12 +5,12 @@ import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker, dockerPhysicalName } from "./Docker.ts";
+import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
-  parseRepoDigest,
+  publishedRepoDigest,
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
@@ -51,10 +51,20 @@ export interface ImageProps {
   name?: string;
   /** Image tag. @default "latest" */
   tag?: string;
-  /** Registry credentials for push. */
+  /**
+   * Registry credentials. The image is pushed to this registry (unless
+   * `skipPush`), and the build itself authenticates with them, so private
+   * base images and `type=registry` caches hosted there resolve without a
+   * host `docker login`. Credentials already in `DOCKER_AUTH_CONFIG` for
+   * other registries are kept. Build-time authentication needs Buildx 0.26+
+   * (Docker Desktop 4.44+) or the legacy builder; older Buildx plugins ignore
+   * it, so a private base image there still needs `docker login`.
+   */
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */
   skipPush?: boolean;
+  /** Docker context name or context resource. */
+  context?: Docker.ContextRef;
   /** Docker build configuration. */
   build: DockerBuildOptions;
 }
@@ -92,10 +102,9 @@ export interface Image extends Resource<
  * `Image` always builds from a Dockerfile. To pull (and optionally re-tag and
  * push) an existing registry image, use `Docker.RemoteImage`.
  *
- * @resource
  *
- * @section Building Images
- * @example Build from a Dockerfile
+ * ### Building Images
+ * **Example:** Build from a Dockerfile
  * ```typescript
  * const image = yield* Docker.Image("app", {
  *   name: "my-app",
@@ -108,8 +117,8 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * @section Registry Push
- * @example Push with Redacted credentials
+ * ### Registry Push
+ * **Example:** Push with Redacted credentials
  * ```typescript
  * const image = yield* Docker.Image("app", {
  *   name: "my-app",
@@ -117,10 +126,43 @@ export interface Image extends Resource<
  *   registry: {
  *     server: "ghcr.io",
  *     username: "octocat",
- *     password: Config.redacted("GITHUB_TOKEN"),
+ *     password: Config.Redacted("GITHUB_TOKEN"),
  *   },
  * });
  * ```
+ *
+ * ### Private Base Images and Registry Caches
+ * **Example:** Build FROM a private base image with a registry cache
+ * ```typescript
+ * // Dockerfile: FROM registry.example.com/base:v1
+ * const image = yield* Docker.Image("app", {
+ *   name: "registry.example.com/app",
+ *   build: {
+ *     context: "./app",
+ *     cacheFrom: ["type=registry,ref=registry.example.com/app:buildcache"],
+ *     cacheTo: ["type=registry,ref=registry.example.com/app:buildcache,mode=max"],
+ *   },
+ *   // Authenticates the base-image pull and cache import/export, then the push.
+ *   registry: {
+ *     server: "registry.example.com",
+ *     username: "deploy",
+ *     password: Config.Redacted("REGISTRY_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Docker Context
+ * **Example:** Build in a named Docker context
+ * ```typescript
+ * const image = yield* Docker.Image("app", {
+ *   name: "my-app",
+ *   context: "remote-build",
+ *   build: { context: "./app" },
+ * });
+ * ```
+ *
+ * @resource
+ * @product Image
  */
 export const Image = Resource<Image>("Docker.Image");
 
@@ -138,6 +180,7 @@ export const ImageProvider = () =>
         instanceId: string,
       ) {
         const name = yield* dockerPhysicalName(id, props, instanceId);
+        const engineContext = dockerContextName(props.context);
         const tag = props.tag ?? "latest";
         const ref = `${name}:${tag}`;
 
@@ -152,6 +195,10 @@ export const ImageProvider = () =>
           "cache-from": props.build.cacheFrom,
           "cache-to": props.build.cacheTo,
           args: props.build.options,
+          engineContext,
+          // Base images and registry caches may live in the same registry;
+          // the push itself stays in `reconcile`.
+          credentials: props.registry,
         });
 
         // Read the freshly built image's id and creation time straight from
@@ -159,14 +206,12 @@ export const ImageProvider = () =>
         return {
           name,
           tag,
-          image: yield* docker.image.inspect(ref),
+          image: yield* docker.image.inspect(ref, engineContext),
           ref,
         };
       }, Artifacts.cached("build"));
 
-      const resolveBuildPaths = Effect.fn(function* (
-        build: DockerBuildOptions,
-      ) {
+      const resolveBuildPaths = Effect.fn(function* (build: DockerBuildOptions) {
         const cwd = yield* Effect.sync(() => process.cwd());
         const context = path.resolve(build.context ?? cwd);
         const dockerfile = build.dockerfile
@@ -175,9 +220,7 @@ export const ImageProvider = () =>
             : path.resolve(context, build.dockerfile)
           : path.resolve(context, "Dockerfile");
         if (!(yield* fs.exists(context))) {
-          return yield* Effect.die(
-            `Docker build context does not exist: ${context}`,
-          );
+          return yield* Effect.die(`Docker build context does not exist: ${context}`);
         }
         if (!(yield* fs.exists(dockerfile))) {
           return yield* Effect.die(`Dockerfile does not exist: ${dockerfile}`);
@@ -188,20 +231,15 @@ export const ImageProvider = () =>
       return Image.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const context = dockerContextName(olds.context);
           const ref =
             output?.imageRef ??
             (yield* dockerPhysicalName(id, olds, instanceId).pipe(
               Effect.map((name) => `${name}:${olds.tag ?? "latest"}`),
             ));
           const image = yield* docker.image
-            .inspect(ref)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.undefined,
-              ),
-            );
+            .inspect(ref, context)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!image) return undefined;
           return {
             name: output?.name ?? repositoryFromImageRef(ref),
@@ -212,32 +250,28 @@ export const ImageProvider = () =>
             builtAt: output?.builtAt ?? parseCreatedAt(image.Created),
           };
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, output }) {
+        diff: Effect.fn(function* ({ id, instanceId, news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
+          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
+            return { action: "update" };
+          }
           const { image } = yield* buildAndInspectImage(id, news, instanceId);
           if (output?.imageId !== image.Id) {
             return { action: "update" };
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const { name, tag, image, ref } = yield* buildAndInspectImage(
-            id,
-            news,
-            instanceId,
-          );
+          const context = dockerContextName(news.context);
+          const { name, tag, image, ref } = yield* buildAndInspectImage(id, news, instanceId);
 
           let repoDigest: string | undefined;
           let targetImageRef: string = ref;
           if (news.registry && !news.skipPush) {
-            yield* session.note(
-              `Pushing image to registry "${news.registry.server}"`,
-            );
+            yield* session.note(`Pushing image to registry "${news.registry.server}"`);
             targetImageRef = withRegistryHost(ref, news.registry);
-            repoDigest = yield* docker.image
-              .push(ref, news.registry)
-              .pipe(
-                Effect.map((result) => parseRepoDigest(ref, result.stdout)),
-              );
+            const pushed = yield* docker.image.push(ref, news.registry, undefined, context);
+            const published = yield* docker.image.inspect(ref, context);
+            repoDigest = publishedRepoDigest(ref, pushed, published.RepoDigests, targetImageRef);
           }
 
           return {
@@ -249,16 +283,10 @@ export const ImageProvider = () =>
             builtAt: parseCreatedAt(image.Created),
           };
         }),
-        delete: Effect.fn(({ output }) =>
+        delete: Effect.fn(({ olds, output }) =>
           docker.image
-            .remove(output.imageRef)
-            .pipe(
-              Effect.catchReason(
-                "PlatformError",
-                "NotFound",
-                () => Effect.void,
-              ),
-            ),
+            .remove(output.imageRef, undefined, dockerContextName(olds.context))
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });
     }),

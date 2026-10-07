@@ -13,7 +13,7 @@ import type { App } from "./App.ts";
  * Context tag, its type, and the callable —
  * `yield* Cloudflare.Flagship.ReadFlags(app)`.
  *
- * @example Evaluating a flag inside a Worker
+ * **Example:** Evaluating a flag inside a Worker
  * ```typescript
  * const flags = yield* Cloudflare.Flagship.ReadFlags(MyApp);
  * const enabled = yield* flags.getBooleanValue("new-checkout", false);
@@ -29,9 +29,7 @@ export interface ReadFlags extends Binding.Service<
   (app: App) => Effect.Effect<ReadFlagsClient>
 > {}
 
-export const ReadFlags = Binding.Service<ReadFlags>(
-  "Cloudflare.Flagship.ReadFlags",
-);
+export const ReadFlags = Binding.Service<ReadFlags>("Cloudflare.Flagship.ReadFlags");
 
 export class FlagshipError extends Data.TaggedError("FlagshipError")<{
   message: string;

@@ -7,7 +7,8 @@ Most Alchemy apps on AWS never touch a VPC. Lambda functions
 serve public traffic from Function URLs, and bindings wire
 access to tables, buckets, and queues without a single subnet.
 Networking becomes your problem when you run an
-[ECS Service](/aws/compute/ecs) or an [EC2 Instance](/aws/compute/ec2) — both
+[ECS Service](/aws/compute/ecs), an [EKS Cluster](/aws/compute/eks), or an
+[EC2 Instance](/aws/compute/ec2) — all
 need a VPC, subnets, and security groups — or when you attach to
 anything that lives inside one.
 

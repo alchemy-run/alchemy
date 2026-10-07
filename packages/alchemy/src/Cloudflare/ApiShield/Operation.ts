@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -77,13 +76,7 @@ export interface OperationAttributes {
   lastUpdated: string;
 }
 
-export type Operation = Resource<
-  TypeId,
-  OperationProps,
-  OperationAttributes,
-  never,
-  Providers
->;
+export type Operation = Resource<TypeId, OperationProps, OperationAttributes, never, Providers>;
 
 /**
  * A Cloudflare API Shield operation — a registered API endpoint on a zone,
@@ -99,11 +92,8 @@ export type Operation = Resource<
  * Endpoint paths may contain `{placeholder}` templates; Cloudflare
  * normalizes the variable names left-to-right to `{var1}`, `{var2}`, … and
  * the normalized form is what is stored and diffed.
- * @resource
- * @product API Shield
- * @category Application Security
- * @section Registering an Operation
- * @example Register a GET endpoint
+ * ### Registering an Operation
+ * **Example:** Register a GET endpoint
  * ```typescript
  * const op = yield* Cloudflare.ApiShield.Operation("GetUser", {
  *   zoneId: zone.zoneId,
@@ -114,7 +104,7 @@ export type Operation = Resource<
  * // op.endpoint === "/api/v1/users/{var1}"
  * ```
  *
- * @example Register a POST endpoint
+ * **Example:** Register a POST endpoint
  * ```typescript
  * yield* Cloudflare.ApiShield.Operation("CreateUser", {
  *   zoneId: zone.zoneId,
@@ -125,6 +115,10 @@ export type Operation = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-management/
+ *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  */
 export const Operation = Resource<Operation>(TypeId);
 
@@ -163,9 +157,7 @@ export const OperationProvider = () =>
               schedule: Schedule.exponential("500 millis"),
               times: 5,
             }),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as OperationAttributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as OperationAttributes[])),
           ),
         { concurrency: 10 },
       );
@@ -186,11 +178,7 @@ export const OperationProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -288,28 +276,20 @@ const getOperation = (zoneId: string, operationId: string) =>
  * tuple is the operation's identity, so at most one can match. Endpoint
  * comparison uses Cloudflare's normalized form.
  */
-const findByTuple = (
-  zoneId: string,
-  tuple: { method: string; host: string; endpoint: string },
-) =>
-  apiGateway.listOperations
-    .items({ zoneId, host: [tuple.host], method: [tuple.method] })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).find(
-          (op): op is ObservedOperation & typeof op =>
-            op.method === tuple.method &&
-            op.host === tuple.host &&
-            op.endpoint === normalizeEndpoint(tuple.endpoint),
-        ),
+const findByTuple = (zoneId: string, tuple: { method: string; host: string; endpoint: string }) =>
+  apiGateway.listOperations.items({ zoneId, host: [tuple.host], method: [tuple.method] }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).find(
+        (op): op is ObservedOperation & typeof op =>
+          op.method === tuple.method &&
+          op.host === tuple.host &&
+          op.endpoint === normalizeEndpoint(tuple.endpoint),
       ),
-    );
+    ),
+  );
 
-const toAttributes = (
-  op: ObservedOperation,
-  zoneId: string,
-): OperationAttributes => ({
+const toAttributes = (op: ObservedOperation, zoneId: string): OperationAttributes => ({
   operationId: op.operationId,
   zoneId,
   // Distilled widens generated string enums to open unions (`string & {}`).

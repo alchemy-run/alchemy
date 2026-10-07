@@ -1,9 +1,9 @@
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-
 import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
+import type { Environment } from "./Environment.ts";
 import { Secret } from "./Secret.ts";
 
 export interface SecretsProps {
@@ -18,10 +18,11 @@ export interface SecretsProps {
   repository: string;
 
   /**
-   * Optional environment name. When set every secret is scoped to that
-   * GitHub Actions environment instead of the whole repository.
+   * Optional environment. When set every secret is scoped to that GitHub
+   * Actions environment instead of the whole repository. Accepts an
+   * environment name or a `GitHub.Environment` resource.
    */
-  environment?: string;
+  environment?: string | Environment;
 
   /**
    * Map of secret name to value. Plain strings are wrapped with
@@ -36,25 +37,22 @@ export interface SecretsProps {
  *
  * Each entry in `secrets` becomes one `GitHub.Secret` resource, using the
  * map key as both the alchemy logical id and the secret name.
- * @resource
- * @example
+ * **Example:** Example
  * ```ts
  * yield* GitHub.Secrets({
- *   owner: "alchemy-run",
- *   repository: "alchemy",
+ *   owner: "my-org",
+ *   repository: "my-repo",
  *   secrets: {
  *     AXIOM_INGEST_TOKEN: tokenValue,
  *     AXIOM_DATASET_TRACES: traces.name,
  *   },
  * });
  * ```
+ *
+ * @resource
+ * @product Actions
  */
-export const Secrets = ({
-  owner,
-  repository,
-  environment,
-  secrets,
-}: SecretsProps) =>
+export const Secrets = ({ owner, repository, environment, secrets }: SecretsProps) =>
   Effect.all(
     Object.entries(secrets).map(([name, value]) =>
       Secret(name, {
@@ -79,15 +77,8 @@ const liftValue = (
     : Effect.isEffect(value)
       ? Effect.map(value, toRedacted)
       : Output.isOutput(value)
-        ? Output.map(
-            value as Output.Output<string | Redacted.Redacted<string>>,
-            toRedacted,
-          )
+        ? Output.map(value as Output.Output<string | Redacted.Redacted<string>>, toRedacted)
         : toRedacted(value as string | Redacted.Redacted<string>);
 
-const toRedacted = (
-  value: string | Redacted.Redacted<string>,
-): Redacted.Redacted<string> =>
-  Redacted.isRedacted(value)
-    ? (value as Redacted.Redacted<string>)
-    : Redacted.make(value);
+const toRedacted = (value: string | Redacted.Redacted<string>): Redacted.Redacted<string> =>
+  Redacted.isRedacted(value) ? (value as Redacted.Redacted<string>) : Redacted.make(value);

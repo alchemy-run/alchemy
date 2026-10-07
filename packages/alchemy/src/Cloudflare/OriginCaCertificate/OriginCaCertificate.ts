@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -89,13 +88,7 @@ export interface Attributes {
   expiresOn: string | undefined;
 }
 
-export type OriginCaCertificate = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type OriginCaCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Origin CA certificate — a free certificate signed by
@@ -112,11 +105,8 @@ export type OriginCaCertificate = Resource<
  * Certificates are fully immutable: there is no update API, so changing any
  * property triggers a replacement (a new certificate is issued, then the
  * old one is revoked). Destroying the resource revokes the certificate.
- * @resource
- * @product Origin CA Certificates
- * @category SSL/TLS & Certificates
- * @section Issuing a certificate
- * @example RSA certificate for a single hostname
+ * ### Issuing a certificate
+ * **Example:** RSA certificate for a single hostname
  * ```typescript
  * const cert = yield* Cloudflare.OriginCaCertificate.OriginCaCertificate("origin-cert", {
  *   csr: originCsrPem,
@@ -126,7 +116,7 @@ export type OriginCaCertificate = Resource<
  * });
  * ```
  *
- * @example Wildcard ECDSA certificate with the default 15-year validity
+ * **Example:** Wildcard ECDSA certificate with the default 15-year validity
  * ```typescript
  * const cert = yield* Cloudflare.OriginCaCertificate.OriginCaCertificate("wildcard-cert", {
  *   csr: wildcardCsrPem,
@@ -135,8 +125,8 @@ export type OriginCaCertificate = Resource<
  * });
  * ```
  *
- * @section Using the certificate
- * @example Install the signed PEM on your origin
+ * ### Using the certificate
+ * **Example:** Install the signed PEM on your origin
  * ```typescript
  * // The signed certificate is returned synchronously on create:
  * const pem = cert.certificate; // "-----BEGIN CERTIFICATE-----\n..."
@@ -144,6 +134,10 @@ export type OriginCaCertificate = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/
+ *
+ * @resource
+ * @product Origin CA Certificates
+ * @category SSL/TLS & Certificates
  */
 export const OriginCaCertificate = Resource<OriginCaCertificate>(TypeId, {
   aliases: ["Cloudflare.OriginCaCertificate"],
@@ -152,9 +146,7 @@ export const OriginCaCertificate = Resource<OriginCaCertificate>(TypeId, {
 /**
  * Returns true if the given value is an OriginCaCertificate resource.
  */
-export const isOriginCaCertificate = (
-  value: unknown,
-): value is OriginCaCertificate =>
+export const isOriginCaCertificate = (value: unknown): value is OriginCaCertificate =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const OriginCaCertificateProvider = () =>
@@ -194,9 +186,7 @@ export const OriginCaCertificateProvider = () =>
                   .map((cert): Attributes => toAttributes(cert)),
               ),
             ),
-            Effect.catchTag("Forbidden", () =>
-              Effect.succeed([] as Attributes[]),
-            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([] as Attributes[])),
           ),
         { concurrency: 10 },
       );
@@ -213,8 +203,7 @@ export const OriginCaCertificateProvider = () =>
       if (
         o.csr !== n.csr ||
         o.requestType !== n.requestType ||
-        (o.requestedValidity ?? DEFAULT_VALIDITY) !==
-          (n.requestedValidity ?? DEFAULT_VALIDITY) ||
+        (o.requestedValidity ?? DEFAULT_VALIDITY) !== (n.requestedValidity ?? DEFAULT_VALIDITY) ||
         !sameHostnames(o.hostnames, n.hostnames)
       ) {
         return { action: "replace" } as const;
@@ -228,9 +217,7 @@ export const OriginCaCertificateProvider = () =>
       // gone for all practical purposes.
       if (output?.certificateId) {
         const observed = yield* getCertificate(output.certificateId);
-        return observed
-          ? toAttributes(observed, { ...olds, ...output })
-          : undefined;
+        return observed ? toAttributes(observed, { ...olds, ...output }) : undefined;
       }
 
       // Cold read — Origin CA certificates have no name or tags, so the
@@ -292,22 +279,20 @@ export const OriginCaCertificateProvider = () =>
       // transient failure, then read back: a revoked/absent certificate
       // counts as deleted; a still-live one re-raises so the leak is never
       // silent.
-      yield* originCa
-        .deleteOriginCaCertificate({ certificateId: output.certificateId })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "CertificateRevocationFailed",
-            schedule: Schedule.exponential("500 millis"),
-            times: 6,
-          }),
-          Effect.catchTag("CertificateNotFound", () => Effect.void),
-          Effect.catchTag("CertificateAlreadyRevoked", () => Effect.void),
-          Effect.catchTag("CertificateRevocationFailed", (e) =>
-            getCertificate(output.certificateId).pipe(
-              Effect.flatMap((cert) => (cert ? Effect.fail(e) : Effect.void)),
-            ),
+      yield* originCa.deleteOriginCaCertificate({ certificateId: output.certificateId }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "CertificateRevocationFailed",
+          schedule: Schedule.exponential("500 millis"),
+          times: 6,
+        }),
+        Effect.catchTag("CertificateNotFound", () => Effect.void),
+        Effect.catchTag("CertificateAlreadyRevoked", () => Effect.void),
+        Effect.catchTag("CertificateRevocationFailed", (e) =>
+          getCertificate(output.certificateId).pipe(
+            Effect.flatMap((cert) => (cert ? Effect.fail(e) : Effect.void)),
           ),
-        );
+        ),
+      );
     }),
   });
 
@@ -337,12 +322,10 @@ const findByHostnames = (hostnames: string[]) =>
     const hostname = hostnames[0].replace(/^\*\./, "");
     const zoneId = yield* resolveZoneIdForHostname(accountId, hostname);
     if (!zoneId) return [];
-    const certs = yield* originCa.listOriginCaCertificates
-      .items({ zoneId })
-      .pipe(
-        Stream.filter((cert) => sameHostnames([...cert.hostnames], hostnames)),
-        Stream.runCollect,
-      );
+    const certs = yield* originCa.listOriginCaCertificates.items({ zoneId }).pipe(
+      Stream.filter((cert) => sameHostnames([...cert.hostnames], hostnames)),
+      Stream.runCollect,
+    );
     return [...certs].sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
   });
 
@@ -363,10 +346,7 @@ const resolveZoneIdForHostname = (accountId: string, hostname: string) =>
     return undefined;
   });
 
-const sameHostnames = (
-  observed: readonly string[],
-  desired: readonly string[],
-) =>
+const sameHostnames = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
@@ -396,10 +376,7 @@ const toAttributes = (
   certificate: cert.certificate ?? "",
   csr: cert.csr ?? fallback?.csr ?? "",
   hostnames: [...cert.hostnames],
-  requestType: (cert.requestType ??
-    fallback?.requestType ??
-    "origin-rsa") as RequestType,
-  requestedValidity:
-    cert.requestedValidity ?? fallback?.requestedValidity ?? DEFAULT_VALIDITY,
+  requestType: (cert.requestType ?? fallback?.requestType ?? "origin-rsa") as RequestType,
+  requestedValidity: cert.requestedValidity ?? fallback?.requestedValidity ?? DEFAULT_VALIDITY,
   expiresOn: cert.expiresOn ?? undefined,
 });

@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Planetscale from "@/Planetscale/index.ts";
-import * as Effect from "effect/Effect";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Effect from "effect/Effect";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Planetscale from "@/Planetscale/index.ts";
 
 /**
  * Shared Planetscale + Cloudflare wiring used by the Hyperdrive
@@ -29,7 +29,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
 
   const branch = yield* Planetscale.PostgresBranch("HyperdriveTestBranch", {
     database,
-    migrationsDir,
+    migrations: migrationsDir,
   });
 
   const role = yield* Planetscale.PostgresRole("HyperdriveTestRole", {

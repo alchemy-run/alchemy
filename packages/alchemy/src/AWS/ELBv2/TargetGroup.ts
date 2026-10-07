@@ -1,4 +1,5 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -6,9 +7,10 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TargetGroupName = string;
@@ -48,10 +50,10 @@ export interface TargetGroupProps {
   healthCheckProtocol?: string;
   /** Whether health checks are enabled. Updated in place. */
   healthCheckEnabled?: boolean;
-  /** The approximate interval between health checks, in seconds. Updated in place. */
-  healthCheckIntervalSeconds?: number;
-  /** The amount of time, in seconds, to wait for a health-check response. Updated in place. */
-  healthCheckTimeoutSeconds?: number;
+  /** The approximate interval between health checks — e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  healthCheckInterval?: Duration.Input;
+  /** The amount of time to wait for a health-check response — e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
+  healthCheckTimeout?: Duration.Input;
   /** The number of consecutive successes before a target is healthy. Updated in place. */
   healthyThresholdCount?: number;
   /** The number of consecutive failures before a target is unhealthy. Updated in place. */
@@ -68,12 +70,19 @@ export interface TargetGroup extends Resource<
   "AWS.ELBv2.TargetGroup",
   TargetGroupProps,
   {
+    /** The ARN of the target group. */
     targetGroupArn: TargetGroupArn;
+    /** The name of the target group. */
     targetGroupName: TargetGroupName;
-    port: number;
-    protocol: string;
+    /** Undefined for `lambda` target groups (they have no port). */
+    port: number | undefined;
+    /** Undefined for `lambda` target groups (they have no protocol). */
+    protocol: string | undefined;
+    /** The target type (`instance`, `ip`, `lambda`, or `alb`). */
     targetType: string;
-    vpcId: string;
+    /** Undefined for `lambda` target groups (they are not VPC-scoped). */
+    vpcId: string | undefined;
+    /** The tags applied to the target group. */
     tags: Record<string, string>;
   },
   never,
@@ -84,9 +93,8 @@ export interface TargetGroup extends Resource<
  * An ELBv2 target group. A target group routes requests to one or more
  * registered targets (instances, IPs, Lambda functions, or another ALB) using
  * the configured protocol and port, and runs health checks against them.
- * @resource
- * @section Creating a Target Group
- * @example HTTP target group
+ * ### Creating a Target Group
+ * **Example:** HTTP target group
  * ```typescript
  * const tg = yield* TargetGroup("web", {
  *   vpcId: vpc.vpcId,
@@ -96,7 +104,15 @@ export interface TargetGroup extends Resource<
  * });
  * ```
  *
- * @example gRPC target group
+ * **Example:** Lambda target group
+ * ```typescript
+ * // No vpc/port/protocol — the target is a Lambda function.
+ * const tg = yield* TargetGroup("fn", {
+ *   targetType: "lambda",
+ * });
+ * ```
+ *
+ * **Example:** gRPC target group
  * ```typescript
  * const tg = yield* TargetGroup("grpc", {
  *   vpcId: vpc.vpcId,
@@ -107,19 +123,21 @@ export interface TargetGroup extends Resource<
  * });
  * ```
  *
- * @section Health Checks
- * @example Custom health-check thresholds
+ * ### Health Checks
+ * **Example:** Custom health-check thresholds
  * ```typescript
  * const tg = yield* TargetGroup("api", {
  *   vpcId: vpc.vpcId,
  *   port: 8080,
  *   protocol: "HTTP",
  *   healthCheckPath: "/healthz",
- *   healthCheckIntervalSeconds: 15,
+ *   healthCheckInterval: "15 seconds",
  *   healthyThresholdCount: 3,
  *   unhealthyThresholdCount: 3,
  * });
  * ```
+ *
+ * @resource
  */
 export const TargetGroup = Resource<TargetGroup>("AWS.ELBv2.TargetGroup");
 
@@ -136,9 +154,7 @@ export const TargetGroupProvider = () =>
         stables: ["targetGroupArn", "targetGroupName", "vpcId"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (
@@ -172,21 +188,17 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               TargetGroupArns: [output.targetGroupArn],
             })
-            .pipe(
-              Effect.catchTag("TargetGroupNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
           const targetGroup = described?.TargetGroups?.[0];
           if (!targetGroup?.TargetGroupArn) {
             return undefined;
           }
           return {
             ...output,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
+            port: targetGroup.Port,
+            protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
+            vpcId: targetGroup.VpcId,
           };
         }),
         // Target groups are account/region-scoped. Exhaustively paginate
@@ -194,21 +206,17 @@ export const TargetGroupProvider = () =>
         // them) to produce the same shape `read` returns.
         list: () =>
           Effect.gen(function* () {
-            const targetGroups = yield* elbv2.describeTargetGroups
-              .pages({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.TargetGroups ?? []).filter(
-                      (
-                        tg,
-                      ): tg is elbv2.TargetGroup & { TargetGroupArn: string } =>
-                        tg.TargetGroupArn != null,
-                    ),
+            const targetGroups = yield* elbv2.describeTargetGroups.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.TargetGroups ?? []).filter(
+                    (tg): tg is elbv2.TargetGroup & { TargetGroupArn: string } =>
+                      tg.TargetGroupArn != null,
                   ),
                 ),
-              );
+              ),
+            );
             return yield* Effect.forEach(
               targetGroups,
               (tg) =>
@@ -224,18 +232,17 @@ export const TargetGroupProvider = () =>
                     (tagDescriptions?.TagDescriptions?.[0]?.Tags ?? [])
                       .filter(
                         (t): t is { Key: string; Value: string } =>
-                          typeof t.Key === "string" &&
-                          typeof t.Value === "string",
+                          typeof t.Key === "string" && typeof t.Value === "string",
                       )
                       .map((t) => [t.Key, t.Value]),
                   );
                   return {
                     targetGroupArn: tg.TargetGroupArn as TargetGroupArn,
                     targetGroupName: tg.TargetGroupName!,
-                    port: tg.Port!,
-                    protocol: tg.Protocol!,
+                    port: tg.Port,
+                    protocol: tg.Protocol,
                     targetType: tg.TargetType!,
-                    vpcId: tg.VpcId!,
+                    vpcId: tg.VpcId,
                     tags,
                   };
                 }),
@@ -254,30 +261,29 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               Names: [name],
             })
-            .pipe(
-              Effect.catchTag("TargetGroupNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
           let targetGroup = described?.TargetGroups?.[0];
 
           // Ensure — create if missing. Stable axes (vpcId, port, protocol,
           // targetType) are handled by diff so we don't deal with mismatch.
+          // Lambda target groups have no port/protocol/VPC — the API rejects
+          // those members, so omit them entirely.
+          const isLambdaTarget = news.targetType === "lambda";
           if (!targetGroup?.TargetGroupArn) {
             const created = yield* elbv2.createTargetGroup({
               Name: name,
-              Port: news.port,
-              Protocol: news.protocol ?? "HTTP",
-              ProtocolVersion: news.protocolVersion,
-              VpcId: news.vpcId,
+              Port: isLambdaTarget ? undefined : news.port,
+              Protocol: isLambdaTarget ? undefined : (news.protocol ?? "HTTP"),
+              ProtocolVersion: isLambdaTarget ? undefined : news.protocolVersion,
+              VpcId: isLambdaTarget ? undefined : news.vpcId,
               TargetType: news.targetType ?? "ip",
-              IpAddressType: news.ipAddressType,
+              IpAddressType: isLambdaTarget ? undefined : news.ipAddressType,
               HealthCheckPath: news.healthCheckPath,
               HealthCheckPort: news.healthCheckPort,
               HealthCheckProtocol: news.healthCheckProtocol,
               HealthCheckEnabled: news.healthCheckEnabled,
-              HealthCheckIntervalSeconds: news.healthCheckIntervalSeconds,
-              HealthCheckTimeoutSeconds: news.healthCheckTimeoutSeconds,
+              HealthCheckIntervalSeconds: toSeconds(news.healthCheckInterval),
+              HealthCheckTimeoutSeconds: toSeconds(news.healthCheckTimeout),
               HealthyThresholdCount: news.healthyThresholdCount,
               UnhealthyThresholdCount: news.unhealthyThresholdCount,
               Matcher: news.matcher,
@@ -288,9 +294,7 @@ export const TargetGroupProvider = () =>
             });
             targetGroup = created.TargetGroups?.[0];
             if (!targetGroup?.TargetGroupArn) {
-              return yield* Effect.die(
-                new Error("createTargetGroup returned no target group"),
-              );
+              return yield* Effect.die(new Error("createTargetGroup returned no target group"));
             }
           }
 
@@ -312,21 +316,15 @@ export const TargetGroupProvider = () =>
           const desiredHc = {
             HealthCheckPath: news.healthCheckPath ?? observedHc.HealthCheckPath,
             HealthCheckPort: news.healthCheckPort ?? observedHc.HealthCheckPort,
-            HealthCheckProtocol:
-              news.healthCheckProtocol ?? observedHc.HealthCheckProtocol,
-            HealthCheckEnabled:
-              news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
+            HealthCheckProtocol: news.healthCheckProtocol ?? observedHc.HealthCheckProtocol,
+            HealthCheckEnabled: news.healthCheckEnabled ?? observedHc.HealthCheckEnabled,
             HealthCheckIntervalSeconds:
-              news.healthCheckIntervalSeconds ??
-              observedHc.HealthCheckIntervalSeconds,
+              toSeconds(news.healthCheckInterval) ?? observedHc.HealthCheckIntervalSeconds,
             HealthCheckTimeoutSeconds:
-              news.healthCheckTimeoutSeconds ??
-              observedHc.HealthCheckTimeoutSeconds,
-            HealthyThresholdCount:
-              news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,
+              toSeconds(news.healthCheckTimeout) ?? observedHc.HealthCheckTimeoutSeconds,
+            HealthyThresholdCount: news.healthyThresholdCount ?? observedHc.HealthyThresholdCount,
             UnhealthyThresholdCount:
-              news.unhealthyThresholdCount ??
-              observedHc.UnhealthyThresholdCount,
+              news.unhealthyThresholdCount ?? observedHc.UnhealthyThresholdCount,
             Matcher: news.matcher ?? observedHc.Matcher,
           };
           if (!deepEqual(observedHc, desiredHc)) {
@@ -341,12 +339,10 @@ export const TargetGroupProvider = () =>
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyTargetGroupAttributes({
               TargetGroupArn: targetGroupArn,
-              Attributes: Object.entries(news.attributes).map(
-                ([Key, Value]) => ({
-                  Key,
-                  Value,
-                }),
-              ),
+              Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
             });
           }
 
@@ -380,10 +376,10 @@ export const TargetGroupProvider = () =>
           return {
             targetGroupArn,
             targetGroupName: targetGroup.TargetGroupName!,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
+            port: targetGroup.Port,
+            protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
+            vpcId: targetGroup.VpcId,
             tags: desiredTags,
           };
         }),
@@ -399,10 +395,7 @@ export const TargetGroupProvider = () =>
             .pipe(
               Effect.retry({
                 while: (e) => e._tag === "ResourceInUseException",
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(8),
-                ]),
+                schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
               }),
               Effect.catchTag("ResourceInUseException", () => Effect.void),
             );

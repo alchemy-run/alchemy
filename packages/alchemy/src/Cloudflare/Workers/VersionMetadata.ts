@@ -22,11 +22,7 @@ export interface WorkerVersionMetadata {
  * an Effect that requires {@link RuntimeContext}. Yield it inside a handler to
  * obtain the {@link WorkerVersionMetadata}.
  */
-export type VersionMetadataAccessor = Effect.Effect<
-  WorkerVersionMetadata,
-  never,
-  RuntimeContext
->;
+export type VersionMetadataAccessor = Effect.Effect<WorkerVersionMetadata, never, RuntimeContext>;
 
 /**
  * A Cloudflare Workers Version Metadata binding — a Worker-only binding with no
@@ -39,11 +35,8 @@ export type VersionMetadataAccessor = Effect.Effect<
  * {@link WorkerVersionMetadata}) or `yield*` it inside an Effect-native Worker
  * to attach the binding and obtain a deferred {@link VersionMetadataAccessor}.
  *
- * @binding
- * @product Workers
- * @category Workers & Compute
- * @section Effect-style Worker (recommended)
- * @example Read the deployed version from inside a handler
+ * ### Effect-style Worker (recommended)
+ * **Example:** Read the deployed version from inside a handler
  * ```typescript
  * import * as Effect from "effect/Effect";
  *
@@ -64,8 +57,8 @@ export type VersionMetadataAccessor = Effect.Effect<
  * );
  * ```
  *
- * @section Worker binding metadata
- * @example
+ * ### Worker binding metadata
+ * **Example:** Example
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
@@ -77,6 +70,10 @@ export type VersionMetadataAccessor = Effect.Effect<
  * ```
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/
+ *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
 export interface VersionMetadata extends Binding.Service<
   VersionMetadata,
@@ -99,7 +96,5 @@ export const VersionMetadata = Binding.Service<VersionMetadata>({
   }),
 });
 
-export const isVersionMetadata = (
-  value: unknown,
-): value is VersionMetadataBinding =>
+export const isVersionMetadata = (value: unknown): value is VersionMetadataBinding =>
   Binding.isBinding(value) && value.kind === TypeId;

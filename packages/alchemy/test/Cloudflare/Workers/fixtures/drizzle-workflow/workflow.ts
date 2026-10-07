@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/index.ts";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { Hyperdrive } from "./db.ts";
 import { relations, Widgets } from "./schema.ts";
 
@@ -10,7 +10,7 @@ import { relations, Widgets } from "./schema.ts";
  * Regression guard for the ExecutionContext-in-Workflow fix
  * (https://github.com/alchemy-run/alchemy/pull/515).
  *
- * `Drizzle.postgres` resolves its pool through `ExecutionContext`, which
+ * `Drizzle.Postgres` resolves its pool through `ExecutionContext`, which
  * `WorkflowBridge.run` now provides per run and `task` threads into each
  * step. Without the fix the query inside a `task` dies on the missing
  * service and the run goes `errored`.
@@ -24,7 +24,7 @@ export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow
     // `proxyChain` defers the connect to the first query, so the pool opens
     // inside a step — where `ExecutionContext` is provided — not here at init.
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     return Effect.fn(function* (input: { id: number; name: string }) {
       const inserted = yield* Cloudflare.Workflows.task(
@@ -47,10 +47,7 @@ export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow
       const rows = yield* Cloudflare.Workflows.task(
         "select-widget",
         Effect.gen(function* () {
-          return yield* db
-            .select()
-            .from(Widgets)
-            .where(eq(Widgets.id, input.id));
+          return yield* db.select().from(Widgets).where(eq(Widgets.id, input.id));
         }).pipe(Effect.orDie),
       );
 

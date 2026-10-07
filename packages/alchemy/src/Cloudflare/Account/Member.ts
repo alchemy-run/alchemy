@@ -2,7 +2,6 @@ import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -106,13 +105,7 @@ export interface MemberAttributes {
   userId: string | undefined;
 }
 
-export type Member = Resource<
-  TypeId,
-  MemberProps,
-  MemberAttributes,
-  never,
-  Providers
->;
+export type Member = Resource<TypeId, MemberProps, MemberAttributes, never, Providers>;
 
 /**
  * A member of a Cloudflare account — an invitation for a user (by email) to
@@ -128,11 +121,8 @@ export type Member = Resource<
  * state, `read` scans the account for an existing membership with the same
  * email and reports it as `Unowned`, so the engine refuses to take it over
  * unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Accounts
- * @category Account & Identity
- * @section Inviting a member
- * @example Invite with a role looked up by name
+ * ### Inviting a member
+ * **Example:** Invite with a role looked up by name
  * ```typescript
  * const role = yield* Cloudflare.Account.findAccountRoleByName(
  *   accountId,
@@ -145,8 +135,8 @@ export type Member = Resource<
  * });
  * ```
  *
- * @section Changing roles
- * @example Swap the member's role in place
+ * ### Changing roles
+ * **Example:** Swap the member's role in place
  * ```typescript
  * // Same email — the membership is updated, not replaced.
  * yield* Cloudflare.Account.Member("Auditor", {
@@ -155,8 +145,8 @@ export type Member = Resource<
  * });
  * ```
  *
- * @section Scoped policies (Enterprise)
- * @example Invite with a scoped policy instead of roles
+ * ### Scoped policies (Enterprise)
+ * **Example:** Invite with a scoped policy instead of roles
  * ```typescript
  * yield* Cloudflare.Account.Member("ScopedOperator", {
  *   email: "operator@example.com",
@@ -169,6 +159,10 @@ export type Member = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/
+ *
+ * @resource
+ * @product Accounts
+ * @category Account & Identity
  */
 export const Member = Resource<Member>(TypeId);
 
@@ -193,9 +187,7 @@ export const MemberProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? [])
-              .map((member) => member.id)
-              .filter((id): id is string => id != null),
+            (page.result ?? []).map((member) => member.id).filter((id): id is string => id != null),
           ),
         ),
       );
@@ -203,9 +195,7 @@ export const MemberProvider = () =>
         ids,
         (memberId) =>
           getMember(accountId, memberId).pipe(
-            Effect.map((member) =>
-              member ? toAttributes(member, accountId) : undefined,
-            ),
+            Effect.map((member) => (member ? toAttributes(member, accountId) : undefined)),
           ),
         { concurrency: 10 },
       );
@@ -259,9 +249,7 @@ export const MemberProvider = () =>
       // 1. Observe — the membership id cached on `output` is a hint, not
       //    a guarantee: a missing member falls through to the email scan
       //    and then to create.
-      let observed = output?.memberId
-        ? yield* getMember(accountId, output.memberId)
-        : undefined;
+      let observed = output?.memberId ? yield* getMember(accountId, output.memberId) : undefined;
 
       // 2. Fall back to scanning the account for the email. Ownership has
       //    already been verified upstream — `read` reports existing
@@ -287,14 +275,12 @@ export const MemberProvider = () =>
             status: news.status,
           })
           .pipe(
-            Effect.catchTag(
-              ["ValidationError", "AccountMemberAlreadyExists"],
-              (error) =>
-                findByEmail(accountId, news.email).pipe(
-                  Effect.flatMap((existing) =>
-                    existing ? Effect.succeed(existing) : Effect.fail(error),
-                  ),
+            Effect.catchTag(["ValidationError", "AccountMemberAlreadyExists"], (error) =>
+              findByEmail(accountId, news.email).pipe(
+                Effect.flatMap((existing) =>
+                  existing ? Effect.succeed(existing) : Effect.fail(error),
                 ),
+              ),
             ),
           );
         observed = created;
@@ -312,8 +298,7 @@ export const MemberProvider = () =>
           desiredRoles,
         );
       const policiesDirty =
-        news.policies !== undefined &&
-        !samePolicies(observed.policies ?? [], news.policies);
+        news.policies !== undefined && !samePolicies(observed.policies ?? [], news.policies);
       if (rolesDirty || policiesDirty) {
         observed = yield* accounts.updateMember({
           accountId,
@@ -384,9 +369,7 @@ const findByEmail = (accountId: string, email: string) =>
       );
       // The list payload omits nothing we need, but re-read through
       // `getMember` so every code path observes the same response shape.
-      return match?.id != null
-        ? getMember(accountId, match.id)
-        : Effect.succeed(undefined);
+      return match?.id != null ? getMember(accountId, match.id) : Effect.succeed(undefined);
     }),
   );
 
@@ -432,10 +415,7 @@ const idList = (groups: readonly { id: string }[]) =>
     .sort()
     .join(",");
 
-const toAttributes = (
-  member: ObservedMember,
-  accountId: string,
-): MemberAttributes => ({
+const toAttributes = (member: ObservedMember, accountId: string): MemberAttributes => ({
   memberId: member.id ?? "",
   accountId,
   email: member.email ?? "",

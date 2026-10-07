@@ -2,7 +2,6 @@ import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -176,13 +175,7 @@ export interface Attributes {
   modifiedOn: string | undefined;
 }
 
-export type LoadBalancer = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type LoadBalancer = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Load Balancer — a zone-level DNS hostname that distributes
@@ -192,11 +185,8 @@ export type LoadBalancer = Resource<
  * Requires the Load Balancing subscription to be enabled for the zone;
  * without it, creation fails with the typed `LoadBalancingNotEnabledForZone`
  * error.
- * @resource
- * @product Load Balancers
- * @category Performance & Reliability
- * @section Creating a Load Balancer
- * @example DNS-only (unproxied) load balancer
+ * ### Creating a Load Balancer
+ * **Example:** DNS-only (unproxied) load balancer
  * ```typescript
  * const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("ApiLb", {
  *   zoneId: zone.zoneId,
@@ -208,7 +198,7 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
- * @example Proxied load balancer with steering and affinity
+ * **Example:** Proxied load balancer with steering and affinity
  * ```typescript
  * const lb = yield* Cloudflare.LoadBalancer.LoadBalancer("AppLb", {
  *   zoneId: zone.zoneId,
@@ -221,8 +211,8 @@ export type LoadBalancer = Resource<
  * });
  * ```
  *
- * @section Geo steering
- * @example Region pools
+ * ### Geo steering
+ * **Example:** Region pools
  * ```typescript
  * yield* Cloudflare.LoadBalancer.LoadBalancer("GeoLb", {
  *   zoneId: zone.zoneId,
@@ -238,6 +228,10 @@ export type LoadBalancer = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/load-balancing/
+ *
+ * @resource
+ * @product Load Balancers
+ * @category Performance & Reliability
  */
 export const LoadBalancer = Resource<LoadBalancer>(TypeId, {
   aliases: ["Cloudflare.LoadBalancer"],
@@ -268,10 +262,7 @@ export const LoadBalancerProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       if (output?.loadBalancerId) {
-        const observed = yield* getLoadBalancer(
-          output.zoneId,
-          output.loadBalancerId,
-        );
+        const observed = yield* getLoadBalancer(output.zoneId, output.loadBalancerId);
         return observed ? toAttributes(observed, output.zoneId) : undefined;
       }
       // Cold read — a load balancer's hostname is unique within its zone.
@@ -368,9 +359,7 @@ type ObservedLoadBalancer =
 const getLoadBalancer = (zoneId: string, loadBalancerId: string) =>
   loadBalancers
     .getLoadBalancer({ zoneId, loadBalancerId })
-    .pipe(
-      Effect.catchTag("LoadBalancerNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("LoadBalancerNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a load balancer by exact hostname within a zone.
@@ -384,12 +373,10 @@ const findByName = (zoneId: string, name: string) =>
 
 const resolvePools = (
   pools: Record<string, ReadonlyArray<Input<string>>> | undefined,
-): Record<string, unknown> | undefined =>
+): Record<string, string[]> | undefined =>
   pools === undefined
     ? undefined
-    : Object.fromEntries(
-        Object.entries(pools).map(([k, v]) => [k, v as string[]]),
-      );
+    : Object.fromEntries(Object.entries(pools).map(([k, v]) => [k, Array.from(v as string[])]));
 
 const buildBody = (news: Props) => ({
   name: news.name,
@@ -432,13 +419,11 @@ const loadBalancerDirty = (
     actual: string | number | boolean | null | undefined,
   ) => desired !== undefined && desired !== (actual ?? undefined);
   const structDirty = (desired: unknown, actual: unknown) =>
-    desired !== undefined &&
-    JSON.stringify(desired) !== JSON.stringify(actual ?? {});
+    desired !== undefined && JSON.stringify(desired) !== JSON.stringify(actual ?? {});
 
   return (
     (observed.name ?? "") !== body.name ||
-    JSON.stringify(observed.defaultPools ?? []) !==
-      JSON.stringify(body.defaultPools) ||
+    JSON.stringify(observed.defaultPools ?? []) !== JSON.stringify(body.defaultPools) ||
     (observed.fallbackPool ?? "") !== body.fallbackPool ||
     scalarDirty(body.description, observed.description) ||
     scalarDirty(body.proxied, observed.proxied) ||
@@ -446,10 +431,7 @@ const loadBalancerDirty = (
     scalarDirty(body.steeringPolicy, observed.steeringPolicy) ||
     scalarDirty(body.sessionAffinity, observed.sessionAffinity) ||
     scalarDirty(body.sessionAffinityTtl, observed.sessionAffinityTtl) ||
-    structDirty(
-      body.sessionAffinityAttributes,
-      observed.sessionAffinityAttributes,
-    ) ||
+    structDirty(body.sessionAffinityAttributes, observed.sessionAffinityAttributes) ||
     structDirty(body.adaptiveRouting, observed.adaptiveRouting) ||
     structDirty(body.locationStrategy, observed.locationStrategy) ||
     structDirty(body.randomSteering, observed.randomSteering) ||
@@ -459,10 +441,7 @@ const loadBalancerDirty = (
   );
 };
 
-const toAttributes = (
-  lb: ObservedLoadBalancer,
-  zoneId: string,
-): Attributes => ({
+const toAttributes = (lb: ObservedLoadBalancer, zoneId: string): Attributes => ({
   loadBalancerId: lb.id ?? "",
   zoneId,
   name: lb.name ?? "",

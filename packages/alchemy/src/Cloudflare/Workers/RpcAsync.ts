@@ -1,7 +1,7 @@
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
-import { isRpcErrorEnvelope, isRpcStreamEnvelope } from "../Bridge.ts";
+import { isRpcErrorEnvelope, isRpcStreamEnvelope } from "./Rpc.ts";
 
 export type RpcAsync<Shape> = {
   [K in keyof Shape as K extends "fetch" ? never : K]: Shape[K] extends (
@@ -82,6 +82,14 @@ export const toRpcAsync = <W>(stub: any): RpcAsync<Rpc.Shape<W>> & Service =>
       if (typeof prop !== "string" || prop === "fetch" || prop === "connect") {
         const value = (target as any)[prop];
         return typeof value === "function" ? value.bind(target) : value;
+      }
+      // Every other string key becomes an RPC method, so the runtime's own
+      // protocol probes must be answered with `undefined`: a `then` method
+      // makes the view a thenable, and `await view` (or returning it from an
+      // async function) then calls `then` as an RPC and never settles.
+      // `toJSON` likewise must not turn `JSON.stringify(view)` into a call.
+      if (prop === "then" || prop === "toJSON") {
+        return undefined;
       }
 
       return async (...args: unknown[]) => {

@@ -49,21 +49,21 @@ visible. We'll tune more knobs at the end of the tutorial.
 ```diff lang="typescript"
 // alchemy.run.ts
 +import { Gateway } from "./src/AiGateway.ts";
- import Api from "./src/Api.ts";
+import Api from "./src/Api.ts";
 
- export default Alchemy.Stack(
-   "CloudflareWorkerExample",
-   { providers: Cloudflare.providers(), state: Cloudflare.state() },
-   Effect.gen(function* () {
-     const api = yield* Api;
+export default Alchemy.Stack(
+  "CloudflareWorkerExample",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
 +    const gateway = yield* Gateway;
 
-     return {
-       url: api.url.as<string>(),
+    return {
+      url: api.url.as<string>(),
 +      gatewayId: gateway.gatewayId,
-     };
-   }),
- );
+    };
+  }),
+);
 ```
 
 `yield* Gateway` registers the resource so it gets created/updated on
@@ -79,28 +79,28 @@ the gateway endpoint, `getLog`/`patchLog` for the request log, and
 
 ```diff lang="typescript"
 // src/Api.ts
- import * as Cloudflare from "alchemy/Cloudflare";
- import * as Effect from "effect/Effect";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 +import { Gateway } from "./AiGateway.ts";
 
- export default class Api extends Cloudflare.Worker<Api>()(
-   "Api",
-   { main: import.meta.url },
-   Effect.gen(function* () {
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
 +    const aiGateway = yield* Cloudflare.AI.QueryGateway(Gateway);
 
-     return {
-       fetch: Effect.gen(function* () {
-         // …existing routes
-       }),
-     };
+    return {
+      fetch: Effect.gen(function* () {
+        // …existing routes
+      }),
+    };
 -  }),
 +  }).pipe(Effect.provide(Cloudflare.AI.QueryGatewayBinding)),
- ) {}
+) {}
 ```
 
 `Cloudflare.AI.QueryGatewayBinding` is the runtime side of the
-binding. Provide it once at the bottom of the Init layer chain and
+binding. Provide it once at the bottom of the constructor's layer chain and
 every `QueryGateway(...)` further up will resolve.
 
 ## Build a `LanguageModel` layer
@@ -127,7 +127,7 @@ that satisfies Effect's standard AI service.
 ```
 
 `parameters` is the per-call default; any individual call can still
-override it. The Init phase is the right place to build this layer —
+override it. The Construction phase is the right place to build this layer —
 construction is pure and the binding factory only exists here.
 
 ## Generate text on `/generate`
@@ -138,9 +138,9 @@ the `languageModel` layer to the handler and call it like any other
 Effect.
 
 ```diff lang="typescript"
-+import { LanguageModel } from "effect/unstable/ai";
- import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { LanguageModel } from "effect/ai";
+ import { HttpServerRequest } from "effect/http/HttpServerRequest";
+ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
    return {
      fetch: Effect.gen(function* () {
@@ -202,7 +202,7 @@ flushes through the Worker → edge → client without buffering.
 
 ```diff lang="typescript"
 +import * as Stream from "effect/Stream";
-+import * as Sse from "effect/unstable/encoding/Sse";
++import * as Sse from "effect/encoding/Sse";
 
 +      if (url.pathname === "/stream" && request.method === "POST") {
 +        const body = (yield* request.json) as { prompt?: string };

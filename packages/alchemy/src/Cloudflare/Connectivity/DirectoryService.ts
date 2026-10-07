@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -23,7 +22,7 @@ export type DirectoryServiceType = "tcp" | "http";
 /**
  * Application protocol hint for `tcp` services.
  */
-export type DirectoryServiceAppProtocol = "postgresql" | "mysql";
+export type DirectoryServiceAppProtocol = "postgresql" | "mysql" | (string & {});
 
 export declare namespace DirectoryService {
   /**
@@ -234,11 +233,8 @@ export type DirectoryService = Resource<
  * Names are unique within the account. All properties — including the host
  * and even the protocol type — are mutable in place via a full PUT; nothing
  * forces a replacement except moving accounts.
- * @resource
- * @product Connectivity
- * @category Cloudflare One (Zero Trust)
- * @section Creating a Directory Service
- * @example TCP database service through a tunnel
+ * ### Creating a Directory Service
+ * **Example:** TCP database service through a tunnel
  * ```typescript
  * const tunnel = yield* Cloudflare.Tunnel.Tunnel("DbTunnel", {
  *   ingress: [{ service: "tcp://localhost:5432" }],
@@ -251,7 +247,7 @@ export type DirectoryService = Resource<
  * });
  * ```
  *
- * @example HTTP service on a private hostname
+ * **Example:** HTTP service on a private hostname
  * ```typescript
  * const api = yield* Cloudflare.Connectivity.DirectoryService("InternalApi", {
  *   type: "http",
@@ -264,8 +260,8 @@ export type DirectoryService = Resource<
  * });
  * ```
  *
- * @section Updating
- * @example Changing the host in place
+ * ### Updating
+ * **Example:** Changing the host in place
  * ```typescript
  * // Host, ports, name, and TLS settings are all mutable — the service
  * // keeps its serviceId across updates.
@@ -280,6 +276,10 @@ export type DirectoryService = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/
+ *
+ * @resource
+ * @product Connectivity
+ * @category Cloudflare One (Zero Trust)
  */
 export const DirectoryService = Resource<DirectoryService>(TypeId);
 
@@ -331,9 +331,7 @@ export const DirectoryServiceProvider = () =>
       // Observe — the serviceId cached on `output` is a hint, not a
       // guarantee: a missing service falls through to a name scan
       // (adoption / lost-state recovery) and then to create.
-      let observed = output?.serviceId
-        ? yield* getService(acct, output.serviceId)
-        : undefined;
+      let observed = output?.serviceId ? yield* getService(acct, output.serviceId) : undefined;
       if (!observed) {
         observed = yield* findByName(acct, name);
       }
@@ -390,18 +388,14 @@ export const DirectoryServiceProvider = () =>
     // the same Attributes shape `read` returns.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* connectivity.listDirectoryServices
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((service) =>
-                toAttributes(service, accountId),
-              ),
-            ),
+      return yield* connectivity.listDirectoryServices.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((service) => toAttributes(service, accountId)),
           ),
-        );
+        ),
+      );
     }),
   });
 
@@ -420,9 +414,7 @@ const createServiceName = (id: string, name: string | undefined) =>
 const getService = (accountId: string, serviceId: string) =>
   connectivity
     .getDirectoryService({ accountId, serviceId })
-    .pipe(
-      Effect.catchTag("VpcServiceNotFound", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("VpcServiceNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find a directory service by its (account-unique) name.
@@ -441,19 +433,24 @@ const findByName = (accountId: string, name: string) =>
  */
 const toRequestBody = (news: DirectoryServiceProps) => {
   const host = news.host;
-  const requestHost = Predicate.hasProperty(host, "hostname")
-    ? {
-        hostname: host.hostname,
-        resolverNetwork: {
-          tunnelId: host.resolverNetwork.tunnelId as string,
-          resolverIps: host.resolverNetwork.resolverIps,
-        },
-      }
-    : {
-        ...(Predicate.hasProperty(host, "ipv4") ? { ipv4: host.ipv4 } : {}),
-        ...(Predicate.hasProperty(host, "ipv6") ? { ipv6: host.ipv6 } : {}),
-        network: { tunnelId: host.network.tunnelId as string },
-      };
+  const requestHost =
+    "hostname" in host
+      ? {
+          hostname: host.hostname,
+          resolverNetwork: {
+            tunnelId: host.resolverNetwork.tunnelId,
+            resolverIps: host.resolverNetwork.resolverIps,
+          },
+        }
+      : "ipv4" in host && "ipv6" in host
+        ? {
+            ipv4: host.ipv4,
+            ipv6: host.ipv6,
+            network: { tunnelId: host.network.tunnelId },
+          }
+        : "ipv4" in host
+          ? { ipv4: host.ipv4, network: { tunnelId: host.network.tunnelId } }
+          : { ipv6: host.ipv6, network: { tunnelId: host.network.tunnelId } };
   return {
     type: news.type,
     host: requestHost,
@@ -485,10 +482,7 @@ const isDirty = (
   if (news.httpsPort !== undefined && current.httpsPort !== news.httpsPort) {
     return true;
   }
-  if (
-    news.appProtocol !== undefined &&
-    current.appProtocol !== news.appProtocol
-  ) {
+  if (news.appProtocol !== undefined && current.appProtocol !== news.appProtocol) {
     return true;
   }
   if (
@@ -514,14 +508,7 @@ const sameHost = (
     ipv6?: string;
     tunnelId?: unknown;
     resolverIps?: string[] | undefined;
-  }) =>
-    JSON.stringify([
-      h.hostname,
-      h.ipv4,
-      h.ipv6,
-      h.tunnelId,
-      [...(h.resolverIps ?? [])].sort(),
-    ]);
+  }) => JSON.stringify([h.hostname, h.ipv4, h.ipv6, h.tunnelId, [...(h.resolverIps ?? [])].sort()]);
   const flat = (h: DirectoryService.HostAttributes | DirectoryService.Host) =>
     Predicate.hasProperty(h, "hostname")
       ? {
@@ -537,9 +524,7 @@ const sameHost = (
   return canon(flat(observed)) === canon(flat(desired));
 };
 
-const toHostAttributes = (
-  host: ObservedService["host"],
-): DirectoryService.HostAttributes => {
+const toHostAttributes = (host: ObservedService["host"]): DirectoryService.HostAttributes => {
   if ("hostname" in host) {
     return {
       hostname: host.hostname,

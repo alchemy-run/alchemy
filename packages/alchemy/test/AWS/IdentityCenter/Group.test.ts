@@ -1,17 +1,21 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Group } from "@/AWS/IdentityCenter";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Identity Center requires an enabled SSO instance / identity store in the
 // testing account. If unavailable, `resolveIdentityStoreId` fails with:
 //   Error: "Unable to resolve a single visible Identity Center instance; pass instanceArn explicitly"
-// Gate the live list test behind ALCHEMY_TEST_IDENTITY_CENTER=1 so an
-// entitled account runs it unchanged.
+// The testing account is an organization management account where
+// `CreateInstance` fails with a typed ValidationException ("Organization
+// management account is not allowed to perform the operation."), so an
+// instance cannot be provisioned programmatically. Gate the live list test
+// behind ALCHEMY_TEST_IDENTITY_CENTER=1 so an entitled account runs it
+// unchanged.
 const SKIP_IDENTITY_CENTER = !process.env.ALCHEMY_TEST_IDENTITY_CENTER;
 
 // Canonical `list()` test (AWS account-scoped collection within the identity
@@ -40,5 +44,8 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:identitycenter", "live"],
+    timeout: 180_000,
+  },
 );

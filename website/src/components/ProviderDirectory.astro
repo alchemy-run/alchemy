@@ -50,17 +50,40 @@ const firstLink = (nodes: SidebarNode[]): string | undefined => {
 
 /** Every provider has a docs hub: each card links to it. */
 const HUBS: Record<string, { href: string; blurb: string }> = {
+  ACME: {
+    href: "/acme",
+    blurb: "Certificate authority accounts, DNS-01 validation, and TLS certificates",
+  },
   Cloudflare: {
     href: "/cloudflare",
     blurb: "Workers, Durable Objects, D1, R2, Queues, Hyperdrive",
   },
-  AWS: { href: "/aws", blurb: "Lambda, ECS, EC2, DynamoDB, S3, SQS, Kinesis" },
+  AWS: {
+    href: "/aws",
+    blurb: "Lambda, ECS, EKS, EC2, DynamoDB, S3, SQS, Kinesis",
+  },
+  Hetzner: {
+    href: "/hetzner",
+    blurb: "Servers running Services over SSH, Volumes, Load Balancers, DNS",
+  },
+  Fly: {
+    href: "/fly",
+    blurb: "Machines, Services, Volumes, Secrets, and fly.dev on Fly.io",
+  },
+  Railway: {
+    href: "/railway",
+    blurb: "Projects, Services, Postgres, Redis, Volumes, and Buckets",
+  },
   Planetscale: {
     href: "/planetscale",
     blurb: "Serverless MySQL & Postgres with branching workflows",
   },
   Neon: { href: "/neon", blurb: "Serverless Postgres with branches per PR" },
   Axiom: { href: "/axiom", blurb: "Logs, traces, dashboards, and monitors" },
+  BetterAuth: {
+    href: "/better-auth",
+    blurb: "Typed Better Auth with a database layer per platform",
+  },
   GitHub: { href: "/github", blurb: "Repos, secrets, and webhook events" },
   Docker: {
     href: "/docker",
@@ -68,11 +91,15 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
   },
   Kubernetes: {
     href: "/kubernetes",
-    blurb: "Kubernetes objects applied to EKS clusters from your Stack",
+    blurb: "Deployments, Jobs, manifests, and Helm charts on any cluster",
   },
   Drizzle: {
-    href: "/drizzle",
+    href: "/sql",
     blurb: "Schemas and migrations as deploy-graph resources",
+  },
+  SQL: {
+    href: "/sql",
+    blurb: "Effect SQL, Drizzle, and Prisma across cloud and database providers",
   },
   Command: {
     href: "/command",
@@ -82,7 +109,10 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
 
 const BLURBS: Record<string, string> = {};
 
-const DISPLAY_LABELS: Record<string, string> = { Planetscale: "PlanetScale" };
+const DISPLAY_LABELS: Record<string, string> = {
+  Planetscale: "PlanetScale",
+  BetterAuth: "Better Auth",
+};
 
 const providers = generatedSidebar() ?? [];
 const cards = providers.map((p) => {

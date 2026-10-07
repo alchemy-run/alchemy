@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Minimal effectful container for exercising stop/crash → auto-restart. `ping`
@@ -18,7 +18,7 @@ export class RestartContainer extends Cloudflare.Container<
 export default RestartContainer.make(
   {
     main: import.meta.filename,
-    dockerfile: "FROM oven/bun:latest",
+    image: "oven/bun:latest",
   },
   Effect.gen(function* () {
     return {

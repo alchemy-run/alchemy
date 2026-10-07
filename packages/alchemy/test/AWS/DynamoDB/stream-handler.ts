@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
 
 export class DynamoDBStreamFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "DynamoDBStreamFunction",
@@ -52,25 +52,22 @@ export default DynamoDBStreamFunction.make(
       },
       (stream) =>
         stream.pipe(
-          Stream.map((record) =>
-            JSON.stringify({
+          Stream.map((record) => ({
+            MessageBody: JSON.stringify({
               eventName: record.eventName,
               keys: record.dynamodb.Keys,
               newImage: record.dynamodb.NewImage,
               oldImage: record.dynamodb.OldImage,
             }),
-          ),
+          })),
           Stream.run(sink),
+          Effect.orDie,
         ),
     );
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(
-          AWS.Lambda.TableEventSource,
-          AWS.SQS.QueueSinkHttp,
-          TableAndQueueLive,
-        ),
+        Layer.mergeAll(AWS.Lambda.TableEventSource, AWS.SQS.QueueSinkHttp, TableAndQueueLive),
         Layer.mergeAll(AWS.SQS.SendMessageBatchHttp),
       ),
     ),

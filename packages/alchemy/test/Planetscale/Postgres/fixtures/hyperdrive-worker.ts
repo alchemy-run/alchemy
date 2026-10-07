@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/index.ts";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Hyperdrive } from "./Stack.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { relations, Widgets } from "./schema.ts";
+import { Hyperdrive } from "./Stack.ts";
 
 /**
  * Worker fixture that binds a Cloudflare Hyperdrive (pointed at a
@@ -22,7 +22,7 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     return {
       fetch: Effect.gen(function* () {
@@ -59,20 +59,14 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
         const idMatch = url.pathname.match(/^\/widgets\/(\d+)$/);
         if (request.method === "DELETE" && idMatch) {
           const id = Number(idMatch[1]);
-          const [deleted] = yield* db
-            .delete(Widgets)
-            .where(eq(Widgets.id, id))
-            .returning();
+          const [deleted] = yield* db.delete(Widgets).where(eq(Widgets.id, id)).returning();
           return yield* HttpServerResponse.json({ widget: deleted ?? null });
         }
 
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
         Effect.catch((cause: any) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(cause) }, { status: 500 }),
         ),
       ),
     };

@@ -1,14 +1,29 @@
-import * as ECS from "@distilled.cloud/aws/ecs";
-import * as Effect from "effect/Effect";
+import type * as ECS from "@distilled.cloud/aws/ecs";
+import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 
-export interface DescribeTasksRequest extends Omit<
-  ECS.DescribeTasksRequest,
-  "cluster"
-> {}
+export interface DescribeTasksRequest extends Omit<ECS.DescribeTasksRequest, "cluster"> {}
 
-/** @binding */
+/**
+ * Runtime binding for `ecs:DescribeTasks`.
+ *
+ * Bind this operation to a `Cluster` inside a function runtime to get a
+ * callable that describes tasks in the bound cluster. The cluster ARN is
+ * injected automatically and the host is granted `ecs:DescribeTasks` on the
+ * cluster's tasks.
+ * ### Describing Tasks
+ * **Example:** Poll a Task Until It Stops
+ * ```typescript
+ * const describeTasks = yield* AWS.ECS.DescribeTasks(cluster);
+ *
+ * const response = yield* describeTasks({ tasks: [taskArn] });
+ * const status = response.tasks?.[0]?.lastStatus;
+ * const exitCode = response.tasks?.[0]?.containers?.[0]?.exitCode;
+ * ```
+ *
+ * @binding
+ */
 export interface DescribeTasks extends Binding.Service<
   DescribeTasks,
   "AWS.ECS.DescribeTasks",
@@ -20,6 +35,4 @@ export interface DescribeTasks extends Binding.Service<
     ) => Effect.Effect<ECS.DescribeTasksResponse, ECS.DescribeTasksError>
   >
 > {}
-export const DescribeTasks = Binding.Service<DescribeTasks>(
-  "AWS.ECS.DescribeTasks",
-);
+export const DescribeTasks = Binding.Service<DescribeTasks>("AWS.ECS.DescribeTasks");

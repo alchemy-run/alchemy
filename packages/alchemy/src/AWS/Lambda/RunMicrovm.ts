@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
-export interface RunMicrovmRequest extends Omit<
-  microvms.RunMicrovmRequest,
-  "imageIdentifier"
-> {}
+export interface RunMicrovmRequest extends Omit<microvms.RunMicrovmRequest, "imageIdentifier"> {}
 
 /**
  * Runtime binding for `RunMicrovm`.
@@ -16,9 +13,8 @@ export interface RunMicrovmRequest extends Omit<
  * The response carries the MicroVM `endpoint`; connect to it with an
  * `X-aws-proxy-auth` token from {@link CreateAuthToken}.
  *
- * @binding
- * @section Running MicroVMs
- * @example Run a MicroVM
+ * ### Running MicroVMs
+ * **Example:** Run a MicroVM
  * ```typescript
  * const runMicrovm = yield* AWS.Lambda.RunMicrovm(Sandbox);
  *
@@ -30,6 +26,8 @@ export interface RunMicrovmRequest extends Omit<
  *   },
  * });
  * ```
+ *
+ * @binding
  */
 export interface RunMicrovm extends Binding.Service<
   RunMicrovm,

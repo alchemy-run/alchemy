@@ -8,7 +8,26 @@ export interface GetResourcePolicyRequest extends Omit<
   "ResourceARN"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `kinesis:GetResourcePolicy`.
+ *
+ * Bind this operation to a `Stream` to read the resource policy attached to
+ * it (set via the stream's `resourcePolicy` prop) — the stream ARN is
+ * injected automatically. Provide the implementation with
+ * `Effect.provide(AWS.Kinesis.GetResourcePolicyHttp)`.
+ * ### Inspecting Streams
+ * **Example:** Read the Stream's Resource Policy
+ * ```typescript
+ * // init
+ * const getResourcePolicy = yield* AWS.Kinesis.GetResourcePolicy(stream);
+ *
+ * // runtime
+ * const result = yield* getResourcePolicy();
+ * const policy = JSON.parse(result.Policy);
+ * ```
+ *
+ * @binding
+ */
 export interface GetResourcePolicy extends Binding.Service<
   GetResourcePolicy,
   "AWS.Kinesis.GetResourcePolicy",
@@ -17,10 +36,7 @@ export interface GetResourcePolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetResourcePolicyRequest,
-    ) => Effect.Effect<
-      Kinesis.GetResourcePolicyOutput,
-      Kinesis.GetResourcePolicyError
-    >
+    ) => Effect.Effect<Kinesis.GetResourcePolicyOutput, Kinesis.GetResourcePolicyError>
   >
 > {}
 

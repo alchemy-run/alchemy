@@ -1,16 +1,20 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { OwnedBySomeoneElse } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { PolicyDocument } from "../IAM/Policy.ts";
+import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
 
-export interface GenerateSecretStringProps
-  extends secretsmanager.GetRandomPasswordRequest {
+export interface GenerateSecretStringProps extends secretsmanager.GetRandomPasswordRequest {
   /**
    * JSON template merged with the generated password.
    * @default "{}"
@@ -49,6 +53,32 @@ export interface SecretProps {
    */
   generateSecretString?: GenerateSecretStringProps;
   /**
+   * Resource-based permission policy attached to the secret
+   * (`PutResourcePolicy`). Accepts a typed {@link PolicyDocument} or a raw
+   * JSON string as an escape hatch (e.g. for adoption of an existing
+   * policy). Omitting the prop removes any policy previously attached by
+   * Alchemy.
+   */
+  resourcePolicy?: PolicyDocument | string;
+  /**
+   * Number of days (a whole number from 7 to 30) AWS keeps the secret recoverable after Alchemy
+   * deletes it (`DeleteSecret`'s `RecoveryWindowInDays`).
+   *
+   * When omitted, deletion is immediate: the secret is deleted with
+   * `ForceDeleteWithoutRecovery` and its value cannot be restored. When set,
+   * the secret stays scheduled for deletion for this many days and can be
+   * restored with `RestoreSecret`. While it is scheduled, AWS does not allow
+   * another secret with the same name, so re-adding a `Secret` with the same
+   * explicit {@link name} restores the pending secret and converges it to the
+   * desired props instead of creating a new one. (Without `name`, a re-added
+   * `Secret` gets a new generated name and creates a new secret.) Only a
+   * pending secret that carries this resource's Alchemy ownership tags is
+   * restored; any other one fails with `OwnedBySomeoneElse`.
+   *
+   * @default undefined (delete immediately, no recovery window)
+   */
+  recoveryWindowInDays?: number;
+  /**
    * User-defined tags for the secret.
    */
   tags?: Record<string, string>;
@@ -58,11 +88,30 @@ export interface Secret extends Resource<
   "AWS.SecretsManager.Secret",
   SecretProps,
   {
+    /**
+     * ARN of the secret.
+     */
     secretArn: string;
+    /**
+     * Name of the secret.
+     */
     secretName: string;
+    /**
+     * Version ID of the `AWSCURRENT` secret value, if a value has been set.
+     */
     versionId: string | undefined;
+    /**
+     * Description of the secret.
+     */
     description: string | undefined;
+    /**
+     * KMS key ID (or ARN) used to encrypt the secret value, if a
+     * customer-managed key was configured.
+     */
     kmsKeyId: string | undefined;
+    /**
+     * Tags on the secret.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -75,9 +124,8 @@ export interface Secret extends Resource<
  * `Secret` owns the lifecycle of the secret metadata and current value. It can
  * store a caller-provided value or generate a password-backed JSON payload for
  * downstream resources such as Aurora clusters and RDS proxies.
- * @resource
- * @section Creating Secrets
- * @example Static Secret String
+ * ### Creating Secrets
+ * **Example:** Static Secret String
  * ```typescript
  * const secret = yield* Secret("DbSecret", {
  *   secretString: Redacted.make(JSON.stringify({
@@ -87,7 +135,7 @@ export interface Secret extends Resource<
  * });
  * ```
  *
- * @example Generated Password Secret
+ * **Example:** Generated Password Secret
  * ```typescript
  * const secret = yield* Secret("DbSecret", {
  *   generateSecretString: {
@@ -97,6 +145,27 @@ export interface Secret extends Resource<
  *   },
  * });
  * ```
+ *
+ * ### Resource Policies
+ * **Example:** Typed Resource Policy
+ * ```typescript
+ * const secret = yield* Secret("SharedSecret", {
+ *   secretString: Redacted.make("shared-value"),
+ *   resourcePolicy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+ *         Action: ["secretsmanager:GetSecretValue"],
+ *         Resource: "*",
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * @resource
  */
 export const Secret = Resource<Secret>("AWS.SecretsManager.Secret");
 
@@ -112,14 +181,73 @@ const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
+/**
+ * Bounded retry through the async `ForceDeleteWithoutRecovery` window
+ * (`InvalidRequestException` "already scheduled for deletion"; force
+ * deletions complete within seconds).
+ *
+ * Expressed as an explicitly-typed helper: inlining `Effect.retry` here
+ * leaves `Retry.Return`'s conditional type unresolved in the provider's
+ * inferred layer type, which TypeScript's declaration emit widens to an
+ * `unknown` R — poisoning the whole `AWS.providers()` union for every
+ * downstream consumer.
+ */
+const retryThroughDeletionWindow = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) =>
+      e._tag === "InvalidRequestException" &&
+      isDeletionInProgress((e as { message?: string }).message),
+    schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
+  });
+
+const isDeletionInProgress = (message: string | undefined): boolean => {
+  const normalized = message?.toLowerCase();
+  return (
+    normalized?.includes("scheduled for deletion") === true ||
+    normalized?.includes("marked for deletion") === true
+  );
+};
+
+/**
+ * Raised when `recoveryWindowInDays` is not a whole number from 7 to 30, the
+ * range `DeleteSecret` accepts.
+ */
+export class SecretRecoveryWindowOutOfRange extends Data.TaggedError(
+  "SecretRecoveryWindowOutOfRange",
+)<{
+  message: string;
+  recoveryWindowInDays: number;
+}> {}
+
+const validateRecoveryWindow = (recoveryWindowInDays: number | undefined) =>
+  recoveryWindowInDays === undefined ||
+  (Number.isInteger(recoveryWindowInDays) &&
+    recoveryWindowInDays >= 7 &&
+    recoveryWindowInDays <= 30)
+    ? Effect.void
+    : Effect.fail(
+        new SecretRecoveryWindowOutOfRange({
+          message: `recoveryWindowInDays must be a whole number from 7 to 30, got ${recoveryWindowInDays}.`,
+          recoveryWindowInDays,
+        }),
+      );
+
+class SecretNotVisible extends Data.TaggedError("SecretNotVisible")<{
+  readonly secretId: string;
+}> {}
+
+class SecretStillExists extends Data.TaggedError("SecretStillExists")<{
+  readonly secretId: string;
+}> {}
+
 export const SecretProvider = () =>
   Provider.effect(
     Secret,
     Effect.gen(function* () {
       const toSecretName = (id: string, props: SecretProps) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 512 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 512 });
 
       const createValue = Effect.fn(function* (props: SecretProps) {
         if (props.secretBinary !== undefined) {
@@ -142,10 +270,7 @@ export const SecretProvider = () =>
               ? password.RandomPassword
               : Redacted.value(password.RandomPassword)
             : "";
-          const template = JSON.parse(secretStringTemplate) as Record<
-            string,
-            unknown
-          >;
+          const template = JSON.parse(secretStringTemplate) as Record<string, unknown>;
           return {
             SecretString: JSON.stringify({
               ...template,
@@ -158,31 +283,85 @@ export const SecretProvider = () =>
       });
 
       const readSecret = Effect.fn(function* (secretId: string) {
-        return yield* secretsmanager
+        const described = yield* secretsmanager
           .describeSecret({
             SecretId: secretId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        // A secret with `DeletedDate` set is scheduled for deletion (our
+        // delete uses `ForceDeleteWithoutRecovery`, which still completes
+        // asynchronously). It cannot be updated, so treat it as missing —
+        // reconcile recreates it once the pending deletion finishes.
+        return described?.DeletedDate ? undefined : described;
       });
+
+      // `CreateSecret` may return before `DescribeSecret` can observe the new
+      // secret. Keep this wait provider-local so every caller (including nuke
+      // recovery and adoption) gets the same bounded consistency handling.
+      const readSecretAfterCreate = (secretId: string) =>
+        Effect.retry(
+          readSecret(secretId).pipe(
+            Effect.flatMap((secret) =>
+              secret?.ARN && secret.Name
+                ? Effect.succeed(secret)
+                : Effect.fail(new SecretNotVisible({ secretId })),
+            ),
+          ),
+          {
+            while: (error) => error._tag === "SecretNotVisible",
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
+          },
+        );
+
+      // A secret deleted with a recovery window keeps its name until the
+      // window ends, so re-adding the same `Secret` must bring it back rather
+      // than create a second one (`CreateSecret` would be refused). Only
+      // applies when the caller opted into a recovery window; the default
+      // force-deletion path keeps its create-through-the-window retry. A
+      // pending secret without this resource's ownership tags belongs to
+      // someone else and is never restored.
+      const restoreIfPendingDeletion = Effect.fn(function* (id: string, secretId: string) {
+        const described = yield* secretsmanager
+          .describeSecret({ SecretId: secretId })
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        if (!described?.DeletedDate) {
+          return;
+        }
+        if (!(yield* hasAlchemyTags(id, toTagRecord(described.Tags)))) {
+          return yield* new OwnedBySomeoneElse({
+            message: `Secret '${secretId}' is scheduled for deletion and was not created by this resource, so it was not restored. Restore or delete it in Secrets Manager, or choose another name.`,
+            resourceType: Secret.Type,
+            logicalId: id,
+            physicalName: secretId,
+          });
+        }
+        yield* secretsmanager.restoreSecret({ SecretId: secretId });
+      });
+
+      // Force deletion is asynchronous. `DeletedDate` means the operation was
+      // accepted, not that the resource is absent, so deletion completion must
+      // be checked with the raw API rather than `readSecret`.
+      const waitForSecretAbsence = (secretId: string) =>
+        Effect.retry(
+          secretsmanager
+            .describeSecret({ SecretId: secretId })
+            .pipe(Effect.flatMap(() => Effect.fail(new SecretStillExists({ secretId })))),
+          {
+            while: (error) => error._tag === "SecretStillExists",
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+          },
+        ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
       return {
         stables: ["secretArn", "secretName"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toSecretName(id, olds ?? {})) !==
-            (yield* toSecretName(id, news ?? {}))
-          ) {
+          if ((yield* toSecretName(id, olds ?? {})) !== (yield* toSecretName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const secretName =
-            output?.secretName ?? (yield* toSecretName(id, olds ?? {}));
+          const secretName = output?.secretName ?? (yield* toSecretName(id, olds ?? {}));
           const described = yield* readSecret(output?.secretArn ?? secretName);
           if (!described?.ARN || !described.Name) {
             return undefined;
@@ -198,8 +377,8 @@ export const SecretProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const secretName =
-            output?.secretName ?? (yield* toSecretName(id, news));
+          yield* validateRecoveryWindow(news.recoveryWindowInDays);
+          const secretName = output?.secretName ?? (yield* toSecretName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const hasNewValue =
@@ -213,29 +392,41 @@ export const SecretProvider = () =>
 
           // Ensure — create if missing. Tolerate `ResourceExistsException`
           // by re-describing; the sync step below converges metadata and
-          // value.
-          if (!observed?.ARN) {
-            yield* secretsmanager
-              .createSecret({
-                Name: secretName,
-                Description: news.description,
-                KmsKeyId: news.kmsKeyId,
-                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                  Key,
-                  Value,
-                })),
-                ...(yield* createValue(news)),
-              })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+          // value. Recreating a physical name right after our own
+          // `ForceDeleteWithoutRecovery` can race the asynchronous deletion
+          // and fail with `InvalidRequestException` ("already scheduled for
+          // deletion") — force deletions complete within seconds, so retry
+          // through that window (bounded).
+          if (!observed?.ARN && news.recoveryWindowInDays !== undefined) {
+            yield* restoreIfPendingDeletion(id, secretName);
             observed = yield* readSecret(secretName);
           }
 
-          if (!observed?.ARN || !observed.Name) {
-            return yield* Effect.fail(
-              new Error(`Failed to describe Secret '${secretName}'`),
+          if (!observed?.ARN) {
+            // Data-FIRST `Effect.retry(self, options)`: the data-last form
+            // infers `Retry.Options<E>`'s `E` from BOTH `while` and the
+            // schedule's input slot (`unknown` for `Schedule.fixed`), and the
+            // unioned candidates collapse this provider's layer to an
+            // `unknown` R that then poisons all of `AWS.providers()`.
+            yield* retryThroughDeletionWindow(
+              secretsmanager
+                .createSecret({
+                  Name: secretName,
+                  Description: news.description,
+                  KmsKeyId: news.kmsKeyId,
+                  Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                    Key,
+                    Value,
+                  })),
+                  ...(yield* createValue(news)),
+                })
+                .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void)),
             );
+            observed = yield* readSecretAfterCreate(secretName);
+          }
+
+          if (!observed?.ARN || !observed.Name) {
+            return yield* Effect.fail(new Error(`Failed to describe Secret '${secretName}'`));
           }
 
           const secretArn = observed.ARN;
@@ -272,27 +463,69 @@ export const SecretProvider = () =>
             });
           }
 
+          // Sync the resource-based policy — diff the observed policy
+          // against the desired one (both canonicalized via
+          // `normalizePolicyDocument`) so a re-deploy of an equivalent
+          // document is a no-op API-wise.
+          const desiredPolicy =
+            news.resourcePolicy === undefined
+              ? undefined
+              : typeof news.resourcePolicy === "string"
+                ? news.resourcePolicy
+                : stringifyPolicyDocument(news.resourcePolicy);
+          const observedPolicy = yield* secretsmanager
+            .getResourcePolicy({ SecretId: secretArn })
+            .pipe(
+              Effect.map((response) => response.ResourcePolicy),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            );
+
+          if (desiredPolicy !== undefined) {
+            if (
+              observedPolicy === undefined ||
+              normalizePolicyDocument(observedPolicy) !== normalizePolicyDocument(desiredPolicy)
+            ) {
+              yield* secretsmanager.putResourcePolicy({
+                SecretId: secretArn,
+                ResourcePolicy: desiredPolicy,
+              });
+            }
+          } else if (observedPolicy !== undefined) {
+            yield* secretsmanager
+              .deleteResourcePolicy({ SecretId: secretArn })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          }
+
           yield* session.note(secretArn);
           return {
             secretArn,
             secretName: observed.Name,
-            versionId: hasNewValue
-              ? (updated.VersionId ?? output?.versionId)
-              : output?.versionId,
+            versionId: hasNewValue ? (updated.VersionId ?? output?.versionId) : output?.versionId,
             description: news.description,
             kmsKeyId: news.kmsKeyId,
             tags: desiredTags,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output }) {
+          const recoveryWindowInDays = olds?.recoveryWindowInDays;
           yield* secretsmanager
             .deleteSecret({
               SecretId: output.secretArn,
-              ForceDeleteWithoutRecovery: true,
+              ...(recoveryWindowInDays === undefined
+                ? { ForceDeleteWithoutRecovery: true }
+                : { RecoveryWindowInDays: recoveryWindowInDays }),
             })
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.catchTag("InvalidRequestException", (error) =>
+                isDeletionInProgress(error.message) ? Effect.void : Effect.fail(error),
+              ),
             );
+          // With a recovery window the secret intentionally stays visible to
+          // `DescribeSecret` (scheduled for deletion) until the window ends.
+          if (recoveryWindowInDays === undefined) {
+            yield* waitForSecretAbsence(output.secretArn);
+          }
         }),
         // `listSecrets` returns full secret metadata (ARN, name, description,
         // KMS key, and tags) inline, so we hydrate the exact `read` Attributes

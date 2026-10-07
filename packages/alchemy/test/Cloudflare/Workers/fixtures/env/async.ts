@@ -15,14 +15,13 @@ export default {
         OBJ: env.OBJ,
         ARR: env.ARR,
         OUTPUT_STR: env.OUTPUT_STR,
+        RANDOM_IS_HEX: /^[0-9a-f]{64}$/.test(env.RANDOM),
         SECRET_STR: env.SECRET_STR,
         // Redacted<Json> is JSON-stringified into secret_text on the way in,
         // so the async runtime sees a string here. Parse it back so the
         // test can compare the structured value.
         SECRET_JSON:
-          typeof env.SECRET_JSON === "string"
-            ? JSON.parse(env.SECRET_JSON)
-            : env.SECRET_JSON,
+          typeof env.SECRET_JSON === "string" ? JSON.parse(env.SECRET_JSON) : env.SECRET_JSON,
         CONFIG_STR: env.CONFIG_STR,
         CONFIG_NUM: env.CONFIG_NUM,
         CONFIG_REDACTED: env.CONFIG_REDACTED,

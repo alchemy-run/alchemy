@@ -18,7 +18,7 @@ a different angle — you define **procedures** instead of HTTP
 endpoints, and you get a fully typed client for free with no URL
 construction or manual serialization.
 [Effect RPC](/apis/effect-rpc) covers the host-agnostic core; this
-page covers the Lambda side — a public Function URL via `url: true`,
+page covers the Lambda side — a public Function URL via `functionUrl: true`,
 and binding implementations provided with
 `Layer.mergeAll(AWS.DynamoDB.GetItemHttp, AWS.DynamoDB.PutItemHttp)`.
 
@@ -29,7 +29,7 @@ wiring story is identical to the HTTP API guide:
 1. **Define schemas outside the Function.** Domain types and tagged
    errors, importable by both server and client.
 2. **Bind resources and construct handlers inside the Function's
-   Init phase.** `RpcGroup.toLayer` is pure construction — safe at
+   Construction phase.** `RpcGroup.toLayer` is pure construction — safe at
    deploy time and at cold start.
 3. **Return `{ fetch }`** where `fetch` is the `HttpEffect` produced
    by `RpcServer.toHttpEffect`.
@@ -81,7 +81,7 @@ into a single value that both the server and the client will share.
 ```typescript
 // src/JobRpcs.ts
 import * as Schema from "effect/Schema";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 import { Job, JobId, JobNotFound, PutJobFailed } from "./Job.ts";
 
 const getJob = Rpc.make("getJob", {
@@ -107,7 +107,7 @@ export class JobRpcs extends RpcGroup.make(getJob, createJob) {}
 
 ## 3. Build the Function
 
-Create `src/JobFunction.ts` with an empty Init phase and a public
+Create `src/JobFunction.ts` with an empty Construction phase and a public
 Function URL:
 
 ```typescript
@@ -117,14 +117,14 @@ import * as Effect from "effect/Effect";
 
 export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
-  { main: import.meta.url, url: true },
+  { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
     return {};
   }),
 ) {}
 ```
 
-The generator is the **Init phase**. It runs at *deploy time* (when
+The generator is the **Construction phase**. It runs at *deploy time* (when
 Alchemy plans the stack and collects bindings into IAM policies and
 environment variables) and again *inside the deployed Lambda* at
 cold start. Only do pure construction here — bindings, layers, never
@@ -133,18 +133,18 @@ per-request work.
 ### 3a. Declare the table and bind operations
 
 Jobs need somewhere durable to live. Yield a DynamoDB `Table` inside
-Init to declare the resource, then bind the two operations the
+the constructor to declare the resource, then bind the two operations the
 handlers will need:
 
 ```diff lang="typescript"
   Effect.gen(function* () {
-+    const table = yield* AWS.DynamoDB.Table("JobsTable", {
-+      partitionKey: "id",
-+      attributes: { id: "S" },
-+    });
++   const table = yield* AWS.DynamoDB.Table("JobsTable", {
++     partitionKey: "id",
++     attributes: { id: "S" },
++   });
 +
-+    const getItem = yield* AWS.DynamoDB.GetItem(table);
-+    const putItem = yield* AWS.DynamoDB.PutItem(table);
++   const getItem = yield* AWS.DynamoDB.GetItem(table);
++   const putItem = yield* AWS.DynamoDB.PutItem(table);
 
     return {};
   }),
@@ -155,7 +155,7 @@ least-privilege IAM statement to the function's execution role; at
 runtime it returns a typed callable that injects the table name
 automatically.
 
-### 3b. Construct the handlers inside Init
+### 3b. Construct the handlers inside the constructor
 
 `JobRpcs.toLayer` takes one handler per procedure and produces a
 `Layer`. Like `HttpApiBuilder.group`, this is pure construction — it
@@ -166,37 +166,37 @@ the `getItem` / `putItem` bindings from step 3a:
     const getItem = yield* AWS.DynamoDB.GetItem(table);
     const putItem = yield* AWS.DynamoDB.PutItem(table);
 
-+    const handlersLayer = JobRpcs.toLayer({
-+      getJob: ({ jobId }) =>
-+        getItem({ Key: { id: { S: jobId } } }).pipe(
-+          Effect.orDie,
-+          Effect.flatMap(({ Item }) =>
-+            Item
-+              ? Effect.succeed(
-+                  new Job({
-+                    id: Item.id?.S ?? jobId,
-+                    content: Item.content?.S ?? "",
-+                  }),
-+                )
-+              : Effect.fail(new JobNotFound({ jobId })),
-+          ),
-+        ),
-+      createJob: ({ content }) =>
-+        Effect.gen(function* () {
-+          const jobId = crypto.randomUUID();
-+          yield* putItem({
-+            Item: {
-+              id: { S: jobId },
-+              content: { S: content },
-+            },
-+          });
-+          return jobId;
-+        }).pipe(
-+          Effect.mapError(
-+            (error) => new PutJobFailed({ message: error.message }),
-+          ),
-+        ),
-+    });
++   const handlersLayer = JobRpcs.toLayer({
++     getJob: ({ jobId }) =>
++       getItem({ Key: { id: { S: jobId } } }).pipe(
++         Effect.orDie,
++         Effect.flatMap(({ Item }) =>
++           Item
++             ? Effect.succeed(
++                 new Job({
++                   id: Item.id?.S ?? jobId,
++                   content: Item.content?.S ?? "",
++                 }),
++               )
++             : Effect.fail(new JobNotFound({ jobId })),
++         ),
++       ),
++     createJob: ({ content }) =>
++       Effect.gen(function* () {
++         const jobId = crypto.randomUUID();
++         yield* putItem({
++           Item: {
++             id: { S: jobId },
++             content: { S: content },
++           },
++         });
++         return jobId;
++       }).pipe(
++         Effect.mapError(
++           (error) => new PutJobFailed({ message: error.message }),
++         ),
++       ),
++   });
 
     return {};
 ```
@@ -220,20 +220,20 @@ HTTP API approach, RPC doesn't need `HttpPlatform.layer` or
 
 ```diff lang="typescript"
     return {
--    };
-+      fetch: yield* RpcServer.toHttpEffect(JobRpcs).pipe(
-+        Effect.provide(
-+          Layer.mergeAll(handlersLayer, RpcSerialization.layerJson),
-+        ),
-+      ),
-+    };
+-   };
++     fetch: yield* RpcServer.toHttpEffect(JobRpcs).pipe(
++       Effect.provide(
++         Layer.mergeAll(handlersLayer, RpcSerialization.layerJson),
++       ),
++     ),
++   };
   }).pipe(
-+    Effect.provide(
-+      Layer.mergeAll(
-+        AWS.DynamoDB.GetItemHttp,
-+        AWS.DynamoDB.PutItemHttp,
-+      ),
-+    ),
++   Effect.provide(
++     Layer.mergeAll(
++       AWS.DynamoDB.GetItemHttp,
++       AWS.DynamoDB.PutItemHttp,
++     ),
++   ),
   ),
 ```
 
@@ -248,13 +248,13 @@ DynamoDB's HTTP API, signed with the Lambda's execution role.
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 import { Job, JobNotFound, PutJobFailed } from "./Job.ts";
 import { JobRpcs } from "./JobRpcs.ts";
 
 export default class JobFunction extends AWS.Lambda.Function<JobFunction>()(
   "JobFunction",
-  { main: import.meta.url, url: true },
+  { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
     const table = yield* AWS.DynamoDB.Table("JobsTable", {
       partitionKey: "id",
@@ -334,7 +334,7 @@ export default Alchemy.Stack(
 ```
 
 Yielding `JobFunction` deploys the function *and* everything it
-declared inside Init — the DynamoDB table, the generated IAM role
+declared inside the constructor — the DynamoDB table, the generated IAM role
 with the two table-scoped statements, and the Function URL.
 
 ## 5. Deploy
@@ -353,8 +353,8 @@ typed client — no codegen. `client.createJob` accepts
 // scripts/client.ts
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 import { JobRpcs } from "../src/JobRpcs.ts";
 
 const program = Effect.gen(function* () {
@@ -409,7 +409,7 @@ a cloud-agnostic `JobStorage` service (with a drop-in S3
 implementation), publishes job-created notifications to SNS, fans
 table changes out to SQS via DynamoDB Streams, and adds a CloudWatch
 dashboard and alarm. The
-[Building with Layers](/infrastructure-as-effects/infrastructure-layers) guide
+[Layers](/infrastructure-as-effects/layers) page
 explains the service-Layer pattern it uses.
 
 ## Where next

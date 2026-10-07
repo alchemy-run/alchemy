@@ -8,7 +8,31 @@ export interface RestoreTableToPointInTimeRequest extends Omit<
   "SourceTableArn" | "SourceTableName" | "TargetTableName"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `dynamodb:RestoreTableToPointInTime`.
+ *
+ * Bind this operation to a source and a target `Table` inside a function
+ * runtime to get a callable that restores the source's point-in-time backup
+ * into the target, automatically injecting both table identifiers. The source
+ * table must have point-in-time recovery enabled. Provide the
+ * `RestoreTableToPointInTimeHttp` layer on the Function to satisfy the
+ * binding.
+ * ### Backup and Restore
+ * **Example:** Restore to the Latest Restorable Time
+ * ```typescript
+ * const restore = yield* AWS.DynamoDB.RestoreTableToPointInTime(
+ *   sourceTable,
+ *   restoreTargetTable,
+ * );
+ *
+ * const response = yield* restore({
+ *   UseLatestRestorableTime: true,
+ * });
+ * const status = response.TableDescription?.TableStatus;
+ * ```
+ *
+ * @binding
+ */
 export interface RestoreTableToPointInTime extends Binding.Service<
   RestoreTableToPointInTime,
   "AWS.DynamoDB.RestoreTableToPointInTime",
@@ -25,7 +49,6 @@ export interface RestoreTableToPointInTime extends Binding.Service<
   >
 > {}
 
-export const RestoreTableToPointInTime =
-  Binding.Service<RestoreTableToPointInTime>(
-    "AWS.DynamoDB.RestoreTableToPointInTime",
-  );
+export const RestoreTableToPointInTime = Binding.Service<RestoreTableToPointInTime>(
+  "AWS.DynamoDB.RestoreTableToPointInTime",
+);

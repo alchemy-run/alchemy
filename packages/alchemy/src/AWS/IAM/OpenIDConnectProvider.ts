@@ -35,14 +35,18 @@ export interface OpenIDConnectProvider extends Resource<
   "AWS.IAM.OpenIDConnectProvider",
   OpenIDConnectProviderProps,
   {
+    /** The ARN of the OIDC provider. */
     openIDConnectProviderArn: string;
+    /** The URL of the identity provider. */
     url: string;
+    /** The client IDs (audiences) registered with the provider. */
     clientIDList: string[];
     /**
      * Reflects the desired state — `undefined` when the user opted out of
      * managing thumbprints (AWS auto-manages them for well-known IdPs).
      */
     thumbprintList: string[] | undefined;
+    /** The tags applied to the provider. */
     tags: Record<string, string>;
   },
   never,
@@ -54,9 +58,8 @@ export interface OpenIDConnectProvider extends Resource<
  *
  * `OpenIDConnectProvider` registers an external OIDC issuer so IAM roles can be
  * assumed through web identity federation flows such as GitHub Actions.
- * @resource
- * @section Federating with OIDC
- * @example Create a GitHub Actions OIDC Provider
+ * ### Federating with OIDC
+ * **Example:** Create a GitHub Actions OIDC Provider
  * ```typescript
  * const oidc = yield* OpenIDConnectProvider("GithubOidc", {
  *   url: "https://token.actions.githubusercontent.com",
@@ -64,6 +67,8 @@ export interface OpenIDConnectProvider extends Resource<
  *   thumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"],
  * });
  * ```
+ *
+ * @resource
  */
 export const OpenIDConnectProvider = Resource<OpenIDConnectProvider>(
   "AWS.IAM.OpenIDConnectProvider",
@@ -86,11 +91,7 @@ export const OpenIDConnectProviderProvider = () =>
           .getOpenIDConnectProvider({
             OpenIDConnectProviderArn: providerArn,
           })
-          .pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
         return response;
       });
 
@@ -114,9 +115,7 @@ export const OpenIDConnectProviderProvider = () =>
           // A peer test may delete a provider between
           // `listOpenIDConnectProviders` and hydrating its tags — skip the
           // vanished entry rather than failing the whole enumeration.
-          Effect.catchTag("NoSuchEntityException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -125,8 +124,7 @@ export const OpenIDConnectProviderProvider = () =>
         // hydrate each into the full Attributes shape `read` produces.
         list: () =>
           Effect.gen(function* () {
-            const { OpenIDConnectProviderList } =
-              yield* iam.listOpenIDConnectProviders({});
+            const { OpenIDConnectProviderList } = yield* iam.listOpenIDConnectProviders({});
             const arns = (OpenIDConnectProviderList ?? [])
               .map((entry) => entry.Arn)
               .filter((arn): arn is string => arn != null);
@@ -147,9 +145,7 @@ export const OpenIDConnectProviderProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           const providerArn =
             output?.openIDConnectProviderArn ??
-            (olds?.url !== undefined
-              ? yield* oidcArnFromUrl(olds.url)
-              : undefined);
+            (olds?.url !== undefined ? yield* oidcArnFromUrl(olds.url) : undefined);
           if (providerArn === undefined) {
             // An Output-valued `url` doesn't survive a `creating`-state
             // round-trip (it deserializes as `undefined`) — report "not
@@ -174,9 +170,7 @@ export const OpenIDConnectProviderProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           // The OIDC provider's ARN is deterministic from its URL, so we
           // can observe with or without prior output.
-          const providerArn =
-            output?.openIDConnectProviderArn ??
-            (yield* oidcArnFromUrl(news.url));
+          const providerArn = output?.openIDConnectProviderArn ?? (yield* oidcArnFromUrl(news.url));
 
           // Observe — read the live provider; absent when missing.
           let observed = yield* readProvider(providerArn);
@@ -207,12 +201,7 @@ export const OpenIDConnectProviderProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "EntityAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("EntityAlreadyExistsException", () => Effect.void));
             observed = yield* readProvider(providerArn);
             observedClientIds = observed?.ClientIDList ?? [];
             observedThumbprints = observed?.ThumbprintList ?? [];

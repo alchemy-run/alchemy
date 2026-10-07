@@ -4,20 +4,37 @@ import * as Binding from "../../Binding.ts";
 
 export interface ListSubscriptionsRequest extends sns.ListSubscriptionsInput {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:ListSubscriptions`.
+ *
+ * An account-scoped operation — bind it with no arguments to page through
+ * all subscriptions in the account/region. The binding grants the host
+ * function `sns:ListSubscriptions`. Provide the `ListSubscriptionsHttp`
+ * layer on the Function to implement the binding.
+ *
+ * To list only the subscriptions of one topic, use
+ * {@link ListSubscriptionsByTopic}.
+ * ### Listing Subscriptions
+ * **Example:** List All Subscriptions
+ * ```typescript
+ * // init (provide SNS.ListSubscriptionsHttp on the Function)
+ * const listSubscriptions = yield* SNS.ListSubscriptions();
+ *
+ * // runtime: pass NextToken to page through large accounts
+ * const response = yield* listSubscriptions();
+ * // response.Subscriptions
+ * ```
+ *
+ * @binding
+ */
 export interface ListSubscriptions extends Binding.Service<
   ListSubscriptions,
   "AWS.SNS.ListSubscriptions",
   () => Effect.Effect<
     (
       request?: ListSubscriptionsRequest,
-    ) => Effect.Effect<
-      sns.ListSubscriptionsResponse,
-      sns.ListSubscriptionsError
-    >
+    ) => Effect.Effect<sns.ListSubscriptionsResponse, sns.ListSubscriptionsError>
   >
 > {}
 
-export const ListSubscriptions = Binding.Service<ListSubscriptions>(
-  "AWS.SNS.ListSubscriptions",
-);
+export const ListSubscriptions = Binding.Service<ListSubscriptions>("AWS.SNS.ListSubscriptions");

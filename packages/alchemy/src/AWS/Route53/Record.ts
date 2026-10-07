@@ -1,4 +1,5 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -6,7 +7,9 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
+import { resolveHostedZoneId } from "./HostedZoneLookup.ts";
 
 export interface RecordAliasTarget {
   /**
@@ -24,9 +27,23 @@ export interface RecordAliasTarget {
   evaluateTargetHealth?: boolean;
 }
 
+/**
+ * Fully-resolved alias target as stored in the record's attributes — a
+ * `RecordAliasTarget` with all `Input` values resolved.
+ */
 export interface ResolvedRecordAliasTarget {
+  /**
+   * Hosted zone ID for the alias target.
+   */
   hostedZoneId: string;
+  /**
+   * DNS name for the alias target.
+   */
   dnsName: string;
+  /**
+   * Whether Route 53 evaluates target health for the alias.
+   * @default false
+   */
   evaluateTargetHealth?: boolean;
 }
 
@@ -73,9 +90,13 @@ export interface RecordCidrRoutingConfig {
 
 export interface RecordProps {
   /**
-   * Hosted zone that owns the record.
+   * Hosted zone that owns the record. When omitted, the most specific
+   * PUBLIC hosted zone in the account containing `name` is inferred by
+   * walking the name's parent domains (`svc.api.example.com` →
+   * `api.example.com` → `example.com`); the deploy fails actionably when
+   * no zone matches.
    */
-  hostedZoneId: string;
+  hostedZoneId?: string;
   /**
    * Record name.
    */
@@ -85,9 +106,10 @@ export interface RecordProps {
    */
   type: route53.RRType;
   /**
-   * TTL in seconds for non-alias records.
+   * TTL for non-alias records, e.g. `"60 seconds"` or `Duration.minutes(5)`
+   * (a bare number is milliseconds). Rounded to whole seconds on the wire.
    */
-  ttl?: number;
+  ttl?: Duration.Input;
   /**
    * Record values for non-alias records.
    */
@@ -212,9 +234,8 @@ export interface Record extends Resource<
  * `Record` manages a single Route 53 record set using `UPSERT` for create and
  * update operations, and waits for Route 53 change propagation before
  * returning.
- * @resource
- * @section Creating Records
- * @example A Record Alias To CloudFront
+ * ### Creating Records
+ * **Example:** A Record Alias To CloudFront
  * ```typescript
  * const record = yield* Record("WebsiteAlias", {
  *   hostedZoneId: "Z1234567890",
@@ -227,25 +248,25 @@ export interface Record extends Resource<
  * });
  * ```
  *
- * @example TXT Record
+ * **Example:** TXT Record
  * ```typescript
  * const record = yield* Record("VerificationRecord", {
  *   hostedZoneId: "Z1234567890",
  *   name: "_acme-challenge.example.com",
  *   type: "TXT",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["\"value\""],
  * });
  * ```
  *
- * @section Routing Policies
- * @example Weighted Routing
+ * ### Routing Policies
+ * **Example:** Weighted Routing
  * ```typescript
  * const blue = yield* Record("Blue", {
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "blue",
  *   weight: 90,
@@ -254,20 +275,20 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["5.6.7.8"],
  *   setIdentifier: "green",
  *   weight: 10,
  * });
  * ```
  *
- * @example Failover Routing With Health Check
+ * **Example:** Failover Routing With Health Check
  * ```typescript
  * const primary = yield* Record("Primary", {
  *   hostedZoneId: zone.id,
  *   name: "app.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "primary",
  *   failover: "PRIMARY",
@@ -277,48 +298,64 @@ export interface Record extends Resource<
  *   hostedZoneId: zone.id,
  *   name: "app.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["5.6.7.8"],
  *   setIdentifier: "secondary",
  *   failover: "SECONDARY",
  * });
  * ```
  *
- * @example Latency Routing
+ * **Example:** Latency Routing
  * ```typescript
  * const record = yield* Record("UsEast", {
  *   hostedZoneId: zone.id,
  *   name: "api.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "us-east-1",
  *   region: "us-east-1",
  * });
  * ```
  *
- * @example Geolocation Routing
+ * **Example:** Geolocation Routing
  * ```typescript
  * const record = yield* Record("Default", {
  *   hostedZoneId: zone.id,
  *   name: "www.example.com",
  *   type: "A",
- *   ttl: 60,
+ *   ttl: "60 seconds",
  *   records: ["1.2.3.4"],
  *   setIdentifier: "default",
  *   geoLocation: { countryCode: "*" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Record = Resource<Record>("AWS.Route53.Record");
 
-const normalizeHostedZoneId = (hostedZoneId: string) =>
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");
 
-const normalizeName = (name: string) =>
-  name.endsWith(".") ? name : `${name}.`;
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const normalizeName = (name: string) => (name.endsWith(".") ? name : `${name}.`);
 
-const toAliasTarget = (
+/**
+ * Route 53 returns record names in lowercase with special characters as
+ * `\ddd` octal escapes (a wildcard `*` comes back as `\052`), so compare
+ * names in that decoded, lowercase form.
+ *
+ * @internal shared with `Records.ts` — not exported from the barrel.
+ */
+export const canonicalName = (name: string) =>
+  normalizeName(name)
+    .replace(/\\(\d{3})/g, (_, code: string) => String.fromCharCode(Number.parseInt(code, 8)))
+    .toLowerCase();
+
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const toAliasTarget = (
   aliasTarget: route53.AliasTarget | undefined,
 ): ResolvedRecordAliasTarget | undefined =>
   aliasTarget
@@ -329,9 +366,7 @@ const toAliasTarget = (
       }
     : undefined;
 
-const toGeoLocation = (
-  geo: RecordGeoLocation | undefined,
-): route53.GeoLocation | undefined =>
+const toGeoLocation = (geo: RecordGeoLocation | undefined): route53.GeoLocation | undefined =>
   geo
     ? {
         ContinentCode: geo.continentCode,
@@ -340,9 +375,7 @@ const toGeoLocation = (
       }
     : undefined;
 
-const fromGeoLocation = (
-  geo: route53.GeoLocation | undefined,
-): RecordGeoLocation | undefined =>
+const fromGeoLocation = (geo: route53.GeoLocation | undefined): RecordGeoLocation | undefined =>
   geo
     ? {
         continentCode: geo.ContinentCode,
@@ -388,28 +421,24 @@ const fromGeoProximity = (
 const toCidrRouting = (
   cidr: RecordCidrRoutingConfig | undefined,
 ): route53.CidrRoutingConfig | undefined =>
-  cidr
-    ? { CollectionId: cidr.collectionId, LocationName: cidr.locationName }
-    : undefined;
+  cidr ? { CollectionId: cidr.collectionId, LocationName: cidr.locationName } : undefined;
 
 const fromCidrRouting = (
   cidr: route53.CidrRoutingConfig | undefined,
 ): RecordCidrRoutingConfig | undefined =>
-  cidr
-    ? { collectionId: cidr.CollectionId, locationName: cidr.LocationName }
-    : undefined;
+  cidr ? { collectionId: cidr.CollectionId, locationName: cidr.LocationName } : undefined;
 
 /**
  * Build the full `ResourceRecordSet` wire shape from props. Used for both the
  * UPSERT change batch and the DELETE change batch — DELETE requires an exact
  * match of every policy field, so this must round-trip the entire surface.
+ * @internal shared with `Records.ts` — not exported from the barrel.
  */
-const toRecordSet = (
+export const toRecordSet = (
   props: Pick<
     RecordProps,
     | "name"
     | "type"
-    | "ttl"
     | "records"
     | "aliasTarget"
     | "setIdentifier"
@@ -421,7 +450,10 @@ const toRecordSet = (
     | "multiValueAnswer"
     | "cidrRoutingConfig"
     | "healthCheckId"
-  >,
+  > & {
+    /** TTL already converted to wire seconds. */
+    ttl?: number;
+  },
 ): route53.ResourceRecordSet => ({
   Name: normalizeName(props.name),
   Type: props.type,
@@ -440,19 +472,14 @@ const toRecordSet = (
     : (props.records ?? []).map((Value) => ({ Value })),
   AliasTarget: props.aliasTarget
     ? {
-        HostedZoneId: normalizeHostedZoneId(
-          props.aliasTarget.hostedZoneId as string,
-        ),
+        HostedZoneId: normalizeHostedZoneId(props.aliasTarget.hostedZoneId as string),
         DNSName: props.aliasTarget.dnsName as string,
         EvaluateTargetHealth: props.aliasTarget.evaluateTargetHealth ?? false,
       }
     : undefined,
 });
 
-const toAttrs = (
-  recordSet: route53.ResourceRecordSet,
-  hostedZoneId: string,
-) => ({
+const toAttrs = (recordSet: route53.ResourceRecordSet, hostedZoneId: string) => ({
   hostedZoneId: normalizeHostedZoneId(hostedZoneId),
   name: recordSet.Name,
   type: recordSet.Type,
@@ -481,19 +508,14 @@ export const RecordProvider = () =>
       // accepts the bare id — the prefixed form returns `NoSuchChange`
       // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53
-          .getChange({ Id: changeId.replace(/^\/change\//, "") })
-          .pipe(
-            Effect.map((response) => response.ChangeInfo.Status),
-            Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(60),
-              ]),
-              until: (status) => status === "INSYNC",
-            }),
-          );
+        return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
+          Effect.map((response) => response.ChangeInfo.Status),
+          Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
+            until: (status) => status === "INSYNC",
+          }),
+        );
       });
 
       const findRecord = Effect.fn(function* (
@@ -507,29 +529,28 @@ export const RecordProvider = () =>
             StartRecordType: props.type,
             MaxItems: 100,
           })
-          .pipe(
-            Effect.catchTag("NoSuchHostedZone", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
 
         return (response?.ResourceRecordSets ?? []).find(
           (recordSet) =>
-            recordSet.Name === normalizeName(props.name) &&
+            canonicalName(recordSet.Name) === canonicalName(props.name) &&
             recordSet.Type === props.type &&
             (recordSet.SetIdentifier ?? undefined) === props.setIdentifier,
         );
       });
 
-      const upsertRecord = Effect.fn(function* (props: RecordProps) {
+      const upsertRecord = Effect.fn(function* (hostedZoneId: string, props: RecordProps) {
         const response = yield* route53.changeResourceRecordSets({
-          HostedZoneId: normalizeHostedZoneId(props.hostedZoneId),
+          HostedZoneId: normalizeHostedZoneId(hostedZoneId),
           ChangeBatch: {
             Comment: "Alchemy Route53 record upsert",
             Changes: [
               {
                 Action: "UPSERT",
-                ResourceRecordSet: toRecordSet(props),
+                ResourceRecordSet: toRecordSet({
+                  ...props,
+                  ttl: durationToSeconds(props.ttl),
+                }),
               },
             ],
           },
@@ -573,9 +594,7 @@ export const RecordProvider = () =>
             // zone with bounded concurrency.
             const zones = yield* route53.listHostedZones.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.HostedZones ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.HostedZones ?? [])),
             );
 
             const rows = yield* Effect.forEach(
@@ -601,11 +620,14 @@ export const RecordProvider = () =>
           // (they deserialize as `undefined`), and an unknown old identity
           // must fall through to the create/update recovery path.
           if (
+            // An undefined side means "inferred" — reconcile resolves it
+            // against the live account, so only two explicit, differing
+            // zones are a replacement.
             (olds.hostedZoneId !== undefined &&
+              news.hostedZoneId !== undefined &&
               normalizeHostedZoneId(olds.hostedZoneId) !==
                 normalizeHostedZoneId(news.hostedZoneId)) ||
-            (olds.name !== undefined &&
-              normalizeName(olds.name) !== normalizeName(news.name)) ||
+            (olds.name !== undefined && normalizeName(olds.name) !== normalizeName(news.name)) ||
             olds.type !== news.type ||
             olds.setIdentifier !== news.setIdentifier
           ) {
@@ -616,11 +638,7 @@ export const RecordProvider = () =>
           const hostedZoneId = output?.hostedZoneId ?? olds?.hostedZoneId;
           const name = output?.name ?? olds?.name;
           const type = output?.type ?? olds?.type;
-          if (
-            hostedZoneId === undefined ||
-            name === undefined ||
-            type === undefined
-          ) {
+          if (hostedZoneId === undefined || name === undefined || type === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
             // — without the record's identity we can't look it up. Report
             // "not found" so the engine re-drives the create (the UPSERT in
@@ -639,25 +657,31 @@ export const RecordProvider = () =>
 
           return toAttrs(recordSet, hostedZoneId);
         }),
-        reconcile: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          // Resolve the zone: explicit prop, else the zone this resource
+          // already resolved to (stable across reconciles), else infer the
+          // most specific public zone containing the record name.
+          const hostedZoneId = yield* resolveHostedZoneId(
+            news.hostedZoneId ?? output?.hostedZoneId,
+            news.name,
+          );
+
           // Route 53 `changeResourceRecordSets` with `UPSERT` is naturally
           // reconciler-friendly: it creates the record if missing and
           // overwrites it if present. There's no separate ensure/sync split
           // — one call converges to the desired record set.
-          yield* upsertRecord(news);
+          yield* upsertRecord(hostedZoneId, news);
 
           // Re-read so the returned attributes reflect the actual current
           // record (including server-applied defaults).
-          const recordSet = yield* findRecord(news.hostedZoneId, news);
+          const recordSet = yield* findRecord(hostedZoneId, news);
 
           if (!recordSet) {
-            return yield* Effect.die(
-              new Error("Route53 record was not found after upsert"),
-            );
+            return yield* Effect.die(new Error("Route53 record was not found after upsert"));
           }
 
           yield* session.note(`${news.type} ${normalizeName(news.name)}`);
-          return toAttrs(recordSet, news.hostedZoneId);
+          return toAttrs(recordSet, hostedZoneId);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* route53
@@ -692,9 +716,7 @@ export const RecordProvider = () =>
               },
             })
             .pipe(
-              Effect.flatMap((response) =>
-                waitForChange(response.ChangeInfo.Id),
-              ),
+              Effect.flatMap((response) => waitForChange(response.ChangeInfo.Id)),
               Effect.catchTag("NoSuchHostedZone", () => Effect.void),
               Effect.catchTag("InvalidChangeBatch", () => Effect.void),
             );

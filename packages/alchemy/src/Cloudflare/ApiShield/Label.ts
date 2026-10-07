@@ -2,7 +2,6 @@ import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -61,13 +60,7 @@ export interface LabelAttributes {
 export const isLabel = (value: unknown): value is Label =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export type Label = Resource<
-  TypeId,
-  LabelProps,
-  LabelAttributes,
-  never,
-  Providers
->;
+export type Label = Resource<TypeId, LabelProps, LabelAttributes, never, Providers>;
 
 /**
  * A Cloudflare API Shield user label — a zone-scoped tag that can be
@@ -78,11 +71,8 @@ export type Label = Resource<
  * characters), so renaming triggers a replacement; only the `description`
  * is mutable in place. Deleting a label detaches it from any operations
  * server-side.
- * @resource
- * @product API Shield
- * @category Application Security
- * @section Creating a Label
- * @example Label with a generated name
+ * ### Creating a Label
+ * **Example:** Label with a generated name
  * ```typescript
  * const label = yield* Cloudflare.ApiShield.Label("TeamPayments", {
  *   zoneId: zone.zoneId,
@@ -90,7 +80,7 @@ export type Label = Resource<
  * });
  * ```
  *
- * @example Label with an explicit name
+ * **Example:** Label with an explicit name
  * ```typescript
  * yield* Cloudflare.ApiShield.Label("Pii", {
  *   zoneId: zone.zoneId,
@@ -100,6 +90,10 @@ export type Label = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-labels/
+ *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  */
 export const Label = Resource<Label>(TypeId);
 
@@ -120,9 +114,7 @@ export const LabelProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((label) =>
-                  toAttributes(label, zone.id),
-                ),
+                (page.result ?? []).map((label) => toAttributes(label, zone.id)),
               ),
             ),
             // A zone may genuinely vanish mid-enumeration: a concurrent
@@ -132,9 +124,7 @@ export const LabelProvider = () =>
             // code-10000 "Authentication error" blips under concurrency are
             // retried globally by the Cloudflare retry policy, so they never
             // reach here as a real failure.)
-            Effect.catchTag(["ZonePurged", "InvalidRoute", "NotFound"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["ZonePurged", "InvalidRoute", "NotFound"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -148,16 +138,15 @@ export const LabelProvider = () =>
       // The name is the label's identity — compare the resolved physical
       // names (an omitted name resolves deterministically from the id).
       const oldName = output?.name ?? (yield* createLabelName(id, o.name));
-      const newName = yield* createLabelName(id, n.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = n.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -265,10 +254,7 @@ const createLabelName = (id: string, name: string | undefined) =>
     );
   });
 
-const toAttributes = (
-  label: ObservedLabel,
-  zoneId: string,
-): LabelAttributes => ({
+const toAttributes = (label: ObservedLabel, zoneId: string): LabelAttributes => ({
   zoneId,
   name: label.name,
   description: label.description,

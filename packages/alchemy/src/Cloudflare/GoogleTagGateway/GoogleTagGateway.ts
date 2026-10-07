@@ -1,7 +1,6 @@
 import * as googleTagGateway from "@distilled.cloud/cloudflare/google-tag-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -81,13 +80,7 @@ export type Attributes = Config & {
   initialConfig: Config | undefined;
 };
 
-export type GoogleTagGateway = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type GoogleTagGateway = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * Google Tag Gateway configuration for a Cloudflare zone
@@ -100,11 +93,8 @@ export type GoogleTagGateway = Resource<
  * idempotent upsert. Destroy restores the configuration the zone had before
  * Alchemy first managed it (or disables the gateway when the zone had never
  * configured it).
- * @resource
- * @product Google Tag Gateway
- * @category Performance & Reliability
- * @section Managing the gateway
- * @example Enable Google Tag Gateway on a zone
+ * ### Managing the gateway
+ * **Example:** Enable Google Tag Gateway on a zone
  * ```typescript
  * const gateway = yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("Analytics", {
  *   zone: "example.com",
@@ -115,7 +105,7 @@ export type GoogleTagGateway = Resource<
  * });
  * ```
  *
- * @example Proxy a Google Tag Manager container without auto-installing the tag
+ * **Example:** Proxy a Google Tag Manager container without auto-installing the tag
  * ```typescript
  * const gateway = yield* Cloudflare.GoogleTagGateway.GoogleTagGateway("Gtm", {
  *   zone: zone.zoneId,
@@ -128,6 +118,10 @@ export type GoogleTagGateway = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/google-tag-gateway/
+ *
+ * @resource
+ * @product Google Tag Gateway
+ * @category Performance & Reliability
  */
 export const GoogleTagGateway = Resource<GoogleTagGateway>(TypeId, {
   aliases: ["Cloudflare.GoogleTagGateway"],
@@ -167,9 +161,7 @@ export const GoogleTagGatewayProvider = () =>
             }),
             // Zone deleted out-of-band, or the scoped token can't see this
             // zone — skip it rather than failing the whole enumeration.
-            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
@@ -191,8 +183,7 @@ export const GoogleTagGatewayProvider = () =>
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
         // before upstream Outputs resolved — report "not found" then.
-        output?.zoneId ??
-        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
+        output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* googleTagGateway.getConfig({ zoneId }).pipe(
         // Zone deleted out-of-band — the config is gone with it.
@@ -203,8 +194,7 @@ export const GoogleTagGatewayProvider = () =>
       // The config is a zone singleton with no ownership tags possible, so
       // a cold read adopts freely (never `Unowned`). The observed config at
       // adoption time becomes the `initialConfig` restored on destroy.
-      const initialConfig =
-        output !== undefined ? output.initialConfig : toConfig(observed);
+      const initialConfig = output !== undefined ? output.initialConfig : toConfig(observed);
       return { zoneId, ...toConfig(observed), initialConfig };
     }),
 
@@ -219,8 +209,7 @@ export const GoogleTagGatewayProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed config is
       //    the zone's original.
-      const initialConfig =
-        output !== undefined ? output.initialConfig : observed;
+      const initialConfig = output !== undefined ? output.initialConfig : observed;
 
       // 3. Sync — PUT is a full replace; skip the call on no-op.
       const desired: Config = {

@@ -4,7 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { collectPages, retryOrganizations } from "./common.ts";
+import { collectPages, retryOrganizations, unredact } from "./common.ts";
 
 export interface DelegatedAdministratorProps {
   /**
@@ -21,11 +21,29 @@ export interface DelegatedAdministrator extends Resource<
   "AWS.Organizations.DelegatedAdministrator",
   DelegatedAdministratorProps,
   {
+    /**
+     * 12-digit ID of the delegated administrator account.
+     */
     accountId: string;
+    /**
+     * ARN of the delegated administrator account.
+     */
     accountArn: string | undefined;
-    accountName: organizations.DelegatedAdministrator["Name"] | undefined;
-    accountEmail: organizations.DelegatedAdministrator["Email"] | undefined;
+    /**
+     * Friendly name of the delegated administrator account.
+     */
+    accountName: string | undefined;
+    /**
+     * Email address of the delegated administrator account.
+     */
+    accountEmail: string | undefined;
+    /**
+     * Service principal delegated to the account.
+     */
     servicePrincipal: string;
+    /**
+     * When the delegation was enabled.
+     */
     delegationEnabledDate: Date | undefined;
   },
   never,
@@ -33,7 +51,32 @@ export interface DelegatedAdministrator extends Resource<
 > {}
 
 /**
- * Registers a delegated administrator account for a trusted AWS service.
+ * Registers a member {@link Account} as the delegated administrator for a
+ * trusted AWS service, letting that account manage the service org-wide
+ * instead of the management account.
+ *
+ * Requires trusted access for the same service principal (see
+ * {@link TrustedServiceAccess}). Existence-only resource: changing
+ * `accountId` or `servicePrincipal` replaces the registration.
+ * ### Delegating Administration
+ * **Example:** Delegate GuardDuty to a Security Account
+ * ```typescript
+ * const security = yield* Account("Security", {
+ *   name: "security",
+ *   email: "aws-security@example.com",
+ *   parentId: root.rootId,
+ * });
+ *
+ * const guardDutyAccess = yield* TrustedServiceAccess("GuardDutyAccess", {
+ *   servicePrincipal: "guardduty.amazonaws.com",
+ * });
+ *
+ * yield* DelegatedAdministrator("GuardDutyAdmin", {
+ *   accountId: security.accountId,
+ *   servicePrincipal: guardDutyAccess.servicePrincipal,
+ * });
+ * ```
+ *
  * @resource
  */
 export const DelegatedAdministrator = Resource<DelegatedAdministrator>(
@@ -57,8 +100,7 @@ export const DelegatedAdministratorProvider = () =>
         }),
         read: Effect.fn(function* ({ olds, output }) {
           const accountId = output?.accountId ?? olds?.accountId;
-          const servicePrincipal =
-            output?.servicePrincipal ?? olds?.servicePrincipal;
+          const servicePrincipal = output?.servicePrincipal ?? olds?.servicePrincipal;
           if (accountId === undefined || servicePrincipal === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
             // (they deserialize as `undefined`) — report "not found" so the
@@ -77,8 +119,7 @@ export const DelegatedAdministratorProvider = () =>
             // Organizations enumeration isn't available here — return [].
             const admins = yield* retryOrganizations(
               collectPages(
-                (NextToken) =>
-                  organizations.listDelegatedAdministrators({ NextToken }),
+                (NextToken) => organizations.listDelegatedAdministrators({ NextToken }),
                 (page) => page.DelegatedAdministrators,
               ),
             ).pipe(
@@ -136,12 +177,11 @@ export const DelegatedAdministratorProvider = () =>
                           ({
                             accountId: admin.Id,
                             accountArn: admin.Arn,
-                            accountName: admin.Name,
-                            accountEmail: admin.Email,
+                            accountName: unredact(admin.Name),
+                            accountEmail: unredact(admin.Email),
                             servicePrincipal: service.ServicePrincipal,
                             delegationEnabledDate:
-                              service.DelegationEnabledDate ??
-                              admin.DelegationEnabledDate,
+                              service.DelegationEnabledDate ?? admin.DelegationEnabledDate,
                           }) satisfies DelegatedAdministrator["Attributes"],
                       ),
                   ),
@@ -167,12 +207,7 @@ export const DelegatedAdministratorProvider = () =>
                   AccountId: news.accountId,
                   ServicePrincipal: news.servicePrincipal,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "AccountAlreadyRegisteredException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("AccountAlreadyRegisteredException", () => Effect.void)),
             );
             state = yield* readDelegatedAdministrator(news);
             if (!state) {
@@ -238,19 +273,16 @@ const readDelegatedAdministrator = Effect.fn(function* ({
   const service = delegatedServices.find(
     (candidate) => candidate.ServicePrincipal === servicePrincipal,
   );
-  const account = delegatedAdmins.find(
-    (candidate) => candidate.Id === accountId,
-  );
+  const account = delegatedAdmins.find((candidate) => candidate.Id === accountId);
 
   return service && account
     ? ({
         accountId,
         accountArn: account.Arn,
-        accountName: account.Name,
-        accountEmail: account.Email,
+        accountName: unredact(account.Name),
+        accountEmail: unredact(account.Email),
         servicePrincipal,
-        delegationEnabledDate:
-          service.DelegationEnabledDate ?? account.DelegationEnabledDate,
+        delegationEnabledDate: service.DelegationEnabledDate ?? account.DelegationEnabledDate,
       } satisfies DelegatedAdministrator["Attributes"])
     : undefined;
 });

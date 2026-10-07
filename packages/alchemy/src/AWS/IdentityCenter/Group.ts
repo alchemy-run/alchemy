@@ -4,11 +4,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  listGroups,
-  resolveIdentityStoreId,
-  retryIdentityCenter,
-} from "./common.ts";
+import { listGroups, resolveIdentityStoreId, retryIdentityCenter, unredact } from "./common.ts";
 
 export interface GroupProps {
   /**
@@ -34,11 +30,17 @@ export interface Group extends Resource<
   "AWS.IdentityCenter.Group",
   GroupProps,
   {
+    /** The identity store containing the group. */
     identityStoreId: string;
+    /** The unique ID of the group. */
     groupId: string;
+    /** The display name of the group. */
     displayName: string | undefined;
+    /** The description of the group. */
     description: string | undefined;
+    /** When the group was created. */
     createdAt: Date | undefined;
+    /** When the group was last updated. */
     updatedAt: Date | undefined;
   },
   never,
@@ -47,15 +49,16 @@ export interface Group extends Resource<
 
 /**
  * A group in the IAM Identity Center identity store.
- * @resource
- * @section Creating Groups
- * @example Platform Engineers
+ * ### Creating Groups
+ * **Example:** Platform Engineers
  * ```typescript
  * const engineers = yield* Group("PlatformEngineers", {
  *   displayName: "platform-engineers",
  *   description: "Platform engineering team",
  * });
  * ```
+ *
+ * @resource
  */
 export const Group = Resource<Group>("AWS.IdentityCenter.Group");
 
@@ -82,9 +85,7 @@ export const GroupProvider = () =>
                   : Effect.succeed(undefined),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is Group["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Group["Attributes"] => row !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
@@ -104,16 +105,13 @@ export const GroupProvider = () =>
           return yield* readGroupByDisplayName(olds);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          const identityStoreId =
-            output?.identityStoreId ?? (yield* resolveIdentityStoreId(news));
+          const identityStoreId = output?.identityStoreId ?? (yield* resolveIdentityStoreId(news));
 
           // Observe — find the group by id (if we already have one) or
           // by display name. We never trust `output.groupId` blindly: a
           // group deleted out of band shows up as missing here.
           let existing =
-            (output?.groupId
-              ? yield* readGroupById(identityStoreId, output.groupId)
-              : undefined) ??
+            (output?.groupId ? yield* readGroupById(identityStoreId, output.groupId) : undefined) ??
             (yield* readGroupByDisplayName({
               ...news,
               identityStoreId,
@@ -155,16 +153,18 @@ export const GroupProvider = () =>
             AttributePath: string;
             AttributeValue: string;
           }[] = [];
+          // Attribute paths are SCIM-style camelCase (`displayName`,
+          // `description`) per the UpdateGroup API.
           if (existing.displayName !== news.displayName) {
             operations.push({
-              AttributePath: "DisplayName",
+              AttributePath: "displayName",
               AttributeValue: news.displayName,
             });
           }
           const desiredDescription = news.description ?? "";
           if ((existing.description ?? "") !== desiredDescription) {
             operations.push({
-              AttributePath: "Description",
+              AttributePath: "description",
               AttributeValue: desiredDescription,
             });
           }
@@ -178,10 +178,7 @@ export const GroupProvider = () =>
               }),
             );
 
-            const updated = yield* readGroupById(
-              existing.identityStoreId,
-              existing.groupId,
-            );
+            const updated = yield* readGroupById(existing.identityStoreId, existing.groupId);
             if (!updated) {
               return yield* Effect.fail(
                 new Error(`group '${existing.groupId}' not found after update`),
@@ -201,30 +198,21 @@ export const GroupProvider = () =>
                 IdentityStoreId: output.identityStoreId,
                 GroupId: output.groupId,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       };
     }),
   );
 
-const readGroupById = Effect.fn(function* (
-  identityStoreId: string,
-  groupId: string,
-) {
+const readGroupById = Effect.fn(function* (identityStoreId: string, groupId: string) {
   const response = yield* retryIdentityCenter(
     identitystore
       .describeGroup({
         IdentityStoreId: identityStoreId,
         GroupId: groupId,
       })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      ),
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
   );
 
   if (!response?.GroupId || !response.IdentityStoreId) {
@@ -234,8 +222,10 @@ const readGroupById = Effect.fn(function* (
   return {
     identityStoreId: response.IdentityStoreId,
     groupId: response.GroupId,
-    displayName: response.DisplayName as string | undefined,
-    description: response.Description as string | undefined,
+    // Sensitive-trait fields decode to Redacted at runtime — unwrap before
+    // persisting into Attributes / diffing against desired props.
+    displayName: unredact(response.DisplayName),
+    description: unredact(response.Description),
     createdAt: response.CreatedAt,
     updatedAt: response.UpdatedAt,
   } satisfies Group["Attributes"];
@@ -251,8 +241,6 @@ const readGroupByDisplayName = Effect.fn(function* ({
     instanceArn,
   });
   const groups = yield* listGroups(resolvedIdentityStoreId);
-  const match = groups.find((group) => group.DisplayName === displayName);
-  return match?.GroupId
-    ? yield* readGroupById(resolvedIdentityStoreId, match.GroupId)
-    : undefined;
+  const match = groups.find((group) => unredact(group.DisplayName) === displayName);
+  return match?.GroupId ? yield* readGroupById(resolvedIdentityStoreId, match.GroupId) : undefined;
 });

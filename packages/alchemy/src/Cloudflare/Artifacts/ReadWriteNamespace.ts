@@ -9,16 +9,17 @@ import type * as Artifacts from "./Namespace.ts";
  * obtain the Effect-native {@link ReadWriteNamespaceClient} (read + write:
  * create / list / get / delete / import).
  *
- * @binding
- * @product Artifacts
- * @category Developer Platform
- * @example Using Artifacts inside a Worker
+ * **Example:** Using Artifacts inside a Worker
  * ```typescript
  * const artifacts = yield* Cloudflare.Artifacts.ReadWriteNamespace(Repos);
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });
  * ```
+ *
+ * @binding
+ * @product Artifacts
+ * @category Developer Platform
  */
 export interface ReadWriteNamespace extends Binding.Service<
   ReadWriteNamespace,
@@ -75,10 +76,7 @@ export interface RepoClient {
   ): Effect.Effect<ArtifactsCreateTokenResult, ArtifactsError>;
   listTokens(): Effect.Effect<ArtifactsTokenListResult, ArtifactsError>;
   revokeToken(tokenOrId: string): Effect.Effect<boolean, ArtifactsError>;
-  fork(
-    name: string,
-    opts?: ForkOptions,
-  ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError>;
+  fork(name: string, opts?: ForkOptions): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError>;
 }
 
 /**
@@ -89,9 +87,7 @@ export interface ReadNamespaceClient {
   raw: Effect.Effect<Artifacts, never, RuntimeContext>;
   /** Look up an existing repo by name. Fails with `ArtifactsError` if missing. */
   get(name: string): Effect.Effect<RepoClient, ArtifactsError, RuntimeContext>;
-  list(
-    opts?: ListOptions,
-  ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
+  list(opts?: ListOptions): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
 }
 
 /**
@@ -113,12 +109,12 @@ export interface WriteNamespaceClient {
 /**
  * Full read + write client for a Cloudflare Artifacts namespace binding.
  */
-export interface ReadWriteNamespaceClient
-  extends ReadNamespaceClient, WriteNamespaceClient {}
+export interface ReadWriteNamespaceClient extends ReadNamespaceClient, WriteNamespaceClient {}
 
 /**
  * Bind a Cloudflare Artifacts namespace with read-only access
  * (`Cloudflare.Artifacts.ReadNamespace(Repos)`): `get` / `list` / `raw`.
+ *
  * @binding
  * @product Artifacts
  * @category Developer Platform
@@ -128,13 +124,12 @@ export interface ReadNamespace extends Binding.Service<
   "Cloudflare.Artifacts.ReadNamespace",
   (namespace: Artifacts.Namespace) => Effect.Effect<ReadNamespaceClient>
 > {}
-export const ReadNamespace = Binding.Service<ReadNamespace>(
-  "Cloudflare.Artifacts.ReadNamespace",
-);
+export const ReadNamespace = Binding.Service<ReadNamespace>("Cloudflare.Artifacts.ReadNamespace");
 
 /**
  * Bind a Cloudflare Artifacts namespace with write access
  * (`Cloudflare.Artifacts.WriteNamespace(Repos)`): `create` / `delete` / `import`.
+ *
  * @binding
  * @product Artifacts
  * @category Developer Platform

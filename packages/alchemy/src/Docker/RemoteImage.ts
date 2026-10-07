@@ -2,12 +2,12 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker } from "./Docker.ts";
+import { Docker, dockerContextName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
   parseCreatedAt,
-  parseRepoDigest,
+  publishedRepoDigest,
   repositoryFromImageRef,
   withRegistryHost,
 } from "./Registry.ts";
@@ -44,6 +44,8 @@ export interface RemoteImageProps {
    * @default false
    */
   skipPush?: boolean;
+  /** Docker context name or context resource. */
+  context?: Docker.ContextRef;
 }
 
 export interface RemoteImage extends Resource<
@@ -77,10 +79,9 @@ export interface RemoteImage extends Resource<
  * to re-tag the pulled image, and `registry` to push it (mirroring it from a
  * source registry into your own, for example).
  *
- * @resource
  *
- * @section Pulling Images
- * @example Pull nginx
+ * ### Pulling Images
+ * **Example:** Pull nginx
  * ```typescript
  * const nginx = yield* Docker.RemoteImage("nginx", {
  *   name: "nginx",
@@ -88,7 +89,7 @@ export interface RemoteImage extends Resource<
  * });
  * ```
  *
- * @example Reuse an existing daemon tag
+ * **Example:** Reuse an existing daemon tag
  * ```typescript
  * const postgres = yield* Docker.RemoteImage("postgres", {
  *   name: "postgres",
@@ -97,8 +98,8 @@ export interface RemoteImage extends Resource<
  * });
  * ```
  *
- * @section Re-tagging and Pushing
- * @example Mirror a public image into your registry
+ * ### Re-tagging and Pushing
+ * **Example:** Mirror a public image into your registry
  * ```typescript
  * const mirrored = yield* Docker.RemoteImage("nginx-mirror", {
  *   name: "nginx",
@@ -108,10 +109,23 @@ export interface RemoteImage extends Resource<
  *   registry: {
  *     server: "ghcr.io",
  *     username: "octocat",
- *     password: Config.redacted("GITHUB_TOKEN"),
+ *     password: Config.Redacted("GITHUB_TOKEN"),
  *   },
  * });
  * ```
+ *
+ * ### Docker Context
+ * **Example:** Pull through a named Docker context
+ * ```typescript
+ * const nginx = yield* Docker.RemoteImage("nginx", {
+ *   name: "nginx",
+ *   tag: "alpine",
+ *   context: "remote-build",
+ * });
+ * ```
+ *
+ * @resource
+ * @product Image
  */
 export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 
@@ -124,8 +138,9 @@ export const RemoteImageProvider = () =>
       return RemoteImage.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ olds, output }) {
+          const context = dockerContextName(olds.context);
           const ref = output?.imageRef ?? targetImageRef(olds);
-          return yield* docker.image.inspect(ref).pipe(
+          return yield* docker.image.inspect(ref, context).pipe(
             Effect.map((image) => ({
               imageRef: ref,
               imageId: image.Id,
@@ -134,16 +149,13 @@ export const RemoteImageProvider = () =>
               tag: output?.tag ?? targetTag(olds),
               repoDigest: output?.repoDigest,
             })),
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
           );
         }),
-        diff: Effect.fn(function* ({ output, news }) {
+        diff: Effect.fn(function* ({ output, news, olds }) {
           if (!isResolved(news)) return undefined;
           if (
+            dockerContextName(olds.context) !== dockerContextName(news.context) ||
             !output ||
             news.alwaysPull !== false ||
             output.imageRef !== targetImageRef(news)
@@ -152,33 +164,28 @@ export const RemoteImageProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
+          const context = dockerContextName(news.context);
           const sourceRef = remoteImageRef(news);
           yield* session.note(`Pulling Docker image: ${sourceRef}`);
-          yield* docker.image.pull(sourceRef, news.platform);
+          yield* docker.image.pull(sourceRef, news.platform, context);
 
           const finalRef = targetImageRef(news);
           if (finalRef !== sourceRef) {
-            yield* session.note(
-              `Tagging Docker image: ${sourceRef} -> ${finalRef}`,
-            );
-            yield* docker.image.tag(sourceRef, finalRef);
+            yield* session.note(`Tagging Docker image: ${sourceRef} -> ${finalRef}`);
+            yield* docker.image.tag(sourceRef, finalRef, context);
           }
 
-          let repoDigest: string | undefined;
+          let pushed: { stdout: string; stderr: string } | undefined;
           if (news.registry && !news.skipPush) {
-            yield* session.note(
-              `Pushing image to registry "${news.registry.server}"`,
-            );
-            repoDigest = yield* docker.image
-              .push(finalRef, news.registry)
-              .pipe(
-                Effect.map((result) =>
-                  parseRepoDigest(finalRef, result.stdout),
-                ),
-              );
+            yield* session.note(`Pushing image to registry "${news.registry.server}"`);
+            pushed = yield* docker.image.push(finalRef, news.registry, undefined, context);
           }
 
-          const inspected = yield* docker.image.inspect(finalRef);
+          const inspected = yield* docker.image.inspect(finalRef, context);
+          const repoDigest =
+            pushed === undefined
+              ? undefined
+              : publishedRepoDigest(finalRef, pushed, inspected.RepoDigests);
           return {
             imageRef: finalRef,
             imageId: inspected.Id,
@@ -200,8 +207,7 @@ export const RemoteImageProvider = () =>
 const remoteImageRef = (props: RemoteImageProps): string =>
   `${props.name}:${props.tag ?? "latest"}`;
 
-const targetTag = (props: RemoteImageProps): string =>
-  props.targetTag ?? props.tag ?? "latest";
+const targetTag = (props: RemoteImageProps): string => props.targetTag ?? props.tag ?? "latest";
 
 /**
  * The final reference after re-tagging and registry-host prefixing. Equals the
@@ -209,7 +215,5 @@ const targetTag = (props: RemoteImageProps): string =>
  */
 const targetImageRef = (props: RemoteImageProps): string => {
   const local = `${props.targetName ?? props.name}:${targetTag(props)}`;
-  return props.registry && !props.skipPush
-    ? withRegistryHost(local, props.registry)
-    : local;
+  return props.registry && !props.skipPush ? withRegistryHost(local, props.registry) : local;
 };

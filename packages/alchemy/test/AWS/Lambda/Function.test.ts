@@ -1,21 +1,28 @@
-import * as AWS from "@/AWS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { fileURLToPath } from "node:url";
+import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
-const timeoutHandlerPath = fileURLToPath(
-  new URL("./timeout-handler.ts", import.meta.url),
-);
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
 );
+const lockfilePinnedHandlerPath = (format: "npm" | "bun" | "pnpm" | "yarn") =>
+  fileURLToPath(new URL(`./fixtures/lockfile-pinning/${format}/handler.ts`, import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,9 +30,25 @@ test.provider(
   "create, update, delete function",
   (stack) =>
     Effect.gen(function* () {
-      const { functionName, functionUrl } = yield* stack.deploy(
-        TestFunction.pipe(Effect.provide(TestFunctionLive)),
-      );
+      yield* stack.destroy();
+
+      const deploy = (marker: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fn = yield* TestFunction;
+            yield* fn.bind`ReadinessMarker`({
+              env: { READINESS_MARKER: marker },
+            });
+            return fn;
+          }).pipe(Effect.provide(TestFunctionLive)),
+        );
+
+      const { functionName, functionUrl, roleName } = yield* deploy("created");
+      yield* assertFunctionReady(functionName, "created");
+
+      const updated = yield* deploy("updated");
+      expect(updated.functionName).toBe(functionName);
+      yield* assertFunctionReady(updated.functionName, "updated");
 
       expect(functionUrl).toBeTruthy();
 
@@ -33,48 +56,114 @@ test.provider(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Function URL returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`Function URL returned ${response.status}`)),
         ),
         Effect.tapError((error) => Effect.logError(error)),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
 
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("Hello, world!");
 
-      const invokePolicy = yield* getPolicyStatement(
-        functionName,
-        "FunctionURLAllowPublicInvoke",
-      );
+      const invokePolicy = yield* getPolicyStatement(functionName, "FunctionURLAllowPublicInvoke");
       expect(invokePolicy.Condition).toEqual({
         Bool: {
           "lambda:InvokedViaFunctionUrl": "true",
         },
       });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(functionName);
+      yield* assertRoleDeleted(roleName);
+
+      const recreated = yield* deploy("recreated");
+      yield* assertFunctionReady(recreated.functionName, "recreated");
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(recreated.functionName);
+      yield* assertRoleDeleted(recreated.roleName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "Effect-native function updates when its source changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      // Work on a temp copy so editing the source never touches the
+      // checked-in fixture. The copy lives under packages/alchemy/.tmp so its
+      // imports resolve exactly like the original's.
+      const fixtureDir = yield* cloneFixture(
+        yield* path.fromFileUrl(new URL("./fixtures/source-change", import.meta.url)),
+        {
+          prefix: "alchemy-lambda-source-change-",
+          tempRoot: yield* path.fromFileUrl(new URL("../../../.tmp", import.meta.url)),
+        },
+      );
+      const entry = path.join(fixtureDir, "function.ts");
+      const source = yield* fs.readFileString(entry);
+      const fixture = yield* Effect.promise(
+        () => import(entry) as Promise<typeof import("./fixtures/source-change/function.ts")>,
+      );
+      const declaration = fixture.SourceChangeFunction.pipe(
+        Effect.provide(fixture.SourceChangeFunctionLive),
+      );
+
+      const created = yield* Effect.gen(function* () {
+        const created = yield* stack.deploy(declaration);
+        expect(yield* invokeHttpFunction(created.functionName)).toBe("source-v1");
+
+        const unchanged = yield* stack.plan(declaration);
+        expect(unchanged.resources.SourceChangeFunction).toMatchObject({
+          action: "noop",
+        });
+
+        yield* fs.writeFileString(entry, source.replace('"source-v1"', '"source-v2"'));
+
+        const changed = yield* stack.plan(declaration);
+        expect(changed.resources.SourceChangeFunction).toMatchObject({
+          action: "update",
+        });
+
+        const updated = yield* stack.deploy(declaration);
+        expect(updated.functionName).toBe(created.functionName);
+        expect(yield* invokeHttpFunction(updated.functionName)).toBe("source-v2");
+        return created;
+      }).pipe(Effect.ensuring(fs.remove(fixtureDir, { recursive: true }).pipe(Effect.ignore)));
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(created.functionName);
+      yield* assertRoleDeleted(created.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
+  },
 );
 
 test.provider(
   "applies and updates the Lambda timeout",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const initial = yield* stack.deploy(
         AWS.Lambda.Function("TimeoutFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           timeout: Duration.seconds(15),
         }),
       );
@@ -89,7 +178,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           timeout: Duration.seconds(45),
         }),
       );
@@ -102,30 +191,73 @@ test.provider(
           () => new Error("Timeout update has not propagated yet"),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
       expect(updatedConfig.Configuration?.Timeout).toBe(45);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 360_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
+);
+
+// `logging.retention` makes Alchemy create the `/aws/lambda/<name>` log
+// group up front (Lambda would only create it on first invoke, with no
+// expiry) and keep its retention policy in sync; destroy reaps the group.
+test.provider(
+  "applies, updates, and clears log retention",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployWith = (retention: "10 days" | "forever") =>
+        stack.deploy(
+          AWS.Lambda.Function("RetentionFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+            logging: { retention },
+          }),
+        );
+      const describeGroup = (name: string) =>
+        Logs.describeLogGroups({ logGroupNamePrefix: name }).pipe(
+          Effect.map((r) => (r.logGroups ?? []).find((g) => g.logGroupName === name)),
+        );
+
+      // Never invoked: the group exists only because Alchemy created it.
+      const fn = yield* deployWith("10 days");
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      expect((yield* describeGroup(logGroupName))?.retentionInDays).toBe(14);
+
+      yield* deployWith("forever");
+      const cleared = yield* describeGroup(logGroupName);
+      expect(cleared).toBeDefined();
+      expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      expect(yield* describeGroup(logGroupName)).toBeUndefined();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:logs", "live"], timeout: 360_000 },
 );
 
 test.provider(
   "installs explicit external packages into the deployment artifact",
   (stack) =>
     Effect.gen(function* () {
-      const { functionUrl } = yield* stack.deploy(
+      yield* stack.destroy();
+
+      const { functionName, functionUrl } = yield* stack.deploy(
         AWS.Lambda.Function("InstallFn", {
           main: externalPackageHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: true,
+          functionUrl: true,
           build: {
             install: ["uuid"],
           },
@@ -136,15 +268,10 @@ test.provider(
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Function URL returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`Function URL returned ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
 
@@ -152,11 +279,77 @@ test.provider(
       expect(body.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 360_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
+);
+
+test.provider(
+  "installs external packages at the versions pinned by each lockfile format",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // Each fixture project declares make-dir@^3.0.0 but its lockfile pins
+      // make-dir@3.0.0 and its transitive semver@6.3.0 — both below the latest
+      // versions satisfying their ranges (3.1.0 / 6.3.1). Free npm resolution
+      // installs the newer versions, so the assertions below fail without
+      // lockfile pinning. Legacy binary bun.lockb has no live fixture because
+      // current Bun can only write the text format; its print-and-parse path
+      // is covered by the yarn-v1 unit fixtures.
+      const formats = ["npm", "bun", "pnpm", "yarn"] as const;
+      const pinnedFunction = (format: (typeof formats)[number]) =>
+        AWS.Lambda.Function(`LockfilePinnedFn-${format}`, {
+          main: lockfilePinnedHandlerPath(format),
+          handler: "handler",
+          isExternal: true,
+          functionUrl: true,
+          build: {
+            install: ["make-dir"],
+          },
+        });
+      const deployed = yield* stack.deploy(
+        Effect.all({
+          npm: pinnedFunction("npm"),
+          bun: pinnedFunction("bun"),
+          pnpm: pinnedFunction("pnpm"),
+          yarn: pinnedFunction("yarn"),
+        }),
+      );
+
+      for (const format of formats) {
+        const { functionUrl } = deployed[format];
+        const response = yield* HttpClient.get(functionUrl!).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(new Error(`Function URL returned ${response.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+          }),
+        );
+
+        const body = JSON.parse(yield* response.text) as {
+          makeDir: string;
+          semver: string;
+        };
+        expect(body.makeDir, format).toBe("3.0.0");
+        expect(body.semver, format).toBe("6.3.0");
+      }
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.npm.functionName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
 test.provider(
@@ -170,7 +363,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           architecture: "arm64",
         }),
       );
@@ -182,17 +375,20 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
       expect(updated.functionName).toBe(initial.functionName);
       yield* waitForArchitecture(updated.functionName, "x86_64");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 360_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
 test.provider(
@@ -206,7 +402,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
@@ -218,7 +414,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           reservedConcurrentExecutions: 0,
         }),
       );
@@ -232,18 +428,21 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
       expect(removed.functionName).toBe(initial.functionName);
       expect(removed.reservedConcurrentExecutions).toBeUndefined();
       yield* waitForReservedConcurrency(removed.functionName, undefined);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 360_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
@@ -261,33 +460,36 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
       const provider = yield* Provider.findProvider(AWS.Lambda.Function);
       const all = yield* provider.list();
 
-      expect(all.some((f) => f.functionName === deployed.functionName)).toBe(
-        true,
-      );
+      expect(all.some((f) => f.functionName === deployed.functionName)).toBe(true);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(deployed.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 180_000 },
 );
 
 test.provider(
   "updates function URL auth to AWS_IAM",
   (stack) =>
     Effect.gen(function* () {
+      yield* stack.destroy();
+
       const initial = yield* stack.deploy(
         AWS.Lambda.Function("IamUrlFn", {
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: true,
+          functionUrl: true,
         }),
       );
 
@@ -306,7 +508,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: {
+          functionUrl: {
             authType: "AWS_IAM",
             cors: {
               AllowHeaders: ["authorization", "content-type"],
@@ -323,10 +525,7 @@ test.provider(
       expect(updated.functionName).toBe(initial.functionName);
       expect(updated.functionUrl).toBeTruthy();
 
-      const config = yield* getFunctionUrlConfigWithAuth(
-        updated.functionName,
-        "AWS_IAM",
-      );
+      const config = yield* getFunctionUrlConfigWithAuth(updated.functionName, "AWS_IAM");
       expect(config.AuthType).toBe("AWS_IAM");
       expect(config.InvokeMode).toBe("RESPONSE_STREAM");
       expect(config.Cors).toEqual({
@@ -337,42 +536,98 @@ test.provider(
         MaxAge: 300,
       });
 
-      yield* waitForPolicyStatementAbsent(
-        updated.functionName,
-        "FunctionURLAllowPublicAccess",
-      );
-      yield* waitForPolicyStatementAbsent(
-        updated.functionName,
-        "FunctionURLAllowPublicInvoke",
-      );
+      yield* waitForPolicyStatementAbsent(updated.functionName, "FunctionURLAllowPublicAccess");
+      yield* waitForPolicyStatementAbsent(updated.functionName, "FunctionURLAllowPublicInvoke");
 
       const response = yield* HttpClient.get(updated.functionUrl!).pipe(
         Effect.flatMap((response) =>
           response.status === 403
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`IAM Function URL returned ${response.status}`),
-              ),
+            : Effect.fail(new Error(`IAM Function URL returned ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
         }),
       );
       expect(response.status).toBe(403);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(initial.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 360_000 },
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
-const getPolicyStatement = Effect.fn(function* (
-  functionName: string,
-  statementId: string,
-) {
+const assertFunctionReady = Effect.fn(function* (functionName: string, marker: string) {
+  // Deploy must finish configuration propagation; these checks never retry.
+  const { Configuration } = yield* Lambda.getFunction({
+    FunctionName: functionName,
+  });
+  expect(Configuration?.State).toBe("Active");
+  expect(Configuration?.LastUpdateStatus).toBe("Successful");
+  const observed = Configuration?.Environment?.Variables?.READINESS_MARKER;
+  expect(Redacted.isRedacted(observed) ? Redacted.value(observed) : observed).toBe(marker);
+
+  expect(yield* invokeHttpFunction(functionName, "/readiness")).toBe(marker);
+});
+
+const invokeHttpFunction = Effect.fn(function* (functionName: string, path = "/") {
+  const response = yield* Lambda.invoke({
+    FunctionName: functionName,
+    Payload: JSON.stringify({
+      version: "2.0",
+      rawPath: path,
+      rawQueryString: "",
+      headers: { host: "localhost" },
+      requestContext: {
+        http: {
+          method: "GET",
+          path,
+          protocol: "HTTP/1.1",
+          sourceIp: "127.0.0.1",
+          userAgent: "alchemy-test",
+        },
+      },
+      isBase64Encoded: false,
+    }),
+  });
+  expect(response.FunctionError).toBeUndefined();
+  const payload = response.Payload
+    ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+    : "";
+  const body = yield* Effect.try(() => JSON.parse(payload));
+  expect(body.statusCode).toBe(200);
+  return body.body as string;
+});
+
+// Out-of-band proof that the trailing destroy actually removed the function
+// from the cloud (bounded retry to ride out delete propagation).
+const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
+  yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error(`Function ${functionName} still exists`))),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
+});
+
+// Function cleanup owns its generated execution role. Verify the role is not
+// stranded when deletion also waits for Lambda's asynchronous log flush.
+const assertRoleDeleted = Effect.fn(function* (roleName: string) {
+  yield* iam.getRole({ RoleName: roleName }).pipe(
+    Effect.flatMap(() => Effect.fail(new Error(`Role ${roleName} still exists`))),
+    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+    Effect.retry({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+});
+
+const getPolicyStatement = Effect.fn(function* (functionName: string, statementId: string) {
   return yield* findPolicyStatement(functionName, statementId).pipe(
     Effect.flatMap((statement) =>
       statement
@@ -401,10 +656,7 @@ const waitForPolicyStatementAbsent = Effect.fn(function* (
   );
 });
 
-const findPolicyStatement = Effect.fn(function* (
-  functionName: string,
-  statementId: string,
-) {
+const findPolicyStatement = Effect.fn(function* (functionName: string, statementId: string) {
   return yield* Lambda.getPolicy({ FunctionName: functionName }).pipe(
     Effect.flatMap(({ Policy }) =>
       Effect.try({
@@ -415,17 +667,12 @@ const findPolicyStatement = Effect.fn(function* (
               Condition?: unknown;
             }>;
           };
-          return policy.Statement?.find(
-            (statement) => statement.Sid === statementId,
-          );
+          return policy.Statement?.find((statement) => statement.Sid === statementId);
         },
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
+        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
       }),
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 });
 
@@ -454,9 +701,7 @@ const waitForReservedConcurrency = Effect.fn(function* (
     FunctionName: functionName,
   }).pipe(
     Effect.map((config) => config.ReservedConcurrentExecutions),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.filterOrFail(
       (actual) => actual === expected,
       () => new Error("Reserved concurrency update has not propagated yet"),

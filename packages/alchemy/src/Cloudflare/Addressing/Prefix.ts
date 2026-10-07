@@ -2,7 +2,6 @@ import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -70,13 +69,7 @@ export interface PrefixAttributes {
   modifiedAt: string | undefined;
 }
 
-export type Prefix = Resource<
-  TypeId,
-  PrefixProps,
-  PrefixAttributes,
-  never,
-  Providers
->;
+export type Prefix = Resource<TypeId, PrefixProps, PrefixAttributes, never, Providers>;
 
 /**
  * A BYOIP (Bring Your Own IP) prefix onboarded to Cloudflare's network.
@@ -88,11 +81,8 @@ export type Prefix = Resource<
  *
  * Only `description` is mutable; `cidr`, `asn`, and the LOA settings force
  * a replacement.
- * @resource
- * @product Addressing
- * @category Network
- * @section Creating a Prefix
- * @example Onboard a prefix with a pre-uploaded LOA
+ * ### Creating a Prefix
+ * **Example:** Onboard a prefix with a pre-uploaded LOA
  * ```typescript
  * const prefix = yield* Cloudflare.Addressing.Prefix("byoip", {
  *   cidr: "192.0.2.0/24",
@@ -102,7 +92,7 @@ export type Prefix = Resource<
  * });
  * ```
  *
- * @example Delegate LOA creation to Cloudflare
+ * **Example:** Delegate LOA creation to Cloudflare
  * ```typescript
  * const prefix = yield* Cloudflare.Addressing.Prefix("byoip", {
  *   cidr: "192.0.2.0/24",
@@ -111,8 +101,8 @@ export type Prefix = Resource<
  * });
  * ```
  *
- * @section Advertising the Prefix
- * @example Advertise via a BGP prefix
+ * ### Advertising the Prefix
+ * **Example:** Advertise via a BGP prefix
  * ```typescript
  * const bgp = yield* Cloudflare.Addressing.BgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
@@ -122,6 +112,10 @@ export type Prefix = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/byoip/
+ *
+ * @resource
+ * @product Addressing
+ * @category Network
  */
 export const Prefix = Resource<Prefix>(TypeId);
 
@@ -133,14 +127,7 @@ export const isPrefix = (value: unknown): value is Prefix =>
 
 export const PrefixProvider = () =>
   Provider.succeed(Prefix, {
-    stables: [
-      "prefixId",
-      "accountId",
-      "cidr",
-      "asn",
-      "ownershipValidationToken",
-      "createdAt",
-    ],
+    stables: ["prefixId", "accountId", "cidr", "asn", "ownershipValidationToken", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (olds === undefined) return undefined;
@@ -159,10 +146,7 @@ export const PrefixProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (
-        (news.delegateLoaCreation ?? false) !==
-        (olds.delegateLoaCreation ?? false)
-      ) {
+      if ((news.delegateLoaCreation ?? false) !== (olds.delegateLoaCreation ?? false)) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -204,9 +188,7 @@ export const PrefixProvider = () =>
 
       // 1. Observe — the prefix id on `output` is a hint; a missing prefix
       //    falls through to the by-CIDR lookup and then to create.
-      let observed = output?.prefixId
-        ? yield* getPrefix(acct, output.prefixId)
-        : undefined;
+      let observed = output?.prefixId ? yield* getPrefix(acct, output.prefixId) : undefined;
       if (!observed) {
         observed = yield* findByCidr(acct, news.cidr);
       }

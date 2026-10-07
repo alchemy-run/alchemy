@@ -2,7 +2,6 @@ import * as urlNormalization from "@distilled.cloud/cloudflare/url-normalization
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -69,13 +68,7 @@ export interface Attributes {
   type: string;
 }
 
-export type UrlNormalization = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type UrlNormalization = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * The URL normalization configuration of a Cloudflare zone
@@ -88,11 +81,8 @@ export type UrlNormalization = Resource<
  * singleton and PUTs the desired `{ scope, type }` only when the observed
  * configuration differs. Destroy issues the API's true reset operation
  * (DELETE), returning the zone to Cloudflare defaults.
- * @resource
- * @product URL Normalization
- * @category Rules & Configuration
- * @section Managing URL normalization
- * @example Normalize URLs sent to the origin too
+ * ### Managing URL normalization
+ * **Example:** Normalize URLs sent to the origin too
  * ```typescript
  * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
@@ -100,7 +90,7 @@ export type UrlNormalization = Resource<
  * });
  * ```
  *
- * @example Strict RFC 3986 normalization
+ * **Example:** Strict RFC 3986 normalization
  * ```typescript
  * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
@@ -109,7 +99,7 @@ export type UrlNormalization = Resource<
  * });
  * ```
  *
- * @example Disable URL normalization
+ * **Example:** Disable URL normalization
  * ```typescript
  * yield* Cloudflare.UrlNormalization.UrlNormalization("UrlNormalization", {
  *   zoneId: zone.zoneId,
@@ -118,6 +108,10 @@ export type UrlNormalization = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/rules/normalization/
+ *
+ * @resource
+ * @product URL Normalization
+ * @category Rules & Configuration
  */
 export const UrlNormalization = Resource<UrlNormalization>(TypeId, {
   aliases: ["Cloudflare.UrlNormalization"],
@@ -156,10 +150,7 @@ export const UrlNormalizationProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
               schedule: Schedule.max([
-                Schedule.min([
-                  Schedule.exponential("500 millis"),
-                  Schedule.spaced("5 seconds"),
-                ]),
+                Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
                 Schedule.recurs(8),
               ]),
             }),
@@ -176,13 +167,8 @@ export const UrlNormalizationProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;

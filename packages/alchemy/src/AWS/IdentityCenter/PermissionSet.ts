@@ -1,9 +1,11 @@
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { normalizeDurationInput } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveInstance, retryIdentityCenter } from "./common.ts";
 
@@ -22,9 +24,11 @@ export interface PermissionSetProps {
    */
   description?: string;
   /**
-   * Optional ISO-8601 session duration such as `PT8H`.
+   * Optional session duration, e.g. `"8 hours"` or `Duration.hours(8)`.
+   * Sent to Identity Center as an ISO-8601 string such as `PT8H` (a bare
+   * number is milliseconds).
    */
-  sessionDuration?: string;
+  sessionDuration?: Duration.Input;
   /**
    * Optional relay state passed to supported applications.
    */
@@ -35,12 +39,19 @@ export interface PermissionSet extends Resource<
   "AWS.IdentityCenter.PermissionSet",
   PermissionSetProps,
   {
+    /** The Identity Center instance the permission set lives in. */
     instanceArn: string;
+    /** The ARN of the permission set. */
     permissionSetArn: string;
+    /** The name of the permission set. */
     name: string;
+    /** The description of the permission set. */
     description: string | undefined;
+    /** The session duration in ISO-8601 format (e.g. `PT8H`). */
     sessionDuration: string | undefined;
+    /** The relay state URL users land on after federating, if set. */
     relayState: string | undefined;
+    /** When the permission set was created. */
     createdDate: Date | undefined;
   },
   never,
@@ -49,20 +60,19 @@ export interface PermissionSet extends Resource<
 
 /**
  * An IAM Identity Center permission set.
- * @resource
- * @section Creating Permission Sets
- * @example Administrator Access
+ * ### Creating Permission Sets
+ * **Example:** Administrator Access
  * ```typescript
  * const admin = yield* PermissionSet("AdministratorAccess", {
  *   name: "AdministratorAccess",
  *   description: "Administrator access for platform engineers",
- *   sessionDuration: "PT8H",
+ *   sessionDuration: "8 hours",
  * });
  * ```
+ *
+ * @resource
  */
-export const PermissionSet = Resource<PermissionSet>(
-  "AWS.IdentityCenter.PermissionSet",
-);
+export const PermissionSet = Resource<PermissionSet>("AWS.IdentityCenter.PermissionSet");
 
 export const PermissionSetProvider = () =>
   Provider.effect(
@@ -95,16 +105,11 @@ export const PermissionSetProvider = () =>
                 }),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is PermissionSet["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is PermissionSet["Attributes"] => row !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            olds?.instanceArn !== news.instanceArn ||
-            olds?.name !== news.name
-          ) {
+          if (olds?.instanceArn !== news.instanceArn || olds?.name !== news.name) {
             return { action: "replace" } as const;
           }
         }),
@@ -123,9 +128,11 @@ export const PermissionSetProvider = () =>
           return yield* readPermissionSetByName(olds);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          const instance = yield* resolveInstance(
-            output?.instanceArn ?? news.instanceArn,
-          );
+          const instance = yield* resolveInstance(output?.instanceArn ?? news.instanceArn);
+          const desiredSessionDuration =
+            news.sessionDuration !== undefined
+              ? toIsoSessionDuration(news.sessionDuration)
+              : undefined;
 
           // Observe — find the permission set by ARN (when we already
           // have one) or by name on the resolved instance.
@@ -148,7 +155,7 @@ export const PermissionSetProvider = () =>
                 InstanceArn: instance.InstanceArn!,
                 Name: news.name,
                 Description: news.description,
-                SessionDuration: news.sessionDuration,
+                SessionDuration: desiredSessionDuration,
                 RelayState: news.relayState,
               }),
             );
@@ -168,9 +175,7 @@ export const PermissionSetProvider = () =>
 
             if (!existing) {
               return yield* Effect.fail(
-                new Error(
-                  `permission set '${news.name}' not found after create`,
-                ),
+                new Error(`permission set '${news.name}' not found after create`),
               );
             }
 
@@ -184,7 +189,7 @@ export const PermissionSetProvider = () =>
           // there's a real delta.
           if (
             (existing.description ?? undefined) !== news.description ||
-            (existing.sessionDuration ?? undefined) !== news.sessionDuration ||
+            (existing.sessionDuration ?? undefined) !== desiredSessionDuration ||
             (existing.relayState ?? undefined) !== news.relayState
           ) {
             yield* retryIdentityCenter(
@@ -192,7 +197,7 @@ export const PermissionSetProvider = () =>
                 InstanceArn: existing.instanceArn,
                 PermissionSetArn: existing.permissionSetArn,
                 Description: news.description,
-                SessionDuration: news.sessionDuration,
+                SessionDuration: desiredSessionDuration,
                 RelayState: news.relayState,
               }),
             );
@@ -203,9 +208,7 @@ export const PermissionSetProvider = () =>
             });
             if (!updated) {
               return yield* Effect.fail(
-                new Error(
-                  `permission set '${existing.permissionSetArn}' not found after update`,
-                ),
+                new Error(`permission set '${existing.permissionSetArn}' not found after update`),
               );
             }
             yield* session.note(updated.permissionSetArn);
@@ -222,14 +225,31 @@ export const PermissionSetProvider = () =>
                 InstanceArn: output.instanceArn,
                 PermissionSetArn: output.permissionSetArn,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       };
     }),
   );
+
+/**
+ * Format a {@link Duration.Input} as the canonical ISO-8601 duration string
+ * (`PT8H`, `PT1H30M`, …) the `SessionDuration` wire field expects. ISO-8601
+ * is semantically part of the AWS field, so only the normalization (state
+ * round-trip re-hydration) comes from the central Duration util.
+ */
+const toIsoSessionDuration = (input: Duration.Input): string => {
+  const totalSeconds = Math.round(Duration.toSeconds(normalizeDurationInput(input)));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [
+    hours > 0 ? `${hours}H` : "",
+    minutes > 0 ? `${minutes}M` : "",
+    seconds > 0 || totalSeconds === 0 ? `${seconds}S` : "",
+  ].join("");
+  return `PT${parts}`;
+};
 
 const readPermissionSetByArn = Effect.fn(function* ({
   instanceArn,
@@ -244,11 +264,7 @@ const readPermissionSetByArn = Effect.fn(function* ({
         InstanceArn: instanceArn,
         PermissionSetArn: permissionSetArn,
       })
-      .pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      ),
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
   );
 
   const permissionSet = response?.PermissionSet;

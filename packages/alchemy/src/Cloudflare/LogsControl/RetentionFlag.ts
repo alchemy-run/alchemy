@@ -1,7 +1,6 @@
 import * as logs from "@distilled.cloud/cloudflare/logs";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -61,11 +60,8 @@ export type LogsRetentionFlag = Resource<
  *
  * Logpull is an Enterprise feature — on unentitled zones every operation
  * fails with the typed `LogsControlNotAuthorized` error.
- * @resource
- * @product Logs
- * @category Observability & Analytics
- * @section Managing log retention
- * @example Enable Logpull retention on a zone
+ * ### Managing log retention
+ * **Example:** Enable Logpull retention on a zone
  * ```typescript
  * const retention = yield* Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
  *   zoneId: zone.zoneId,
@@ -73,7 +69,7 @@ export type LogsRetentionFlag = Resource<
  * });
  * ```
  *
- * @example Explicitly disable retention
+ * **Example:** Explicitly disable retention
  * ```typescript
  * yield* Cloudflare.LogsControl.LogsRetentionFlag("Retention", {
  *   zoneId: zone.zoneId,
@@ -82,15 +78,17 @@ export type LogsRetentionFlag = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/logs/logpull/enabling-log-retention/
+ *
+ * @resource
+ * @product Logs
+ * @category Observability & Analytics
  */
 export const LogsRetentionFlag = Resource<LogsRetentionFlag>(TypeId);
 
 /**
  * Returns true if the given value is a LogsRetentionFlag resource.
  */
-export const isLogsRetentionFlag = (
-  value: unknown,
-): value is LogsRetentionFlag =>
+export const isLogsRetentionFlag = (value: unknown): value is LogsRetentionFlag =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const LogsRetentionFlagProvider = () =>
@@ -119,15 +117,11 @@ export const LogsRetentionFlagProvider = () =>
             ),
             // Logpull is Enterprise-only; unentitled zones reject with the
             // typed error — skip them rather than fail the whole listing.
-            Effect.catchTag("LogsControlNotAuthorized", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("LogsControlNotAuthorized", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is LogsRetentionFlagAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is LogsRetentionFlagAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -140,9 +134,7 @@ export const LogsRetentionFlagProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
       const observed = yield* getFlag(zoneId);
       // Zone deleted out-of-band — the flag is gone with it.

@@ -1,9 +1,9 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -33,10 +33,24 @@ export interface PipelineProps {
    * so the engine orders the pipeline after them on deploy (and before
    * them on destroy).
    *
-   * Immutable — changing the SQL triggers a replacement.
+   * Immutable — changing the SQL triggers a replacement. Whitespace-only
+   * changes are a no-op. A changed, fully-resolved statement is validated
+   * during plan, so invalid SQL fails before anything is replaced.
    */
   sql: string;
 }
+
+/**
+ * Raised during plan when a pipeline's SQL is rejected by Cloudflare's
+ * SQL validator (`InvalidSql`, code 1014). Nothing has been replaced or
+ * deleted when this fails.
+ */
+export class PipelineSqlInvalid extends Data.TaggedError(
+  "Cloudflare.Pipelines.PipelineSqlInvalid",
+)<{
+  message: string;
+  sql: string;
+}> {}
 
 export interface PipelineAttributes {
   /** Cloudflare-assigned pipeline identifier. */
@@ -55,13 +69,7 @@ export interface PipelineAttributes {
   modifiedAt: string;
 }
 
-export type Pipeline = Resource<
-  TypeId,
-  PipelineProps,
-  PipelineAttributes,
-  never,
-  Providers
->;
+export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never, Providers>;
 
 /**
  * A Cloudflare SQL Pipeline — the transform of the Pipelines product. A
@@ -69,34 +77,44 @@ export type Pipeline = Resource<
  * {@link Stream} and writes them to a {@link Sink}, both
  * referenced by name.
  *
+ * Also exported as `Cloudflare.Basin.Pipeline`.
+ *
  * The SQL is fixed at creation: changing it (or the name) triggers a
  * replacement. Nothing references a pipeline downstream, so replacements
- * are cheap.
- * @resource
- * @product Pipelines
- * @category Storage & Databases
- * @section Creating a Pipeline
- * @example Stream → Sink passthrough
+ * are cheap. A changed statement is checked with Cloudflare's SQL
+ * validator during plan, so a syntax error fails the plan (with
+ * {@link PipelineSqlInvalid}) instead of deleting the running pipeline.
+ * References to streams/sinks that do not exist yet are not an error at
+ * plan time — they are created in the same deploy.
+ *
+ * Pipelines is ingest-only: to process data after the sink writes it,
+ * subscribe to the sink's bucket with `Cloudflare.R2.BucketEventNotification`.
+ * ### Creating a Pipeline
+ * **Example:** Stream → Sink passthrough
  * ```typescript
- * const stream = yield* Cloudflare.Pipelines.Stream("events", {});
- * const sink = yield* Cloudflare.Pipelines.Sink("events-sink", {
+ * const stream = yield* Cloudflare.Basin.Stream("events", {});
+ * const sink = yield* Cloudflare.Basin.Sink("events-sink", {
  *   type: "r2",
  *   config: { bucket: bucket.bucketName, credentials },
  * });
  *
- * const pipeline = yield* Cloudflare.Pipelines.Pipeline("etl", {
+ * const pipeline = yield* Cloudflare.Basin.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
  * });
  * ```
  *
- * @example Filtering transform
+ * **Example:** Filtering transform
  * ```typescript
- * const pipeline = yield* Cloudflare.Pipelines.Pipeline("errors-only", {
+ * const pipeline = yield* Cloudflare.Basin.Pipeline("errors-only", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name} WHERE level = 'error'`,
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
+ *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  */
 export const Pipeline = Resource<Pipeline>(TypeId);
 
@@ -125,10 +143,25 @@ export const PipelineProvider = () =>
         return { action: "replace" } as const;
       }
       const oldSql = typeof o.sql === "string" ? o.sql : output?.sql;
-      if (oldSql !== undefined && news.sql !== oldSql) {
-        return { action: "replace" } as const;
+      if (oldSql === undefined || canonicalSql(news.sql) === canonicalSql(oldSql)) {
+        return oldSql === undefined ? undefined : ({ action: "noop" } as const);
       }
-      return undefined;
+      // The replacement deletes the running pipeline — validate the new
+      // statement first so bad SQL fails the plan, not the deploy. Tables
+      // created in the same deploy are not visible yet, so a missing table
+      // is not a validation failure.
+      yield* pipelines.validateSqlPipeline({ accountId, sql: news.sql }).pipe(
+        Effect.catchTag("TableNotFound", () => Effect.void),
+        Effect.catchTag("InvalidSql", (error) =>
+          Effect.fail(
+            new PipelineSqlInvalid({
+              message: `Cloudflare.Pipelines.Pipeline '${id}': invalid SQL — ${error.message}`,
+              sql: news.sql,
+            }),
+          ),
+        ),
+      );
+      return { action: "replace" } as const;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -169,16 +202,16 @@ export const PipelineProvider = () =>
       // replaced and `sql` was unresolved at diff time), delete the stale
       // pipeline and fall through to recreate it under the same name.
       // Nothing references a pipeline downstream, so this is safe.
-      if (observed && (observed.sql !== sql || observed.name !== name)) {
+      if (
+        observed &&
+        (canonicalSql(observed.sql) !== canonicalSql(sql) || observed.name !== name)
+      ) {
         yield* deletePipeline(accountId, observed.id);
         // Wait until the delete is visible so the recreate below does not
         // race an `PipelineAlreadyExists` against the dying pipeline.
         yield* getPipeline(accountId, observed.id).pipe(
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.exponential("250 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("250 millis"), Schedule.recurs(8)]),
             until: (p) => p === undefined,
           }),
         );
@@ -192,24 +225,17 @@ export const PipelineProvider = () =>
       //    no sync step: the SQL is immutable, so changes arrive as
       //    replacements (diff).
       if (!observed) {
-        observed = yield* pipelines
-          .createV1Pipeline({ accountId, name, sql })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "TableNotFound",
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(6),
-              ]),
-            }),
-            Effect.catchTag("PipelineAlreadyExists", (error) =>
-              findPipelineByName(accountId, name).pipe(
-                Effect.flatMap((match) =>
-                  match ? Effect.succeed(match) : Effect.fail(error),
-                ),
-              ),
+        observed = yield* pipelines.createV1Pipeline({ accountId, name, sql }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "TableNotFound",
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
+          }),
+          Effect.catchTag("PipelineAlreadyExists", (error) =>
+            findPipelineByName(accountId, name).pipe(
+              Effect.flatMap((match) => (match ? Effect.succeed(match) : Effect.fail(error))),
             ),
-          );
+          ),
+        );
       }
 
       return toAttributes(observed, accountId);
@@ -234,6 +260,31 @@ export const PipelineProvider = () =>
       );
     }),
   });
+
+/**
+ * Canonical SQL for change detection: whitespace runs outside quoted
+ * literals/identifiers collapse to one space, surrounding whitespace and
+ * a trailing `;` are dropped.
+ */
+const canonicalSql = (sql: string): string => {
+  let out = "";
+  let quote: string | undefined;
+  let pendingSpace = false;
+  for (const ch of sql.trim().replace(/;\s*$/, "")) {
+    if (quote) {
+      out += ch;
+      if (ch === quote) quote = undefined;
+    } else if (/\s/.test(ch)) {
+      pendingSpace = true;
+    } else {
+      if (pendingSpace && out.length > 0) out += " ";
+      pendingSpace = false;
+      if (ch === "'" || ch === '"' || ch === "`") quote = ch;
+      out += ch;
+    }
+  }
+  return out;
+};
 
 /**
  * The subset of pipeline state shared by get/list/create responses.
@@ -286,10 +337,7 @@ const findPipelineByName = (accountId: string, name: string) =>
     ),
   );
 
-const toAttributes = (
-  observed: ObservedPipeline,
-  accountId: string,
-): PipelineAttributes => ({
+const toAttributes = (observed: ObservedPipeline, accountId: string): PipelineAttributes => ({
   pipelineId: observed.id,
   accountId,
   name: observed.name,

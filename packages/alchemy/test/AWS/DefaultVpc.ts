@@ -1,16 +1,14 @@
-import { VpcId } from "@/AWS/EC2";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { VpcId } from "@/AWS/EC2";
 
-class DefaultVpcNotVisible extends Data.TaggedError(
-  "DefaultVpcNotVisible",
-)<{}> {}
+class DefaultVpcNotVisible extends Data.TaggedError("DefaultVpcNotVisible")<{}> {}
 
-class UnsupportedDefaultVpcCidr extends Data.TaggedError(
-  "UnsupportedDefaultVpcCidr",
-)<{
+class DefaultVpcNetworkNotVisible extends Data.TaggedError("DefaultVpcNetworkNotVisible")<{}> {}
+
+class UnsupportedDefaultVpcCidr extends Data.TaggedError("UnsupportedDefaultVpcCidr")<{
   readonly cidrBlock: string;
 }> {}
 
@@ -31,9 +29,7 @@ export const getDefaultVpc = Effect.gen(function* () {
 
   const [baseAddress, prefixString] = vpc.CidrBlock.split("/");
   if (prefixString !== "16") {
-    return yield* Effect.fail(
-      new UnsupportedDefaultVpcCidr({ cidrBlock: vpc.CidrBlock }),
-    );
+    return yield* Effect.fail(new UnsupportedDefaultVpcCidr({ cidrBlock: vpc.CidrBlock }));
   }
 
   const [a, b] = baseAddress.split(".");
@@ -46,5 +42,37 @@ export const getDefaultVpc = Effect.gen(function* () {
   Effect.retry({
     while: (e) => e._tag === "DefaultVpcNotVisible",
     schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
+  }),
+);
+
+/** Wait for the default VPC's generated subnets and security group as well. */
+export const getDefaultVpcNetwork = Effect.gen(function* () {
+  const vpc = yield* getDefaultVpc;
+  const [subnets, groups] = yield* Effect.all(
+    [
+      EC2.describeSubnets({
+        Filters: [{ Name: "vpc-id", Values: [vpc.vpcId] }],
+      } as any),
+      EC2.describeSecurityGroups({
+        Filters: [
+          { Name: "vpc-id", Values: [vpc.vpcId] },
+          { Name: "group-name", Values: ["default"] },
+        ],
+      } as any),
+    ],
+    { concurrency: 2 },
+  );
+  const subnetIds = (subnets.Subnets ?? [])
+    .flatMap((subnet) => (subnet.SubnetId ? [subnet.SubnetId] : []))
+    .sort();
+  const defaultSecurityGroupId = groups.SecurityGroups?.[0]?.GroupId;
+  if (subnetIds.length === 0 || !defaultSecurityGroupId) {
+    return yield* Effect.fail(new DefaultVpcNetworkNotVisible());
+  }
+  return { ...vpc, subnetIds, defaultSecurityGroupId };
+}).pipe(
+  Effect.retry({
+    while: (error) => error._tag === "DefaultVpcNetworkNotVisible",
+    schedule: Schedule.max([Schedule.fixed("1 second"), Schedule.recurs(30)]),
   }),
 );

@@ -48,29 +48,30 @@ export default Alchemy.Stack(
 
 ## Migrations
 
-Point `migrationsDir` at a folder of `.sql` files. Files are sorted
+Point `migrations` at a folder of `.sql` files. Files are sorted
 by numeric prefix (`0001_`, `0002_`, …) and applied in order as part
 of every deploy; already-applied migrations are skipped:
 
 ```typescript
 const db = yield* Cloudflare.D1.Database("my-db", {
-  migrationsDir: "./migrations",
+  migrations: "./migrations",
 });
 ```
 
-The tracking table is wrangler-compatible, and you can point at a
-custom one (e.g. for Drizzle-generated migrations):
-
-```typescript
-const db = yield* Cloudflare.D1.Database("my-db", {
-  migrationsDir: "./migrations",
-  migrationsTable: "drizzle_migrations",
-});
-```
+Bookkeeping lives in Alchemy's `__alchemy_migrations` table. A
+database previously migrated with `wrangler d1 migrations apply` or
+`drizzle-kit migrate` is
+[adopted automatically](/sql/effect-sql/migrations#adopting-an-existing-database):
+the old tool's applied history is copied in once and its table is
+frozen — never written, never dropped. D1 has no transactions over
+HTTP, so each migration and its bookkeeping row are sent as one
+batched query, matching wrangler's own behavior.
 
 The migration files themselves don't have to be hand-written —
-[Drizzle.Schema](/drizzle/migrations) can generate them from a
-Drizzle schema on deploy.
+[Drizzle.Schema](/sql/drizzle/migrations) can generate them from a
+Drizzle schema on deploy. [Drizzle on D1](/cloudflare/data/d1-drizzle)
+walks through the whole flow: schema → generated migrations → typed
+queries from the Worker.
 
 ## Query from a Worker
 
@@ -83,14 +84,14 @@ with `all`, `first`, or `run`:
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Database } from "./database.ts";
 
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // init: register the binding, get a typed client
+    // Construction: register the binding, get a typed client
     const db = yield* Cloudflare.D1.QueryDatabase(Database);
 
     return {
@@ -113,13 +114,69 @@ and those return Effects. For libraries that want the native
 `D1Database` object (e.g. Better Auth), use the client's `raw`
 escape hatch.
 
+## SQL with `@effect/sql-d1`
+
+Prefer tagged-template SQL over hand-written prepared statements?
+`SQL.D1` (from `alchemy/SQL/D1` — each low-level effect-sql client
+lives on its own subpath) wraps the same binding in an
+`@effect/sql-d1` `D1Client` —
+interpolated values are parameterized, every query is an Effect, and
+failures surface as typed `SqlError`s:
+
+```typescript
+import * as SQL from "alchemy/SQL/D1";
+
+Effect.gen(function* () {
+  const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
+  const sql = yield* SQL.D1(d1);
+
+  return {
+    fetch: Effect.gen(function* () {
+      const id = 1;
+      const users = yield* sql`SELECT * FROM users WHERE id = ${id}`;
+      return yield* HttpServerResponse.json({ users });
+    }),
+  };
+}).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding));
+```
+
+The client is built lazily on the first query and memoized per
+execution — a `fetch`/`queue`/`scheduled` event, a Durable Object
+call, or a Workflow run — then torn down when the event settles.
+
+`D1Client` implements Effect's generic `SqlClient` interface, so
+services written against `SqlClient.SqlClient` run on D1 unchanged.
+Provide both tags with the layer form:
+
+```typescript
+import * as SqlClient from "effect/sql/SqlClient";
+
+const makeApp = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  // ... services that only know about SqlClient
+});
+
+const app = yield* makeApp.pipe(
+  Effect.provide(SQL.D1Layer(d1)),
+);
+```
+
+The complete runnable project is
+[`cloudflare-effect-sql-d1`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-effect-sql-d1).
+The full client API, the Layer pattern, and the lifecycle contract
+live in the SQL hub — [Effect SQL: D1](/sql/effect-sql/d1) and
+[Connection lifecycle](/sql/effect-sql/lifecycle). For typed schemas
+and an ORM on top of the same binding, see
+[Drizzle on D1](/cloudflare/data/d1-drizzle).
+
 ## Where next
 
 Guides:
 
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — typed schemas and
-  generated migrations (the D1 resource's `migrationsTable` prop
-  accepts Drizzle's).
+- [Drizzle on D1](/cloudflare/data/d1-drizzle) — typed schemas,
+  generated migrations, and the `effect-d1` driver on this database.
+- [`cloudflare-effect-sql-d1`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-effect-sql-d1)
+  — the runnable `@effect/sql-d1` example.
 
 Related:
 

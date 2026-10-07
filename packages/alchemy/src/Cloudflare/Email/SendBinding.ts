@@ -2,12 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
-import {
-  Send,
-  SendEmailError,
-  type SendClient,
-  type SendEmailMessage,
-} from "./Send.ts";
+import { Send, SendEmailError, type SendClient, type SendEmailMessage } from "./Send.ts";
 import type { SendEmail } from "./SendEmail.ts";
 
 export const SendBinding = Layer.effect(
@@ -28,16 +23,15 @@ export const SendBinding = Layer.effect(
               allowedSenderAddresses: sender.allowedSenderAddresses,
             },
           ],
+          // Dev-only local-emulation opt-out, contributed as a parallel
+          // channel (like `hyperdrives`) so the wire binding stays pure.
+          ...(sender.devRemote ? { devRemote: { [sender.name]: true } } : {}),
         });
       }
 
-      const raw = Effect.sync(
-        () => (env as Record<string, runtime.SendEmail>)[sender.name]!,
-      );
+      const raw = Effect.sync(() => (env as Record<string, runtime.SendEmail>)[sender.name]!);
 
-      const tryPromise = <T>(
-        fn: () => Promise<T>,
-      ): Effect.Effect<T, SendEmailError> =>
+      const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, SendEmailError> =>
         Effect.tryPromise({
           try: fn,
           catch: (error: any) =>

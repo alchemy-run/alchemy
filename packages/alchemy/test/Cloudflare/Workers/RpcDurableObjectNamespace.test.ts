@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
+import * as RpcClient from "effect/rpc/RpcClient";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/rpc-do-namespace-do-rpc/stack.ts";
 import { WorkerRpcs as RpcWorkerWorkerRpcs } from "./fixtures/rpc-worker-rpc-http/group.ts";
 import RpcWorkerStack from "./fixtures/rpc-worker-rpc-http/stack.ts";
@@ -20,10 +20,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // otherwise surface as an opaque `RpcClientDefect`; see Test/Http.ts.
 const rpcClientLayer = Test.rpcClientLayer;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cap exponential backoff at 3s so retries stay bounded when CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
@@ -52,7 +49,9 @@ const resetCounter = (url: string, id: string) =>
     yield* client.post(`${url}/counter/${id}/reset`).pipe(retryHttp);
   });
 
-const readinessRetries = 15;
+// Full-suite concurrency + workers.dev propagation routinely needs more than
+// a dozen attempts before the DO binding / subdomain is routable.
+const readinessRetries = 30;
 
 // The `*DO` RPC handlers forward to the Durable Object via `getByName(...)`.
 // On a freshly-deployed worker the DO-namespace binding hasn't propagated to
@@ -72,7 +71,20 @@ const retryReadyN =
 
 const retryReady = retryReadyN(readinessRetries);
 
-const stack = beforeAll(deploy(Stack));
+// Gate HTTP deploy on workers.dev + DO binding readiness. Without this the
+// first test burns its 30s budget on 404s while the subdomain propagates.
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    Effect.tap((outputs) =>
+      Effect.gen(function* () {
+        const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+        yield* client
+          .post(`${outputs.url}/counter/${k("warmup")}/reset`)
+          .pipe(retryReadyN(readinessRetries));
+      }),
+    ),
+  ),
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // Gate the deploy on the worker→DO binding having propagated to the edge:
@@ -102,9 +114,7 @@ test(
     yield* resetCounter(url, alpha);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const incRes = yield* client
-      .post(`${url}/counter/${alpha}/increment`)
-      .pipe(retryHttp);
+    const incRes = yield* client.post(`${url}/counter/${alpha}/increment`).pipe(retryHttp);
     expect(incRes.status).toBe(200);
     const inc = (yield* incRes.json) as { count: number };
     expect(inc.count).toBe(1);
@@ -117,7 +127,10 @@ test(
     const got = (yield* getRes.json) as { count: number };
     expect(got.count).toBe(3);
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 test(
@@ -132,20 +145,20 @@ test(
 
     yield* client.post(`${url}/counter/${betaId}/increment`).pipe(retryHttp);
 
-    const beta = (yield* (yield* client
-      .get(`${url}/counter/${betaId}`)
-      .pipe(retryHttp)).json) as {
+    const beta = (yield* (yield* client.get(`${url}/counter/${betaId}`).pipe(retryHttp)).json) as {
       count: number;
     };
-    const gamma = (yield* (yield* client
-      .get(`${url}/counter/${gammaId}`)
-      .pipe(retryHttp)).json) as {
+    const gamma = (yield* (yield* client.get(`${url}/counter/${gammaId}`).pipe(retryHttp))
+      .json) as {
       count: number;
     };
     expect(beta.count).toBe(1);
     expect(gamma.count).toBe(0);
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -160,23 +173,22 @@ test(
     // the headers are sent and surfaces as a truncated/empty 200 body —
     // invisible to status-based retries. `CountUpTo` is a pure stream, so
     // retry on content until all four lines arrive.
-    const lines = yield* client
-      .get(`${url}/counter/${delta}/stream?upto=4`)
-      .pipe(
-        Effect.flatMap((res) => res.text),
-        Effect.flatMap((body) => {
-          const lines = body.split("\n").filter((l) => l.length > 0);
-          return lines.length === 4
-            ? Effect.succeed(lines)
-            : Effect.fail(
-                new Error(`truncated stream body: ${JSON.stringify(lines)}`),
-              );
-        }),
-        retryHttp,
-      );
+    const lines = yield* client.get(`${url}/counter/${delta}/stream?upto=4`).pipe(
+      Effect.flatMap((res) => res.text),
+      Effect.flatMap((body) => {
+        const lines = body.split("\n").filter((l) => l.length > 0);
+        return lines.length === 4
+          ? Effect.succeed(lines)
+          : Effect.fail(new Error(`truncated stream body: ${JSON.stringify(lines)}`));
+      }),
+      retryHttp,
+    );
     expect(lines).toEqual(["1", "2", "3", "4"]);
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -193,7 +205,10 @@ test(
       expect(pingDO.echo).toBe("via DO");
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -204,9 +219,7 @@ test(
     yield* resetCounter(url, concurrent);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    yield* client
-      .post(`${url}/counter/${concurrent}/increment`)
-      .pipe(retryHttp);
+    yield* client.post(`${url}/counter/${concurrent}/increment`).pipe(retryHttp);
 
     const N = 100;
     const results = yield* Effect.forEach(
@@ -232,13 +245,14 @@ test(
     );
 
     expect(results).toHaveLength(N);
-    const finalRes = yield* client
-      .get(`${url}/counter/${concurrent}`)
-      .pipe(retryHttp);
+    const finalRes = yield* client.get(`${url}/counter/${concurrent}`).pipe(retryHttp);
     const final = (yield* finalRes.json) as { count: number };
     expect(final.count).toBe(N + 1);
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -271,7 +285,10 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 60_000,
+  },
 );
 
 test(
@@ -285,10 +302,7 @@ test(
       const N = 100;
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
-        (i) =>
-          c
-            .PingDO({ message: `m-${i}` })
-            .pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
+        (i) => c.PingDO({ message: `m-${i}` }).pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: 16 },
       );
 
@@ -298,7 +312,10 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );
 
 test(
@@ -315,21 +332,18 @@ test(
         (i) =>
           c
             .CountDO({ upto: 3 + (i % 3) })
-            .pipe(
-              Stream.runCollect,
-              Effect.timeout("10 seconds"),
-              retryReadyN(5),
-            ),
+            .pipe(Stream.runCollect, Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: 16 },
       );
 
       expect(results).toHaveLength(N);
       for (let i = 0; i < N; i++) {
-        expect(results[i]).toEqual(
-          Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1),
-        );
+        expect(results[i]).toEqual(Array.from({ length: 3 + (i % 3) }, (_, n) => n + 1));
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 30_000,
+  },
 );

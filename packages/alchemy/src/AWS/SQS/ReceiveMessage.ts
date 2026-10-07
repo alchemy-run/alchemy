@@ -3,12 +3,36 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface ReceiveMessageRequest extends Omit<
-  sqs.ReceiveMessageRequest,
-  "QueueUrl"
-> {}
+export interface ReceiveMessageRequest extends Omit<sqs.ReceiveMessageRequest, "QueueUrl"> {}
 
-/** @binding */
+/**
+ * Runtime binding for `sqs:ReceiveMessage`.
+ *
+ * Bind this operation to a {@link Queue} inside a function runtime to poll
+ * messages on demand. The binding grants the host function
+ * `sqs:ReceiveMessage` on the queue. Provide the `ReceiveMessageHttp` layer
+ * on the Function to implement the binding.
+ *
+ * For push-based consumption (Lambda event-source mapping) use
+ * {@link consumeQueueMessages} instead of polling manually.
+ * ### Receiving Messages
+ * **Example:** Poll for Messages
+ * ```typescript
+ * // init (provide SQS.ReceiveMessageHttp on the Function)
+ * const receiveMessage = yield* SQS.ReceiveMessage(queue);
+ *
+ * // runtime: long-poll for up to 10 messages
+ * const result = yield* receiveMessage({
+ *   MaxNumberOfMessages: 10,
+ *   WaitTimeSeconds: 2,
+ * });
+ * for (const message of result.Messages ?? []) {
+ *   // message.Body, message.ReceiptHandle
+ * }
+ * ```
+ *
+ * @binding
+ */
 export interface ReceiveMessage extends Binding.Service<
   ReceiveMessage,
   "AWS.SQS.ReceiveMessage",
@@ -21,6 +45,4 @@ export interface ReceiveMessage extends Binding.Service<
   >
 > {}
 
-export const ReceiveMessage = Binding.Service<ReceiveMessage>(
-  "AWS.SQS.ReceiveMessage",
-);
+export const ReceiveMessage = Binding.Service<ReceiveMessage>("AWS.SQS.ReceiveMessage");

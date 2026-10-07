@@ -1,3 +1,5 @@
+import type { MigrationsInput } from "../SQL/Migrations/index.ts";
+
 /**
  * Region selector for a PlanetScale Database.
  */
@@ -17,7 +19,9 @@ export interface DatabaseRegion {
 export interface BaseDatabaseProps {
   /**
    * Database name. Must be lowercase. If omitted, a unique name will be
-   * generated from the stack/stage/logical-id.
+   * generated from the stack/stage/logical-id. A change that replaces the
+   * database needs a new name, so it fails while an explicit name stays
+   * the same.
    */
   name?: string;
 
@@ -52,23 +56,36 @@ export interface BaseDatabaseProps {
   productionBranchWebConsole?: boolean;
 
   /**
+   * Whether PlanetScale refuses to delete the database. While enabled,
+   * destroying or replacing the database fails with a
+   * `PlanetscaleDeletionProtected` error; set it to `false` and deploy
+   * before deleting. If omitted, Alchemy leaves the database's current
+   * setting unchanged.
+   *
+   * A replacement (e.g. a region change) creates the new database first,
+   * so deleting the protected old one fails afterwards. The resource then
+   * manages the new database, so turn protection off on the old one in
+   * PlanetScale directly and deploy again.
+   */
+  deletionProtection?: boolean;
+
+  /**
    * The default branch of the database.
    * @default "main"
    */
   defaultBranch?: string;
 
   /**
-   * Directory containing `.sql` migration files. Files are sorted by numeric
-   * prefix (for example `0001_init.sql`) and applied in order against the
-   * default branch.
+   * SQL migrations to apply against the default branch. Accepts a directory
+   * path, a `Drizzle.Schema` resource, or `{ dir, table? }`.
+   *
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy: the old tool's applied history is
+   * copied into Alchemy's table and the old table is left frozen. No
+   * baselining required.
    */
-  migrationsDir?: string;
-
-  /**
-   * Name of the table used to track applied migrations.
-   * @default "__alchemy_migrations"
-   */
-  migrationsTable?: string;
+  migrations?: MigrationsInput;
 
   /**
    * Paths to additional `.sql` files to apply after migrations. Each file is
@@ -127,4 +144,9 @@ export interface BaseDatabaseAttributes {
    * Whether the web console can be used on the production branch.
    */
   productionBranchWebConsole: boolean;
+
+  /**
+   * Whether deletion protection is enabled for the database.
+   */
+  deletionProtection: boolean;
 }

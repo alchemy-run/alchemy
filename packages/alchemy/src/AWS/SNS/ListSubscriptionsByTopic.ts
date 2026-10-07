@@ -8,7 +8,28 @@ export interface ListSubscriptionsByTopicRequest extends Omit<
   "TopicArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:ListSubscriptionsByTopic`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to page
+ * through that topic's subscriptions; the `TopicArn` is injected
+ * automatically. The binding grants the host function
+ * `sns:ListSubscriptionsByTopic` on the topic. Provide the
+ * `ListSubscriptionsByTopicHttp` layer on the Function to implement the
+ * binding.
+ * ### Listing a Topic's Subscriptions
+ * **Example:** List Subscriptions of a Topic
+ * ```typescript
+ * // init (provide SNS.ListSubscriptionsByTopicHttp on the Function)
+ * const listSubscriptionsByTopic = yield* SNS.ListSubscriptionsByTopic(topic);
+ *
+ * // runtime
+ * const response = yield* listSubscriptionsByTopic();
+ * const endpoints = (response.Subscriptions ?? []).map((s) => s.Endpoint);
+ * ```
+ *
+ * @binding
+ */
 export interface ListSubscriptionsByTopic extends Binding.Service<
   ListSubscriptionsByTopic,
   "AWS.SNS.ListSubscriptionsByTopic",
@@ -17,11 +38,9 @@ export interface ListSubscriptionsByTopic extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListSubscriptionsByTopicRequest,
-    ) => Effect.Effect<
-      sns.ListSubscriptionsByTopicResponse,
-      sns.ListSubscriptionsByTopicError
-    >
+    ) => Effect.Effect<sns.ListSubscriptionsByTopicResponse, sns.ListSubscriptionsByTopicError>
   >
 > {}
-export const ListSubscriptionsByTopic =
-  Binding.Service<ListSubscriptionsByTopic>("AWS.SNS.ListSubscriptionsByTopic");
+export const ListSubscriptionsByTopic = Binding.Service<ListSubscriptionsByTopic>(
+  "AWS.SNS.ListSubscriptionsByTopic",
+);

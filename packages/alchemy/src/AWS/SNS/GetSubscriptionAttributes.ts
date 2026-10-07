@@ -8,7 +8,29 @@ export interface GetSubscriptionAttributesRequest extends Omit<
   "SubscriptionArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:GetSubscriptionAttributes`.
+ *
+ * Bind this operation to a {@link Subscription} inside a function runtime to
+ * read the subscription's raw attribute map (filter policy, redrive policy,
+ * raw message delivery, etc.). The binding grants the host function
+ * `sns:GetSubscriptionAttributes` on the subscription. Provide the
+ * `GetSubscriptionAttributesHttp` layer on the Function to implement the
+ * binding.
+ * ### Reading Subscription Attributes
+ * **Example:** Read a Subscription's Attributes
+ * ```typescript
+ * // init (provide SNS.GetSubscriptionAttributesHttp on the Function)
+ * const getSubscriptionAttributes =
+ *   yield* SNS.GetSubscriptionAttributes(subscription);
+ *
+ * // runtime
+ * const response = yield* getSubscriptionAttributes();
+ * const filterPolicy = response.Attributes?.FilterPolicy;
+ * ```
+ *
+ * @binding
+ */
 export interface GetSubscriptionAttributes extends Binding.Service<
   GetSubscriptionAttributes,
   "AWS.SNS.GetSubscriptionAttributes",
@@ -17,13 +39,9 @@ export interface GetSubscriptionAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetSubscriptionAttributesRequest,
-    ) => Effect.Effect<
-      sns.GetSubscriptionAttributesResponse,
-      sns.GetSubscriptionAttributesError
-    >
+    ) => Effect.Effect<sns.GetSubscriptionAttributesResponse, sns.GetSubscriptionAttributesError>
   >
 > {}
-export const GetSubscriptionAttributes =
-  Binding.Service<GetSubscriptionAttributes>(
-    "AWS.SNS.GetSubscriptionAttributes",
-  );
+export const GetSubscriptionAttributes = Binding.Service<GetSubscriptionAttributes>(
+  "AWS.SNS.GetSubscriptionAttributes",
+);

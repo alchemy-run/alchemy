@@ -9,12 +9,7 @@ import { hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
-import {
-  createName,
-  readResourceTags,
-  retryConcurrent,
-  updateResourceTags,
-} from "./common.ts";
+import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
 export type CompositeAlarmName = string;
 
@@ -36,11 +31,17 @@ export interface CompositeAlarm extends Resource<
   "AWS.CloudWatch.CompositeAlarm",
   CompositeAlarmProps,
   {
+    /** Physical name of the composite alarm. */
     alarmName: CompositeAlarmName;
+    /** ARN of the composite alarm. */
     alarmArn: AlarmArn;
+    /** Current state of the composite alarm (`OK`, `ALARM`, or `INSUFFICIENT_DATA`). */
     stateValue: cloudwatch.StateValue | undefined;
+    /** Human-readable reason for the current state. */
     stateReason: string | undefined;
+    /** The full CompositeAlarm description as last read from CloudWatch. */
     compositeAlarm: cloudwatch.CompositeAlarm;
+    /** Tags on the composite alarm, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -48,19 +49,37 @@ export interface CompositeAlarm extends Resource<
 > {}
 
 /**
- * A CloudWatch composite alarm.
- * @resource
- * @section Creating Composite Alarms
- * @example Composite Rule
+ * A CloudWatch composite alarm — combines the states of other alarms with
+ * a boolean `AlarmRule` expression so a single alarm (and its actions)
+ * reflects overall health.
+ * ### Creating Composite Alarms
+ * **Example:** Composite Rule
  * ```typescript
  * const composite = yield* CompositeAlarm("HighSeverity", {
  *   AlarmRule: 'ALARM("HighErrors") OR ALARM("HighLatency")',
  * });
  * ```
+ *
+ * **Example:** Compose Alarm Resources with Output.interpolate
+ * ```typescript
+ * const errors = yield* Alarm("HighErrors", {
+ *   MetricName: "Errors",
+ *   Namespace: "AWS/Lambda",
+ *   Statistic: "Sum",
+ *   Period: 60,
+ *   EvaluationPeriods: 1,
+ *   Threshold: 1,
+ *   ComparisonOperator: "GreaterThanOrEqualToThreshold",
+ * });
+ *
+ * const composite = yield* CompositeAlarm("HighSeverity", {
+ *   AlarmRule: Output.interpolate`ALARM("${errors.alarmName}")`,
+ * });
+ * ```
+ *
+ * @resource
  */
-export const CompositeAlarm = Resource<CompositeAlarm>(
-  "AWS.CloudWatch.CompositeAlarm",
-);
+export const CompositeAlarm = Resource<CompositeAlarm>("AWS.CloudWatch.CompositeAlarm");
 
 export const CompositeAlarmProvider = () =>
   Provider.effect(
@@ -91,9 +110,7 @@ export const CompositeAlarmProvider = () =>
         }
 
         const tags = yield* readResourceTags(compositeAlarm.AlarmArn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed({}),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
         );
 
         return {
@@ -118,13 +135,10 @@ export const CompositeAlarmProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
+          const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           const state = yield* readCompositeAlarm(name);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // Observe — pin the physical name from `output` if present so we
@@ -191,9 +205,7 @@ export const CompositeAlarmProvider = () =>
                       ): candidate is cloudwatch.CompositeAlarm & {
                         AlarmName: string;
                         AlarmArn: string;
-                      } =>
-                        candidate.AlarmName != null &&
-                        candidate.AlarmArn != null,
+                      } => candidate.AlarmName != null && candidate.AlarmArn != null,
                     ),
                   ),
                 ),
@@ -203,9 +215,7 @@ export const CompositeAlarmProvider = () =>
               alarms,
               (compositeAlarm) =>
                 readResourceTags(compositeAlarm.AlarmArn).pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed({}),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
                   Effect.map((tags) => ({
                     alarmName: compositeAlarm.AlarmName,
                     alarmArn: compositeAlarm.AlarmArn as AlarmArn,

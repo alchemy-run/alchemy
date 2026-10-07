@@ -1,7 +1,8 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Namespace from "../../Namespace.ts";
-import { AWSEnvironment } from "../Environment.ts";
+import * as Output from "../../Output.ts";
 import type { EIP as EIPResource } from "./EIP.ts";
 import { EIP } from "./EIP.ts";
 import type { InternetGateway as InternetGatewayResource } from "./InternetGateway.ts";
@@ -102,15 +103,14 @@ export type Network = Effect.Success<ReturnType<typeof Network>>;
  *
  * The helper still returns the underlying canonical resources so callers can
  * keep composing with raw `AWS.EC2.*` APIs when they need more control.
- * @resource
- * @example Minimal network
+ * **Example:** Minimal network
  * ```typescript
  * const network = yield* AWS.EC2.Network("AppNetwork", {
  *   cidrBlock: "10.42.0.0/16",
  * });
  * ```
  *
- * @example ECS-ready network with shared NAT
+ * **Example:** ECS-ready network with shared NAT
  * ```typescript
  * const network = yield* AWS.EC2.Network("AppNetwork", {
  *   cidrBlock: "10.42.0.0/16",
@@ -127,18 +127,15 @@ export type Network = Effect.Success<ReturnType<typeof Network>>;
  *   assignPublicIp: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Network = (id: string, props: NetworkProps) =>
   Namespace.push(
     id,
     Effect.gen(function* () {
-      const availabilityZones = yield* resolveAvailabilityZones(
-        props.availabilityZones,
-      );
-      const subnetCidrs = deriveSubnetCidrs(
-        props.cidrBlock,
-        availabilityZones.length,
-      );
+      const availabilityZones = yield* resolveAvailabilityZones(props.availabilityZones);
+      const subnetCidrs = deriveSubnetCidrs(props.cidrBlock, availabilityZones.length);
       const tags = props.tags;
 
       const vpc = yield* Vpc("Vpc", {
@@ -163,6 +160,9 @@ export const Network = (id: string, props: NetworkProps) =>
           availabilityZone,
           mapPublicIpOnLaunch: true,
           tags: {
+            // Kubernetes load-balancer subnet discovery (EKS Auto Mode and the
+            // AWS Load Balancer Controller both select subnets by this tag).
+            "kubernetes.io/role/elb": "1",
             ...tags,
             Tier: "public",
           },
@@ -174,6 +174,9 @@ export const Network = (id: string, props: NetworkProps) =>
           cidrBlock: subnetCidrs.private[index],
           availabilityZone,
           tags: {
+            // Internal load-balancer subnet discovery (see the public-subnet
+            // `kubernetes.io/role/elb` note above).
+            "kubernetes.io/role/internal-elb": "1",
             ...tags,
             Tier: "private",
           },
@@ -229,16 +232,13 @@ export const Network = (id: string, props: NetworkProps) =>
           });
           natGateways.push(natGateway);
 
-          const privateRouteTable = yield* RouteTable(
-            `PrivateRouteTable${index + 1}`,
-            {
-              vpcId: vpc.vpcId,
-              tags: {
-                ...tags,
-                Tier: "private",
-              },
+          const privateRouteTable = yield* RouteTable(`PrivateRouteTable${index + 1}`, {
+            vpcId: vpc.vpcId,
+            tags: {
+              ...tags,
+              Tier: "private",
             },
-          );
+          });
           privateRouteTables.push(privateRouteTable);
 
           privateRoutes.push(
@@ -250,13 +250,10 @@ export const Network = (id: string, props: NetworkProps) =>
           );
 
           privateRouteAssociations.push(
-            yield* RouteTableAssociation(
-              `PrivateSubnetAssociation${index + 1}`,
-              {
-                routeTableId: privateRouteTable.routeTableId,
-                subnetId: privateSubnets[index].subnetId,
-              },
-            ),
+            yield* RouteTableAssociation(`PrivateSubnetAssociation${index + 1}`, {
+              routeTableId: privateRouteTable.routeTableId,
+              subnetId: privateSubnets[index].subnetId,
+            }),
           );
         }
       } else {
@@ -295,31 +292,34 @@ export const Network = (id: string, props: NetworkProps) =>
 
         for (const [index, subnet] of privateSubnets.entries()) {
           privateRouteAssociations.push(
-            yield* RouteTableAssociation(
-              `PrivateSubnetAssociation${index + 1}`,
-              {
-                routeTableId: privateRouteTable.routeTableId,
-                subnetId: subnet.subnetId,
-              },
-            ),
+            yield* RouteTableAssociation(`PrivateSubnetAssociation${index + 1}`, {
+              routeTableId: privateRouteTable.routeTableId,
+              subnetId: subnet.subnetId,
+            }),
           );
         }
       }
 
-      const { region } = yield* AWSEnvironment.current;
       const gatewayEndpoints: VpcEndpointResource[] = [];
-      for (const service of uniqueGatewayEndpoints(props.gatewayEndpoints)) {
-        gatewayEndpoints.push(
-          yield* VpcEndpoint(`${toEndpointId(service)}Endpoint`, {
-            vpcId: vpc.vpcId,
-            serviceName: `com.amazonaws.${region}.${service}`,
-            vpcEndpointType: "Gateway",
-            routeTableIds: privateRouteTables.map(
-              (table) => table.routeTableId,
-            ),
-            tags,
-          }),
-        );
+      const endpointServices = uniqueGatewayEndpoints(props.gatewayEndpoints);
+      if (endpointServices.length > 0) {
+        // Resolve the region lazily and via the `Region` service, which is
+        // provided both at deploy time and by the Lambda runtime.
+        // `AWSEnvironment` is deploy-time-only: this layer is re-executed at
+        // Function init, where `AWS::Environment` is not provided and
+        // resolving it crashes the runtime.
+        const region = yield* yield* Region;
+        for (const service of endpointServices) {
+          gatewayEndpoints.push(
+            yield* VpcEndpoint(`${toEndpointId(service)}Endpoint`, {
+              vpcId: vpc.vpcId,
+              serviceName: `com.amazonaws.${region}.${service}`,
+              vpcEndpointType: "Gateway",
+              routeTableIds: privateRouteTables.map((table) => table.routeTableId),
+              tags,
+            }),
+          );
+        }
       }
 
       return {
@@ -338,7 +338,20 @@ export const Network = (id: string, props: NetworkProps) =>
         privateRouteAssociations,
         gatewayEndpoints,
         vpcId: vpc.vpcId,
-        publicSubnetIds: publicSubnets.map((subnet) => subnet.subnetId),
+        // A "public subnet" is usable for public IPv4 only after both its
+        // route-table association and the route through the internet gateway
+        // exist. Preserve those dependencies in the convenience IDs returned
+        // to downstream resources. Besides preventing a launch/readiness race,
+        // this makes teardown order those consumers before the route and IGW;
+        // EC2 refuses to detach an IGW while an instance in the VPC still owns
+        // a public IPv4 address.
+        publicSubnetIds: publicSubnets.map((subnet, index) =>
+          Output.all(
+            subnet.subnetId,
+            publicRouteAssociations[index].associationId,
+            publicInternetRoute.routeTableId,
+          ).pipe(Output.map(([subnetId]) => subnetId)),
+        ),
         privateSubnetIds: privateSubnets.map((subnet) => subnet.subnetId),
       } satisfies NetworkResources;
     }).pipe(Effect.orDie),
@@ -348,15 +361,11 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
   Effect.gen(function* () {
     if (Array.isArray(input)) {
       if (input.length === 0) {
-        return yield* Effect.fail(
-          new Error("EC2.Network requires at least one availability zone"),
-        );
+        return yield* Effect.fail(new Error("EC2.Network requires at least one availability zone"));
       }
       if (new Set(input).size !== input.length) {
         return yield* Effect.fail(
-          new Error(
-            "EC2.Network availabilityZones must not contain duplicates",
-          ),
+          new Error("EC2.Network availabilityZones must not contain duplicates"),
         );
       }
       return input;
@@ -365,9 +374,21 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
     const desiredCount = input ?? 2;
     if (!Number.isInteger(desiredCount) || desiredCount <= 0) {
       return yield* Effect.fail(
-        new Error(
-          "EC2.Network availabilityZones count must be a positive integer",
-        ),
+        new Error("EC2.Network availabilityZones count must be a positive integer"),
+      );
+    }
+
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      // Inside a deployed Function this composition is re-executed at init,
+      // where every `yield* Subnet(...)` resolves its attributes from the
+      // injected environment — the zone names below only shape input props
+      // that the runtime ignores. Skip ec2:DescribeAvailabilityZones
+      // entirely: the function role does not (and should not) have that
+      // permission, so calling it at init crashes with UnauthorizedOperation.
+      const region = yield* yield* Region;
+      return Array.from(
+        { length: desiredCount },
+        (_, index) => `${region}${String.fromCharCode(97 + index)}`,
       );
     }
 
@@ -392,9 +413,7 @@ const deriveSubnetCidrs = (cidrBlock: string, azCount: number) => {
   const [baseAddress, prefixText] = cidrBlock.split("/");
   const prefix = Number(prefixText);
   if (!baseAddress || !Number.isInteger(prefix) || prefix < 0 || prefix > 28) {
-    throw new Error(
-      `EC2.Network requires a valid IPv4 CIDR block, got '${cidrBlock}'`,
-    );
+    throw new Error(`EC2.Network requires a valid IPv4 CIDR block, got '${cidrBlock}'`);
   }
 
   const totalSubnets = azCount * 2;
@@ -435,9 +454,7 @@ const ipv4ToNumber = (ip: string) => {
     throw new Error(`Invalid IPv4 address '${ip}'`);
   }
 
-  return (
-    octets[0] * 256 ** 3 + octets[1] * 256 ** 2 + octets[2] * 256 + octets[3]
-  );
+  return octets[0] * 256 ** 3 + octets[1] * 256 ** 2 + octets[2] * 256 + octets[3];
 };
 
 const numberToIpv4 = (value: number) =>
@@ -448,12 +465,8 @@ const numberToIpv4 = (value: number) =>
     value % 256,
   ].join(".");
 
-const toCidr = (value: number, prefix: number) =>
-  `${numberToIpv4(value)}/${prefix}`;
+const toCidr = (value: number, prefix: number) => `${numberToIpv4(value)}/${prefix}`;
 
-const uniqueGatewayEndpoints = (services: NetworkGatewayEndpoint[] = []) => [
-  ...new Set(services),
-];
+const uniqueGatewayEndpoints = (services: NetworkGatewayEndpoint[] = []) => [...new Set(services)];
 
-const toEndpointId = (service: NetworkGatewayEndpoint) =>
-  service === "s3" ? "S3" : "DynamoDb";
+const toEndpointId = (service: NetworkGatewayEndpoint) => (service === "s3" ? "S3" : "DynamoDb");

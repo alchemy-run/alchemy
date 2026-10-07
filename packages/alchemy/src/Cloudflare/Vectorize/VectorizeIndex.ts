@@ -1,7 +1,6 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -68,13 +67,7 @@ export type IndexAttributes = {
   modifiedOn: string | undefined;
 };
 
-export type Index = Resource<
-  TypeId,
-  IndexProps,
-  IndexAttributes,
-  never,
-  Providers
->;
+export type Index = Resource<TypeId, IndexProps, IndexAttributes, never, Providers>;
 
 /**
  * A Cloudflare Vectorize index for storing and querying vector embeddings.
@@ -85,11 +78,8 @@ export type Index = Resource<
  * A Vectorize index is identified by its name and is immutable: its
  * dimensions, metric, preset, and description are all fixed at creation.
  * Changing any of them triggers a replacement.
- * @resource
- * @product Vectorize
- * @category AI
- * @section Creating an Index
- * @example Index with explicit dimensions and metric
+ * ### Creating an Index
+ * **Example:** Index with explicit dimensions and metric
  * ```typescript
  * const index = yield* Cloudflare.Vectorize.Index("my-index", {
  *   dimensions: 768,
@@ -97,7 +87,7 @@ export type Index = Resource<
  * });
  * ```
  *
- * @example Index from a managed embedding model preset
+ * **Example:** Index from a managed embedding model preset
  * A preset fixes the dimensions and metric to match the named model.
  * ```typescript
  * const index = yield* Cloudflare.Vectorize.Index("my-index", {
@@ -105,7 +95,7 @@ export type Index = Resource<
  * });
  * ```
  *
- * @example Index with a description
+ * **Example:** Index with a description
  * ```typescript
  * const index = yield* Cloudflare.Vectorize.Index("my-index", {
  *   dimensions: 1536,
@@ -114,8 +104,8 @@ export type Index = Resource<
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Querying an index inside a Worker
+ * ### Binding to a Worker
+ * **Example:** Querying an index inside a Worker
  * ```typescript
  * const index = yield* Cloudflare.Vectorize.SearchIndex(MyIndex);
  *
@@ -129,14 +119,17 @@ export type Index = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/vectorize/
+ *
+ * @resource
+ * @product Vectorize
+ * @category AI
  */
 export const Index = Resource<Index>(TypeId);
 
 /**
  * Returns true if the given value is a Vectorize Index resource.
  */
-export const isIndex = (value: unknown): value is Index =>
-  isResourceOfType(value, TypeId);
+export const isIndex = (value: unknown): value is Index => isResourceOfType(value, TypeId);
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {
@@ -147,10 +140,11 @@ export const IndexProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createIndexName(id, news.name);
-      const oldName = output?.indexName
-        ? output.indexName
-        : yield* createIndexName(id, olds.name);
+      const oldName = output?.indexName ?? (yield* createIndexName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         (news.preset ?? undefined) !== (olds.preset ?? undefined) ||
@@ -165,20 +159,17 @@ export const IndexProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name =
-        output?.indexName ?? (yield* createIndexName(id, olds?.name));
-      return yield* vectorize
-        .getIndex({ accountId: acct, indexName: name })
-        .pipe(
-          Effect.map((index) => toAttributes(index, name, acct)),
-          Effect.catchTag(["NotFound", "Gone"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+      const name = output?.indexName ?? (yield* createIndexName(id, olds?.name));
+      return yield* vectorize.getIndex({ accountId: acct, indexName: name }).pipe(
+        Effect.map((index) => toAttributes(index, name, acct)),
+        Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)),
+      );
     }),
-    reconcile: Effect.fn(function* ({ id, news = {} }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const indexName = yield* createIndexName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // index if the generator's output for this id ever drifts.
+      const indexName = output?.indexName ?? (yield* createIndexName(id, news.name));
 
       // Observe — read the live index by name. The name is the stable
       // identifier; fall back through a NotFound to the create path so
@@ -188,11 +179,7 @@ export const IndexProvider = () =>
           accountId,
           indexName,
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "Gone"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)));
 
       // Ensure — create if missing. Cloudflare returns 409 Conflict when
       // an index with the same name already exists; tolerate the race by
@@ -263,9 +250,7 @@ const createIndexName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const buildConfig = (
-  news: IndexProps,
-): vectorize.CreateIndexRequest["config"] =>
+const buildConfig = (news: IndexProps): vectorize.CreateIndexRequest["config"] =>
   news.preset !== undefined
     ? // `Preset` is intentionally open (`| (string & {})`) so
       // new Cloudflare presets aren't blocked by stale types. The

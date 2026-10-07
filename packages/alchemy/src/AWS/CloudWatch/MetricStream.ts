@@ -10,21 +10,12 @@ import { hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import {
-  createName,
-  readResourceTags,
-  retryConcurrent,
-  updateResourceTags,
-} from "./common.ts";
+import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
 export type MetricStreamName = string;
-export type MetricStreamArn =
-  `arn:aws:cloudwatch:${RegionID}:${AccountID}:metric-stream/${string}`;
+export type MetricStreamArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:metric-stream/${string}`;
 
-export interface MetricStreamProps extends Omit<
-  cloudwatch.PutMetricStreamInput,
-  "Name" | "Tags"
-> {
+export interface MetricStreamProps extends Omit<cloudwatch.PutMetricStreamInput, "Name" | "Tags"> {
   /**
    * Name of the metric stream. If omitted, a unique name is generated.
    */
@@ -44,10 +35,15 @@ export interface MetricStream extends Resource<
   "AWS.CloudWatch.MetricStream",
   MetricStreamProps,
   {
+    /** Physical name of the metric stream. */
     metricStreamName: MetricStreamName;
+    /** ARN of the metric stream. */
     metricStreamArn: MetricStreamArn;
+    /** Current state of the stream (`running` or `stopped`). */
     state: string | undefined;
+    /** The full metric stream description as last read from CloudWatch. */
     metricStream: cloudwatch.GetMetricStreamOutput;
+    /** Tags on the metric stream, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -55,10 +51,10 @@ export interface MetricStream extends Resource<
 > {}
 
 /**
- * A CloudWatch metric stream.
- * @resource
- * @section Creating Metric Streams
- * @example Firehose Delivery Stream
+ * A CloudWatch metric stream — continuously exports CloudWatch metrics to
+ * a Kinesis Data Firehose delivery stream (and on to S3, Datadog, etc.).
+ * ### Creating Metric Streams
+ * **Example:** Firehose Delivery Stream
  * ```typescript
  * const stream = yield* MetricStream("MetricsExport", {
  *   FirehoseArn: "arn:aws:firehose:us-east-1:123456789012:deliverystream/example",
@@ -66,19 +62,38 @@ export interface MetricStream extends Resource<
  *   OutputFormat: "json",
  * });
  * ```
+ *
+ * **Example:** Stream Only Selected Namespaces
+ * ```typescript
+ * const stream = yield* MetricStream("LambdaMetricsExport", {
+ *   FirehoseArn: firehose.deliveryStreamArn,
+ *   RoleArn: role.roleArn,
+ *   OutputFormat: "json",
+ *   IncludeFilters: [{ Namespace: "AWS/Lambda" }],
+ * });
+ * ```
+ *
+ * ### Reading Metric Streams at Runtime
+ * **Example:** Read the Stream's State from a Function
+ * ```typescript
+ * // init — bind the stream to the function (see GetMetricStream)
+ * const getMetricStream = yield* AWS.CloudWatch.GetMetricStream(stream);
+ *
+ * // runtime
+ * const result = yield* getMetricStream();
+ * const state = result.State; // "running" | "stopped"
+ * ```
+ *
+ * @resource
  */
-export const MetricStream = Resource<MetricStream>(
-  "AWS.CloudWatch.MetricStream",
-);
+export const MetricStream = Resource<MetricStream>("AWS.CloudWatch.MetricStream");
 
 export const MetricStreamProvider = () =>
   Provider.effect(
     MetricStream,
     Effect.gen(function* () {
-      const createMetricStreamName = (
-        id: string,
-        props: { name?: string } = {},
-      ) => createName(id, props.name, 255);
+      const createMetricStreamName = (id: string, props: { name?: string } = {}) =>
+        createName(id, props.name, 255);
 
       const metricStreamArn = (name: string) =>
         AWSEnvironment.current.pipe(
@@ -94,12 +109,8 @@ export const MetricStreamProvider = () =>
             Name: name,
           })
           .pipe(
-            Effect.catchTag("InvalidParameterValueException", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("InvalidParameterValueException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
         if (!output?.Name || !output.Arn) {
@@ -107,12 +118,8 @@ export const MetricStreamProvider = () =>
         }
 
         const tags = yield* readResourceTags(output.Arn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed({}),
-          ),
-          Effect.catchTag("InvalidParameterValueException", () =>
-            Effect.succeed({}),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
+          Effect.catchTag("InvalidParameterValueException", () => Effect.succeed({})),
         );
 
         return {
@@ -149,11 +156,7 @@ export const MetricStreamProvider = () =>
 
       return {
         stables: ["metricStreamName", "metricStreamArn"],
-        diff: Effect.fn(function* ({
-          id,
-          olds = {},
-          news = {} as Input<MetricStreamProps>,
-        }) {
+        diff: Effect.fn(function* ({ id, olds = {}, news = {} as Input<MetricStreamProps> }) {
           if (!isResolved(news)) return undefined;
           const oldName = yield* createMetricStreamName(id, olds);
           const newName = yield* createMetricStreamName(id, news);
@@ -169,42 +172,30 @@ export const MetricStreamProvider = () =>
             // produce the full Attributes shape `read` returns.
             const entries = yield* cloudwatch.listMetricStreams.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.Entries ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Entries ?? [])),
             );
 
             const results = yield* Effect.forEach(
               entries,
-              (entry) =>
-                entry.Name
-                  ? readMetricStream(entry.Name)
-                  : Effect.succeed(undefined),
+              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.succeed(undefined)),
               { concurrency: 10 },
             );
 
             return results.filter(
-              (state): state is NonNullable<typeof state> =>
-                state !== undefined,
+              (state): state is NonNullable<typeof state> => state !== undefined,
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.metricStreamName ??
-            (yield* createMetricStreamName(id, olds ?? {}));
+          const name = output?.metricStreamName ?? (yield* createMetricStreamName(id, olds ?? {}));
           const state = yield* readMetricStream(name);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // Observe — pin the physical name from `output` if present;
           // otherwise derive from desired props. Read existing so we have
           // a baseline for tag-diffing on adoption.
-          const name =
-            output?.metricStreamName ??
-            (yield* createMetricStreamName(id, news));
+          const name = output?.metricStreamName ?? (yield* createMetricStreamName(id, news));
           const existing = yield* readMetricStream(name);
 
           // Ensure — `putMetricStream` is an upsert; we send the full
@@ -256,12 +247,7 @@ export const MetricStreamProvider = () =>
             cloudwatch.deleteMetricStream({
               Name: output.metricStreamName,
             }),
-          ).pipe(
-            Effect.catchTag(
-              "InvalidParameterValueException",
-              () => Effect.void,
-            ),
-          );
+          ).pipe(Effect.catchTag("InvalidParameterValueException", () => Effect.void));
         }),
       };
     }),

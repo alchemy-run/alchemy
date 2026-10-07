@@ -3,13 +3,13 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type { Bucket } from "./Bucket.ts";
 
 const TypeId = "Cloudflare.R2.DataCatalog" as const;
 type TypeId = typeof TypeId;
@@ -59,14 +59,7 @@ export type SnapshotExpiration = {
   minSnapshotsToKeep?: number;
 };
 
-export type DataCatalogProps = {
-  /**
-   * Name of the R2 bucket to enable the Iceberg data catalog on. The bucket
-   * must already exist — pass `bucket.bucketName` from a `Cloudflare.R2.Bucket`
-   * resource to order catalog-after-bucket. Changing the bucket replaces the
-   * catalog (the old bucket's catalog is disabled; table data is untouched).
-   */
-  bucketName: string;
+export type DataCatalogProps = DataCatalogBucket & {
   /**
    * Compaction maintenance configuration. Only the fields you specify are
    * enforced; omitted fields keep Cloudflare's defaults.
@@ -84,6 +77,46 @@ export type DataCatalogProps = {
    * Maintenance jobs stay pending until a credential is provided.
    */
   token?: Redacted.Redacted<string>;
+};
+
+/**
+ * The bucket a catalog is enabled on. `bucketName` is the deprecated spelling
+ * of `bucket`; both name the same bucket and switching between them is not a
+ * change.
+ */
+export type DataCatalogBucket =
+  | {
+      /**
+       * The R2 bucket to enable the Iceberg catalog on: a
+       * `Cloudflare.R2.Bucket` resource (orders the catalog after the bucket)
+       * or a bucket name. Changing the bucket replaces the catalog (the old
+       * bucket's catalog is disabled; table data is untouched).
+       */
+      bucket: string | Bucket;
+      bucketName?: never;
+    }
+  | {
+      /**
+       * Name of the R2 bucket to enable the catalog on.
+       * @deprecated Use `bucket`, which also accepts the bucket resource.
+       */
+      bucketName: string;
+      bucket?: never;
+    };
+
+/**
+ * The bucket name behind a catalog's props: `bucket` as a name or a resolved
+ * `Cloudflare.R2.Bucket`, or the deprecated `bucketName`.
+ */
+export const catalogBucketName = (props: unknown): string | undefined => {
+  if (props === null || typeof props !== "object") return undefined;
+  const { bucket, bucketName } = props as { bucket?: unknown; bucketName?: unknown };
+  if (typeof bucket === "string") return bucket;
+  if (bucket !== null && typeof bucket === "object") {
+    const name = (bucket as { bucketName?: unknown }).bucketName;
+    if (typeof name === "string") return name;
+  }
+  return typeof bucketName === "string" ? bucketName : undefined;
 };
 
 export type DataCatalogAttributes = {
@@ -111,7 +144,7 @@ export type DataCatalogAttributes = {
   /**
    * Whether a maintenance credential is registered for this catalog.
    */
-  credentialStatus: "present" | "absent";
+  credentialStatus: "present" | "absent" | (string & {});
   /**
    * Observed compaction maintenance configuration.
    */
@@ -154,16 +187,20 @@ export type DataCatalog = Resource<
  * Iceberg tables stored in R2. The catalog is a singleton per bucket: this
  * resource enables it, keeps its maintenance configuration in sync, and
  * disables it on destroy (table data in the bucket is never deleted).
- * @resource
- * @product R2 Data Catalog
- * @category Storage & Databases
- * @section Enabling a catalog
- * @example Enable the catalog on an R2 bucket
+ *
+ * Also exported as `Cloudflare.Basin.Catalog` — the catalog of Cloudflare's
+ * Basin product (Pipelines + Catalog + SQL). The warehouse is named
+ * `<accountId>_<bucket>` and served at
+ * `https://catalog.cloudflarestorage.com/<accountId>/<bucket>`. Pass the
+ * catalog resource to a catalog `Cloudflare.Basin.Sink` (`catalog: Catalog`)
+ * so the sink is created after it.
+ * ### Enabling a catalog
+ * **Example:** Enable the catalog on an R2 bucket
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("LakehouseBucket");
  *
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
- *   bucketName: bucket.bucketName,
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
+ *   bucket,
  * });
  *
  * // Point any Iceberg REST client at the warehouse:
@@ -171,11 +208,11 @@ export type DataCatalog = Resource<
  * const warehouse = catalog.name;
  * ```
  *
- * @section Maintenance
- * @example Configure compaction and snapshot expiration
+ * ### Maintenance
+ * **Example:** Configure compaction and snapshot expiration
  * ```typescript
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
- *   bucketName: bucket.bucketName,
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
+ *   bucket,
  *   compaction: { state: "enabled", targetSizeMb: "256" },
  *   snapshotExpiration: {
  *     state: "enabled",
@@ -185,22 +222,26 @@ export type DataCatalog = Resource<
  * });
  * ```
  *
- * @example Register a maintenance credential
+ * **Example:** Register a maintenance credential
  * ```typescript
  * // Maintenance jobs need an API token with R2 read/write on the bucket.
- * const catalog = yield* Cloudflare.R2.R2DataCatalog("Lakehouse", {
- *   bucketName: bucket.bucketName,
+ * const catalog = yield* Cloudflare.Basin.Catalog("Lakehouse", {
+ *   bucket,
  *   compaction: { state: "enabled" },
  *   token: maintenanceToken, // Redacted<string>
  * });
  * ```
  *
  * @see https://developers.cloudflare.com/r2/data-catalog/
+ *
+ * @resource
+ * @product R2 Data Catalog
+ * @category Storage & Databases
  */
 export const DataCatalog = Resource<DataCatalog>(TypeId);
 
 /**
- * Returns true if the given value is an R2DataCatalog resource.
+ * Returns true if the given value is a DataCatalog (Basin Catalog) resource.
  */
 export const isDataCatalog = (value: unknown): value is DataCatalog =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
@@ -217,14 +258,9 @@ export const DataCatalogProvider = () =>
       // The catalog is keyed to its bucket — moving buckets is a replacement
       // (disable on the old bucket, enable on the new one). bucketName is an
       // Input<string>; compare only once both sides are concrete strings.
-      const oldBucket =
-        output?.bucketName ??
-        (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
-      if (
-        oldBucket !== undefined &&
-        typeof news.bucketName === "string" &&
-        oldBucket !== news.bucketName
-      ) {
+      const oldBucket = output?.bucketName ?? catalogBucketName(olds);
+      const newBucket = catalogBucketName(news);
+      if (oldBucket !== undefined && newBucket !== undefined && oldBucket !== newBucket) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -232,9 +268,7 @@ export const DataCatalogProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const bucketName =
-        output?.bucketName ??
-        (typeof olds?.bucketName === "string" ? olds.bucketName : undefined);
+      const bucketName = output?.bucketName ?? catalogBucketName(olds);
       if (bucketName === undefined) return undefined;
 
       const observed = yield* getCatalog(acct, bucketName);
@@ -254,9 +288,7 @@ export const DataCatalogProvider = () =>
       // a live resource — `read` treats `inactive` (disabled) as gone.
       return yield* rdc.listR2DataCatalogs({ accountId }).pipe(
         Effect.map(({ warehouses }) =>
-          warehouses
-            .filter((w) => w.status === "active")
-            .map((w) => toAttributes(w, accountId)),
+          warehouses.filter((w) => w.status === "active").map((w) => toAttributes(w, accountId)),
         ),
         // Accounts without R2 Data Catalog access reject the route entirely.
         Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
@@ -265,8 +297,9 @@ export const DataCatalogProvider = () =>
     reconcile: Effect.fn(function* ({ news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      // Inputs have been resolved to concrete strings by Plan.
-      const bucketName = news.bucketName as string;
+      // Inputs have been resolved by Plan: `bucket` is a name or the
+      // bucket's attributes.
+      const bucketName = catalogBucketName(news) as string;
 
       // Observe — `output` is only a cache; a disabled or never-enabled
       // catalog observes as missing/inactive and falls through to ensure.
@@ -283,15 +316,32 @@ export const DataCatalogProvider = () =>
             schedule: catalogConsistencySchedule,
           }),
         );
-        observed = yield* rdc
-          .getR2DataCatalog({ accountId: acct, bucketName })
-          .pipe(
-            // The catalog can lag behind its own enable call.
-            Effect.retry({
-              while: (e) => e._tag === "WarehouseNotFound",
-              schedule: catalogConsistencySchedule,
-            }),
-          );
+        observed = yield* rdc.getR2DataCatalog({ accountId: acct, bucketName }).pipe(
+          // The catalog can lag behind its own enable call.
+          Effect.retry({
+            while: (e) => e._tag === "WarehouseNotFound",
+            schedule: catalogConsistencySchedule,
+          }),
+        );
+      }
+
+      // Sync credential before maintenance — Cloudflare rejects maintenance
+      // updates when the warehouse has no credential registered.
+      // The API exposes only present/absent, so `olds` serves as the rotation
+      // hint: re-push when the token value changed or no credential is
+      // registered (adoption re-pushes; idempotent).
+      let credentialStatus = (observed.credentialStatus ?? "absent") as "present" | "absent";
+      if (news.token !== undefined) {
+        const rotated =
+          olds?.token === undefined || Redacted.value(olds.token) !== Redacted.value(news.token);
+        if (credentialStatus !== "present" || rotated) {
+          yield* rdc.createCredential({
+            accountId: acct,
+            bucketName,
+            token: Redacted.value(news.token),
+          });
+          credentialStatus = "present";
+        }
       }
 
       // Sync maintenance — diff observed config against the fields the user
@@ -310,11 +360,9 @@ export const DataCatalogProvider = () =>
         ((news.snapshotExpiration.state !== undefined &&
           news.snapshotExpiration.state !== observedExpiration?.state) ||
           (news.snapshotExpiration.maxSnapshotAge !== undefined &&
-            news.snapshotExpiration.maxSnapshotAge !==
-              observedExpiration?.maxSnapshotAge) ||
+            news.snapshotExpiration.maxSnapshotAge !== observedExpiration?.maxSnapshotAge) ||
           (news.snapshotExpiration.minSnapshotsToKeep !== undefined &&
-            news.snapshotExpiration.minSnapshotsToKeep !==
-              observedExpiration?.minSnapshotsToKeep));
+            news.snapshotExpiration.minSnapshotsToKeep !== observedExpiration?.minSnapshotsToKeep));
       if (compactionDirty || expirationDirty) {
         const updated = yield* rdc.updateMaintenanceConfig({
           accountId: acct,
@@ -326,26 +374,6 @@ export const DataCatalogProvider = () =>
           compaction: updated.compaction,
           snapshotExpiration: updated.snapshotExpiration,
         };
-      }
-
-      // Sync credential — the API exposes only present/absent, so `olds`
-      // serves as the rotation hint: re-push when the token value changed
-      // or no credential is registered (adoption re-pushes; idempotent).
-      let credentialStatus = (observed.credentialStatus ?? "absent") as
-        | "present"
-        | "absent";
-      if (news.token !== undefined) {
-        const rotated =
-          olds?.token === undefined ||
-          Redacted.value(olds.token) !== Redacted.value(news.token);
-        if (credentialStatus !== "present" || rotated) {
-          yield* rdc.createCredential({
-            accountId: acct,
-            bucketName,
-            token: Redacted.value(news.token),
-          });
-          credentialStatus = "present";
-        }
       }
 
       return toAttributes(
@@ -362,21 +390,13 @@ export const DataCatalogProvider = () =>
           accountId: output.accountId,
           bucketName: output.bucketName,
         })
-        .pipe(
-          Effect.catchTag(
-            ["WarehouseNotFound", "NoSuchBucket"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["WarehouseNotFound", "NoSuchBucket"], () => Effect.void));
     }),
   });
 
 // A freshly-created bucket (or freshly-enabled catalog) can briefly 404 on
 // the r2-catalog endpoints before the warehouse propagates.
-const catalogConsistencySchedule = Schedule.max([
-  Schedule.exponential(100),
-  Schedule.recurs(5),
-]);
+const catalogConsistencySchedule = Schedule.max([Schedule.exponential(100), Schedule.recurs(5)]);
 
 /**
  * Read a catalog by bucket name, mapping "gone" (`WarehouseNotFound`, code
@@ -385,11 +405,7 @@ const catalogConsistencySchedule = Schedule.max([
 const getCatalog = (accountId: string, bucketName: string) =>
   rdc
     .getR2DataCatalog({ accountId, bucketName })
-    .pipe(
-      Effect.catchTag(["WarehouseNotFound", "NoSuchBucket"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["WarehouseNotFound", "NoSuchBucket"], () => Effect.succeed(undefined)));
 
 const toAttributes = (
   catalog: rdc.GetR2DataCatalogResponse,
@@ -406,18 +422,14 @@ const toAttributes = (
   compaction: catalog.maintenanceConfig?.compaction
     ? {
         state: catalog.maintenanceConfig.compaction.state as MaintenanceState,
-        targetSizeMb: catalog.maintenanceConfig.compaction
-          .targetSizeMb as TargetSizeMb,
+        targetSizeMb: catalog.maintenanceConfig.compaction.targetSizeMb as TargetSizeMb,
       }
     : undefined,
   snapshotExpiration: catalog.maintenanceConfig?.snapshotExpiration
     ? {
-        state: catalog.maintenanceConfig.snapshotExpiration
-          .state as MaintenanceState,
-        maxSnapshotAge:
-          catalog.maintenanceConfig.snapshotExpiration.maxSnapshotAge,
-        minSnapshotsToKeep:
-          catalog.maintenanceConfig.snapshotExpiration.minSnapshotsToKeep,
+        state: catalog.maintenanceConfig.snapshotExpiration.state as MaintenanceState,
+        maxSnapshotAge: catalog.maintenanceConfig.snapshotExpiration.maxSnapshotAge,
+        minSnapshotsToKeep: catalog.maintenanceConfig.snapshotExpiration.minSnapshotsToKeep,
       }
     : undefined,
   catalogUri: `https://catalog.cloudflarestorage.com/${accountId}/${catalog.bucket}`,

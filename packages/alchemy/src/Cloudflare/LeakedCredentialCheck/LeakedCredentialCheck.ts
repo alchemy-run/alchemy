@@ -1,15 +1,13 @@
 import * as lcc from "@distilled.cloud/cloudflare/leaked-credential-checks";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
-const TypeId =
-  "Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck" as const;
+const TypeId = "Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck" as const;
 type TypeId = typeof TypeId;
 
 export interface Props {
@@ -40,13 +38,7 @@ export interface Attributes {
   initialEnabled: boolean;
 }
 
-export type LeakedCredentialCheck = Resource<
-  TypeId,
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type LeakedCredentialCheck = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
  * The Leaked Credential Checks setting of a Cloudflare zone
@@ -68,11 +60,8 @@ export type LeakedCredentialCheck = Resource<
  *
  * Only one `LeakedCredentialCheck` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- * @resource
- * @product Leaked Credential Checks
- * @category Application Security
- * @section Managing the check
- * @example Enable Leaked Credential Checks on a zone
+ * ### Managing the check
+ * **Example:** Enable Leaked Credential Checks on a zone
  * ```typescript
  * const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
  *
@@ -81,7 +70,7 @@ export type LeakedCredentialCheck = Resource<
  * });
  * ```
  *
- * @example Explicitly pin the check off
+ * **Example:** Explicitly pin the check off
  * ```typescript
  * yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
  *   zoneId: zone.zoneId,
@@ -90,6 +79,10 @@ export type LeakedCredentialCheck = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/detections/leaked-credentials/
+ *
+ * @resource
+ * @product Leaked Credential Checks
+ * @category Application Security
  */
 export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(TypeId, {
   aliases: ["Cloudflare.LeakedCredentialCheck"],
@@ -98,9 +91,7 @@ export const LeakedCredentialCheck = Resource<LeakedCredentialCheck>(TypeId, {
 /**
  * Returns true if the given value is a LeakedCredentialCheck resource.
  */
-export const isLeakedCredentialCheck = (
-  value: unknown,
-): value is LeakedCredentialCheck =>
+export const isLeakedCredentialCheck = (value: unknown): value is LeakedCredentialCheck =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const desiredEnabled = (props: Props): boolean => props.enabled ?? true;
@@ -141,13 +132,8 @@ export const LeakedCredentialCheckProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -162,8 +148,7 @@ export const LeakedCredentialCheckProvider = () =>
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialEnabled` restored on destroy.
       const enabled = observed.enabled ?? false;
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : enabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
       return { zoneId, enabled, initialEnabled };
     }),
 
@@ -179,8 +164,7 @@ export const LeakedCredentialCheckProvider = () =>
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
-      const initialEnabled =
-        output !== undefined ? output.initialEnabled : observedEnabled;
+      const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
       // 3. Sync — POST (the API's set/upsert) only when it differs.
       const desired = desiredEnabled(news);

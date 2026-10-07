@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -45,7 +44,7 @@ export type IntegrationAttributes = {
   /** Account that owns the integration. */
   accountId: string;
   /** The third-party consumer of risk-score changes. */
-  integrationType: "Okta";
+  integrationType: "Okta" | (string & {});
   /** Observed tenant base URL. */
   tenantUrl: string;
   /** Observed client-supplied reference id. */
@@ -75,11 +74,8 @@ export type Integration = Resource<
  * Requires the Zero Trust risk-scoring entitlement (an Enterprise
  * feature); accounts without it receive the typed `Forbidden` error on
  * all writes.
- * @resource
- * @product Risk Scoring
- * @category Cloudflare One (Zero Trust)
- * @section Creating a risk scoring integration
- * @example Push risk scores to an Okta tenant
+ * ### Creating a risk scoring integration
+ * **Example:** Push risk scores to an Okta tenant
  * ```typescript
  * const okta = yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
  *   tenantUrl: "https://tenant.okta.com",
@@ -87,7 +83,7 @@ export type Integration = Resource<
  * });
  * ```
  *
- * @example Pause exporting without deleting
+ * **Example:** Pause exporting without deleting
  * ```typescript
  * const okta = yield* Cloudflare.RiskScoring.Integration("OktaSsf", {
  *   tenantUrl: "https://tenant.okta.com",
@@ -96,6 +92,10 @@ export type Integration = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/insights/risk-score/
+ *
+ * @resource
+ * @product Risk Scoring
+ * @category Cloudflare One (Zero Trust)
  */
 export const Integration = Resource<Integration>(TypeId);
 
@@ -146,9 +146,7 @@ export const IntegrationProvider = () =>
           accountId,
           integrationType: news.integrationType ?? "Okta",
           tenantUrl: news.tenantUrl,
-          ...(news.referenceId !== undefined
-            ? { referenceId: news.referenceId }
-            : {}),
+          ...(news.referenceId !== undefined ? { referenceId: news.referenceId } : {}),
         });
       }
 
@@ -158,8 +156,7 @@ export const IntegrationProvider = () =>
       const dirty =
         observed.tenantUrl !== news.tenantUrl ||
         observed.active !== desiredActive ||
-        (news.referenceId !== undefined &&
-          observed.referenceId !== news.referenceId);
+        (news.referenceId !== undefined && observed.referenceId !== news.referenceId);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -168,9 +165,7 @@ export const IntegrationProvider = () =>
         integrationId: observed.id,
         active: desiredActive,
         tenantUrl: news.tenantUrl,
-        ...(news.referenceId !== undefined
-          ? { referenceId: news.referenceId }
-          : {}),
+        ...(news.referenceId !== undefined ? { referenceId: news.referenceId } : {}),
       });
       return toAttributes(updated, accountId);
     }),
@@ -181,9 +176,7 @@ export const IntegrationProvider = () =>
           accountId: output.accountId,
           integrationId: output.integrationId,
         })
-        .pipe(
-          Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.void));
     }),
 
     // Account collection (pattern b). Enumerate every risk-scoring
@@ -193,19 +186,15 @@ export const IntegrationProvider = () =>
     // as "nothing to list" and return [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listRiskScoringIntegrations
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((integration) =>
-                toAttributes(integration, accountId),
-              ),
-            ),
+      return yield* zeroTrust.listRiskScoringIntegrations.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((integration) => toAttributes(integration, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
   });
 
@@ -216,7 +205,7 @@ type ObservedIntegration = {
   id: string;
   active: boolean;
   createdAt: string;
-  integrationType: "Okta";
+  integrationType: string;
   referenceId: string;
   tenantUrl: string;
   wellKnownUrl: string;
@@ -228,11 +217,7 @@ type ObservedIntegration = {
 const observeIntegration = (accountId: string, integrationId: string) =>
   zeroTrust
     .getRiskScoringIntegration({ accountId, integrationId })
-    .pipe(
-      Effect.catchTag("RiskScoringIntegrationNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find an integration by exact tenant URL.
@@ -240,9 +225,7 @@ const observeIntegration = (accountId: string, integrationId: string) =>
 const findByTenantUrl = (accountId: string, tenantUrl: string) =>
   zeroTrust
     .listRiskScoringIntegrations({ accountId })
-    .pipe(
-      Effect.map((list) => list.result.find((i) => i.tenantUrl === tenantUrl)),
-    );
+    .pipe(Effect.map((list) => list.result.find((i) => i.tenantUrl === tenantUrl)));
 
 const toAttributes = (
   integration: ObservedIntegration,

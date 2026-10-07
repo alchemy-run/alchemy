@@ -9,10 +9,15 @@ import type { Providers } from "../Providers.ts";
 import { retryOnApiStatusUpdating } from "./common.ts";
 
 export interface GatewayResponseProps {
+  /** ID of the REST API the response mapping belongs to. */
   restApiId: Input<string>;
+  /** The gateway response type to customize (e.g. `DEFAULT_4XX`, `ACCESS_DENIED`). */
   responseType: ag.GatewayResponseType;
+  /** HTTP status code to return; defaults to the response type's standard code. */
   statusCode?: string;
+  /** Response header parameters (e.g. `gatewayresponse.header.X-Foo`) as mapping expressions. */
   responseParameters?: { [key: string]: string | undefined };
+  /** Response body mapping templates keyed by content type. */
   responseTemplates?: { [key: string]: string | undefined };
 }
 
@@ -32,8 +37,8 @@ export interface GatewayResponse extends Resource<
 /**
  * Gateway response mapping for a REST API (e.g. DEFAULT_4XX, DEFAULT_5XX).
  *
- * @section Gateway responses
- * @example Default 4xx JSON body
+ * ### Gateway responses
+ * **Example:** Default 4xx JSON body
  * ```typescript
  * yield* ApiGateway.GatewayResponse("Default4xx", {
  *   restApiId: api.restApiId,
@@ -42,9 +47,7 @@ export interface GatewayResponse extends Resource<
  * });
  * ```
  */
-const GatewayResponseResource = Resource<GatewayResponse>(
-  "AWS.ApiGateway.GatewayResponse",
-);
+const GatewayResponseResource = Resource<GatewayResponse>("AWS.ApiGateway.GatewayResponse");
 
 export { GatewayResponseResource as GatewayResponse };
 
@@ -57,10 +60,7 @@ export const GatewayResponseProvider = () =>
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as Input.ResolveProps<GatewayResponseProps>;
-          if (
-            news.restApiId !== olds.restApiId ||
-            news.responseType !== olds.responseType
-          ) {
+          if (news.restApiId !== olds.restApiId || news.responseType !== olds.responseType) {
             return { action: "replace" } as const;
           }
         }),
@@ -71,11 +71,7 @@ export const GatewayResponseProvider = () =>
               restApiId: output.restApiId,
               responseType: output.responseType,
             })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!g?.responseType) return undefined;
           return {
             restApiId: output.restApiId,
@@ -91,9 +87,7 @@ export const GatewayResponseProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.items ?? [])
-                    .map((a) => a.id)
-                    .filter((id): id is string => id != null),
+                  (page.items ?? []).map((a) => a.id).filter((id): id is string => id != null),
                 ),
               ),
             );
@@ -116,9 +110,7 @@ export const GatewayResponseProvider = () =>
                         statusCode: g.statusCode,
                       })),
                   ),
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.catchTag("NotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
             );
@@ -146,9 +138,7 @@ export const GatewayResponseProvider = () =>
               responseTemplates: news.responseTemplates,
             }),
           );
-          yield* session.note(
-            `Reconciled gateway response ${responseType} on ${restApiId}`,
-          );
+          yield* session.note(`Reconciled gateway response ${responseType} on ${restApiId}`);
           return {
             restApiId,
             responseType,
@@ -164,9 +154,7 @@ export const GatewayResponseProvider = () =>
               })
               .pipe(Effect.catchTag("NotFoundException", () => Effect.void)),
           );
-          yield* session.note(
-            `Deleted gateway response ${output.responseType}`,
-          );
+          yield* session.note(`Deleted gateway response ${output.responseType}`);
         }),
       };
     }),

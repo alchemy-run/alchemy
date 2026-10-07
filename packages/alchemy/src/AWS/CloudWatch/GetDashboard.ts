@@ -3,13 +3,26 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
-export interface GetDashboardRequest extends Omit<
-  cloudwatch.GetDashboardInput,
-  "DashboardName"
-> {}
+export interface GetDashboardRequest extends Omit<cloudwatch.GetDashboardInput, "DashboardName"> {}
 
 /**
- * Runtime binding for `cloudwatch:GetDashboard`.
+ * Runtime binding for `cloudwatch:GetDashboard` — read the body and
+ * metadata of the bound {@link Dashboard}; the dashboard name is injected
+ * automatically.
+ *
+ * Provide `CloudWatch.GetDashboardHttp` on the hosting Lambda Function to
+ * satisfy the requirement.
+ * ### Reading Dashboards
+ * **Example:** Read a Bound Dashboard
+ * ```typescript
+ * // init — grants cloudwatch:GetDashboard on the dashboard
+ * const getDashboard = yield* AWS.CloudWatch.GetDashboard(dashboard);
+ *
+ * // runtime
+ * const result = yield* getDashboard();
+ * const widgets = JSON.parse(result.DashboardBody ?? "{}").widgets;
+ * ```
+ *
  * @binding
  */
 export interface GetDashboard extends Binding.Service<
@@ -20,13 +33,8 @@ export interface GetDashboard extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetDashboardRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetDashboardOutput,
-      cloudwatch.GetDashboardError
-    >
+    ) => Effect.Effect<cloudwatch.GetDashboardOutput, cloudwatch.GetDashboardError>
   >
 > {}
 
-export const GetDashboard = Binding.Service<GetDashboard>(
-  "AWS.CloudWatch.GetDashboard",
-);
+export const GetDashboard = Binding.Service<GetDashboard>("AWS.CloudWatch.GetDashboard");

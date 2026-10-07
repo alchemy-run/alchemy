@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -76,13 +75,7 @@ export interface MagicSiteAttributes {
   location: MagicSiteLocation | undefined;
 }
 
-export type MagicSite = Resource<
-  TypeId,
-  MagicSiteProps,
-  MagicSiteAttributes,
-  never,
-  Providers
->;
+export type MagicSite = Resource<TypeId, MagicSiteProps, MagicSiteAttributes, never, Providers>;
 
 /**
  * A Magic WAN site — represents a physical or logical network location
@@ -94,11 +87,8 @@ export type MagicSite = Resource<
  *
  * `haMode` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
- * @resource
- * @product Magic Transit
- * @category Network
- * @section Creating a site
- * @example Basic site
+ * ### Creating a site
+ * **Example:** Basic site
  * ```typescript
  * const site = yield* Cloudflare.MagicTransit.MagicSite("hq", {
  *   description: "Headquarters",
@@ -106,7 +96,7 @@ export type MagicSite = Resource<
  * });
  * ```
  *
- * @example Site with LAN and WAN
+ * **Example:** Site with LAN and WAN
  * ```typescript
  * const site = yield* Cloudflare.MagicTransit.MagicSite("hq", {});
  *
@@ -123,6 +113,10 @@ export type MagicSite = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/magic-wan/configuration/connector/
+ *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  */
 export const MagicSite = Resource<MagicSite>(TypeId);
 
@@ -148,9 +142,7 @@ export const MagicSiteProvider = () =>
             (page.result ?? []).map((site) => toAttributes(site, accountId)),
           ),
         ),
-        Effect.catchTag("MagicWanUnauthorized", () =>
-          Effect.succeed<MagicSiteAttributes[]>([]),
-        ),
+        Effect.catchTag("MagicWanUnauthorized", () => Effect.succeed<MagicSiteAttributes[]>([])),
       );
     }),
 
@@ -186,14 +178,10 @@ export const MagicSiteProvider = () =>
       const name = yield* createSiteName(id, news.name);
       // Inputs have been resolved to concrete strings by Plan.
       const connectorId = news.connectorId as string | undefined;
-      const secondaryConnectorId = news.secondaryConnectorId as
-        | string
-        | undefined;
+      const secondaryConnectorId = news.secondaryConnectorId as string | undefined;
 
       // Observe — the id on `output` is a hint; fall back to a name scan.
-      let observed = output?.siteId
-        ? yield* getSite(accountId, output.siteId)
-        : undefined;
+      let observed = output?.siteId ? yield* getSite(accountId, output.siteId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
@@ -209,10 +197,7 @@ export const MagicSiteProvider = () =>
           haMode: news.haMode,
           location: news.location,
         });
-        return toAttributes(
-          { ...created, id: created.id ?? undefined },
-          accountId,
-        );
+        return toAttributes({ ...created, id: created.id ?? undefined }, accountId);
       }
 
       // Sync — diff observed cloud state against desired; skip on no-op.
@@ -220,11 +205,9 @@ export const MagicSiteProvider = () =>
         (observed.name ?? undefined) !== name ||
         (news.description !== undefined &&
           (observed.description ?? undefined) !== news.description) ||
-        (connectorId !== undefined &&
-          (observed.connectorId ?? undefined) !== connectorId) ||
+        (connectorId !== undefined && (observed.connectorId ?? undefined) !== connectorId) ||
         (secondaryConnectorId !== undefined &&
-          (observed.secondaryConnectorId ?? undefined) !==
-            secondaryConnectorId) ||
+          (observed.secondaryConnectorId ?? undefined) !== secondaryConnectorId) ||
         locationDirty(observed.location, news.location);
       if (dirty) {
         const updated = yield* magicTransit.updateSite({
@@ -297,16 +280,12 @@ const locationDirty = (
 ): boolean => {
   if (desired === undefined) return false;
   return (
-    (desired.lat !== undefined &&
-      (observed?.lat ?? undefined) !== desired.lat) ||
+    (desired.lat !== undefined && (observed?.lat ?? undefined) !== desired.lat) ||
     (desired.lon !== undefined && (observed?.lon ?? undefined) !== desired.lon)
   );
 };
 
-const toAttributes = (
-  site: ObservedSite,
-  accountId: string,
-): MagicSiteAttributes => ({
+const toAttributes = (site: ObservedSite, accountId: string): MagicSiteAttributes => ({
   siteId: site.id ?? "",
   accountId,
   name: site.name ?? "",

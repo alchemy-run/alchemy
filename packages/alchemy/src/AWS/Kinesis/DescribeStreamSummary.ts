@@ -8,7 +8,27 @@ export interface DescribeStreamSummaryRequest extends Omit<
   "StreamName" | "StreamARN"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `kinesis:DescribeStreamSummary`.
+ *
+ * Bind this operation to a `Stream` to read its status, mode, retention,
+ * encryption, and open shard count without paginating the full shard map.
+ * Provide the implementation with
+ * `Effect.provide(AWS.Kinesis.DescribeStreamSummaryHttp)`.
+ * ### Inspecting Streams
+ * **Example:** Read the Stream Summary
+ * ```typescript
+ * // init
+ * const describeStreamSummary = yield* AWS.Kinesis.DescribeStreamSummary(stream);
+ *
+ * // runtime
+ * const result = yield* describeStreamSummary();
+ * const summary = result.StreamDescriptionSummary;
+ * yield* Effect.log(`${summary.StreamStatus}: ${summary.OpenShardCount} shards`);
+ * ```
+ *
+ * @binding
+ */
 export interface DescribeStreamSummary extends Binding.Service<
   DescribeStreamSummary,
   "AWS.Kinesis.DescribeStreamSummary",
@@ -17,10 +37,7 @@ export interface DescribeStreamSummary extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeStreamSummaryRequest,
-    ) => Effect.Effect<
-      Kinesis.DescribeStreamSummaryOutput,
-      Kinesis.DescribeStreamSummaryError
-    >
+    ) => Effect.Effect<Kinesis.DescribeStreamSummaryOutput, Kinesis.DescribeStreamSummaryError>
   >
 > {}
 

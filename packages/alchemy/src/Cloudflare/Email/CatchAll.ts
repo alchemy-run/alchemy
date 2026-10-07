@@ -8,6 +8,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { retryWorkerScriptNotFound } from "./retry.ts";
 import type { Action } from "./Rule.ts";
 
 const CatchAllTypeId = "Cloudflare.Email.CatchAll" as const;
@@ -90,11 +91,8 @@ export type CatchAll = Resource<
  * Email Routing must be enabled on the zone first (see
  * `Cloudflare.Email.Routing`), and `forward` actions require the destination
  * address to be verified (see `Cloudflare.Email.Address`).
- * @resource
- * @product Email
- * @category Email
- * @section Catching unmatched mail
- * @example Forward everything else to a verified destination
+ * ### Catching unmatched mail
+ * **Example:** Forward everything else to a verified destination
  * ```typescript
  * const routing = yield* Cloudflare.Email.Routing("Routing", {
  *   zone: "example.com",
@@ -106,7 +104,7 @@ export type CatchAll = Resource<
  * });
  * ```
  *
- * @example Silently drop unmatched mail
+ * **Example:** Silently drop unmatched mail
  * ```typescript
  * yield* Cloudflare.Email.CatchAll("DropTheRest", {
  *   zone: routing.zoneId,
@@ -115,14 +113,18 @@ export type CatchAll = Resource<
  * });
  * ```
  *
- * @section Workers
- * @example Hand unmatched mail to an email Worker
+ * ### Workers
+ * **Example:** Hand unmatched mail to an email Worker
  * ```typescript
  * yield* Cloudflare.Email.CatchAll("CatchAllWorker", {
  *   zone: routing.zoneId,
  *   actions: [{ type: "worker", value: ["my-email-worker"] }],
  * });
  * ```
+ *
+ * @resource
+ * @product Email
+ * @category Email
  */
 export const CatchAll = Resource<CatchAll>(CatchAllTypeId, {
   aliases: ["Cloudflare.EmailCatchAll"],
@@ -137,13 +139,7 @@ export const isCatchAll = (value: unknown): value is CatchAll =>
 export const CatchAllProvider = () =>
   Provider.succeed(CatchAll, {
     nuke: { singleton: true },
-    stables: [
-      "ruleId",
-      "zoneId",
-      "initialName",
-      "initialEnabled",
-      "initialActions",
-    ],
+    stables: ["ruleId", "zoneId", "initialName", "initialEnabled", "initialActions"],
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -155,9 +151,7 @@ export const CatchAllProvider = () =>
         allZones.map((zone) => zone.id),
         (zoneId) =>
           emailRouting.getRuleCatchAll({ zoneId }).pipe(
-            Effect.map((observed) =>
-              toAttributes(zoneId, observed, observedInitial(observed)),
-            ),
+            Effect.map((observed) => toAttributes(zoneId, observed, observedInitial(observed))),
             // Zones without Email Routing enabled (or that the token can no
             // longer see) reject the route; skip them.
             Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
@@ -182,8 +176,7 @@ export const CatchAllProvider = () =>
       const zoneId =
         // `olds.zone` may be `undefined` when a `creating` row was persisted
         // before upstream Outputs resolved — report "not found" then.
-        output?.zoneId ??
-        (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
+        output?.zoneId ?? (olds?.zone !== undefined ? yield* resolve(olds.zone) : undefined);
       if (!zoneId) return undefined;
       const observed = yield* emailRouting.getRuleCatchAll({ zoneId }).pipe(
         // Zone deleted out-of-band (or the token can no longer see it) —
@@ -221,17 +214,17 @@ export const CatchAllProvider = () =>
       ) {
         return toAttributes(zoneId, observed, initial);
       }
-      const result = yield* emailRouting.putRuleCatchAll({
-        zoneId,
-        matchers: [{ type: "all" }],
-        actions: news.actions.map((a) =>
-          a.type === "drop"
-            ? { type: a.type }
-            : { type: a.type, value: a.value },
-        ),
-        enabled: desiredEnabled,
-        name: desiredName,
-      });
+      const result = yield* emailRouting
+        .putRuleCatchAll({
+          zoneId,
+          matchers: [{ type: "all" }],
+          actions: news.actions.map((a) =>
+            a.type === "drop" ? { type: a.type } : { type: a.type, value: a.value },
+          ),
+          enabled: desiredEnabled,
+          name: desiredName,
+        })
+        .pipe(retryWorkerScriptNotFound);
       return toAttributes(zoneId, result, initial);
     }),
 
@@ -256,19 +249,20 @@ export const CatchAllProvider = () =>
           zoneId,
           matchers: [{ type: "all" }],
           actions: initialActions.map((a) =>
-            a.type === "drop"
-              ? { type: a.type }
-              : { type: a.type, value: a.value },
+            a.type === "drop" ? { type: a.type } : { type: a.type, value: a.value },
           ),
           enabled: initialEnabled,
           name: initialName,
         })
         .pipe(
           Effect.catchTag("Forbidden", () => Effect.void),
-          // The original forward destination may have been unverified or
-          // removed since we captured it — fall back to the Cloudflare
-          // default (disabled, drop) rather than failing the destroy.
-          Effect.catchTag("DestinationNotVerified", () =>
+          // The captured action may name something that no longer exists:
+          // an unverified/removed destination address, or — after the
+          // Worker it pointed at was replaced or deleted — a missing
+          // script. Neither is retryable and neither should strand the
+          // destroy, so fall back to the Cloudflare default (disabled,
+          // drop) instead of failing.
+          Effect.catchTag(["DestinationNotVerified", "WorkerScriptNotFound"], () =>
             emailRouting
               .putRuleCatchAll({
                 zoneId,
@@ -283,18 +277,15 @@ export const CatchAllProvider = () =>
     }),
   });
 
-type ObservedCatchAll =
-  | emailRouting.GetRuleCatchAllResponse
-  | emailRouting.PutRuleCatchAllResponse;
+type ObservedCatchAll = emailRouting.GetRuleCatchAllResponse | emailRouting.PutRuleCatchAllResponse;
 
 const normalizeActions = (actions: ObservedCatchAll["actions"]): Action[] =>
-  (actions ?? []).map(
-    (a): Action =>
-      a.type === "drop"
-        ? { type: "drop" }
-        : a.type === "forward"
-          ? { type: "forward", value: [...(a.value ?? [])] }
-          : { type: "worker", value: [...(a.value ?? [])] },
+  (actions ?? []).map((a): Action =>
+    a.type === "drop"
+      ? { type: "drop" }
+      : a.type === "forward"
+        ? { type: "forward", value: [...(a.value ?? [])] }
+        : { type: "worker", value: [...(a.value ?? [])] },
   );
 
 const actionsEqual = (a: Action[], b: Action[]): boolean =>
