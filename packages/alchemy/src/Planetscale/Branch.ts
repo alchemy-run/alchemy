@@ -9,9 +9,11 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
 import {
-  diffMigrations,
+  classifyMigrationHistory,
+  describeRewrittenHistory,
   migrationsAttrs,
   migrationsInputOf,
+  RewrittenMigrationHistoryError,
   stampedOf,
   type MigrationRun,
   type MigrationsInput,
@@ -23,6 +25,7 @@ import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterArch,
   toPostgresClusterSku,
   waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
@@ -66,6 +69,11 @@ export interface BaseBranchProps {
    * a `Drizzle.Schema` resource, or `{ dir, table? }`. Bookkeeping lives
    * in Alchemy's `__alchemy_migrations` table; drizzle/prisma history is
    * converted one-way on first deploy.
+   *
+   * Adding a file is an in-place update. Editing or removing an
+   * already-applied file replaces a non-production branch (re-forked from
+   * its parent) and fails on a current or desired production branch — add
+   * a forward migration instead.
    */
   migrations?: MigrationsInput;
 
@@ -299,7 +307,30 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      if (yield* diffMigrations({ news, output })) {
+      const migrationChange = yield* classifyMigrationHistory({
+        news,
+        output,
+      });
+      if (migrationChange.kind === "rewritten") {
+        // Editing or deleting an already-applied file cannot be replayed
+        // in place (apply is name-keyed). Development branches re-fork
+        // from the parent and apply from scratch; production must add a
+        // forward migration instead.
+        const production = output?.production === true || news.isProduction === true;
+        if (production) {
+          return yield* new RewrittenMigrationHistoryError({
+            changed: migrationChange.changed,
+            removed: migrationChange.removed,
+            message:
+              `Cannot rewrite applied migration history on production PlanetScale branch ` +
+              `"${output?.name ?? news.name ?? "unknown"}" ` +
+              `(${describeRewrittenHistory(migrationChange)}). ` +
+              "Add a new forward migration instead of editing or deleting already-applied files.",
+          });
+        }
+        return { action: "replace" } as const;
+      }
+      if (migrationChange.kind === "pending") {
         return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
@@ -413,6 +444,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           ? parent.kind === "postgresql"
             ? toPostgresClusterSku({
                 size: news.clusterSize,
+                arch: toPostgresClusterArch(parent.cluster_architecture),
                 region: parent.region.slug,
               })
             : news.clusterSize

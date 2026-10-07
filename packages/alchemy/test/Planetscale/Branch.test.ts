@@ -1,10 +1,15 @@
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
+import { hashMigrations } from "@/SQL/SqlFile.ts";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
@@ -135,6 +140,122 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
             yield* stack.destroy();
             yield* waitForBranchToBeDeleted(dbName, branchName, organization);
           }).pipe(Effect.ensuring(deleteBranchIfExists(dbName, branchName, organization)));
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    test.provider(
+      "Postgres branch off an ARM parent expands a short cluster size to an ARM SKU",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, branch } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ArmParentDatabase", {
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const branch = yield* Planetscale.PostgresBranch("ArmChildBranch", {
+                database,
+                parentBranch: "main",
+                clusterSize: "PS_DEV",
+              });
+
+              return { database, branch };
+            }),
+          );
+
+          const live = yield* ps.getBranch({
+            organization: database.organization,
+            database: database.name,
+            branch: branch.name,
+          });
+
+          expect(live.cluster_architecture).toEqual("aarch64");
+          expect(live.cluster_name).toEqual("PS_DEV_AWS_ARM");
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+        }).pipe(logLevel),
+      { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
+    );
+
+    // #1389: an edited already-applied migration used to plan as an
+    // in-place update; the runner skipped it by name and persisted the new
+    // hash, silently accepting rewritten history.
+    test.provider(
+      "rewritten migration history replaces a development branch and fails on production",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = path.join(import.meta.dirname, "../../.tmp", `ps-rewrite-${stack.stage}`);
+          const databaseDir = path.join(root, "database");
+          const branchDir = path.join(root, "branch");
+          yield* fs.remove(root, { recursive: true, force: true });
+          yield* fs.makeDirectory(databaseDir, { recursive: true });
+          yield* fs.makeDirectory(branchDir, { recursive: true });
+          const init = "CREATE TABLE users (id int);";
+          yield* fs.writeFileString(path.join(databaseDir, "0001_init.sql"), init);
+          yield* fs.writeFileString(path.join(branchDir, "0001_init.sql"), init);
+          // Applied only on the development branch, never on main.
+          yield* fs.writeFileString(
+            path.join(branchDir, "0002_posts.sql"),
+            "CREATE TABLE posts (id int);",
+          );
+
+          const program = Effect.gen(function* () {
+            const database = yield* Planetscale.PostgresDatabase("RewriteDatabase", {
+              clusterSize: "PS_5",
+              migrations: databaseDir,
+            });
+            const branch = yield* Planetscale.PostgresBranch("RewriteBranch", {
+              database,
+              parentBranch: "main",
+              migrations: branchDir,
+            });
+            return { database, branch };
+          });
+
+          yield* stack.destroy();
+
+          const first = yield* stack.deploy(program);
+          expect(first.branch.production).toBe(false);
+
+          // Rewrite the branch-only migration: the branch re-forks from main
+          // (which never ran it) and applies the new version.
+          yield* fs.writeFileString(
+            path.join(branchDir, "0002_posts.sql"),
+            "CREATE TABLE posts (id int, title text);",
+          );
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.RewriteBranch).toMatchObject({ action: "replace" });
+
+          const second = yield* stack.deploy(program);
+          expect(second.branch.name).not.toEqual(first.branch.name);
+          expect(second.branch.migrationsHashes).toEqual(yield* hashMigrations(branchDir));
+          yield* waitForBranchToBeDeleted(
+            first.database.name,
+            first.branch.name,
+            first.database.organization,
+          );
+
+          // Rewrite a migration main (a production branch) already ran: no
+          // replacement is possible, so the deploy fails and keeps the
+          // recorded history.
+          yield* fs.writeFileString(
+            path.join(databaseDir, "0001_init.sql"),
+            "CREATE TABLE users (id int, name text);",
+          );
+          const rewrite = yield* Effect.exit(stack.deploy(program));
+          expect(Exit.isFailure(rewrite)).toBe(true);
+          if (Exit.isFailure(rewrite)) {
+            expect(Cause.pretty(rewrite.cause)).toContain("forward migration");
+          }
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(first.database.name, first.database.organization);
         }).pipe(logLevel),
       { timeout: 5_000_000, tags: ["provider:planetscale:postgres"] },
     );

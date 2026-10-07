@@ -2,7 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
-import { SecurityGroup, Vpc } from "@/AWS/EC2";
+import { SecurityGroup, Subnet, Vpc } from "@/AWS/EC2";
 import { ClientVpnEndpoint, type ClientVpnEndpointProps } from "@/AWS/EC2/ClientVpnEndpoint.ts";
 import { LogGroup, LogStream } from "@/AWS/Logs";
 import * as Alchemy from "@/index.ts";
@@ -11,22 +11,30 @@ import * as Test from "@/Test/Alchemy";
 import {
   assertClientVpnCertificateDeleted,
   assertClientVpnEndpointDeleted,
+  clientVpnAvailabilityZones,
   clientVpnEndpointProps,
   clientVpnTestTimeout,
   expectClientVpnOwnershipTags,
   importClientVpnCertificate,
   readClientVpnEndpoint,
+  readClientVpnTargetNetworks,
   waitForClientVpn,
 } from "./fixtures/client-vpn.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers: AWS.providers() });
 const certificate = beforeAll(importClientVpnCertificate("ClientVpnEndpointPrerequisites"));
+const zones = beforeAll(clientVpnAvailabilityZones);
 const Stack = Alchemy.Stack(
   "ClientVpnEndpointPrerequisites",
   { providers: AWS.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const certificateArn = yield* certificate;
     const vpc = yield* Vpc("Vpc", { cidrBlock: "10.171.0.0/16" });
+    const subnet = yield* Subnet("Subnet", {
+      vpcId: vpc.vpcId,
+      cidrBlock: "10.171.1.0/24",
+      availabilityZone: (yield* zones).firstZone,
+    });
     const firstGroup = yield* SecurityGroup("FirstGroup", {
       vpcId: vpc.vpcId,
       description: "Client VPN first security group",
@@ -37,7 +45,7 @@ const Stack = Alchemy.Stack(
     });
     const logs = yield* LogGroup("ConnectionLogs", { retention: "1 day" });
     const stream = yield* LogStream("ConnectionLogStream", { logGroupName: logs.logGroupName });
-    return { certificateArn, vpc, firstGroup, secondGroup, logs, stream };
+    return { certificateArn, vpc, subnet, firstGroup, secondGroup, logs, stream };
   }),
 );
 const prerequisites = beforeAll(deploy(Stack), { timeout: clientVpnTestTimeout });
@@ -359,6 +367,33 @@ describe.sequential(
           yield* assertClientVpnEndpointDeleted(changedCidr.clientVpnEndpointId);
           yield* stack.destroy();
           yield* assertClientVpnEndpointDeleted(changedProtocol.clientVpnEndpointId);
+        }),
+      { timeout: clientVpnTestTimeout },
+    );
+
+    test.provider.skipIf(!!process.env.FAST)(
+      "deletes an endpoint whose target network was associated out of band",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { certificateArn, vpc, subnet } = yield* prerequisites;
+          const endpoint = yield* stack.deploy(
+            ClientVpnEndpoint("Endpoint", {
+              ...clientVpnEndpointProps(certificateArn),
+              vpcId: vpc.vpcId,
+            }),
+          );
+          yield* ec2.associateClientVpnTargetNetwork({
+            ClientVpnEndpointId: endpoint.clientVpnEndpointId,
+            SubnetId: subnet.subnetId,
+          });
+          yield* waitForClientVpn(
+            readClientVpnTargetNetworks(endpoint.clientVpnEndpointId),
+            (networks) => networks.some((network) => network.Status?.Code === "associated"),
+            "out-of-band target network association",
+          );
+          yield* stack.destroy();
+          yield* assertClientVpnEndpointDeleted(endpoint.clientVpnEndpointId);
         }),
       { timeout: clientVpnTestTimeout },
     );

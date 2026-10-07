@@ -158,10 +158,7 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
           directory: serverOutDir,
           prefix: "server",
         }).pipe(Effect.mapError(wrapCollectorError));
-        const serverModules = FrameworkCore.sortServerModules(
-          modules,
-          NodePath.join("server", "index.js"),
-        );
+        const serverModules = FrameworkCore.sortServerModules(modules, "server/index.js");
         const externalWorkspaces = yield* FrameworkCore.collectExternalWorkspaces(
           externalDirectories,
         ).pipe(Effect.mapError(wrapCollectorError));

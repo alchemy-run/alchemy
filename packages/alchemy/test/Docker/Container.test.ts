@@ -6,12 +6,40 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Action } from "@/Action";
 import * as Docker from "@/Docker";
+import { healthcheckCommand, isHealthcheckDisabled } from "@/Docker/HealthcheckCommand";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState(), adopt: true });
+
+test.provider(
+  "renders Docker healthcheck arrays as a --health-cmd string",
+  () =>
+    Effect.sync(() => {
+      expect(healthcheckCommand("pg_isready -U postgres")).toBe("pg_isready -U postgres");
+      expect(healthcheckCommand(["CMD-SHELL", "pg_isready -U postgres"])).toBe(
+        "pg_isready -U postgres",
+      );
+      expect(healthcheckCommand(["CMD", "pg_isready", "-U", "postgres"])).toBe(
+        "pg_isready -U postgres",
+      );
+      expect(healthcheckCommand(["CMD", "echo", "a b", "it's"])).toBe("echo 'a b' 'it'\\''s'");
+      expect(healthcheckCommand(["NONE"])).toBeUndefined();
+      // Arrays without a Docker marker keep the old behaviour: joined with
+      // spaces and run in the shell.
+      expect(healthcheckCommand(["curl -f localhost || exit 1"])).toBe(
+        "curl -f localhost || exit 1",
+      );
+      expect(healthcheckCommand(["curl", "-f", "localhost", "||", "exit", "1"])).toBe(
+        "curl -f localhost || exit 1",
+      );
+      expect(isHealthcheckDisabled(["NONE"])).toBe(true);
+      expect(isHealthcheckDisabled(["CMD", "true"])).toBe(false);
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
 
 test.provider(
   "diff replaces a container when its image changes",
@@ -863,6 +891,117 @@ describe(
         expect(health?.StartPeriod).toBe(1_000_000_000);
       }),
     );
+    // The array form used to be joined with spaces, so `["CMD-SHELL", "true"]`
+    // ran a command literally named `CMD-SHELL` and the container never
+    // became healthy.
+    test.provider("runs a CMD-SHELL array healthcheck as the shell command", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-shell", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["CMD-SHELL", "true"], interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true"]);
+      }),
+    );
+
+    test.provider("runs a CMD array healthcheck with its arguments quoted", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-exec", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["CMD", "echo", "a b"], interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "echo 'a b'"]);
+      }),
+    );
+
+    test.provider("keeps a plain string healthcheck unchanged", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-string", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: "true", interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true"]);
+      }),
+    );
+
+    test.provider("runs an array without a marker as a shell line, as before", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-cmd-legacy", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["true || exit 1"], interval: "1 second", retries: 1 },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["CMD-SHELL", "true || exit 1"]);
+      }),
+    );
+
+    test.provider("disables the image healthcheck with NONE", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const container = yield* stack.deploy(
+          Docker.Container("healthcheck-none", {
+            image: "nginx:alpine",
+            healthcheck: { cmd: ["NONE"] },
+            start: true,
+          }),
+        );
+        const info = yield* docker.container.inspect(container.name);
+        expect(info?.Config.Healthcheck?.Test).toEqual(["NONE"]);
+      }),
+    );
+
+    // Stored form is not enough: the check must actually run in the container.
+    const healthStatus = (name: string, until: "healthy" | "unhealthy") =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        return yield* docker.container.inspect(name).pipe(
+          Effect.map((info) => info.State.Health?.Status),
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (status) => status === until,
+            times: 40,
+          }),
+        );
+      });
+
+    for (const [label, cmd, expected] of [
+      ["a CMD-SHELL array", ["CMD-SHELL", "test -d /etc"], "healthy"],
+      ["a CMD array", ["CMD", "test", "-d", "/etc"], "healthy"],
+      ["a failing CMD array", ["CMD", "false"], "unhealthy"],
+    ] as const) {
+      test.provider(`reports ${expected} for ${label} healthcheck`, (stack) =>
+        Effect.gen(function* () {
+          const container = yield* stack.deploy(
+            Docker.Container(`healthcheck-run-${expected}-${cmd[0].toLowerCase()}`, {
+              image: "nginx:alpine",
+              healthcheck: { cmd: [...cmd], interval: "1 second", retries: 1 },
+              start: true,
+            }),
+          );
+          expect(yield* healthStatus(container.name, expected)).toBe(expected);
+        }),
+      );
+    }
+
     test.provider("reports the host port Docker assigned to a random publish (#1388)", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
@@ -1022,6 +1161,38 @@ describe(
           expect(info.Image).toBe(second.image.imageId);
         }),
       { timeout: 120_000 },
+    );
+
+    // #1990: an image that is still an Output at plan time (here from an
+    // Action) must still roll the container when it resolves to a new value.
+    test.provider("recreates a container when an Action-resolved image changes", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const Resolve = Action("ContainerImageRef", (input: { image: string }) =>
+          Effect.succeed(input.image),
+        );
+        const deploy = (image: string) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const ref = yield* Resolve({ image });
+              return yield* Docker.Container("action-image-container", {
+                image: ref,
+                command: ["sleep", "300"],
+                start: true,
+              });
+            }),
+          );
+
+        const first = yield* deploy("alpine:3.19");
+        const second = yield* deploy("busybox:1.36");
+        expect(second.id).not.toBe(first.id);
+        expect(second.imageRef).toBe("busybox:1.36");
+        expect((yield* docker.container.inspect(second.name)).Config.Image).toBe("busybox:1.36");
+
+        // The same resolved image keeps the container.
+        const third = yield* deploy("busybox:1.36");
+        expect(third.id).toBe(second.id);
+      }),
     );
 
     test.provider("adopts a container from a named context without removing it", (stack) =>
