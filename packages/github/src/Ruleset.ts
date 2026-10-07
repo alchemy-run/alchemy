@@ -1,3 +1,4 @@
+import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -459,9 +460,32 @@ export const RulesetProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return undefined;
-      const observed = yield* getRuleset(olds, output.rulesetId);
-      return observed === undefined ? undefined : attrsOf(observed);
+      if (output !== undefined) {
+        const observed = yield* getRuleset(olds, output.rulesetId);
+        return observed === undefined ? undefined : attrsOf(observed);
+      }
+      const octokit = yield* octokitFor(olds.baseUrl);
+      const rulesets = yield* Effect.tryPromise({
+        try: () =>
+          octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+            owner: olds.owner,
+            repo: olds.repository,
+            includes_parents: false,
+            per_page: 100,
+          }),
+        catch: (e) => e as Error & { status?: number },
+      }).pipe(
+        Effect.catchIf(
+          (error) => error.status === 404,
+          () => Effect.succeed([]),
+        ),
+      );
+      const match = rulesets.find(
+        (ruleset) => ruleset.name === olds.name && ruleset.target === (olds.target ?? "branch"),
+      );
+      if (match === undefined) return undefined;
+      const observed = yield* getRuleset(olds, match.id);
+      return observed === undefined ? undefined : Unowned(attrsOf(observed));
     }),
 
     list: Effect.fn(function* () {
