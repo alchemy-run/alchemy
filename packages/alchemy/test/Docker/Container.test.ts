@@ -969,6 +969,39 @@ describe(
       }),
     );
 
+    // Stored form is not enough: the check must actually run in the container.
+    const healthStatus = (name: string, until: "healthy" | "unhealthy") =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        return yield* docker.container.inspect(name).pipe(
+          Effect.map((info) => info.State.Health?.Status),
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (status) => status === until,
+            times: 40,
+          }),
+        );
+      });
+
+    for (const [label, cmd, expected] of [
+      ["a CMD-SHELL array", ["CMD-SHELL", "test -d /etc"], "healthy"],
+      ["a CMD array", ["CMD", "test", "-d", "/etc"], "healthy"],
+      ["a failing CMD array", ["CMD", "false"], "unhealthy"],
+    ] as const) {
+      test.provider(`reports ${expected} for ${label} healthcheck`, (stack) =>
+        Effect.gen(function* () {
+          const container = yield* stack.deploy(
+            Docker.Container(`healthcheck-run-${expected}-${cmd[0].toLowerCase()}`, {
+              image: "nginx:alpine",
+              healthcheck: { cmd: [...cmd], interval: "1 second", retries: 1 },
+              start: true,
+            }),
+          );
+          expect(yield* healthStatus(container.name, expected)).toBe(expected);
+        }),
+      );
+    }
+
     test.provider("reports the host port Docker assigned to a random publish (#1388)", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;

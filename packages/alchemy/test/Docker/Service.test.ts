@@ -194,6 +194,45 @@ describe(
     );
 
     test.provider(
+      "applies array healthchecks and re-enables one after NONE",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const deploy = (cmd: string[]) =>
+            stack.deploy(
+              Docker.Service("healthcheck-array-service", {
+                name: "alchemy-test-service-healthcheck-array",
+                image: "nginx:alpine",
+                healthcheck: { cmd },
+              }),
+            );
+          const healthcheck = (id: string) =>
+            docker
+              .run([
+                "service",
+                "inspect",
+                id,
+                "--format",
+                "{{json .Spec.TaskTemplate.ContainerSpec.Healthcheck}}",
+              ])
+              .pipe(Effect.map((output) => JSON.parse(output.stdout).Test));
+
+          const shell = yield* deploy(["CMD-SHELL", "test -d /etc"]);
+          expect(yield* healthcheck(shell.id)).toEqual(["CMD-SHELL", "test -d /etc"]);
+
+          // Disable, then turn it back on through `docker service update`.
+          const disabled = yield* deploy(["NONE"]);
+          expect(yield* healthcheck(disabled.id)).toEqual(["NONE"]);
+          const restored = yield* deploy(["CMD", "test", "-d", "/etc"]);
+          expect(yield* healthcheck(restored.id)).toEqual(["CMD-SHELL", "test -d /etc"]);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
       "disables the image healthcheck with NONE",
       (stack) =>
         Effect.gen(function* () {
