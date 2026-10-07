@@ -1,5 +1,6 @@
 import { component, view, type Props, type Source } from "solid-yield";
-import type { ApiError, Greeting } from "../lib/api.ts";
+import type { ApiError } from "../lib/api.ts";
+import type { Greeting } from "../spec.ts";
 
 // Declares the colors it accepts: the greeting may be pending and may fail
 // with an ApiError, so the caller must place it inside Loading and Errored.

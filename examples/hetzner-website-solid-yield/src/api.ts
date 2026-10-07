@@ -1,14 +1,19 @@
 import * as Hetzner from "alchemy/Hetzner";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import { API_PORT, Box } from "./shared.ts";
+import { GreetingApi } from "./spec.ts";
 
-const cors = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,OPTIONS",
-  "access-control-allow-headers": "content-type",
-};
+const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
+  handlers.handle("greeting", () =>
+    Effect.succeed({ message: "Hello from the Hetzner API!", platform: "Hetzner" }),
+  ),
+);
 
 /** A basic Effect HTTP API on the shared Hetzner Server, called by the solid-yield SPA. */
 export default class Api extends Hetzner.Service<Api>()(
@@ -22,23 +27,14 @@ export default class Api extends Hetzner.Service<Api>()(
     };
   }),
   Effect.succeed({
-    fetch: Effect.gen(function* () {
-      const request = yield* HttpServerRequest;
-      const path = new URL(request.url, "http://service").pathname;
-      if (request.method === "OPTIONS") {
-        return HttpServerResponse.empty({ status: 204, headers: cors });
-      }
-      // The Hetzner Service deploy waits on `GET /health` before it reports ready.
-      if (path === "/health") {
-        return yield* HttpServerResponse.json({ ok: true }, { headers: cors });
-      }
-      if (path === "/api/greeting") {
-        return yield* HttpServerResponse.json(
-          { message: "Hello from the Hetzner API!", platform: "Hetzner" },
-          { headers: cors },
-        );
-      }
-      return yield* HttpServerResponse.json({ error: "not found" }, { status: 404, headers: cors });
-    }).pipe(Effect.orDie),
+    fetch: HttpApiBuilder.layer(GreetingApi).pipe(
+      Layer.provide(greeting),
+      // The Hetzner Service deploy waits on a `GET /health` probe.
+      Layer.provide(HttpRouter.add("GET", "/health", HttpServerResponse.text("ok"))),
+      // The SPA is served from another origin.
+      Layer.provide(HttpRouter.cors()),
+      Layer.provide([HttpPlatform.layer, Etag.layer]),
+      HttpRouter.toHttpEffect,
+    ),
   }),
 ) {}

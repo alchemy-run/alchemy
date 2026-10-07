@@ -2,6 +2,7 @@ import { expect } from "bun:test";
 import * as Alchemy from "alchemy";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -40,7 +41,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
+const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), { timeout: 600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 300_000 });
 
 const trim = (url: unknown) => {

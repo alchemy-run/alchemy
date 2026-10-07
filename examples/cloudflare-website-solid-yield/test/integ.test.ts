@@ -1,6 +1,7 @@
 import { expect } from "bun:test";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -38,7 +39,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
+const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), { timeout: 600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const trim = (url: string | undefined) => {

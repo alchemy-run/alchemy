@@ -1,13 +1,11 @@
 import * as Lambda from "alchemy/AWS/Lambda";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
-const cors = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,OPTIONS",
-  "access-control-allow-headers": "content-type",
-};
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as Layer from "effect/Layer";
+import { GreetingApi } from "./spec.ts";
 
 /**
  * A basic Effect HTTP API on a Lambda Function, called by the solid-yield
@@ -18,24 +16,20 @@ export default class Api extends Lambda.Function<Api>()(
   "Api",
   { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
+    const greeting = HttpApiBuilder.group(GreetingApi, "Greeting", (handlers) =>
+      handlers.handle("greeting", () =>
+        Effect.succeed({ message: "Hello from the AWS API!", platform: "AWS" }),
+      ),
+    );
+
     return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const path = new URL(request.originalUrl, "http://lambda").pathname;
-        if (request.method === "OPTIONS") {
-          return HttpServerResponse.empty({ status: 204, headers: cors });
-        }
-        if (path === "/api/greeting") {
-          return yield* HttpServerResponse.json(
-            { message: "Hello from the AWS API!", platform: "AWS" },
-            { headers: cors },
-          );
-        }
-        return yield* HttpServerResponse.json(
-          { error: "not found" },
-          { status: 404, headers: cors },
-        );
-      }).pipe(Effect.orDie),
+      fetch: HttpApiBuilder.layer(GreetingApi).pipe(
+        Layer.provide(greeting),
+        // The SPA is served from another origin.
+        Layer.provide(HttpRouter.cors()),
+        Layer.provide([HttpPlatform.layer, Etag.layer]),
+        HttpRouter.toHttpEffect,
+      ),
     };
   }),
 ) {}

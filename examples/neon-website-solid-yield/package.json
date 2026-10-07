@@ -18,6 +18,7 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@solidjs/web": "2.0.0-rc.13",
+    "effect": "catalog:",
     "solid-js": "2.0.0-rc.13",
     "solid-yield": "file:../../vendor/solid-yield/solid-yield-0.0.0.tgz"
   },
@@ -26,7 +27,6 @@
     "@tailwindcss/vite": "catalog:",
     "@vercel/nft": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
