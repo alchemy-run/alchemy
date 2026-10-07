@@ -46,6 +46,11 @@ for (const sql of [
   "CREATE INDEX CONCURRENTLY users_id ON users(id);",
   "CREATE TABLE users(id bigint GENERATED ALWAYS AS IDENTITY);",
   "CREATE TABLE users(id text DEFAULT 'unterminated);",
+  // Each rejected by DSQL with "ALTER TABLE ADD COLUMN with constraint not supported".
+  "ALTER TABLE users ADD COLUMN active boolean NOT NULL DEFAULT true;",
+  "ALTER TABLE users ADD COLUMN nickname text DEFAULT 'a';",
+  "ALTER TABLE users ADD COLUMN email text UNIQUE;",
+  "ALTER TABLE users ADD age int CHECK (age > 0);",
 ]) {
   test.effect(`DSQL preflight rejects ${sql}`, () =>
     Effect.gen(function* () {
@@ -75,5 +80,17 @@ test.effect("DSQL retains literal-only statements for database validation", () =
     expect(
       yield* prepareDsqlStatements("'not a command'; $$nor is this$$; -- comment", "0001.sql"),
     ).toEqual(["'not a command'", "$$nor is this$$"]);
+  }),
+);
+
+test.effect("DSQL accepts the ADD COLUMN forms it supports", () =>
+  Effect.gen(function* () {
+    const statements = yield* prepareDsqlStatements(
+      `ALTER TABLE users ADD COLUMN nickname text;
+ALTER TABLE users ADD bio text NULL;
+ALTER TABLE users RENAME COLUMN email TO address;`,
+      "0005_users.sql",
+    );
+    expect(statements).toHaveLength(3);
   }),
 );

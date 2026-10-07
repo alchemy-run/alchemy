@@ -173,13 +173,13 @@ test.provider(
       yield* fs.makeDirectory(next);
       yield* fs.writeFileString(
         path.join(next, "migration.sql"),
-        `ALTER TABLE users ADD COLUMN active boolean NOT NULL DEFAULT true;
+        `ALTER TABLE users ADD COLUMN nickname text;
 ALTER TABLE users RENAME COLUMN email TO address;`,
       );
       const updated = yield* stack.deploy(deploy);
       expect(updated.clusterId).toBe(created.clusterId);
-      const user = yield* query(updated.endpoint, "SELECT address, active FROM users");
-      expect(user.rows).toEqual([{ address: "test@example.com", active: true }]);
+      const user = yield* query(updated.endpoint, "SELECT address, nickname FROM users");
+      expect(user.rows).toEqual([{ address: "test@example.com", nickname: null }]);
       const after = yield* query(updated.endpoint, "SELECT name FROM __alchemy_migrations");
       expect(after.rows).toHaveLength(2);
 

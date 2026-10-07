@@ -44,7 +44,7 @@ export const withDsqlClient = <A, E, R>(
             password: Redacted.value(password),
             ssl: { rejectUnauthorized: true },
             connectionTimeoutMillis: 10_000,
-            statement_timeout: 30_000,
+            // Client-side only: DSQL rejects a server-side `statement_timeout`.
             query_timeout: 35_000,
           });
           // pg emits idle socket failures as events; the next query reports the

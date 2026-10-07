@@ -115,6 +115,14 @@ export const prepareDsqlStatements = (sql: string, migration: string) =>
               "DSQL sequences and identity columns require an explicit CACHE of 1 or at least 65536.";
           }
         }
+        if (
+          /^\s*ALTER\s+TABLE\b/i.test(code) &&
+          /\bADD\s+(?!CONSTRAINT\b)(?:COLUMN\s+)?/i.test(code) &&
+          /\b(?:DEFAULT|NOT\s+NULL|UNIQUE|CHECK|PRIMARY\s+KEY|REFERENCES|GENERATED)\b/i.test(code)
+        ) {
+          reason =
+            "DSQL cannot add a column with a constraint or default. Add the column bare, then backfill it in a later statement.";
+        }
         if (/^\s*(?:SET|RESET)\b/i.test(code)) {
           reason =
             "Session settings cannot be changed inside DSQL migration files. Qualify table names with their schema instead of changing search_path.";
