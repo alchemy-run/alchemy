@@ -2,6 +2,7 @@ import * as container from "@distilled.cloud/gcp/container_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
@@ -219,9 +220,8 @@ test.provider.skipIf(!runLifecycle)(
         const blockedReplace = yield* stack
           .plan(prod({ deletionProtection: true, location: CAPACITY_ZONE_2 }))
           .pipe(Effect.flip);
-        expect(String(blockedReplace)).toContain("ClusterDeletionProtected");
-        const blockedDestroy = yield* stack.destroy().pipe(Effect.flip);
-        expect(String(blockedDestroy)).toContain("ClusterDeletionProtected");
+        expect(blockedReplace).toMatchObject({ _tag: "GCP.Container.ClusterDeletionProtected" });
+        expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
         expect(
           (yield* container.getProjectsLocationsClusters({ name: created.name })).status,
         ).toEqual("RUNNING");
