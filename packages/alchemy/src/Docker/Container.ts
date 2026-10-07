@@ -642,7 +642,9 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       ...(news.healthcheck
         ? {
             "health-cmd": healthcheckCommand(news.healthcheck.cmd),
-            "no-healthcheck": isHealthcheckDisabled(news.healthcheck.cmd),
+            // Only when set: an always-present key would change every
+            // container's config hash and recreate it on upgrade.
+            ...(isHealthcheckDisabled(news.healthcheck.cmd) ? { "no-healthcheck": true } : {}),
             "health-interval": normalizeDuration(news.healthcheck.interval),
             "health-timeout": normalizeDuration(news.healthcheck.timeout),
             "health-retries": news.healthcheck.retries ?? 0,
@@ -651,7 +653,6 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
           }
         : {
             "health-cmd": undefined,
-            "no-healthcheck": false,
             "health-interval": undefined,
             "health-timeout": undefined,
             "health-retries": undefined,
