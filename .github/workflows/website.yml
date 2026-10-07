@@ -139,6 +139,17 @@ jobs:
           install: true
           require-lockfile: true
 
+      # Docs on main.alchemy.run and PR previews install this commit's preview
+      # packages; production keeps npm (see website/plugins/preview-install.ts).
+      - name: Set preview package tag
+        if: steps.mode.outputs.mode == 'deploy' && env.STAGE != 'prod'
+        env:
+          PR: ${{ github.event.number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -n "$PR" ]; then tag="pr:$PR:${SHA:0:7}"; else tag="$SHA"; fi
+          echo "PREVIEW_PACKAGE_TAG=$tag" >> "$GITHUB_ENV"
+
       # Main/prod use the production account; PR stages use the test account.
       - name: Deploy
         if: steps.mode.outputs.mode == 'deploy'
