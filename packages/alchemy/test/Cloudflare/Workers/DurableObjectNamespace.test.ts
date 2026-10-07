@@ -698,6 +698,88 @@ export default { async fetch() { return new Response("v4"); } };
       { timeout: 120_000 },
     );
 
+    // #2072: Wrangler ≥ 4.107 deploys Durable Objects with Cloudflare's
+    // declarative `exports` map, after which Cloudflare rejects every
+    // `migrations` upload ("reverting to `migrations` is not supported").
+    // Alchemy must adopt such a Worker without touching its namespaces —
+    // including a class it never binds (reached through `ctx.exports`), which
+    // must stay declared or Cloudflare refuses the upload.
+    test.provider(
+      "adopts a worker deployed with declarative exports",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const physicalName = `alchemy-test-do-exports-${scratch.stage
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, "-")}`;
+          const script = `${hostWorkerScript}\nexport class Unbound extends DurableObject {}\n`;
+
+          yield* workers
+            .deleteScript({ accountId, scriptName: physicalName, force: true })
+            .pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
+
+          // Phase 1: the Wrangler-shaped deploy — declarative `exports`, no
+          // migrations, no Alchemy tags.
+          yield* workers.putScript({
+            accountId,
+            scriptName: physicalName,
+            metadata: {
+              mainModule: "main.js",
+              bindings: [
+                { type: "durable_object_namespace", name: "Counter", className: "Counter" },
+              ],
+              exports: {
+                Counter: { type: "durable-object", storage: "sqlite" },
+                Unbound: { type: "durable-object", storage: "sqlite" },
+              },
+              compatibilityDate: "2026-03-17",
+            },
+            files: [new File([script], "main.js", { type: "application/javascript+module" })],
+          });
+          const namespacesOf = Effect.gen(function* () {
+            const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === physicalName),
+              Stream.runCollect,
+            );
+            return Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id]));
+          });
+          const before = yield* namespacesOf;
+          expect(Object.keys(before).sort()).toEqual(["Counter", "Unbound"]);
+
+          // Phase 2: adopt it. Only `Counter` is bound.
+          const deployAdopted = scratch
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Worker("AdoptExports", {
+                  name: physicalName,
+                  script,
+                  env: { Counter: Cloudflare.DurableObject("Counter") },
+                });
+              }),
+            )
+            .pipe(adopt(true));
+          const adopted = yield* deployAdopted;
+
+          // Both namespaces survived the takeover unchanged.
+          expect(adopted.durableObjectNamespaces.Counter).toBe(before.Counter);
+          expect(yield* namespacesOf).toEqual(before);
+
+          yield* fetchJsonReady<{ ok: boolean }>(`${adopted.url}/reset`);
+          const written = yield* fetchJsonReady<{ value: number }>(`${adopted.url}/increment`);
+          expect(written.value).toBe(1);
+
+          // A routine redeploy keeps the data.
+          const redeployed = yield* deployAdopted;
+          const read = yield* fetchJsonReady<{ value: number }>(`${redeployed.url}/get`);
+          expect(read.value).toBe(1);
+          expect(yield* namespacesOf).toEqual(before);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // #799: moving a Durable Object class from one Worker to another is
     // *declared*: the new host names the former host with `transferredFrom` —
     // here by Worker *logical id*, resolved to the actual script via alchemy's
@@ -1308,12 +1390,19 @@ export default { async fetch() { return new Response("v1"); } };
           const scriptName = v1.worker.workerName;
 
           // Rewrite the tags the way alchemy <= beta.62 wrote them: one
-          // `alchemy:do:` tag per binding, no packed tag.
+          // `alchemy:do:` tag per binding, no packed tag. The Worker deploys
+          // with declarative `exports`, and Cloudflare reconciles every
+          // settings patch against the `exports` it carries, so the live
+          // classes are re-declared alongside the tags.
           const deployedTags = yield* getWorkerTags(scriptName, accountId);
           yield* workers.patchScriptScriptAndVersionSetting({
             accountId,
             scriptName,
             settings: {
+              exports: {
+                CounterClass: { type: "durable-object", storage: "sqlite" },
+                MeterClass: { type: "durable-object", storage: "sqlite" },
+              },
               tags: [
                 ...deployedTags.filter((t) => !t.startsWith("alchemy:dos:")),
                 "alchemy:do:Counter:CounterClass",

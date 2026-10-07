@@ -1972,7 +1972,7 @@ export const LiveWorkerProvider = () =>
         logicalId: string;
         className: string;
         sources: readonly string[];
-        observedNamespaces: readonly { id?: string | null; script: string; class: string }[];
+        observedNamespaces: readonly ObservedDurableObjectNamespace[];
       }) {
         if (params.sources.length === 0) {
           return undefined;
@@ -3496,18 +3496,30 @@ export const LiveWorkerProvider = () =>
           }
         }
 
-        // One account-level namespace listing serves both sides of a
-        // transfer: the destination checks the source still hosts the class
-        // before emitting `transferred_classes`, and the former host checks
-        // whether a to-be-deleted class was already transferred away.
-        // Dispatch-namespace user workers keep the legacy behavior — their
-        // namespaces don't surface on the account-level list.
+        // One account-level namespace listing is the observed Durable Object
+        // state for this deploy: the `exports` map declares every namespace
+        // this script owns (with its storage backend), the destination of a
+        // transfer checks the source still hosts the class, and the former
+        // host checks whether a to-be-deleted class was already transferred
+        // away. Dispatch-namespace user workers keep the legacy `migrations`
+        // flow — their namespaces don't surface on the account-level list.
         const mayTransferIn = currentDoBindings.some(
           (binding) =>
             !oldDoClassNameByLogicalId[binding.logicalId] && binding.transferredFrom !== undefined,
         );
+        const hostedDurableObjectsBefore = oldBindings.some(
+          (binding) =>
+            binding.type === "durable_object_namespace" &&
+            (!("scriptName" in binding) ||
+              binding.scriptName === undefined ||
+              binding.scriptName === name),
+        );
         const observedNamespaces =
-          !dispatchNamespace && (deletedClassCandidates.length > 0 || mayTransferIn)
+          !dispatchNamespace &&
+          (deletedClassCandidates.length > 0 ||
+            mayTransferIn ||
+            currentDoBindings.length > 0 ||
+            hostedDurableObjectsBefore)
             ? yield* listDurableObjectNamespaces(accountId)
             : [];
         const hosts = (
@@ -3696,7 +3708,9 @@ export const LiveWorkerProvider = () =>
         const alchemyTags = [
           ...createAlchemyWorkerTags(id),
           ...alchemyDoTags,
-          ...(newMigrationTag ? [`alchemy:migration-tag:${newMigrationTag}`] : []),
+          ...(dispatchNamespace && newMigrationTag
+            ? [`alchemy:migration-tag:${newMigrationTag}`]
+            : []),
         ];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
@@ -3710,6 +3724,22 @@ export const LiveWorkerProvider = () =>
           transferredClasses,
           newSqliteClasses,
         };
+
+        // Cloudflare's declarative `exports` map: the complete Durable Object
+        // lifecycle of this script. Every namespace Cloudflare reports for
+        // this script stays declared with its observed storage backend
+        // (adopted classes Alchemy never bound included — an undeclared
+        // namespace is rejected, never silently deleted), then this deploy's
+        // creates, renames, deletes and incoming transfers are applied on top.
+        const exportsMap = buildDurableObjectExports({
+          scriptName: name,
+          observedNamespaces,
+          hostedClasses: currentDoBindings.map((binding) => binding.className),
+          renamedClasses,
+          deletedClasses,
+          transferredClasses,
+        });
+        const transferringIn = new Set(transferredClasses.map((transfer) => transfer.to));
 
         const metadataContainers = [...containerClassNames].map((className) => ({ className }));
 
@@ -3733,7 +3763,9 @@ export const LiveWorkerProvider = () =>
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.main,
-          migrations,
+          migrations: dispatchNamespace ? migrations : undefined,
+          exports:
+            dispatchNamespace || Object.keys(exportsMap).length === 0 ? undefined : exportsMap,
           observability,
           placement: news.placement,
           tags: metadataTags,
@@ -3775,7 +3807,7 @@ export const LiveWorkerProvider = () =>
           if (migratedClasses.length > 0) {
             return yield* Effect.fail(
               new WorkerVersionConfigError({
-                message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}), which requires a migration — migrations cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
+                message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}). Durable Object lifecycle changes cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
               }),
             );
           }
@@ -3794,6 +3826,10 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
                 cacheOptions: metadata.cacheOptions,
+                // No lifecycle changes reach this path (checked above): the
+                // map only re-declares the live classes, as Cloudflare
+                // requires once a Worker uses `exports`.
+                exports: metadata.exports,
                 annotations:
                   news.version?.alias !== undefined ||
                   news.version?.message !== undefined ||
@@ -3843,17 +3879,72 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker ${name}: no previous live version to split traffic with; deploying at 100%`,
             );
           }
-          worker = yield* putWorkerScriptWithMigrationRecovery();
+          if (transferringIn.size > 0) {
+            // A transfer is two-phase under `exports`: this Worker first
+            // declares the class `expecting-transfer` (Cloudflare rejects a
+            // binding to it until the namespace arrives, so that binding is
+            // held back, and its `alchemy:dos` tag too — a crash before the
+            // commit then re-plans the transfer instead of creating a fresh
+            // namespace), then the former host commits with a `transferred`
+            // tombstone, then the full upload below binds the moved class.
+            const stagedTags = Array.from(
+              new Set([
+                ...createAlchemyWorkerTags(id),
+                ...encodeDurableObjectTags(
+                  currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
+                ),
+                ...(news.tags ?? []),
+              ]),
+            );
+            yield* putWorkerScript({
+              accountId,
+              scriptName: name,
+              dispatchNamespace,
+              metadata: {
+                ...metadata,
+                tags: stagedTags,
+                bindings: metadata.bindings?.filter(
+                  (binding) =>
+                    !(
+                      binding.type === "durable_object_namespace" &&
+                      transferringIn.has(binding.className) &&
+                      (binding.scriptName === undefined || binding.scriptName === name)
+                    ),
+                ),
+              },
+              files: bundle.files,
+            });
+            for (const fromScript of new Set(transferredClasses.map((t) => t.fromScript))) {
+              yield* commitDurableObjectTransfer({
+                accountId,
+                fromScript,
+                toScript: name,
+                classNames: transferredClasses
+                  .filter((transfer) => transfer.fromScript === fromScript)
+                  .map((transfer) => transfer.from),
+                observedNamespaces,
+              });
+            }
+          }
+          worker = yield* putWorkerScriptWithMigrationRecovery({
+            ...metadata,
+            exports: metadata.exports && settleTransfers(metadata.exports),
+          });
         }
 
-        function putWorkerScriptWithMigrationRecovery() {
-          return putWorkerScript({
+        function putWorkerScriptWithMigrationRecovery(
+          metadata: workers.PutScriptRequest["metadata"],
+        ) {
+          const upload = putWorkerScript({
             accountId,
             scriptName: name,
             dispatchNamespace,
             metadata,
             files: bundle.files,
-          }).pipe(
+          });
+          // `exports` uploads carry no migration tag to recover.
+          if (metadata.migrations === undefined) return upload;
+          return upload.pipe(
             Effect.catch((err) => {
               // When adopting a Worker managed by Wrangler (or after a previous
               // deploy with mismatched migrations), the old_tag precondition
@@ -4807,8 +4898,19 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
                 containers,
+                // A fresh script: every hosted class is new and SQLite-backed.
+                // Dispatch-namespace uploads don't accept `exports`.
+                exports:
+                  !dispatchNamespace && doClasses.length > 0
+                    ? Object.fromEntries(
+                        doClasses.map((className) => [
+                          className,
+                          { type: "durable-object", storage: "sqlite" },
+                        ]),
+                      )
+                    : undefined,
                 migrations:
-                  doClasses.length > 0
+                  dispatchNamespace && doClasses.length > 0
                     ? {
                         oldTag: undefined,
                         newTag: undefined,
@@ -5435,10 +5537,148 @@ const listDurableObjectNamespaces = (accountId: string) =>
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
-        ns.script && ns.class ? [{ id: ns.id, script: ns.script, class: ns.class }] : [],
+        ns.script && ns.class
+          ? [
+              {
+                id: ns.id,
+                script: ns.script,
+                class: ns.class,
+                useSqlite: ns.useSqlite ?? undefined,
+              },
+            ]
+          : [],
       ),
     ),
   );
+
+type ObservedDurableObjectNamespace = {
+  id?: string | null;
+  script: string;
+  class: string;
+  useSqlite?: boolean;
+};
+
+/** The storage backend Cloudflare reports for a script's class. */
+const observedStorage = (
+  observedNamespaces: readonly ObservedDurableObjectNamespace[],
+  scriptName: string,
+  className: string,
+): "sqlite" | "legacy-kv" =>
+  observedNamespaces.find((ns) => ns.script === scriptName && ns.class === className)?.useSqlite ===
+  false
+    ? "legacy-kv"
+    : "sqlite";
+
+/**
+ * Build a script's declarative `exports` map: every namespace Cloudflare
+ * reports for the script stays live with its observed storage backend, then
+ * the classes this deploy hosts, renames, deletes and receives are applied
+ * on top. New classes are SQLite-backed (Cloudflare no longer provisions
+ * key-value namespaces).
+ *
+ * @internal
+ */
+const buildDurableObjectExports = (params: {
+  scriptName: string;
+  observedNamespaces: readonly ObservedDurableObjectNamespace[];
+  hostedClasses: readonly string[];
+  renamedClasses: readonly { from: string; to: string }[];
+  deletedClasses: readonly string[];
+  transferredClasses: readonly { from: string; fromScript: string; to: string }[];
+}): Record<string, workers.PutScriptMetadataExport> => {
+  const { scriptName, observedNamespaces } = params;
+  const exports: Record<string, workers.PutScriptMetadataExport> = {};
+  const live = (className: string, storageOf = className) => {
+    exports[className] = {
+      type: "durable-object",
+      storage: observedStorage(observedNamespaces, scriptName, storageOf),
+    };
+  };
+  for (const ns of observedNamespaces) {
+    if (ns.script === scriptName) live(ns.class);
+  }
+  for (const className of params.hostedClasses) {
+    const renamed = params.renamedClasses.find((rename) => rename.to === className);
+    live(className, renamed?.from ?? className);
+  }
+  for (const { from, to } of params.renamedClasses) {
+    exports[from] = { type: "durable-object", state: "renamed", renamedTo: to };
+  }
+  for (const className of params.deletedClasses) {
+    exports[className] = { type: "durable-object", state: "deleted" };
+  }
+  for (const { from, fromScript, to } of params.transferredClasses) {
+    exports[to] = {
+      type: "durable-object",
+      storage: observedStorage(observedNamespaces, fromScript, from),
+      state: "expecting-transfer",
+      transferFrom: fromScript,
+    };
+  }
+  return exports;
+};
+
+/**
+ * The `exports` map after incoming transfers have committed: each
+ * `expecting-transfer` entry becomes a live entry.
+ *
+ * @internal
+ */
+const settleTransfers = (
+  exports: Record<string, workers.PutScriptMetadataExport | undefined>,
+): Record<string, workers.PutScriptMetadataExport> =>
+  Object.fromEntries(
+    Object.entries(exports).flatMap(([className, entry]) =>
+      entry === undefined
+        ? []
+        : [
+            [
+              className,
+              entry.state === "expecting-transfer"
+                ? { type: entry.type, storage: entry.storage }
+                : entry,
+            ],
+          ],
+    ),
+  );
+
+/**
+ * Commit a Durable Object transfer on the former host. Once the new host has
+ * declared the classes `expecting-transfer`, the former host's settings are
+ * patched with a `transferred` tombstone for each moved class, keeping every
+ * other namespace it hosts live. Cloudflare moves the namespaces, with their
+ * data, when the patch lands; the former host's bindings and tags are
+ * untouched.
+ *
+ * @internal
+ */
+const commitDurableObjectTransfer = (params: {
+  accountId: string;
+  fromScript: string;
+  toScript: string;
+  classNames: readonly string[];
+  observedNamespaces: readonly ObservedDurableObjectNamespace[];
+}) =>
+  workers.patchScriptScriptAndVersionSetting({
+    accountId: params.accountId,
+    scriptName: params.fromScript,
+    // The settings part is sent verbatim, so entries use wire names.
+    settings: {
+      exports: Object.fromEntries(
+        params.observedNamespaces
+          .filter((ns) => ns.script === params.fromScript)
+          .map((ns) => [
+            ns.class,
+            params.classNames.includes(ns.class)
+              ? { type: "durable-object", state: "transferred", transferred_to: params.toScript }
+              : {
+                  type: "durable-object",
+                  storage: observedStorage(params.observedNamespaces, params.fromScript, ns.class),
+                },
+          ]),
+      ),
+    },
+  });
 
 /**
  * Coerce a resolved `transferredFrom` declaration to its list form, dropping
