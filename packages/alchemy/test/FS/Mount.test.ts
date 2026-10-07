@@ -8,7 +8,7 @@ import Stack, { providers, state } from "./fixtures/stack.ts";
 /**
  * Every mount kind in one container, built locally (`dev: true`):
  * `FS.MountFile`, `FS.MountFolder`, `GitHub.MountRepository` (read and
- * write access), `Git.MountRepository` (a repository on a local Alchemy
+ * write access, with a token or an automatic deploy key), `Git.MountRepository` (a repository on a local Alchemy
  * Git service) and `Cloudflare.Artifacts.MountRepository` (a real Artifacts
  * repository — run with `--profile testing`). The container reports what landed on disk and what git may
  * do with each checkout.
@@ -62,6 +62,12 @@ describe("FS and git mounts in a container", { tags: ["local"] }, () => {
       expect(facts["docs.readme"]).toBe("Hello World!");
       expect(facts["docs.pushurl"]).toMatch(/\/e2e\/.+\.git$/);
       expect(facts["docs.cred"]).not.toBe("");
+
+      // A private GitHub repository mounted without a token: git uses the
+      // deploy key the mount created, over SSH, for fetch and push.
+      expect(facts["agent.readme"]).toBe("# test-mount-deploy-key");
+      expect(facts["agent.lsremote"]).toBe("ok");
+      expect(facts["agent.push"]).toBe("ok");
 
       // A Cloudflare Artifacts repository, with a minted read token.
       expect(facts["scratch.readme"]).toBe("Hello World!");

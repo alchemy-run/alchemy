@@ -95,6 +95,27 @@ const credentialHelperLayer: ImageLayer = {
   ],
 };
 
+const SSH_COMMAND = `#!/bin/sh
+# git ssh command: \`alchemy-git-ssh <ENV_PREFIX> <ssh args…>\` connects with
+# the private key in <ENV_PREFIX>_SSH_KEY from the environment.
+prefix="$1"; shift
+eval "key=\\\${\${prefix}_SSH_KEY:-}"
+file="\${TMPDIR:-/tmp}/alchemy-git-ssh-$prefix"
+if [ -n "$key" ] && [ ! -s "$file" ]; then (umask 077; printf '%s\\n' "$key" > "$file"); fi
+exec ssh -i "$file" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$@"
+`;
+
+const sshLayer: ImageLayer = {
+  id: "git-ssh",
+  stage: "install",
+  instructions: [
+    "RUN if command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y --no-install-recommends openssh-client && rm -rf /var/lib/apt/lists/*; elif command -v apk >/dev/null 2>&1; then apk add --no-cache openssh-client; fi",
+    `COPY ${contextTarget("git-ssh")} /usr/local/bin/alchemy-git-ssh`,
+    "RUN chmod +x /usr/local/bin/alchemy-git-ssh",
+  ].join("\n"),
+  context: [{ kind: "content", target: contextTarget("git-ssh"), content: SSH_COMMAND }],
+};
+
 const envPrefix = (path: string) =>
   `ALCHEMY_GIT_${Crypto.createHash("sha256").update(path).digest("hex").slice(0, 12).toUpperCase()}`;
 
@@ -115,6 +136,16 @@ export const mountGitRepository = (options: {
   readonly url: Input<string>;
   readonly credentials?: GitCredentialsInput;
   readonly runtimeCredentials?: GitCredentialsInput;
+  /**
+   * An SSH private key (OpenSSH format) for git inside the container,
+   * instead of `runtimeCredentials` — e.g. a deploy key. `https://<host>/`
+   * remotes are rewritten to `git@<host>:` so fetch and push use it.
+   */
+  readonly runtimeSshKey?: {
+    readonly host: string;
+    /** Absent at runtime, where the key is read from the bound environment. */
+    readonly privateKey?: Input<Redacted.Redacted<string>>;
+  };
   /** Source-specific tooling the mount installs (e.g. the `gh` CLI). */
   readonly tooling?: ReadonlyArray<ImageLayer>;
   /** Source-specific environment for the container (e.g. `GH_TOKEN`). */
@@ -135,7 +166,9 @@ export const mountGitRepository = (options: {
       {
         for (const key of [
           ...Object.keys(options.env ?? {}),
-          ...(access !== "none" ? [`${prefix}_USERNAME`, `${prefix}_PASSWORD`] : []),
+          ...(access !== "none"
+            ? [`${prefix}_USERNAME`, `${prefix}_PASSWORD`, `${prefix}_SSH_KEY`]
+            : []),
         ]) {
           const value = unpackEnvValue<unknown>(process.env[key]);
           if (value === undefined) continue;
@@ -146,7 +179,8 @@ export const mountGitRepository = (options: {
       }
       return { path: mount.path };
     }
-    if (access !== "none" && !options.runtimeCredentials) {
+    const ssh = access !== "none" ? options.runtimeSshKey : undefined;
+    if (access !== "none" && !options.runtimeCredentials && !ssh) {
       return yield* Effect.die(
         new Error(`${options.kind}: access "${access}" needs credentials for ${mount.path}`),
       );
@@ -160,11 +194,17 @@ export const mountGitRepository = (options: {
       ...(access === "write" ? [] : [`git -C ${path} remote set-url --push origin DISABLED`]),
       ...(access === "none"
         ? []
-        : [
-            // Scoped to this checkout's own config: no URL needed here (it
-            // may still be an unresolved Output at plan time).
-            `git -C ${path} config credential.helper ${shellQuote(`/usr/local/bin/alchemy-git-credential ${prefix}`)}`,
-          ]),
+        : ssh
+          ? [
+              // Over SSH with the key: rewrite the host's https remotes.
+              `git -C ${path} config core.sshCommand ${shellQuote(`/usr/local/bin/alchemy-git-ssh ${prefix}`)}`,
+              `git -C ${path} config url.${shellQuote(`git@${ssh.host}:`)}.insteadOf ${shellQuote(`https://${ssh.host}/`)}`,
+            ]
+          : [
+              // Scoped to this checkout's own config: no URL needed here (it
+              // may still be an unresolved Output at plan time).
+              `git -C ${path} config credential.helper ${shellQuote(`/usr/local/bin/alchemy-git-credential ${prefix}`)}`,
+            ]),
     ];
     const layer: Input<ImageLayer> = {
       id: `git-mount:${mount.path}`,
@@ -196,13 +236,14 @@ export const mountGitRepository = (options: {
       {
         image: [
           gitCliLayer,
-          ...(access === "none" ? [] : [credentialHelperLayer]),
+          ...(access === "none" ? [] : ssh ? [sshLayer] : [credentialHelperLayer]),
           ...(options.tooling ?? []),
           layer,
         ],
         env: {
           ...options.env,
-          ...(access !== "none" && options.runtimeCredentials
+          ...(ssh?.privateKey ? { [`${prefix}_SSH_KEY`]: ssh.privateKey } : {}),
+          ...(access !== "none" && !ssh && options.runtimeCredentials
             ? {
                 [`${prefix}_USERNAME`]: options.runtimeCredentials.username,
                 [`${prefix}_PASSWORD`]: options.runtimeCredentials.password,
