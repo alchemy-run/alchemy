@@ -82,6 +82,10 @@ describe(
           assets: { notFoundHandling: "404-page" },
         }),
       () =>
+        GCP.Website.SolidYield("SY", {
+          assets: { notFoundHandling: "404-page" },
+        }),
+      () =>
         GCP.Website.StaticSite("St", {
           build: { command: "hugo --minify", output: "public" },
           scaling: { minInstanceCount: 1 },

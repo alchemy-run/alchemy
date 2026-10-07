@@ -1,0 +1,37 @@
+{
+  "name": "fly-website-solid-yield",
+  "version": "0.0.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/fly-website-solid-yield"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@distilled.cloud/fly-io": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "@solidjs/web": "2.0.0-rc.13",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.13",
+    "solid-yield": "file:../../vendor/solid-yield/solid-yield-0.0.0.tgz"
+  },
+  "devDependencies": {
+    "@solidjs/vite-plugin": "3.0.0-next.47",
+    "@tailwindcss/vite": "catalog:",
+    "alchemy": "workspace:*",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid-yield": "file:../../vendor/solid-yield/vite-plugin-solid-yield-0.0.0.tgz"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

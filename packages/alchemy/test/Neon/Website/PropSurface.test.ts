@@ -13,6 +13,7 @@ const constructors = [
   "Waku",
   "Octane",
   "Foldkit",
+  "SolidYield",
   "Vocs",
   "StaticSite",
 ] as const;
@@ -32,6 +33,8 @@ const contracts = [
   () => Website.SvelteKit("Web", { kit: { paths: { base: "/docs" } } }),
   () => Website.Waku("Web", { waku: { srcDir: "src" } }),
   () => Website.Foldkit("Web"),
+  () => Website.SolidYield("Web"),
+  () => Website.SolidYield("Web", { assets: { notFoundHandling: "404-page" } }),
   () => Website.Octane("Web"),
   () => Website.ReactRouter("Web"),
   () => Website.SolidStart("Web"),
@@ -72,7 +75,7 @@ const contracts = [
 ];
 
 it(
-  "exports all thirteen constructors with restricted Neon deployment controls",
+  "exports all fourteen constructors with restricted Neon deployment controls",
   () => {
     for (const name of constructors) expect(typeof Website[name]).toBe("function");
     expect(contracts.length).toBeGreaterThan(constructors.length);

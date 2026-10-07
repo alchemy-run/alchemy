@@ -29,6 +29,7 @@ smoke
 .wrangler
 
 *.tgz
+!vendor/solid-yield/*.tgz
 *.js
 *.d.ts
 # Emitted by `prisma contract emit` (the example's prepare script).

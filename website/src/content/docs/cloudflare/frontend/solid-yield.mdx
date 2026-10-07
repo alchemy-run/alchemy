@@ -1,0 +1,150 @@
+---
+title: solid-yield
+description: Deploy a solid-yield app to Cloudflare with Cloudflare.Website.SolidYield — one declaration, no Wrangler config.
+sidebar:
+  order: 9
+---
+
+[solid-yield](https://github.com/devagrawal09/solid-yield) writes Solid 2
+components as generator functions whose types track pending, failure and
+context requirements. Its apps are client-rendered Vite projects, so
+`Cloudflare.Website.SolidYield` deploys them with one declaration.
+
+`SolidYield` is [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite) with
+SPA fallback on by default.
+
+See [examples/cloudflare-website-solid-yield](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-website-solid-yield)
+for a Tailwind app that loads data from an Effect API.
+
+## Install
+
+solid-yield has no npm release yet. Build it from source and depend on it
+by `file:` path, as its
+[README](https://github.com/devagrawal09/solid-yield#using-it-today-from-source)
+describes:
+
+```jsonc
+// package.json
+{
+  "dependencies": {
+    "solid-yield": "file:../solid-yield/packages/yield",
+    "solid-js": "^2.0.0-rc.13",
+    "@solidjs/web": "^2.0.0-rc.13"
+  },
+  "devDependencies": {
+    "vite-plugin-solid-yield": "file:../solid-yield/packages/vite-plugin-yield",
+    "@solidjs/vite-plugin": "3.0.0-next.47",
+    "vite": "^8"
+  }
+}
+```
+
+## Configure Vite
+
+Put the yield transform before Solid's JSX compiler:
+
+```typescript
+// vite.config.ts
+import solid from "@solidjs/vite-plugin";
+import { defineConfig } from "vite";
+import solidYield from "vite-plugin-solid-yield";
+
+export default defineConfig({
+  plugins: [solidYield(), solid()],
+});
+```
+
+Alchemy layers its Cloudflare plugin on top of this config.
+
+## Declare the Website
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Website = Cloudflare.Website.SolidYield("Website");
+```
+
+Point `rootDir` at an app in a monorepo subdirectory:
+
+```typescript
+export const Website = Cloudflare.Website.SolidYield("Website", {
+  rootDir: "applications/web",
+});
+```
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySolidYieldApp",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+`alchemy deploy` builds the app and serves it from a Worker at `url`.
+
+## Deep links
+
+Unmatched paths like `/todos/42` serve `index.html`, so your client router
+resolves them. Serve a real 404 page instead with `"404-page"`:
+
+```typescript
+export const Website = Cloudflare.Website.SolidYield("Website", {
+  assets: { notFoundHandling: "404-page" },
+});
+```
+
+## Add a Worker in front of the app
+
+Point `main` at a Worker module to serve API routes at the edge. The app
+still serves through the `ASSETS` binding:
+
+```typescript
+// src/worker.ts
+export default {
+  async fetch(request: Request, env: { ASSETS: Fetcher }) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/health") {
+      return Response.json({ ok: true });
+    }
+    return env.ASSETS.fetch(request);
+  },
+};
+```
+
+```typescript
+// alchemy.run.ts
+export const Website = Cloudflare.Website.SolidYield("Website", {
+  main: "src/worker.ts",
+  assets: { runWorkerFirst: ["/api/*"] },
+});
+```
+
+## Dev
+
+`alchemy dev` runs the app's own Vite dev server with Solid's HMR. Pin its
+address when several apps share a Stack:
+
+```typescript
+export const Website = Cloudflare.Website.SolidYield("Website", {
+  dev: { host: "127.0.0.1", port: 5180, strictPort: true },
+});
+```
+
+:::note
+See the [`SolidYield` reference](/providers/cloudflare/website#solidyield)
+for every prop, and [Vite](/cloudflare/frontend/vite) for environment
+variables and bindings.
+:::

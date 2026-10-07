@@ -3,6 +3,7 @@ export * from "./Foldkit.ts";
 export * from "./Nextjs.ts";
 export * from "./Nuxt.ts";
 export * from "./Octane.ts";
+export * from "./SolidYield.ts";
 export * from "./StaticSite.ts";
 export * from "./SvelteKit.ts";
 export * from "./Vinext.ts";

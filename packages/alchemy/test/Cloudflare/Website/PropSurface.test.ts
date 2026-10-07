@@ -116,6 +116,17 @@ describe(
       // client build. Pinned positively so an `Omit` can't quietly drop it.
       () => Cloudflare.Website.Foldkit("F", { main: "src/worker.ts" }),
       () =>
+        Cloudflare.Website.SolidYield("S", {
+          // @ts-expect-error `source` is owned by the resource itself
+          source: { provider: "x", options: {} },
+        }),
+      () =>
+        Cloudflare.Website.SolidYield("S", {
+          // @ts-expect-error no `vite` override bag on CF (no seam through the plugin pipeline)
+          vite: { base: "/app/" },
+        }),
+      () => Cloudflare.Website.SolidYield("S", { main: "src/worker.ts" }),
+      () =>
         Cloudflare.Website.Vocs("Docs", {
           // @ts-expect-error `source` is owned by the Vocs integration
           source: { provider: "x", options: {} },

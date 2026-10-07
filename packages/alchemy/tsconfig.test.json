@@ -11,6 +11,8 @@
     "test/Prisma/ORM/fixtures/variants/generated/contract.json"
   ],
   "exclude": [
+    // Solid 2 app with its own tsconfig (jsxImportSource: solid-yield).
+    "test/Website/fixtures/solid-yield-app",
     // Prisma migration packages are self-emitting Node scripts whose
     // snapshot imports (`../../snapshots/<hash>/contract`) are extensionless
     // and only resolve under Prisma's own toolchain — not this project.

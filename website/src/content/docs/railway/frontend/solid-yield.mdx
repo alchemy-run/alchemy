@@ -1,0 +1,130 @@
+---
+title: solid-yield
+description: Deploy a solid-yield app to Railway with Railway.Website.SolidYield.
+sidebar:
+  order: 9
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+[solid-yield](https://github.com/devagrawal09/solid-yield) writes Solid 2
+components as generator functions whose types track pending, failure and
+context requirements. Its apps are client-rendered Vite projects, so
+`Railway.Website.SolidYield` is [`Railway.Website.Vite`](/railway/frontend/vite) with
+SPA fallback on by default.
+
+Deploy creates a [`Railway.Project`](/railway/compute/projects) and a [`Railway.Service`](/railway/compute/services) running a static-file server.
+
+See [examples/railway-website-solid-yield](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-website-solid-yield)
+for a Tailwind app that loads data from an Effect API.
+
+## Install
+
+Install the build integration. The resource loads its `/vite` and `/vite/node`
+exports from your project at deploy time:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun"><Code code={`bun add -d ${devDeps}`} lang="sh" /></TabItem>
+  <TabItem label="npm" icon="npm"><Code code={`npm install -D ${devDeps}`} lang="sh" /></TabItem>
+  <TabItem label="pnpm" icon="pnpm"><Code code={`pnpm add -D ${devDeps}`} lang="sh" /></TabItem>
+  <TabItem label="yarn" icon="seti:yarn"><Code code={`yarn add -D ${devDeps}`} lang="sh" /></TabItem>
+</Tabs>
+
+solid-yield has no npm release yet. Build it from source and depend on it
+by `file:` path, as its
+[README](https://github.com/devagrawal09/solid-yield#using-it-today-from-source)
+describes:
+
+```jsonc
+// package.json
+{
+  "dependencies": {
+    "solid-yield": "file:../solid-yield/packages/yield",
+    "solid-js": "^2.0.0-rc.13",
+    "@solidjs/web": "^2.0.0-rc.13"
+  },
+  "devDependencies": {
+    "vite-plugin-solid-yield": "file:../solid-yield/packages/vite-plugin-yield",
+    "@solidjs/vite-plugin": "3.0.0-next.47",
+    "vite": "^8"
+  }
+}
+```
+
+## Configure Vite
+
+Put the yield transform before Solid's JSX compiler:
+
+```typescript
+// vite.config.ts
+import solid from "@solidjs/vite-plugin";
+import { defineConfig } from "vite";
+import solidYield from "vite-plugin-solid-yield";
+
+export default defineConfig({
+  plugins: [solidYield(), solid()],
+});
+```
+
+## Declare the Website
+
+```typescript
+// alchemy.run.ts
+import * as Railway from "alchemy/Railway";
+
+export const Website = Railway.Website.SolidYield("Website");
+```
+
+Point `rootDir` at an app in a monorepo subdirectory:
+
+```typescript
+export const Website = Railway.Website.SolidYield("Website", {
+  rootDir: "applications/web",
+});
+```
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySolidYieldApp",
+  {
+    providers: Railway.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+`site.url` is `https://{name}.up.railway.app`.
+
+## Deep links
+
+Unmatched paths like `/todos/42` serve `index.html`, so your client router
+resolves them. Serve a real 404 page instead with `"404-page"`:
+
+```typescript
+export const Website = Railway.Website.SolidYield("Website", {
+  assets: { notFoundHandling: "404-page" },
+});
+```
+
+## Dev
+
+`alchemy dev` runs the app's own Vite dev server with Solid's HMR. No cloud
+resources are created. Wrap the site in `Alchemy.remote()` to deploy it
+during dev.
+
+:::note
+See the [`SolidYield` reference](/providers/railway/website#solidyield) for
+every prop, and [Vite](/railway/frontend/vite) for environment variables.
+:::
