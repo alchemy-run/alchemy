@@ -1,0 +1,93 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import type * as Redacted from "effect/Redacted";
+import * as Binding from "../Binding.ts";
+import type { RuntimeContext } from "../RuntimeContext.ts";
+import { Self } from "../Self.ts";
+import type { Database } from "./Database.ts";
+import { DatabaseToken, type TokenAuthorization } from "./DatabaseToken.ts";
+
+/**
+ * libSQL connection accessors for one Turso database. Resolving them does
+ * not open a connection; pass the client to `SQL.LibSQL` or
+ * `Drizzle.LibSQL`, or read `url` / `authToken` for `@libsql/client`.
+ */
+export interface ConnectClient {
+  /** libSQL URL of the database (`libsql://<hostname>`). */
+  url: Effect.Effect<string, never, RuntimeContext>;
+  /** SQL auth token for the database. */
+  authToken: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
+}
+
+export interface ConnectOptions {
+  /**
+   * Access level of the token minted for this host.
+   * @default "full-access"
+   */
+  authorization?: TokenAuthorization;
+}
+
+/**
+ * Connect to a Turso database from a Worker, Lambda, or any other Platform
+ * host. Mints a {@link DatabaseToken} for the host and binds the database
+ * URL and token into its environment — the deployer's Platform API token
+ * never reaches the runtime.
+ *
+ * ### Querying a Database
+ * **Example:** Effect SQL over a Turso database
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const conn = yield* Turso.Connect(Db);
+ *   const sql = yield* SQL.LibSQL(conn);
+ *   return {
+ *     fetch: Effect.gen(function* () {
+ *       return yield* HttpServerResponse.json(yield* sql`SELECT 1 AS value`);
+ *     }),
+ *   };
+ * }).pipe(Effect.provide(Turso.ConnectHttp));
+ * ```
+ *
+ * **Example:** Drizzle over a Turso database
+ * ```typescript
+ * const conn = yield* Turso.Connect(Db);
+ * const db = yield* Drizzle.LibSQL(conn, { relations });
+ * ```
+ *
+ * **Example:** Read-only access
+ * ```typescript
+ * const conn = yield* Turso.Connect(Db, { authorization: "read-only" });
+ * ```
+ *
+ * @binding
+ * @product Database
+ */
+export interface Connect extends Binding.Service<
+  Connect,
+  "Turso.Connect",
+  (database: Database, options?: ConnectOptions) => Effect.Effect<ConnectClient>
+> {}
+
+export const Connect = Binding.Service<Connect>("Turso.Connect");
+
+/**
+ * Host-independent implementation: the URL and a per-host token are bound
+ * as environment values, so it works on any Platform host.
+ */
+export const ConnectHttp = Layer.effect(
+  Connect,
+  Effect.gen(function* () {
+    const self = yield* Self;
+    const Token = yield* DatabaseToken;
+    return Effect.fn(function* (database: Database, options?: ConnectOptions) {
+      const authorization = options?.authorization ?? "full-access";
+      const token = yield* Token(
+        `${self.LogicalId}${database.LogicalId}${authorization === "read-only" ? "ReadOnly" : ""}Token`,
+        { database: database.name, authorization },
+      );
+      return {
+        url: yield* database.url,
+        authToken: yield* token.token,
+      } satisfies ConnectClient;
+    });
+  }),
+);
