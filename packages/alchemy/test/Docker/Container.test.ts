@@ -465,6 +465,55 @@ describe(
     );
 
     test.provider(
+      "replaces the container when a later env file changes, given as a relative path",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { base, override } = yield* writeEnvFiles;
+          // Docker resolves relative paths against the CLI's working
+          // directory; the digest must read the same file.
+          const relativeOverride = path.relative(process.cwd(), override);
+          expect(path.isAbsolute(relativeOverride)).toBe(false);
+          const container = Docker.Container("env-file-relative-container", {
+            image: "nginx:alpine",
+            command: printEnv,
+            envFiles: [base, relativeOverride],
+            start: true,
+          });
+
+          const first = yield* stack.deploy(container);
+          expect(yield* readPrintedEnv(first.name)).toBe("base override override");
+
+          yield* fs.writeFileString(override, "LAYERED=second-edit\nEXPLICIT=override\n");
+          const plan = yield* stack.plan(container);
+          expect(plan.resources["env-file-relative-container"]?.action).toBe("update");
+          const second = yield* stack.deploy(container);
+          expect(second.id).not.toBe(first.id);
+          expect(yield* readPrintedEnv(second.name)).toBe("base second-edit override");
+        }),
+    );
+
+    test.provider("fails the plan with the path when an env file is missing", (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const { base } = yield* writeEnvFiles;
+        const container = Docker.Container("env-file-missing-container", {
+          image: "nginx:alpine",
+          envFiles: [base],
+          start: false,
+        });
+        yield* stack.deploy(container);
+
+        yield* fs.remove(base);
+        const error = yield* stack.plan(container).pipe(Effect.flip);
+        const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
+        expect(report).toContain(base);
+        expect(report).toContain("NotFound");
+      }),
+    );
+
+    test.provider(
       "does not replace the container when env files go from empty to omitted",
       (stack) =>
         Effect.gen(function* () {
