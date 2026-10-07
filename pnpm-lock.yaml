@@ -734,7 +734,7 @@ pnpmfileChecksum: sha256-ZR+EePdNPtPmfrxwBEFhocmgEqPh5QhSV2MMQstzKHQ=
 patchedDependencies:
   '@astrojs/starlight@0.42.0': 3ea8686c3055e8d097b5afa93dcf9e16ebfbebbf006e7493ad5df38e6edbfd19
   starlight-blog@0.29.0: 7b6e57367fab3517e0cfd5e4d0da3459ac1430bf4b6036cf03002c978602c23b
-  typescript@7.1.0-dev.20260905.1: 3b836f1ed9f402f2d41b472b92e58851267e3035da1c4259159c96403f642a91
+  typescript@7.1.0-dev.20260905.1: ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7
 
 importers:
 
@@ -787,7 +787,7 @@ importers:
         version: 7.0.2
       typescript-api:
         specifier: 'catalog:'
-        version: typescript@7.1.0-dev.20260905.1(patch_hash=3b836f1ed9f402f2d41b472b92e58851267e3035da1c4259159c96403f642a91)
+        version: typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7)
 
   benchmark/container:
     dependencies:
@@ -7277,7 +7277,7 @@ importers:
         version: 7.0.2
       typescript-api:
         specifier: 'catalog:'
-        version: typescript@7.1.0-dev.20260905.1(patch_hash=3b836f1ed9f402f2d41b472b92e58851267e3035da1c4259159c96403f642a91)
+        version: typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7)
       unenv:
         specifier: 'catalog:'
         version: 2.0.0-rc.24
@@ -43204,7 +43204,7 @@ snapshots:
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
 
-  typescript@7.1.0-dev.20260905.1(patch_hash=3b836f1ed9f402f2d41b472b92e58851267e3035da1c4259159c96403f642a91):
+  typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7):
     optionalDependencies:
       '@typescript/typescript-darwin-arm64': 7.1.0-dev.20260905.1
       '@typescript/typescript-darwin-x64': 7.1.0-dev.20260905.1

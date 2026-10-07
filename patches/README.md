@@ -27,5 +27,6 @@ bundled dependencies and invalidates its cache when the lockfile changes.
 patching, docs and lint tooling). The patch removes its `tsc` bin, which would
 otherwise shadow the `typescript` catalog compiler in projects that depend on
 both. Mixing compiler versions makes every `tsc -b` treat the other version's
-output as out of date and rebuild it. Rebase the patch when bumping
-`typescript-api`.
+output as out of date and rebuild it. It also drops the `getExePath` check that
+requires that bin, since the compiler API uses it to find the native executable.
+Rebase the patch when bumping `typescript-api`.

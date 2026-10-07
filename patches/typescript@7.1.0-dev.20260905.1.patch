@@ -1,3 +1,20 @@
+diff --git a/lib/getExePath.js b/lib/getExePath.js
+index 2de01d4c005a92a835558d057e5769b2b47b80c0..90ba55c6cd12655753fced21badc3e2a4b378b5f 100644
+--- a/lib/getExePath.js
++++ b/lib/getExePath.js
+@@ -12,10 +12,8 @@ export default function getExePath() {
+     const pkgName = pkg.name;
+     const baseName = pkgName.startsWith("@") ? pkgName.split("/")[1] : pkgName;
+     const expectedBinName = baseName === "typescript" ? "tsc" : "tsgo";
+-    const binNames = pkg.bin && typeof pkg.bin === "object" ? Object.keys(pkg.bin) : [];
+-    if (binNames.length !== 1 || binNames[0] !== expectedBinName) {
+-        throw new Error(`Expected ${pkgName} to declare exactly one bin entry named ${expectedBinName}.`);
+-    }
++    // alchemy: the `tsc` bin is patched out of package.json so this dev build
++    // doesn't shadow the catalog compiler; the executable is still shipped.
+     let binName = expectedBinName;
+     let exeDir;
+ 
 diff --git a/package.json b/package.json
 index 814b3749e52860cf34664f17006e306680a8435e..9d9ab82f60df708de9c4dc61d4d14c50904051dc 100644
 --- a/package.json
