@@ -76,8 +76,13 @@ export const nodeLoaderArgs = (entry: string): string[] => [
 
 /**
  * Whether this Node supports the synchronous in-thread loader hooks
- * (`module.registerHooks`, v22.15 / v23.5) that `bin/register-dev-mode.js`
- * needs. This is THE capability gate for running the CLI from source under
+ * (`module.registerHooks`) the way `bin/register-dev-mode.js` needs them.
+ * Before 24.5 (nodejs/node#59011) a resolve hook's `conditions` were
+ * ignored, so the `bun` condition never reached Node's resolver; before
+ * 24.11.1 an imported CommonJS module could not `require()` TypeScript
+ * (see `importedCommonJsNeedsNodeLoader` in node-utils' register-oxc).
+ *
+ * This is THE capability gate for running the CLI from source under
  * node: with the hooks installed, the Oxc loader handles every `.ts`/`.tsx`
  * file regardless of Node's own TypeScript support.
  *
@@ -85,8 +90,8 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * before any `.ts` can load. Keep the two in sync.
  */
 export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
-  const [major = 0, minor = 0] = version.split(".").map(Number);
-  return (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
+  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+  return (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) || major >= 25;
 };
 
 /**

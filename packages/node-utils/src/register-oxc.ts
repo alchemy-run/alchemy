@@ -118,6 +118,24 @@ const scheduleCompileCacheFlush = (() => {
   };
 })();
 
+/**
+ * Whether `require()` breaks inside an imported CommonJS module whose source
+ * the load hook supplied (nodejs/node#62920, fixed in 24.18 and 26.2, never
+ * in 25.x): Node evaluates it with a stand-in `require` that cannot load ES
+ * modules, so a `.cts` requiring TypeScript fails. On these versions the
+ * hook leaves imported CommonJS to Node's default load, which defers it to
+ * the real CommonJS loader without reading it; that loader's `require()`
+ * calls reach the hook again, now in a require context, and are transpiled
+ * there. Returning `source: null` directly is rejected by synchronous hooks
+ * on older 24.x; Node's default load defers from 24.11.1, alchemy's minimum.
+ * A namespaced (reloaded) graph loses its freshness for such files: the
+ * CommonJS cache is keyed by path.
+ */
+const importedCommonJsNeedsNodeLoader = (() => {
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  return (major === 24 && minor < 18) || major === 25 || (major === 26 && minor < 2);
+})();
+
 /** Specifiers Node owns outright: builtins, data URLs, remote schemes. */
 const isForeignSpecifier = (specifier: string) =>
   /^(?:node:|data:|[a-z][a-z\d+.-]*:\/\/)/i.test(specifier) && !specifier.startsWith("file:");
@@ -215,9 +233,13 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
 
   // Transformed sources reference their source maps (see transform-source);
   // Node only reads and applies them to stack traces once source-map support
-  // is on.
-  const sourceMapsWereEnabled = process.sourceMapsEnabled;
-  process.setSourceMapsEnabled(true);
+  // is on. `nodeModules` stays on: a published alchemy runs its own `lib/`
+  // from `node_modules`, and ships maps back to its `src/`.
+  const previousSourceMapsSupport = NodeModule.getSourceMapsSupport();
+  NodeModule.setSourceMapsSupport(true, {
+    nodeModules: true,
+    generatedCode: previousSourceMapsSupport.generatedCode,
+  });
 
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
@@ -278,6 +300,14 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
       if (transformed === undefined) {
         return nextLoad(cleanUrl, withJsonAttribute(cleanUrl, context));
       }
+      // `importAttributes` is present on every import and absent on require().
+      if (
+        importedCommonJsNeedsNodeLoader &&
+        transformed.format === "commonjs" &&
+        context.importAttributes !== undefined
+      ) {
+        return nextLoad(cleanUrl, { ...context, format: "commonjs" });
+      }
       return { ...transformed, shortCircuit: true };
     },
   });
@@ -300,7 +330,8 @@ export const registerOxc = (options: RegisterOxcOptions = {}): OxcLoader => {
       if (globalRegistration[globalRegistrationKey] === loader) {
         delete globalRegistration[globalRegistrationKey];
       }
-      if (sourceMapsWereEnabled === false) process.setSourceMapsEnabled(false);
+      const { enabled, ...options } = previousSourceMapsSupport;
+      NodeModule.setSourceMapsSupport(enabled, options);
     },
   };
   if (options.namespace === undefined) {

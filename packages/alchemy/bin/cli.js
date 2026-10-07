@@ -26,16 +26,16 @@ const launchedByBun = path.basename(process.env.npm_execpath ?? "").startsWith("
 const runtime = runningInBun || launchedByBun ? "bun" : "node";
 
 if (runtime === "node") {
-  // Oxc's loader requires module.registerHooks. Keep this gate in sync with
-  // src/Util/Node.ts; the launcher must run before TypeScript can be loaded.
-  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  // Oxc's loader needs complete module.registerHooks support (24.11.1+).
+  // Keep this gate in sync with src/Util/Node.ts; the launcher must run
+  // before TypeScript can be loaded.
+  const [major = 0, minor = 0, patch = 0] = process.versions.node.split(".").map(Number);
   const supportsHooks =
-    (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
+    (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) || major >= 25;
   if (!supportsHooks) {
     process.stderr.write(
-      `alchemy: node ${process.versions.node} is not supported ` +
-        "(module.registerHooks needs node 22.15+, 23.5+, or 24+).\n" +
-        "Use a newer node, or run alchemy with bun.\n",
+      `alchemy: node ${process.versions.node} is not supported. ` +
+        "Upgrade to node 24.11.1 or newer.\n",
     );
     process.exit(1);
   }
