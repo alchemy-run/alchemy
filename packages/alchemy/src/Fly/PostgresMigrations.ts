@@ -9,29 +9,17 @@ import {
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
 } from "../SQL/Migrations/index.ts";
-import { importPg } from "../SQL/PostgresDriver.ts";
+import {
+  connectPgClient,
+  stripSslQueryParams,
+  withPgClient as withConnectedPgClient,
+} from "../SQL/PostgresDriver.ts";
 import { readSqlFile } from "../SQL/SqlFile.ts";
 
 export class PostgresMigrationError extends Data.TaggedError("Fly.PostgresMigrationError")<{
   message: string;
   cause?: unknown;
 }> {}
-
-/**
- * Strip query-string SSL flags so `pg-connection-string` does not treat
- * `sslmode=require` as `verify-full`. TLS and certificate verification
- * are set on the client (`ssl.rejectUnauthorized: true`).
- */
-export const stripSslQueryParams = (uri: string): string => {
-  try {
-    const url = new URL(uri);
-    url.searchParams.delete("sslmode");
-    url.searchParams.delete("channel_binding");
-    return url.toString();
-  } catch {
-    return uri;
-  }
-};
 
 const toMigrationError = (cause: unknown) =>
   new PostgresMigrationError({
@@ -65,19 +53,14 @@ export const withPgClient = <A, E, R>(
   connectionUri: Redacted.Redacted<string>,
   use: (client: Client) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, PostgresMigrationError | E, R> =>
-  Effect.acquireUseRelease(
-    Effect.tryPromise({
-      try: async () => {
-        const { Client } = await importPg();
-        const client = new Client({
-          connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
-          ssl: { rejectUnauthorized: true },
-        });
-        await client.connect();
-        return client;
+  withConnectedPgClient(
+    connectPgClient(
+      {
+        connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
+        ssl: { rejectUnauthorized: true },
       },
-      catch: toMigrationError,
-    }).pipe(
+      toMigrationError,
+    ).pipe(
       Effect.retry({
         while: isTransientConnectError,
         schedule: Schedule.spaced("3 seconds"),
@@ -100,7 +83,6 @@ export const withPgClient = <A, E, R>(
       ),
     ),
     use,
-    (client) => Effect.promise(() => client.end().catch(() => {})),
   );
 
 /**

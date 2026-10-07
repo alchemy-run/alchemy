@@ -35,12 +35,6 @@ export interface MigrationRecord {
 export interface SqlExecutor {
   readonly dialect: MigrationDialect;
   /**
-   * How the Postgres bookkeeping table generates its `id`. Aurora DSQL has
-   * no `SERIAL`, only identity columns.
-   * @default "serial"
-   */
-  readonly idColumn?: "serial" | "identity";
-  /**
    * Run a single query and return its rows as objects. `params` bind as
    * `?`/`$n` placeholders; adapters without native parameter support inline
    * them as SQL literals (see `inlineSqlParams`).
@@ -50,9 +44,10 @@ export interface SqlExecutor {
     params?: ReadonlyArray<unknown>,
   ) => Effect.Effect<Array<Record<string, unknown>>, MigrationError>;
   /**
-   * Execute one or more statements as a unit — a transaction where the
-   * target supports one (pg/mysql), a single batched query on D1 (which has
-   * no transactions over HTTP).
+   * Execute one or more statements as atomically as the target allows — a
+   * transaction on pg/mysql, a single batched query on D1 (which has no
+   * transactions over HTTP). Aurora DSQL commits each DDL statement in its
+   * own transaction, so a batch containing DDL is not atomic there.
    */
   readonly batch: (statements: ReadonlyArray<string>) => Effect.Effect<void, MigrationError>;
 }

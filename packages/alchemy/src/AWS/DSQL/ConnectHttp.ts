@@ -3,14 +3,10 @@ import type * as Region from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
-import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
-import type { SqlConnectionInfo } from "../Connection/internal.ts";
-import { formatSqlConnectionUrl } from "../Connection/internal.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, connectEnvPrefix, type ConnectOptions } from "./Connect.ts";
-
-const DSQL_PORT = 5432;
+import { dsqlConnectionInfo } from "./ConnectionInfo.ts";
 
 /**
  * IAM-token implementation of {@link Connect}. At deploy time it grants
@@ -50,35 +46,17 @@ export const ConnectHttp = Layer.effect(
         }
       }
 
-      const username = admin ? "admin" : options?.username;
-      const database = options?.database ?? "postgres";
-
       return Effect.gen(function* () {
         const host = yield* Host;
         if (!host) {
           return yield* Effect.die(`DSQL endpoint for '${cluster.LogicalId}' is not available yet`);
         }
-        const password = yield* generateDbAuthToken({
-          service: "dsql",
-          hostname: host,
-          action: admin ? "DbConnectAdmin" : "DbConnect",
-        }).pipe(Effect.provideContext(services));
-        return {
+        return yield* dsqlConnectionInfo({
           host,
-          port: DSQL_PORT,
-          database,
-          username,
-          password,
-          ssl: true,
-          url: formatSqlConnectionUrl({
-            host,
-            port: DSQL_PORT,
-            database,
-            username,
-            password,
-            ssl: true,
-          }),
-        } satisfies SqlConnectionInfo;
+          admin,
+          username: options?.username,
+          database: options?.database,
+        }).pipe(Effect.provideContext(services));
       });
     });
   }),

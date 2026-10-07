@@ -139,7 +139,9 @@ test.provider(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-dsql-migrations-" });
+      const migrationsDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-dsql-migrations-",
+      });
       yield* fs.writeFileString(
         path.join(migrationsDir, "0001_users.sql"),
         "CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL);",

@@ -185,16 +185,20 @@ export const ClusterProvider = () =>
       const toAttrs = (
         cluster: dsql.GetClusterOutput | dsql.CreateClusterOutput,
         region: string,
-        previous: Cluster["Attributes"] | undefined,
-      ): Cluster["Attributes"] => ({
+      ) => ({
         clusterId: cluster.identifier,
         clusterArn: cluster.arn,
         status: cluster.status,
         endpoint: cluster.endpoint ?? endpointFor(cluster.identifier, region),
         deletionProtectionEnabled: cluster.deletionProtectionEnabled,
-        migrationsDir: previous?.migrationsDir,
-        migrationsTable: previous?.migrationsTable,
-        migrationsHashes: previous?.migrationsHashes ?? {},
+      });
+
+      // Migration state lives in the database, not the cluster API, so it
+      // is carried over from prior state rather than observed.
+      const migrationsStateOf = (output: Cluster["Attributes"] | undefined) => ({
+        migrationsDir: output?.migrationsDir,
+        migrationsTable: output?.migrationsTable,
+        migrationsHashes: output?.migrationsHashes ?? {},
       });
 
       return {
@@ -219,7 +223,7 @@ export const ClusterProvider = () =>
             return undefined;
           }
           const tags = yield* readTags(cluster.arn);
-          const attrs = toAttrs(cluster, region, output);
+          const attrs = { ...toAttrs(cluster, region), ...migrationsStateOf(output) };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -277,8 +281,10 @@ export const ClusterProvider = () =>
 
           // 3c. Sync migrations — the shared pipeline skips applied files,
           // so this converges on create, update, and adoption alike.
+          // A cluster recreated out-of-band has an empty database, so prior
+          // migration state only carries over for the same cluster.
           const previous = output?.clusterId === observed.identifier ? output : undefined;
-          const attrs = toAttrs(observed, region, previous);
+          const attrs = toAttrs(observed, region);
           const migrationsInput = migrationsInputOf(news);
           const migrations = migrationsInput
             ? yield* runDsqlMigrations({
@@ -333,7 +339,7 @@ export const ClusterProvider = () =>
                   Effect.map((cluster) =>
                     cluster === undefined || cluster.status === "DELETED"
                       ? undefined
-                      : toAttrs(cluster, region, undefined),
+                      : { ...toAttrs(cluster, region), ...migrationsStateOf(undefined) },
                   ),
                 ),
               { concurrency: 4 },

@@ -10,17 +10,8 @@ import {
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
 } from "../../SQL/Migrations/index.ts";
+import { connectPgClient, stripSslQueryParams, withPgClient } from "../../SQL/PostgresDriver.ts";
 import { readSqlFile } from "../../SQL/SqlFile.ts";
-
-// `pg` is an optional peer dependency — loaded lazily so importing the
-// Planetscale provider never requires the driver unless migrations run.
-const importPg = () =>
-  import("pg").catch((cause) => {
-    throw new Error(
-      "Failed to load the 'pg' driver. Install the optional peer dependency 'pg' to run Planetscale Postgres migrations.",
-      { cause },
-    );
-  });
 
 const MIGRATION_ROLE_TTL_SECONDS = 600;
 
@@ -85,31 +76,15 @@ const withPostgresClient = <A, E, R>(
   use: (client: Client) => Effect.Effect<A, E, R>,
 ) =>
   withTemporaryPostgresRole(target, (role) =>
-    Effect.acquireUseRelease(
-      Effect.gen(function* () {
-        const { Client } = yield* Effect.tryPromise({
-          try: importPg,
-          catch: toMigrationError,
-        });
-        const client = yield* Effect.sync(
-          () =>
-            new Client({
-              connectionString: stripPgSslQueryParams(Redacted.value(role.connectionUrl)),
-              ssl: { rejectUnauthorized: true },
-            }),
-        );
-        yield* Effect.tryPromise({
-          try: () => client.connect(),
-          catch: toMigrationError,
-        });
-        return client;
-      }),
+    withPgClient(
+      connectPgClient(
+        {
+          connectionString: stripSslQueryParams(Redacted.value(role.connectionUrl)),
+          ssl: { rejectUnauthorized: true },
+        },
+        toMigrationError,
+      ),
       use,
-      (client) =>
-        Effect.tryPromise({
-          try: () => client.end(),
-          catch: toMigrationError,
-        }).pipe(Effect.catch(() => Effect.void)),
     ),
   );
 
@@ -180,14 +155,3 @@ const toMigrationError = (cause: unknown) =>
     message: cause instanceof Error ? cause.message : String(cause),
     cause,
   });
-
-const stripPgSslQueryParams = (uri: string): string => {
-  try {
-    const url = new URL(uri);
-    url.searchParams.delete("sslmode");
-    url.searchParams.delete("channel_binding");
-    return url.toString();
-  } catch {
-    return uri;
-  }
-};

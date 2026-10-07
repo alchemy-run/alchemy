@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import type { MigrationsInput } from "../../SQL/Migrations/index.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
@@ -382,6 +383,11 @@ export const Aurora = (id: string, props: AuroraProps) =>
   Namespace.push(
     id,
     Effect.gen(function* () {
+      if (props.migrations && props.dataApi === false) {
+        return yield* Effect.die(
+          `Aurora '${id}': "migrations" are applied over the Data API and require "dataApi" to be enabled.`,
+        );
+      }
       const engine = props.engine ?? "aurora-postgresql";
       const engineVersion = props.engineVersion;
       const databaseName = props.databaseName ?? "app";
@@ -561,11 +567,13 @@ export const Aurora = (id: string, props: AuroraProps) =>
         { concurrency: "unbounded" },
       );
 
-      // The writer's cluster identifier orders the migrations after the
-      // writer, which the Data API needs to serve requests.
+      // The Data API needs an available writer, so the migrations are
+      // ordered after it.
       const migrations = props.migrations
         ? yield* DBClusterMigrations("Migrations", {
-            dbClusterIdentifier: writer.dbClusterIdentifier.as<string>(),
+            dbClusterIdentifier: Output.all(cluster.dbClusterIdentifier, writer.dbInstanceArn).pipe(
+              Output.map(([dbClusterIdentifier]) => dbClusterIdentifier),
+            ),
             secretArn: secret.secretArn,
             database: databaseName,
             migrations: props.migrations,

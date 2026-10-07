@@ -24,8 +24,8 @@ export interface DBClusterMigrationsProps {
   /**
    * Identifier of the Aurora cluster to migrate. The cluster must have the
    * Data API enabled (`enableHttpEndpoint: true`) and an available writer
-   * instance, so pass the writer `DBInstance`'s `dbClusterIdentifier` to
-   * order the migrations after it. Changing it replaces the resource.
+   * instance — combine the cluster identifier with the writer's output
+   * (see the example) so the migrations are ordered after the writer.
    */
   dbClusterIdentifier: string;
   /**
@@ -35,7 +35,7 @@ export interface DBClusterMigrationsProps {
    */
   secretArn?: string;
   /**
-   * Database to migrate. Changing it replaces the resource.
+   * Database to migrate.
    * @default the cluster's `databaseName`
    */
   database?: string;
@@ -98,7 +98,9 @@ export interface DBClusterMigrations extends Resource<
  *   engine: "aurora-postgresql",
  * });
  * yield* AWS.RDS.DBClusterMigrations("Migrations", {
- *   dbClusterIdentifier: writer.dbClusterIdentifier.as<string>(),
+ *   dbClusterIdentifier: Output.all(cluster.dbClusterIdentifier, writer.dbInstanceArn).pipe(
+ *     Output.map(([dbClusterIdentifier]) => dbClusterIdentifier),
+ *   ),
  *   migrations: "./migrations",
  * });
  * ```
@@ -131,16 +133,14 @@ const makeDataApiMigrationExecutor = Effect.fn(function* (target: {
   const rollbackTransaction = yield* rdsdata.rollbackTransaction;
   const { dialect, resourceArn, secretArn, database } = target;
   // An auto-paused Serverless v2 writer resumes on the first request.
-  const retryResuming = {
-    while: (error: { _tag: string }) => error._tag === "DatabaseResumingException",
-    schedule: Schedule.spaced("5 seconds"),
-    times: 10,
-  };
-  const toMigrationError = (context: string) => (cause: { _tag: string; message?: string }) =>
-    new MigrationError({
-      message: `Data API ${context} failed: ${cause.message ?? cause._tag}`,
-      cause,
-    });
+  const resumeRetry = { schedule: Schedule.spaced("5 seconds"), times: 10 };
+  const toMigrationError =
+    (context: string) =>
+    <E extends { readonly _tag: string; readonly message?: string }>(cause: E) =>
+      new MigrationError({
+        message: `Data API ${context} failed: ${cause.message ?? cause._tag}`,
+        cause,
+      });
 
   return {
     dialect,
@@ -152,7 +152,7 @@ const makeDataApiMigrationExecutor = Effect.fn(function* (target: {
         sql: inlineSqlParams(sql, params ?? [], dialect),
         formatRecordsAs: "JSON",
       }).pipe(
-        Effect.retry(retryResuming),
+        Effect.retry({ while: (e) => e._tag === "DatabaseResumingException", ...resumeRetry }),
         Effect.mapError(toMigrationError("query")),
         Effect.flatMap((result) =>
           Effect.try({
@@ -174,20 +174,24 @@ const makeDataApiMigrationExecutor = Effect.fn(function* (target: {
           resourceArn,
           secretArn,
           database,
-        }).pipe(Effect.retry(retryResuming));
+        }).pipe(
+          Effect.retry({ while: (e) => e._tag === "DatabaseResumingException", ...resumeRetry }),
+        );
         if (!transactionId) {
           return yield* new MigrationError({ message: "Data API returned no transaction id" });
         }
-        yield* Effect.forEach(
-          statements,
-          (sql) => executeStatement({ resourceArn, secretArn, database, sql, transactionId }),
-          { discard: true },
-        ).pipe(
-          Effect.tapError(() =>
+        yield* Effect.gen(function* () {
+          yield* Effect.forEach(
+            statements,
+            (sql) => executeStatement({ resourceArn, secretArn, database, sql, transactionId }),
+            { discard: true },
+          );
+          yield* commitTransaction({ resourceArn, secretArn, transactionId });
+        }).pipe(
+          Effect.onError(() =>
             rollbackTransaction({ resourceArn, secretArn, transactionId }).pipe(Effect.ignore),
           ),
         );
-        yield* commitTransaction({ resourceArn, secretArn, transactionId });
       }).pipe(Effect.mapError(toMigrationError("migration batch"))),
   } satisfies SqlExecutor;
 });
@@ -196,14 +200,8 @@ export const DBClusterMigrationsProvider = () =>
   Provider.succeed(DBClusterMigrations, {
     // Non-listable: the bookkeeping lives inside the cluster's database.
     list: () => Effect.succeed([]),
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
-      if (
-        olds !== undefined &&
-        (olds.dbClusterIdentifier !== news.dbClusterIdentifier || olds.database !== news.database)
-      ) {
-        return { action: "replace" } as const;
-      }
       if (yield* diffMigrations({ news, output })) {
         return { action: "update" } as const;
       }
@@ -232,7 +230,7 @@ export const DBClusterMigrationsProvider = () =>
       }
       if (!cluster.DBClusterMembers?.some((member) => member.IsClusterWriter)) {
         return yield* new DBClusterMigrationsError({
-          message: `DB cluster '${news.dbClusterIdentifier}' has no writer instance; pass the writer DBInstance's dbClusterIdentifier so migrations run after it`,
+          message: `DB cluster '${news.dbClusterIdentifier}' has no writer instance; order the migrations after the writer DBInstance by combining its output into dbClusterIdentifier`,
         });
       }
       const secretArn = news.secretArn ?? cluster.MasterUserSecret?.SecretArn;
@@ -243,6 +241,7 @@ export const DBClusterMigrationsProvider = () =>
       }
       const dbClusterArn = cluster.DBClusterArn;
       const database = news.database ?? cluster.DatabaseName;
+      // A different cluster or database starts from its own bookkeeping.
       const previous =
         output?.dbClusterArn === dbClusterArn && output.database === database ? output : undefined;
 

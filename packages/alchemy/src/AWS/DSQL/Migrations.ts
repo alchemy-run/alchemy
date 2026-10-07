@@ -9,20 +9,43 @@ import {
   type SqlExecutor,
   type StampedMigrationsState,
 } from "../../SQL/Migrations/index.ts";
-import { importPg } from "../../SQL/PostgresDriver.ts";
-import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
+import { connectPgClient, withPgClient } from "../../SQL/PostgresDriver.ts";
+import { dsqlConnectionInfo } from "./ConnectionInfo.ts";
+
+const isDml = (sql: string): boolean =>
+  /^\s*(?:(?:--[^\n]*\n|\/\*[\s\S]*?\*\/)\s*)*(?:insert|update|delete)\b/i.test(sql);
 
 /**
- * Aurora DSQL allows a single DDL statement per transaction and never mixes
- * DDL with DML, so every statement of a batch commits on its own.
+ * Split statements into transaction units. Aurora DSQL allows a single DDL
+ * statement per transaction and never mixes DDL with DML, so each DDL (or
+ * unrecognized) statement stands alone while consecutive DML statements —
+ * e.g. a migration's data fix-ups and its bookkeeping INSERT — commit
+ * together.
  */
+const transactionUnits = (statements: ReadonlyArray<string>): string[][] => {
+  const units: string[][] = [];
+  let dml: string[] | undefined;
+  for (const sql of statements) {
+    if (!isDml(sql)) {
+      units.push([sql]);
+      dml = undefined;
+      continue;
+    }
+    if (dml === undefined) {
+      dml = [];
+      units.push(dml);
+    }
+    dml.push(sql);
+  }
+  return units;
+};
+
 const makeDsqlMigrationExecutor = (client: Client): SqlExecutor => {
   const pg = makePgMigrationExecutor(client);
   return {
-    dialect: "postgres",
-    idColumn: "identity",
-    query: pg.query,
-    batch: (statements) => Effect.forEach(statements, (sql) => pg.query(sql), { discard: true }),
+    ...pg,
+    batch: (statements) =>
+      Effect.forEach(transactionUnits(statements), (unit) => pg.batch(unit), { discard: true }),
   };
 };
 
@@ -32,33 +55,24 @@ export const withDsqlAdminClient = <A, E, R>(
   use: (client: Client) => Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const password = yield* generateDbAuthToken({
-      service: "dsql",
-      hostname: endpoint,
-      action: "DbConnectAdmin",
-    });
-    return yield* Effect.acquireUseRelease(
-      Effect.tryPromise({
-        try: () =>
-          importPg().then(({ Client }) => {
-            const client = new Client({
-              host: endpoint,
-              port: 5432,
-              user: "admin",
-              database: "postgres",
-              password: Redacted.value(password),
-              ssl: true,
-            });
-            return client.connect().then(() => client);
-          }),
-        catch: (cause) =>
+    const info = yield* dsqlConnectionInfo({ host: endpoint, admin: true });
+    return yield* withPgClient(
+      connectPgClient(
+        {
+          host: info.host,
+          port: info.port,
+          user: info.username,
+          database: info.database,
+          password: Redacted.value(info.password),
+          ssl: info.ssl,
+        },
+        (cause) =>
           new MigrationError({
             message: `Failed to connect to DSQL cluster ${endpoint}: ${String(cause)}`,
             cause,
           }),
-      }),
+      ),
       use,
-      (client) => Effect.promise(() => client.end().catch(() => {})),
     );
   });
 

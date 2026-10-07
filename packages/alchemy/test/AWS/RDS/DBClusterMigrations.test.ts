@@ -19,7 +19,9 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER)(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-aurora-migrations-" });
+      const migrationsDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-aurora-migrations-",
+      });
       yield* fs.writeFileString(
         path.join(migrationsDir, "0001_users.sql"),
         "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
