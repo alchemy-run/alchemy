@@ -6,6 +6,11 @@ description: Create Postgres roles on a Neon branch with Neon.Role — separate 
 Every Neon project starts with one owner role. Use `Neon.Role` to give
 your app, your migrations, and your teammates their own logins.
 
+:::caution
+Every role has the same access as the owner. It can read and write all
+data, create databases and roles, and bypass row-level security.
+:::
+
 ## Create a login role
 
 Pass the branch the role lives on:
@@ -67,7 +72,7 @@ const owner = yield* Neon.Role("Owner", {
 });
 ```
 
-Its `password` is `undefined`. Grant it to login roles with SQL:
+Its `password` is `undefined`. Grant it to login roles with SQL so they can act as it:
 
 ```sql
 GRANT app_owner TO migrator;

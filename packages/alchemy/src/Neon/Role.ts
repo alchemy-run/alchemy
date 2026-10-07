@@ -40,9 +40,10 @@ export interface RoleAttributes extends ResolvedBranchScope {
 export interface Role extends Resource<"Neon.Role", RoleProps, RoleAttributes, never, Providers> {}
 
 /**
- * A Postgres role on a Neon branch. Neon creates roles as members of
- * `neon_superuser`, so they can create databases and roles. Grant
- * object privileges between roles with SQL.
+ * A Postgres role on a Neon branch. Neon makes every role it creates a
+ * member of `neon_superuser`: it can read and write all data, create
+ * databases and roles, and bypass row-level security. Use roles for
+ * separate logins and passwords, not to restrict access.
  *
  * ### Creating a Role
  * **Example:** A login role on a branch
