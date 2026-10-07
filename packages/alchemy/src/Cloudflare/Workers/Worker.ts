@@ -335,8 +335,8 @@ export interface WorkerVersionAffinity {
  *
  * A gradual rollout carries only what a version can: code, static assets,
  * bindings, compatibility settings, and cache configuration. A deploy that
- * changes Durable Object class migrations must go out at
- * 100% (migrations cannot ride a rollout), and script-level settings
+ * creates, renames, deletes or moves Durable Object classes must go out at
+ * 100% (class lifecycle changes cannot ride a rollout), and script-level settings
  * (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
  */

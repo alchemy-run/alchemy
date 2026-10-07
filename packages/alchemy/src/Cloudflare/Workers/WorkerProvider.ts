@@ -86,8 +86,8 @@ class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
  * Moving a Durable Object class between Workers is always declared: set
  * `transferredFrom` on the Durable Object at its **new host** — naming the
  * former host by Worker logical id (same stack) or physical script name — and
- * Alchemy performs the data-preserving `transferred_classes` migration on the
- * new host's deploy; this deploy then converges on its own. To abandon the
+ * Alchemy moves the namespace, with its data, on the new host's deploy; this
+ * deploy then converges on its own. To abandon the
  * data instead, remove the binding entirely in one deploy (which deletes the
  * class and its data), then add the cross-script binding in a second deploy.
  */
@@ -5525,7 +5525,7 @@ const contentTypeFromExtension = (extension: string) => {
 /**
  * Observe every Durable Object namespace on the account with its identity,
  * script and class. Namespace ownership is authoritative cloud state: after a
- * `transferred_classes` migration the namespace moves to the receiving
+ * transfer the namespace moves to the receiving
  * script, so this is how both sides of a transfer observe where a class
  * currently lives — the destination checks the source still hosts the class
  * before emitting the transfer, and the former host checks whether a class

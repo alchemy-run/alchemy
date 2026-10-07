@@ -220,9 +220,10 @@ export interface DurableObjectProps {
   scriptName?: Input<string> | undefined;
   /**
    * The Worker(s) that previously hosted this Durable Object class. When one
-   * of them still holds the namespace, the deploy performs Cloudflare's
-   * data-preserving `transferred_classes` migration, moving the namespace —
-   * including all stored objects — from that script to this Worker.
+   * of them still holds the namespace, the deploy transfers it — including
+   * all stored objects — from that script to this Worker: this Worker
+   * declares the class `expecting-transfer` in its `exports`, and the former
+   * host commits the move with a `transferred` tombstone.
    *
    * Each entry names a former host — see
    * {@link DurableObjectTransferSource} for the accepted forms: a string
@@ -1057,10 +1058,10 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * "transfer the data" and "delete it, start fresh", so Alchemy never
  * guesses (removing a DO deletes it; that is the default). Declare
  * `transferredFrom` on the Durable Object at its **new host**, naming the
- * former host, and the new host's deploy ships Cloudflare's
- * data-preserving `transferred_classes` migration. The former host's
- * deploy converges on its own — no delete migration is emitted for a
- * class that moved away.
+ * former host, and the new host's deploy moves the namespace with its
+ * data (Cloudflare's `expecting-transfer` / `transferred` exports
+ * entries). The former host's deploy converges on its own — nothing is
+ * deleted for a class that moved away.
  *
  * Each `transferredFrom` entry is either the former host's Worker
  * **logical id** (same stack + stage, resolved via alchemy's ownership
