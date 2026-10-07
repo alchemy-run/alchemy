@@ -1,5 +1,5 @@
 import type * as NodeChildProcessModule from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import type * as NodeNet from "node:net";
 import * as Effect from "effect/Effect";
@@ -20,6 +20,37 @@ import { loadVinextBuildConfig, type VinextRouteRootConfig } from "./BuildConfig
 import { makeVinextCachePlugin, type VinextCacheKind } from "./cache/plugin.ts";
 import { loadVinextModule } from "./Modules.ts";
 import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
+
+/**
+ * Environment variable holding a stable, high-entropy root secret for the
+ * vinext build. Deployers should set it (ideally from a value persisted in
+ * Alchemy state) so the emitted Worker is reproducible.
+ */
+export const VINEXT_BUILD_SECRET_ENV = "ALCHEMY_BUILD_SECRET";
+
+/**
+ * Derive one of vinext's shared build secrets.
+ *
+ * vinext signs preview, revalidation and prerender tokens with these values,
+ * so they must be unguessable. Re-randomizing them on every build also makes
+ * the emitted JavaScript — and therefore its content hash — differ run to
+ * run, which defeats Alchemy's own change detection: every plan reports the
+ * Worker as changed and every deploy re-uploads it even when nothing did.
+ *
+ * Given a stable root secret we derive each value from it with a distinct
+ * label. The result is still unguessable (the root secret is high-entropy and
+ * never derived from public data) but now stable across builds, so the output
+ * is reproducible. Without a root secret we keep the previous random
+ * behaviour.
+ */
+export const deriveBuildSecret = (
+  rootSecret: string | undefined,
+  label: string,
+  bytes: number,
+): string =>
+  rootSecret === undefined || rootSecret.length === 0
+    ? randomBytes(bytes).toString("hex")
+    : createHash("sha256").update(`${rootSecret}:${label}`).digest("hex").slice(0, bytes * 2);
 
 export const failFramework = (message: string) => (cause: unknown) =>
   new FrameworkCore.FrameworkError({ framework: "vinext", message, cause });
@@ -75,7 +106,14 @@ export const runVinextBuild = (options: {
     const plugins = loaded?.config.plugins ?? [vinext()];
     const config = yield* loadVinextBuildConfig(root, plugins);
     const { runWithPreviewBuildCredentials } = yield* loadVinextModule<{
-      runWithPreviewBuildCredentials<T>(callback: () => T): T;
+      runWithPreviewBuildCredentials<T>(
+        callback: () => T,
+        credentials?: {
+          id: string;
+          signingKey: string;
+          encryptionKey: string;
+        },
+      ): T;
     }>(root, "build/preview-credentials.js");
     const { PAGES_CLIENT_ASSETS_MODULE } = yield* loadVinextModule<{
       PAGES_CLIENT_ASSETS_MODULE: string;
@@ -96,12 +134,17 @@ export const runVinextBuild = (options: {
     }
     yield* Effect.acquireUseRelease(
       Effect.sync(() => {
+        const rootSecret = process.env[VINEXT_BUILD_SECRET_ENV];
         const shared = {
           __VINEXT_SHARED_BUILD_ID: config.nextConfig.buildId,
           __VINEXT_SHARED_RSC_COMPATIBILITY_ID: config.rscCompatibilityId,
-          __VINEXT_SHARED_RSC_BUILD_IDENTITY: randomBytes(16).toString("hex"),
-          __VINEXT_SHARED_REVALIDATE_SECRET: randomBytes(32).toString("hex"),
-          __VINEXT_SHARED_PRERENDER_SECRET: randomBytes(32).toString("hex"),
+          __VINEXT_SHARED_RSC_BUILD_IDENTITY: deriveBuildSecret(
+            rootSecret,
+            "rsc-build-identity",
+            16,
+          ),
+          __VINEXT_SHARED_REVALIDATE_SECRET: deriveBuildSecret(rootSecret, "revalidate-secret", 32),
+          __VINEXT_SHARED_PRERENDER_SECRET: deriveBuildSecret(rootSecret, "prerender-secret", 32),
         };
         const previous = Object.fromEntries(
           Object.keys(shared).map((key) => [key, process.env[key]]),
@@ -218,6 +261,11 @@ export const runVinextBuild = (options: {
                   },
                 },
               });
+            },
+            {
+              id: deriveBuildSecret(rootSecret, "preview-id", 16),
+              signingKey: deriveBuildSecret(rootSecret, "preview-signing-key", 32),
+              encryptionKey: deriveBuildSecret(rootSecret, "preview-encryption-key", 32),
             }),
           );
           yield* runVinextPrerenderIfConfigured(root, options.cache, config);
