@@ -30,7 +30,6 @@ const NAME_UPDATE = "alchemy-obsdest-update";
 const NAME_REPLACE_V1 = "alchemy-obsdest-replace-v1";
 const NAME_REPLACE_V2 = "alchemy-obsdest-replace-v2";
 const NAME_LIST = "alchemy-obsdest-list";
-const NAME_REDACTED = "alchemy-obsdest-redacted";
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -346,9 +345,10 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
-      yield* purgeByName(accountId, NAME_REDACTED);
 
-      // Synthetic credential — the sink Worker accepts any request.
+      // Engine-generated name (derived from the stage), so concurrent runs by
+      // other users or worktrees never collide. Synthetic credential — the
+      // sink Worker accepts any request.
       const program = (token: string) =>
         Effect.gen(function* () {
           const worker = yield* Cloudflare.Worker("ObsSinkWorker", {
@@ -356,7 +356,6 @@ test.provider(
             compatibility: { date: "2024-01-01" },
           });
           const dest = yield* Cloudflare.Workers.ObservabilityDestination("RedactedDest", {
-            name: NAME_REDACTED,
             url: worker.url.as<string>(),
             headers: {
               authorization: Redacted.make(`Bearer ${token}`),
@@ -364,7 +363,7 @@ test.provider(
             },
             logpushDataset: "opentelemetry-traces",
             skipPreflightCheck: true,
-          }).pipe(adopt(true));
+          });
           return { worker, dest };
         });
 
@@ -373,7 +372,7 @@ test.provider(
       expect(Redacted.isRedacted(initial.dest.destinationConf)).toBe(true);
       expect(JSON.stringify(initial.dest)).not.toContain("alchemy-test-token-v1");
 
-      const live = yield* findByName(accountId, NAME_REDACTED);
+      const live = yield* findByName(accountId, initial.dest.name);
       expect(live?.configuration.headers.authorization).toEqual("Bearer alchemy-test-token-v1");
       expect(live?.configuration.headers["x-alchemy-test"]).toEqual("1");
 
@@ -392,7 +391,7 @@ test.provider(
       expect(Redacted.isRedacted(rotated.dest.destinationConf)).toBe(true);
       expect(JSON.stringify(rotated.dest)).not.toContain("alchemy-test-token-v2");
 
-      const liveRotated = yield* findByName(accountId, NAME_REDACTED);
+      const liveRotated = yield* findByName(accountId, initial.dest.name);
       expect(liveRotated?.configuration.headers.authorization).toEqual(
         "Bearer alchemy-test-token-v2",
       );
@@ -434,7 +433,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, NAME_REDACTED);
+      yield* expectGone(accountId, initial.dest.name);
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
