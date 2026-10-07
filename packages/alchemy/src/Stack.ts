@@ -156,9 +156,10 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
+      at(stage: string): Effect.Effect<Self>;
     };
   };
-  <Self, Shape>(): {
+  <Self, Shape, Stages extends string = string>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       readonly stackName: string;
@@ -167,8 +168,9 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
         effect: Effect.Effect<A, ConfigError, Req>,
       ) => Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
       stage: {
-        [stage: string]: Effect.Effect<Self>;
+        readonly [S in Stages]: Effect.Effect<Self>;
       };
+      at(stage: Stages): Effect.Effect<Self>;
     };
   };
   <A, Req extends StackServices | ProviderServices = never>(
@@ -191,7 +193,7 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
             Output.stackRef<A>(stackName).pipe(effectClass),
             {
               stackName,
-              stage: createStageProxy(stackName),
+              ...stageRefs(stackName),
               state: options?.state,
               providers: options?.providers,
               secrets: options?.secrets,
@@ -213,7 +215,7 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
         (eff) =>
           Object.assign(eff, {
             stackName,
-            stage: createStageProxy(stackName),
+            ...stageRefs(stackName),
             state: options?.state,
             providers: options?.providers,
             secrets: options?.secrets,
@@ -223,13 +225,18 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
   ),
 ) as any;
 
-const createStageProxy = (stackName: string) =>
-  new Proxy(
-    {},
-    {
-      get: (_, stage: string) => Output.stackRef(stackName, { stage }),
-    },
-  );
+const stageRefs = (stackName: string) => {
+  const at = (stage: string) => Output.stackRef(stackName, { stage });
+  return {
+    at,
+    stage: new Proxy(
+      {},
+      {
+        get: (_, stage: string) => at(stage),
+      },
+    ),
+  };
+};
 
 export interface StackSpec<Output = any> {
   name: string;
