@@ -1,6 +1,11 @@
 import { describe, expect } from "alchemy-test";
+import * as Brand from "effect/Brand";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { systemError } from "effect/PlatformError";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
+import { Action } from "@/Action";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "@/State";
@@ -98,6 +103,166 @@ test.provider(
       expect(containerDiff).toEqual({ action: "replace", deleteFirst: true });
     }),
   { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+const createdImages: Array<string> = [];
+
+const commandOutput = (stdout: string): Docker.CommandOutput => ({
+  exitCode: Brand.nominal<ChildProcessSpawner.ExitCode>()(0),
+  stdout,
+  stderr: "",
+});
+
+const memoryDocker = (() => {
+  const containers = new Map<string, Docker.Docker.Container>();
+  let nextId = 0;
+
+  const notFound = (method: string, name: string) =>
+    Effect.fail(
+      systemError({
+        _tag: "NotFound",
+        module: "Docker",
+        method,
+        pathOrDescriptor: name,
+        description: "no such container",
+      }),
+    );
+
+  const findContainer = (name: string) => containers.get(name);
+
+  const unsupported = () => Effect.die("unused docker method");
+
+  return {
+    run: unsupported,
+    materialize: unsupported,
+    container: {
+      create: (options: { name: string; image: string; label?: Record<string, string> }) =>
+        Effect.sync(() => {
+          const id = `container-${nextId}`;
+          nextId += 1;
+          createdImages.push(options.image);
+          const container: Docker.Docker.Container = {
+            Id: id,
+            Name: options.name,
+            State: { Status: "created" },
+            Created: new Date(0).toISOString(),
+            Config: {
+              Image: options.image,
+              Cmd: null,
+              Env: null,
+              Labels: options.label ?? null,
+            },
+            HostConfig: {
+              PortBindings: null,
+              Binds: null,
+              ExtraHosts: null,
+              RestartPolicy: { Name: "no", MaximumRetryCount: 0 },
+              AutoRemove: false,
+            },
+            NetworkSettings: { Networks: null },
+          };
+          containers.set(id, container);
+          containers.set(options.name, container);
+          return commandOutput(id);
+        }),
+      inspect: (name: string) => {
+        const container = findContainer(name);
+        return container === undefined
+          ? notFound("container.inspect", name)
+          : Effect.succeed(container);
+      },
+      remove: (name: string) => {
+        const container = findContainer(name);
+        if (container === undefined) return notFound("container.remove", name);
+        containers.delete(container.Id);
+        if (container.Name !== undefined) containers.delete(container.Name);
+        return Effect.succeed(commandOutput(""));
+      },
+      start: (name: string) => {
+        const container = findContainer(name);
+        if (container === undefined) return notFound("container.start", name);
+        container.State.Status = "running";
+        return Effect.succeed(commandOutput(""));
+      },
+      stop: (name: string) => {
+        const container = findContainer(name);
+        if (container === undefined) return notFound("container.stop", name);
+        container.State.Status = "exited";
+        return Effect.succeed(commandOutput(""));
+      },
+    },
+    image: {
+      build: unsupported,
+      pull: unsupported,
+      push: unsupported,
+      tag: unsupported,
+      inspect: unsupported,
+      remove: unsupported,
+    },
+    volume: { create: unsupported, remove: unsupported, inspect: unsupported },
+    context: {
+      create: unsupported,
+      update: unsupported,
+      inspect: unsupported,
+      remove: unsupported,
+    },
+    network: {
+      create: unsupported,
+      connect: () => Effect.succeed(commandOutput("")),
+      disconnect: () => Effect.succeed(commandOutput("")),
+      inspect: unsupported,
+      remove: unsupported,
+    },
+    swarm: { init: unsupported, info: unsupported, leave: unsupported },
+    service: {
+      create: unsupported,
+      update: unsupported,
+      inspect: unsupported,
+      remove: unsupported,
+    },
+  } satisfies Docker.Docker["Service"];
+})();
+
+const { test: offline } = Test.make({
+  providers: Layer.effect(Docker.Providers, Provider.collection([Docker.Container])).pipe(
+    Layer.provide(Docker.ContainerProvider()),
+    Layer.provideMerge(Layer.succeed(Docker.Docker, memoryDocker)),
+  ),
+  state: inMemoryState(),
+});
+
+offline.provider(
+  "recreates a container when an upstream image resolves to a new value",
+  (stack) =>
+    Effect.gen(function* () {
+      createdImages.splice(0, createdImages.length);
+
+      const Build = Action("FixtureImage", (input: { revision: string }) =>
+        Effect.succeed({ image: `sha256:${input.revision}` }),
+      );
+      const app = (revision: string) =>
+        Effect.gen(function* () {
+          const image = yield* Build("image", { revision });
+          return yield* Docker.Container("app", {
+            name: "app",
+            image: image.image,
+            start: true,
+          });
+        });
+
+      const first = yield* stack.deploy(app("one"));
+      const second = yield* stack.deploy(app("two"));
+      const third = yield* stack.deploy(app("two"));
+
+      expect(first.imageRef).toBe("sha256:one");
+      expect(second.imageRef).toBe("sha256:two");
+      expect(third.id).toBe(second.id);
+      expect(second.id).not.toBe(first.id);
+      expect(createdImages).toEqual(["sha256:one", "sha256:two"]);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "unit", "local"] },
 );
 
 describe(

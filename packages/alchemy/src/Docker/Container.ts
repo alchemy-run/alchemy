@@ -380,15 +380,32 @@ export const ContainerProvider = () =>
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
           if (live) {
-            yield* reconcileNetworks(live, news, olds);
-            if (news.start && live.State.Status !== "running") {
-              yield* docker.container.start(live.Id, context);
-            } else if (!news.start && live.State.Status === "running") {
-              yield* docker.container.stop(live.Id, context);
+            // Plan compares props before upstream Outputs resolve, so an image
+            // that comes from an Action is an update rather than a replace.
+            // Recreate when the resolved create args differ from the previous
+            // ones. With no previous image, compare the live image to the one
+            // this reconcile is applying.
+            const replace =
+              olds?.image === undefined
+                ? live.Config.Image !== args.image
+                : !Equal.equals(yield* makeCreateArgs(id, olds, instanceId), args);
+            if (!replace) {
+              yield* reconcileNetworks(live, news, olds);
+              if (news.start && live.State.Status !== "running") {
+                yield* docker.container.start(live.Id, context);
+              } else if (!news.start && live.State.Status === "running") {
+                yield* docker.container.stop(live.Id, context);
+              }
+              return yield* docker.container
+                .inspect(live.Id, context)
+                .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
             }
-            return yield* docker.container
-              .inspect(live.Id, context)
-              .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
+            yield* docker.container
+              .stop(args.name, context)
+              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
+            yield* docker.container
+              .remove(args.name, true, context)
+              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
           }
 
           const internalTags = yield* createInternalTags(id);
