@@ -60,7 +60,7 @@
     "test:cross-version": "bun run test/cross-version-test/run.ts",
     "test:dev": "cd ./examples/dev-stress && bun test",
     "test:examples": "bun scripts/test-examples.ts",
-    "typecheck:cloudflare-packages": "pnpm build:cloudflare-packages && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks run typecheck",
+    "typecheck:cloudflare-packages": "pnpm ensure:built && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks run typecheck",
     "validate:publish-packages": "bun scripts/validate-publish-packages.ts",
     "prepare:hooks": "husky",
     "prepare:patch": "effect-tsgo patch --oxlint --no-typescript",

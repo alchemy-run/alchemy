@@ -30,6 +30,9 @@ const packages = {
   "frontend-frameworks": { outDir: "dist" },
 } as const;
 
+// pnpm may be a `.cmd` shim on Windows, which only a shell can run.
+const shell = process.platform === "win32";
+
 type PackageName = keyof typeof packages;
 const packageNames = Object.keys(packages) as Array<PackageName>;
 
@@ -49,7 +52,7 @@ const dependencyDirectories = Effect.fn(function* (root: string, name: PackageNa
     ChildProcess.make(
       "pnpm",
       ["ls", "-r", "--filter", `{./packages/${name}}...`, "--depth", "-1", "--json"],
-      { cwd: root },
+      { cwd: root, shell },
     ),
   );
   return (JSON.parse(output) as Array<{ path: string }>).map((project) => project.path);
@@ -66,7 +69,7 @@ const newestSourceTime = Effect.fn(function* (directory: string) {
     ChildProcess.make(
       "git",
       ["-C", directory, "ls-files", "--cached", "--others", "--exclude-standard", "."],
-      { cwd: directory },
+      { cwd: directory, shell },
     ),
   );
   const times = yield* Effect.forEach(
@@ -127,7 +130,7 @@ const command = Command.make(
           "run",
           "build:package",
         ],
-        { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+        { cwd: root, shell, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
       ),
     );
     if (exitCode !== 0) {
