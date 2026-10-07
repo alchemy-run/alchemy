@@ -724,7 +724,10 @@ describe.concurrent(
             path.join(context, "Dockerfile"),
             'FROM alpine:3.19\nRUN cat /proc/sys/kernel/random/uuid > /layer\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
           );
-          yield* fs.writeFileString(path.join(context, "payload"), "first");
+          // A per-run nonce keeps the content new: the shared stage repository
+          // would otherwise serve a previous run's image and nothing would build.
+          const runId = yield* Effect.sync(() => crypto.randomUUID());
+          yield* fs.writeFileString(path.join(context, "payload"), `first-${runId}`);
           const program = sharedApplication(context);
           const first = yield* stack.deploy(program);
           // Unnamed publications default to the stack and stage repository.
@@ -788,7 +791,7 @@ describe.concurrent(
           const firstLayers = yield* layersOf(first.app.hash!.digest!);
           expect(firstLayers.length).toBeGreaterThanOrEqual(2);
 
-          yield* fs.writeFileString(path.join(context, "payload"), "changed");
+          yield* fs.writeFileString(path.join(context, "payload"), `changed-${runId}`);
           const changed = yield* Effect.gen(function* () {
             // A new BuildKit instance cannot reuse the first builder's local layers.
             expect(yield* buildHistory).toHaveLength(0);
@@ -828,7 +831,7 @@ describe.concurrent(
             ),
           ).toBe(changed.app.hash?.digest);
 
-          yield* fs.writeFileString(path.join(context, "payload"), "first");
+          yield* fs.writeFileString(path.join(context, "payload"), `first-${runId}`);
           const restored = yield* Effect.acquireUseRelease(
             Effect.sync(() => {
               const previous = process.env.BUILDX_BUILDER;
