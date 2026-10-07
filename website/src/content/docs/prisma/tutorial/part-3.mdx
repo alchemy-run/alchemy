@@ -5,7 +5,6 @@ sidebar:
   order: 3
 ---
 
-import { effectVersion } from "../../../../versions";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Continue from [Part 2](/prisma/tutorial/part-2). Add an explicit Postgres
@@ -14,7 +13,7 @@ This query needs no tables or migrations.
 
 ## Install the SQL client
 
-<PackageManagers add={`"@effect/sql-pg@${effectVersion}"`} />
+<PackageManagers add="@effect/sql-pg" />
 
 Alchemy's SQL helper uses the Effect Postgres client. Match its version to
 the other Effect packages.

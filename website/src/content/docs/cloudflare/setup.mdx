@@ -3,17 +3,16 @@ title: Setup
 description: Install Alchemy, create a Cloudflare account, and connect the two — OAuth or API token, saved to a local profile. No environment variables required.
 ---
 
-import { effectVersion } from "../../../versions";
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
 
 Everything you need before deploying to Cloudflare: the alchemy
 package, a Cloudflare account, and stored credentials.
 
 ## Install
 
-Install <code>alchemy@latest</code> and <code>effect@{effectVersion}</code>
+Install `alchemy@latest` and `effect`
 in your project:
 
 <PackageManagers add={pkgs} />

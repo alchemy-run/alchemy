@@ -3,10 +3,9 @@ title: Setup
 description: Create a Fly org, generate an API token, and store it in a profile.
 ---
 
-import { effectVersion } from "../../../versions";
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
 
 Everything you need before deploying to Fly.io: the alchemy package,
 a Fly organization, and an API token stored in a profile.

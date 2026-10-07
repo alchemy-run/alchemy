@@ -6,10 +6,9 @@ sidebar:
 ---
 
 import Terminal from "../../../../components/Terminal.astro";
-import { effectVersion } from "../../../../versions";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `"alchemy@latest" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
 
 Install Alchemy and Effect, create a Stack, and deploy a
 `Fly.Service`: an Effect program running in a Fly Machine. The
@@ -40,7 +39,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install <code>alchemy@latest</code> and <code>effect@{effectVersion}</code>:
+Install `alchemy@latest` and `effect`:
 
 <PackageManagers add={pkgs} />
 
