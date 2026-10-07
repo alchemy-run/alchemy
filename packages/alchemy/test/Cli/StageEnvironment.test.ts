@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { UserInputError } from "@/Cli/commands/errors.ts";
-import { resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
+import { envFile, resolveStage, stage, userStage } from "@/Cli/commands/flags.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const envLayer = (env: Record<string, string>) =>
@@ -164,5 +164,43 @@ describe("default stages", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       expect(yield* userStage("test")).toBe("test_sam");
     }).pipe(Effect.provide(TestEnv)),
+  );
+});
+
+const parseEnvFile = (path: string) =>
+  envFile
+    .parse({ arguments: [], flags: { "env-file": [path] } })
+    .pipe(Effect.map(([, file]) => file));
+
+describe("--env-file flag", { tags: ["unit", "local"] }, () => {
+  test.effect(
+    "reads /dev/null as an empty env file",
+    () =>
+      Effect.gen(function* () {
+        const file = yield* parseEnvFile("/dev/null");
+        expect(file).toEqual(Option.some("/dev/null"));
+        expect(yield* resolveStage("live", undefined, file)).toBe("live_sam");
+      }).pipe(provideStageTest),
+    { exclusive: true },
+  );
+
+  test.effect("rejects a directory", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const result = yield* parseEnvFile(yield* fs.makeTempDirectoryScoped()).pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure.message).toContain("Path is not a file");
+      }
+    }).pipe(Effect.scoped, Effect.provide(TestEnv)),
+  );
+
+  test.effect("fails on a missing file", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const file = yield* parseEnvFile(`${yield* fs.makeTempDirectoryScoped()}/.env`);
+      const result = yield* resolveStage("live", undefined, file).pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(TestEnv)),
   );
 });
