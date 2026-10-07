@@ -123,6 +123,8 @@ export const recoveryApplications = (delay: number, includeSecond = false, seed 
         dockerfile: {
           content: `FROM alpine:3.19\nLABEL test.run="${seed}"\nRUN sleep ${delay}\nCMD ["sleep", "3600"]\n`,
         },
+        // Applications share a published image only through a shared repository.
+        publish: { repository: "alchemy-publication-recovery" },
       },
       maxInstances: 2,
     };

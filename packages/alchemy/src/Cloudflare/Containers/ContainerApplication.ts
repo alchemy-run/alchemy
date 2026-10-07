@@ -201,7 +201,9 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * A relative `repository` such as `"web"` resolves inside the current
    * account's registry (`registry.cloudflare.com/<account-id>/web` with the
    * default `registryId`); fully qualified destinations are used as-is. When
-   * omitted, images publish to a repository shared by the stack and stage.
+   * omitted, each application publishes to its own repository, named
+   * `<stack>-<id>-<stage>`. Name the same `repository` on several
+   * applications to share images between them.
    *
    * Builds publish a content-hash tag plus an inline layer cache at a
    * per-image `:buildcache-<hash>` tag and deploy the immutable manifest digest. Matching build

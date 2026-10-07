@@ -212,14 +212,15 @@ export class Web extends Cloudflare.Container<Web>()("Web", {
 }) {}
 ```
 
-Alchemy builds the image through a child `Docker.Image` resource. The default
-repository is `registry.cloudflare.com/<account-id>/alchemy-<hash>-containers`,
-where the hash identifies the stack and stage. Every container in that stage
-publishes there, so matching inputs reuse published images, including when
-reverting to previously built inputs or recreating the application.
+Alchemy builds the image through a child `Docker.Image` resource. Each
+application publishes to its own repository,
+`registry.cloudflare.com/<account-id>/<stack>-<id>-<stage>`. The name doesn't
+change when the application is replaced, so matching inputs reuse published
+images, including when reverting to previously built inputs or recreating the
+application.
 
-To reuse images across stages, choose a common `publish.repository` as shown
-below.
+To share images between applications or stages, choose a common
+`publish.repository` as shown below.
 
 :::caution[Pin external build inputs]
 Pin base images and downloaded dependencies. A changed upstream image tag or
@@ -227,7 +228,7 @@ package download is outside the build context and cannot invalidate its
 content hash, so a matching cached image may still be reused.
 :::
 
-## Share published images across stages
+## Share published images
 
 Set `publish.repository` to choose a destination repository shared by
 applications and stages in the same Cloudflare account:

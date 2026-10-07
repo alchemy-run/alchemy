@@ -659,6 +659,11 @@ describe.concurrent(
           expect(first.first.configuration.image).toBe(first.second.configuration.image);
           expect(first.first.configuration.image).not.toBe(first.other.configuration.image);
           expect(first.first.hash?.image).not.toBe(first.changed.hash?.image);
+          // Without `publish.repository`, each application publishes to its own repository.
+          const repositoryOf = (app: typeof first.other) =>
+            app.configuration.image!.split("@")[0]!.split("/").at(-1)!;
+          expect(repositoryOf(first.other)).toMatch(/-publicationothercontext-/);
+          expect(repositoryOf(first.changed)).toMatch(/-publicationchangedcontent-/);
           expect(first.first.applicationId).not.toBe(first.second.applicationId);
           for (const [slot, app] of [
             ["first", first.first],
@@ -724,18 +729,18 @@ describe.concurrent(
             path.join(context, "Dockerfile"),
             'FROM alpine:3.19\nRUN cat /proc/sys/kernel/random/uuid > /layer\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
           );
-          // A per-run nonce keeps the content new: the shared stage repository
+          // A per-run nonce keeps the content new: the application's repository
           // would otherwise serve a previous run's image and nothing would build.
           const runId = yield* Effect.sync(() => crypto.randomUUID());
           yield* fs.writeFileString(path.join(context, "payload"), `first-${runId}`);
           const program = sharedApplication(context);
           const first = yield* stack.deploy(program);
-          // Unnamed publications default to the stack and stage repository.
+          // Unnamed publications default to a repository named after the application.
           const repositoryPath = first.app.configuration
             .image!.split("@")[0]!
             .slice("registry.cloudflare.com/".length);
           expect(repositoryPath).toMatch(
-            new RegExp(`^${first.app.accountId}/alchemy-[a-f0-9]{12}-containers$`),
+            new RegExp(`^${first.app.accountId}/[a-z0-9-]+-sharedpublication-[a-z0-9-]+$`),
           );
           const firstHistory = yield* buildHistory;
           expect(firstHistory.filter((build) => build.status === "Completed")).toHaveLength(1);

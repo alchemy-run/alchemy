@@ -44,6 +44,27 @@ const isImageOptions = (image: AnyContainerApplicationProps["image"]): image is 
 
 const isRemoteImageOptions = (image: ImageOptions): image is RemoteImageOptions => "ref" in image;
 
+const MAX_REPOSITORY_NAME = 64;
+
+/**
+ * Default publication repository: one per container application, named
+ * `<stack>-<namespace…>-<id>-<stage>`. It is deterministic (no instance
+ * suffix) so it is known when the container registers and stays stable when
+ * the application is replaced.
+ */
+const defaultRepositoryName = Effect.fn(function* (id: string) {
+  const stack = yield* Stack;
+  const chain = yield* Namespace.CurrentChain;
+  const name = [stack.name, ...chain.toReversed(), id, stack.stage]
+    .join("-")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "");
+  if (name.length <= MAX_REPOSITORY_NAME) return name;
+  const hash = (yield* sha256Object({ name })).slice(0, 12);
+  return `${name.slice(0, MAX_REPOSITORY_NAME - hash.length - 1).replace(/-+$/, "")}-${hash}`;
+});
+
 /** Compose image resources while registering the container, before planning. */
 export const composeContainerImage = Effect.fn(function* (
   id: string,
@@ -126,12 +147,7 @@ export const composeContainerImage = Effect.fn(function* (
     (yield* defaultProviderMode) === "local"
       ? yield* localAccountId
       : (yield* yield* CloudflareEnvironment).accountId;
-  const stack = yield* Stack;
-  const suffix = (yield* sha256Object({
-    stack: stack.name,
-    stage: stack.stage,
-  })).slice(0, 12);
-  const defaultName = `alchemy-${suffix}-containers`;
+  const defaultName = yield* defaultRepositoryName(id);
   const registry = props.registryId ?? "registry.cloudflare.com";
   const repository = `${registry}/${accountId}/${defaultName}`;
   const qualifyRepository = (name: string) => {
