@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Task } from "./Task.ts";
 
-export interface RunTaskRequest extends Omit<
-  ECS.RunTaskRequest,
-  "cluster" | "taskDefinition"
-> {}
+export interface RunTaskRequest extends Omit<ECS.RunTaskRequest, "cluster" | "taskDefinition"> {}
 
 /**
  * Runtime binding for `ecs:RunTask`.
@@ -57,9 +54,7 @@ export interface RunTask extends Binding.Service<
     cluster: Cluster,
     task: Task,
   ) => Effect.Effect<
-    (
-      request: RunTaskRequest,
-    ) => Effect.Effect<ECS.RunTaskResponse, ECS.RunTaskError>
+    (request: RunTaskRequest) => Effect.Effect<ECS.RunTaskResponse, ECS.RunTaskError>
   >
 > {}
 export const RunTask = Binding.Service<RunTask>("AWS.ECS.RunTask");

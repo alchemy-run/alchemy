@@ -1,19 +1,9 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { useAnimation } from "@alchemy.run/sigil";
+import { stringWidth } from "@alchemy.run/sigil/ansi";
 import type { ReactNode } from "react";
-import stringWidth from "string-width";
-import {
-  spinnerFramesFor,
-  statusColor,
-  statusPaint,
-  theme,
-  type StatusVariant,
-} from "../../../Util/Theme.ts";
-import {
-  useBorderStyle,
-  useCliEnvironment,
-  useGlyphs,
-} from "./Environment.tsx";
+import { spinnerFramesFor, statusColor, theme, type StatusVariant } from "../../../Util/Theme.ts";
+import { useBorderStyle, useCliEnvironment, useGlyphs } from "./Environment.tsx";
 import { Box, tabsWindow } from "./Layout.tsx";
 import { Text } from "./Typography.tsx";
 
@@ -28,9 +18,7 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
   return (
     <Box gap={1} flexWrap="wrap">
       <Text color={statusColor(variant)}>{glyphs[variant]}</Text>
-      <Text color={variant === "error" ? statusColor(variant) : undefined}>
-        {children}
-      </Text>
+      <Text color={variant === "error" ? statusColor(variant) : undefined}>{children}</Text>
       {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
     </Box>
   );
@@ -38,23 +26,16 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
 
 export type ToastProps = StatusProps;
 
-/** Compact application notice, distinguished by its semantic rail. */
+/**
+ * Compact application notice. Severity is carried by the status glyph and
+ * its colour alone — the same vocabulary as transcript lines — so a notice
+ * row never needs a rail of its own.
+ */
 export function Toast({ variant = "info", children, detail }: ToastProps) {
-  const borderStyle = useBorderStyle();
   return (
-    <Box
-      paddingLeft={1}
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-    >
-      <Status variant={variant} detail={detail}>
-        {children}
-      </Status>
-    </Box>
+    <Status variant={variant} detail={detail}>
+      {children}
+    </Status>
   );
 }
 
@@ -62,34 +43,20 @@ export interface AlertProps extends StatusProps {
   readonly title?: ReactNode;
 }
 
-export function Alert({
-  variant = "info",
-  title,
-  children,
-  detail,
-}: AlertProps) {
-  const borderStyle = useBorderStyle();
+/** Glyph + bold title on one row, body indented beneath it. */
+export function Alert({ variant = "info", title, children, detail }: AlertProps) {
   const glyphs = useGlyphs();
   return (
-    <Box
-      flexDirection="column"
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-      paddingLeft={1}
-    >
+    <Box flexDirection="column">
       <Box gap={1} alignItems="center">
         <Text bold color={statusColor(variant)}>
-          {glyphs[variant]} {variant.toUpperCase()}
+          {glyphs[variant]}
         </Text>
         {title === undefined ? null : <Text bold>{title}</Text>}
         {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
       </Box>
-      <Box paddingLeft={1}>
-        <Text>{children}</Text>
+      <Box paddingLeft={theme.space.indent}>
+        <Text tone="muted">{children}</Text>
       </Box>
     </Box>
   );
@@ -221,26 +188,17 @@ export function Tabs({ tabs, active }: TabsProps) {
   );
   // chip width = paddingX (2) + optional marker glyph + space + label
   const widths = tabs.map(
-    (tab) =>
-      2 +
-      stringWidth(tab.label) +
-      (tab.marked ? stringWidth(glyphs.selected) + 1 : 0),
+    (tab) => 2 + stringWidth(tab.label) + (tab.marked ? stringWidth(glyphs.selected) + 1 : 0),
   );
   const totalWidth =
-    widths.reduce((sum, width) => sum + width, 0) +
-    Math.max(0, tabs.length - 1) * gap;
+    widths.reduce((sum, width) => sum + width, 0) + Math.max(0, tabs.length - 1) * gap;
   const contentWidth = Math.max(1, columns - theme.space.indent);
   const { start, end } =
     totalWidth <= contentWidth
       ? { start: 0, end: tabs.length }
       : // reserve an arrow cell + gap on each side so the window stays put
         // whether or not the edge arrows render
-        tabsWindow(
-          widths,
-          activeIndex,
-          Math.max(1, contentWidth - 2 * (1 + gap)),
-          gap,
-        );
+        tabsWindow(widths, activeIndex, Math.max(1, contentWidth - 2 * (1 + gap)), gap);
   return (
     <Box
       width="100%"
@@ -267,9 +225,7 @@ export function Tabs({ tabs, active }: TabsProps) {
               dimColor={!selected}
             >
               {tab.marked ? (
-                <Text
-                  color={selected ? theme.color.onAccent : theme.color.brand}
-                >
+                <Text color={selected ? theme.color.onAccent : theme.color.brand}>
                   {glyphs.selected}{" "}
                 </Text>
               ) : null}
@@ -278,9 +234,7 @@ export function Tabs({ tabs, active }: TabsProps) {
           </Box>
         );
       })}
-      {end < tabs.length ? (
-        <Text tone="muted">{glyphs.overflowRight}</Text>
-      ) : null}
+      {end < tabs.length ? <Text tone="muted">{glyphs.overflowRight}</Text> : null}
     </Box>
   );
 }

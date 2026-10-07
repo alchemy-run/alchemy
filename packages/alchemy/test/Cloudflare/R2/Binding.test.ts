@@ -1,13 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import { createHash } from "node:crypto";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -18,10 +19,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 120_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -34,17 +32,13 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
-const untilOk = <E, R>(
-  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
-) =>
+const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>) =>
   eff.pipe(
     Effect.flatMap((res) =>
       res.status === 200
         ? Effect.succeed(res)
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
@@ -58,9 +52,7 @@ class ValueMismatch extends Data.TaggedError("ValueMismatch")<{
   actual: string | null;
 }> {}
 
-const retryMismatch = <A, E, R>(
-  eff: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+const retryMismatch = <A, E, R>(eff: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   eff.pipe(
     Effect.retry({
       while: (e: E) => e instanceof ValueMismatch,
@@ -103,17 +95,13 @@ const headObject = (base: string, key: string) =>
 
 /** `/list?prefix=` and retry until `key` appears (list is eventually consistent). */
 const expectListed = (base: string, prefix: string, key: string) =>
-  untilOk(
-    HttpClient.get(`${base}/list?prefix=${encodeURIComponent(prefix)}`),
-  ).pipe(
+  untilOk(HttpClient.get(`${base}/list?prefix=${encodeURIComponent(prefix)}`)).pipe(
     Effect.flatMap((res) => res.json),
     Effect.flatMap((body) => {
       const keys = (body as { keys: string[] }).keys;
       return keys.includes(key)
         ? Effect.succeed(keys)
-        : Effect.fail(
-            new ValueMismatch({ expected: key, actual: keys.join(",") }),
-          );
+        : Effect.fail(new ValueMismatch({ expected: key, actual: keys.join(",") }));
     }),
     retryMismatch,
   );
@@ -127,12 +115,18 @@ const put = (base: string, key: string, value: string) =>
     ),
   );
 
+/** PUT `/put-stream?key=&sha256=`: the body is streamed into R2 under a declared hash. */
+const putStream = (base: string, key: string, body: string, sha256: string) =>
+  HttpClient.execute(
+    HttpClientRequest.put(
+      `${base}/put-stream?key=${encodeURIComponent(key)}&sha256=${sha256}`,
+    ).pipe(HttpClientRequest.bodyText(body)),
+  );
+
 const del = (base: string, key: string) =>
   untilOk(
     HttpClient.execute(
-      HttpClientRequest.make("DELETE")(
-        `${base}/del?key=${encodeURIComponent(key)}`,
-      ),
+      HttpClientRequest.make("DELETE")(`${base}/del?key=${encodeURIComponent(key)}`),
     ),
   );
 
@@ -153,9 +147,7 @@ const delMany = (base: string, keys: string[]) =>
  */
 const post = (base: string, path: string, key: string) =>
   untilOk(
-    HttpClient.execute(
-      HttpClientRequest.post(`${base}/${path}?key=${encodeURIComponent(key)}`),
-    ),
+    HttpClient.execute(HttpClientRequest.post(`${base}/${path}?key=${encodeURIComponent(key)}`)),
   );
 
 const exercise = (
@@ -253,7 +245,10 @@ test(
     const out = yield* stack;
     yield* exercise("bind", out.writeBinding, out.readBinding, true);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // The ReadWrite worker round-trips a key by itself over the native binding.
@@ -261,14 +256,43 @@ test(
   "native binding: read-write round-trip in one worker",
   Effect.gen(function* () {
     const out = yield* stack;
-    yield* exercise(
-      "rw-bind",
-      out.readWriteBinding,
-      out.readWriteBinding,
-      true,
-    );
+    yield* exercise("rw-bind", out.readWriteBinding, out.readWriteBinding, true);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
+);
+
+// A `put` given an Effect `Stream` goes through a `FixedLengthStream`, and
+// the options passed alongside it must still reach R2. Without them R2 has
+// nothing to verify and stores whatever bytes arrive under the declared
+// hash, which lets a caller plant content under a hash it does not have.
+test(
+  "native binding: a streamed put is verified against its declared sha256",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const value = "stream-value";
+    const sha256 = yield* Effect.sync(() => createHash("sha256").update(value).digest("hex"));
+
+    // Matching hash: stored and readable.
+    const ok = yield* untilOk(putStream(out.writeBinding, "stream/ok", value, sha256));
+    expect(((yield* ok.json) as { stored: boolean }).stored).toBe(true);
+    expect(yield* expectValue(out.readBinding, "stream/ok", value)).toBe(value);
+
+    // Mismatched hash: R2 rejects the body and nothing is stored. The key is
+    // cleared first so a previous run cannot satisfy the final check.
+    yield* del(out.writeBinding, "stream/bad");
+    yield* expectMissing(out.readBinding, "stream/bad");
+    const bad = yield* putStream(out.writeBinding, "stream/bad", value, "0".repeat(64));
+    expect(bad.status).toBe(400);
+    expect(((yield* bad.json) as { stored: boolean }).stored).toBe(false);
+    expect((yield* headObject(out.readBinding, "stream/bad")).exists).toBe(false);
+  }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 // ── Scoped HTTP API token ── same matrix over the `*BucketHttp` clients
@@ -279,7 +303,10 @@ test(
     const out = yield* stack;
     yield* exercise("http", out.writeHttp, out.readHttp, false);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
 );
 
 test(
@@ -288,5 +315,8 @@ test(
     const out = yield* stack;
     yield* exercise("rw-http", out.readWriteHttp, out.readWriteHttp, false);
   }).pipe(logLevel),
-  { timeout: TEST_TIMEOUT },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: TEST_TIMEOUT,
+  },
 );

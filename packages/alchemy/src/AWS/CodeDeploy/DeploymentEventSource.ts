@@ -112,16 +112,11 @@ export const consumeDeploymentEvents = <StreamReq = never, Req = never>(
     props.id ?? "CodeDeployEvents",
     {
       source: ["aws.codedeploy"],
-      "detail-type": (props.kinds ?? (["deployment"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.applications !== undefined ||
-      props.deploymentGroups !== undefined
+      "detail-type": (props.kinds ?? (["deployment"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.applications !== undefined || props.deploymentGroups !== undefined
         ? {
             detail: {
-              ...(props.applications !== undefined
-                ? { application: [...props.applications] }
-                : {}),
+              ...(props.applications !== undefined ? { application: [...props.applications] } : {}),
               ...(props.deploymentGroups !== undefined
                 ? { deploymentGroup: [...props.deploymentGroups] }
                 : {}),

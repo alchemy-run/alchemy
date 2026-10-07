@@ -9,7 +9,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as CredentialsCache from "../Auth/CredentialsCache.ts";
-import { resolveProviderConfig } from "../Auth/Resolve.ts";
+import {
+  deferUntilFirstUse,
+  orDieCredentialsUnavailable,
+  resolveProviderConfig,
+} from "../Auth/Resolve.ts";
 import {
   PLANETSCALE_AUTH_PROVIDER_NAME,
   type PlanetscaleAuthConfig,
@@ -46,14 +50,8 @@ export const fromToken = (input: {
   Layer.succeed(
     Credentials,
     Effect.succeed({
-      tokenId:
-        typeof input.tokenId === "string"
-          ? Redacted.make(input.tokenId)
-          : input.tokenId,
-      token:
-        typeof input.token === "string"
-          ? Redacted.make(input.token)
-          : input.token,
+      tokenId: typeof input.tokenId === "string" ? Redacted.make(input.tokenId) : input.tokenId,
+      token: typeof input.token === "string" ? Redacted.make(input.token) : input.token,
       organization: input.organization,
       apiBaseUrl: input.apiBaseUrl ?? DEFAULT_API_BASE_URL,
     }),
@@ -68,22 +66,34 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const apiBaseUrl = yield* Config.string("PLANETSCALE_API_BASE_URL").pipe(
+      const apiBaseUrl = yield* Config.String("PLANETSCALE_API_BASE_URL").pipe(
         Config.withDefault(DEFAULT_API_BASE_URL),
       );
-      const { profileName, resolve } = yield* resolveProviderConfig<
+      // Defer profile lookup and credential resolution until first use, so
+      // building the provider layers never requires a configured profile.
+      const resolve = yield* resolveProviderConfig<
         PlanetscaleAuthConfig,
         PlanetscaleResolvedCredentials
-      >(PLANETSCALE_AUTH_PROVIDER_NAME);
+      >(PLANETSCALE_AUTH_PROVIDER_NAME).pipe(
+        Effect.flatMap(({ profileName, resolve }) =>
+          Effect.mapError(
+            resolve,
+            (e) =>
+              new ConfigError({
+                message: `Failed to resolve Planetscale credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${e.message}`,
+              }),
+          ),
+        ),
+        deferUntilFirstUse,
+      );
 
       // Cache until shortly before the OAuth token expires (service tokens
       // never expire) so a long `alchemy dev` session re-resolves — and
       // thereby refreshes — the token instead of keeping the first, by then
       // dead, resolution forever. The cache wraps `resolve` (not the mapped
       // client config) because the mapping drops the `expires` timestamp.
-      const cached = yield* CredentialsCache.cacheUntilExpiry(
-        resolve,
-        (creds) => (creds.type === "oauth" ? creds.expires : undefined),
+      const cached = yield* CredentialsCache.cacheUntilExpiry(resolve, (creds) =>
+        creds.type === "oauth" ? creds.expires : undefined,
       );
       return cached.pipe(
         Effect.map((creds): PlanetscaleClientConfig =>
@@ -102,13 +112,7 @@ export const fromAuthProvider = () =>
                 apiBaseUrl,
               },
         ),
-        Effect.mapError(
-          (e) =>
-            new ConfigError({
-              message: `Failed to resolve Planetscale credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-            }),
-        ),
-        Effect.orDie,
+        orDieCredentialsUnavailable(PLANETSCALE_AUTH_PROVIDER_NAME),
       );
     }),
   );

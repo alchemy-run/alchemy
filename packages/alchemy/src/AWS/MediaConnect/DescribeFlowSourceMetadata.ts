@@ -38,7 +38,6 @@ export interface DescribeFlowSourceMetadata extends Binding.Service<
     >
   >
 > {}
-export const DescribeFlowSourceMetadata =
-  Binding.Service<DescribeFlowSourceMetadata>(
-    "AWS.MediaConnect.DescribeFlowSourceMetadata",
-  );
+export const DescribeFlowSourceMetadata = Binding.Service<DescribeFlowSourceMetadata>(
+  "AWS.MediaConnect.DescribeFlowSourceMetadata",
+);

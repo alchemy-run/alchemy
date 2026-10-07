@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface ExecuteStatementRequest
-  extends DynamoDB.ExecuteStatementInput {}
+export interface ExecuteStatementRequest extends DynamoDB.ExecuteStatementInput {}
 
 /**
  * Runtime binding for DynamoDB PartiQL `ExecuteStatement`.
@@ -32,13 +31,8 @@ export interface ExecuteStatement extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecuteStatementRequest,
-    ) => Effect.Effect<
-      DynamoDB.ExecuteStatementOutput,
-      DynamoDB.ExecuteStatementError
-    >
+    ) => Effect.Effect<DynamoDB.ExecuteStatementOutput, DynamoDB.ExecuteStatementError>
   >
 > {}
 
-export const ExecuteStatement = Binding.Service<ExecuteStatement>(
-  "AWS.DynamoDB.ExecuteStatement",
-);
+export const ExecuteStatement = Binding.Service<ExecuteStatement>("AWS.DynamoDB.ExecuteStatement");

@@ -1,11 +1,11 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { AiAsyncWorker } from "./fixtures/AiAsyncWorker.ts";
 import AiBindingTestWorker from "./fixtures/AiBindingWorker.ts";
 
@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "AiBindingStack",
@@ -61,14 +58,12 @@ test(
     const out = yield* stack;
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const res = yield* client
-      .get(`${out.url}/run?prompt=${encodeURIComponent("Say pong.")}`)
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-      );
+    const res = yield* client.get(`${out.url}/run?prompt=${encodeURIComponent("Say pong.")}`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
     expect(res.status).toBe(200);
 
     // Workers AI answers either the native shape (`{ response }`) or the
@@ -81,7 +76,10 @@ test(
     expect(typeof text).toBe("string");
     expect((text as string).length).toBeGreaterThan(0);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -102,7 +100,10 @@ test(
     expect(body.count).toBeGreaterThan(0);
     expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -138,7 +139,10 @@ test(
     expect(body.usage.outputTokens).toBeGreaterThan(0);
     expect(body.finishReason).toBe("stop");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -165,12 +169,14 @@ test(
       };
     };
     expect(body.mode).toBe("async");
-    const text =
-      body.result.response ?? body.result.choices?.[0]?.message?.content;
+    const text = body.result.response ?? body.result.choices?.[0]?.message?.content;
     expect(typeof text).toBe("string");
     expect((text as string).length).toBeGreaterThan(0);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -196,7 +202,10 @@ test(
     expect(body.count).toBeGreaterThan(0);
     expect(body.names.some((name) => name.includes("llama-3.3"))).toBe(true);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );
 
 test(
@@ -214,8 +223,7 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.map(parseSse),
         Effect.flatMap((parts) =>
-          parts.some((p) => p.type === "text-delta") &&
-          parts.some((p) => p.type === "finish")
+          parts.some((p) => p.type === "text-delta") && parts.some((p) => p.type === "finish")
             ? Effect.succeed(parts)
             : Effect.fail(new Error("AI stream not ready: empty/unfinished")),
         ),
@@ -235,5 +243,8 @@ test(
     expect(text.length).toBeGreaterThan(0);
     expect(finish).toBeDefined();
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
 );

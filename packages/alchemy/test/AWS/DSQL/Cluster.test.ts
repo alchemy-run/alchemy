@@ -1,11 +1,18 @@
-import * as AWS from "@/AWS";
-import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
-import * as Test from "@/Test/Alchemy";
 import * as dsql from "@distilled.cloud/aws/dsql";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as AWS from "@/AWS";
+import { Cluster, ClusterPolicy } from "@/AWS/DSQL";
+import { withDsqlClient } from "@/AWS/DSQL/Migrations.ts";
+import * as Drizzle from "@/Drizzle";
+import * as Test from "@/Test/Alchemy";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Drizzle.providers()),
+});
 
 /** Docs-canonical policy: deny non-VPC connections. */
 const vpcOnlyPolicy = (exceptions?: string[]) =>
@@ -20,9 +27,7 @@ const vpcOnlyPolicy = (exceptions?: string[]) =>
         Resource: "*",
         Condition: {
           Null: { "aws:SourceVpc": "true" },
-          ...(exceptions
-            ? { StringNotEquals: { "aws:PrincipalArn": exceptions } }
-            : {}),
+          ...(exceptions ? { StringNotEquals: { "aws:PrincipalArn": exceptions } } : {}),
         },
       },
     ],
@@ -31,11 +36,7 @@ const vpcOnlyPolicy = (exceptions?: string[]) =>
 const getCluster = (identifier: string) =>
   dsql
     .getCluster({ identifier })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, update deletion protection, delete DSQL cluster",
@@ -112,9 +113,7 @@ test.provider(
           });
           const policy = yield* ClusterPolicy("AppDbPolicy", {
             clusterId: cluster.clusterId,
-            policy: vpcOnlyPolicy([
-              "arn:aws:iam::123456789012:role/ExceptionRole",
-            ]),
+            policy: vpcOnlyPolicy(["arn:aws:iam::123456789012:role/ExceptionRole"]),
           });
           return { policyVersion: policy.policyVersion };
         }),
@@ -129,11 +128,75 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* getCluster(created.clusterId);
       // A deleted DSQL cluster is either gone or reports DELETING/DELETED.
-      expect(
-        gone === undefined ||
-          gone.status === "DELETING" ||
-          gone.status === "DELETED",
-      ).toBe(true);
+      expect(gone === undefined || gone.status === "DELETING" || gone.status === "DELETED").toBe(
+        true,
+      );
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:aws", "provider:aws:dsql", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "applies Drizzle migrations on deploy, applies new ones in place, and rejects edited history",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      // Generate into a temp directory so the test never writes checked-in files.
+      const out = yield* fs.makeTempDirectoryScoped();
+      const schema = path.join(import.meta.dirname, "fixtures/migrations/schema.ts");
+      const deploy = Effect.gen(function* () {
+        const generated = yield* Drizzle.Schema("Schema", { schema, out, dialect: "postgres" });
+        return yield* Cluster("Database", { migrations: generated.out });
+      });
+      const query = (endpoint: string, sql: string) =>
+        withDsqlClient(endpoint, (client) => Effect.tryPromise(() => client.query(sql)));
+
+      const created = yield* stack.deploy(deploy);
+      const history = yield* query(created.endpoint, "SELECT name, hash FROM __alchemy_migrations");
+      expect(history.rows).toHaveLength(1);
+      // CREATE INDEX ran as CREATE INDEX ASYNC and was awaited.
+      const indexes = yield* query(
+        created.endpoint,
+        "SELECT indisvalid FROM pg_index WHERE indexrelid = 'users_email_idx'::regclass",
+      );
+      expect(indexes.rows[0].indisvalid).toBe(true);
+      yield* query(
+        created.endpoint,
+        "INSERT INTO users(id, email) VALUES ('00000000-0000-0000-0000-000000000001', 'test@example.com')",
+      );
+
+      // A new migration file at the same path updates the cluster in place
+      // and keeps existing rows.
+      const [first] = (yield* fs.readDirectory(out)).sort();
+      const next = path.join(out, "20990101000000_evolve");
+      yield* fs.makeDirectory(next);
+      yield* fs.writeFileString(
+        path.join(next, "migration.sql"),
+        `ALTER TABLE users ADD COLUMN active boolean NOT NULL DEFAULT true;
+ALTER TABLE users RENAME COLUMN email TO address;`,
+      );
+      const updated = yield* stack.deploy(deploy);
+      expect(updated.clusterId).toBe(created.clusterId);
+      const user = yield* query(updated.endpoint, "SELECT address, active FROM users");
+      expect(user.rows).toEqual([{ address: "test@example.com", active: true }]);
+      const after = yield* query(updated.endpoint, "SELECT name FROM __alchemy_migrations");
+      expect(after.rows).toHaveLength(2);
+
+      // Editing an applied migration fails the deploy instead of silently
+      // skipping it.
+      yield* fs.writeFileString(
+        path.join(out, first!, "migration.sql"),
+        "CREATE TABLE users (id uuid PRIMARY KEY);",
+      );
+      const failure = yield* stack.deploy(deploy).pipe(Effect.flip);
+      expect(String(failure)).toMatch(/changed|does not match/i);
+
+      yield* stack.destroy();
+      const gone = yield* getCluster(created.clusterId);
+      expect(gone === undefined || gone.status === "DELETING" || gone.status === "DELETED").toBe(
+        true,
+      );
+    }),
+  { timeout: 600_000 },
 );

@@ -1,21 +1,17 @@
+import * as databrew from "@distilled.cloud/aws/databrew";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Dataset, Ruleset } from "@/AWS/DataBrew";
 import { Bucket } from "@/AWS/S3";
 import * as Test from "@/Test/Alchemy";
-import * as databrew from "@distilled.cloud/aws/databrew";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getRuleset = (name: string) =>
   databrew
     .describeRuleset({ Name: name })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, update, delete DataBrew ruleset",
@@ -53,9 +49,7 @@ test.provider(
       );
 
       expect(created.ruleset.rulesetName).toBeDefined();
-      expect(created.ruleset.rulesetArn).toContain(
-        `:ruleset/${created.ruleset.rulesetName}`,
-      );
+      expect(created.ruleset.rulesetArn).toContain(`:ruleset/${created.ruleset.rulesetName}`);
       expect(created.ruleset.targetArn).toEqual(created.dataset.datasetArn);
 
       // out-of-band verification
@@ -108,5 +102,8 @@ test.provider(
       const gone = yield* getRuleset(created.ruleset.rulesetName);
       expect(gone).toBeUndefined();
     }),
-  { timeout: 120_000 },
+  {
+    tags: ["provider:aws", "provider:aws:databrew", "provider:aws:s3", "live"],
+    timeout: 120_000,
+  },
 );

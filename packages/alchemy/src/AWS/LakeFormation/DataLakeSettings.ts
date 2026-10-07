@@ -139,13 +139,9 @@ export interface DataLakeSettings extends Resource<
  *
  * @resource
  */
-export const DataLakeSettings = Resource<DataLakeSettings>(
-  "AWS.LakeFormation.DataLakeSettings",
-);
+export const DataLakeSettings = Resource<DataLakeSettings>("AWS.LakeFormation.DataLakeSettings");
 
-const principalIds = (
-  principals: lf.DataLakePrincipal[] | undefined,
-): string[] =>
+const principalIds = (principals: lf.DataLakePrincipal[] | undefined): string[] =>
   (principals ?? [])
     .map((p) => p.DataLakePrincipalIdentifier)
     .filter((id): id is string => id !== undefined);
@@ -153,9 +149,7 @@ const principalIds = (
 const toPrincipals = (ids: string[]): lf.DataLakePrincipal[] =>
   ids.map((id) => ({ DataLakePrincipalIdentifier: id }));
 
-const toWireDefaults = (
-  specs: DefaultPermissionSpec[],
-): lf.PrincipalPermissions[] =>
+const toWireDefaults = (specs: DefaultPermissionSpec[]): lf.PrincipalPermissions[] =>
   specs.map((s) => ({
     Principal: { DataLakePrincipalIdentifier: s.principal },
     Permissions: s.permissions,
@@ -179,9 +173,7 @@ const fingerprint = (s: lf.DataLakeSettings): string =>
       principal: p.Principal?.DataLakePrincipalIdentifier,
       permissions: [...(p.Permissions ?? [])].sort(),
     })),
-    parameters: Object.entries(s.Parameters ?? {}).sort(([a], [b]) =>
-      a.localeCompare(b),
-    ),
+    parameters: Object.entries(s.Parameters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     trusted: [...(s.TrustedResourceOwners ?? [])].sort(),
     allowExternal: s.AllowExternalDataFiltering ?? false,
     allowFullTable: s.AllowFullTableExternalDataAccess ?? false,
@@ -212,12 +204,10 @@ const copyField = (
 ): void => {
   switch (field) {
     case "createDatabaseDefaultPermissions":
-      target.CreateDatabaseDefaultPermissions =
-        source.CreateDatabaseDefaultPermissions;
+      target.CreateDatabaseDefaultPermissions = source.CreateDatabaseDefaultPermissions;
       break;
     case "createTableDefaultPermissions":
-      target.CreateTableDefaultPermissions =
-        source.CreateTableDefaultPermissions;
+      target.CreateTableDefaultPermissions = source.CreateTableDefaultPermissions;
       break;
     case "parameters":
       target.Parameters = source.Parameters;
@@ -229,16 +219,13 @@ const copyField = (
       target.AllowExternalDataFiltering = source.AllowExternalDataFiltering;
       break;
     case "allowFullTableExternalDataAccess":
-      target.AllowFullTableExternalDataAccess =
-        source.AllowFullTableExternalDataAccess;
+      target.AllowFullTableExternalDataAccess = source.AllowFullTableExternalDataAccess;
       break;
     case "externalDataFilteringAllowList":
-      target.ExternalDataFilteringAllowList =
-        source.ExternalDataFilteringAllowList;
+      target.ExternalDataFilteringAllowList = source.ExternalDataFilteringAllowList;
       break;
     case "authorizedSessionTagValueList":
-      target.AuthorizedSessionTagValueList =
-        source.AuthorizedSessionTagValueList;
+      target.AuthorizedSessionTagValueList = source.AuthorizedSessionTagValueList;
       break;
   }
 };
@@ -256,9 +243,7 @@ const applyField = (
       );
       break;
     case "createTableDefaultPermissions":
-      target.CreateTableDefaultPermissions = toWireDefaults(
-        news.createTableDefaultPermissions!,
-      );
+      target.CreateTableDefaultPermissions = toWireDefaults(news.createTableDefaultPermissions!);
       break;
     case "parameters":
       target.Parameters = news.parameters;
@@ -270,13 +255,10 @@ const applyField = (
       target.AllowExternalDataFiltering = news.allowExternalDataFiltering;
       break;
     case "allowFullTableExternalDataAccess":
-      target.AllowFullTableExternalDataAccess =
-        news.allowFullTableExternalDataAccess;
+      target.AllowFullTableExternalDataAccess = news.allowFullTableExternalDataAccess;
       break;
     case "externalDataFilteringAllowList":
-      target.ExternalDataFilteringAllowList = toPrincipals(
-        news.externalDataFilteringAllowList!,
-      );
+      target.ExternalDataFilteringAllowList = toPrincipals(news.externalDataFilteringAllowList!);
       break;
     case "authorizedSessionTagValueList":
       target.AuthorizedSessionTagValueList = news.authorizedSessionTagValueList;
@@ -307,13 +289,9 @@ export const DataLakeSettingsProvider = () =>
         previouslyManaged: string[];
         captured: string[];
       }): string[] => {
-        const removedByUs = input.previouslyManaged.filter(
-          (p) => !input.managed.includes(p),
-        );
+        const removedByUs = input.previouslyManaged.filter((p) => !input.managed.includes(p));
         return dedupe([
-          ...input.observed.filter(
-            (p) => !removedByUs.includes(p) || input.captured.includes(p),
-          ),
+          ...input.observed.filter((p) => !removedByUs.includes(p) || input.captured.includes(p)),
           ...input.managed,
         ]);
       };
@@ -393,9 +371,7 @@ export const DataLakeSettingsProvider = () =>
             }),
           );
 
-          const managedFields = MANAGED_FIELDS.filter(
-            (field) => news[field] !== undefined,
-          );
+          const managedFields = MANAGED_FIELDS.filter((field) => news[field] !== undefined);
           for (const field of MANAGED_FIELDS) {
             if (news[field] !== undefined) {
               applyField(desired, news, field);
@@ -431,8 +407,7 @@ export const DataLakeSettingsProvider = () =>
           // Restore: remove the admins we added (unless they were already
           // admins before we managed the settings) and put back the captured
           // values for every field we managed.
-          const catalogIdInput =
-            output.catalogId === undefined ? undefined : output.catalogId;
+          const catalogIdInput = output.catalogId === undefined ? undefined : output.catalogId;
           const observed = yield* observe(catalogIdInput);
           const captured = output.captured;
           const desired = snapshot(observed);
@@ -440,16 +415,13 @@ export const DataLakeSettingsProvider = () =>
           const capturedAdmins = principalIds(captured.DataLakeAdmins);
           desired.DataLakeAdmins = toPrincipals(
             principalIds(observed.DataLakeAdmins).filter(
-              (p) =>
-                !output.managedAdmins.includes(p) || capturedAdmins.includes(p),
+              (p) => !output.managedAdmins.includes(p) || capturedAdmins.includes(p),
             ),
           );
           const capturedReadOnly = principalIds(captured.ReadOnlyAdmins);
           desired.ReadOnlyAdmins = toPrincipals(
             principalIds(observed.ReadOnlyAdmins).filter(
-              (p) =>
-                !output.managedReadOnlyAdmins.includes(p) ||
-                capturedReadOnly.includes(p),
+              (p) => !output.managedReadOnlyAdmins.includes(p) || capturedReadOnly.includes(p),
             ),
           );
 

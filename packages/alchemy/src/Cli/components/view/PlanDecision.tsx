@@ -1,15 +1,11 @@
-/** @jsxImportSource react */
-import { useMemo, useState, type JSX } from "react";
+/** @jsxImportSource @alchemy.run/sigil */
+import { useMemo, useState } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import type { Plan } from "../../../Plan.ts";
-import {
-  PromptFrame,
-  ChoiceGroup,
-  useKeyGlyphs,
-  useTerminalInput,
-} from "../ui/index.ts";
 import { Screen, type ScreenController } from "../../CliKit/index.ts";
-import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
+import { PromptFrame, ChoiceGroup, useKeyGlyphs, useTerminalInput } from "../ui/index.ts";
 import type { PlanTreeData } from "./PlanTree.ts";
+import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
 
 export interface PlanDecisionChoice<Value> {
   readonly value: Value;
@@ -24,18 +20,8 @@ function PlanDecision<Value>(props: {
   readonly initialValue: Value;
   readonly controller: ScreenController<Value>;
 }): JSX.Element {
-  const {
-    plan,
-    label = "Plan",
-    message,
-    choices,
-    initialValue,
-    controller,
-  } = props;
-  const tree = useMemo(
-    () => new PlanTree(plan, { mode: "review", label }),
-    [plan, label],
-  );
+  const { plan, label = "Plan", message, choices, initialValue, controller } = props;
+  const tree = useMemo(() => new PlanTree(plan, { mode: "review", label }), [plan, label]);
   const [selected, setSelected] = useState(initialValue);
   const keys = useKeyGlyphs();
 
@@ -57,11 +43,7 @@ function PlanDecision<Value>(props: {
             [keys.escape, "cancel"],
           ]}
         >
-          <ChoiceGroup
-            choices={choices}
-            value={selected}
-            onChange={setSelected}
-          />
+          <ChoiceGroup choices={choices} value={selected} onChange={setSelected} />
         </PromptFrame>
       }
     />

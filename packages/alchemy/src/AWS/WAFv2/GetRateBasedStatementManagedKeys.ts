@@ -44,7 +44,6 @@ export interface GetRateBasedStatementManagedKeys extends Binding.Service<
   >
 > {}
 
-export const GetRateBasedStatementManagedKeys =
-  Binding.Service<GetRateBasedStatementManagedKeys>(
-    "AWS.WAFv2.GetRateBasedStatementManagedKeys",
-  );
+export const GetRateBasedStatementManagedKeys = Binding.Service<GetRateBasedStatementManagedKeys>(
+  "AWS.WAFv2.GetRateBasedStatementManagedKeys",
+);

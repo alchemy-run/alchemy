@@ -1,13 +1,9 @@
-import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import {
-  base64ToBytes,
-  bytesToBase64,
-  makeHttpSecretKeyBinding,
-} from "./SecretKeyHttp.ts";
+import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
+import { base64ToBytes, bytesToBase64, makeHttpSecretKeyBinding } from "./SecretKeyHttp.ts";
 import { Sign, type SignRequest } from "./Sign.ts";
 
 /**
@@ -25,6 +21,7 @@ import { Sign, type SignRequest } from "./Sign.ts";
  * ```
  *
  * @layer
+ * @product Secret Key
  * @provides Fly.Sign
  */
 export const SignHttp = Layer.effect(
@@ -44,4 +41,4 @@ export const SignHttp = Layer.effect(
         }),
     }),
   ),
-).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromEnv));
+).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromAmbientOrEnv));

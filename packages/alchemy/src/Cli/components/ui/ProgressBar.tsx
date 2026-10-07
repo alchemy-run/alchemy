@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import type { ReactNode } from "react";
 import { statusPaint, type StatusVariant } from "../../../Util/Theme.ts";
 import { useCliEnvironment } from "./Environment.tsx";
@@ -47,9 +47,7 @@ export function ProgressBar({
         </Text>
         <Text tone="muted">{(unicode ? " " : ".").repeat(remaining)}]</Text>
       </Text>
-      {showPercent ? (
-        <Text tone="muted">{`${Math.round(ratio * 100)}%`.padStart(4)}</Text>
-      ) : null}
+      {showPercent ? <Text tone="muted">{`${Math.round(ratio * 100)}%`.padStart(4)}</Text> : null}
       {label === undefined ? null : <Text>{label}</Text>}
       {detail === undefined ? null : <Text tone="muted">{detail}</Text>}
     </Box>

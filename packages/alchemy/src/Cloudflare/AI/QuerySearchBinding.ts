@@ -29,10 +29,7 @@ export const QuerySearchBinding = Layer.effect(
       }
 
       const rawEff = Effect.sync(
-        () =>
-          (env as Record<string, runtime.AiSearchInstance>)[
-            instance.LogicalId
-          ]!,
+        () => (env as Record<string, runtime.AiSearchInstance>)[instance.LogicalId]!,
       );
       return makeClient(rawEff);
     });

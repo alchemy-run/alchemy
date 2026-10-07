@@ -34,7 +34,6 @@ export interface DescribeAttackStatistics extends Binding.Service<
     >
   >
 > {}
-export const DescribeAttackStatistics =
-  Binding.Service<DescribeAttackStatistics>(
-    "AWS.Shield.DescribeAttackStatistics",
-  );
+export const DescribeAttackStatistics = Binding.Service<DescribeAttackStatistics>(
+  "AWS.Shield.DescribeAttackStatistics",
+);

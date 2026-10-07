@@ -28,10 +28,7 @@ export interface DisassociateLicense extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<grafana.DisassociateLicenseRequest, "workspaceId">,
-    ) => Effect.Effect<
-      grafana.DisassociateLicenseResponse,
-      grafana.DisassociateLicenseError
-    >
+    ) => Effect.Effect<grafana.DisassociateLicenseResponse, grafana.DisassociateLicenseError>
   >
 > {}
 export const DisassociateLicense = Binding.Service<DisassociateLicense>(

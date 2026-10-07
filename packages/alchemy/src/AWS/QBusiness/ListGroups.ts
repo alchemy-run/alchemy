@@ -40,6 +40,4 @@ export interface ListGroups extends Binding.Service<
     ) => Effect.Effect<qbusiness.ListGroupsResponse, qbusiness.ListGroupsError>
   >
 > {}
-export const ListGroups = Binding.Service<ListGroups>(
-  "AWS.QBusiness.ListGroups",
-);
+export const ListGroups = Binding.Service<ListGroups>("AWS.QBusiness.ListGroups");

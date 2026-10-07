@@ -1,21 +1,37 @@
+import * as Argument from "effect/cli/Argument";
+import * as CliError from "effect/cli/CliError";
+import * as Flag from "effect/cli/Flag";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Argument from "effect/unstable/cli/Argument";
-import * as Flag from "effect/unstable/cli/Flag";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { UserInputError } from "./errors.ts";
 
-export const USER = Config.string("USER").pipe(
-  Config.orElse(() => Config.string("USERNAME")),
+export const USER = Config.String("USER").pipe(
+  Config.orElse(() => Config.String("USERNAME")),
   Config.withDefault("unknown"),
 );
 
-export const ALCHEMY_STAGE = Config.string("ALCHEMY_STAGE").pipe(
+/**
+ * `live_$USER`, `dev_$USER`, or `test_$USER` (falls back to `*_unknown`).
+ * Characters a stage can't hold (`first.last`, `John Smith`) become `-`, so
+ * the default always passes the `--stage` pattern and works in physical names.
+ */
+export const userStage = (kind: "live" | "dev" | "test") =>
+  USER.pipe(
+    Effect.map((user) => {
+      const safe = user.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+      return `${kind}_${safe || "unknown"}`;
+    }),
+    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
+  );
+
+export const ALCHEMY_STAGE = Config.String("ALCHEMY_STAGE").pipe(
   Config.option,
   Effect.map(Option.getOrUndefined),
 );
@@ -23,10 +39,8 @@ export const ALCHEMY_STAGE = Config.string("ALCHEMY_STAGE").pipe(
 const STAGE_NAME_PATTERN = /^[a-z0-9]+([-_a-z0-9]+)*$/i;
 
 const makeStageFlag = (kind: "live" | "dev") =>
-  Flag.string("stage").pipe(
-    Flag.withSchema(
-      Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi)),
-    ),
+  Flag.String("stage").pipe(
+    Flag.withSchema(Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
     Flag.withDescription(
       kind === "live"
         ? "Stage to deploy to. Defaults to $ALCHEMY_STAGE or live_${USER}"
@@ -69,51 +83,98 @@ export const resolveStage = Effect.fn(function* (
     }
     return configured;
   }
-  return yield* USER.pipe(
-    Effect.map((user) => `${kind}_${user}`),
-    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
-  );
+  return yield* userStage(kind);
 });
 
-export const envFile = Flag.file("env-file").pipe(
-  Flag.optional,
-  Flag.withDescription(
-    "File to load environment variables from, defaults to .env",
+// `Flag.File` accepts regular files only. Also accept a character device, so
+// `--env-file /dev/null` reads as an empty env file.
+export const envFile = Flag.Path("env-file", { typeName: "file" }).pipe(
+  Flag.mapEffect((path) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      // A missing path fails later, when the file is read.
+      const type = yield* fs.stat(path).pipe(
+        Effect.map((info) => info.type),
+        Effect.option,
+      );
+      if (Option.isSome(type) && type.value !== "File" && type.value !== "CharacterDevice") {
+        return yield* new CliError.InvalidValue({
+          option: "env-file",
+          value: path,
+          expected: "a file or /dev/null",
+          kind: "flag",
+        });
+      }
+      return path;
+    }),
   ),
+  Flag.optional,
+  Flag.withDescription("File to load environment variables from, defaults to .env"),
 );
 
-export const dryRun = Flag.boolean("dry-run").pipe(
+export const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Dry run the deployment, do not actually deploy"),
   Flag.withDefault(false),
 );
 
-export const yes = Flag.boolean("yes").pipe(
+export const yes = Flag.Boolean("yes").pipe(
   Flag.withAlias("y"),
   Flag.withDescription("Yes to all prompts"),
   Flag.withDefault(false),
 );
 
-export const force = Flag.boolean("force").pipe(
-  Flag.withDescription(
-    "Force updates for resources that would otherwise no-op",
-  ),
+export const force = Flag.Boolean("force").pipe(
+  Flag.withDescription("Force updates for resources that would otherwise no-op"),
   Flag.withDefault(false),
 );
 
-export const config = Flag.file("config", { mustExist: true }).pipe(
+/** One pattern per occurrence; commas and whitespace are preserved. */
+const selectionFlag = (name: "include" | "exclude", description: string) =>
+  Flag.String(name).pipe(
+    Flag.withDescription(description),
+    Flag.atLeast(0),
+    Flag.map((values) => (values.length === 0 ? undefined : values)),
+  );
+
+export const include = selectionFlag(
+  "include",
+  "Include exact FQNs, unique logical IDs, or FQN globs and their dependencies (repeatable, one pattern per flag). Quote globs: --include 'App/**'. Other rows and stack outputs are preserved; the whole declaration still runs.",
+);
+
+export const exclude = selectionFlag(
+  "exclude",
+  "Exclude exact FQNs, unique logical IDs, or FQN globs (repeatable, one pattern per flag). Quote globs: --exclude 'App/Legacy/**'. Required excluded dependencies fail planning, even when unchanged.",
+);
+
+export const validateSelectionOptions = (options: {
+  readonly include?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string>;
+  readonly destroy?: boolean;
+  readonly detectDrift?: boolean;
+}) =>
+  (options.include !== undefined || options.exclude !== undefined) &&
+  (options.destroy || options.detectDrift)
+    ? Effect.fail(
+        new UserInputError({
+          message: "--include/--exclude cannot be combined with destroy or --detect-drift.",
+        }),
+      )
+    : Effect.void;
+
+export const config = Flag.File("config", { mustExist: true }).pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
   Flag.withDefault("alchemy.run.ts"),
 );
 
-export const optionalConfig = Flag.file("config", { mustExist: true }).pipe(
+export const optionalConfig = Flag.File("config", { mustExist: true }).pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );
 
-export const configPath = Argument.file("config", { mustExist: true }).pipe(
+export const configPath = Argument.File("config", { mustExist: true }).pipe(
   Argument.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Argument.optional,
   Argument.map(Option.getOrUndefined),
@@ -130,8 +191,7 @@ export const resolveConfig = <
   Effect.gen(function* () {
     if (args.config !== undefined && args.configPath !== undefined) {
       return yield* new UserInputError({
-        message:
-          "Pass the config path either positionally or with --config, not both.",
+        message: "Pass the config path either positionally or with --config, not both.",
       });
     }
     return {
@@ -158,10 +218,8 @@ export const resolveStackArgs =
       return { ...resolved, stage };
     });
 
-export const profile = Flag.string("profile").pipe(
-  Flag.withDescription(
-    "Auth profile to use. Defaults to $ALCHEMY_PROFILE or 'default'.",
-  ),
+export const profile = Flag.String("profile").pipe(
+  Flag.withDescription("Auth profile to use. Defaults to $ALCHEMY_PROFILE or 'default'."),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );

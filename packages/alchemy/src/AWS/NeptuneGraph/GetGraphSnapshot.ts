@@ -24,10 +24,7 @@ export interface GetGraphSnapshot extends Binding.Service<
   () => Effect.Effect<
     (
       request: neptunegraph.GetGraphSnapshotInput,
-    ) => Effect.Effect<
-      neptunegraph.GetGraphSnapshotOutput,
-      neptunegraph.GetGraphSnapshotError
-    >
+    ) => Effect.Effect<neptunegraph.GetGraphSnapshotOutput, neptunegraph.GetGraphSnapshotError>
   >
 > {}
 export const GetGraphSnapshot = Binding.Service<GetGraphSnapshot>(

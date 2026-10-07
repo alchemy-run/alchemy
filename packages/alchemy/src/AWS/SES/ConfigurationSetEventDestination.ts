@@ -126,30 +126,26 @@ export interface ConfigurationSetEventDestination extends Resource<
  *
  * @resource
  */
-export const ConfigurationSetEventDestination =
-  Resource<ConfigurationSetEventDestination>(
-    "AWS.SES.ConfigurationSetEventDestination",
-  );
+export const ConfigurationSetEventDestination = Resource<ConfigurationSetEventDestination>(
+  "AWS.SES.ConfigurationSetEventDestination",
+);
 
 const toDefinition = (
   props: ConfigurationSetEventDestinationProps,
 ): sesv2Types.EventDestinationDefinition => ({
   Enabled: props.enabled ?? true,
   MatchingEventTypes: props.matchingEventTypes,
-  SnsDestination: props.snsDestination
-    ? { TopicArn: props.snsDestination.topicArn }
-    : undefined,
+  SnsDestination: props.snsDestination ? { TopicArn: props.snsDestination.topicArn } : undefined,
   EventBridgeDestination: props.eventBridgeDestination
     ? { EventBusArn: props.eventBridgeDestination.eventBusArn }
     : undefined,
   CloudWatchDestination: props.cloudWatchDestination
     ? {
-        DimensionConfigurations:
-          props.cloudWatchDestination.dimensionConfigurations.map((d) => ({
-            DimensionName: d.dimensionName,
-            DimensionValueSource: d.dimensionValueSource,
-            DefaultDimensionValue: d.defaultDimensionValue,
-          })),
+        DimensionConfigurations: props.cloudWatchDestination.dimensionConfigurations.map((d) => ({
+          DimensionName: d.dimensionName,
+          DimensionValueSource: d.dimensionValueSource,
+          DefaultDimensionValue: d.defaultDimensionValue,
+        })),
       }
     : undefined,
 });
@@ -158,8 +154,7 @@ const isInSync = (
   observed: sesv2Types.EventDestination,
   desired: sesv2Types.EventDestinationDefinition,
 ) => {
-  const sortedTypes = (types: ReadonlyArray<string> | undefined) =>
-    [...(types ?? [])].sort();
+  const sortedTypes = (types: ReadonlyArray<string> | undefined) => [...(types ?? [])].sort();
   const observedTypes = sortedTypes(observed.MatchingEventTypes);
   const desiredTypes = sortedTypes(desired.MatchingEventTypes);
   return (
@@ -167,14 +162,9 @@ const isInSync = (
     observedTypes.length === desiredTypes.length &&
     observedTypes.every((t, i) => t === desiredTypes[i]) &&
     observed.SnsDestination?.TopicArn === desired.SnsDestination?.TopicArn &&
-    observed.EventBridgeDestination?.EventBusArn ===
-      desired.EventBridgeDestination?.EventBusArn &&
-    JSON.stringify(
-      observed.CloudWatchDestination?.DimensionConfigurations ?? null,
-    ) ===
-      JSON.stringify(
-        desired.CloudWatchDestination?.DimensionConfigurations ?? null,
-      )
+    observed.EventBridgeDestination?.EventBusArn === desired.EventBridgeDestination?.EventBusArn &&
+    JSON.stringify(observed.CloudWatchDestination?.DimensionConfigurations ?? null) ===
+      JSON.stringify(desired.CloudWatchDestination?.DimensionConfigurations ?? null)
   );
 };
 
@@ -184,15 +174,9 @@ export const ConfigurationSetEventDestinationProvider = () =>
     Effect.gen(function* () {
       const createName = Effect.fn(function* (
         id: string,
-        props: Pick<
-          ConfigurationSetEventDestinationProps,
-          "eventDestinationName"
-        >,
+        props: Pick<ConfigurationSetEventDestinationProps, "eventDestinationName">,
       ) {
-        return (
-          props.eventDestinationName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.eventDestinationName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const findDestination = Effect.fn(function* (
@@ -218,12 +202,8 @@ export const ConfigurationSetEventDestinationProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const pages = yield* sesv2.listConfigurationSets
-              .pages({})
-              .pipe(Stream.runCollect);
-            const configSets = Array.from(pages).flatMap(
-              (page) => page.ConfigurationSets ?? [],
-            );
+            const pages = yield* sesv2.listConfigurationSets.pages({}).pipe(Stream.runCollect);
+            const configSets = Array.from(pages).flatMap((page) => page.ConfigurationSets ?? []);
             const nested = yield* Effect.forEach(
               configSets,
               (configurationSetName) =>
@@ -253,11 +233,9 @@ export const ConfigurationSetEventDestinationProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const configurationSetName =
-            output?.configurationSetName ?? olds?.configurationSetName;
+          const configurationSetName = output?.configurationSetName ?? olds?.configurationSetName;
           if (configurationSetName === undefined) return undefined;
-          const name =
-            output?.eventDestinationName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.eventDestinationName ?? (yield* createName(id, olds ?? {}));
           const found = yield* findDestination(configurationSetName, name);
           if (!found) return undefined;
           return { configurationSetName, eventDestinationName: name };
@@ -279,8 +257,7 @@ export const ConfigurationSetEventDestinationProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const configurationSetName = news.configurationSetName;
-          const name =
-            output?.eventDestinationName ?? (yield* createName(id, news));
+          const name = output?.eventDestinationName ?? (yield* createName(id, news));
           const desired = toDefinition(news);
 
           // 1. OBSERVE — look the destination up on the owning set.

@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * THE plan renderer. Every surface that shows a plan tree — `alchemy plan`
  * output, the approval prompt, and the live apply/dev/destroy progress —
@@ -17,7 +17,15 @@
  * - Property diffs (`detailed`) render in every mode, and the window is
  *   line-budget aware so multi-line rows never overflow the terminal.
  */
-import { useMemo, useSyncExternalStore, type JSX, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
+import type { JSX, ReactNode } from "react";
+import type { Plan as AlchemyPlan } from "../../../Plan.ts";
+import type { ApplyStatus } from "../../../Report.ts";
+import { theme } from "../../CliKit/index.ts";
+import { formatElapsed } from "../../Format.ts";
+import { formatModeNote } from "../../ModeTag.ts";
+import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
+import { matchYamlChange, matchYamlKey } from "../../PropertyDiff.ts";
 import {
   Box,
   KeyBar,
@@ -30,21 +38,7 @@ import {
   useGlyphs,
   useKeyGlyphs,
 } from "../ui/index.ts";
-import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import type { ApplyStatus } from "../../../Report.ts";
-import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
-import { formatModeNote } from "../../ModeTag.ts";
-import { theme } from "../../CliKit/index.ts";
-import { formatElapsed } from "../../Format.ts";
-import {
-  actionStyle,
-  applyStatusColor,
-  isInProgress,
-  isTerminalStatus,
-} from "./statusStyle.ts";
-import { matchYamlChange, matchYamlKey } from "../../PropertyDiff.ts";
 import { NamespaceRow, namespaceStyle } from "./PlanRow.tsx";
-import { StackOutputs } from "./StackOutputs.tsx";
 import {
   PlanTree,
   initialResourceState,
@@ -53,8 +47,10 @@ import {
   type ResourceRow,
   type RowState,
 } from "./PlanTree.ts";
-import { usePlanViewport } from "./usePlanViewport.ts";
+import { StackOutputs } from "./StackOutputs.tsx";
+import { actionStyle, applyStatusColor, isInProgress, isTerminalStatus } from "./statusStyle.ts";
 import { usePlanPresentation } from "./usePlanPresentation.ts";
+import { usePlanViewport } from "./usePlanViewport.ts";
 
 export { PlanTree } from "./PlanTree.ts";
 export type {
@@ -106,15 +102,7 @@ const usePlanTree = (tree: PlanTree): PlanTreeState => {
 };
 
 export function Plan(props: PlanProps): JSX.Element {
-  const {
-    tree,
-    collapsible = false,
-    before,
-    summaryBefore,
-    summaryAfter,
-    footer,
-    after,
-  } = props;
+  const { tree, collapsible = false, before, summaryBefore, summaryAfter, footer, after } = props;
   const { mode } = tree;
   const keyGlyphs = useKeyGlyphs();
   const borderStyle = useBorderStyle();
@@ -160,9 +148,7 @@ export function Plan(props: PlanProps): JSX.Element {
           </>
         ) : null}
         <SectionHeading>{label}</SectionHeading>
-        <Text tone="muted">
-          {workRows === 0 ? "" : ` (${completed}/${workRows})`}
-        </Text>
+        <Text tone="muted">{workRows === 0 ? "" : ` (${completed}/${workRows})`}</Text>
       </>
     ) : null;
   const planSummary =
@@ -178,12 +164,7 @@ export function Plan(props: PlanProps): JSX.Element {
       ? [[keyGlyphs.upDown, `scroll ${selectedView}`] as const]
       : []),
     ...(!collapsed && hasOutput
-      ? [
-          [
-            keyGlyphs.leftRight,
-            selectedView === "plan" ? "show output" : "show plan",
-          ] as const,
-        ]
+      ? [[keyGlyphs.leftRight, selectedView === "plan" ? "show output" : "show plan"] as const]
       : []),
     ["p", collapsed ? "show plan/output" : "hide widget"],
     ["Ctrl+C", "exit"],
@@ -271,8 +252,7 @@ function PlanContent(props: {
   readonly hiddenBelow: number;
   readonly lines: ReturnType<typeof usePlanViewport>["planLines"];
 }) {
-  const { tree, state, selectedView, virtual, budget, offset, hiddenBelow } =
-    props;
+  const { tree, state, selectedView, virtual, budget, offset, hiddenBelow } = props;
   const glyphs = useGlyphs();
   const overflowUnit = virtual ? "lines" : "rows";
   return (
@@ -283,11 +263,7 @@ function PlanContent(props: {
         </Text>
       ) : null}
       {selectedView === "output" ? (
-        <StackOutputs
-          value={state.output}
-          offset={offset}
-          limit={virtual ? budget : undefined}
-        />
+        <StackOutputs value={state.output} offset={offset} limit={virtual ? budget : undefined} />
       ) : props.lines === undefined ? (
         tree.rows.map((row) => (
           <PlanRowView
@@ -295,9 +271,7 @@ function PlanContent(props: {
             row={row}
             mode={tree.mode}
             detailed={tree.detailed}
-            state={state.tasks.get(
-              row.type === "binding" ? row.hostKey : row.key,
-            )}
+            state={state.tasks.get(row.type === "binding" ? row.hostKey : row.key)}
             defaultMode={tree.defaultMode}
           />
         ))
@@ -310,17 +284,11 @@ function PlanContent(props: {
               mode={tree.mode}
               detailed={tree.detailed}
               includeYaml={false}
-              state={state.tasks.get(
-                line.row.type === "binding" ? line.row.hostKey : line.row.key,
-              )}
+              state={state.tasks.get(line.row.type === "binding" ? line.row.hostKey : line.row.key)}
               defaultMode={tree.defaultMode}
             />
           ) : line.kind === "yaml" ? (
-            <YamlLine
-              key={line.key}
-              line={line.line}
-              paddingLeft={line.paddingLeft}
-            />
+            <YamlLine key={line.key} line={line.line} paddingLeft={line.paddingLeft} />
           ) : (
             <DetailLine key={line.key} paddingLeft={line.paddingLeft}>
               <Text tone="muted" dimColor>
@@ -365,11 +333,7 @@ function PlanRowView(props: {
       return (
         <Row gap={1} paddingLeft={row.depth * 2}>
           <Text color={style.color}>{glyphs[style.icon]}</Text>
-          <Text
-            color={
-              row.action === "delete" ? theme.color.muted : theme.color.info
-            }
-          >
+          <Text color={row.action === "delete" ? theme.color.muted : theme.color.info}>
             {row.id}
           </Text>
           {row.action === "delete" ? <Text tone="muted">(unbind)</Text> : null}
@@ -379,10 +343,8 @@ function PlanRowView(props: {
     // `state` is the HOST resource's row state: a binding is reconciled by
     // the resource that carries it, so it settles exactly when the host does.
     const hostStatus: ApplyStatus = state?.status ?? "pending";
-    const status: ApplyStatus | "no change" =
-      row.action === "noop" ? "no change" : hostStatus;
-    const color =
-      row.action === "delete" ? theme.color.muted : applyStatusColor(status);
+    const status: ApplyStatus | "no change" = row.action === "noop" ? "no change" : hostStatus;
+    const color = row.action === "delete" ? theme.color.muted : applyStatusColor(status);
     const bindingStatus =
       row.action !== "delete"
         ? status
@@ -397,19 +359,11 @@ function PlanRowView(props: {
       <TaskRow
         spinning={status !== "no change" && isInProgress(hostStatus)}
         icon={
-          status === "pending"
-            ? glyphs.bullet
-            : status === "fail"
-              ? glyphs.error
-              : glyphs.success
+          status === "pending" ? glyphs.bullet : status === "fail" ? glyphs.error : glyphs.success
         }
         iconColor={color}
         label={
-          <Text
-            color={
-              row.action === "delete" ? theme.color.muted : theme.color.info
-            }
-          >
+          <Text color={row.action === "delete" ? theme.color.muted : theme.color.info}>
             {row.id}
           </Text>
         }
@@ -424,18 +378,12 @@ function PlanRowView(props: {
     if (mode === "review") {
       const style = namespaceStyle(row.action);
       return (
-        <TaskRow
-          icon={glyphs[style.icon]}
-          iconColor={style.color}
-          label={row.id}
-          depth={row.depth}
-        >
+        <TaskRow icon={glyphs[style.icon]} iconColor={style.color} label={row.id} depth={row.depth}>
           <Text color={theme.color.info}>[action]</Text>
         </TaskRow>
       );
     }
-    const status: ApplyStatus =
-      state?.status ?? (row.action === "noop" ? "ran" : "pending");
+    const status: ApplyStatus = state?.status ?? (row.action === "noop" ? "ran" : "pending");
     const color = applyStatusColor(status);
     return (
       <TaskRow
@@ -463,13 +411,10 @@ function PlanRowView(props: {
     priorMode: row.fromProviderMode,
     defaultMode,
   });
-  const showYaml =
-    includeYaml && (detailed || row.propertyYaml?.kind === "drift");
+  const showYaml = includeYaml && (detailed || row.propertyYaml?.kind === "drift");
   const yaml = showYaml ? (
     row.propertyYaml === undefined ? (
-      row.action === "update" ||
-      row.action === "adopted" ||
-      row.action === "replace" ? (
+      row.action === "update" || row.action === "adopted" || row.action === "replace" ? (
         <DetailLine paddingLeft={row.depth * 2 + 2}>
           <Text tone="muted" dimColor>
             no declared property changes
@@ -478,11 +423,7 @@ function PlanRowView(props: {
       ) : null
     ) : (
       row.propertyYaml.lines.map((line, index) => (
-        <YamlLine
-          key={`${index}:${line}`}
-          line={line}
-          paddingLeft={row.depth * 2 + 2}
-        />
+        <YamlLine key={`${index}:${line}`} line={line} paddingLeft={row.depth * 2 + 2} />
       ))
     )
   ) : null;
@@ -494,18 +435,12 @@ function PlanRowView(props: {
         <TaskRow
           icon={glyphs[style.icon]}
           iconColor={style.color}
-          label={
-            <Text color={row.action === "noop" ? undefined : style.color}>
-              {row.id}
-            </Text>
-          }
+          label={<Text color={row.action === "noop" ? undefined : style.color}>{row.id}</Text>}
           depth={row.depth}
           detail={row.detail}
         >
           {modeNote && <Text tone="muted">({modeNote})</Text>}
-          {row.id !== row.resourceType ? (
-            <Text tone="muted">({row.resourceType})</Text>
-          ) : null}
+          {row.id !== row.resourceType ? <Text tone="muted">({row.resourceType})</Text> : null}
         </TaskRow>
         {yaml}
       </Box>
@@ -533,14 +468,8 @@ function PlanRowView(props: {
         iconColor={color}
         label={
           <>
-            {row.action === "orphaned" ? (
-              <Text tone="muted">{row.id}</Text>
-            ) : (
-              row.id
-            )}
-            {row.id !== row.resourceType ? (
-              <Text tone="muted"> ({row.resourceType})</Text>
-            ) : null}
+            {row.action === "orphaned" ? <Text tone="muted">{row.id}</Text> : row.id}
+            {row.id !== row.resourceType ? <Text tone="muted"> ({row.resourceType})</Text> : null}
             {row.detail ? <Text tone="muted"> · {row.detail}</Text> : null}
           </>
         }
@@ -560,15 +489,10 @@ function PlanRowView(props: {
 
 // ── Headers ───────────────────────────────────────────────────────────────
 
-function ReviewSummary(props: {
-  label: string;
-  summary: PlanSummaryCounts;
-}): JSX.Element {
+function ReviewSummary(props: { label: string; summary: PlanSummaryCounts }): JSX.Element {
   const { counts, taskCounts, bindingChanges } = props.summary;
   const parts = [
-    ...(
-      ["create", "update", "adopted", "delete", "orphaned", "replace"] as const
-    )
+    ...(["create", "update", "adopted", "delete", "orphaned", "replace"] as const)
       .filter((action) => counts[action] > 0)
       .map((action) => ({
         key: action,
@@ -704,13 +628,8 @@ function ApplySummary(props: {
 
 // ── Status helpers ────────────────────────────────────────────────────────
 
-const resourceDisplayStatus = (
-  row: ResourceRow,
-  status: ApplyStatus,
-): ApplyStatus | "no change" =>
-  row.action === "noop" && (status === "created" || status === "updated")
-    ? "no change"
-    : status;
+const resourceDisplayStatus = (row: ResourceRow, status: ApplyStatus): ApplyStatus | "no change" =>
+  row.action === "noop" && (status === "created" || status === "updated") ? "no change" : status;
 
 const taskLabel = (action: ActionVerb, status: ApplyStatus): string =>
   action === "delete"
@@ -737,21 +656,14 @@ function taskIcon(
 ): string {
   if (status === "fail") return glyphs.error;
   if (status === "skipped") return glyphs.bullet;
-  if (status === "ran")
-    return action === "noop" ? glyphs.bullet : glyphs.success;
+  if (status === "ran") return action === "noop" ? glyphs.bullet : glyphs.success;
   if (status === "deleted" || status === "orphaned") return glyphs.success;
   if (action === "delete") return glyphs[actionStyle.delete.icon];
   if (action === "noop") return glyphs[actionStyle.noop.icon];
   return glyphs[actionStyle.run.icon];
 }
 
-function YamlLine({
-  line,
-  paddingLeft,
-}: {
-  readonly line: string;
-  readonly paddingLeft: number;
-}) {
+function YamlLine({ line, paddingLeft }: { readonly line: string; readonly paddingLeft: number }) {
   const change = matchYamlChange(line);
   const content = change?.content ?? line;
   const key = matchYamlKey(content);
@@ -780,9 +692,7 @@ function YamlLine({
           ) : (
             <>
               {key.indent}
-              <Text color={change === undefined ? theme.color.info : undefined}>
-                {key.key}
-              </Text>
+              <Text color={change === undefined ? theme.color.info : undefined}>{key.key}</Text>
               {key.value}
             </>
           )}

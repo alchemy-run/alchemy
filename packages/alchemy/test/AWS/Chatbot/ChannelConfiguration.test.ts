@@ -1,15 +1,12 @@
-import * as AWS from "@/AWS";
-import {
-  MicrosoftTeamsChannelConfiguration,
-  SlackChannelConfiguration,
-} from "@/AWS/Chatbot";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as chatbot from "@distilled.cloud/aws/chatbot";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { MicrosoftTeamsChannelConfiguration, SlackChannelConfiguration } from "@/AWS/Chatbot";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -40,11 +37,9 @@ test.provider(
           IamRoleArn: `arn:aws:iam::${accountId}:role/alchemy-nonexistent-role`,
         }),
       );
-      expect(["SlackWorkspaceNotAuthorized", "ConflictException"]).toContain(
-        error._tag,
-      );
+      expect(["SlackWorkspaceNotAuthorized", "ConflictException"]).toContain(error._tag);
     }),
-  { timeout: 30_000 },
+  { tags: ["provider:aws", "provider:aws:chatbot", "live"], timeout: 30_000 },
 );
 
 // Team-onboarding gate: the Teams create fails at team validation (before
@@ -65,7 +60,7 @@ test.provider(
       );
       expect(error._tag).toBe("MicrosoftTeamsTeamNotConfigured");
     }),
-  { timeout: 30_000 },
+  { tags: ["provider:aws", "provider:aws:chatbot", "live"], timeout: 30_000 },
 );
 
 // Validates the distilled chatbot patch: the wire ResourceNotFoundException
@@ -85,7 +80,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:chatbot", "live"], timeout: 60_000 },
 );
 
 // The Slack read path is a filter — an unknown ARN yields an empty list, not
@@ -100,7 +95,7 @@ test.provider(
       });
       expect(result.SlackChannelConfigurations).toEqual([]);
     }),
-  { timeout: 30_000 },
+  { tags: ["provider:aws", "provider:aws:chatbot", "live"], timeout: 30_000 },
 );
 
 // ---------------------------------------------------------------------------
@@ -120,24 +115,22 @@ const chatbotAssumeRolePolicy: AWS.IAM.PolicyDocument = {
   ],
 };
 
-class ConfigurationStillExists extends Data.TaggedError(
-  "ConfigurationStillExists",
-)<{ readonly arn: string }> {}
+class ConfigurationStillExists extends Data.TaggedError("ConfigurationStillExists")<{
+  readonly arn: string;
+}> {}
 
 const assertSlackConfigurationDeleted = (arn: string) =>
-  chatbot
-    .describeSlackChannelConfigurations({ ChatConfigurationArn: arn })
-    .pipe(
-      Effect.flatMap((r) =>
-        (r.SlackChannelConfigurations ?? []).length === 0
-          ? Effect.void
-          : Effect.fail(new ConfigurationStillExists({ arn })),
-      ),
-      Effect.retry({
-        while: (e) => e._tag === "ConfigurationStillExists",
-        schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
-      }),
-    );
+  chatbot.describeSlackChannelConfigurations({ ChatConfigurationArn: arn }).pipe(
+    Effect.flatMap((r) =>
+      (r.SlackChannelConfigurations ?? []).length === 0
+        ? Effect.void
+        : Effect.fail(new ConfigurationStillExists({ arn })),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "ConfigurationStillExists",
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+    }),
+  );
 
 test.provider.skipIf(
   !process.env.AWS_TEST_CHATBOT ||
@@ -171,9 +164,7 @@ test.provider.skipIf(
         );
 
       const { config } = yield* deploy("ERROR");
-      expect(config.chatConfigurationArn).toContain(
-        ":chat-configuration/slack-channel/",
-      );
+      expect(config.chatConfigurationArn).toContain(":chat-configuration/slack-channel/");
       expect(config.slackTeamId).toBe(slackTeamId);
       expect(config.slackChannelId).toBe(slackChannelId);
 
@@ -199,25 +190,22 @@ test.provider.skipIf(
       yield* stack.destroy();
       yield* assertSlackConfigurationDeleted(config.chatConfigurationArn);
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:chatbot", "provider:aws:iam", "live"],
+    timeout: 300_000,
+  },
 );
 
 const findTeamsConfiguration = (arn: string) =>
-  chatbot
-    .getMicrosoftTeamsChannelConfiguration({ ChatConfigurationArn: arn })
-    .pipe(
-      Effect.map((r) => r.ChannelConfiguration),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  chatbot.getMicrosoftTeamsChannelConfiguration({ ChatConfigurationArn: arn }).pipe(
+    Effect.map((r) => r.ChannelConfiguration),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  );
 
 const assertTeamsConfigurationDeleted = (arn: string) =>
   findTeamsConfiguration(arn).pipe(
     Effect.flatMap((config) =>
-      config === undefined
-        ? Effect.void
-        : Effect.fail(new ConfigurationStillExists({ arn })),
+      config === undefined ? Effect.void : Effect.fail(new ConfigurationStillExists({ arn })),
     ),
     Effect.retry({
       while: (e) => e._tag === "ConfigurationStillExists",
@@ -260,29 +248,26 @@ test.provider.skipIf(
         );
 
       const { config } = yield* deploy("ERROR");
-      expect(config.chatConfigurationArn).toContain(
-        ":chat-configuration/microsoft-teams-channel/",
-      );
+      expect(config.chatConfigurationArn).toContain(":chat-configuration/microsoft-teams-channel/");
       expect(config.teamId).toBe(teamId);
       expect(config.tenantId).toBe(tenantId);
 
       // out-of-band verification via distilled
-      const observed = yield* findTeamsConfiguration(
-        config.chatConfigurationArn,
-      );
+      const observed = yield* findTeamsConfiguration(config.chatConfigurationArn);
       expect(observed?.ChannelId).toBe(teamsChannelId);
       expect(observed?.LoggingLevel).toBe("ERROR");
 
       // update the logging level in place
       const { config: updated } = yield* deploy("INFO");
       expect(updated.chatConfigurationArn).toBe(config.chatConfigurationArn);
-      const afterUpdate = yield* findTeamsConfiguration(
-        config.chatConfigurationArn,
-      );
+      const afterUpdate = yield* findTeamsConfiguration(config.chatConfigurationArn);
       expect(afterUpdate?.LoggingLevel).toBe("INFO");
 
       yield* stack.destroy();
       yield* assertTeamsConfigurationDeleted(config.chatConfigurationArn);
     }),
-  { timeout: 300_000 },
+  {
+    tags: ["provider:aws", "provider:aws:chatbot", "provider:aws:iam", "live"],
+    timeout: 300_000,
+  },
 );

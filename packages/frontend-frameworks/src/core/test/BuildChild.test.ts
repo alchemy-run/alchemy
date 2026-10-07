@@ -10,7 +10,9 @@ it.each<{
   nodeEnv: string;
   env: BuildChildOptions["env"];
   expected: string;
+  runtime?: "node";
 }>([
+  { nodeEnv: "test", env: undefined, expected: "production", runtime: "node" },
   { nodeEnv: "test", env: undefined, expected: "production" },
   {
     nodeEnv: "development",
@@ -24,7 +26,7 @@ it.each<{
   },
 ])(
   "builds with $expected from parent $nodeEnv and overrides $env",
-  async ({ nodeEnv, env, expected }) => {
+  async ({ nodeEnv, env, expected, runtime }) => {
     vi.stubEnv("NODE_ENV", nodeEnv);
     const runner = new URL("../BuildChildRunner.ts", import.meta.url).href;
     const root = await makeProject({
@@ -47,12 +49,11 @@ it.each<{
         rootDir: root,
         config: {},
         env,
+        runtime,
       }),
     );
     expect(output.clientDirectory).toBe(expected);
-    expect(output.externalWorkspaces).toEqual(
-      new Set([env?.BUILD_GREETING ?? "default"]),
-    );
+    expect(output.externalWorkspaces).toEqual(new Set([env?.BUILD_GREETING ?? "default"]));
     expect(process.env.NODE_ENV).toBe(nodeEnv);
   },
 );

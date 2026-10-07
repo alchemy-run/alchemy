@@ -30,9 +30,7 @@ export interface ListRules extends Binding.Service<
   ListRules,
   "AWS.Rbin.ListRules",
   () => Effect.Effect<
-    (
-      request: rbin.ListRulesRequest,
-    ) => Effect.Effect<rbin.ListRulesResponse, rbin.ListRulesError>
+    (request: rbin.ListRulesRequest) => Effect.Effect<rbin.ListRulesResponse, rbin.ListRulesError>
   >
 > {}
 export const ListRules = Binding.Service<ListRules>("AWS.Rbin.ListRules");

@@ -1,16 +1,16 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
+import type { JSX } from "react";
+import { theme } from "../../CliKit/index.ts";
 import {
   Box,
   Gutter,
+  Pointer,
   SectionHeading,
   Spinner,
   Text,
   useBorderStyle,
   useGlyphs,
 } from "../ui/index.ts";
-import { stringWidth } from "@alchemy.run/sigil/ansi";
-import type { JSX } from "react";
-import { theme } from "../../CliKit/index.ts";
 
 export interface ProfileProviderDisplay {
   readonly name: string;
@@ -136,15 +136,11 @@ function ProfileList({
         borderColor={theme.color.muted}
         borderDimColor
       >
-        <SectionHeading annotation={`${profiles.length}`}>
-          Profiles
-        </SectionHeading>
+        <SectionHeading annotation={`${profiles.length}`}>Profiles</SectionHeading>
       </Box>
       {profiles.length === 0 ? (
         <Gutter>
-          <Text tone="muted">
-            {"No profiles configured. Run `alchemy profile` to create one."}
-          </Text>
+          <Text tone="muted">{"No profiles configured. Run `alchemy profile` to create one."}</Text>
         </Gutter>
       ) : (
         profiles.map((profile) => (
@@ -172,8 +168,11 @@ export interface ProviderBlockOptions {
   readonly refreshingProvider?: string;
   /** Provider currently focused by an interactive parent view. */
   readonly focusedProvider?: string;
-  /** Reserve a stable focus rail column for an interactive parent view. */
-  readonly showFocusRail?: boolean;
+  /**
+   * Reserve the list-cursor column (see `Pointer`) so an interactive parent
+   * can mark the focused provider without shifting the table.
+   */
+  readonly focusColumn?: boolean;
 }
 
 /** Column widths computed over every provider so windowed blocks stay aligned. */
@@ -185,47 +184,32 @@ export const providerColumnWidths = (
 });
 
 /**
- * Rows a `ProviderBlock` occupies: separator and padding above every block
- * but the first, the header row, then a blank row and the detail rows (the
- * refresh spinner fits inside that same reserved height). The dashboard
+ * Rows a `ProviderBlock` occupies: one blank spacer row above every block
+ * but the first, the header row, then the detail rows (at least one, so the
+ * refresh spinner fits inside the same reserved height). The dashboard
  * windows providers by this number, so keep it in step with the layout.
  */
-export const providerBlockHeight = (
-  provider: ProfileProviderDisplay,
-  first: boolean,
-): number => (first ? 0 : 2) + 1 + Math.max(provider.lines.length, 1) + 1;
+export const providerBlockHeight = (provider: ProfileProviderDisplay, first: boolean): number =>
+  (first ? 0 : 1) + 1 + Math.max(provider.lines.length, 1);
 
 /**
- * Columns the widest provider block needs. A windowed pane only lays out the
- * blocks on screen, so it sizes itself by this instead, keeping the separators
- * the width of the whole table rather than of the terminal.
+ * Detail lines arrive as `key: value` strings (plus free-form diagnostic
+ * messages). Split the former so keys render as a muted, aligned column and
+ * values start together; anything that does not fit the shape is shown as-is.
  */
-export const providerPaneWidth = (
-  providers: ReadonlyArray<ProfileProviderDisplay>,
-  { showFocusRail = false, reauthHint }: ProviderBlockOptions = {},
-): number => {
-  const { nameWidth, methodWidth } = providerColumnWidths(providers);
-  const indent = (showFocusRail ? 1 : 0) + theme.space.indent;
-  return Math.max(
-    0,
-    ...providers.flatMap((provider) => {
-      const status = providerStatusStyle[provider.status];
-      const hint =
-        reauthHint !== undefined && provider.status === "reauth"
-          ? stringWidth(` — ${reauthHint}`)
-          : 0;
-      // glyph, space, label
-      const header =
-        indent + nameWidth + methodWidth + 2 + stringWidth(status.label) + hint;
-      return [
-        header,
-        ...provider.lines.map((line) => indent + 2 + stringWidth(line)),
-      ];
-    }),
-  );
+const splitDetail = (
+  line: string,
+): { readonly key: string; readonly value: string } | undefined => {
+  const match = /^([A-Za-z0-9_.-]+): (.*)$/.exec(line);
+  return match === null ? undefined : { key: match[1]!, value: match[2]! };
 };
 
-/** One provider's header and detail rows; `first` drops the separator above. */
+/**
+ * One provider in the table: `[cursor] name  method  status` on the header
+ * row, its details indented beneath. Blocks are separated by a blank row
+ * rather than a rule, and the focused block is marked by the cursor glyph and
+ * a brand-coloured name — never by a rail.
+ */
 export function ProviderBlock({
   provider,
   first,
@@ -234,7 +218,7 @@ export function ProviderBlock({
   reauthHint,
   refreshingProvider,
   focusedProvider,
-  showFocusRail = false,
+  focusColumn = false,
 }: ProviderBlockOptions & {
   readonly provider: ProfileProviderDisplay;
   readonly first: boolean;
@@ -242,27 +226,29 @@ export function ProviderBlock({
   readonly methodWidth: number;
 }): JSX.Element {
   const glyphs = useGlyphs();
-  const borderStyle = useBorderStyle();
   const status = providerStatusStyle[provider.status];
-  const focused = showFocusRail && provider.name === focusedProvider;
+  const focused = focusColumn && provider.name === focusedProvider;
+  const details = provider.lines.map((line) => ({
+    line,
+    parts: splitDetail(line),
+  }));
+  const keyWidth = columnWidth(
+    details.flatMap(({ parts }) => (parts === undefined ? [] : [parts.key])),
+  );
+  // Details sit under the name, past the cursor column when there is one.
+  const detailIndent = (focusColumn ? 2 : 0) + theme.space.indent;
   return (
-    <Box
-      flexDirection="column"
-      paddingTop={first ? 0 : 1}
-      paddingLeft={showFocusRail ? (focused ? 0 : 1) : 0}
-      borderStyle={borderStyle}
-      borderTop={!first}
-      borderBottom={false}
-      borderLeft={focused}
-      borderRight={false}
-      borderColor={theme.color.muted}
-      borderLeftColor={theme.color.brand}
-      borderDimColor
-    >
+    <Box flexDirection="column" paddingTop={first ? 0 : 1}>
       <Gutter>
         <Box flexDirection="row">
+          {focusColumn ? (
+            <>
+              <Pointer focused={focused} />
+              <Text> </Text>
+            </>
+          ) : null}
           <Box width={nameWidth} flexShrink={0}>
-            <Text bold color={theme.color.accent}>
+            <Text bold color={focused ? theme.paint.focus : undefined}>
               {provider.name}
             </Text>
           </Box>
@@ -274,29 +260,34 @@ export function ProviderBlock({
           </Text>
           {reauthHint !== undefined &&
           provider.status === "reauth" &&
-          (focusedProvider === undefined ||
-            provider.name === focusedProvider) ? (
+          (focusedProvider === undefined || provider.name === focusedProvider) ? (
             <Text tone="muted"> — {reauthHint}</Text>
           ) : null}
         </Box>
       </Gutter>
-      <Box
-        flexDirection="column"
-        minHeight={Math.max(provider.lines.length, 1) + 1}
-      >
+      <Box flexDirection="column" minHeight={Math.max(provider.lines.length, 1)}>
         {provider.name === refreshingProvider ? (
           <Gutter>
-            <Box paddingLeft={2} marginTop={1}>
+            <Box paddingLeft={detailIndent}>
               <Spinner
                 label={`refreshing ${provider.method.toLowerCase() === "oauth" ? "OAuth" : provider.method} credentials…`}
               />
             </Box>
           </Gutter>
         ) : (
-          provider.lines.map((line, lineIndex) => (
+          details.map(({ line, parts }, lineIndex) => (
             <Gutter key={`${provider.name}-${lineIndex}`}>
-              <Box paddingLeft={2} marginTop={lineIndex === 0 ? 1 : 0}>
-                <Text>{line}</Text>
+              <Box paddingLeft={detailIndent}>
+                {parts === undefined ? (
+                  <Text>{line}</Text>
+                ) : (
+                  <>
+                    <Box width={keyWidth} flexShrink={0}>
+                      <Text tone="muted">{parts.key}</Text>
+                    </Box>
+                    <Text>{parts.value}</Text>
+                  </>
+                )}
               </Box>
             </Gutter>
           ))
@@ -422,24 +413,20 @@ function CurrentProfile({
 /**
  * View builders consumed by `CliKit.print` and the interactive profile app.
  */
-export const profileListNode = (
-  profiles: ReadonlyArray<ProfileListDisplay>,
-): JSX.Element => <ProfileList profiles={profiles} />;
+export const profileListNode = (profiles: ReadonlyArray<ProfileListDisplay>): JSX.Element => (
+  <ProfileList profiles={profiles} />
+);
 
 export const profileDetailsNode = (
   profile: string,
   providers: ReadonlyArray<ProfileProviderDisplay>,
   active: boolean,
-): JSX.Element => (
-  <ProfileDetails profile={profile} providers={providers} active={active} />
+): JSX.Element => <ProfileDetails profile={profile} providers={providers} active={active} />;
+
+export const profileNoticeNode = (profile: string, message: string): JSX.Element => (
+  <ProfileNotice profile={profile} message={message} />
 );
 
-export const profileNoticeNode = (
-  profile: string,
-  message: string,
-): JSX.Element => <ProfileNotice profile={profile} message={message} />;
-
-export const currentProfileNode = (
-  name: string,
-  source: string,
-): JSX.Element => <CurrentProfile name={name} source={source} />;
+export const currentProfileNode = (name: string, source: string): JSX.Element => (
+  <CurrentProfile name={name} source={source} />
+);

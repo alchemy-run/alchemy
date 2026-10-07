@@ -13,11 +13,7 @@ import {
 } from "../../SQL/Migrations/index.ts";
 import { importPg } from "../../SQL/PostgresDriver.ts";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
-import {
-  dsqlIndexTarget,
-  parseDsqlStatements,
-  prepareDsqlStatements,
-} from "./MigrationSql.ts";
+import { dsqlIndexTarget, parseDsqlStatements, prepareDsqlStatements } from "./MigrationSql.ts";
 
 const migrationError = (cause: unknown) =>
   new MigrationError({
@@ -83,17 +79,12 @@ export const makeDsqlMigrationExecutor = (
   const query: SqlExecutor["query"] = (sql, params) =>
     Effect.tryPromise({
       try: async () =>
-        (await client.query(sql, [...(params ?? [])])).rows as Array<
-          Record<string, unknown>
-        >,
+        (await client.query(sql, [...(params ?? [])])).rows as Array<Record<string, unknown>>,
       catch: migrationError,
     }).pipe(
       Effect.retry({
         while: (error) => sqlState(error.cause) === "40001",
-        schedule: Schedule.max([
-          Schedule.exponential("100 millis"),
-          Schedule.recurs(5),
-        ]),
+        schedule: Schedule.max([Schedule.exponential("100 millis"), Schedule.recurs(5)]),
       }),
     );
   const batch: SqlExecutor["batch"] = (statements) =>
@@ -102,10 +93,7 @@ export const makeDsqlMigrationExecutor = (
   const waitForJob = (job: string) =>
     Effect.gen(function* () {
       for (let attempt = 0; attempt < 10; attempt++) {
-        const [row] = yield* query(
-          "SELECT status, details FROM sys.jobs WHERE job_id = $1",
-          [job],
-        );
+        const [row] = yield* query("SELECT status, details FROM sys.jobs WHERE job_id = $1", [job]);
         if (row?.status === "completed") return;
         if (row?.status === "failed") {
           return yield* new MigrationError({
@@ -127,7 +115,6 @@ export const makeDsqlMigrationExecutor = (
     dialect: "postgres",
     migrationTableId: "uuid",
     transactionalDdl: false,
-    verifyMigrationHashes: true,
     query,
     batch,
     applyMigration: (record, bookkeeping) =>
@@ -173,11 +160,7 @@ export const makeDsqlMigrationExecutor = (
             message: `DSQL migration ${record.name}, statement ${Number(state.next_statement) + 1} has an uncertain outcome. Inspect the database before repairing ${progress}; Alchemy will not replay it automatically.`,
           });
         }
-        for (
-          let index = Number(state.next_statement);
-          index < statements.length;
-          index++
-        ) {
+        for (let index = Number(state.next_statement); index < statements.length; index++) {
           if (state.status === "waiting" && state.job_id) {
             yield* waitForJob(String(state.job_id));
           } else {
@@ -190,10 +173,9 @@ export const makeDsqlMigrationExecutor = (
                 // ERROR is a server-confirmed failed autocommit statement. A
                 // socket error/timeout has no such assurance: leave it running.
                 serverRejected(error.cause)
-                  ? query(
-                      `UPDATE ${progress} SET status = 'ready' WHERE name = $1`,
-                      [record.name],
-                    ).pipe(Effect.andThen(Effect.fail(error)))
+                  ? query(`UPDATE ${progress} SET status = 'ready' WHERE name = $1`, [
+                      record.name,
+                    ]).pipe(Effect.andThen(Effect.fail(error)))
                   : Effect.fail(error),
               ),
             );
@@ -236,9 +218,7 @@ export const makeDsqlMigrationExecutor = (
 };
 
 const sqlState = (cause: unknown) =>
-  typeof cause === "object" && cause !== null && "code" in cause
-    ? cause.code
-    : undefined;
+  typeof cause === "object" && cause !== null && "code" in cause ? cause.code : undefined;
 const serverRejected = (cause: unknown) =>
   typeof cause === "object" &&
   cause !== null &&
@@ -261,10 +241,7 @@ export const withDsqlMigrationLock = <A, E, R>(
       `CREATE TABLE IF NOT EXISTS "__alchemy_dsql_migration_lock" (id integer PRIMARY KEY, owner uuid NOT NULL)`,
     );
     yield* executor
-      .query(
-        `INSERT INTO "__alchemy_dsql_migration_lock" (id, owner) VALUES (1, $1)`,
-        [owner],
-      )
+      .query(`INSERT INTO "__alchemy_dsql_migration_lock" (id, owner) VALUES (1, $1)`, [owner])
       .pipe(
         Effect.mapError(
           (cause) =>

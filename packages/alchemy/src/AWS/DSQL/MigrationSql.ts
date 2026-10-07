@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
-import { hashMigrations } from "../../SQL/SqlFile.ts";
 import {
   MigrationError,
   readMigrationRecords,
   type NormalizedMigrationsInput,
 } from "../../SQL/Migrations/index.ts";
+import { hashMigrations } from "../../SQL/SqlFile.ts";
 
 /**
  * Split PostgreSQL scripts without splitting quoted values, identifiers,
@@ -40,8 +40,7 @@ export const parseDsqlStatements = (sql: string) => {
       if (depth) throw new Error("Unterminated SQL comment");
     } else if (sql[i] === "'" || sql[i] === '"') {
       const quote = sql[i++];
-      const escaped =
-        quote === "'" && /(?:^|\W)[eE]$/.test(sql.slice(0, begin));
+      const escaped = quote === "'" && /(?:^|\W)[eE]$/.test(sql.slice(0, begin));
       let closed = false;
       while (i < sql.length) {
         if (escaped && sql[i] === "\\") {
@@ -73,9 +72,8 @@ export const parseDsqlStatements = (sql: string) => {
     }
     // Keep literals as opaque tokens so invalid literal-only SQL is not skipped.
     code +=
-      (sql[begin] === '"' || sql[begin] === "'" || sql[begin] === "$"
-        ? "_"
-        : " ") + " ".repeat(i - begin - 1);
+      (sql[begin] === '"' || sql[begin] === "'" || sql[begin] === "$" ? "_" : " ") +
+      " ".repeat(i - begin - 1);
   }
   push(sql.length);
   return statements;
@@ -97,16 +95,11 @@ export const prepareDsqlStatements = (sql: string, migration: string) =>
             "Transaction control is managed by Alchemy; DSQL permits one DDL statement per transaction and cannot combine DDL with bookkeeping.";
         } else if (
           /^\s*(?:CREATE|ALTER)\s+TABLE\b/i.test(code) &&
-          /[\w$]+\s+(?:smallserial|serial|bigserial|serial2|serial4|serial8)\b/i.test(
-            code,
-          )
+          /[\w$]+\s+(?:smallserial|serial|bigserial|serial2|serial4|serial8)\b/i.test(code)
         ) {
           reason =
             "Use a UUID primary key or a bigint identity with an explicit CACHE instead of serial.";
-        } else if (
-          /^\s*CREATE\s+SEQUENCE\b/i.test(code) ||
-          /\bAS\s+IDENTITY\b/i.test(code)
-        ) {
+        } else if (/^\s*CREATE\s+SEQUENCE\b/i.test(code) || /\bAS\s+IDENTITY\b/i.test(code)) {
           const definitions = /^\s*CREATE\s+SEQUENCE\b/i.test(code)
             ? [code]
             : [...code.matchAll(/\bAS\s+IDENTITY\b(?:\s*\(([^)]*)\))?/gi)].map(
@@ -115,10 +108,7 @@ export const prepareDsqlStatements = (sql: string, migration: string) =>
           if (
             definitions.some((definition) => {
               const cache = /\bCACHE\s+(\d+)\b/i.exec(definition)?.[1];
-              return (
-                cache === undefined ||
-                (Number(cache) !== 1 && Number(cache) < 65536)
-              );
+              return cache === undefined || (Number(cache) !== 1 && Number(cache) < 65536);
             })
           ) {
             reason =
@@ -144,13 +134,10 @@ export const prepareDsqlStatements = (sql: string, migration: string) =>
           const using = /\bUSING\s+btree\b/i.exec(code);
           if (using)
             prepared =
-              prepared.slice(0, using.index) +
-              prepared.slice(using.index + using[0].length);
+              prepared.slice(0, using.index) + prepared.slice(using.index + using[0].length);
           if (!/^\s*ASYNC\b/i.test(code.slice(index[0].length))) {
             prepared =
-              prepared.slice(0, index[0].length) +
-              " ASYNC" +
-              prepared.slice(index[0].length);
+              prepared.slice(0, index[0].length) + " ASYNC" + prepared.slice(index[0].length);
           }
         }
         return prepared.trim();
@@ -194,10 +181,9 @@ export const validateDsqlMigrations = (
 export const dsqlIndexTarget = (sql: string) => {
   const statement = parseDsqlStatements(sql)[0];
   if (!statement) return undefined;
-  const prefix =
-    /^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+ASYNC\s+(?:IF\s+NOT\s+EXISTS\s+)?/i.exec(
-      statement.code,
-    );
+  const prefix = /^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+ASYNC\s+(?:IF\s+NOT\s+EXISTS\s+)?/i.exec(
+    statement.code,
+  );
   if (!prefix) return undefined;
   const identifier = /^(?:"(?:[^"]|"")*"|[A-Za-z_][A-Za-z_0-9$]*)/;
   const name = identifier.exec(statement.sql.slice(prefix[0].length))?.[0];
@@ -216,12 +202,9 @@ export const dsqlIndexTarget = (sql: string) => {
     if (!next) return undefined;
     table = `${table}${statement.sql.slice(tableStart + table.length, tableStart + table.length + dot[0].length)}${next}`;
   }
-  if (!/^\s*\(/.test(statement.code.slice(tableStart + table.length)))
-    return undefined;
+  if (!/^\s*\(/.test(statement.code.slice(tableStart + table.length))) return undefined;
   return {
-    name: name.startsWith('"')
-      ? name.slice(1, -1).replaceAll('""', '"')
-      : name.toLowerCase(),
+    name: name.startsWith('"') ? name.slice(1, -1).replaceAll('""', '"') : name.toLowerCase(),
     table,
   };
 };

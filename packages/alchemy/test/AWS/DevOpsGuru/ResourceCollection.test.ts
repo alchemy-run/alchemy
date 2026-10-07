@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ResourceCollection } from "@/AWS/DevOpsGuru/ResourceCollection.ts";
-import * as Test from "@/Test/Alchemy";
 import * as devopsguru from "@distilled.cloud/aws/devops-guru";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ResourceCollection } from "@/AWS/DevOpsGuru/ResourceCollection.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -11,25 +11,24 @@ const { test } = Test.make({ providers: AWS.providers() });
 // never configured a collection fails with the typed ResourceNotFoundException
 // ("No CustomerResourceFilter present") — treated as empty. A key whose last
 // value was removed lingers with an empty TagValues list — also empty.
-const observedTags = devopsguru
-  .getResourceCollection({ ResourceCollectionType: "AWS_TAGS" })
-  .pipe(
-    Effect.map((r) =>
-      (r.ResourceCollection?.Tags ?? []).filter((t) => t.TagValues.length > 0),
-    ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed([] as devopsguru.TagCollectionFilter[]),
-    ),
-  );
+const observedTags = devopsguru.getResourceCollection({ ResourceCollectionType: "AWS_TAGS" }).pipe(
+  Effect.map((r) => (r.ResourceCollection?.Tags ?? []).filter((t) => t.TagValues.length > 0)),
+  Effect.catchTag("ResourceNotFoundException", () =>
+    Effect.succeed([] as devopsguru.TagCollectionFilter[]),
+  ),
+);
 
 // Ungated typed-error probe: getResourceCollection either returns the
 // configured collection or fails with the typed not-found tag — never an
 // untyped catch-all.
-test.provider("getResourceCollection returns typed results", () =>
-  Effect.gen(function* () {
-    const tags = yield* observedTags;
-    expect(Array.isArray(tags)).toBe(true);
-  }),
+test.provider(
+  "getResourceCollection returns typed results",
+  () =>
+    Effect.gen(function* () {
+      const tags = yield* observedTags;
+      expect(Array.isArray(tags)).toBe(true);
+    }),
+  { tags: ["provider:aws", "provider:aws:devopsguru", "live"] },
 );
 
 // The resource collection is an account/region singleton. This test only
@@ -69,10 +68,7 @@ test.provider(
       );
       expect(created.cloudFormationStackNames).toEqual([]);
       expect(created.tags).toHaveLength(1);
-      expect(created.tags[0]!.tagValues.sort()).toEqual([
-        "devopsguru-test-a",
-        "devopsguru-test-b",
-      ]);
+      expect(created.tags[0]!.tagValues.sort()).toEqual(["devopsguru-test-a", "devopsguru-test-b"]);
 
       // Out-of-band verification via distilled.
       const observed = yield* observedTags;
@@ -96,10 +92,7 @@ test.provider(
           });
         }),
       );
-      expect(updated.tags[0]!.tagValues.sort()).toEqual([
-        "devopsguru-test-a",
-        "devopsguru-test-c",
-      ]);
+      expect(updated.tags[0]!.tagValues.sort()).toEqual(["devopsguru-test-a", "devopsguru-test-c"]);
       const observedUpdated = yield* observedTags;
       expect([...(observedUpdated[0]?.TagValues ?? [])].sort()).toEqual([
         "devopsguru-test-a",
@@ -111,5 +104,8 @@ test.provider(
       const after = yield* observedTags;
       expect(after).toEqual([]);
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:devopsguru", "live"],
+    timeout: 180_000,
+  },
 );

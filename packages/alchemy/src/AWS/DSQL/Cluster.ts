@@ -14,11 +14,11 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "../../SQL/Migrations/index.ts";
-import { validateDsqlMigrations } from "./MigrationSql.ts";
-import { runDsqlMigrations } from "./Migrations.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { runDsqlMigrations } from "./Migrations.ts";
+import { validateDsqlMigrations } from "./MigrationSql.ts";
 
 export interface ClusterProps {
   /**
@@ -153,21 +153,13 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getCluster({ identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dsql
           .listTagsForResource({ resourceArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return Object.fromEntries(
           Object.entries(response?.tags ?? {}).filter(
             (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -176,15 +168,10 @@ export const ClusterProvider = () =>
       });
 
       const findCluster = Effect.fn(function* (id: string, instanceId: string) {
-        const summaries = yield* dsql.listClusters
-          .items({})
-          .pipe(Stream.runCollect);
+        const summaries = yield* dsql.listClusters.items({}).pipe(Stream.runCollect);
         for (const summary of summaries) {
           const tags = yield* readTags(summary.arn);
-          if (
-            tags["alchemy::instance"] === instanceId &&
-            (yield* hasAlchemyTags(id, tags))
-          ) {
+          if (tags["alchemy::instance"] === instanceId && (yield* hasAlchemyTags(id, tags))) {
             return yield* readCluster(summary.identifier);
           }
         }
@@ -192,22 +179,15 @@ export const ClusterProvider = () =>
 
       // Bound readiness to 50 seconds; a later deploy can resume provisioning.
       const waitForActive = Effect.fn(function* (identifier: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("5 seconds"),
-          Schedule.recurs(10),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]);
         return yield* readCluster(identifier).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(
-                new Error(`DSQL cluster '${identifier}' not found`),
-              );
+              return Effect.fail(new Error(`DSQL cluster '${identifier}' not found`));
             }
             if (!activeStatuses.has(cluster.status)) {
               return Effect.fail(
-                new Error(
-                  `DSQL cluster '${identifier}' not active (status: ${cluster.status})`,
-                ),
+                new Error(`DSQL cluster '${identifier}' not active (status: ${cluster.status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -236,13 +216,9 @@ export const ClusterProvider = () =>
         diff: Effect.fn(function* ({ olds = {}, news, output }) {
           if (!isResolved(news)) return undefined;
           const input = migrationsInputOf(news);
-          if (input)
-            yield* validateDsqlMigrations(input, output?.migrationsHashes);
+          if (input) yield* validateDsqlMigrations(input, output?.migrationsHashes);
           // KMS key is create-only; changing it forces a replacement.
-          if (
-            (news.kmsEncryptionKey ?? undefined) !==
-            (olds.kmsEncryptionKey ?? undefined)
-          ) {
+          if ((news.kmsEncryptionKey ?? undefined) !== (olds.kmsEncryptionKey ?? undefined)) {
             return { action: "replace" } as const;
           }
           if (yield* diffMigrations({ news, output })) {
@@ -268,16 +244,9 @@ export const ClusterProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          instanceId,
-          news = {},
-          output,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news = {}, output, session }) {
           const input = migrationsInputOf(news);
-          if (input)
-            yield* validateDsqlMigrations(input, output?.migrationsHashes);
+          if (input) yield* validateDsqlMigrations(input, output?.migrationsHashes);
           const { region } = yield* AWSEnvironment.current;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = {
@@ -297,8 +266,7 @@ export const ClusterProvider = () =>
           if (observed === undefined) {
             const created = yield* dsql.createCluster({
               clientToken: instanceId,
-              deletionProtectionEnabled:
-                news.deletionProtectionEnabled ?? false,
+              deletionProtectionEnabled: news.deletionProtectionEnabled ?? false,
               kmsEncryptionKey: news.kmsEncryptionKey,
               tags: desiredTags,
             });
@@ -312,8 +280,7 @@ export const ClusterProvider = () =>
           // 3. Sync deletion protection against observed state.
           if (
             news.deletionProtectionEnabled !== undefined &&
-            news.deletionProtectionEnabled !==
-              observed.deletionProtectionEnabled
+            news.deletionProtectionEnabled !== observed.deletionProtectionEnabled
           ) {
             yield* dsql.updateCluster({
               identifier: identifier!,
@@ -361,9 +328,7 @@ export const ClusterProvider = () =>
                 identifier,
                 deletionProtectionEnabled: false,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
           yield* dsql.deleteCluster({ identifier }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
@@ -371,10 +336,7 @@ export const ClusterProvider = () =>
             // retry briefly until it settles into a deletable state.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
             }),
           );
         }),
@@ -399,9 +361,7 @@ export const ClusterProvider = () =>
               { concurrency: 4 },
             ).pipe(
               Effect.map((attrs) =>
-                attrs.filter(
-                  (a): a is NonNullable<typeof a> => a !== undefined,
-                ),
+                attrs.filter((a): a is NonNullable<typeof a> => a !== undefined),
               ),
             );
           }),

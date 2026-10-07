@@ -6,7 +6,7 @@ sidebar:
 ---
 
 import Terminal from "../../../../components/Terminal.astro";
-import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 In [Part 1](/aws/tutorial/part-1) you deployed an S3 Bucket. Now
 you'll create a Lambda Function with a public URL that reads and
@@ -51,7 +51,7 @@ wired up to handle incoming HTTP requests:
 // src/api.ts
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
-+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
@@ -65,7 +65,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
 ) {}
 ```
 
-`HttpServerResponse.text(...)` is the same `effect/unstable/http` API
+`HttpServerResponse.text(...)` is the same `effect/http` API
 used everywhere else in Effect — Alchemy adapts it to the Lambda
 event envelope under the hood, so your handler never sees the raw
 `APIGatewayProxyEvent` shape.
@@ -111,7 +111,7 @@ everything about the function in one file. Add it to the constructor:
 import * as AWS from "alchemy/AWS";
 +import * as S3 from "alchemy/AWS/S3";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
@@ -168,8 +168,8 @@ object key and writes the request body to the bucket:
 import * as AWS from "alchemy/AWS";
 import * as S3 from "alchemy/AWS/S3";
 import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 // ...
     return {
@@ -348,20 +348,7 @@ Construction phase runs — it just isn't surfaced as a stack output anymore.
 Deploy again. Alchemy detects the new function and the unchanged
 bucket:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code="bun alchemy deploy" lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code="npm run alchemy deploy" lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code="pnpm alchemy deploy" lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code="yarn alchemy deploy" lang="sh" />
-  </TabItem>
-</Tabs>
+<PackageManagers run="alchemy deploy" />
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]
 

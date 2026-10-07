@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/stack.ts";
 
 // The fixture stack provisions its own Flagship app via the FlagshipApp
@@ -35,17 +35,12 @@ const getJson = (url: string) =>
       res.status === 200
         ? res.json
         : res.text.pipe(
-            Effect.flatMap((body) =>
-              Effect.fail(new WorkerNotReady({ status: res.status, body })),
-            ),
+            Effect.flatMap((body) => Effect.fail(new WorkerNotReady({ status: res.status, body }))),
           ),
     ),
     Effect.retry({
       schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("5 seconds"),
-        ]),
+        Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
         Schedule.recurs(30),
       ]),
     }),
@@ -61,7 +56,15 @@ test(
     const result = yield* getJson(`${asyncWorkerUrl}/bool`);
     expect(result).toMatchObject({ mode: "async", enabled: false });
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -76,7 +79,15 @@ test(
     expect(result.details.flagKey).toBe("nonexistent-flag");
     expect(result.details.value).toBe("fallback");
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -86,7 +97,15 @@ test(
     const result = yield* getJson(`${effectWorkerUrl}/bool`);
     expect(result).toMatchObject({ mode: "effect", enabled: false });
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );
 
 test(
@@ -101,5 +120,13 @@ test(
     expect(result.details.flagKey).toBe("nonexistent-flag");
     expect(result.details.value).toBe("fallback");
   }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:flagship",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

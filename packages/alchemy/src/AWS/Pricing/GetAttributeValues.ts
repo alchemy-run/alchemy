@@ -2,8 +2,7 @@ import type * as pricing from "@distilled.cloud/aws/pricing";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetAttributeValuesRequest
-  extends pricing.GetAttributeValuesRequest {}
+export interface GetAttributeValuesRequest extends pricing.GetAttributeValuesRequest {}
 
 /**
  * Runtime binding for `pricing:GetAttributeValues` — list the values of a
@@ -40,10 +39,7 @@ export interface GetAttributeValues extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetAttributeValuesRequest,
-    ) => Effect.Effect<
-      pricing.GetAttributeValuesResponse,
-      pricing.GetAttributeValuesError
-    >
+    ) => Effect.Effect<pricing.GetAttributeValuesResponse, pricing.GetAttributeValuesError>
   >
 > {}
 export const GetAttributeValues = Binding.Service<GetAttributeValues>(

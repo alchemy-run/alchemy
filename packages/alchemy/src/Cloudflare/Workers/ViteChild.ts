@@ -1,17 +1,16 @@
+import { fileURLToPath } from "node:url";
+import * as NodeV8 from "node:v8";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { fileURLToPath } from "node:url";
-import * as NodeV8 from "node:v8";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { BundleError } from "../../Bundle/Bundle.ts";
-import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   fromProcessEnv,
   RPC_SERVER_ENVIRONMENT_KEY,
@@ -20,6 +19,8 @@ import {
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
+import { moduleExtension } from "../../Util/Node.ts";
+import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,
@@ -40,11 +41,7 @@ export interface ViteChildHandle {
 // at startup even though no child is ever spawned there. At spawn time
 // we are guaranteed to be in Node/bun.
 const resolveRunner = (basename: string) =>
-  fileURLToPath(
-    import.meta.resolve(
-      import.meta.url.endsWith(".ts") ? `./${basename}.ts` : `./${basename}.js`,
-    ),
-  );
+  fileURLToPath(import.meta.resolve(`./${basename}${moduleExtension(import.meta.url)}`));
 
 export const startViteChild = (
   config: ViteChildConfig,
@@ -109,9 +106,7 @@ export const startViteChild = (
     const child = yield* spawner.spawn(
       ChildProcess.make(
         nodeExecPath ?? process.execPath,
-        isBun && nodeExecPath === undefined
-          ? ["run", runner]
-          : [...nodeLoaderArgs(runner), runner],
+        isBun && nodeExecPath === undefined ? ["run", runner] : [...nodeLoaderArgs(runner), runner],
         {
           cwd: config.rootDir,
           stdin: Stream.succeed(serializedConfig),
@@ -151,19 +146,15 @@ export const startViteChild = (
       Deferred.await(ready),
       exitCode.pipe(
         Effect.flatMap((exitCode) =>
-          Effect.die(
-            new Error(
-              `Vite child exited with code ${exitCode} before becoming ready`,
-            ),
-          ),
+          Effect.die(new Error(`Vite child exited with code ${exitCode} before becoming ready`)),
         ),
       ),
     ]);
     return { url, pid: child.pid, exitCode } satisfies ViteChildHandle;
   });
 
-/** Number of trailing output lines echoed into a failed build's error. */
-const BUILD_ERROR_TAIL = 50;
+/** Number of trailing stderr lines echoed into a failed build's error. */
+const BUILD_ERROR_TAIL = 200;
 
 /**
  * Run a one-shot production Vite build in a child process whose working
@@ -193,9 +184,7 @@ export const runViteBuildChild = (
       const outputPath = path.join(outputDir, "result.v8");
       // Redacted values can't cross the process boundary — the config is
       // plain data once unwrapped.
-      const serializedConfig = NodeV8.serialize(
-        unwrapRedacted({ ...config, outputPath }),
-      );
+      const serializedConfig = NodeV8.serialize(unwrapRedacted({ ...config, outputPath }));
       const child = yield* spawner.spawn(
         ChildProcess.make(
           process.execPath,
@@ -217,11 +206,15 @@ export const runViteBuildChild = (
         ),
       );
 
-      const tail: string[] = [];
+      // stdout is build progress; the failure cause lands on stderr.
+      const stderrTail: string[] = [];
+      let stderrLines = 0;
       const forward = (channel: "stdout" | "stderr") => (line: string) =>
         Effect.sync(() => {
-          tail.push(line);
-          if (tail.length > BUILD_ERROR_TAIL) tail.shift();
+          if (channel !== "stderr") return;
+          stderrLines++;
+          stderrTail.push(line);
+          if (stderrTail.length > BUILD_ERROR_TAIL) stderrTail.shift();
         }).pipe(Effect.andThen(onOutput(channel, line)));
       const stdoutFiber = yield* Effect.forkChild(
         child.stdout.pipe(
@@ -243,9 +236,18 @@ export const runViteBuildChild = (
       yield* Fiber.join(stdoutFiber).pipe(Effect.ignore);
       yield* Fiber.join(stderrFiber).pipe(Effect.ignore);
       if (exitCode !== 0) {
+        const truncated = stderrLines > stderrTail.length;
         return yield* Effect.fail(
           new BundleError({
-            message: `Vite build child exited with code ${exitCode}:\n${tail.join("\n")}`,
+            message: [
+              `Vite build child exited with code ${exitCode}.`,
+              ...(stderrTail.length === 0
+                ? []
+                : [
+                    truncated ? `stderr (last ${stderrTail.length} lines):` : "stderr:",
+                    ...stderrTail,
+                  ]),
+            ].join("\n"),
           }),
         );
       }

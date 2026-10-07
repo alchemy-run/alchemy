@@ -31,12 +31,7 @@ export interface GetAccessPoint extends Binding.Service<
   (
     accessPoint: AccessPoint,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      s3control.GetAccessPointResult,
-      s3control.GetAccessPointError
-    >
+    () => Effect.Effect<s3control.GetAccessPointResult, s3control.GetAccessPointError>
   >
 > {}
-export const GetAccessPoint = Binding.Service<GetAccessPoint>(
-  "AWS.S3Control.GetAccessPoint",
-);
+export const GetAccessPoint = Binding.Service<GetAccessPoint>("AWS.S3Control.GetAccessPoint");

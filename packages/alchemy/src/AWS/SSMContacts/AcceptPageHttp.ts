@@ -1,7 +1,7 @@
 import * as ssm from "@distilled.cloud/aws/ssm-contacts";
 import * as Layer from "effect/Layer";
-import { makeAccountHttpBinding } from "./BindingHttp.ts";
 import { AcceptPage } from "./AcceptPage.ts";
+import { makeAccountHttpBinding } from "./BindingHttp.ts";
 
 export const AcceptPageHttp = Layer.effect(
   AcceptPage,
