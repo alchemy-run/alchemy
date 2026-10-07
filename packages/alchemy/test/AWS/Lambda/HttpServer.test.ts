@@ -1,6 +1,7 @@
 import { describe, expect, it } from "alchemy-test";
 import type { LambdaFunctionURLEvent, LambdaFunctionURLResult } from "aws-lambda";
 import * as Effect from "effect/Effect";
+import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type { Scope } from "effect/Scope";
@@ -155,6 +156,27 @@ describe(
       // Fixture only serves /inspect; the stage-prefixed path 404s, proving the
       // prefix is preserved rather than stripped.
       expect(result.statusCode).toBe(404);
+    });
+
+    // `HttpMiddleware.cors()` (and `HttpRouter.cors()`) add their headers to
+    // non-preflight responses through a pre-response handler, which only runs
+    // when the bridge goes through `HttpEffect.toHandled`.
+    it("applies pre-response handlers from middleware like cors", async () => {
+      const result = asStructuredResult(
+        await invoke(
+          makeEvent({
+            rawPath: "/inspect",
+            headers: { origin: "https://app.example.com" },
+            requestContext: {
+              http: { method: "GET", path: "/inspect" },
+            } as LambdaFunctionURLEvent["requestContext"],
+          }),
+          HttpMiddleware.cors()(TestHttpEffect),
+        ),
+      );
+
+      expect(result.statusCode).toBe(200);
+      expect(result.headers?.["access-control-allow-origin"]).toBe("*");
     });
 
     it("uses shared Http error handling for defects", async () => {

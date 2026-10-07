@@ -6,7 +6,9 @@ import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
 } from "aws-lambda";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as EffectHttp from "effect/http/HttpEffect";
 import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -42,6 +44,19 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
   // exporter installed the span is exported when the invocation scope
   // flushes.
   const safeHandler = HttpMiddleware.tracer(Http.safeHttpEffect(handler));
+  // Run through `toHandled` so the response gets the pre-response handlers
+  // middleware registers — `HttpRouter.cors()` adds its headers to every
+  // non-preflight response that way.
+  const handle = <A>(
+    convert: (response: HttpServerResponse.HttpServerResponse) => Effect.Effect<A>,
+  ) =>
+    Effect.gen(function* () {
+      const result = yield* Deferred.make<A>();
+      yield* EffectHttp.toHandled(safeHandler, (_request, response) =>
+        Effect.flatMap(convert(response), (converted) => Deferred.succeed(result, converted)),
+      );
+      return yield* Deferred.await(result);
+    });
   return (
     event: any,
   ):
@@ -57,9 +72,8 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
-      return safeHandler.pipe(
+      return handle(toLambdaFunctionURLResult).pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-        Effect.flatMap(toLambdaFunctionURLResult),
       ) as Effect.Effect<
         LambdaFunctionURLResult,
         never,
@@ -71,13 +85,12 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
       });
-      return safeHandler.pipe(
+      return handle(toApiGatewayProxyResult).pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         // The ALB result shape is the API Gateway v1 result shape (statusCode,
         // headers, multiValueHeaders, body, isBase64Encoded); ALB reads
         // whichever of headers/multiValueHeaders matches the target group's
         // multi-value-headers setting.
-        Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         ALBResult,
         never,
@@ -90,9 +103,8 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.fromNullishOr(event.requestContext?.identity?.sourceIp),
       });
-      return safeHandler.pipe(
+      return handle(toApiGatewayProxyResult).pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-        Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         APIGatewayProxyResult,
         never,
