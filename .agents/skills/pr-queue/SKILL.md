@@ -226,15 +226,46 @@ remove any a contributor committed.
 - "Ready" means: tests pass locally, CI green, not a draft, mergeable. Then
   `gh pr ready <n>`.
 
-Rewrite the description to show the developer experience. Write it to a file:
+**Rewrite the description to show the developer experience** — every PR you
+touch, even when the author's body looks fine. Explain the change through the
+code a user writes, not through prose or bullet points about the
+implementation. Contributor bodies usually arrive as Change/Tests/Checks
+bullet lists; replace them rather than appending to them.
 
 - one plain sentence on what changes and why, no heading above it
-- `ts` snippets of the user code that now works, a before/after `diff` where
-  useful — check API signatures in the snippet against the source
-- prose only for the "why" a snippet can't show
+- then `ts` snippets of the user's code that is new or now works — the props,
+  values and variants they can now write. For a fix or a changed API, a
+  before/after `diff` of the user's code
+- check every API signature in a snippet against the source
+- prose only for the "why" a snippet can't show, one or two sentences
 - no `#`/`##` headings, bullet dumps, Change/Tests/Checks sections or test
   plans
 - end with the attribution line your harness asks for, if any
+
+Bad — describes the implementation:
+
+```md
+## Changes
+- Added `retention` prop to `LogGroup`
+- Updated reconcile to call `putRetentionPolicy` when retention changes
+- Added tests
+```
+
+Good — shows the user's code:
+
+````md
+`LogGroup` now takes a retention period, so logs stop growing forever.
+
+```ts
+const logs = yield* AWS.Logs.LogGroup("Logs", {
+  retention: "30 days", // or "forever"
+});
+```
+
+Changing `retention` updates the group in place; it no longer replaces it.
+````
+
+Write it to a file:
 
 ```sh
 gh pr edit <n> --body-file /tmp/pr-<n>.md
