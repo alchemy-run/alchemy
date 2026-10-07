@@ -118,6 +118,24 @@ export const getMachineById = (appName: string, machineId: string) =>
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 
+/**
+ * Reads a Machine we just leased. Fly's Machines API is not read-after-write
+ * consistent: a freshly created Machine can accept a lease (201) and then
+ * answer `GET /machines/{id}` with 404 for a few seconds. Holding the lease
+ * blocks other writers, so a 404 here is lag rather than deletion; retry it
+ * (bounded) before treating the Machine as gone.
+ */
+const getLeasedMachineById = (appName: string, machineId: string) =>
+  machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
+    Effect.retry({
+      times: 10,
+      schedule: Schedule.spaced("1 second"),
+      while: (error) => error._tag === "NotFound",
+    }),
+    Effect.map((machine) => (gone(machine) ? undefined : machine)),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
+
 export const listMachinesByApp = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
@@ -620,12 +638,17 @@ export const leaseSnapshot = Effect.fn(function* (
   leases: MachineLeases,
 ) {
   const ordered = [...snapshot].sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
+  const leased = new Set<string>();
   yield* Effect.forEach(
     ordered,
     (machine) =>
       Effect.gen(function* () {
         if (!machine.id || machine.host_status === "unreachable") return;
-        yield* leases.acquire([machine.id]).pipe(Effect.catchTag("NotFound", () => Effect.void));
+        const id = machine.id;
+        yield* leases.acquire([id]).pipe(
+          Effect.tap(() => Effect.sync(() => leased.add(id))),
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
       }),
     { concurrency: 1 },
   ).pipe(Effect.timeout("30 seconds"));
@@ -636,7 +659,9 @@ export const leaseSnapshot = Effect.fn(function* (
       observed.push(machine);
       continue;
     }
-    const current = yield* getMachineById(appName, machine.id);
+    const current = yield* leased.has(machine.id)
+      ? getLeasedMachineById(appName, machine.id)
+      : getMachineById(appName, machine.id);
     if (!current) {
       yield* leases.forget(machine.id);
       continue;
