@@ -2785,6 +2785,7 @@ export const LiveWorkerProvider = () =>
                     name: item.name,
                     service: parentName,
                     ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                    ...(item.props !== undefined && { props: item.props }),
                   }
                 : item,
           ),
@@ -3143,6 +3144,7 @@ export const LiveWorkerProvider = () =>
                     name: item.name,
                     service: parentName,
                     ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                    ...(item.props !== undefined && { props: item.props }),
                   }
                 : item,
           ),
@@ -3345,6 +3347,7 @@ export const LiveWorkerProvider = () =>
                 name: item.name,
                 service: name,
                 ...(item.entrypoint !== undefined && { entrypoint: item.entrypoint }),
+                ...(item.props !== undefined && { props: item.props }),
               };
             }
             if (item.type === "durable_object_namespace" && item.transferredFrom !== undefined) {

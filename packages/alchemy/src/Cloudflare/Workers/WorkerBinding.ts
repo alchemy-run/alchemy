@@ -93,6 +93,8 @@ export interface SelfServiceWorkerBinding {
   name: string;
   /** Named `WorkerEntrypoint` class to target; omitted → default export. */
   entrypoint?: string;
+  /** `ctx.props` delivered to the entrypoint. */
+  props?: Record<string, unknown>;
 }
 
 /**

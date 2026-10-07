@@ -1427,26 +1427,7 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
 export const Self = {
   "~alchemy/Kind": "Cloudflare.Workers.Self",
 } as const;
-export type Self = typeof Self & {
-  /** Named `WorkerEntrypoint` class to target; omitted → the default export. */
-  readonly entrypoint?: string;
-};
-
-/**
- * {@link Self}, targeting a named `WorkerEntrypoint` class this Worker
- * exports instead of its default export (Wrangler's `services: [{ binding,
- * service: <this worker>, entrypoint }]`).
- *
- * ```typescript
- * const worker = yield* Cloudflare.Worker("Api", {
- *   main: "./src/worker.ts",
- *   env: {
- *     MCP: Cloudflare.Workers.SelfEntrypoint("McpEntrypoint"),
- *   },
- * });
- * ```
- */
-export const SelfEntrypoint = (entrypoint: string): Self => ({ ...Self, entrypoint });
+export type Self = typeof Self;
 
 /** Returns true when the value is the {@link Self} marker. */
 export const isSelf = (value: unknown): value is Self =>

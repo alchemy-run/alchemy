@@ -606,6 +606,15 @@ const toBinding = (
     // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
     // Tested BEFORE `isWorker` — the marker carries the Worker rather than
     // being one, but keep the specific classifier ahead of the general one.
+    if (isSelf(binding.worker)) {
+      // One of this Worker's own named entrypoints: lowered like `Self`.
+      return {
+        type: "self_service",
+        name: bindingName,
+        entrypoint: binding.entrypoint,
+        props: binding.props,
+      };
+    }
     return {
       type: "service",
       name: bindingName,
@@ -651,7 +660,6 @@ const toBinding = (
     return {
       type: "self_service",
       name: bindingName,
-      ...(binding.entrypoint !== undefined && { entrypoint: binding.entrypoint }),
     };
   } else if (isWorkerLoader(binding)) {
     return {

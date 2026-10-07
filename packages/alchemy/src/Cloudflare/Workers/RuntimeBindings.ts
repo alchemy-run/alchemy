@@ -227,7 +227,7 @@ export const toRuntimeBinding = Effect.fn(function* (
       // A service binding to the worker itself: served in-process by the
       // runtime's self service (bypasses the assets middleware), matching
       // the production `service: <own name>` lowering.
-      return Service.self(b.name, { entrypoint: b.entrypoint });
+      return Service.self(b.name, { entrypoint: b.entrypoint, props: b.props });
     case "service":
       return Service.local({
         binding: b.name,

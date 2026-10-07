@@ -1,6 +1,6 @@
 import type { Rpc } from "@cloudflare/workers-types";
 import type { Input } from "../../Input.ts";
-import type { Worker } from "./Worker.ts";
+import type { Self, Worker } from "./Worker.ts";
 
 type WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypoint";
 const WorkerEntrypointTypeId: WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypoint";
@@ -35,8 +35,8 @@ export interface WorkerEntrypointBinding<
 > {
   /** Brand discriminating entrypoint bindings in `env` classification. */
   readonly kind: WorkerEntrypointTypeId;
-  /** The target Worker resource. */
-  readonly worker: Worker;
+  /** The target Worker resource, or {@link Self} for this Worker's own entrypoints. */
+  readonly worker: Worker | Self;
   /** Named entrypoint on the target, or `undefined` for the default. */
   readonly entrypoint: string | undefined;
   /** `ctx.props` delivered to the target entrypoint. */
@@ -113,6 +113,40 @@ export interface WorkerEntrypointBinding<
  * };
  * ```
  *
+ * ### Binding This Worker's Own Entrypoint
+ * Pass `Cloudflare.Workers.Self` as the target to bind a named
+ * entrypoint of the Worker that declares the binding (Wrangler's
+ * `services: [{ binding, service: <this worker>, entrypoint }]`).
+ *
+ * **Example:** Bind the Worker's own McpEntrypoint
+ * ```typescript
+ * // alchemy.run.ts
+ * import type { McpEntrypoint } from "./src/worker.ts";
+ *
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     MCP: Cloudflare.WorkerEntrypoint<McpEntrypoint>(
+ *       Cloudflare.Workers.Self,
+ *       "McpEntrypoint",
+ *     ),
+ *   },
+ * });
+ * ```
+ *
+ * ```typescript
+ * // src/worker.ts
+ * export class McpEntrypoint extends WorkerEntrypoint {
+ *   async fetch() {
+ *     return new Response("mcp");
+ *   }
+ * }
+ *
+ * export default {
+ *   fetch: (request: Request, env: WorkerEnv) => env.MCP.fetch(request),
+ * };
+ * ```
+ *
  * ### Delivering ctx.props
  * The options form attaches properties the target reads from
  * `this.ctx.props` — workerd's per-binding configuration channel. `Output`
@@ -135,7 +169,7 @@ export interface WorkerEntrypointBinding<
 export const WorkerEntrypoint = <
   Entrypoint extends Rpc.WorkerEntrypointBranded | undefined = undefined,
 >(
-  worker: Worker,
+  worker: Worker | Self,
   entrypointOrOptions?: string | WorkerEntrypointOptions,
 ): WorkerEntrypointBinding<NoInfer<Entrypoint>> => {
   const options =
