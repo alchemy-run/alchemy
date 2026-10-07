@@ -11,6 +11,7 @@ import { moduleExtension } from "../Util/Node.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
 import type { Queue } from "./Queues/Queue.ts";
+import { LocalEdgeLive } from "./Workers/LocalEdge.ts";
 
 /**
  * The Cloudflare provider group module ([Local.ts](./Local.ts)) every
@@ -81,14 +82,18 @@ const makeLocalRuntimeServices = () =>
       const getEnv = yield* CloudflareEnvironment;
       return Layer.merge(
         LocalRuntimeStateLive,
-        layerRuntime({
-          api: {
-            accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
-          },
-          storage: {
-            directory: yield* localStorageDirectory,
-          },
-        }),
+        LocalEdgeLive.pipe(
+          Layer.provideMerge(
+            layerRuntime({
+              api: {
+                accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
+              },
+              storage: {
+                directory: yield* localStorageDirectory,
+              },
+            }),
+          ),
+        ),
       );
     }),
   );
@@ -97,7 +102,7 @@ let _localRuntimeServices: ReturnType<typeof makeLocalRuntimeServices> | undefin
 
 /**
  * The shared local-runtime dependency layer (workerd `Runtime`,
- * `WorkerProxy`, {@link LocalRuntimeState}) used by every Cloudflare local
+ * `WorkerProxy`, {@link LocalRuntimeState}, the zone-routing `LocalEdge`) used by every Cloudflare local
  * provider.
  *
  * Returns a **module-memoized layer reference**: local providers register

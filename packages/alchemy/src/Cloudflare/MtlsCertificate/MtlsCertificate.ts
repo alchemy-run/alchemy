@@ -2,6 +2,7 @@ import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -303,6 +304,18 @@ export const MtlsCertificateProvider = () =>
         })
         .pipe(
           Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
+          // Cloudflare releases a Worker's `mtls_certificate` binding
+          // eventually: for a short while after the Worker is deleted the
+          // delete still fails with `CertificateInUse`, even though the
+          // certificate's association list is already empty. Treat it as a
+          // dependency violation and retry, bounded to about 45 seconds.
+          Effect.retry({
+            while: (e) => e._tag === "CertificateInUse",
+            schedule: Schedule.max([
+              Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+              Schedule.recurs(10),
+            ]),
+          }),
         );
     }),
   });

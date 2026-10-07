@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
@@ -33,7 +34,8 @@ import * as Schedule from "effect/Schedule";
  *   - a dualized Queue + a `bundle: false` Function + a distilled
  *     event-source mapping pump SQS messages through the containerized
  *     function into a dualized Bucket;
- *   - after destroy the function is gone from the emulator.
+ *   - after destroy the function and its `/aws/lambda/<name>` log group
+ *     are gone from the emulator.
  *
  * Requires Docker (floci + the Lambda runtime container); skipped when the
  * daemon is unavailable.
@@ -236,9 +238,28 @@ test.provider.skipIf(!dockerAvailable)(
       );
       expect(afterUpdateSwap.body).toBe("marker-v4:env-updated");
 
+      // The invocations above made the emulator create the function's log
+      // group (control: the destroy assertion below is not vacuous).
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const logGroupExists = Logs.describeLogGroups({
+        logGroupNamePrefix: logGroupName,
+      }).pipe(
+        Effect.map((r) => (r.logGroups ?? []).some((g) => g.logGroupName === logGroupName)),
+        Effect.provide(flociContext),
+      );
+      const existedBeforeDestroy = yield* logGroupExists.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (exists): boolean => exists,
+          times: 20,
+        }),
+      );
+      expect(existedBeforeDestroy).toBe(true);
+
       // Destroy: the function (and its role) must be gone from the
       // emulator.
       yield* stack.destroy();
+      expect(yield* logGroupExists).toBe(false);
       const gone = yield* Lambda.getFunction({
         FunctionName: fn.functionName,
       }).pipe(
@@ -341,4 +362,49 @@ test.provider.skipIf(!dockerAvailable)(
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
     timeout: 540_000,
   },
+);
+
+test.provider.skipIf(!dockerAvailable)(
+  "logging.retention creates the log group with its policy before the first invoke",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (logging?: AWS.Lambda.FunctionProps["logging"]) =>
+        stack.deploy(
+          AWS.Lambda.Function("DevRetentionFn", {
+            main: esmHandlerPath,
+            handler: "handler",
+            bundle: false,
+            functionUrl: false,
+            logging,
+          }),
+        );
+
+      // Control: without `logging` the provider does not touch CloudWatch
+      // Logs, and the function is never invoked, so no group exists.
+      const fn = yield* deploy();
+      const logGroupName = `/aws/lambda/${fn.functionName}`;
+      const findGroup = Logs.describeLogGroups({ logGroupNamePrefix: logGroupName }).pipe(
+        Effect.map((page) => page.logGroups?.find((g) => g.logGroupName === logGroupName)),
+        Effect.provide(flociContext),
+      );
+      yield* Effect.addFinalizer(() =>
+        Logs.deleteLogGroup({ logGroupName }).pipe(Effect.provide(flociContext), Effect.ignore),
+      );
+      expect(yield* findGroup).toBeUndefined();
+
+      // 10 days rounds up to CloudWatch's 14.
+      yield* deploy({ retention: "10 days" });
+      expect((yield* findGroup)?.retentionInDays).toBe(14);
+
+      // "forever" clears the policy and keeps the group.
+      yield* deploy({ retention: "forever" });
+      const cleared = yield* findGroup;
+      expect(cleared).toBeDefined();
+      expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
 );

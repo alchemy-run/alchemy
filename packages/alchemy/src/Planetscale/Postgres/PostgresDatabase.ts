@@ -19,6 +19,7 @@ import type { Providers } from "../Providers.ts";
 import { PlanetscaleConflict, waitForBranchReady, waitForDatabaseReady } from "../Util.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
+  toPostgresClusterArch,
   toPostgresClusterSku,
   type PostgresClusterSize,
 } from "./PostgresClusterSize.ts";
@@ -207,7 +208,7 @@ export const PostgresDatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-      const arch: "x86" | "arm" = branch!.cluster_architecture === "aarch64" ? "arm" : "x86";
+      const arch = toPostgresClusterArch(branch!.cluster_architecture);
       const clusterSize = branch!.cluster_name;
 
       return {
@@ -413,7 +414,7 @@ export const PostgresDatabaseProvider = () =>
               })
               .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-            const arch: "x86" | "arm" = branch?.cluster_architecture === "aarch64" ? "arm" : "x86";
+            const arch = toPostgresClusterArch(branch?.cluster_architecture);
             const clusterSize = branch?.cluster_name ?? "";
 
             const attrs: PostgresDatabase["Attributes"] = {

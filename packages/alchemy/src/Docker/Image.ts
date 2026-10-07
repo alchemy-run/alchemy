@@ -51,7 +51,15 @@ export interface ImageProps {
   name?: string;
   /** Image tag. @default "latest" */
   tag?: string;
-  /** Registry credentials for push. */
+  /**
+   * Registry credentials. The image is pushed to this registry (unless
+   * `skipPush`), and the build itself authenticates with them, so private
+   * base images and `type=registry` caches hosted there resolve without a
+   * host `docker login`. Credentials already in `DOCKER_AUTH_CONFIG` for
+   * other registries are kept. Build-time authentication needs Buildx 0.26+
+   * (Docker Desktop 4.44+) or the legacy builder; older Buildx plugins ignore
+   * it, so a private base image there still needs `docker login`.
+   */
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */
   skipPush?: boolean;
@@ -123,6 +131,26 @@ export interface Image extends Resource<
  * });
  * ```
  *
+ * ### Private Base Images and Registry Caches
+ * **Example:** Build FROM a private base image with a registry cache
+ * ```typescript
+ * // Dockerfile: FROM registry.example.com/base:v1
+ * const image = yield* Docker.Image("app", {
+ *   name: "registry.example.com/app",
+ *   build: {
+ *     context: "./app",
+ *     cacheFrom: ["type=registry,ref=registry.example.com/app:buildcache"],
+ *     cacheTo: ["type=registry,ref=registry.example.com/app:buildcache,mode=max"],
+ *   },
+ *   // Authenticates the base-image pull and cache import/export, then the push.
+ *   registry: {
+ *     server: "registry.example.com",
+ *     username: "deploy",
+ *     password: Config.Redacted("REGISTRY_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
  * ### Docker Context
  * **Example:** Build in a named Docker context
  * ```typescript
@@ -168,6 +196,9 @@ export const ImageProvider = () =>
           "cache-to": props.build.cacheTo,
           args: props.build.options,
           engineContext,
+          // Base images and registry caches may live in the same registry;
+          // the push itself stays in `reconcile`.
+          credentials: props.registry,
         });
 
         // Read the freshly built image's id and creation time straight from
