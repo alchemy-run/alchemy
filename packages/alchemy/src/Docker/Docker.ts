@@ -70,6 +70,8 @@ export class Docker extends Context.Service<
         restart: "no" | "always" | "on-failure" | "unless-stopped";
         rm: boolean;
         "health-cmd": string | undefined;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval": string | undefined;
         "health-timeout": string | undefined;
         "health-retries": number | undefined;
@@ -300,6 +302,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -343,6 +347,8 @@ export class Docker extends Context.Service<
         "restart-max-attempts"?: number;
         "restart-window"?: string;
         "health-cmd"?: string;
+        /** `--no-healthcheck`: disable any healthcheck defined by the image. */
+        "no-healthcheck"?: boolean;
         "health-interval"?: string;
         "health-timeout"?: string;
         "health-retries"?: number;
@@ -406,7 +412,11 @@ export declare namespace Docker {
     Id: string;
     Image: string;
     Name?: string;
-    State: { Status: ContainerStatus };
+    State: {
+      Status: ContainerStatus;
+      /** Present when the container has a healthcheck. */
+      Health?: { Status: "starting" | "healthy" | "unhealthy" };
+    };
     Created: string;
     Config: {
       Image: string;
@@ -483,15 +493,27 @@ export interface CommandOutput {
   stderr: string;
 }
 
-const DockerBin = Config.String("DOCKER_BIN").pipe(Effect.orElseSucceed(() => "docker"));
+export interface DockerOptions {
+  /**
+   * The Docker-compatible CLI to run, e.g. `"podman"`. The `DOCKER_BIN`
+   * environment variable, when set, overrides it (per machine or CI).
+   * @default "docker"
+   */
+  bin?: string;
+}
 
-export const DockerLive = Layer.effect(
-  Docker,
+/** The Docker CLI client, running `options.bin` (`DOCKER_BIN` overrides). */
+export const dockerLive = (options: DockerOptions = {}) =>
+  Layer.effect(Docker, makeDocker(options));
+
+const makeDocker = (options: DockerOptions) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const bin = yield* DockerBin;
+    const bin = yield* Config.String("DOCKER_BIN").pipe(
+      Effect.orElseSucceed(() => options.bin ?? "docker"),
+    );
 
     const run = (
       args: Array<string>,
@@ -533,14 +555,15 @@ export const DockerLive = Layer.effect(
           systemError({
             _tag: "Unknown",
             args,
-            description: "The command failed unexpectedly.",
+            // Name the CLI: a misconfigured `bin` / DOCKER_BIN fails here.
+            description: `Failed to run \`${bin}\`; is it installed and on PATH?`,
             cause: error.reason,
           }),
         ),
         Effect.tap((result) => {
           if (result.exitCode === 0) return Effect.void;
           const stderr = result.stderr.replace(/^Error response from daemon: /, "");
-          if (stderr.match(/no such/i) || stderr.match(/not found/i)) {
+          if (stderr.match(/not found|not known|no such/i)) {
             return systemError({ _tag: "NotFound", args, description: stderr });
           }
           if (stderr.match(/already exists/i)) {
@@ -666,25 +689,48 @@ export const DockerLive = Layer.effect(
       return { DOCKER_CONFIG: dir };
     });
 
+    // `podman push` prints no `digest:` line, and Podman's RepoDigests can
+    // list a source digest under the pushed name, so Podman pushes report the
+    // published digest through `--digestfile` instead. Probed once.
+    const isPodman = yield* Effect.cached(
+      run(["--version"]).pipe(
+        Effect.map((result) => /^podman\b/i.test(result.stdout.trim())),
+        Effect.orElseSucceed(() => false),
+      ),
+    );
+
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context) {
         // Isolated credentials avoid global login/keychain races.
         const env = "username" in credentials ? yield* registryConfig(credentials) : undefined;
-        if (platform === undefined) {
-          return yield* run([...formatArgs({ context }), "push", ref], env);
-        }
-        return yield* run(
-          [...formatArgs({ context }), "push", "--platform", platform, ref],
-          env,
-        ).pipe(
-          // Engines without the containerd image store reject `--platform`
-          // on push; their local tag is already narrowed to the requested
-          // platform by `pull --platform`, so a plain push is equivalent.
-          Effect.catchIf(
-            (error) => /--platform|unknown flag|containerd/i.test(String(error)),
-            () => run([...formatArgs({ context }), "push", ref], env),
-          ),
-        );
+        const digestFile = (yield* isPodman)
+          ? path.join(
+              yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-digest-" }),
+              "digest",
+            )
+          : undefined;
+        const digestArgs = digestFile ? ["--digestfile", digestFile] : [];
+        const result =
+          platform === undefined
+            ? yield* run([...formatArgs({ context }), "push", ...digestArgs, ref], env)
+            : yield* run(
+                [...formatArgs({ context }), "push", "--platform", platform, ...digestArgs, ref],
+                env,
+              ).pipe(
+                // Engines without the containerd image store reject `--platform`
+                // on push; their local tag is already narrowed to the requested
+                // platform by `pull --platform`, so a plain push is equivalent.
+                Effect.catchIf(
+                  (error) => /--platform|unknown flag|containerd/i.test(String(error)),
+                  () => run([...formatArgs({ context }), "push", ...digestArgs, ref], env),
+                ),
+              );
+        if (digestFile === undefined) return result;
+        const digest = (yield* fs
+          .readFileString(digestFile)
+          .pipe(Effect.orElseSucceed(() => ""))).trim();
+        // Report it the way `docker push` does, so callers parse one format.
+        return digest ? { ...result, stdout: `${result.stdout}\ndigest: ${digest}` } : result;
       },
       Effect.scoped,
       Effect.mapError(classifyDockerRegistryError),
@@ -903,8 +949,10 @@ export const DockerLive = Layer.effect(
         remove: (id, context) => run([...formatArgs({ context }), "service", "rm", id]),
       },
     });
-  }),
-);
+  });
+
+/** The Docker CLI client, running `docker` (or `DOCKER_BIN`). */
+export const DockerLive = dockerLive();
 
 export const dockerContextName = (context: Docker.ContextRef | undefined): string | undefined => {
   const value = typeof context === "string" ? context : context?.name;

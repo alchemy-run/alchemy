@@ -365,3 +365,55 @@ test.provider(
   }),
   { tags: logicalIdTags, timeout: 180_000 },
 );
+
+test.provider(
+  "region inherit uses the project default region when the project has no default database",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = Effect.gen(function* () {
+      const project = yield* Prisma.Project("Project", {
+        createDatabase: false,
+        region: "eu-central-1",
+      });
+      const database = yield* Prisma.Database("Inherited", { project, region: "inherit" });
+      return { project, database };
+    });
+
+    const initial = yield* stack.deploy(resources);
+    expect((yield* getProject({ id: initial.project.projectId })).data.defaultRegion).toBe(
+      "eu-central-1",
+    );
+    expect(initial.database.region).toBe("eu-central-1");
+    expect((yield* observeDatabase(initial.database.databaseId)).region?.id).toBe("eu-central-1");
+
+    const repeated = yield* stack.deploy(resources);
+    expect(repeated.database.databaseId).toBe(initial.database.databaseId);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(initial.database.databaseId);
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+test.provider(
+  "region inherit fails before creating anything when the project has no region",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const failure = yield* failureOf(
+      stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Prisma.Project("Project", { createDatabase: false });
+          const database = yield* Prisma.Database("Inherited", { project, region: "inherit" });
+          return { project, database };
+        }),
+      ),
+    );
+    expect(failure.text).toContain("has no default region and no default database region");
+
+    yield* stack.destroy();
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);

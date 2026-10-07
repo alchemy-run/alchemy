@@ -838,6 +838,11 @@ export interface WorkerProps<
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
    * `pattern`. When the zone is omitted, it is inferred from the pattern's
    * hostname.
+   *
+   * `alchemy dev` emulates zone routing locally: a Worker whose custom
+   * {@link domain} matches a route's hostname serves the routes on its own
+   * dev URL, and each route's `url` attribute is a local listener for its
+   * hostname.
    */
   routes?: WorkerRouteConfig[];
   /**
@@ -1151,7 +1156,12 @@ export type Worker<Bindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    routes: { id: string; pattern: string; zoneId: string }[];
+    /**
+     * The zone routes attached to this Worker. `url` is the origin serving
+     * the route's hostname — `https://<host>` when deployed, the local edge
+     * listener under `alchemy dev` — and `undefined` for a wildcard host.
+     */
+    routes: { id: string; pattern: string; zoneId: string; url?: string }[];
     crons: string[];
     /**
      * The tail consumers attached to this Worker's script — each entry the
@@ -1793,6 +1803,28 @@ export const isSelf = (value: unknown): value is Self =>
  *     { pattern: "example.com/api/*", zoneId: "<YOUR_ZONE_ID>" },
  *   ],
  * }
+ * ```
+ *
+ * **Example:** Federating one hostname across Workers
+ * Routes take precedence over custom domains, so one Worker can own the
+ * hostname while others claim paths under it — no gateway Worker in the
+ * request path, and each Worker binds only what its paths need. `alchemy
+ * dev` applies the same routing on the custom-domain Worker's local URL.
+ * ```typescript
+ * const home = yield* Cloudflare.Worker("Home", {
+ *   main: "./src/home.ts",
+ *   domain: "api.example.com",
+ * });
+ * yield* Cloudflare.Worker("Products", {
+ *   main: "./src/products.ts",
+ *   routes: [{ pattern: "api.example.com/products*" }],
+ * });
+ * yield* Cloudflare.Worker("Orders", {
+ *   main: "./src/orders.ts",
+ *   routes: [{ pattern: "api.example.com/orders*" }],
+ * });
+ * // https://api.example.com/orders/1 runs Orders; /about runs Home.
+ * return { url: home.url };
  * ```
  *
  * **Example:** Deploying a prebuilt Worker without bundling

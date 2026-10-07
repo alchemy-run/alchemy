@@ -98,6 +98,9 @@
       "path": "./examples/cloudflare-better-auth/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-federated-api/tsconfig.json"
+    },
+    {
       "path": "./examples/gcp-cloud-function/tsconfig.json"
     },
     {

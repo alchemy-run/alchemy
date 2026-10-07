@@ -2,7 +2,7 @@ import * as Layer from "effect/Layer";
 import * as Provider from "../Provider.ts";
 import { Container, ContainerProvider } from "./Container.ts";
 import { Context, ContextProvider } from "./Context.ts";
-import { DockerLive } from "./Docker.ts";
+import { type DockerOptions, dockerLive } from "./Docker.ts";
 import { Image, ImageProvider } from "./Image.ts";
 import { Network, NetworkProvider } from "./Network.ts";
 import { RemoteImage, RemoteImageProvider } from "./RemoteImage.ts";
@@ -21,9 +21,14 @@ export const imageProviders = Layer.mergeAll(ImageProvider(), RemoteImageProvide
  * Registers all Docker resource providers.
  *
  * Docker providers use the active Docker CLI context and are intentionally
- * separate from `Cloudflare.Container`.
+ * separate from `Cloudflare.Container`. Pass `bin` to run a Docker-compatible
+ * CLI such as Podman; the `DOCKER_BIN` environment variable overrides it.
+ *
+ * ```typescript
+ * providers: Docker.providers({ bin: "podman" }),
+ * ```
  */
-export const providers = () =>
+export const providers = (options: DockerOptions = {}) =>
   Layer.effect(
     Providers,
     Provider.collection([Container, Image, Network, RemoteImage, Volume, Context, Service, Swarm]),
@@ -39,5 +44,5 @@ export const providers = () =>
         SwarmProvider(),
       ),
     ),
-    Layer.provideMerge(DockerLive),
+    Layer.provideMerge(dockerLive(options)),
   );

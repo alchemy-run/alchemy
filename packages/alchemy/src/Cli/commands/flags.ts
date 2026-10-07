@@ -1,10 +1,12 @@
 import * as Argument from "effect/cli/Argument";
+import * as CliError from "effect/cli/CliError";
 import * as Flag from "effect/cli/Flag";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
@@ -15,10 +17,17 @@ export const USER = Config.String("USER").pipe(
   Config.withDefault("unknown"),
 );
 
-/** `live_$USER`, `dev_$USER`, or `test_$USER` (falls back to `*_unknown`). */
+/**
+ * `live_$USER`, `dev_$USER`, or `test_$USER` (falls back to `*_unknown`).
+ * Characters a stage can't hold (`first.last`, `John Smith`) become `-`, so
+ * the default always passes the `--stage` pattern and works in physical names.
+ */
 export const userStage = (kind: "live" | "dev" | "test") =>
   USER.pipe(
-    Effect.map((user) => `${kind}_${user}`),
+    Effect.map((user) => {
+      const safe = user.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+      return `${kind}_${safe || "unknown"}`;
+    }),
     Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
   );
 
@@ -77,7 +86,28 @@ export const resolveStage = Effect.fn(function* (
   return yield* userStage(kind);
 });
 
-export const envFile = Flag.File("env-file").pipe(
+// `Flag.File` accepts regular files only. Also accept a character device, so
+// `--env-file /dev/null` reads as an empty env file.
+export const envFile = Flag.Path("env-file", { typeName: "file" }).pipe(
+  Flag.mapEffect((path) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      // A missing path fails later, when the file is read.
+      const type = yield* fs.stat(path).pipe(
+        Effect.map((info) => info.type),
+        Effect.option,
+      );
+      if (Option.isSome(type) && type.value !== "File" && type.value !== "CharacterDevice") {
+        return yield* new CliError.InvalidValue({
+          option: "env-file",
+          value: path,
+          expected: "a file or /dev/null",
+          kind: "flag",
+        });
+      }
+      return path;
+    }),
+  ),
   Flag.optional,
   Flag.withDescription("File to load environment variables from, defaults to .env"),
 );
