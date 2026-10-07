@@ -10,7 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { makeS3State } from "@/AWS";
 import { createStateBucketName } from "@/AWS/StateStore/State.ts";
-import type { ResourceState, StateService } from "@/State";
+import { StateStoreError, type ResourceState, type StateService } from "@/State";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -677,6 +677,103 @@ test.provider(
         });
         expect(result.map((r) => r.fqn)).toEqual(["Replaced"]);
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "a second S3 state store cannot write a stage another deploy holds",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(AWS.S3.Bucket("StateBucket", { forceDestroy: true }));
+      const options = { bucketName: bucket.bucketName, prefix: "lease" };
+      const stage = "race";
+      const created = resource("Vpc", { vpcId: "vpc-aaaa" });
+      const request = { stack: STACK, stage, fqn: created.fqn, value: created };
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const held = yield* makeS3State(options);
+          yield* held.set(request);
+          const other = yield* makeS3State(options);
+          const error = yield* other
+            .set({ ...request, value: { ...created, attr: { vpcId: "vpc-bbbb" } } })
+            .pipe(Effect.flip);
+          expect(error).toBeInstanceOf(StateStoreError);
+          expect(error.message).toContain("another deploy holds the S3 state lock");
+          expect(yield* held.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+            attr: { vpcId: "vpc-aaaa" },
+          });
+          // The lease object is not a resource row.
+          expect(yield* held.list({ stack: STACK, stage })).toEqual([created.fqn]);
+        }),
+      );
+
+      // The first store's scope has closed, so the lease is expired and the
+      // next deploy of this stage can write.
+      const next = yield* makeS3State(options);
+      yield* next.set({ ...request, value: { ...created, attr: { vpcId: "vpc-cccc" } } });
+      expect(yield* next.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+        attr: { vpcId: "vpc-cccc" },
+      });
+      yield* next.deleteStack({ stack: STACK, stage });
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "an expired S3 state lease can be taken and a live one cannot",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(AWS.S3.Bucket("StateBucket", { forceDestroy: true }));
+      const prefix = "lease-expiry";
+      const state = yield* makeS3State({ bucketName: bucket.bucketName, prefix });
+      const expiredStage = "expired";
+      const heldStage = "held";
+      const leaseKey = (stage: string) => `${prefix}/${STACK}/${stage}/__lease__.json`;
+      const putLease = (stage: string, expiresAt: number) =>
+        s3.putObject({
+          Bucket: bucket.bucketName,
+          Key: leaseKey(stage),
+          Body: JSON.stringify({ token: "foreign", expiresAt }),
+          ContentType: "application/json",
+        });
+
+      yield* putLease(expiredStage, 0);
+      const created = resource("Group", { groupId: "sg-aaaa" });
+      yield* state.set({
+        stack: STACK,
+        stage: expiredStage,
+        fqn: created.fqn,
+        value: created,
+      });
+      expect(yield* state.list({ stack: STACK, stage: expiredStage })).toEqual([created.fqn]);
+
+      yield* putLease(heldStage, Date.now() + 60_000);
+      const blocked = yield* state
+        .set({
+          stack: STACK,
+          stage: heldStage,
+          fqn: created.fqn,
+          value: created,
+        })
+        .pipe(Effect.flip);
+      expect(blocked).toBeInstanceOf(StateStoreError);
+      expect(blocked.message).toContain("another deploy holds the S3 state lock");
+
+      yield* s3.deleteObject({ Bucket: bucket.bucketName, Key: leaseKey(heldStage) });
+      yield* state.deleteStack({ stack: STACK, stage: expiredStage });
+      yield* state.deleteStack({ stack: STACK, stage: heldStage });
       yield* stack.destroy();
     }),
   {
