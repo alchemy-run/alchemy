@@ -98,10 +98,14 @@ export const Default = Layer.effect(
  * of `Default` can be pointed at another account, region or credential
  * source with `layer.pipe(Layer.provide(environment))`.
  */
-export const ProvidedOrDefault = Layer.unwrap(
-  Effect.serviceOption(AWSEnvironment).pipe(
-    Effect.map((provided) =>
-      Option.isSome(provided) ? Layer.succeed(AWSEnvironment, provided.value) : Default,
+export const providedOrDefault = () =>
+  // A fresh layer per call: layers are memoized by identity, so a shared
+  // instance built once with nothing provided (e.g. by a layer used to derive
+  // the provided environment) would be reused here and shadow it.
+  Layer.unwrap(
+    Effect.serviceOption(AWSEnvironment).pipe(
+      Effect.map((provided) =>
+        Option.isSome(provided) ? Layer.succeed(AWSEnvironment, provided.value) : Default,
+      ),
     ),
-  ),
-);
+  );

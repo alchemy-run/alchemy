@@ -98,7 +98,7 @@ import * as EMRContainers from "./EMRContainers/index.ts";
 import * as EMRServerless from "./EMRServerless/index.ts";
 import * as Endpoint from "./Endpoint.ts";
 import * as EntityResolution from "./EntityResolution/index.ts";
-import { ProvidedOrDefault as DefaultEnvironment } from "./Environment.ts";
+import { providedOrDefault } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as FinSpace from "./FinSpace/index.ts";
 import * as Firehose from "./Firehose/index.ts";
@@ -1829,10 +1829,13 @@ export const providers = () =>
     // at the stack level lets `Capability.execute(...)` Outputs (e.g.
     // `AWS.EC2.getAmi`) resolve during plan.
     Layer.provideMerge(EC2.GetAmiHttp),
-    Layer.provideMerge(Region.fromEnvironment),
-    Layer.provideMerge(Credentials.fromEnvironment),
-    Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
+    // Fresh per call: these derive from the environment below, and shared
+    // (memoized) instances built for another environment in the same run
+    // would shadow an `AWSEnvironment` provided to this layer.
+    Layer.provideMerge(Layer.fresh(Region.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Credentials.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
+    Layer.provideMerge(providedOrDefault()),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every AWS SDK call. Like distilled's

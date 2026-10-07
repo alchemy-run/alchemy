@@ -22,7 +22,7 @@ import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
 import * as Endpoint from "../Endpoint.ts";
-import { AWSEnvironment, ProvidedOrDefault as DefaultEnvironment } from "../Environment.ts";
+import { AWSEnvironment, providedOrDefault } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
 import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
 
@@ -194,10 +194,13 @@ export const state = (options: S3StateOptions = {}) =>
       return yield* Effect.cached(make);
     }),
   ).pipe(
-    Layer.provideMerge(AwsRegion.fromEnvironment),
-    Layer.provideMerge(AwsCredentials.fromEnvironment),
-    Layer.provideMerge(Endpoint.fromEnvironment),
-    Layer.provideMerge(DefaultEnvironment),
+    // Fresh per call: these derive from the environment below, and shared
+    // (memoized) instances built for another environment in the same run
+    // would shadow an `AWSEnvironment` provided to this layer.
+    Layer.provideMerge(Layer.fresh(AwsRegion.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(AwsCredentials.fromEnvironment)),
+    Layer.provideMerge(Layer.fresh(Endpoint.fromEnvironment)),
+    Layer.provideMerge(providedOrDefault()),
     Layer.provideMerge(AwsAuth),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
