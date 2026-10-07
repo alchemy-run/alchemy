@@ -1,17 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as healthlake from "@distilled.cloud/aws/healthlake";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import HealthLakeTestFunctionLive, {
-  HealthLakeTestFunction,
-  IMPORT_PREFIX,
-} from "./handler";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import HealthLakeTestFunctionLive, { HealthLakeTestFunction, IMPORT_PREFIX } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test } = Test.make(testOptions);
@@ -30,64 +27,61 @@ const NONEXISTENT_JOB = "0123456789abcdef0123456789abcdef";
 // gated behind the 15-30 minute data store provisioning.
 // ---------------------------------------------------------------------------
 
-describe("HealthLake job operations (typed-error probes)", () => {
-  test.provider(
-    "describeFHIRImportJob on a nonexistent datastore fails with ResourceNotFoundException",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          healthlake.describeFHIRImportJob({
-            DatastoreId: NONEXISTENT_DATASTORE,
-            JobId: NONEXISTENT_JOB,
-          }),
-        );
-        expect(error._tag).toBe("ResourceNotFoundException");
-      }),
-  );
+describe(
+  "HealthLake job operations (typed-error probes)",
+  { tags: ["provider:aws", "provider:aws:healthlake", "live"] },
+  () => {
+    test.provider(
+      "describeFHIRImportJob on a nonexistent datastore fails with ResourceNotFoundException",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            healthlake.describeFHIRImportJob({
+              DatastoreId: NONEXISTENT_DATASTORE,
+              JobId: NONEXISTENT_JOB,
+            }),
+          );
+          expect(error._tag).toBe("ResourceNotFoundException");
+        }),
+    );
 
-  test.provider(
-    "describeFHIRExportJob on a nonexistent datastore fails with ResourceNotFoundException",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          healthlake.describeFHIRExportJob({
-            DatastoreId: NONEXISTENT_DATASTORE,
-            JobId: NONEXISTENT_JOB,
-          }),
-        );
-        expect(error._tag).toBe("ResourceNotFoundException");
-      }),
-  );
+    test.provider(
+      "describeFHIRExportJob on a nonexistent datastore fails with ResourceNotFoundException",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            healthlake.describeFHIRExportJob({
+              DatastoreId: NONEXISTENT_DATASTORE,
+              JobId: NONEXISTENT_JOB,
+            }),
+          );
+          expect(error._tag).toBe("ResourceNotFoundException");
+        }),
+    );
 
-  test.provider(
-    "listFHIRImportJobs on a nonexistent datastore fails with ResourceNotFoundException",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          healthlake.listFHIRImportJobs({
-            DatastoreId: NONEXISTENT_DATASTORE,
-          }),
-        );
-        expect(error._tag).toBe("ResourceNotFoundException");
-      }),
-  );
+    test.provider(
+      "listFHIRImportJobs on a nonexistent datastore fails with ResourceNotFoundException",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            healthlake.listFHIRImportJobs({ DatastoreId: NONEXISTENT_DATASTORE }),
+          );
+          expect(error._tag).toBe("ResourceNotFoundException");
+        }),
+    );
 
-  test.provider(
-    "listFHIRExportJobs on a nonexistent datastore fails with ResourceNotFoundException",
-    () =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          healthlake.listFHIRExportJobs({
-            DatastoreId: NONEXISTENT_DATASTORE,
-          }),
-        );
-        expect(error._tag).toBe("ResourceNotFoundException");
-      }),
-  );
+    test.provider(
+      "listFHIRExportJobs on a nonexistent datastore fails with ResourceNotFoundException",
+      () =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            healthlake.listFHIRExportJobs({ DatastoreId: NONEXISTENT_DATASTORE }),
+          );
+          expect(error._tag).toBe("ResourceNotFoundException");
+        }),
+    );
 
-  test.provider(
-    "startFHIRExportJob on a nonexistent datastore fails with a typed tag",
-    () =>
+    test.provider("startFHIRExportJob on a nonexistent datastore fails with a typed tag", () =>
       Effect.gen(function* () {
         const { accountId } = yield* AWSEnvironment.current;
         const error = yield* Effect.flip(
@@ -108,11 +102,9 @@ describe("HealthLake job operations (typed-error probes)", () => {
           "AccessDeniedException",
         ]).toContain(error._tag);
       }),
-  );
+    );
 
-  test.provider(
-    "startFHIRImportJob on a nonexistent datastore fails with a typed tag",
-    () =>
+    test.provider("startFHIRImportJob on a nonexistent datastore fails with a typed tag", () =>
       Effect.gen(function* () {
         const { accountId } = yield* AWSEnvironment.current;
         const error = yield* Effect.flip(
@@ -134,8 +126,9 @@ describe("HealthLake job operations (typed-error probes)", () => {
           "AccessDeniedException",
         ]).toContain(error._tag);
       }),
-  );
-});
+    );
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Full runtime fixture: a Lambda bound to all six job bindings against a live
@@ -174,16 +167,11 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
           HttpClient.get(`${baseUrl}${path}`).pipe(
             Effect.flatMap((response) =>
               response.status >= 500
-                ? Effect.fail(
-                    new Error(`transient upstream ${response.status}`),
-                  )
+                ? Effect.fail(new Error(`transient upstream ${response.status}`))
                 : Effect.succeed(response),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -213,9 +201,10 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
         expect(importJob.status).toBe("SUBMITTED");
 
         // DescribeFHIRImportJob — the job is observable immediately.
-        const describedImport = (yield* getJson(
-          `/describe-import?jobId=${importJob.jobId}`,
-        )) as { status?: string; errorTag?: string };
+        const describedImport = (yield* getJson(`/describe-import?jobId=${importJob.jobId}`)) as {
+          status?: string;
+          errorTag?: string;
+        };
         expect(describedImport.errorTag).toBeUndefined();
         expect(describedImport.status).toBeTruthy();
 
@@ -230,9 +219,7 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
           Effect.repeat({
             schedule: Schedule.spaced("15 seconds"),
             until: (status): boolean =>
-              status !== "SUBMITTED" &&
-              status !== "QUEUED" &&
-              status !== "IN_PROGRESS",
+              status !== "SUBMITTED" && status !== "QUEUED" && status !== "IN_PROGRESS",
             times: 60,
           }),
         );
@@ -247,9 +234,10 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
         expect(exportJob.jobId).toBeTruthy();
         expect(exportJob.status).toBe("SUBMITTED");
 
-        const describedExport = (yield* getJson(
-          `/describe-export?jobId=${exportJob.jobId}`,
-        )) as { status?: string; errorTag?: string };
+        const describedExport = (yield* getJson(`/describe-export?jobId=${exportJob.jobId}`)) as {
+          status?: string;
+          errorTag?: string;
+        };
         expect(describedExport.errorTag).toBeUndefined();
         expect(describedExport.status).toBeTruthy();
 
@@ -263,14 +251,23 @@ test.provider.skipIf(!process.env.AWS_TEST_HEALTHLAKE)(
           Effect.repeat({
             schedule: Schedule.spaced("15 seconds"),
             until: (status): boolean =>
-              status !== "SUBMITTED" &&
-              status !== "QUEUED" &&
-              status !== "IN_PROGRESS",
+              status !== "SUBMITTED" && status !== "QUEUED" && status !== "IN_PROGRESS",
             times: 60,
           }),
         );
       }).pipe(Effect.ensuring(sharedStack.destroy().pipe(Effect.orDie)));
     }),
   // data store create (~15-30 min) + import + export + delete wait, one test.
-  { timeout: 5_400_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:healthlake",
+      "provider:aws:iam",
+      "provider:aws:kms",
+      "provider:aws:lambda",
+      "provider:aws:s3",
+      "live",
+    ],
+    timeout: 5_400_000,
+  },
 );

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { SearchJob } from "@/AWS/BackupSearch";
-import * as Test from "@/Test/Alchemy";
 import * as backupsearch from "@distilled.cloud/aws/backupsearch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { SearchJob } from "@/AWS/BackupSearch";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,12 +16,11 @@ test.provider(
     Effect.gen(function* () {
       // Identifiers must be UUID-shaped — anything else is a ValidationException.
       const error = yield* Effect.flip(
-        backupsearch.getSearchJob({
-          SearchJobIdentifier: "00000000-0000-0000-0000-000000000000",
-        }),
+        backupsearch.getSearchJob({ SearchJobIdentifier: "00000000-0000-0000-0000-000000000000" }),
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:backupsearch", "live"] },
 );
 
 test.provider(
@@ -36,6 +35,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:backupsearch", "live"] },
 );
 
 test.provider(
@@ -50,6 +50,7 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:backupsearch", "live"] },
 );
 
 test.provider(
@@ -64,13 +65,17 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:backupsearch", "live"] },
 );
 
-test.provider("listSearchJobs succeeds on an account-level scan", () =>
-  Effect.gen(function* () {
-    const page = yield* backupsearch.listSearchJobs({ MaxResults: 10 });
-    expect(Array.isArray(page.SearchJobs)).toBe(true);
-  }),
+test.provider(
+  "listSearchJobs succeeds on an account-level scan",
+  () =>
+    Effect.gen(function* () {
+      const page = yield* backupsearch.listSearchJobs({ MaxResults: 10 });
+      expect(Array.isArray(page.SearchJobs)).toBe(true);
+    }),
+  { tags: ["provider:aws", "provider:aws:backupsearch", "live"] },
 );
 
 // Search jobs CANNOT be deleted — the API is Start/Stop/Get/List only, and
@@ -81,21 +86,14 @@ test.provider("listSearchJobs succeeds on an account-level scan", () =>
 // It is idempotent: stopping a job that already reached a terminal state is
 // a ConflictException, which means there is nothing to do.
 const stopLeakedSearchJobs = Effect.gen(function* () {
-  const page = yield* backupsearch.listSearchJobs({
-    ByStatus: "RUNNING",
-    MaxResults: 25,
-  });
+  const page = yield* backupsearch.listSearchJobs({ ByStatus: "RUNNING", MaxResults: 25 });
   yield* Effect.forEach(
-    (page.SearchJobs ?? []).filter((job) =>
-      job.Name?.startsWith("start-S3-search-job"),
-    ),
+    (page.SearchJobs ?? []).filter((job) => job.Name?.startsWith("start-S3-search-job")),
     (job) =>
-      backupsearch
-        .stopSearchJob({ SearchJobIdentifier: job.SearchJobIdentifier! })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          Effect.catchTag("ConflictException", () => Effect.void),
-        ),
+      backupsearch.stopSearchJob({ SearchJobIdentifier: job.SearchJobIdentifier! }).pipe(
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.catchTag("ConflictException", () => Effect.void),
+      ),
   );
 }).pipe(Effect.orDie);
 
@@ -118,11 +116,7 @@ test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
           const job = yield* SearchJob("Search", {
             searchScope: { backupResourceTypes: ["S3"] },
             itemFilters: {
-              s3ItemFilters: [
-                {
-                  objectKeys: [{ value: "alchemy-", operator: "BEGINS_WITH" }],
-                },
-              ],
+              s3ItemFilters: [{ objectKeys: [{ value: "alchemy-", operator: "BEGINS_WITH" }] }],
             },
             tags: { fixture: "backup-search" },
           });
@@ -141,9 +135,7 @@ test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
         SearchJobIdentifier: job.searchJobIdentifier,
       });
       expect(observed.SearchJobArn).toBe(job.searchJobArn);
-      const tags = yield* backupsearch.listTagsForResource({
-        ResourceArn: job.searchJobArn,
-      });
+      const tags = yield* backupsearch.listTagsForResource({ ResourceArn: job.searchJobArn });
       expect(tags.Tags?.fixture).toBe("backup-search");
 
       // Replacement: the search scope/filters are immutable — changing them
@@ -153,11 +145,7 @@ test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
           const job = yield* SearchJob("Search", {
             searchScope: { backupResourceTypes: ["S3"] },
             itemFilters: {
-              s3ItemFilters: [
-                {
-                  objectKeys: [{ value: "replaced-", operator: "BEGINS_WITH" }],
-                },
-              ],
+              s3ItemFilters: [{ objectKeys: [{ value: "replaced-", operator: "BEGINS_WITH" }] }],
             },
             tags: { fixture: "backup-search" },
           });
@@ -178,14 +166,12 @@ test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
       const after = yield* backupsearch.getSearchJob({
         SearchJobIdentifier: replaced.searchJobIdentifier,
       });
-      expect(["STOPPING", "STOPPED", "COMPLETED", "FAILED"]).toContain(
-        after.Status,
-      );
+      expect(["STOPPING", "STOPPED", "COMPLETED", "FAILED"]).toContain(after.Status);
     }).pipe(
       // Crash-safe teardown: even if any assertion above fails mid-flight,
       // never leave a search job RUNNING. (Terminal records are un-deletable
       // and age out server-side within ~7 days.)
       Effect.ensuring(stopLeakedSearchJobs),
     ),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:backupsearch", "live"], timeout: 120_000 },
 );

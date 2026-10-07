@@ -1,20 +1,28 @@
-import type { RegionsResultItem } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway";
+import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
+import { Railway, type Region } from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { resolveWorkspace } from "./Environment.ts";
 
+const regionFields = <E>(region: Query<Region, E>) => ({
+  id: region.id,
+  name: region.name,
+  region: region.region,
+});
+type RegionsResultItem = UnwrapPlan<ReturnType<typeof regionFields>>;
+
+const readRegions = Query.fn((projectId?: string) =>
+  Railway.regions(projectId === undefined ? {} : { projectId }).pipe(Query.map(regionFields)),
+);
+
 export type CatalogKind = "region" | "workspace";
 
-export class CatalogNotFound extends Data.TaggedError(
-  "Railway.CatalogNotFound",
-)<{
+export class CatalogNotFound extends Data.TaggedError("Railway.CatalogNotFound")<{
   kind: CatalogKind;
   ref: string;
 }> {}
 
-const notFound = (kind: CatalogKind, ref: string) =>
-  new CatalogNotFound({ kind, ref });
+const notFound = (kind: CatalogKind, ref: string) => new CatalogNotFound({ kind, ref });
 
 /**
  * Current token workspace (`me.workspace ?? me.workspaces[0]`).
@@ -27,9 +35,7 @@ export const currentWorkspace = resolveWorkspace;
  * catalog to a project; omit it for the workspace default set.
  */
 export const listRegions = Effect.fn(function* (projectId?: string) {
-  const regions = yield* railway.regions(
-    projectId === undefined ? {} : { projectId },
-  );
+  const regions = yield* readRegions(projectId);
   return regions ?? [];
 });
 

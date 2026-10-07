@@ -1,17 +1,16 @@
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
-import { hashMigrations } from "../SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
+import { hashMigrations } from "../SqlFile.ts";
 import { ALCHEMY_DEFAULT_TABLE, applyAlchemyFormat } from "./AlchemyFormat.ts";
-import { detectLayout } from "./Detect.ts";
 import {
   MigrationError,
   type DrizzleV0LayoutError,
   type MigrationApplyError,
   type SqlExecutor,
 } from "./Format.ts";
-import { readDrizzleDirRecords, readFlatRecords } from "./Records.ts";
+import { readMigrationRecords } from "./Records.ts";
 
 /**
  * The migrations input surface shared by every SQL database resource.
@@ -45,9 +44,7 @@ export interface NormalizedMigrationsInput {
   table?: string;
 }
 
-export const normalizeMigrationsInput = (
-  input: MigrationsInput,
-): NormalizedMigrationsInput => {
+export const normalizeMigrationsInput = (input: MigrationsInput): NormalizedMigrationsInput => {
   if (typeof input === "string") return { dir: input };
   if ("out" in input) return { dir: input.out };
   return input;
@@ -111,11 +108,7 @@ export const applyMigrations = (options: {
 > =>
   Effect.gen(function* () {
     const { resolved, executor } = options;
-    const layout = yield* detectLayout(resolved.dir);
-    const records =
-      layout === "flat"
-        ? yield* readFlatRecords(resolved.dir)
-        : yield* readDrizzleDirRecords(resolved.dir);
+    const records = yield* readMigrationRecords(resolved.dir);
     yield* applyAlchemyFormat({
       executor,
       table: resolved.table,
@@ -160,18 +153,12 @@ export const runMigrations = <E, R>(options: {
       FileSystem.FileSystem | Path.Path
     >,
   ) => Effect.Effect<void, E, R>;
-}): Effect.Effect<
-  MigrationRun,
-  MigrationError | E,
-  R | FileSystem.FileSystem | Path.Path
-> =>
+}): Effect.Effect<MigrationRun, MigrationError | E, R | FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const hashes = yield* hashMigrationsDir(options.input.dir);
     const resolved = resolveMigrations(options);
     if (Object.keys(hashes).length > 0) {
-      yield* options.withExecutor((executor) =>
-        applyMigrations({ resolved, executor }),
-      );
+      yield* options.withExecutor((executor) => applyMigrations({ resolved, executor }));
     }
     return { resolved, hashes };
   });
@@ -222,19 +209,12 @@ export const classifyMigrationHistory = (options: {
         migrationsHashes: Record<string, string>;
       }
     | undefined;
-}): Effect.Effect<
-  MigrationHistoryChange,
-  MigrationError,
-  FileSystem.FileSystem | Path.Path
-> =>
+}): Effect.Effect<MigrationHistoryChange, MigrationError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const input = migrationsInputOf(options.news);
     if (!input) return { kind: "none" } as const;
     const newHashes = yield* hashMigrationsDir(input.dir);
-    const rewritten = rewrittenMigrationHistory(
-      options.output?.migrationsHashes,
-      newHashes,
-    );
+    const rewritten = rewrittenMigrationHistory(options.output?.migrationsHashes, newHashes);
     if (rewritten) {
       return { kind: "rewritten", ...rewritten } as const;
     }
@@ -245,8 +225,7 @@ export const classifyMigrationHistory = (options: {
       input,
       stamped: stampedOf(options.output),
     });
-    return resolved.table !==
-      (options.output?.migrationsTable ?? resolved.table)
+    return resolved.table !== (options.output?.migrationsTable ?? resolved.table)
       ? ({ kind: "pending" } as const)
       : ({ kind: "none" } as const);
   });
@@ -266,9 +245,7 @@ export const diffMigrations = (options: {
       }
     | undefined;
 }): Effect.Effect<boolean, MigrationError, FileSystem.FileSystem | Path.Path> =>
-  classifyMigrationHistory(options).pipe(
-    Effect.map((change) => change.kind !== "none"),
-  );
+  classifyMigrationHistory(options).pipe(Effect.map((change) => change.kind !== "none"));
 
 /**
  * The migration attributes every SQL database resource persists, threaded
@@ -291,8 +268,6 @@ export const migrationsAttrs = (options: {
   migrationsHashes: Record<string, string>;
 } => ({
   migrationsDir: options.input?.dir,
-  migrationsTable:
-    options.run?.resolved.table ?? options.output?.migrationsTable,
-  migrationsHashes:
-    options.run?.hashes ?? options.output?.migrationsHashes ?? {},
+  migrationsTable: options.run?.resolved.table ?? options.output?.migrationsTable,
+  migrationsHashes: options.run?.hashes ?? options.output?.migrationsHashes ?? {},
 });

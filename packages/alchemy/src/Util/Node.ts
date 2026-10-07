@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -13,6 +13,15 @@ import * as NodeNet from "node:net";
  * the state tree the same way, for the same reason.)
  */
 export const initialCwd: string = process.cwd();
+
+/**
+ * The extension of alchemy's own modules next to `importMetaUrl`: `.ts`
+ * when running from `src/` (Bun, or Node under the dev loader), `.js`
+ * from the compiled `lib/`. The dev loader namespaces file URLs with a
+ * query, so only the pathname is consulted.
+ */
+export const moduleExtension = (importMetaUrl: string) =>
+  new URL(importMetaUrl).pathname.endsWith(".ts") ? ".ts" : ".js";
 
 /**
  * Opt out of cross-spawn's temporary `process.chdir` dance.
@@ -46,42 +55,38 @@ export const disableCrossSpawnChdir = (): void => {
   (process.chdir as { disabled?: boolean }).disabled = true;
 };
 
-export const isTransformTypesSupported = (
-  version = process.versions.node,
-): boolean => {
-  const [major, minor] = version.split(".").map(Number);
-  return (major === 22 && minor >= 7) || (major >= 23 && major < 26);
-};
-
 /**
- * Node CLI flags that transparently transform TypeScript types so `.ts`
- * entry points work the same way they do under Bun. Empty when the running
- * Node doesn't support (or no longer needs) the experimental flag.
+ * Node arguments that install alchemy's Oxc loader in a child process, the
+ * same way `bin/cli.js` installs it for the CLI itself. Every `.ts`/`.tsx`
+ * a Node process loads — alchemy's own source in a checkout, the user's
+ * stack everywhere — goes through it; nothing relies on Node's built-in
+ * TypeScript support (strip-only, and Node 26 removed the transform flag).
+ *
+ * A `.ts` entry means a checkout: `bin/register-dev-mode.js` adds the
+ * src-condition resolution for workspace packages on top of the loader.
+ * A `.js` entry means a published install: `bin/register-oxc.js` is the
+ * loader alone.
  */
-export const transformTypesFlags = (
-  version = process.versions.node,
-): string[] =>
-  isTransformTypesSupported(version)
-    ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
-    : [];
+export const nodeLoaderArgs = (entry: string): string[] => [
+  "--import",
+  import.meta.resolve(
+    /\.[cm]?tsx?$/.test(entry) ? "../../bin/register-dev-mode.js" : "../../bin/register-oxc.js",
+  ),
+];
 
 /**
  * Whether this Node supports the synchronous in-thread loader hooks
  * (`module.registerHooks`, v22.15 / v23.5) that `bin/register-dev-mode.js`
- * needs. Since every registerHooks-capable Node also loads `.ts` (via
- * {@link transformTypesFlags} below v26, natively from v26), this is THE
- * capability gate for running the CLI from source under node.
+ * needs. This is THE capability gate for running the CLI from source under
+ * node: with the hooks installed, the Oxc loader handles every `.ts`/`.tsx`
+ * file regardless of Node's own TypeScript support.
  *
  * `bin/cli.js` mirrors this predicate inline — it must run under plain node
  * before any `.ts` can load. Keep the two in sync.
  */
-export const isRegisterHooksSupported = (
-  version = process.versions.node,
-): boolean => {
+export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
   const [major = 0, minor = 0] = version.split(".").map(Number);
-  return (
-    (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24
-  );
+  return (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
 };
 
 /**
@@ -98,19 +103,14 @@ export const findAvailablePort = (host = "127.0.0.1") =>
     server.once("error", (error) => resume(Effect.fail(error)));
     server.listen(0, host, () => {
       const address = server.address();
-      const port =
-        typeof address === "object" && address !== null
-          ? address.port
-          : undefined;
+      const port = typeof address === "object" && address !== null ? address.port : undefined;
       server.close((error) => {
         if (error) {
           resume(Effect.fail(error));
         } else if (port !== undefined) {
           resume(Effect.succeed(port));
         } else {
-          resume(
-            Effect.fail(new Error("Failed to allocate an available port")),
-          );
+          resume(Effect.fail(new Error("Failed to allocate an available port")));
         }
       });
     });

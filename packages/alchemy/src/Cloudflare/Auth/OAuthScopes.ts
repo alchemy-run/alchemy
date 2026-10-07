@@ -1,5 +1,3 @@
-import type { CloudflareAuthConfig } from "./AuthConfig.ts";
-
 /** Scopes enabled on Alchemy's public Cloudflare OAuth client. */
 export const OAUTH_SCOPE_GROUPS = [
   {
@@ -24,10 +22,16 @@ export const OAUTH_SCOPE_GROUPS = [
       "flagship.write",
       "query-cache.read",
       "query-cache.write",
+      "k2.read",
+      "k2.write",
+      "k2.consume",
+      "k2.produce",
       "mcp-portals.read",
       "mcp-portals.write",
       "messaging.edit",
       "messaging.read",
+      "cfspeed.read",
+      "cfspeed.write",
       "page.read",
       "page.write",
       "pipelines.read",
@@ -37,9 +41,9 @@ export const OAUTH_SCOPE_GROUPS = [
       "pubsub.write",
       "queues.read",
       "queues.write",
+      "realtime.write",
       "realtime.admin",
       "realtime.read",
-      "realtime.write",
       "secrets-store.read",
       "secrets-store.write",
       "vectorize.read",
@@ -51,6 +55,7 @@ export const OAUTH_SCOPE_GROUPS = [
       "workers-scripts.edit",
       "workers-kv-storage.read",
       "workers-kv-storage.write",
+      "workers-scripts.metadata_read",
       "workers-observability.read",
       "workers-observability-telemetry.write",
       "workers-observability.write",
@@ -63,7 +68,6 @@ export const OAUTH_SCOPE_GROUPS = [
       "workers-r2.write",
       "workers-routes.read",
       "workers-routes.write",
-      "workers-scripts.bind",
       "workers-scripts.read",
       "workers-scripts.write",
       "workers-tail.read",
@@ -73,6 +77,9 @@ export const OAUTH_SCOPE_GROUPS = [
     id: "ai-machine-learning",
     label: "AI & Machine Learning",
     scopes: [
+      "agw.read",
+      "agw.run",
+      "agw.write",
       "aiaudit.read",
       "aiaudit.write",
       "aig.read",
@@ -82,17 +89,16 @@ export const OAUTH_SCOPE_GROUPS = [
       "ai-search.read",
       "ai-search.run",
       "ai-search.write",
-      "agw.read",
-      "agw.run",
-      "agw.write",
       "rag.read",
-      "rag.run",
       "rag.write",
+      "rag.run",
       "firewall-for-ai.read",
       "firewall-for-ai.write",
       "websearch.read",
       "websearch.run",
       "websearch.write",
+      "ai-model.read",
+      "ai-model.write",
       "ai.read",
       "ai.write",
     ],
@@ -148,8 +154,8 @@ export const OAUTH_SCOPE_GROUPS = [
       "ddos-botnet-feed.write",
       "ddos-protection.read",
       "ddos-protection.write",
-      "api-gateway.read",
       "api-gateway.write",
+      "api-gateway.read",
       "domain-page.shield",
       "domain-page-shield.read",
       "field-extractor.read",
@@ -185,9 +191,9 @@ export const OAUTH_SCOPE_GROUPS = [
       "challenge-widgets.write",
       "url-scanner.read",
       "url-scanner.write",
+      "zaraz.write",
       "zaraz.edit",
       "zaraz.read",
-      "zaraz.write",
       "zone-security-center-insights.read",
       "zone-security-center-insights.write",
       "zone-waf.read",
@@ -238,15 +244,15 @@ export const OAUTH_SCOPE_GROUPS = [
     id: "zero-trust",
     label: "Cloudflare One / Zero Trust",
     scopes: [
-      "access-app.read",
-      "access-app.revoke",
-      "access-app.write",
       "access.read",
       "zone-access.read",
       "access.revoke",
       "zone-access.revoke",
       "access.write",
       "zone-access.write",
+      "access-app.read",
+      "access-app.revoke",
+      "access-app.write",
       "access-audit-log.read",
       "access-custom-page.read",
       "access-custom-page.write",
@@ -270,15 +276,15 @@ export const OAUTH_SCOPE_GROUPS = [
       "access-policy.write",
       "access-policy-test.read",
       "access-policy-test.write",
-      "access-population.read",
-      "access-population.write",
       "access-saml-certificate.read",
       "access-saml-certificate.write",
       "access-scim-log.read",
-      "access-ssh-auditing.read",
-      "access-ssh-auditing.write",
+      "access-population.read",
+      "access-population.write",
       "access-service-token.read",
       "access-service-token.write",
+      "access-ssh-auditing.read",
+      "access-ssh-auditing.write",
       "access-tag.read",
       "access-tag.write",
       "access-users.read",
@@ -290,10 +296,10 @@ export const OAUTH_SCOPE_GROUPS = [
       "teams-dex.read",
       "teams-dex.write",
       "teams-connector-cloudflared.monitoring",
-      "teams-connector-warp.read",
-      "teams-connector-warp.write",
       "teams-connector-cloudflared.read",
       "teams-connector-cloudflared.write",
+      "teams-connector-warp.read",
+      "teams-connector-warp.write",
       "teams-connectors.read",
       "teams-connectors.write",
       "teams-networks.read",
@@ -321,10 +327,12 @@ export const OAUTH_SCOPE_GROUPS = [
       "intel.read",
       "intel.write",
       "account-logs.read",
-      "account-logs.write",
       "logs.read",
+      "account-logs.write",
       "logs.write",
       "radar.read",
+      "zone-observability.read",
+      "zone-observability.write",
     ],
   },
   {
@@ -411,8 +419,8 @@ export const OAUTH_SCOPE_GROUPS = [
       "cache-settings.read",
       "cache-settings.write",
       "account-disable-esc.read",
-      "account-disable-esc.write",
       "zone-disable-esc.read",
+      "account-disable-esc.write",
       "zone-disable-esc.write",
       "ssl-and-certificates.read",
       "ssl-and-certificates.write",
@@ -422,8 +430,8 @@ export const OAUTH_SCOPE_GROUPS = [
     id: "account-billing",
     label: "Account & Billing",
     scopes: [
-      "account-api-gateway.read",
       "account-api-gateway.write",
+      "account-api-gateway.read",
       "account-custom-asset.read",
       "account-custom-asset.write",
       "account-settings.read",
@@ -452,8 +460,7 @@ export const OAUTH_SCOPE_GROUPS = [
   },
 ] as const;
 
-export type OAuthScopeId =
-  (typeof OAUTH_SCOPE_GROUPS)[number]["scopes"][number];
+export type OAuthScopeId = (typeof OAUTH_SCOPE_GROUPS)[number]["scopes"][number];
 
 /** Human-readable names from Cloudflare's OAuth scope catalog. */
 export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
@@ -475,10 +482,16 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "flagship.write": "Flagship Write",
   "query-cache.read": "Hyperdrive Read",
   "query-cache.write": "Hyperdrive Write",
+  "k2.read": "K2 Config Read",
+  "k2.write": "K2 Config Write",
+  "k2.consume": "K2 Consume",
+  "k2.produce": "K2 Produce",
   "mcp-portals.read": "MCP Portals Read",
   "mcp-portals.write": "MCP Portals Write",
   "messaging.edit": "Messaging Edit",
   "messaging.read": "Messaging Read",
+  "cfspeed.read": "Network Quality Read",
+  "cfspeed.write": "Network Quality Write",
   "page.read": "Pages Read",
   "page.write": "Pages Write",
   "pipelines.read": "Pipelines Read",
@@ -502,9 +515,9 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "workers-scripts.edit": "Workers Editor",
   "workers-kv-storage.read": "Workers KV Storage Read",
   "workers-kv-storage.write": "Workers KV Storage Write",
+  "workers-scripts.metadata_read": "Workers Metadata Read-Only",
   "workers-observability.read": "Workers Observability Read",
-  "workers-observability-telemetry.write":
-    "Workers Observability Telemetry Write",
+  "workers-observability-telemetry.write": "Workers Observability Telemetry Write",
   "workers-observability.write": "Workers Observability Write",
   "r2-catalog.read": "Workers R2 Data Catalog Read",
   "r2-catalog.write": "Workers R2 Data Catalog Write",
@@ -515,10 +528,12 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "workers-r2.write": "Workers R2 Storage Write",
   "workers-routes.read": "Workers Routes Read",
   "workers-routes.write": "Workers Routes Write",
-  "workers-scripts.bind": "Workers Scripts Bind",
   "workers-scripts.read": "Workers Scripts Read",
   "workers-scripts.write": "Workers Scripts Write",
   "workers-tail.read": "Workers Tail Read",
+  "agw.read": "Agents Gateway Read",
+  "agw.run": "Agents Gateway Run",
+  "agw.write": "Agents Gateway Write",
   "aiaudit.read": "AI Audit Read",
   "aiaudit.write": "AI Audit Write",
   "aig.read": "AI Gateway Read",
@@ -528,9 +543,6 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "ai-search.read": "AI Search Read",
   "ai-search.run": "AI Search Run",
   "ai-search.write": "AI Search Write",
-  "agw.read": "Agents Gateway Read",
-  "agw.run": "Agents Gateway Run",
-  "agw.write": "Agents Gateway Write",
   "rag.read": "Auto Rag Read",
   "rag.write": "Auto Rag Write",
   "rag.run": "Auto Rag Write Run Engine",
@@ -539,6 +551,8 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "websearch.read": "Websearch Read",
   "websearch.run": "Websearch Run",
   "websearch.write": "Websearch Write",
+  "ai-model.read": "Workers AI Custom Models Read",
+  "ai-model.write": "Workers AI Custom Models Write",
   "ai.read": "Workers AI Read",
   "ai.write": "Workers AI Write",
   "account-dns-settings.read": "Account DNS Settings Read",
@@ -566,15 +580,12 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "fraud-detection-pii.read": "Account Abuse Protection PII Read",
   "account-firewall-access-rules.read": "Account Firewall Access Rules Read",
   "account-firewall-access-rules.write": "Account Firewall Access Rules Write",
-  "account-security-center-insights.read":
-    "Account Security Center Insights Read",
-  "account-security-center-insights.write":
-    "Account Security Center Insights Write",
+  "account-security-center-insights.read": "Account Security Center Insights Read",
+  "account-security-center-insights.write": "Account Security Center Insights Write",
   "account-waf.read": "Account WAF Read",
   "account-waf.write": "Account WAF Write",
   "request-tracer.read": "Allow Request Tracer Read",
-  "reports-application-security-report.read":
-    "Application Security Reports Read",
+  "reports-application-security-report.read": "Application Security Reports Read",
   "bot-management-feedback.read": "Bot Management Feedback Report Read",
   "bot-management-feedback.write": "Bot Management Feedback Report Write",
   "bot-management.read": "Bot Management Read",
@@ -663,15 +674,15 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "transform-rules.write": "Transform Rules Write",
   "zone-transform-rules.read": "Zone Transform Rules Read",
   "zone-transform-rules.write": "Zone Transform Rules Write",
-  "access-app.read": "Access: Apps Read",
-  "access-app.revoke": "Access: Apps Revoke",
-  "access-app.write": "Access: Apps Write",
   "access.read": "Access: Apps and Policies Read",
   "zone-access.read": "Access: Apps and Policies Read",
   "access.revoke": "Access: Apps and Policies Revoke",
   "zone-access.revoke": "Access: Apps and Policies Revoke",
   "access.write": "Access: Apps and Policies Write",
   "zone-access.write": "Access: Apps and Policies Write",
+  "access-app.read": "Access: Apps Read",
+  "access-app.revoke": "Access: Apps Revoke",
+  "access-app.write": "Access: Apps Write",
   "access-audit-log.read": "Access: Audit Logs Read",
   "access-custom-page.read": "Access: Custom Pages Read",
   "access-custom-page.write": "Access: Custom Pages Write",
@@ -688,25 +699,22 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "access-org.read": "Access: Organizations Read",
   "access-org.revoke": "Access: Organizations Revoke",
   "access-org.write": "Access: Organizations Write",
-  "access-acct.read":
-    "Access: Organizations, Identity Providers, and Groups Read",
-  "access-acct.revoke":
-    "Access: Organizations, Identity Providers, and Groups Revoke",
-  "access-acct.write":
-    "Access: Organizations, Identity Providers, and Groups Write",
+  "access-acct.read": "Access: Organizations, Identity Providers, and Groups Read",
+  "access-acct.revoke": "Access: Organizations, Identity Providers, and Groups Revoke",
+  "access-acct.write": "Access: Organizations, Identity Providers, and Groups Write",
   "access-policy.read": "Access: Policies Read",
   "access-policy.write": "Access: Policies Write",
   "access-policy-test.read": "Access: Policy Test Read",
   "access-policy-test.write": "Access: Policy Test Write",
-  "access-population.read": "Access: Population Read",
-  "access-population.write": "Access: Population Write",
   "access-saml-certificate.read": "Access: SAML Certificates Read",
   "access-saml-certificate.write": "Access: SAML Certificates Write",
   "access-scim-log.read": "Access: SCIM Logs Read",
-  "access-ssh-auditing.read": "Access: SSH Auditing Read",
-  "access-ssh-auditing.write": "Access: SSH Auditing Write",
+  "access-population.read": "Access: SCIM Population Read",
+  "access-population.write": "Access: SCIM Population Write",
   "access-service-token.read": "Access: Service Tokens Read",
   "access-service-token.write": "Access: Service Tokens Write",
+  "access-ssh-auditing.read": "Access: SSH Auditing Read",
+  "access-ssh-auditing.write": "Access: SSH Auditing Write",
   "access-tag.read": "Access: Tags Read",
   "access-tag.write": "Access: Tags Write",
   "access-users.read": "Access: Users Read",
@@ -717,14 +725,11 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "teams-cds-compute-account.write": "Cloudflare CDS Compute Account Write",
   "teams-dex.read": "Cloudflare DEX Read",
   "teams-dex.write": "Cloudflare DEX Write",
-  "teams-connector-cloudflared.monitoring":
-    "Cloudflare One Connector Monitoring: cloudflared",
+  "teams-connector-cloudflared.monitoring": "Cloudflare One Connector Monitoring: cloudflared",
+  "teams-connector-cloudflared.read": "Cloudflare One Connector: cloudflared Read",
+  "teams-connector-cloudflared.write": "Cloudflare One Connector: cloudflared Write",
   "teams-connector-warp.read": "Cloudflare One Connector: WARP Read",
   "teams-connector-warp.write": "Cloudflare One Connector: WARP Write",
-  "teams-connector-cloudflared.read":
-    "Cloudflare One Connector: cloudflared Read",
-  "teams-connector-cloudflared.write":
-    "Cloudflare One Connector: cloudflared Write",
   "teams-connectors.read": "Cloudflare One Connectors Read",
   "teams-connectors.write": "Cloudflare One Connectors Write",
   "teams-networks.read": "Cloudflare One Networks Read",
@@ -750,6 +755,8 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "account-logs.write": "Logs Write",
   "logs.write": "Logs Write",
   "radar.read": "Radar Read",
+  "zone-observability.read": "Zone Observability Read",
+  "zone-observability.write": "Zone Observability Write",
   "account-waiting-rooms.read": "Account Waiting Rooms Read",
   "address-maps.read": "Address Maps Read",
   "address-maps.write": "Address Maps Write",
@@ -768,10 +775,8 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
   "load-balancers-account.write": "Load Balancers Account Write",
   "load-balancers.read": "Load Balancers Read",
   "load-balancers.write": "Load Balancers Write",
-  "load-balancing-monitors-and-pools.read":
-    "Load Balancing: Monitors and Pools Read",
-  "load-balancing-monitors-and-pools.write":
-    "Load Balancing: Monitors and Pools Write",
+  "load-balancing-monitors-and-pools.read": "Load Balancing: Monitors and Pools Read",
+  "load-balancing-monitors-and-pools.write": "Load Balancing: Monitors and Pools Write",
   "pcaps-api.read": "Magic Firewall Packet Captures - Read PCAPs API",
   "pcaps-api.write": "Magic Firewall Packet Captures - Write PCAPs API",
   "magic-firewall.read": "Magic Firewall Read",
@@ -843,43 +848,52 @@ export const OAUTH_SCOPE_NAMES: Readonly<Record<OAuthScopeId, string>> = {
 
 /** Flat lookup retained for consumers that do not need grouping metadata. */
 export const ALL_SCOPES = Object.fromEntries(
-  OAUTH_SCOPE_GROUPS.flatMap((group) =>
-    group.scopes.map((scope) => [scope, group.label]),
-  ),
+  OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes.map((scope) => [scope, group.label])),
 ) as Readonly<Record<OAuthScopeId, string>>;
 
 /** Every scope available to the public Alchemy OAuth client. */
-export const ALL_SCOPE_IDS: ReadonlyArray<OAuthScopeId> =
-  OAUTH_SCOPE_GROUPS.flatMap((group) => group.scopes);
+export const ALL_SCOPE_IDS: ReadonlyArray<OAuthScopeId> = OAUTH_SCOPE_GROUPS.flatMap(
+  (group) => group.scopes,
+);
+
+/**
+ * The OAuth scope that grants a refresh token. Every authorization requests
+ * it, and the token response echoes it into the stored scopes, so it is
+ * never a catalog scope.
+ */
+export const OFFLINE_ACCESS_SCOPE = "offline_access";
 
 /**
  * Split stored scopes into those the current OAuth client offers and those
- * it does not. Profiles configured against an older client (or scope
- * catalog) can hold scopes the current client rejects, and a single unknown
- * scope invalidates the entire authorize URL — sanitize with this before
- * building one.
+ * it does not, leaving out {@link OFFLINE_ACCESS_SCOPE}. Profiles configured
+ * against an older client (or scope catalog) can hold scopes the current
+ * client rejects, and a single unknown scope invalidates the entire
+ * authorize URL — sanitize with this before building one.
  */
 export const partitionOAuthScopes = (
   scopes: ReadonlyArray<string>,
 ): { valid: string[]; dropped: string[] } => {
   const known = new Set<string>(ALL_SCOPE_IDS);
+  const catalog = scopes.filter((scope) => scope !== OFFLINE_ACCESS_SCOPE);
   return {
-    valid: scopes.filter((scope) => known.has(scope)),
-    dropped: scopes.filter((scope) => !known.has(scope)),
+    valid: catalog.filter((scope) => known.has(scope)),
+    dropped: catalog.filter((scope) => !known.has(scope)),
   };
 };
 
 /**
  * Initial selections for the custom-scope prompt. Reconfiguration restores
  * the existing OAuth grant while dropping scopes no longer offered by the
- * current client; first-time and stored-credential setup use the basic set.
+ * current client; first-time and stored-credential setup select every scope.
  */
-export const customOAuthScopeDefaults = (
-  currentConfig?: CloudflareAuthConfig,
-): string[] =>
-  currentConfig?.method === "oauth"
+export const customOAuthScopeDefaults = (currentConfig?: {
+  readonly method: string;
+  readonly scopes?: ReadonlyArray<string>;
+  readonly [key: string]: unknown;
+}): string[] =>
+  currentConfig?.method === "oauth" && currentConfig.scopes !== undefined
     ? partitionOAuthScopes(currentConfig.scopes).valid
-    : [...BASIC_SCOPES];
+    : [...ALL_SCOPE_IDS];
 
 /** Reusable scope bundles for common OAuth authorization flows. */
 export const OAUTH_SCOPE_TEMPLATES = {
@@ -893,29 +907,13 @@ export const OAUTH_SCOPE_TEMPLATES = {
     "aig.read",
     "aig.run",
     "aig.write",
-    "cloudchamber.write",
     "connectivity-directory.admin",
-    "containers.write",
-    "d1.write",
-    "page.write",
-    "pipelines.send",
-    "pipelines.write",
-    "queues.write",
-    "secrets-store.write",
     "account-ssl-and-certificates.write",
     "ssl-and-certificates.write",
-    "vectorize.write",
-    "workers-kv-storage.write",
-    "workers-observability.read",
-    "workers-observability.write",
-    "workers-observability-telemetry.write",
-    "workers-r2.write",
-    "workers-routes.write",
-    "workers-scripts.write",
-    "workers-tail.read",
     "zone.read",
+    // every Developer Platform scope
+    ...OAUTH_SCOPE_GROUPS[0].scopes,
   ],
 } as const satisfies Readonly<Record<string, ReadonlyArray<OAuthScopeId>>>;
 
-export const BASIC_SCOPES: ReadonlyArray<OAuthScopeId> =
-  OAUTH_SCOPE_TEMPLATES.basic;
+export const BASIC_SCOPES: ReadonlyArray<OAuthScopeId> = OAUTH_SCOPE_TEMPLATES.basic;

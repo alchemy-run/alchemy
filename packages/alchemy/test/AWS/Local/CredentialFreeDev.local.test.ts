@@ -1,7 +1,16 @@
+import { spawnSync } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 /**
  * Credential-free `alchemy dev` for AWS.
  *
- * THE RULING: `{ method: "local" }` is invisible plumbing — `alchemy dev`
+ * THE RULING: local emulation is invisible plumbing — `alchemy dev`
  * with zero AWS credentials must work, landing every emulatable resource in
  * the local floci emulator, while `Alchemy.remote()` resources demand real
  * credentials up front with a typed, actionable error.
@@ -36,15 +45,6 @@ import { Bucket } from "@/AWS/S3";
 import { Queue } from "@/AWS/SQS";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
 
@@ -60,10 +60,7 @@ const NO_CREDS_PROFILE = "credfree-dev-test-does-not-exist";
 // plain boolean.
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -97,9 +94,7 @@ const maskAwsEnv = Layer.effect(
   Effect.gen(function* () {
     const base = yield* ConfigProvider.ConfigProvider;
     return ConfigProvider.make((path) =>
-      path.length === 1 &&
-      typeof path[0] === "string" &&
-      MASKED_AWS_KEYS.has(path[0])
+      path.length === 1 && typeof path[0] === "string" && MASKED_AWS_KEYS.has(path[0])
         ? Effect.succeed(undefined)
         : base.load(path),
     );
@@ -110,11 +105,7 @@ const providers = AWS.providers().pipe(Layer.provide(maskAwsEnv));
 
 // `dev: true` runs the same topology as the real `alchemy dev` command
 // (including the RPC sidecar default for RPC-backed providers).
-const { test } = Test.make({
-  providers,
-  dev: true,
-  profile: NO_CREDS_PROFILE,
-});
+const { test } = Test.make({ providers, dev: true, profile: NO_CREDS_PROFILE });
 
 /**
  * Raw (non-distilled) call against the emulator gateway — out-of-band proof
@@ -136,10 +127,7 @@ const rawAwsJson = Effect.fn(function* (options: {
         authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
       }),
       HttpClientRequest.setBody(
-        HttpBody.text(
-          JSON.stringify(options.body),
-          "application/x-amz-json-1.0",
-        ),
+        HttpBody.text(JSON.stringify(options.body), "application/x-amz-json-1.0"),
       ),
     ),
   );
@@ -197,11 +185,9 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(listQueues.status).toBe(200);
       const queues = (yield* listQueues.json) as { QueueUrls?: string[] };
-      expect(
-        queues.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ),
-      ).toBe(true);
+      expect(queues.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`))).toBe(
+        true,
+      );
 
       // Destroy must be equally credential-free (rows are stamped local).
       yield* stack.destroy();
@@ -214,12 +200,10 @@ test.provider.skipIf(!dockerAvailable)(
       });
       const queuesAfter = (yield* after.json) as { QueueUrls?: string[] };
       expect(
-        queuesAfter.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ) ?? false,
+        queuesAfter.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`)) ?? false,
       ).toBe(false);
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:s3", "provider:aws:sqs", "local"], timeout: 240_000 },
 );
 
 /**
@@ -238,7 +222,8 @@ const noCredsProfile: ProfileStoreService = {
   createProfile: () => unexpectedProfileMutation,
   renameProfile: () => unexpectedProfileMutation,
   current: Effect.succeed({ name: NO_CREDS_PROFILE, source: "configuration" }),
-  setProfile: () => unexpectedProfileMutation,
+  setProviderConfig: () => unexpectedProfileMutation,
+  deleteProviderConfig: () => unexpectedProfileMutation,
   deleteProfile: () => Effect.succeed(false),
   loadProviderConfig: () => unexpectedProfileMutation,
 };
@@ -246,16 +231,18 @@ const noCredsProfile: ProfileStoreService = {
 /**
  * The test runner exports CI=true, but the CI contract for the
  * credential-demand seam is "use env-var credentials" — a different behavior
- * than the one under test. Mask the CI key (delegating everything else) so
- * the demand seam sees a plain developer shell: `ci: false` → the typed
- * failure.
+ * than the one under test. Mask CI and AWS credentials at the demand seam
+ * as well as provider construction, so fake-profile wrappers and .env files
+ * cannot turn the missing-credentials assertion into an environment login.
  */
-const maskCi = Layer.effect(
+const maskCredentialDemand = Layer.effect(
   ConfigProvider.ConfigProvider,
   Effect.gen(function* () {
     const base = yield* ConfigProvider.ConfigProvider;
     return ConfigProvider.make((path) =>
-      path.length === 1 && path[0] === "CI"
+      path.length === 1 &&
+      typeof path[0] === "string" &&
+      (path[0] === "CI" || MASKED_AWS_KEYS.has(path[0]))
         ? Effect.succeed(undefined)
         : base.load(path),
     );
@@ -277,16 +264,14 @@ test.provider(
         stack
           .deploy(
             Effect.gen(function* () {
-              const bucket = yield* Bucket("RemoteBucket").pipe(
-                Alchemy.remote(),
-              );
+              const bucket = yield* Bucket("RemoteBucket").pipe(Alchemy.remote());
               return { bucket };
             }),
           )
           .pipe(
-            // Hermetic view for the demand seam: no profile on disk, no CI.
+            // No saved profile, CI mode, or ambient AWS credentials.
             Effect.provideService(ProfileStore, noCredsProfile),
-            Effect.provide(maskCi),
+            Effect.provide(maskCredentialDemand),
           ),
       );
 
@@ -296,9 +281,7 @@ test.provider(
         expect(error._tag).toBe("CredentialsRequired");
         expect(error.provider).toBe("AWS");
         expect(error.reason).toBe("remote");
-        expect(
-          error.resources.some((fqn) => fqn.includes("RemoteBucket")),
-        ).toBe(true);
+        expect(error.resources.some((fqn) => fqn.includes("RemoteBucket"))).toBe(true);
         expect(error.message).toContain("AWS credentials are required");
         expect(error.message).toContain("RemoteBucket");
         expect(error.message).toContain(
@@ -307,5 +290,5 @@ test.provider(
         expect(error.message).toContain("Alchemy.remote()");
       }
     }),
-  { timeout: 60_000 },
+  { tags: ["provider:aws", "provider:aws:s3", "local"], timeout: 60_000 },
 );

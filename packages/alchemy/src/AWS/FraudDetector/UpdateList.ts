@@ -8,10 +8,7 @@ import type { List } from "./List.ts";
  * supplies the elements and the `updateMode` (`APPEND`, `REMOVE`, or
  * `REPLACE`).
  */
-export interface UpdateListRequest extends Omit<
-  frauddetector.UpdateListRequest,
-  "name"
-> {}
+export interface UpdateListRequest extends Omit<frauddetector.UpdateListRequest, "name"> {}
 
 /**
  * Mutate the elements of a bound Amazon Fraud Detector list at runtime — the
@@ -54,12 +51,7 @@ export interface UpdateList extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateListRequest,
-    ) => Effect.Effect<
-      frauddetector.UpdateListResult,
-      frauddetector.UpdateListError
-    >
+    ) => Effect.Effect<frauddetector.UpdateListResult, frauddetector.UpdateListError>
   >
 > {}
-export const UpdateList = Binding.Service<UpdateList>(
-  "AWS.FraudDetector.UpdateList",
-);
+export const UpdateList = Binding.Service<UpdateList>("AWS.FraudDetector.UpdateList");

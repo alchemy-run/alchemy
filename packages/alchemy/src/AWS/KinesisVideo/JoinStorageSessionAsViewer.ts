@@ -53,7 +53,6 @@ export interface JoinStorageSessionAsViewer extends Binding.Service<
   >
 > {}
 
-export const JoinStorageSessionAsViewer =
-  Binding.Service<JoinStorageSessionAsViewer>(
-    "AWS.KinesisVideo.JoinStorageSessionAsViewer",
-  );
+export const JoinStorageSessionAsViewer = Binding.Service<JoinStorageSessionAsViewer>(
+  "AWS.KinesisVideo.JoinStorageSessionAsViewer",
+);

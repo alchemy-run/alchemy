@@ -20,9 +20,7 @@ export const GetApiKeysHttp = Layer.effect(
         verb: "GET",
         paths: (region) => [`arn:aws:apigateway:${region}::/apikeys`],
       });
-      return Effect.fn("AWS.ApiGateway.GetApiKeys")(function* (
-        request?: GetApiKeysRequest,
-      ) {
+      return Effect.fn("AWS.ApiGateway.GetApiKeys")(function* (request?: GetApiKeysRequest) {
         return yield* getApiKeys(request ?? {});
       });
     });

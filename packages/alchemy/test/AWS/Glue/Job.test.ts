@@ -1,14 +1,14 @@
+import * as glue from "@distilled.cloud/aws/glue";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Job } from "@/AWS/Glue";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as glue from "@distilled.cloud/aws/glue";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,80 +36,85 @@ const jobRole = () =>
     ],
   });
 
-test.provider("create, update, delete Glue job definition", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "create, update, delete Glue job definition",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const created = yield* stack.deploy(
-      Effect.gen(function* () {
-        const bucket = yield* Bucket("JobBucket", { forceDestroy: true });
-        const role = yield* jobRole();
-        const job = yield* Job("Etl", {
-          role: role.roleArn,
-          command: {
-            name: "pythonshell",
-            pythonVersion: "3.9",
-            scriptLocation: Output.interpolate`s3://${bucket.bucketName}/scripts/etl.py`,
-          },
-          maxCapacity: 0.0625,
-          glueVersion: "3.0",
-          defaultArguments: { "--job-language": "python" },
-          tags: { Environment: "test" },
-        });
-        return { bucket, role, job };
-      }),
-    );
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Bucket("JobBucket", { forceDestroy: true });
+          const role = yield* jobRole();
+          const job = yield* Job("Etl", {
+            role: role.roleArn,
+            command: {
+              name: "pythonshell",
+              pythonVersion: "3.9",
+              scriptLocation: Output.interpolate`s3://${bucket.bucketName}/scripts/etl.py`,
+            },
+            maxCapacity: 0.0625,
+            glueVersion: "3.0",
+            defaultArguments: { "--job-language": "python" },
+            tags: { Environment: "test" },
+          });
+          return { bucket, role, job };
+        }),
+      );
 
-    expect(created.job.jobName).toBeDefined();
-    expect(created.job.jobArn).toContain(`:job/${created.job.jobName}`);
+      expect(created.job.jobName).toBeDefined();
+      expect(created.job.jobArn).toContain(`:job/${created.job.jobName}`);
 
-    // out-of-band verification
-    const observed = yield* getJob(created.job.jobName);
-    expect(observed?.Name).toEqual(created.job.jobName);
-    expect(observed?.Command?.Name).toEqual("pythonshell");
-    expect(observed?.Command?.ScriptLocation).toEqual(
-      `s3://${created.bucket.bucketName}/scripts/etl.py`,
-    );
-    expect(observed?.GlueVersion).toEqual("3.0");
-    expect(observed?.DefaultArguments?.["--job-language"]).toEqual("python");
+      // out-of-band verification
+      const observed = yield* getJob(created.job.jobName);
+      expect(observed?.Name).toEqual(created.job.jobName);
+      expect(observed?.Command?.Name).toEqual("pythonshell");
+      expect(observed?.Command?.ScriptLocation).toEqual(
+        `s3://${created.bucket.bucketName}/scripts/etl.py`,
+      );
+      expect(observed?.GlueVersion).toEqual("3.0");
+      expect(observed?.DefaultArguments?.["--job-language"]).toEqual("python");
 
-    // tags (jobs ARE ARN-taggable)
-    const tags = yield* glue.getTags({ ResourceArn: created.job.jobArn });
-    expect(tags.Tags?.["alchemy::id"]).toBeDefined();
-    expect(tags.Tags?.Environment).toEqual("test");
+      // tags (jobs ARE ARN-taggable)
+      const tags = yield* glue.getTags({ ResourceArn: created.job.jobArn });
+      expect(tags.Tags?.["alchemy::id"]).toBeDefined();
+      expect(tags.Tags?.Environment).toEqual("test");
 
-    // update: change default arguments + timeout
-    yield* stack.deploy(
-      Effect.gen(function* () {
-        const bucket = yield* Bucket("JobBucket", { forceDestroy: true });
-        const role = yield* jobRole();
-        const job = yield* Job("Etl", {
-          role: role.roleArn,
-          command: {
-            name: "pythonshell",
-            pythonVersion: "3.9",
-            scriptLocation: Output.interpolate`s3://${bucket.bucketName}/scripts/etl.py`,
-          },
-          maxCapacity: 0.0625,
-          glueVersion: "3.0",
-          description: "curated ETL",
-          defaultArguments: { "--job-language": "python", "--extra": "1" },
-          timeout: "30 minutes",
-          tags: { Environment: "test" },
-        });
-        return { job };
-      }),
-    );
+      // update: change default arguments + timeout
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* Bucket("JobBucket", { forceDestroy: true });
+          const role = yield* jobRole();
+          const job = yield* Job("Etl", {
+            role: role.roleArn,
+            command: {
+              name: "pythonshell",
+              pythonVersion: "3.9",
+              scriptLocation: Output.interpolate`s3://${bucket.bucketName}/scripts/etl.py`,
+            },
+            maxCapacity: 0.0625,
+            glueVersion: "3.0",
+            description: "curated ETL",
+            defaultArguments: { "--job-language": "python", "--extra": "1" },
+            timeout: "30 minutes",
+            tags: { Environment: "test" },
+          });
+          return { job };
+        }),
+      );
 
-    const reobserved = yield* getJob(created.job.jobName);
-    expect(reobserved?.Description).toEqual("curated ETL");
-    expect(reobserved?.DefaultArguments?.["--extra"]).toEqual("1");
-    expect(reobserved?.Timeout).toEqual(30);
+      const reobserved = yield* getJob(created.job.jobName);
+      expect(reobserved?.Description).toEqual("curated ETL");
+      expect(reobserved?.DefaultArguments?.["--extra"]).toEqual("1");
+      expect(reobserved?.Timeout).toEqual(30);
 
-    yield* stack.destroy();
-    const gone = yield* getJob(created.job.jobName);
-    expect(gone).toBeUndefined();
-  }),
+      yield* stack.destroy();
+      const gone = yield* getJob(created.job.jobName);
+      expect(gone).toBeUndefined();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:glue", "provider:aws:iam", "provider:aws:s3", "live"],
+  },
 );
 
 // A live job run is billed and takes ~1-2 minutes — gated behind AWS_TEST_SLOW=1.
@@ -166,9 +171,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               times: 20,
             }),
           );
-        yield* Effect.log(
-          `job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`,
-        );
+        yield* Effect.log(`job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`);
         if (
           finalRun?.JobRunState !== "SUCCEEDED" &&
           finalRun?.ErrorMessage?.includes("assume role permissions")
@@ -185,5 +188,8 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       yield* stack.destroy();
     }),
-  { timeout: 420_000 },
+  {
+    tags: ["provider:aws", "provider:aws:glue", "provider:aws:iam", "provider:aws:s3", "live"],
+    timeout: 420_000,
+  },
 );

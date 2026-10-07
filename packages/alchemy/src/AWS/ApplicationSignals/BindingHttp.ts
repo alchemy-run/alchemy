@@ -57,12 +57,7 @@ export const makeApplicationSignalsAccountHttpBinding = <I, A, E, R>(options: {
  * the runtime callable injects the bound SLO's ARN as `Id` and the
  * deploy-time half grants `actions` on the SLO ARN.
  */
-export const makeSloIdHttpBinding = <
-  I extends { Id: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeSloIdHttpBinding = <I extends { Id: string }, A, E, R>(options: {
   /** Fully-qualified binding tag. */
   tag: string;
   /** The distilled operation; `Id` is injected from the SLO. */
@@ -89,9 +84,7 @@ export const makeSloIdHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${slo.LogicalId})`)(function* (
-        request?: Omit<I, "Id">,
-      ) {
+      return Effect.fn(`${options.tag}(${slo.LogicalId})`)(function* (request?: Omit<I, "Id">) {
         return yield* op({
           ...request,
           Id: yield* SloArn,
@@ -107,12 +100,7 @@ export const makeSloIdHttpBinding = <
  * runtime callable injects `SloIds: [sloArn]` and the deploy-time half
  * grants `actions` on the SLO ARN.
  */
-export const makeSloBatchHttpBinding = <
-  I extends { SloIds: string[] },
-  A,
-  E,
-  R,
->(options: {
+export const makeSloBatchHttpBinding = <I extends { SloIds: string[] }, A, E, R>(options: {
   /** Fully-qualified binding tag. */
   tag: string;
   /** The distilled operation; `SloIds` is injected from the SLO. */
@@ -154,9 +142,7 @@ export const makeSloBatchHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${slo.LogicalId})`)(function* (
-        request: Omit<I, "SloIds">,
-      ) {
+      return Effect.fn(`${options.tag}(${slo.LogicalId})`)(function* (request: Omit<I, "SloIds">) {
         return yield* op({
           ...request,
           SloIds: [yield* SloArn],

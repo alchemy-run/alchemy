@@ -24,7 +24,6 @@ export type HetznerResolvedCredentials = {
 
 const hetznerAuth = makeStoredAuthProvider<HetznerResolvedCredentials>({
   provider: HETZNER_AUTH_PROVIDER_NAME,
-  storageKey: "hetzner-stored",
   fields: [
     { name: "token", label: "Hetzner Cloud API Token", secret: true },
     {
@@ -50,9 +49,7 @@ const hetznerAuth = makeStoredAuthProvider<HetznerResolvedCredentials>({
       apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
       source: {
         type: "env" as const,
-        details: apiBaseUrl
-          ? `${HCLOUD_TOKEN_ENV}, ${HCLOUD_ENDPOINT_ENV}`
-          : HCLOUD_TOKEN_ENV,
+        details: apiBaseUrl ? `${HCLOUD_TOKEN_ENV}, ${HCLOUD_ENDPOINT_ENV}` : HCLOUD_TOKEN_ENV,
       },
     })),
   ),

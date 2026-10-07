@@ -1,12 +1,12 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -18,21 +18,14 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(import.meta.dirname, "vite-queue-fixture");
+const queueFixtureDir = pathe.resolve(import.meta.dirname, "vite-queue-fixture");
+const cronFixtureDir = pathe.resolve(import.meta.dirname, "vite-cron-fixture");
 // Keep the temp clone under the workspace so Vite can express the project
 // root relative to cwd (see the note on `tempRoot` in Vite.test.ts).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "index.html",
-  "package.json",
-  "vite.config.ts",
-  "worker.ts",
-];
+const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "worker.ts"];
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -50,10 +43,7 @@ const getJsonReady = (url: string) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(15),
         ]),
       }),
@@ -76,7 +66,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const rootDir = yield* cloneFixture(fixtureDir, {
+      const rootDir = yield* cloneFixture(queueFixtureDir, {
         prefix: "alchemy-vite-queue-",
         tempRoot,
         entries: fixtureEntries,
@@ -114,15 +104,13 @@ test.provider(
 
       // `send()` resolves (pre-fix it hung forever against the registry's
       // drop stub)...
-      const sent = (yield* getJsonReady(
-        `${deployed.site.url}/api/send?text=vite-queue-hello`,
-      ).pipe(Effect.timeout("60 seconds"))) as { sent: string };
+      const sent = (yield* getJsonReady(`${deployed.site.url}/api/send?text=vite-queue-hello`).pipe(
+        Effect.timeout("60 seconds"),
+      )) as { sent: string };
       expect(sent.sent).toBe("vite-queue-hello");
 
       // ...and the broker delivers to the fixture's queue() handler.
-      const received = yield* getJsonReady(
-        `${deployed.site.url}/api/received`,
-      ).pipe(
+      const received = yield* getJsonReady(`${deployed.site.url}/api/received`).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
           schedule: Schedule.spaced("500 millis"),
@@ -134,5 +122,62 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:website",
+      "local",
+    ],
+    timeout: 240_000,
+  },
+);
+
+/** Regression test for cron configuration dropped by the Vite child path. */
+test.provider(
+  "Vite dev: automatically invokes scheduled handlers",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(cronFixtureDir, {
+        prefix: "alchemy-vite-cron-",
+        tempRoot,
+        entries: fixtureEntries,
+      });
+
+      const site = yield* stack.deploy(
+        Cloudflare.Website.Vite("ViteCronSite", {
+          rootDir,
+          main: "worker.ts",
+          workersDev: true,
+          compatibility: {
+            date: "2024-09-23",
+            flags: ["nodejs_compat"],
+          },
+          memo: { include: fixtureEntries },
+          assets: { runWorkerFirst: true },
+          dev: { port: 0 },
+          // Effect Cron supports seconds for fast local feedback; five-field
+          // production expressions use the same runtime path.
+          crons: ["* * * * * *"],
+        }),
+      );
+
+      const scheduledCount = yield* getJsonReady(`${site.url}/api/scheduled`).pipe(
+        Effect.map((body) => (body as { scheduledCount: number }).scheduledCount),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (count) => count > 0,
+          times: 20,
+        }),
+      );
+      expect(scheduledCount).toBeGreaterThan(0);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:website", "local"],
+    timeout: 240_000,
+  },
 );

@@ -1,3 +1,8 @@
+import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
@@ -5,11 +10,6 @@ import { Destination } from "@/AWS/IoTManagedIntegrations";
 import { Stream } from "@/AWS/Kinesis";
 import { Region } from "@/AWS/Region.ts";
 import * as Test from "@/Test/Alchemy";
-import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,11 +34,12 @@ test.provider(
       );
       expect(error._tag).toBe("ResourceNotFoundException");
     }),
+  { tags: ["provider:aws", "provider:aws:iotmanagedintegrations", "live"] },
 );
 
-class DestinationStillExists extends Data.TaggedError(
-  "DestinationStillExists",
-)<{ readonly name: string }> {}
+class DestinationStillExists extends Data.TaggedError("DestinationStillExists")<{
+  readonly name: string;
+}> {}
 
 const assertDestinationGone = (name: string) =>
   mi.getDestination({ Name: name }).pipe(
@@ -107,20 +108,25 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
       const observed = yield* mi.getDestination({
         Name: destination.destinationName,
       });
-      expect(observed.DeliveryDestinationArn).toBe(
-        destination.deliveryDestinationArn,
-      );
+      expect(observed.DeliveryDestinationArn).toBe(destination.deliveryDestinationArn);
       expect(observed.Tags?.fixture).toBe("iot-mi-destination");
 
       // Update the description in place.
-      const { destination: updated } = yield* stack.deploy(
-        makeStack("phase two"),
-      );
+      const { destination: updated } = yield* stack.deploy(makeStack("phase two"));
       expect(updated.destinationName).toBe(destination.destinationName);
       expect(updated.description).toBe("phase two");
 
       yield* stack.destroy();
       yield* assertDestinationGone(destination.destinationName);
     }),
-  { timeout: 240_000 },
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:iam",
+      "provider:aws:iotmanagedintegrations",
+      "provider:aws:kinesis",
+      "live",
+    ],
+    timeout: 240_000,
+  },
 );

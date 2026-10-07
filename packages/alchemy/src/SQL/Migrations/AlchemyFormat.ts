@@ -15,7 +15,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { quoteIdentifier, sqlLiteral } from "./Records.ts";
+import { quoteIdentifier, sqlLiteral } from "./Utils.ts";
 
 export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 
@@ -68,11 +68,7 @@ const insertSql = (
   return `INSERT INTO ${quoted} (hash, created_at, name${appliedColumn}) VALUES (${sqlLiteral(record.hash)}, ${sqlLiteral(record.createdAtMillis ?? null)}, ${sqlLiteral(record.name)}${applied});`;
 };
 
-const renameSql = (
-  from: string,
-  to: string,
-  dialect: MigrationDialect,
-): string =>
+const renameSql = (from: string, to: string, dialect: MigrationDialect): string =>
   dialect === "mysql"
     ? `RENAME TABLE ${quoteIdentifier(from, dialect)} TO ${quoteIdentifier(to, dialect)};`
     : `ALTER TABLE ${quoteIdentifier(from, dialect)} RENAME TO ${quoteIdentifier(to, dialect)};`;
@@ -118,10 +114,7 @@ const rebuildInPlace = (options: {
     const temp = `${table}_alchemy_upgrade`;
     yield* executor.batch([
       `DROP TABLE IF EXISTS ${quoteIdentifier(temp, dialect)};`,
-      createTableSql(temp, dialect).replace(
-        "CREATE TABLE IF NOT EXISTS",
-        "CREATE TABLE",
-      ),
+      createTableSql(temp, dialect).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE"),
       ...matched.map((row) => convertedRowInsertSql(temp, dialect, row)),
       `DROP TABLE ${quoted};`,
       renameSql(temp, table, dialect),
@@ -142,14 +135,10 @@ const ensureTable = (options: {
         // history the previous tool (drizzle-kit / prisma / wrangler) left
         // behind: copy it into our table ONCE and freeze theirs. One-way.
         const history = yield* findForeignHistory({ executor, table });
-        const converted = history
-          ? yield* matchForeignRows({ history, records })
-          : [];
+        const converted = history ? yield* matchForeignRows({ history, records }) : [];
         yield* executor.batch([
           createTableSql(table, executor.dialect),
-          ...converted.map((row) =>
-            convertedRowInsertSql(table, executor.dialect, row),
-          ),
+          ...converted.map((row) => convertedRowInsertSql(table, executor.dialect, row)),
         ]);
         return;
       }
@@ -204,25 +193,19 @@ const aliasesOf = (name: string): readonly string[] => [
 ];
 
 const appliedHistory = (executor: SqlExecutor, table: string) =>
-  executor
-    .query(
-      `SELECT name, hash FROM ${quoteIdentifier(table, executor.dialect)};`,
-    )
-    .pipe(
-      Effect.map((rows) => {
-        const byName = new Map<string, string | undefined>();
-        for (const row of rows) {
-          if (row.name === null || row.name === undefined) continue;
-          byName.set(
-            String(row.name),
-            row.hash === null || row.hash === undefined
-              ? undefined
-              : String(row.hash),
-          );
-        }
-        return byName;
-      }),
-    );
+  executor.query(`SELECT name, hash FROM ${quoteIdentifier(table, executor.dialect)};`).pipe(
+    Effect.map((rows) => {
+      const byName = new Map<string, string | undefined>();
+      for (const row of rows) {
+        if (row.name === null || row.name === undefined) continue;
+        byName.set(
+          String(row.name),
+          row.hash === null || row.hash === undefined ? undefined : String(row.hash),
+        );
+      }
+      return byName;
+    }),
+  );
 
 const lookupApplied = (
   byName: Map<string, string | undefined>,
@@ -256,12 +239,9 @@ export const applyAlchemyFormat = (options: {
 }): Effect.Effect<void, MigrationApplyError> =>
   Effect.gen(function* () {
     const { executor, table, records } = options;
-    if (records.length === 0) return;
     yield* ensureTable({ executor, table, records });
     const applied = yield* appliedHistory(executor, table);
-    const localNames = new Set(
-      records.flatMap((record) => aliasesOf(record.name)),
-    );
+    const localNames = new Set(records.flatMap((record) => aliasesOf(record.name)));
     const changed: string[] = [];
     const removed: string[] = [];
     for (const name of applied.keys()) {
@@ -287,9 +267,6 @@ export const applyAlchemyFormat = (options: {
     }
     for (const record of records) {
       if (lookupApplied(applied, record.name)) continue;
-      yield* executor.batch([
-        ...record.statements,
-        insertSql(table, executor.dialect, record),
-      ]);
+      yield* executor.batch([...record.statements, insertSql(table, executor.dialect, record)]);
     }
   });

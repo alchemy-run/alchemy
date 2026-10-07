@@ -1,20 +1,23 @@
+import { createHash } from "node:crypto";
 import { Region } from "@distilled.cloud/aws/Region";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Arr from "effect/Array";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http";
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { Stack } from "../../Stack.ts";
+import { isActionState, State } from "../../State/State.ts";
 import { diffTags } from "../../Tags.ts";
-import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -42,6 +45,15 @@ export interface BucketEncryption {
    * @default false
    */
   bucketKeyEnabled?: boolean;
+  /**
+   * Encryption types to block for new object writes. Currently supports SSE-C
+   * (server-side encryption with customer-provided keys).
+   * Omitted or `[]` blocks no encryption types and permits SSE-C, sending
+   * AWS's `NONE` value. Set to `["SSE-C"]` to block customer-provided keys.
+   * Removing this property resets the blocklist to its default.
+   * @default []
+   */
+  blockedEncryptionTypes?: "SSE-C"[];
 }
 
 /**
@@ -147,7 +159,9 @@ export interface BucketProps {
    */
   mfaDelete?: "Enabled" | "Disabled";
   /**
-   * Default server-side encryption for objects written to the bucket.
+   * Default server-side encryption for new objects. Omission restores AES256,
+   * no KMS key, bucket keys disabled, and no encryption types blocked.
+   * Existing objects are not re-encrypted. External changes are repaired on deploy.
    */
   encryption?: BucketEncryption;
   /**
@@ -166,10 +180,7 @@ export interface BucketProps {
   /**
    * Object ownership control. `"BucketOwnerEnforced"` disables ACLs entirely.
    */
-  objectOwnership?:
-    | "BucketOwnerPreferred"
-    | "ObjectWriter"
-    | "BucketOwnerEnforced";
+  objectOwnership?: "BucketOwnerPreferred" | "ObjectWriter" | "BucketOwnerEnforced";
   /**
    * Canned ACL to apply. Only valid when object ownership is not
    * `BucketOwnerEnforced`.
@@ -240,10 +251,16 @@ export interface Bucket extends Resource<
      * AWS account ID that owns the bucket.
      */
     accountId: AccountID;
+    /**
+     * Notification configuration requested through bindings, retained for drift
+     * detection when binding outputs are unresolved during planning.
+     */
+    managedNotificationConfiguration?: s3.NotificationConfiguration;
   },
   {
     /**
-     * Notification configuration for the bucket.
+     * Notification configuration for the bucket. Alchemy assigns stable target
+     * IDs and reconciles Lambda, queue, topic, and EventBridge bindings.
      */
     notificationConfiguration?: s3.NotificationConfiguration;
     /**
@@ -336,6 +353,78 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
+ * ### Default Bucket Encryption
+ * **Example:** Use the default encryption settings
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {});
+ * ```
+ *
+ * The default is AES256 encryption with S3-managed keys, bucket keys disabled,
+ * and no encryption types blocked. Requests may explicitly supply their own
+ * encryption keys (SSE-C); permitting SSE-C does not change the default
+ * encryption used by requests without those keys.
+ *
+ * ### Blocking Customer-Provided Encryption Keys
+ * **Example:** Reject new SSE-C writes
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ *     blockedEncryptionTypes: ["SSE-C"],
+ *   },
+ * });
+ * ```
+ *
+ * `blockedEncryptionTypes` lists encryption types to reject. This blocks new
+ * writes using customer-provided keys while retaining AES256 default encryption.
+ * Existing encrypted objects are unchanged.
+ *
+ * ### Resetting Encryption Restrictions
+ * **Example:** Remove the block to restore the default
+ * ```diff
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ * -    blockedEncryptionTypes: ["SSE-C"],
+ *   },
+ * });
+ * ```
+ *
+ * Redeploy the same logical resource after removing the property. Alchemy
+ * resets the blocklist to its default, `[]`, so SSE-C writes are permitted.
+ * It updates AWS rather than preserving the previously configured block.
+ *
+ * **Example:** Set the default blocklist explicitly
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ *     blockedEncryptionTypes: [],
+ *   },
+ * });
+ * ```
+ *
+ * `[]` and omission have the same desired state: no encryption types blocked.
+ * The provider sends AWS's `NONE` value when it needs to reset a restriction.
+ * Redeploying unchanged code also repairs externally modified restrictions.
+ *
+ * ### Resetting All Encryption Settings
+ * **Example:** Remove the entire encryption configuration
+ * ```diff
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ * -  encryption: {
+ * -    sseAlgorithm: "aws:kms",
+ * -    kmsMasterKeyId: "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012",
+ * -    bucketKeyEnabled: true,
+ * -    blockedEncryptionTypes: ["SSE-C"],
+ * -  },
+ * });
+ * ```
+ *
+ * Omitting `encryption` resets every setting to the defaults: AES256, no custom
+ * KMS key, bucket keys disabled, and an empty blocklist. Previously configured
+ * KMS encryption is also reset; existing objects are not re-encrypted.
+ *
  * ### Runtime Operations
  * Bind S3 operations in the init phase and use them in runtime
  * handlers. Bindings inject the bucket name and grant scoped IAM
@@ -368,8 +457,13 @@ export interface Bucket extends Resource<
  * ```
  *
  * ### Event Notifications
- * Subscribe to bucket events from the init phase. The subscription
- * and Lambda invoke permissions are created automatically.
+ * Subscribe to bucket events from the init phase. The runtime binding creates
+ * the delivery permissions: Lambda invokes directly, while servers consume an SQS queue.
+ *
+ * Notification bindings reconcile Lambda, SQS, SNS, and EventBridge destinations.
+ * Removing a binding removes the targets Alchemy manages while preserving external
+ * configurations, including identical pre-existing targets. EventBridge ownership
+ * is recorded in a reserved bucket tag so interrupted deployments can recover.
  *
  * **Example:** Process object creation events
  * ```typescript
@@ -393,10 +487,7 @@ export const BucketProvider = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
-      const createBucketName = (
-        id: string,
-        props: { bucketName?: string | undefined },
-      ) =>
+      const createBucketName = (id: string, props: { bucketName?: string | undefined }) =>
         Effect.gen(function* () {
           if (props.bucketName) {
             return props.bucketName;
@@ -409,9 +500,7 @@ export const BucketProvider = () =>
         });
 
       const deleteAllObjects = Effect.fn(function* (bucketName: string) {
-        yield* Effect.logInfo(
-          `S3 Bucket delete: deleting all objects from ${bucketName}`,
-        );
+        yield* Effect.logInfo(`S3 Bucket delete: deleting all objects from ${bucketName}`);
         // Delete every object VERSION and DELETE MARKER, by Key+VersionId.
         // `DeleteBucket` fails with BucketNotEmpty until all of them are
         // gone — deleting only current objects (listObjectsV2) leaves
@@ -509,27 +598,27 @@ export const BucketProvider = () =>
         const { accountId } = yield* AWSEnvironment.current;
         const bucketName = yield* createBucketName(id, news);
 
-        yield* Effect.logInfo(
-          `S3 Bucket create: bucket=${bucketName} region=${region} `,
-        );
+        yield* Effect.logInfo(`S3 Bucket create: bucket=${bucketName} region=${region} `);
 
         // For us-east-1, BucketAlreadyOwnedByYou is not thrown, so we need to
         // pre-emptively check if the bucket exists for idempotency
         if (region === "us-east-1") {
-          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.catch(() => Effect.succeed(false)),
-          );
+          const exists = yield* s3
+            .getBucketLocation({
+              Bucket: bucketName,
+              ExpectedBucketOwner: accountId,
+            })
+            .pipe(
+              Effect.map(() => true),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+            );
 
           yield* Effect.logInfo(
             `S3 Bucket create: us-east-1 existence check for ${bucketName} -> ${exists}`,
           );
 
           if (!exists) {
-            yield* Effect.logInfo(
-              `S3 Bucket create: creating bucket ${bucketName} in us-east-1`,
-            );
+            yield* Effect.logInfo(`S3 Bucket create: creating bucket ${bucketName} in us-east-1`);
             yield* s3
               .createBucket({
                 Bucket: bucketName,
@@ -537,18 +626,14 @@ export const BucketProvider = () =>
               })
               .pipe(
                 Effect.retry({
-                  while: (e) =>
-                    e._tag === "OperationAborted" ||
-                    e._tag === "ServiceUnavailable",
+                  while: (e) => e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
                   schedule: Schedule.exponential(100),
                 }),
               );
           }
         } else {
           // For non-us-east-1 regions, we can rely on BucketAlreadyOwnedByYou
-          yield* Effect.logInfo(
-            `S3 Bucket create: creating bucket ${bucketName} in ${region}`,
-          );
+          yield* Effect.logInfo(`S3 Bucket create: creating bucket ${bucketName} in ${region}`);
           yield* s3
             .createBucket({
               Bucket: bucketName,
@@ -560,47 +645,48 @@ export const BucketProvider = () =>
             .pipe(
               Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void),
               Effect.retry({
-                while: (e) =>
-                  e._tag === "OperationAborted" ||
-                  e._tag === "ServiceUnavailable",
+                while: (e) => e._tag === "OperationAborted" || e._tag === "ServiceUnavailable",
                 schedule: Schedule.exponential(100),
               }),
             );
         }
 
         // Wait for bucket to exist (eventual consistency)
-        yield* Effect.retry(
-          s3.headBucket({ Bucket: bucketName }),
-          Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
-        );
-        yield* Effect.logInfo(
-          `S3 Bucket create: bucket is available ${bucketName}`,
-        );
+        yield* s3
+          .getBucketLocation({
+            Bucket: bucketName,
+            ExpectedBucketOwner: accountId,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: Schedule.exponential(100),
+              times: 8,
+            }),
+          );
+        yield* Effect.logInfo(`S3 Bucket create: bucket is available ${bucketName}`);
 
         return {
           bucketName,
           bucketArn: `arn:aws:s3:::${bucketName}` as const,
           bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
-          bucketRegionalDomainName:
-            `${bucketName}.s3.${region}.amazonaws.com` as const,
+          bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
           region,
           accountId,
         };
       });
 
-      const fetchBucketTags = (
-        bucketName: string,
-      ): Effect.Effect<
-        Record<string, string>,
-        never,
-        Credentials | HttpClient.HttpClient | Region
-      > =>
+      const fetchBucketTags = (bucketName: string) =>
         s3.getBucketTagging({ Bucket: bucketName }).pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.TagSet ?? []).map((t) => [t.Key!, t.Value!])),
-          ),
-          Effect.catchTag("NoSuchTagSet", () => Effect.succeed({})),
-          Effect.catch(() => Effect.succeed({})),
+          Effect.map((r) => Object.fromEntries((r.TagSet ?? []).map((t) => [t.Key!, t.Value!]))),
+          Effect.catchTag("NoSuchTagSet", () => Effect.succeed<Record<string, string>>({})),
+        );
+
+      const eventBridgeOwnerTag = "alchemy:notifications:eventbridge";
+      const notificationOwner = (bucketName: string) =>
+        Effect.sync(
+          () =>
+            `alchemy-notification-${createHash("sha256").update(bucketName).digest("hex").slice(0, 16)}-`,
         );
 
       const syncBucketTags = Effect.fn(function* ({
@@ -620,7 +706,11 @@ export const BucketProvider = () =>
         // correctly even after a cold-start adoption (where olds.tags
         // equals news.tags and would otherwise look like a no-op).
         const previousTags = oldTags ?? (yield* fetchBucketTags(bucketName));
-        const desiredTags = newTags ?? {};
+        const desiredTags = { ...newTags };
+        delete desiredTags[eventBridgeOwnerTag];
+        if (previousTags[eventBridgeOwnerTag]) {
+          desiredTags[eventBridgeOwnerTag] = previousTags[eventBridgeOwnerTag];
+        }
         const { removed, upsert } = diffTags(previousTags, desiredTags);
         const canSkip = oldTags !== undefined;
 
@@ -628,11 +718,7 @@ export const BucketProvider = () =>
           `S3 Bucket ${operation}: bucket=${bucketName} removedTags=${removed.length} upsertTags=${Object.keys(upsert).length}`,
         );
 
-        if (
-          canSkip &&
-          removed.length === 0 &&
-          Object.keys(upsert).length === 0
-        ) {
+        if (canSkip && removed.length === 0 && Object.keys(upsert).length === 0) {
           return;
         }
 
@@ -653,9 +739,7 @@ export const BucketProvider = () =>
           return;
         }
 
-        yield* Effect.logInfo(
-          `S3 Bucket ${operation}: removing all tags from ${bucketName}`,
-        );
+        yield* Effect.logInfo(`S3 Bucket ${operation}: removing all tags from ${bucketName}`);
         yield* s3.deleteBucketTagging({
           Bucket: bucketName,
         });
@@ -686,14 +770,12 @@ export const BucketProvider = () =>
                 Statement: policyStatements,
               })
             : undefined;
-        const existingPolicy = yield* s3
-          .getBucketPolicy({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.Policy),
-            Effect.catchTag("NoSuchBucketPolicy", () =>
-              Effect.succeed<string | undefined>(undefined),
-            ),
-          );
+        const existingPolicy = yield* s3.getBucketPolicy({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.Policy),
+          Effect.catchTag("NoSuchBucketPolicy", () =>
+            Effect.succeed<string | undefined>(undefined),
+          ),
+        );
 
         yield* Effect.logInfo(
           `S3 Bucket ${operation}: bucket=${bucketName} policyStatements=${policyStatements.length}`,
@@ -719,80 +801,252 @@ export const BucketProvider = () =>
           return;
         }
 
-        yield* Effect.logInfo(
-          `S3 Bucket ${operation}: deleting bucket policy for ${bucketName}`,
-        );
+        yield* Effect.logInfo(`S3 Bucket ${operation}: deleting bucket policy for ${bucketName}`);
         yield* s3.deleteBucketPolicy({ Bucket: bucketName });
         yield* session.note(`Removed bucket policy: ${bucketName}`);
       });
 
-      // Apply S3 event notification configuration declared via bindings
-      // (e.g. `S3.consumeBucketEvents(bucket, handler)`). Without this the
-      // binding is recorded in state but never reaches the bucket, so no
-      // events are ever delivered.
-      // Canonical form of the Lambda targets, ignoring S3-assigned `Id`s and
-      // event ordering, so drift detection doesn't churn across deploys.
-      const canonicalLambda = (
-        configs: readonly s3.LambdaFunctionConfiguration[],
-      ) =>
-        JSON.stringify(
-          Arr.map(configs, (c) => ({
-            arn: c.LambdaFunctionArn,
-            events: Arr.sort(c.Events ?? [], Order.String),
-            filter: c.Filter ?? null,
-          })),
+      type NotificationTarget =
+        | s3.LambdaFunctionConfiguration
+        | s3.QueueConfiguration
+        | s3.TopicConfiguration;
+      const notificationTargetKey = (target: NotificationTarget) =>
+        JSON.stringify({
+          arn:
+            "LambdaFunctionArn" in target
+              ? target.LambdaFunctionArn
+              : "QueueArn" in target
+                ? target.QueueArn
+                : target.TopicArn,
+          events: [...(target.Events ?? [])].sort(),
+          filter: (target.Filter?.Key?.FilterRules ?? [])
+            .map((rule) => [rule.Name?.toLowerCase(), rule.Value])
+            .sort(([a, av], [b, bv]) => `${a}:${av}`.localeCompare(`${b}:${bv}`)),
+        });
+      const readManagedNotifications = Effect.fn(function* (
+        fqn: string,
+        instanceId: string,
+        output: Bucket["Attributes"] | undefined,
+      ) {
+        if (!output || output.managedNotificationConfiguration !== undefined) {
+          return output?.managedNotificationConfiguration;
+        }
+        const stack = yield* Stack;
+        const state = yield* yield* State;
+        const row = yield* state.get({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn,
+        });
+        if (
+          !row ||
+          isActionState(row) ||
+          row.resourceType !== "AWS.S3.Bucket" ||
+          row.fqn !== fqn ||
+          row.instanceId !== instanceId ||
+          row.attr?.bucketName !== output.bucketName ||
+          (row.status !== "created" &&
+            row.status !== "updated" &&
+            row.status !== "replaced" &&
+            row.status !== "updating") ||
+          (row.status === "updating" && row.adopting)
+        ) {
+          return undefined;
+        }
+        // An updating row contains the new bindings; only its old snapshot proves ownership.
+        const previous = row.status === "updating" ? row.old : row;
+        if (
+          previous.attr?.bucketName !== output.bucketName ||
+          previous.attr?.bucketArn !== output.bucketArn ||
+          previous.attr?.accountId !== output.accountId ||
+          previous.attr?.region !== output.region
+        ) {
+          return undefined;
+        }
+        const managed: s3.NotificationConfiguration | undefined =
+          previous.attr.managedNotificationConfiguration;
+        if (managed !== undefined) return managed;
+        const bindings: ResourceBinding<Bucket["Binding"]>[] = previous.bindings ?? [];
+        if (!isResolved(bindings)) return undefined;
+        const legacy = bindings.flatMap(
+          ({ data }) => data.notificationConfiguration?.LambdaFunctionConfigurations ?? [],
         );
-
+        if (legacy.length === 0) return undefined;
+        const observed = yield* s3.getBucketNotificationConfiguration({
+          Bucket: output.bucketName,
+        });
+        return {
+          LambdaFunctionConfigurations: (observed.LambdaFunctionConfigurations ?? []).filter(
+            (target) =>
+              legacy.some(
+                (old) =>
+                  (old.Id === undefined || old.Id === target.Id) &&
+                  notificationTargetKey(old) === notificationTargetKey(target),
+              ),
+          ),
+        } satisfies s3.NotificationConfiguration;
+      });
+      const notificationKey = (config: s3.NotificationConfiguration) => {
+        const targets = (values: NotificationTarget[] = []) =>
+          values.map((target) => `${target.Id ?? ""}:${notificationTargetKey(target)}`).sort();
+        return JSON.stringify({
+          lambda: targets(config.LambdaFunctionConfigurations),
+          queue: targets(config.QueueConfigurations),
+          topic: targets(config.TopicConfigurations),
+          eventBridge: config.EventBridgeConfiguration !== undefined,
+        });
+      };
+      const desiredNotifications = (
+        bindings: ResourceBinding<Bucket["Binding"]>[],
+        owner: string,
+      ) =>
+        Effect.sync(() => {
+          const desired: s3.NotificationConfiguration = {
+            LambdaFunctionConfigurations: [],
+            QueueConfigurations: [],
+            TopicConfigurations: [],
+          };
+          for (const { sid, data } of bindings) {
+            const config = data.notificationConfiguration;
+            if (!config) continue;
+            const target = <T extends NotificationTarget>(value: T): T => ({
+              ...value,
+              Id: `${owner}${createHash("sha256")
+                .update(JSON.stringify([sid, value.Id ?? notificationTargetKey(value)]))
+                .digest("hex")}`,
+            });
+            desired.LambdaFunctionConfigurations!.push(
+              ...(config.LambdaFunctionConfigurations ?? []).map(target),
+            );
+            desired.QueueConfigurations!.push(...(config.QueueConfigurations ?? []).map(target));
+            desired.TopicConfigurations!.push(...(config.TopicConfigurations ?? []).map(target));
+            if (config.EventBridgeConfiguration !== undefined) {
+              desired.EventBridgeConfiguration = {};
+            }
+          }
+          return desired;
+        });
+      const mergeNotifications = (
+        existing: s3.NotificationConfiguration,
+        desired: s3.NotificationConfiguration,
+        previous: s3.NotificationConfiguration | undefined,
+        owner: string,
+        ownsEventBridge: boolean,
+      ): s3.NotificationConfiguration => {
+        const targets = <T extends NotificationTarget>(
+          observed: T[] = [],
+          wanted: T[] = [],
+          managed: T[] = [],
+        ): T[] => {
+          const managedIds = new Set(managed.flatMap((target) => (target.Id ? [target.Id] : [])));
+          const external = observed.filter(
+            (target) =>
+              !(
+                target.Id?.startsWith(owner) && /^[0-9a-f]{64}$/.test(target.Id.slice(owner.length))
+              ) && !managedIds.has(target.Id ?? ""),
+          );
+          const satisfied = new Set(external.map(notificationTargetKey));
+          return [
+            ...external,
+            ...[...wanted]
+              .sort((a, b) => (a.Id ?? "").localeCompare(b.Id ?? ""))
+              .filter((target) => {
+                const key = notificationTargetKey(target);
+                if (satisfied.has(key)) return false;
+                satisfied.add(key);
+                return true;
+              }),
+          ];
+        };
+        return {
+          LambdaFunctionConfigurations: targets(
+            existing.LambdaFunctionConfigurations,
+            desired.LambdaFunctionConfigurations,
+            previous?.LambdaFunctionConfigurations,
+          ),
+          QueueConfigurations: targets(
+            existing.QueueConfigurations,
+            desired.QueueConfigurations,
+            previous?.QueueConfigurations,
+          ),
+          TopicConfigurations: targets(
+            existing.TopicConfigurations,
+            desired.TopicConfigurations,
+            previous?.TopicConfigurations,
+          ),
+          ...(desired.EventBridgeConfiguration !== undefined ||
+          (existing.EventBridgeConfiguration !== undefined && !ownsEventBridge)
+            ? { EventBridgeConfiguration: {} }
+            : {}),
+        };
+      };
       const syncBucketNotifications = Effect.fn(function* ({
         bucketName,
         bindings,
+        previous,
         session,
         operation,
       }: {
         bucketName: string;
         session: ScopedPlanStatusSession;
         bindings: ResourceBinding<Bucket["Binding"]>[];
+        previous: s3.NotificationConfiguration | undefined;
         operation: "create" | "update";
       }) {
-        const desired = Arr.flatMap(
-          bindings,
-          (binding) =>
-            binding.data.notificationConfiguration
-              ?.LambdaFunctionConfigurations ?? [],
-        );
-
-        // Nothing declared — leave any externally-managed config untouched.
-        if (Arr.isReadonlyArrayEmpty(desired)) return;
-
+        const owner = yield* notificationOwner(bucketName);
+        const desired = yield* desiredNotifications(bindings, owner);
         const existing = yield* s3.getBucketNotificationConfiguration({
           Bucket: bucketName,
         });
-
+        const tags = yield* fetchBucketTags(bucketName);
+        let ownsEventBridge = tags[eventBridgeOwnerTag] === owner;
         if (
-          canonicalLambda(existing.LambdaFunctionConfigurations ?? []) ===
-          canonicalLambda(desired)
+          desired.EventBridgeConfiguration !== undefined &&
+          existing.EventBridgeConfiguration === undefined &&
+          !ownsEventBridge
         ) {
-          return;
+          // Record ownership before enabling so interrupted writes remain recoverable.
+          yield* s3.putBucketTagging({
+            Bucket: bucketName,
+            Tagging: {
+              TagSet: Object.entries({
+                ...tags,
+                [eventBridgeOwnerTag]: owner,
+              }).map(([Key, Value]) => ({ Key, Value })),
+            },
+          });
+          ownsEventBridge = true;
         }
-
-        yield* Effect.logInfo(
-          `S3 Bucket ${operation}: applying notification configuration to ${bucketName}`,
-        );
-        yield* s3.putBucketNotificationConfiguration({
-          Bucket: bucketName,
-          // Preserve any Topic/Queues/EventBridge config already on the bucket;
-          // only manage the Lambda targets declared through bindings.
-          NotificationConfiguration: {
-            ...existing,
-            LambdaFunctionConfigurations: desired,
-          },
-          // The Lambda invoke permission is created as a separate resource
-          // that may be applied after this bucket reconcile. Skip S3's
-          // synchronous test-invoke so the PUT doesn't fail on ordering;
-          // the permission exists by the time events are delivered.
-          SkipDestinationValidation: true,
-        });
-        yield* session.note(`Updated bucket notifications: ${bucketName}`);
+        const next = mergeNotifications(existing, desired, previous, owner, ownsEventBridge);
+        if (notificationKey(existing) !== notificationKey(next)) {
+          yield* Effect.logInfo(
+            `S3 Bucket ${operation}: applying notification configuration to ${bucketName}`,
+          );
+          yield* s3.putBucketNotificationConfiguration({
+            Bucket: bucketName,
+            NotificationConfiguration: next,
+            // Destination policies can reconcile later in the same binding cycle.
+            SkipDestinationValidation: true,
+          });
+          yield* session.note(`Updated bucket notifications: ${bucketName}`);
+        }
+        if (desired.EventBridgeConfiguration === undefined && ownsEventBridge) {
+          delete tags[eventBridgeOwnerTag];
+          if (Object.keys(tags).length > 0) {
+            yield* s3.putBucketTagging({
+              Bucket: bucketName,
+              Tagging: {
+                TagSet: Object.entries(tags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              },
+            });
+          } else {
+            yield* s3.deleteBucketTagging({ Bucket: bucketName });
+          }
+        }
+        return desired;
       });
 
       // ---- Bucket configuration sync helpers ------------------------------
@@ -833,49 +1087,6 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket versioning: ${bucketName}`);
       });
 
-      const syncBucketEncryption = Effect.fn(function* ({
-        bucketName,
-        encryption,
-        session,
-      }: {
-        bucketName: string;
-        encryption?: BucketEncryption;
-        session: ScopedPlanStatusSession;
-      }) {
-        if (encryption === undefined) return;
-        const desiredRule: s3.ServerSideEncryptionRule = {
-          ApplyServerSideEncryptionByDefault: {
-            SSEAlgorithm: encryption.sseAlgorithm,
-            KMSMasterKeyID: encryption.kmsMasterKeyId,
-          },
-          BucketKeyEnabled: encryption.bucketKeyEnabled ?? false,
-        };
-        const current = yield* s3
-          .getBucketEncryption({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.ServerSideEncryptionConfiguration?.Rules?.[0]),
-            // Some partitions return 404 with no default config; treat any
-            // not-configured read as "no rule" so we converge by writing.
-            Effect.catch(() =>
-              Effect.succeed<s3.ServerSideEncryptionRule | undefined>(
-                undefined,
-              ),
-            ),
-          );
-        const canon = (r: s3.ServerSideEncryptionRule | undefined) =>
-          JSON.stringify({
-            alg: r?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
-            key: r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID ?? null,
-            bucketKey: r?.BucketKeyEnabled ?? false,
-          });
-        if (canon(current) === canon(desiredRule)) return;
-        yield* s3.putBucketEncryption({
-          Bucket: bucketName,
-          ServerSideEncryptionConfiguration: { Rules: [desiredRule] },
-        });
-        yield* session.note(`Updated bucket encryption: ${bucketName}`);
-      });
-
       const syncPublicAccessBlock = Effect.fn(function* ({
         bucketName,
         publicAccessBlock,
@@ -890,19 +1101,14 @@ export const BucketProvider = () =>
           BlockPublicAcls: publicAccessBlock.blockPublicAcls ?? false,
           IgnorePublicAcls: publicAccessBlock.ignorePublicAcls ?? false,
           BlockPublicPolicy: publicAccessBlock.blockPublicPolicy ?? false,
-          RestrictPublicBuckets:
-            publicAccessBlock.restrictPublicBuckets ?? false,
+          RestrictPublicBuckets: publicAccessBlock.restrictPublicBuckets ?? false,
         };
-        const current = yield* s3
-          .getPublicAccessBlock({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.PublicAccessBlockConfiguration),
-            Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
-              Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(
-                undefined,
-              ),
-            ),
-          );
+        const current = yield* s3.getPublicAccessBlock({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.PublicAccessBlockConfiguration),
+          Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
+            Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(undefined),
+          ),
+        );
         const canon = (c: s3.PublicAccessBlockConfiguration | undefined) =>
           JSON.stringify({
             a: c?.BlockPublicAcls ?? false,
@@ -943,9 +1149,7 @@ export const BucketProvider = () =>
         if (cors === undefined) return;
         const current = yield* s3.getBucketCors({ Bucket: bucketName }).pipe(
           Effect.map((r) => r.CORSRules ?? []),
-          Effect.catchTag("NoSuchCORSConfiguration", () =>
-            Effect.succeed<s3.CORSRule[]>([]),
-          ),
+          Effect.catchTag("NoSuchCORSConfiguration", () => Effect.succeed<s3.CORSRule[]>([])),
         );
         if (cors.length === 0) {
           if (current.length === 0) return;
@@ -979,14 +1183,12 @@ export const BucketProvider = () =>
         session: ScopedPlanStatusSession;
       }) {
         if (lifecycleRules === undefined) return;
-        const current = yield* s3
-          .getBucketLifecycleConfiguration({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.Rules ?? []),
-            Effect.catchTag("NoSuchLifecycleConfiguration", () =>
-              Effect.succeed<s3.LifecycleRule[]>([]),
-            ),
-          );
+        const current = yield* s3.getBucketLifecycleConfiguration({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.Rules ?? []),
+          Effect.catchTag("NoSuchLifecycleConfiguration", () =>
+            Effect.succeed<s3.LifecycleRule[]>([]),
+          ),
+        );
         if (lifecycleRules.length === 0) {
           if (current.length === 0) return;
           yield* s3.deleteBucketLifecycle({ Bucket: bucketName });
@@ -1007,21 +1209,16 @@ export const BucketProvider = () =>
         session,
       }: {
         bucketName: string;
-        objectOwnership?:
-          | "BucketOwnerPreferred"
-          | "ObjectWriter"
-          | "BucketOwnerEnforced";
+        objectOwnership?: "BucketOwnerPreferred" | "ObjectWriter" | "BucketOwnerEnforced";
         session: ScopedPlanStatusSession;
       }) {
         if (objectOwnership === undefined) return;
-        const current = yield* s3
-          .getBucketOwnershipControls({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
-            Effect.catchTag("OwnershipControlsNotFoundError", () =>
-              Effect.succeed<string | undefined>(undefined),
-            ),
-          );
+        const current = yield* s3.getBucketOwnershipControls({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
+          Effect.catchTag("OwnershipControlsNotFoundError", () =>
+            Effect.succeed<string | undefined>(undefined),
+          ),
+        );
         if (current === objectOwnership) return;
         yield* s3.putBucketOwnershipControls({
           Bucket: bucketName,
@@ -1144,9 +1341,7 @@ export const BucketProvider = () =>
           IndexDocument: website.indexDocument
             ? { Suffix: website.indexDocument.suffix }
             : undefined,
-          ErrorDocument: website.errorDocument
-            ? { Key: website.errorDocument.key }
-            : undefined,
+          ErrorDocument: website.errorDocument ? { Key: website.errorDocument.key } : undefined,
           RedirectAllRequestsTo: website.redirectAllRequestsTo
             ? {
                 HostName: website.redirectAllRequestsTo.hostName,
@@ -1155,9 +1350,7 @@ export const BucketProvider = () =>
             : undefined,
           RoutingRules: website.routingRules,
         };
-        const canon = (
-          w: s3.GetBucketWebsiteOutput | s3.WebsiteConfiguration | undefined,
-        ) =>
+        const canon = (w: s3.GetBucketWebsiteOutput | s3.WebsiteConfiguration | undefined) =>
           JSON.stringify({
             index: w?.IndexDocument ?? null,
             error: w?.ErrorDocument ?? null,
@@ -1173,9 +1366,7 @@ export const BucketProvider = () =>
       });
 
       const canonReplication = (
-        cfg:
-          | { Role?: string; Rules?: readonly s3.ReplicationRule[] }
-          | undefined,
+        cfg: { Role?: string; Rules?: readonly s3.ReplicationRule[] } | undefined,
       ) =>
         JSON.stringify({
           role: cfg?.Role ?? null,
@@ -1195,16 +1386,12 @@ export const BucketProvider = () =>
         session: ScopedPlanStatusSession;
       }) {
         if (replication === undefined) return;
-        const current = yield* s3
-          .getBucketReplication({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.ReplicationConfiguration),
-            Effect.catchTag("ReplicationConfigurationNotFoundError", () =>
-              Effect.succeed<s3.ReplicationConfiguration | undefined>(
-                undefined,
-              ),
-            ),
-          );
+        const current = yield* s3.getBucketReplication({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.ReplicationConfiguration),
+          Effect.catchTag("ReplicationConfigurationNotFoundError", () =>
+            Effect.succeed<s3.ReplicationConfiguration | undefined>(undefined),
+          ),
+        );
         const desired: s3.ReplicationConfiguration = {
           Role: replication.role,
           Rules: replication.rules,
@@ -1229,9 +1416,7 @@ export const BucketProvider = () =>
         session: ScopedPlanStatusSession;
       }) {
         if (intelligentTiering === undefined) return;
-        const desiredById = new Map(
-          Arr.map(intelligentTiering, (c) => [c.Id, c] as const),
-        );
+        const desiredById = new Map(Arr.map(intelligentTiering, (c) => [c.Id, c] as const));
         // Reconcile each desired id: put when missing or changed (observed
         // against the per-id read, which is read-after-write consistent).
         for (const [id, desired] of desiredById) {
@@ -1243,9 +1428,7 @@ export const BucketProvider = () =>
             .pipe(
               Effect.map((r) => r.IntelligentTieringConfiguration),
               Effect.catchTag("NoSuchConfiguration", () =>
-                Effect.succeed<s3.IntelligentTieringConfiguration | undefined>(
-                  undefined,
-                ),
+                Effect.succeed<s3.IntelligentTieringConfiguration | undefined>(undefined),
               ),
             );
           if (JSON.stringify(current) === JSON.stringify(desired)) continue;
@@ -1254,9 +1437,7 @@ export const BucketProvider = () =>
             Id: id,
             IntelligentTieringConfiguration: desired,
           });
-          yield* session.note(
-            `Updated intelligent-tiering ${id}: ${bucketName}`,
-          );
+          yield* session.note(`Updated intelligent-tiering ${id}: ${bucketName}`);
         }
         // Remove ids that were previously declared but are no longer desired.
         // `list` is eventually-consistent, so diff against the prior props
@@ -1269,9 +1450,7 @@ export const BucketProvider = () =>
         if (oldIntelligentTiering === undefined) {
           const observed = yield* s3
             .listBucketIntelligentTieringConfigurations({ Bucket: bucketName })
-            .pipe(
-              Effect.map((r) => r.IntelligentTieringConfigurationList ?? []),
-            );
+            .pipe(Effect.map((r) => r.IntelligentTieringConfigurationList ?? []));
           for (const cfg of observed) {
             if (cfg.Id && !desiredById.has(cfg.Id)) removedIds.add(cfg.Id);
           }
@@ -1283,9 +1462,7 @@ export const BucketProvider = () =>
             Bucket: bucketName,
             Id: id,
           });
-          yield* session.note(
-            `Removed intelligent-tiering ${id}: ${bucketName}`,
-          );
+          yield* session.note(`Removed intelligent-tiering ${id}: ${bucketName}`);
         }
       });
 
@@ -1299,16 +1476,12 @@ export const BucketProvider = () =>
         session: ScopedPlanStatusSession;
       }) {
         if (objectLockConfiguration === undefined) return;
-        const current = yield* s3
-          .getObjectLockConfiguration({ Bucket: bucketName })
-          .pipe(
-            Effect.map(
-              (r) => r.ObjectLockConfiguration?.Rule?.DefaultRetention,
-            ),
-            Effect.catchTag("ObjectLockConfigurationNotFoundError", () =>
-              Effect.succeed<s3.DefaultRetention | undefined>(undefined),
-            ),
-          );
+        const current = yield* s3.getObjectLockConfiguration({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.ObjectLockConfiguration?.Rule?.DefaultRetention),
+          Effect.catchTag("ObjectLockConfigurationNotFoundError", () =>
+            Effect.succeed<s3.DefaultRetention | undefined>(undefined),
+          ),
+        );
         const desired: s3.DefaultRetention = {
           Mode: objectLockConfiguration.mode,
           Days: durationToDays(objectLockConfiguration.days),
@@ -1333,10 +1506,10 @@ export const BucketProvider = () =>
 
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
-        // S3 bucket names are globally unique. `headBucket` succeeds only when
-        // the bucket exists in our account, so a successful response is itself
-        // proof of account-level ownership — there is no separate ownership
-        // signal to surface as `Unowned`.
+        // ListBuckets enumerates this account. Read verifies the same ownership
+        // with ExpectedBucketOwner; cross-account access alone is not ownership.
+        // GetBucketLocation needs configuration access, not HeadBucket's
+        // s3:ListBucket permission to enumerate the bucket's objects.
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
@@ -1347,14 +1520,11 @@ export const BucketProvider = () =>
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
                   (page.Buckets ?? [])
-                    .filter(
-                      (b): b is s3.Bucket & { Name: string } => b.Name != null,
-                    )
+                    .filter((b): b is s3.Bucket & { Name: string } => b.Name != null)
                     .map((b) => {
                       // ListBuckets is global — record each bucket's actual
                       // region so later operations (delete) can target it.
-                      const bucketRegion = (b.BucketRegion ??
-                        region) as RegionID;
+                      const bucketRegion = (b.BucketRegion ?? region) as RegionID;
                       return {
                         bucketName: b.Name,
                         bucketArn: `arn:aws:s3:::${b.Name}` as const,
@@ -1369,27 +1539,42 @@ export const BucketProvider = () =>
               ),
             );
           }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const bucketName =
-            output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
+        read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
+          const bucketName = output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
           const { accountId, region } = yield* AWSEnvironment.current;
-          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.catch(() => Effect.succeed(false)),
-          );
+          const exists = yield* s3
+            .getBucketLocation({
+              Bucket: bucketName,
+              ExpectedBucketOwner: accountId,
+            })
+            .pipe(
+              Effect.map(() => true),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+            );
           if (!exists) return undefined;
           return {
             bucketName,
             bucketArn: `arn:aws:s3:::${bucketName}` as const,
             bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
-            bucketRegionalDomainName:
-              `${bucketName}.s3.${region}.amazonaws.com` as const,
+            bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
             region,
             accountId,
+            managedNotificationConfiguration: yield* readManagedNotifications(
+              fqn,
+              instanceId,
+              output,
+            ),
           };
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({
+          id,
+          fqn,
+          instanceId,
+          news = {},
+          olds = {},
+          output,
+          newBindings,
+        }) {
           if (!isResolved(news)) return undefined;
           const oldBucketName = yield* createBucketName(id, olds);
           const newBucketName = yield* createBucketName(id, news);
@@ -1403,19 +1588,64 @@ export const BucketProvider = () =>
             return { action: "replace" } as const;
           }
           // Object lock can only be enabled at creation time
-          if (
-            (olds.objectLockEnabled ?? false) !==
-            (news.objectLockEnabled ?? false)
-          ) {
+          if ((olds.objectLockEnabled ?? false) !== (news.objectLockEnabled ?? false)) {
             yield* Effect.logInfo(
               `S3 Bucket diff: replacing bucket because object lock changed for ${newBucketName}`,
             );
             return { action: "replace" } as const;
           }
+          if (output) {
+            const observed = yield* readBucketEncryption(output.bucketName).pipe(
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+            );
+            if (
+              encryptionFingerprint(observed) !==
+              encryptionFingerprint(desiredEncryptionRule(news.encryption))
+            ) {
+              return { action: "update" } as const;
+            }
+            const previous = yield* readManagedNotifications(fqn, instanceId, output);
+            if (output.managedNotificationConfiguration === undefined && previous !== undefined) {
+              return { action: "update" } as const;
+            }
+            const owner = yield* notificationOwner(output.bucketName);
+            const desired = isResolved(newBindings)
+              ? yield* desiredNotifications(newBindings, owner)
+              : previous;
+            if (desired) {
+              const notifications = yield* s3
+                .getBucketNotificationConfiguration({
+                  Bucket: output.bucketName,
+                })
+                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
+              const tags: Record<string, string> = notifications
+                ? yield* fetchBucketTags(output.bucketName)
+                : {};
+              if (
+                notifications &&
+                ((desired.EventBridgeConfiguration === undefined &&
+                  tags[eventBridgeOwnerTag] === owner) ||
+                  notificationKey(notifications) !==
+                    notificationKey(
+                      mergeNotifications(
+                        notifications,
+                        desired,
+                        previous,
+                        owner,
+                        tags[eventBridgeOwnerTag] === owner,
+                      ),
+                    ))
+              ) {
+                return { action: "update" } as const;
+              }
+            }
+          }
         }),
         precreate: (props) => ensureBucketExists(props),
         reconcile: Effect.fn(function* ({
           id,
+          fqn,
+          instanceId,
           news = {},
           olds,
           output,
@@ -1457,11 +1687,9 @@ export const BucketProvider = () =>
             session,
           });
 
-          yield* syncBucketEncryption({
-            bucketName: resolved.bucketName,
-            encryption: news.encryption,
-            session,
-          });
+          if (yield* syncBucketEncryption(resolved.bucketName, news.encryption)) {
+            yield* session.note(`Updated bucket encryption: ${resolved.bucketName}`);
+          }
 
           yield* syncBucketCors({
             bucketName: resolved.bucketName,
@@ -1533,9 +1761,10 @@ export const BucketProvider = () =>
             operation,
           });
 
-          yield* syncBucketNotifications({
+          const managedNotificationConfiguration = yield* syncBucketNotifications({
             bucketName: resolved.bucketName,
             bindings,
+            previous: yield* readManagedNotifications(fqn, instanceId, output),
             session,
             operation,
           });
@@ -1544,7 +1773,7 @@ export const BucketProvider = () =>
             yield* session.note(`Ensured bucket: ${resolved.bucketName}`);
           }
 
-          return resolved;
+          return { ...resolved, managedNotificationConfiguration };
         }),
         delete: Effect.fn(function* ({ olds = {}, output, session, force }) {
           // Whether we are allowed to destroy the bucket's contents.
@@ -1553,10 +1782,10 @@ export const BucketProvider = () =>
           //   operator-confirmed account teardown. Nuke enumerates buckets
           //   straight from the cloud (its `olds` is Attributes, not Props),
           //   so `forceDestroy` is never present there. S3 ownership is
-          //   account-level (see `list`/`read`: buckets are globally unique
-          //   and only enumerable/headable in our own account; this provider
-          //   deliberately does not stamp alchemy tags on buckets), so every
-          //   bucket nuke hands us is one this account owns.
+          //   account-level: list enumerates this account and read verifies
+          //   ExpectedBucketOwner. This provider deliberately does not stamp
+          //   alchemy tags on buckets, so every bucket nuke hands us is one
+          //   this account owns.
           // A normal destroy without `forceDestroy` must NOT empty the
           // bucket — a non-empty bucket fails with BucketNotEmpty, which is
           // the data-protection behavior users rely on.
@@ -1608,12 +1837,8 @@ export const BucketProvider = () =>
                   // can transiently report attachments. Retry until the view
                   // converges (bounded).
                   while: (e): boolean =>
-                    e._tag === "BucketNotEmpty" ||
-                    e._tag === "BucketHasAccessPointsAttached",
-                  schedule: Schedule.max([
-                    Schedule.exponential(250),
-                    Schedule.recurs(7),
-                  ]),
+                    e._tag === "BucketNotEmpty" || e._tag === "BucketHasAccessPointsAttached",
+                  schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(7)]),
                 }),
               );
           });
@@ -1625,19 +1850,14 @@ export const BucketProvider = () =>
           // the redirect reports.
           yield* (
             output.region
-              ? run.pipe(
-                  Effect.provideService(Region, Effect.succeed(output.region)),
-                )
+              ? run.pipe(Effect.provideService(Region, Effect.succeed(output.region)))
               : run
           ).pipe(
             Effect.tapError(Effect.logInfo),
             Effect.catchTag("PermanentRedirect", (e) =>
               e.BucketRegion
                 ? run.pipe(
-                    Effect.provideService(
-                      Region,
-                      Effect.succeed(e.BucketRegion as RegionID),
-                    ),
+                    Effect.provideService(Region, Effect.succeed(e.BucketRegion as RegionID)),
                   )
                 : Effect.fail(e),
             ),
@@ -1648,3 +1868,66 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+class BucketEncryptionNotConverged extends Data.TaggedError("BucketEncryptionNotConverged")<{
+  bucket: string;
+}> {}
+
+const desiredEncryptionRule = (encryption?: BucketEncryption): s3.ServerSideEncryptionRule => {
+  const algorithm = encryption?.sseAlgorithm ?? "AES256";
+  const blocked = encryption?.blockedEncryptionTypes ?? [];
+  return {
+    ApplyServerSideEncryptionByDefault: {
+      SSEAlgorithm: algorithm,
+      KMSMasterKeyID: algorithm === "AES256" ? undefined : encryption?.kmsMasterKeyId,
+    },
+    BucketKeyEnabled: encryption?.bucketKeyEnabled ?? false,
+    BlockedEncryptionTypes: {
+      EncryptionType: blocked.length ? [...new Set(blocked)] : ["NONE"],
+    },
+  };
+};
+
+const encryptionFingerprint = (rule: s3.ServerSideEncryptionRule | undefined) => {
+  const key = rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
+  return JSON.stringify({
+    algorithm: rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
+    key: (Redacted.isRedacted(key) ? Redacted.value(key) : key) ?? null,
+    bucketKey: rule?.BucketKeyEnabled ?? false,
+    blocked: [
+      ...new Set(
+        rule?.BlockedEncryptionTypes?.EncryptionType?.filter((type) => type !== "NONE") ?? [],
+      ),
+    ].sort(),
+  });
+};
+
+const readBucketEncryption = (bucket: string) =>
+  s3
+    .getBucketEncryption({ Bucket: bucket })
+    .pipe(Effect.map((result) => result.ServerSideEncryptionConfiguration?.Rules?.[0]));
+
+export const syncBucketEncryption = Effect.fn(function* (
+  bucket: string,
+  encryption?: BucketEncryption,
+) {
+  const desired = desiredEncryptionRule(encryption);
+  const matches = (rule: s3.ServerSideEncryptionRule | undefined) =>
+    encryptionFingerprint(rule) === encryptionFingerprint(desired);
+  if (matches(yield* readBucketEncryption(bucket))) return false;
+  yield* s3.putBucketEncryption({
+    Bucket: bucket,
+    ServerSideEncryptionConfiguration: { Rules: [desired] },
+  });
+  const observed = yield* readBucketEncryption(bucket).pipe(
+    Effect.repeat({
+      until: matches,
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+  if (!matches(observed)) {
+    return yield* Effect.fail(new BucketEncryptionNotConverged({ bucket }));
+  }
+  return true;
+});

@@ -2,7 +2,7 @@ import { isRegisterHooksSupported } from "@/Util/Node.ts";
 
 /**
  * The real node binary tests spawn, and ITS version — not bun's emulated
- * `process.versions.node`, which is what `transformTypesFlags()` would
+ * `process.versions.node`, which is what the version gates would
  * consult by default. Gating on the wrong runtime made the node-launcher
  * tests run (and fail with zero diagnostics) on machines whose PATH node
  * is older than the version bun reports.
@@ -24,5 +24,4 @@ export const nodeVersion: string | null = (() => {
  * Whether the spawned node can run alchemy's dev-mode source path: hooks
  * capable implies `.ts` capable (transform flag below v26, native from v26).
  */
-export const nodeSupportsDevMode =
-  nodeVersion !== null && isRegisterHooksSupported(nodeVersion);
+export const nodeSupportsDevMode = nodeVersion !== null && isRegisterHooksSupported(nodeVersion);

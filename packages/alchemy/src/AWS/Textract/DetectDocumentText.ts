@@ -35,10 +35,7 @@ export interface DetectDocumentText extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.DetectDocumentTextRequest,
-    ) => Effect.Effect<
-      textract.DetectDocumentTextResponse,
-      textract.DetectDocumentTextError
-    >
+    ) => Effect.Effect<textract.DetectDocumentTextResponse, textract.DetectDocumentTextError>
   >
 > {}
 export const DetectDocumentText = Binding.Service<DetectDocumentText>(

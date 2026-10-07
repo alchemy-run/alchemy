@@ -11,11 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { toWireSeconds } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readRolesAnywhereTags,
-  syncRolesAnywhereTags,
-  toWireTags,
-} from "./internal.ts";
+import { readRolesAnywhereTags, syncRolesAnywhereTags, toWireTags } from "./internal.ts";
 
 /**
  * Raised when the RolesAnywhere API acknowledges a profile write but returns
@@ -220,14 +216,8 @@ export const ProfileProvider = () =>
   Provider.effect(
     Profile,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Partial<ProfileProps>,
-      ) {
-        return (
-          props.profileName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Partial<ProfileProps>) {
+        return props.profileName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       /** Find a profile by its user-facing name across all pages. */
@@ -241,9 +231,7 @@ export const ProfileProvider = () =>
       const getById = (profileId: string) =>
         rolesanywhere.getProfile({ profileId }).pipe(
           Effect.map((r) => r.profile),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -254,8 +242,7 @@ export const ProfileProvider = () =>
           // requireInstanceProperties has no member on updateProfile — it is
           // immutable after create, so a change forces a replacement.
           if (
-            (olds?.requireInstanceProperties ?? false) !==
-            (news.requireInstanceProperties ?? false)
+            (olds?.requireInstanceProperties ?? false) !== (news.requireInstanceProperties ?? false)
           ) {
             return { action: "replace" } as const;
           }
@@ -279,9 +266,7 @@ export const ProfileProvider = () =>
           const desiredDurationSeconds = toWireSeconds(news.duration);
 
           // 1. Observe — cloud state is authoritative; output caches the id.
-          let live = output?.profileId
-            ? yield* getById(output.profileId)
-            : yield* findByName(name);
+          let live = output?.profileId ? yield* getById(output.profileId) : yield* findByName(name);
 
           // 2. Ensure — create if missing.
           if (live === undefined) {
@@ -309,13 +294,11 @@ export const ProfileProvider = () =>
               live.name !== desiredName ||
               !sameMembers(live.roleArns, news.roleArns) ||
               !sameMembers(live.managedPolicyArns, news.managedPolicyArns) ||
-              (news.sessionPolicy !== undefined &&
-                live.sessionPolicy !== news.sessionPolicy) ||
+              (news.sessionPolicy !== undefined && live.sessionPolicy !== news.sessionPolicy) ||
               (desiredDurationSeconds !== undefined &&
                 live.durationSeconds !== desiredDurationSeconds) ||
               (news.acceptRoleSessionName !== undefined &&
-                (live.acceptRoleSessionName ?? false) !==
-                  news.acceptRoleSessionName);
+                (live.acceptRoleSessionName ?? false) !== news.acceptRoleSessionName);
             if (drift) {
               const updated = yield* rolesanywhere.updateProfile({
                 profileId: live.profileId!,
@@ -349,12 +332,8 @@ export const ProfileProvider = () =>
             ]),
           );
           for (const mapping of desiredMappings) {
-            const observedSpecifiers = observedMappings.get(
-              mapping.certificateField,
-            );
-            const desiredSpecifiers = mapping.mappingRules.map(
-              (r) => r.specifier,
-            );
+            const observedSpecifiers = observedMappings.get(mapping.certificateField);
+            const desiredSpecifiers = mapping.mappingRules.map((r) => r.specifier);
             if (
               observedSpecifiers === undefined ||
               !sameMembers(observedSpecifiers, desiredSpecifiers)
@@ -369,9 +348,7 @@ export const ProfileProvider = () =>
               profile = mapped.profile;
             }
           }
-          const desiredFields = new Set(
-            desiredMappings.map((m) => m.certificateField),
-          );
+          const desiredFields = new Set(desiredMappings.map((m) => m.certificateField));
           for (const previous of olds?.attributeMappings ?? []) {
             if (
               !desiredFields.has(previous.certificateField) &&
@@ -383,9 +360,7 @@ export const ProfileProvider = () =>
                   certificateField: previous.certificateField,
                 })
                 .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                 );
               profile = cleaned?.profile ?? profile;
             }
@@ -410,9 +385,7 @@ export const ProfileProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* rolesanywhere
             .deleteProfile({ profileId: output.profileId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

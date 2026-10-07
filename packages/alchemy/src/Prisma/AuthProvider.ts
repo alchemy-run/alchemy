@@ -20,7 +20,6 @@ export interface PrismaResolvedCredentials {
 
 const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
   provider: PRISMA_AUTH_PROVIDER_NAME,
-  storageKey: "prisma-stored",
   fields: [
     {
       name: "serviceToken",
@@ -40,8 +39,7 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
     const token = serviceToken ?? apiToken;
     if (token === undefined || Redacted.value(token).trim().length === 0) {
       return yield* new AuthError({
-        message:
-          "Prisma CI credentials not found. Set PRISMA_SERVICE_TOKEN or PRISMA_API_TOKEN.",
+        message: "Prisma CI credentials not found. Set PRISMA_SERVICE_TOKEN or PRISMA_API_TOKEN.",
       });
     }
     return {
@@ -49,10 +47,7 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
       serviceToken: Redacted.make(Redacted.value(token).trim()),
       source: {
         type: "env" as const,
-        details:
-          serviceToken === undefined
-            ? "PRISMA_API_TOKEN"
-            : "PRISMA_SERVICE_TOKEN",
+        details: serviceToken === undefined ? "PRISMA_API_TOKEN" : "PRISMA_SERVICE_TOKEN",
       },
     };
   }),
@@ -78,6 +73,6 @@ const prismaAuth = makeStoredAuthProvider<PrismaResolvedCredentials>({
  */
 export const PrismaAuth = prismaAuth.layer;
 
-/** Schema of the stored Prisma credential file (flat field record). */
+/** Schema of Prisma's inline static-token values. */
 export const PrismaStoredCredentials = prismaAuth.storedSchema;
 export type PrismaStoredCredentials = typeof PrismaStoredCredentials.Type;

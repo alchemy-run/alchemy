@@ -1,23 +1,30 @@
-import * as AWS from "@/AWS";
-import { Certificate, waitForRoute53Change } from "@/AWS/ACM/Certificate.ts";
-import { HostedZone } from "@/AWS/Route53";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
+import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Certificate, waitForRoute53Change } from "@/AWS/ACM/Certificate.ts";
+import { HostedZone } from "@/AWS/Route53";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 // ACM certificates for CloudFront are provider-pinned to us-east-1; every
 // out-of-band ACM call in this file must target the same region.
 const withUsEast1 = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provideService(AwsRegion, Effect.succeed("us-east-1")));
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
 
 test.provider.skipIf(!!process.env.FAST)(
   "polls Route53 validation changes returned with resource-path IDs",
@@ -56,7 +63,10 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  {
+    tags: ["provider:aws", "provider:aws:acm", "provider:aws:route53", "live"],
+    timeout: 180_000,
+  },
 );
 
 // Canonical `list()` test (AWS account/region-scoped collection): request a
@@ -93,20 +103,15 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(20),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
         }),
       );
 
-      expect(all.some((c) => c.certificateArn === cert.certificateArn)).toBe(
-        true,
-      );
+      expect(all.some((c) => c.certificateArn === cert.certificateArn)).toBe(true);
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:acm", "live"], timeout: 120_000 },
 );
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
@@ -140,7 +145,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:aws", "provider:aws:acm", "live"], timeout: 180_000 },
 );
 
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
@@ -187,9 +192,9 @@ test.provider.skipIf(!!process.env.FAST)(
       // Safety net: reclaim the certificate on scope close even if the body
       // fails mid-way (e.g. during the pre-fix crash verification).
       yield* Effect.addFinalizer(() =>
-        withUsEast1(
-          acm.deleteCertificate({ CertificateArn: created.certificateArn }),
-        ).pipe(Effect.ignore),
+        withUsEast1(acm.deleteCertificate({ CertificateArn: created.certificateArn })).pipe(
+          Effect.ignore,
+        ),
       );
 
       // `ListCertificates` is eventually consistent; the recovery redeploy
@@ -207,10 +212,7 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(18),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(18)]),
         }),
       );
 
@@ -218,22 +220,17 @@ test.provider.skipIf(!!process.env.FAST)(
       // interrupted deploy leaves behind: `creating`, no attributes, and the
       // props lost in the Output round-trip.
       const state = yield* yield* State;
-      const stage = "test"; // scratch stacks default to the "test" stage
+      const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
-        state
-          .get({ stack: stack.name, stage, fqn })
-          .pipe(Effect.map((row) => ({ fqn, row }))),
+        state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
       );
       const wedged = rows.find(
         (r): r is { fqn: string; row: ResourceState } =>
-          isResourceState(r.row) &&
-          r.row.resourceType === "AWS.ACM.Certificate",
+          isResourceState(r.row) && r.row.resourceType === "AWS.ACM.Certificate",
       );
       if (!wedged) {
-        return yield* Effect.die(
-          new Error("no AWS.ACM.Certificate state row found after deploy"),
-        );
+        return yield* Effect.die(new Error("no AWS.ACM.Certificate state row found after deploy"));
       }
       yield* state.set({
         stack: stack.name,
@@ -262,5 +259,101 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:acm", "live"], timeout: 240_000 },
+);
+
+// ACM issues ONE validation record shared by a name and its wildcard. The
+// provider must upsert it once: Route 53 rejects a change batch that touches
+// the same record twice (`InvalidChangeBatch`).
+//
+// Issuance needs a publicly resolvable zone, so delegate a subdomain of the
+// Cloudflare test zone to a fresh Route 53 zone. The delegation is deployed
+// first so ACM never sees (and negatively caches) the undelegated name.
+const cloudflareZoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+// One delegated subdomain per test stage (`test_$USER` by default), so
+// concurrent runs by different developers never share NS records.
+const wildcardDomainFor = (stage: string) =>
+  `acm-wildcard-${stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${cloudflareZoneName}`;
+
+const delegatedZone = (wildcardDomain: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const parent = yield* findZoneByName({ accountId, name: cloudflareZoneName });
+    if (!parent) {
+      return yield* Effect.die(new Error(`Cloudflare zone ${cloudflareZoneName} not found`));
+    }
+    const zone = yield* HostedZone("WildcardZone", {
+      name: wildcardDomain,
+      forceDestroy: true,
+    });
+    // Route 53 always assigns four name servers to a public hosted zone.
+    yield* Effect.forEach([0, 1, 2, 3], (i) =>
+      Cloudflare.DNS.Record(`WildcardZoneNs${i}`, {
+        zoneId: parent.id,
+        name: wildcardDomain,
+        type: "NS",
+        content: zone.nameServers.pipe(Output.map((nameServers) => nameServers[i]!)),
+        ttl: 60,
+      }),
+    );
+    return zone;
+  });
+
+test.provider.skipIf(!!process.env.FAST)(
+  "validates an apex + wildcard certificate through one shared record",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const wildcardDomain = wildcardDomainFor(stack.stage);
+
+      yield* stack.deploy(delegatedZone(wildcardDomain));
+
+      const { zone, certificate } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const zone = yield* delegatedZone(wildcardDomain);
+          const certificate = yield* Certificate("WildcardCertificate", {
+            domainName: wildcardDomain,
+            subjectAlternativeNames: [wildcardDomain, `*.${wildcardDomain}`],
+            hostedZoneId: zone.id,
+          });
+          return { zone, certificate };
+        }),
+      );
+
+      const issued = yield* withUsEast1(
+        acm.describeCertificate({ CertificateArn: certificate.certificateArn }),
+      );
+      expect(issued.Certificate?.Status).toBe("ISSUED");
+
+      // Both names validated through the single record ACM shares between them.
+      const options = issued.Certificate?.DomainValidationOptions ?? [];
+      expect(options.map((option) => option.DomainName).sort()).toEqual([
+        `*.${wildcardDomain}`,
+        wildcardDomain,
+      ]);
+      expect(new Set(options.map((option) => option.ResourceRecord?.Name)).size).toBe(1);
+
+      const records = yield* route53.listResourceRecordSets({
+        HostedZoneId: zone.id.replace(/^\/hostedzone\//, ""),
+      });
+      expect(
+        (records.ResourceRecordSets ?? []).filter((record) => record.Type === "CNAME"),
+      ).toHaveLength(1);
+
+      yield* stack.destroy();
+      const deleted = yield* withUsEast1(
+        acm.describeCertificate({ CertificateArn: certificate.certificateArn }),
+      ).pipe(Effect.flip);
+      expect(deleted._tag).toBe("ResourceNotFoundException");
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:acm",
+      "provider:aws:route53",
+      "provider:cloudflare",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

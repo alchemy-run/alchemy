@@ -1,20 +1,18 @@
-import * as AWS from "@/AWS";
-import { Stream } from "@/AWS/KinesisVideo";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/aws/kinesis-video";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Stream } from "@/AWS/KinesisVideo";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const findStream = (streamName: string) =>
   kv.describeStream({ StreamName: streamName }).pipe(
     Effect.map((r) => r.StreamInfo),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class StreamStillExists extends Data.TaggedError("StreamStillExists")<{
@@ -32,17 +30,12 @@ const assertStreamDeleted = (streamName: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "StreamStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
 const fetchTags = (streamArn: string) =>
-  kv
-    .listTagsForStream({ StreamARN: streamArn })
-    .pipe(Effect.map((r) => r.Tags ?? {}));
+  kv.listTagsForStream({ StreamARN: streamArn }).pipe(Effect.map((r) => r.Tags ?? {}));
 
 test.provider(
   "create, update retention/mediaType/tags, delete video stream",
@@ -111,7 +104,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertStreamDeleted(stream.streamName);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:kinesisvideo", "live"],
+    timeout: 240_000,
+  },
 );
 
 test.provider(
@@ -145,5 +141,8 @@ test.provider(
       yield* stack.destroy();
       yield* assertStreamDeleted(second.streamName);
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:kinesisvideo", "live"],
+    timeout: 240_000,
+  },
 );

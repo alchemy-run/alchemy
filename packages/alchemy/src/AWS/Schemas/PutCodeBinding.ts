@@ -35,12 +35,7 @@ export interface PutCodeBinding extends Binding.Service<
       Language: string;
       /** The version of the schema to generate bindings for. Defaults to the latest. */
       SchemaVersion?: string;
-    }) => Effect.Effect<
-      schemas.PutCodeBindingResponse,
-      schemas.PutCodeBindingError
-    >
+    }) => Effect.Effect<schemas.PutCodeBindingResponse, schemas.PutCodeBindingError>
   >
 > {}
-export const PutCodeBinding = Binding.Service<PutCodeBinding>(
-  "AWS.Schemas.PutCodeBinding",
-);
+export const PutCodeBinding = Binding.Service<PutCodeBinding>("AWS.Schemas.PutCodeBinding");

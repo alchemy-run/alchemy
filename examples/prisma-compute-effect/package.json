@@ -16,12 +16,12 @@
     "tail": "alchemy logs --tail"
   },
   "dependencies": {
-    "@effect/platform-bun": "catalog:effect",
+    "@effect/platform-bun": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:effect"
+    "effect": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "catalog:tooling",
-    "typescript": "catalog:build"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

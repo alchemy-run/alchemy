@@ -2,7 +2,6 @@ import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -18,9 +17,7 @@ type TypeId = typeof TypeId;
  * A rule inside an account phase entrypoint — same shape Cloudflare accepts
  * on the entrypoint PUT endpoint.
  */
-export type AccountEntrypointRule = NonNullable<
-  rulesets.PutPhasForAccountRequest["rules"]
->[number];
+export type AccountEntrypointRule = NonNullable<rulesets.PutPhasForAccountRequest["rules"]>[number];
 
 export type AccountEntrypointProps = {
   /**
@@ -129,9 +126,7 @@ export const AccountEntrypoint = Resource<AccountEntrypoint>(TypeId);
 /**
  * Returns true if the given value is a AccountEntrypoint resource.
  */
-export const isAccountEntrypoint = (
-  value: unknown,
-): value is AccountEntrypoint =>
+export const isAccountEntrypoint = (value: unknown): value is AccountEntrypoint =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const AccountEntrypointProvider = () =>
@@ -148,8 +143,7 @@ export const AccountEntrypointProvider = () =>
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.name ?? olds.name ?? (yield* createPhysicalName({ id }));
+      const oldName = output?.name ?? olds.name ?? (yield* createPhysicalName({ id }));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
@@ -169,29 +163,21 @@ export const AccountEntrypointProvider = () =>
       // account's ruleset list. The list response omits the rules, so
       // hydrate each entrypoint via `getPhasForAccount` (the same call
       // `read` uses) to produce the exact `read` Attributes shape.
-      const entrypoints = yield* rulesets.listRulesetsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).filter((r) => r.kind === "root"),
-            ),
-          ),
-        );
+      const entrypoints = yield* rulesets.listRulesetsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => (page.result ?? []).filter((r) => r.kind === "root")),
+        ),
+      );
       const rows = yield* Effect.forEach(
         entrypoints,
         (entry) =>
-          rulesets
-            .getPhasForAccount({ accountId, rulesetPhase: entry.phase })
-            .pipe(
-              Effect.map((ruleset) => toAttributes(accountId, ruleset)),
-              // Removed/empty out-of-band or plan-gated phases are skipped.
-              Effect.catchTag("RulesetNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-              Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-            ),
+          rulesets.getPhasForAccount({ accountId, rulesetPhase: entry.phase }).pipe(
+            Effect.map((ruleset) => toAttributes(accountId, ruleset)),
+            // Removed/empty out-of-band or plan-gated phases are skipped.
+            Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
         { concurrency: 10 },
       );
       return rows.filter(
@@ -204,25 +190,21 @@ export const AccountEntrypointProvider = () =>
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
-      const accountId =
-        output?.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
+      const accountId = output?.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
       const phase = output?.phase ?? olds?.phase;
       if (phase === undefined) return undefined;
       // The entrypoint is a per-phase singleton that Cloudflare creates
       // lazily — there is nothing to "own", so a cold read adopts freely
       // (mirrors the zone-level `Cloudflare.Ruleset.Ruleset`).
-      return yield* rulesets
-        .getPhasForAccount({ accountId, rulesetPhase: phase })
-        .pipe(
-          Effect.map((ruleset) => toAttributes(accountId, ruleset)),
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
-        );
+      return yield* rulesets.getPhasForAccount({ accountId, rulesetPhase: phase }).pipe(
+        Effect.map((ruleset) => toAttributes(accountId, ruleset)),
+        Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+      );
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name =
-        news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
+      const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
       // PUT is a true upsert on the phase entrypoint — one call observes
       // nothing and converges everything, whether the entrypoint exists yet
       // or not.

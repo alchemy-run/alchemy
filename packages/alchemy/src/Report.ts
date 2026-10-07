@@ -60,7 +60,6 @@ export interface ResourceStatusChanged {
   type: string; // resource type (e.g. "AWS::Lambda::Function", "Cloudflare::Worker")
   status: ApplyStatus;
   message?: string; // optional details
-  bindingId?: string; // if this event is for a binding
   /**
    * The {@link ProviderMode} this node's provider was resolved for.
    * `undefined` for mode-agnostic providers (a single implementation serves
@@ -87,14 +86,7 @@ export interface PlannedResource {
   readonly logicalId: string;
   readonly resourceType: string;
   /** The action the plan decided for this resource. */
-  readonly action:
-    | "create"
-    | "update"
-    | "adopted"
-    | "replace"
-    | "delete"
-    | "orphaned"
-    | "noop";
+  readonly action: "create" | "update" | "adopted" | "replace" | "delete" | "orphaned" | "noop";
   /** Binding rows the node carries; empty when the resource has none. */
   readonly bindings: ReadonlyArray<PlannedBinding>;
   /** Mode the node's provider resolved for; absent for mode-agnostic providers. */
@@ -164,10 +156,7 @@ export interface PlanPhaseChanged {
 }
 
 /** A per-node planning event (one resource or action diffed). */
-export type PlanNodeEvent =
-  | ResourceDiffStarted
-  | ResourcePlanned
-  | ActionPlanned;
+export type PlanNodeEvent = ResourceDiffStarted | ResourcePlanned | ActionPlanned;
 
 export type PlanEvent = PlanPhaseChanged | PlanNodeEvent;
 
@@ -190,16 +179,34 @@ export interface StateBootstrapCompleted {
 
 export type StateEvent = StateBootstrapStarted | StateBootstrapCompleted;
 
+export interface NukeScanStarted {
+  readonly _tag: "nuke.scan.started";
+  readonly total: number;
+}
+
+export interface NukeProviderScanStarted {
+  readonly _tag: "nuke.scan.provider.started";
+  readonly provider: string;
+}
+
+export interface NukePassStarted {
+  readonly _tag: "nuke.pass.started";
+  readonly pass: number;
+}
+
 /** Emitted as a nuke scan finishes enumerating one provider's resources. */
 export interface NukeProviderScanned {
   readonly _tag: "nuke.scan.provider.completed";
   readonly provider: string;
   /** Resources found for this provider (0 when the listing failed). */
   readonly resources: number;
+  /** Listing failure, reported immediately when this provider settles. */
+  readonly error?: string;
 }
 
 export interface NukeResourceDeleted {
   readonly _tag: "nuke.resource.deleted";
+  readonly provider: string;
   /** Display name of the deleted resource. */
   readonly resource: string;
 }
@@ -207,11 +214,15 @@ export interface NukeResourceDeleted {
 /** Emitted when a nuke deletion attempt fails (the run keeps going). */
 export interface NukeResourceFailed {
   readonly _tag: "nuke.resource.failed";
+  readonly provider: string;
   readonly resource: string;
   readonly message: string;
 }
 
 export type NukeEvent =
+  | NukeScanStarted
+  | NukeProviderScanStarted
+  | NukePassStarted
   | NukeProviderScanned
   | NukeResourceDeleted
   | NukeResourceFailed;
@@ -246,12 +257,7 @@ export type ProviderEvent =
  * Every progress event the engine and the Alchemist routes can report — one
  * flat union, one `_tag` discriminator, tags namespaced `domain.subject.verb`.
  */
-export type ProgressEvent =
-  | PlanEvent
-  | ApplyEvent
-  | StateEvent
-  | NukeEvent
-  | ProviderEvent;
+export type ProgressEvent = PlanEvent | ApplyEvent | StateEvent | NukeEvent | ProviderEvent;
 
 export type ProgressReporter = (event: ProgressEvent) => Effect.Effect<void>;
 
@@ -262,14 +268,21 @@ export type ProgressReporter = (event: ProgressEvent) => Effect.Effect<void>;
  * a caller that only wants the result provides nothing; a renderer provides
  * its own handler for the events it wants to observe.
  */
-export const Progress = Context.Reference<ProgressReporter>(
-  "alchemy/Progress",
-  { defaultValue: (): ProgressReporter => () => Effect.void },
-);
+export const Progress = Context.Reference<ProgressReporter>("alchemy/Progress", {
+  defaultValue: (): ProgressReporter => () => Effect.void,
+});
 
 export interface PlanStatusSession {
   emit: (event: ApplyEvent) => Effect.Effect<void>;
   done: (outcome: "success" | "failure") => Effect.Effect<void>;
+  /** Replace the dev widget's stack output view without writing scrollback. */
+  setOutput?: (value: unknown) => Effect.Effect<void>;
+  /**
+   * Tear down the session's live presentation without settling it. Dev keeps
+   * its widget mounted after `done`; an interrupted generation (reload,
+   * Ctrl+C) must remove it so the next generation does not stack another.
+   */
+  close?: Effect.Effect<void>;
 }
 
 /** A session that drops everything — the default when no renderer is ambient. */
@@ -298,10 +311,7 @@ export interface PlanningStatusSession {
 }
 
 export interface ScopedPlanStatusSession extends PlanStatusSession {
-  note: (
-    note: string,
-    options?: { readonly kind?: NoteKind },
-  ) => Effect.Effect<void>;
+  note: (note: string, options?: { readonly kind?: NoteKind }) => Effect.Effect<void>;
 }
 
 export interface PlanDisplayOptions {
@@ -309,6 +319,8 @@ export interface PlanDisplayOptions {
   detailed?: boolean;
   /** Stage displayed in terminal lifecycle updates. */
   stage?: string;
+  /** Keep the dev plan mounted as a collapsible widget below static logs. */
+  dev?: boolean;
 }
 
 export interface CLIService {
@@ -321,10 +333,7 @@ export interface CLIService {
     plan: P,
     options?: PlanDisplayOptions,
   ) => Effect.Effect<boolean, NonInteractiveTerminal>;
-  displayPlan: <P extends Plan>(
-    plan: P,
-    options?: PlanDisplayOptions,
-  ) => Effect.Effect<void>;
+  displayPlan: <P extends Plan>(plan: P, options?: PlanDisplayOptions) => Effect.Effect<void>;
   startApplySession: <P extends Plan>(
     plan: P,
     options?: PlanDisplayOptions,

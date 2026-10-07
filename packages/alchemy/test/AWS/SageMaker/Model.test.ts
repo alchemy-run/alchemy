@@ -1,11 +1,11 @@
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { Model } from "@/AWS/SageMaker";
 import * as Test from "@/Test/Alchemy";
-import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { sklearnImage } from "./images.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -17,12 +17,11 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        sagemaker.describeModel({
-          ModelName: "alchemy-nonexistent-sagemaker-model-probe",
-        }),
+        sagemaker.describeModel({ ModelName: "alchemy-nonexistent-sagemaker-model-probe" }),
       );
       expect(error._tag).toBe("ModelNotFound");
     }),
+  { tags: ["provider:aws", "provider:aws:sagemaker", "live"] },
 );
 
 const findModel = (modelName: string) =>
@@ -42,9 +41,7 @@ const sagemakerRole = Role("SageMakerModelRole", {
     ],
   },
   // CreateModel validates the execution role can pull the container image.
-  managedPolicyArns: [
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-  ],
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"],
 });
 
 test.provider(
@@ -62,10 +59,7 @@ test.provider(
             const role = yield* sagemakerRole;
             const model = yield* Model("TestModel", {
               executionRoleArn: role.roleArn,
-              primaryContainer: {
-                Image: image,
-                Environment: env,
-              },
+              primaryContainer: { Image: image, Environment: env },
               tags: { purpose: "alchemy-test" },
             });
             return { model };
@@ -94,14 +88,15 @@ test.provider(
       const { model: replaced } = yield* deployModel({ MODEL_VERSION: "2" });
       expect(replaced.modelName).not.toBe(model.modelName);
       const observedReplacement = yield* findModel(replaced.modelName);
-      expect(
-        observedReplacement?.PrimaryContainer?.Environment?.MODEL_VERSION,
-      ).toBe("2");
+      expect(observedReplacement?.PrimaryContainer?.Environment?.MODEL_VERSION).toBe("2");
       // the replaced model is deleted
       expect(yield* findModel(model.modelName)).toBeUndefined();
 
       yield* stack.destroy();
       expect(yield* findModel(replaced.modelName)).toBeUndefined();
     }),
-  { timeout: 240_000 },
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:sagemaker", "live"],
+    timeout: 240_000,
+  },
 );

@@ -1,13 +1,15 @@
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-
 import * as Semaphore from "effect/Semaphore";
 import { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
+import { cachedFunction } from "../Util/cached-function.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
 
 /**
@@ -43,21 +45,18 @@ export class AuthError extends Schema.TaggedError<AuthError>()("AuthError", {
 
 /**
  * Stored credentials exist (or are expected) but cannot be used until the
- * user re-authenticates: a missing credential file, an expired/rotated
+ * user re-authenticates: missing values, an expired/rotated
  * token, or a session the provider can no longer refresh silently. The
  * profile UI renders this as "needs re-login" instead of a generic error,
  * and callers match it with `Effect.catchTag("NeedsReauth", ...)` — never
  * by inspecting the message.
  */
-export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()(
-  "NeedsReauth",
-  {
-    provider: Schema.String,
-    profile: Schema.String,
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {
+export class NeedsReauth extends Schema.TaggedError<NeedsReauth>()("NeedsReauth", {
+  provider: Schema.String,
+  profile: Schema.String,
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {
   readonly [UserFacingError] = true;
 }
 
@@ -73,10 +72,7 @@ export const refreshHint = (provider: string, profileName: string): string =>
   `Run \`alchemy profile refresh --profile ${profileName} --provider ${provider}\`.`;
 
 /** {@link refreshHint}'s sibling for reconfiguration. */
-export const reconfigureHint = (
-  provider: string,
-  profileName: string,
-): string =>
+export const reconfigureHint = (provider: string, profileName: string): string =>
   `Run \`alchemy profile edit --profile ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
 export class AuthProviders extends Context.Service<
@@ -119,9 +115,7 @@ export type EnvironmentVariable = typeof EnvironmentVariable.Type;
 const EnvironmentVariables = Schema.Array(EnvironmentVariable);
 
 /** Render a one-line summary of a provider's environment contract. */
-export const describeEnvironment = (
-  environment: ReadonlyArray<EnvironmentVariable>,
-): string =>
+export const describeEnvironment = (environment: ReadonlyArray<EnvironmentVariable>): string =>
   environment
     .map((v) => {
       const names = [v.name, ...(v.alternatives ?? [])].join(" | ");
@@ -130,26 +124,31 @@ export const describeEnvironment = (
     .join(", ");
 
 /**
- * The variable names a provider's environment resolution would consume from
- * `env`, or `undefined` when the declared contract is not fully satisfied
- * (some required variable has no non-empty value). Used outside CI to decide
- * whether explicitly exported variables should take precedence over an
- * implicitly selected profile — and to tell the user exactly which keys won.
+ * The variable names a provider's environment resolution would consume, or
+ * `undefined` when the declared contract is not fully satisfied (some
+ * required variable has no non-empty value). Reads through the ambient
+ * `ConfigProvider` — the process environment plus `.env` / `--env-file` —
+ * so it sees exactly what `readEnvironment` will. Environment credentials
+ * take precedence over any profile, CI or not; the returned names tell the
+ * user exactly which keys won.
  */
-export const presentEnvironment = (
-  environment: ReadonlyArray<EnvironmentVariable>,
-  env: Record<string, string | undefined>,
-): ReadonlyArray<string> | undefined => {
-  const used: string[] = [];
-  for (const variable of environment) {
-    const found = [variable.name, ...(variable.alternatives ?? [])].find(
-      (name) => (env[name] ?? "") !== "",
-    );
-    if (found !== undefined) used.push(found);
-    else if (variable.required) return undefined;
-  }
-  return used.length > 0 ? used : undefined;
-};
+export const presentEnvironment = (environment: ReadonlyArray<EnvironmentVariable>) =>
+  Effect.gen(function* () {
+    const used: string[] = [];
+    for (const variable of environment) {
+      let found: string | undefined;
+      for (const name of [variable.name, ...(variable.alternatives ?? [])]) {
+        const value = yield* Config.option(Config.String(name));
+        if (Option.isSome(value) && value.value !== "") {
+          found = name;
+          break;
+        }
+      }
+      if (found !== undefined) used.push(found);
+      else if (variable.required) return undefined;
+    }
+    return used.length > 0 ? used : undefined;
+  });
 
 /**
  * One rendered line of a provider's credential details: `key: value`.
@@ -199,7 +198,11 @@ export interface ConfigureField {
  * appear here.
  */
 export interface ConfigureMethod {
-  /** `--method` value, e.g. `"api-token"`. */
+  /**
+   * `--method` value. Always the same literal the provider persists as the
+   * config's `method` (`"stored"`, `"sso"`, `"local"`, `"env"`), so the
+   * flag and the credentials file speak one vocabulary.
+   */
   readonly method: string;
   readonly fields: ReadonlyArray<ConfigureField>;
 }
@@ -210,7 +213,7 @@ export interface AuthProviderImpl<
   R = never,
 > {
   /**
-   * Schema for the provider's manifest entry ({@link Config}). Stored
+   * Schema for the provider-owned `values` object ({@link Config}). Stored
    * entries are user-editable JSON that may also come from a newer or
    * older alchemy, so every load decodes against this schema — an invalid
    * entry fails with a reconfigure hint instead of reaching provider code
@@ -246,12 +249,10 @@ export interface AuthProviderImpl<
   login(
     profileName: string,
     config: Config,
-  ): Effect.Effect<void, AuthError, R | Interaction>;
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<Config | void, AuthError, R | Interaction>;
 
-  logout(
-    profileName: string,
-    config: Config,
-  ): Effect.Effect<void, AuthError, R | Interaction>;
+  logout(profileName: string, config: Config): Effect.Effect<void, AuthError, R | Interaction>;
 
   /**
    * Structured credential details for display. Fails with
@@ -262,10 +263,11 @@ export interface AuthProviderImpl<
   details(
     profileName: string,
     config: Config,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
   ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth, R | Interaction>;
 
   /**
-   * Resolve credentials from the store/config, silently refreshing when the
+   * Resolve credentials from the profile values, silently refreshing when the
    * provider supports it. MUST be non-interactive — this is the only method
    * (with {@link readEnvironment}) that child processes exercise, and their
    * graphs carry no interaction services. When re-authentication is needed,
@@ -274,6 +276,7 @@ export interface AuthProviderImpl<
   read(
     profileName: string,
     config: Config,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
   ): Effect.Effect<Credentials, AuthError | NeedsReauth, R>;
 
   /**
@@ -297,20 +300,19 @@ export interface AuthProvider<
 > extends AuthProviderImpl<Config, Credentials> {
   readonly kind: "AuthProvider";
   readonly name: string;
+  /** Log each environment contract once per built provider layer. */
+  readonly logEnvironmentCredentials: (used: ReadonlyArray<string>) => Effect.Effect<void>;
   /**
    * The provider's declared CI environment contract. Empty when the
    * provider does not support environment credentials.
    */
   readonly environment: ReadonlyArray<EnvironmentVariable>;
   /**
-   * Decode a raw manifest entry against {@link AuthProviderImpl.configSchema}.
+   * Decode raw provider values against {@link AuthProviderImpl.configSchema}.
    * Fails with an {@link AuthError} carrying the reconfigure hint, so every
    * consumer of stored configuration reports invalid entries the same way.
    */
-  decodeConfig(
-    profileName: string,
-    config: { readonly method: string },
-  ): Effect.Effect<Config, AuthError>;
+  decodeConfig(profileName: string, config: unknown): Effect.Effect<Config, AuthError>;
 }
 
 export const AuthProvider =
@@ -340,14 +342,10 @@ export const AuthProvider =
       // re-declares as a requirement anyway, so no call site can rely on the
       // capture satisfying it.
       const ctx = Context.omit(Interaction)(
-        yield* Effect.context<
-          FileSystem.FileSystem | Path.Path | R | ImplReq
-        >(),
+        yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
       ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
       const providers = yield* AuthProviders;
-      const service = yield* Effect.isEffect(impl)
-        ? impl
-        : Effect.succeed(impl);
+      const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
       // Validate the declared environment contract at registration so a
       // malformed declaration fails at layer build (programmer error), not
       // when a CI run tries to render it.
@@ -364,8 +362,7 @@ export const AuthProvider =
       }
       if (
         service.configureWith !== undefined &&
-        (service.configureMethods === undefined ||
-          service.configureMethods.length === 0)
+        (service.configureMethods === undefined || service.configureMethods.length === 0)
       ) {
         return yield* Effect.die(
           `AuthProvider '${name}' implements configureWith but does not ` +
@@ -375,6 +372,13 @@ export const AuthProvider =
       }
 
       const provider: AuthProvider<Config, Credentials> = {
+        logEnvironmentCredentials: yield* cachedFunction(
+          (used: ReadonlyArray<string>) =>
+            Effect.logInfo(
+              `${name}: using environment variables (${used.join(", ")}) instead of the profile.`,
+            ),
+          { key: ([used]) => JSON.stringify(used.toSorted()) },
+        ),
         kind: "AuthProvider",
         name,
         // configure/login can wait minutes on a browser grant, so they hold
@@ -389,25 +393,21 @@ export const AuthProvider =
           Semaphore.withPermits(
             interactiveMutex,
             1,
-          )(
-            service
-              .configure(profileName, currentConfig)
-              .pipe(Effect.provideContext(ctx)),
-          ),
-        login: (profileName, config) =>
+          )(service.configure(profileName, currentConfig).pipe(Effect.provideContext(ctx))),
+        login: (profileName, config, updateConfig) =>
           Semaphore.withPermits(
             interactiveMutex,
             1,
-          )(
-            service.login(profileName, config).pipe(Effect.provideContext(ctx)),
-          ),
+          )(service.login(profileName, config, updateConfig).pipe(Effect.provideContext(ctx))),
         logout: (profileName, config) =>
+          withProfileCredentialsLock(profileName, service.logout(profileName, config)).pipe(
+            Effect.provideContext(ctx),
+          ),
+        details: (profileName, config, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.logout(profileName, config),
+            service.details(profileName, config, updateConfig),
           ).pipe(Effect.provideContext(ctx)),
-        details: (profileName, config) =>
-          service.details(profileName, config).pipe(Effect.provideContext(ctx)),
         ...(service.configureWith === undefined
           ? {}
           : {
@@ -417,33 +417,26 @@ export const AuthProvider =
                   readonly method: string;
                   readonly values: Record<string, string>;
                 },
-              ) =>
-                service.configureWith!(profileName, input).pipe(
-                  Effect.provideContext(ctx),
-                ),
+              ) => service.configureWith!(profileName, input).pipe(Effect.provideContext(ctx)),
               configureMethods: service.configureMethods,
             }),
-        read: (profileName, config) =>
+        read: (profileName, config, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.read(profileName, config),
+            service.read(profileName, config, updateConfig),
           ).pipe(Effect.provideContext(ctx)),
-        readEnvironment: service.readEnvironment?.pipe(
-          Effect.provideContext(ctx),
-        ),
+        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(ctx)),
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
           Effect.gen(function* () {
-            return yield* Schema.decodeUnknownEffect(service.configSchema)(
-              config,
-            ).pipe(
+            return yield* Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
               Effect.mapError(
                 (cause) =>
                   new AuthError({
                     message:
                       `Stored ${name} configuration in profile '${profileName}' is not valid ` +
-                      `for this version of alchemy (method '${config.method}'). ` +
+                      `for this version of alchemy. ` +
                       `${reconfigureHint(name, profileName)}`,
                     cause,
                   }),
@@ -469,9 +462,7 @@ export const AuthProviderLayer =
       | AuthProviderImpl<Config, Credentials, R>
       | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
   ) =>
-    Layer.effectDiscard(
-      AuthProvider<Config, Credentials>()<R, ImplReq>(name, impl),
-    );
+    Layer.effectDiscard(AuthProvider<Config, Credentials>()<R, ImplReq>(name, impl));
 
 /**
  * Look up a registered {@link AuthProvider} by name. Fails with

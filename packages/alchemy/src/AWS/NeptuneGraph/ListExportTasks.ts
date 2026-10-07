@@ -27,12 +27,7 @@ export interface ListExportTasks extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<neptunegraph.ListExportTasksInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.ListExportTasksOutput,
-      neptunegraph.ListExportTasksError
-    >
+    ) => Effect.Effect<neptunegraph.ListExportTasksOutput, neptunegraph.ListExportTasksError>
   >
 > {}
-export const ListExportTasks = Binding.Service<ListExportTasks>(
-  "AWS.NeptuneGraph.ListExportTasks",
-);
+export const ListExportTasks = Binding.Service<ListExportTasks>("AWS.NeptuneGraph.ListExportTasks");

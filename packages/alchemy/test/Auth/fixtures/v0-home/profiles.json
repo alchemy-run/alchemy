@@ -11,6 +11,9 @@
         "method": "sso",
         "ssoProfile": "dev"
       },
+      "GitHub": {
+        "method": "gh-cli"
+      },
       "Neon": {
         "method": "env"
       }
@@ -24,7 +27,7 @@
       },
       "Cloudflare": {
         "method": "stored",
-        "credentialType": "apiToken"
+        "credentialType": "apiKey"
       }
     }
   }

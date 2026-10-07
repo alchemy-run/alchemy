@@ -1,9 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { LanguageModel } from "effect/ai/LanguageModel";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Gateway as GatewayResource } from "./Gateway.ts";
@@ -15,7 +15,7 @@ import { type LanguageModelOptions } from "./LanguageModel.ts";
  * the Cloudflare.AI. Gateway runtime binding so each operation returns
  * an Effect tagged with {@link GatewayError}, exposes the raw
  * Workers AI handle for `ai.run(...)`, and provides a `model(options)`
- * factory that produces an `effect/unstable/ai` `LanguageModel`
+ * factory that produces an `effect/ai` `LanguageModel`
  * `Layer`.
  *
  * Bind a {@link Gateway} to a Worker and obtain the
@@ -78,9 +78,7 @@ export interface QueryGateway extends Binding.Service<
   (gateway: GatewayResource) => Effect.Effect<QueryGatewayClient>
 > {}
 
-export const QueryGateway = Binding.Service<QueryGateway>(
-  "Cloudflare.AI.QueryGateway",
-);
+export const QueryGateway = Binding.Service<QueryGateway>("Cloudflare.AI.QueryGateway");
 
 // Error raised by AI Gateway runtime operations.
 export class GatewayError extends Data.TaggedError("AiGatewayError")<{
@@ -126,9 +124,7 @@ export interface QueryGatewayClient {
   /**
    * Read an AI Gateway log entry by ID.
    */
-  getLog(
-    logId: string,
-  ): Effect.Effect<AiGatewayLog, GatewayError, RuntimeContext>;
+  getLog(logId: string): Effect.Effect<AiGatewayLog, GatewayError, RuntimeContext>;
   /**
    * Build a provider URL routed through this gateway.
    */
