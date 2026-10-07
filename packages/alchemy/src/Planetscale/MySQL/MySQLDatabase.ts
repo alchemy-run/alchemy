@@ -239,7 +239,11 @@ export const MySQLDatabaseProvider = () =>
         return { action: "update", stables } as const;
       }
 
-      return undefined;
+      // Nothing changed. Still advertise the conditional `name` stable so
+      // a `--force` deploy (which upgrades this noop to an update) keeps
+      // `name` resolvable downstream instead of falsely replacing
+      // consumers such as roles and passwords (#1832).
+      return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {

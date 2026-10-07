@@ -583,6 +583,8 @@ export const kindStablesResourceProvider = () =>
 // Under override semantics, on a `string` change `providerStable` must be
 // treated as CHANGED (downstream re-plans) while `diffStable`/`sharedStable`
 // stay stable. Under the old merge, `providerStable` would wrongly stay stable.
+// When `string` is unchanged the diff returns a noop that still carries its
+// `stables`, which a `--force` deploy must honor (#1832).
 
 export type OverrideStablesResourceProps = {
   string?: string;
@@ -617,7 +619,9 @@ export const overrideStablesResourceProvider = () =>
           stables: ["diffStable", "sharedStable"],
         } as const;
       }
-      return undefined;
+      // Unchanged: still advertise the diff-level stables so a `--force`
+      // deploy (which upgrades this noop to an update) keeps them (#1832).
+      return { action: "noop", stables: ["diffStable", "sharedStable"] } as const;
     }),
     reconcile: Effect.fn(function* ({ id, news = {} }) {
       return {

@@ -3,11 +3,13 @@
   "include": ["scripts/**/*.ts", "scripts/nuke.sh"],
   "compilerOptions": {
     "noEmit": true,
+    "composite": true,
+    "tsBuildInfoFile": ".cache/tsconfig.scripts.tsbuildinfo",
     "types": ["bun", "node"]
   },
   "references": [
-    {
-      "path": "./submodules/distilled/packages/aws/tsconfig.json"
-    }
+    { "path": "./submodules/distilled/packages/aws/tsconfig.json" },
+    { "path": "./packages/alchemy-test/tsconfig.json" },
+    { "path": "./packages/vite-plugin-copy-editor/tsconfig.json" }
   ]
 }

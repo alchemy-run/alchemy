@@ -67,7 +67,11 @@ test.provider(
           hasReadOnlyReplicas: false,
         }),
       });
-      expect(alreadyConvergedToNonHa).toBeUndefined();
+      // Converged: a noop that still carries the `name` stable for `--force`.
+      expect(alreadyConvergedToNonHa).toEqual({
+        action: "noop",
+        stables: ["organization", "database", "name"],
+      });
 
       const exactHaCountChanged = yield* provider.diff!({
         id: "Branch",

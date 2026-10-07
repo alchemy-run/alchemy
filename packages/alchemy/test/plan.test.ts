@@ -2461,6 +2461,66 @@ describe("diff.stables overrides provider.stables", { tags: ["unit", "local"] },
 
   // `sharedStable` is in both lists -> stays stable -> downstream no-op.
   subtest("shared stable keeps downstream stable", (A) => A.sharedStable, "shared-A", "noop");
+
+  // #1832: `--force` upgrades A's noop to an update. The stables carried on
+  // A's noop diff must survive that upgrade — otherwise only
+  // `provider.stables` reach downstream diffs and identity-sensitive
+  // consumers (e.g. a PlanetScale role reading `database.name`) falsely
+  // plan a replacement on every forced deploy.
+  test(
+    "--force keeps the stables a noop diff returns",
+    Effect.gen(function* () {
+      yield* seed({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.OverrideStablesResource",
+          status: "created",
+          props: { string: "old" },
+          attr: {
+            string: "old",
+            providerStable: "provider-A",
+            diffStable: "diff-A",
+            sharedStable: "shared-A",
+          },
+          downstream: [],
+          bindings: [],
+        },
+        B: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "B",
+          fqn: "B",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "diff-A", stringArray: ["provider-A"] },
+          attr: { string: "diff-A", stableString: "B", stableArray: ["B"] },
+          downstream: [],
+          bindings: [],
+        },
+      });
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* OverrideStablesResource("A", { string: "old" });
+        yield* TestResource("B", {
+          string: A.diffStable,
+          stringArray: [A.providerStable],
+        });
+      }).pipe((program) => makePlan(program, { force: true }));
+
+      expect(plan.resources.A!.action).toBe("update");
+      expect(plan.resources.B!.action).toBe("update");
+      const bProps = (plan.resources.B as any).props;
+      // The noop diff's `diffStable` resolves to the persisted value...
+      expect(bProps.string).toBe("diff-A");
+      // ...while `providerStable` (omitted by the diff's stables) is left
+      // for apply to re-evaluate against the forced reconcile's output.
+      expect(Output.isExpr(bProps.stringArray[0])).toBe(true);
+    }),
+  );
 });
 
 describe("unsatisfied cycle detection", { tags: ["unit", "local"] }, () => {
