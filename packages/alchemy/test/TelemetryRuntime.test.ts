@@ -6,6 +6,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
+import * as Metric from "effect/Metric";
 import * as Redacted from "effect/Redacted";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import { buildEventTelemetry, EXPORTERS_KEY } from "@/TelemetryRuntime.ts";
@@ -22,9 +23,12 @@ const runEvent = (
     Effect.gen(function* () {
       const telemetry = yield* buildEventTelemetry(context, yield* Effect.scope, override);
       yield* Effect.void.pipe(Effect.withSpan("event"), Effect.provideContext(telemetry));
+      yield* Metric.update(eventCounter, 1).pipe(Effect.provideContext(telemetry));
     }),
   ).pipe(Effect.provideContext(context));
 };
+
+const eventCounter = Metric.counter("telemetry_runtime_test_events_total");
 
 const recordingClient = (requests: HttpClientRequest.HttpClientRequest[]) =>
   HttpClient.make((request) =>
@@ -105,6 +109,23 @@ describe("event telemetry configuration", { tags: ["unit", "local"] }, () => {
       expect(requests).toHaveLength(2);
       expect(requests[1].url).toBe("https://second.example/v1/traces");
       expect(requests[1].headers.authorization).toBe("fallback");
+    }),
+  );
+
+  it.effect("exports metrics as protobuf and traces as JSON", () =>
+    Effect.gen(function* () {
+      const values = new Map<string, ConfigProvider.Node>([
+        ["OTEL_EXPORTER_OTLP_ENDPOINT", ConfigProvider.makeValue("https://otlp.example")],
+      ]);
+      const provider = ConfigProvider.make((path) => Effect.sync(() => values.get(path.join("_"))));
+      const requests: HttpClientRequest.HttpClientRequest[] = [];
+      yield* runEvent(provider, recordingClient(requests));
+
+      const contentType = (path: string) =>
+        requests.find((request) => request.url === `https://otlp.example${path}`)?.body.contentType;
+      // OTLP/HTTP receivers must accept protobuf; Axiom rejects JSON metrics (415).
+      expect(contentType("/v1/metrics")).toBe("application/x-protobuf");
+      expect(contentType("/v1/traces")).toBe("application/json");
     }),
   );
 
