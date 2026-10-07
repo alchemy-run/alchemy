@@ -956,15 +956,10 @@ const apiDatabase = (
 const makeDatabaseCloud = () => {
   const databases = new Map<string, ApiDatabase>();
   const calls: Array<[string, unknown?]> = [];
-  const project = { defaultRegion: null as string | null };
   let nextId = 1;
   // The same in-memory cloud, served over the wire for the Database resource.
   const fake = makeFakeManagementApi((request) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
-
-    if (segments.length === 3 && segments[1] === "projects" && request.method === "GET") {
-      return data(toWireProject(apiProject(segments[2]!, "app", project.defaultRegion)));
-    }
 
     if (request.pathname === "/v1/databases" && request.method === "GET") {
       return page(Array.from(databases.values()).map(toWireDatabase));
@@ -1053,7 +1048,7 @@ const makeDatabaseCloud = () => {
     return unhandled(request);
   });
 
-  return { fake, calls, databases, project };
+  return { fake, calls, databases };
 };
 
 const generatedDatabaseRecoveryCloud = makeDatabaseCloud();
@@ -1263,7 +1258,7 @@ const inheritedRegionCloud = makeDatabaseCloud();
 const inheritedRegion = Test.make({ providers: databaseLayer(inheritedRegionCloud.fake) });
 
 inheritedRegion.test.provider(
-  "Database region inherit falls back to the default database region",
+  "Database region inherit is stable and follows the project default region",
   (stack) =>
     Effect.gen(function* () {
       inheritedRegionCloud.databases.clear();
@@ -1308,85 +1303,6 @@ inheritedRegion.test.provider(
 
       yield* stack.destroy();
       inheritedRegionCloud.databases.clear();
-    }),
-  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
-);
-
-const projectRegionCloud = makeDatabaseCloud();
-const projectRegion = Test.make({ providers: databaseLayer(projectRegionCloud.fake) });
-
-projectRegion.test.provider(
-  "Database region inherit uses the project default region over the default database",
-  (stack) =>
-    Effect.gen(function* () {
-      projectRegionCloud.databases.clear();
-      projectRegionCloud.project.defaultRegion = "eu-central-1";
-      yield* stack.destroy();
-
-      const first = yield* stack.deploy(
-        PrismaDatabase("Database", { project: "project-1", name: "inherited", region: "inherit" }),
-      );
-      expect(first.region).toBe("eu-central-1");
-      expect(projectRegionCloud.calls).toContainEqual([
-        "createDatabase",
-        expect.objectContaining({ region: "eu-central-1" }),
-      ]);
-
-      projectRegionCloud.databases.set(
-        "project-default",
-        apiDatabase("project-default", {
-          projectId: "project-1",
-          name: "project-default",
-          region: "us-east-1",
-          isDefault: true,
-        }),
-      );
-      projectRegionCloud.calls.length = 0;
-      const second = yield* stack.deploy(
-        PrismaDatabase("Database", { project: "project-1", name: "inherited", region: "inherit" }),
-      );
-      expect(second.databaseId).toBe(first.databaseId);
-      expect(second.region).toBe("eu-central-1");
-      const operations = projectRegionCloud.calls.map(([operation]) => operation);
-      expect(operations).not.toContain("createDatabase");
-      expect(operations).not.toContain("deleteDatabase");
-
-      projectRegionCloud.databases.delete("project-default");
-      yield* stack.destroy();
-      projectRegionCloud.databases.clear();
-    }),
-  { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
-);
-
-const noRegionCloud = makeDatabaseCloud();
-const noRegion = Test.make({ providers: databaseLayer(noRegionCloud.fake) });
-
-noRegion.test.provider(
-  "Database region inherit fails without a project or default database region",
-  (stack) =>
-    Effect.gen(function* () {
-      noRegionCloud.databases.clear();
-      yield* stack.destroy();
-
-      const result = yield* stack
-        .deploy(
-          PrismaDatabase("Database", {
-            project: "project-1",
-            name: "inherited",
-            region: "inherit",
-          }),
-        )
-        .pipe(Effect.result);
-
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(String(result.failure)).toContain(
-          "has no default region and no default database region",
-        );
-      }
-      expect(noRegionCloud.calls.map(([operation]) => operation)).not.toContain("createDatabase");
-
-      yield* stack.destroy();
     }),
   { tags: ["unit", "provider:prisma", "provider:prisma:database", "local"] },
 );
