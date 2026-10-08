@@ -79,7 +79,7 @@ layer(NodeServices.layer)("Bundle output location", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const { root, entry } = yield* makeProject("LIFECYCLE_MARKER");
-        const dir = path.join(root, ".alchemy", "bundles", "BundleStack", "test", "Api__Handler");
+        const dir = path.join(root, ".alchemy", "bundles", "BundleStack-test-Api__Handler");
         const chunks = fs
           .readDirectory(dir)
           .pipe(Effect.map((files) => files.filter((file) => file.startsWith("lazy-"))));
@@ -150,7 +150,7 @@ layer(NodeServices.layer)("Bundle output location", (it) => {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const { root, entry } = yield* makeProject("WATCH_LIFECYCLE_MARKER");
-        const dir = path.join(root, ".alchemy", "bundles", "BundleStack", "test", "Handler");
+        const dir = path.join(root, ".alchemy", "bundles", "BundleStack-test-Handler");
 
         const event = yield* firstWatchResult(Bundle.watch({ input: entry, cwd: root })).pipe(
           inLifecycle(root, "Handler"),

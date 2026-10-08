@@ -46,9 +46,7 @@ test.provider(
         path.join(
           dotAlchemy,
           "bundles",
-          stack.name,
-          stack.stage,
-          "DockerPlatformService",
+          `${stack.name}-${stack.stage}-DockerPlatformService`,
           "index.mjs",
         ),
       );

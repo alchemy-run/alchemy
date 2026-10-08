@@ -93,7 +93,7 @@ export interface BundleConfig extends BundleExtraOptions {
   /**
    * Rolldown output options overrides.
    *
-   * The bundle is written to `.alchemy/bundles/<stack>/<stage>/<resource>`,
+   * The bundle is written to `.alchemy/bundles/<stack>-<stage>-<resource>`,
    * which is cleared before every build, so you can inspect exactly what
    * ships. Set `dir` or `file` to write it somewhere else; Alchemy never
    * clears a directory you choose.
@@ -216,7 +216,8 @@ export const hasOutputLocation = (outputOptions?: Partial<rolldown.OutputOptions
 
 /**
  * The directory a resource's bundle is written to when its `output` sets
- * neither `dir` nor `file`: `.alchemy/bundles/<stack>/<stage>/<fqn>`. Every
+ * neither `dir` nor `file`: `.alchemy/bundles/<stack>-<stage>-<fqn>`, one flat
+ * level under `bundles/` (namespace separators in the FQN become `__`). Every
  * resource gets its own directory, so concurrent stages never share one and
  * the directory can be cleared before each build.
  */
@@ -233,9 +234,7 @@ export const outputDirectory = (resource: {
     return path.join(
       dotAlchemy,
       "bundles",
-      resource.stack,
-      resource.stage,
-      encodeFqn(resource.fqn),
+      `${resource.stack}-${resource.stage}-${encodeFqn(resource.fqn)}`,
     );
   });
 

@@ -124,7 +124,7 @@ layer(PlatformServices)("runtime directory", (it) => {
             stack: { name: "test", stage: "test" },
             extraOptions: override ? { output: { dir: override } } : undefined,
           });
-          const directory = override ?? path.join(runtime, "bundles/test/test/test");
+          const directory = override ?? path.join(runtime, "bundles/test-test-test");
           expect(bundle.files.length).toBeGreaterThan(0);
           expect((yield* fs.readDirectory(directory)).length).toBeGreaterThan(0);
         }
@@ -164,7 +164,7 @@ layer(PlatformServices)("runtime directory", (it) => {
           });
           expect(
             (yield* fs.readDirectory(
-              path.join(root, configured ?? ".alchemy", "bundles/test/test/relative"),
+              path.join(root, configured ?? ".alchemy", "bundles/test-test-relative"),
             )).length,
           ).toBeGreaterThan(0);
         }

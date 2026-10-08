@@ -137,11 +137,11 @@ describe.concurrent(
           );
 
           // The bundle that shipped is kept for inspection in the Worker's own
-          // directory, keyed by stack, stage, and FQN.
+          // directory under `.alchemy/bundles`, named after stack, stage, and FQN.
           const fs = yield* FileSystem.FileSystem;
           const { dotAlchemy } = yield* AlchemyContext;
           const bundled = yield* fs.readDirectory(
-            pathe.join(dotAlchemy, "bundles", s.name, s.stage, "TestWorker"),
+            pathe.join(dotAlchemy, "bundles", `${s.name}-${s.stage}-TestWorker`),
           );
           expect(bundled.some((file) => file.endsWith(".js"))).toBe(true);
 
