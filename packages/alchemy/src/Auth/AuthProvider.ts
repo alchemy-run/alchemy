@@ -346,11 +346,15 @@ export const AuthProvider =
       ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
-      // A missing or malformed environment declaration falls back to `[]`,
-      // which the readEnvironment check below rejects at layer build.
-      const environment = yield* Schema.decodeUnknownEffect(EnvironmentVariables)(
-        service.environment,
-      ).pipe(Effect.orElseSucceed(() => []));
+      // Validate the declared environment contract at registration so a
+      // malformed declaration fails at layer build (programmer error), not
+      // when a CI run tries to render it.
+      const environment =
+        service.environment === undefined
+          ? []
+          : yield* Schema.decodeUnknownEffect(EnvironmentVariables)(service.environment).pipe(
+              Effect.orDie,
+            );
       if (service.readEnvironment !== undefined && environment.length === 0) {
         return yield* Effect.die(
           `AuthProvider '${name}' implements readEnvironment but does not ` +
