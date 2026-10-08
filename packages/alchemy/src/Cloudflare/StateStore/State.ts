@@ -862,7 +862,7 @@ const waitForStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const { matches, expected, observed } = yield* checkStateStoreVersion(url);
     if (!matches) {
-      return yield* Effect.fail(new StateStoreVersionNotReady({ expected, observed }));
+      return yield* new StateStoreVersionNotReady({ expected, observed });
     }
   }).pipe(
     Effect.retry({

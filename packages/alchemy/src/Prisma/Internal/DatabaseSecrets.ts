@@ -140,11 +140,9 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends O
 
   const connectionId = database.defaultConnectionId;
   if (connectionId === null) {
-    return yield* Effect.fail(
-      new DatabaseCredentialsNotReady({
-        message: `Prisma database '${database.name}' (${database.id}) was reported ready without a defaultConnectionId after the credential recovery wait.`,
-      }),
-    );
+    return yield* new DatabaseCredentialsNotReady({
+      message: `Prisma database '${database.name}' (${database.id}) was reported ready without a defaultConnectionId after the credential recovery wait.`,
+    });
   }
   const rotated = yield* createConnectionRotate({ id: connectionId }).pipe(
     // Rotation mints new credentials; a replay would revoke the ones we

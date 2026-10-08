@@ -316,18 +316,14 @@ const observeDesiredDefaultDatabase = (
       desiredRegion,
     );
     if (database.id !== expectedDatabaseId) {
-      return yield* Effect.fail(
-        new DefaultDatabaseConsistencyError({
-          message: `Prisma project '${projectName}' exposes default database '${database.id}', but newly created database '${expectedDatabaseId}' was expected. Retry after the in-progress default database promotion completes.`,
-        }),
-      );
+      return yield* new DefaultDatabaseConsistencyError({
+        message: `Prisma project '${projectName}' exposes default database '${database.id}', but newly created database '${expectedDatabaseId}' was expected. Retry after the in-progress default database promotion completes.`,
+      });
     }
     if (project.defaultRegion !== desiredRegion) {
-      return yield* Effect.fail(
-        new DefaultDatabaseConsistencyError({
-          message: `Prisma project '${projectName}' still reports default region '${project.defaultRegion ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after the in-progress default database promotion completes.`,
-        }),
-      );
+      return yield* new DefaultDatabaseConsistencyError({
+        message: `Prisma project '${projectName}' still reports default region '${project.defaultRegion ?? "unknown"}', but region '${desiredRegion}' was requested. Retry after the in-progress default database promotion completes.`,
+      });
     }
     return { project, database };
   }).pipe(
@@ -630,11 +626,9 @@ const ProviderLive = () =>
           if (defaultDatabaseChanged) {
             const changedDatabaseId = database?.id;
             if (changedDatabaseId === undefined) {
-              return yield* Effect.fail(
-                new DefaultDatabaseConsistencyError({
-                  message: `Prisma project '${name}' did not return an identifier for its new default database.`,
-                }),
-              );
+              return yield* new DefaultDatabaseConsistencyError({
+                message: `Prisma project '${name}' did not return an identifier for its new default database.`,
+              });
             }
             const observed = yield* observeDesiredDefaultDatabase(
               name,

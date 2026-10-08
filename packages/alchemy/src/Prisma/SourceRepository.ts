@@ -253,11 +253,9 @@ const verifyRepositoryLink = Effect.fn(function* (
     observed.provider !== repo.provider ||
     observed.installationId !== repo.installationId
   ) {
-    return yield* Effect.fail(
-      new SourceRepositoryLinkNotReady({
-        message: `Prisma source repository link '${repo.id}' has not converged to its requested immutable identity.`,
-      }),
-    );
+    return yield* new SourceRepositoryLinkNotReady({
+      message: `Prisma source repository link '${repo.id}' has not converged to its requested immutable identity.`,
+    });
   }
   const listDefaultBranches = Effect.gen(function* () {
     const items: GetProjectBranchesResponse["data"][number][] = [];
@@ -295,11 +293,9 @@ const verifyRepositoryLink = Effect.fn(function* (
     (branch) => branch.gitName === observed.defaultBranch && branch.isDefault === true,
   );
   if (defaults.length !== 1) {
-    return yield* Effect.fail(
-      new SourceRepositoryLinkNotReady({
-        message: `Prisma source repository link '${repo.id}' did not produce exactly one default branch named '${observed.defaultBranch}'.`,
-      }),
-    );
+    return yield* new SourceRepositoryLinkNotReady({
+      message: `Prisma source repository link '${repo.id}' did not produce exactly one default branch named '${observed.defaultBranch}'.`,
+    });
   }
   const branchId = defaults[0]!.id;
   yield* Effect.forEach(
