@@ -368,9 +368,6 @@ export function Resource<R extends ResourceLike>(
 
       const existing = stack.resources[fqn];
       if (existing) {
-        // A logical id names one resource. The same type is the memoized
-        // re-yield. A different type would return the first resource typed
-        // as the second, and the second declaration would never register.
         if (existing.Type !== type) {
           return yield* Effect.die(
             new DuplicateLogicalIdError({
