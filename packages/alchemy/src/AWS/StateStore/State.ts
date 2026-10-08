@@ -488,7 +488,8 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         let etag = created;
         if (etag === undefined) {
           const existing = yield* run((bucket) => readLease(bucket, key));
-          if (existing === undefined || existing.record.expiresAt > now) {
+          const stillHeld = existing === undefined || existing.record.expiresAt > now;
+          if (stillHeld) {
             return yield* Effect.fail(heldError(stack, stage));
           }
           const replaced = yield* run((bucket) =>
@@ -542,11 +543,11 @@ export const makeS3State = (options: S3StateOptions = {}) =>
             if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
             const existing = yield* run((bucket) => readLease(bucket, key));
             const observedAt = yield* Clock.currentTimeMillis;
-            if (
+            const leaseLost =
               existing === undefined ||
               existing.record.token !== token ||
-              existing.record.expiresAt <= observedAt
-            ) {
+              existing.record.expiresAt <= observedAt;
+            if (leaseLost) {
               cursor.lost = true;
               return yield* Effect.fail(lostError(stack, stage));
             }
