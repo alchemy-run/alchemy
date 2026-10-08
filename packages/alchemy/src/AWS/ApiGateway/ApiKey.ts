@@ -199,11 +199,9 @@ export const ApiKeyProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* readByName(id, name);
                     if (existing) return existing;
-                    return yield* Effect.fail(
-                      ag.ConflictException.make({
-                        message: `API key '${name}' already exists and is not managed by alchemy`,
-                      }),
-                    );
+                    return yield* ag.ConflictException.make({
+                      message: `API key '${name}' already exists and is not managed by alchemy`,
+                    });
                   }),
                 ),
               );

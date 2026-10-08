@@ -266,14 +266,12 @@ export const apply = <P extends Plan>(
         // the leak surfaces in the run that caused it.
         const remaining = yield* state.list({ stack: stackName, stage });
         if (remaining.length > 0) {
-          return yield* Effect.fail(
-            new StateStoreError({
-              message:
-                `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
-                `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
-                `not see the stack's persisted state, so its cloud resources were NOT deleted`,
-            }),
-          );
+          return yield* new StateStoreError({
+            message:
+              `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
+              `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
+              `not see the stack's persisted state, so its cloud resources were NOT deleted`,
+          });
         }
         return undefined;
       }
@@ -2218,7 +2216,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
     // Every independent delete was still attempted; now surface everything
     // that went wrong (and everything skipped as a consequence) as one
     // typed aggregate. The destroy as a whole still fails.
-    return yield* Effect.fail(new DestroyError({ failures, blocked: blockedDeletes }));
+    return yield* new DestroyError({ failures, blocked: blockedDeletes });
   }
 });
 

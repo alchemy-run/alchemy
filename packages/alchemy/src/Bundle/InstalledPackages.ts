@@ -481,11 +481,9 @@ const resolveInstallVersion = (
 
     for (const prefix of incompatibleVersionPrefixes) {
       if (version.startsWith(prefix)) {
-        return yield* Effect.fail(
-          BundleError.make({
-            message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.install.`,
-          }),
-        );
+        return yield* BundleError.make({
+          message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.install.`,
+        });
       }
     }
 
@@ -555,11 +553,9 @@ const pinInstallVersionsFromLockfile = (options: {
 
     for (const packageName of candidates) {
       if (plan.resolved[packageName] === undefined) {
-        return yield* Effect.fail(
-          BundleError.make({
-            message: `Could not resolve a locked version for '${packageName}' from '${options.lockfilePath}'. Pin an exact npm-compatible version in build.install or refresh the package-manager lockfile.`,
-          }),
-        );
+        return yield* BundleError.make({
+          message: `Could not resolve a locked version for '${packageName}' from '${options.lockfilePath}'. Pin an exact npm-compatible version in build.install or refresh the package-manager lockfile.`,
+        });
       }
     }
 
@@ -1441,11 +1437,9 @@ const resolveCatalogVersion = (cwd: string, packageName: string, version: string
       const workspace = parseYaml(content) as CatalogSource;
       const resolved = resolveCatalogEntry(packageName, version, workspace);
       if (resolved === undefined) {
-        return yield* Effect.fail(
-          BundleError.make({
-            message: `Could not resolve catalog version for '${packageName}' (${version}) from ${workspacePath}. Pin an npm-compatible version explicitly.`,
-          }),
-        );
+        return yield* BundleError.make({
+          message: `Could not resolve catalog version for '${packageName}' (${version}) from ${workspacePath}. Pin an npm-compatible version explicitly.`,
+        });
       }
       return resolved;
     }
@@ -1455,11 +1449,9 @@ const resolveCatalogVersion = (cwd: string, packageName: string, version: string
       return bunResolved;
     }
 
-    return yield* Effect.fail(
-      BundleError.make({
-        message: `Could not resolve catalog version for '${packageName}' (${version}): no pnpm-workspace.yaml or Bun catalog found. Pin an npm-compatible version explicitly.`,
-      }),
-    );
+    return yield* BundleError.make({
+      message: `Could not resolve catalog version for '${packageName}' (${version}): no pnpm-workspace.yaml or Bun catalog found. Pin an npm-compatible version explicitly.`,
+    });
   });
 
 const findUp = (
@@ -1524,11 +1516,9 @@ const resolveBunCatalogVersion = (cwd: string, packageName: string, version: str
         if (source !== undefined) {
           const resolved = resolveCatalogEntry(packageName, version, source);
           if (resolved === undefined) {
-            return yield* Effect.fail(
-              BundleError.make({
-                message: `Could not resolve catalog version for '${packageName}' (${version}) from ${packagePath}. Pin an npm-compatible version explicitly.`,
-              }),
-            );
+            return yield* BundleError.make({
+              message: `Could not resolve catalog version for '${packageName}' (${version}) from ${packagePath}. Pin an npm-compatible version explicitly.`,
+            });
           }
           return resolved;
         }

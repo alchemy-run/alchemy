@@ -187,9 +187,9 @@ export const RouteProvider = () =>
           .pipe(
             Effect.catch((err) =>
               Effect.gen(function* () {
-                if (!news.adopt) return yield* Effect.fail(err);
+                if (!news.adopt) return yield* err;
                 const existing = yield* observe(acct, network, virtualNetworkId, undefined);
-                if (!existing) return yield* Effect.fail(err);
+                if (!existing) return yield* err;
                 // Sentinel: undefined means "adoption path; use re-observed value".
                 return undefined;
               }),

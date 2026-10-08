@@ -192,7 +192,7 @@ export const CertificateProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findCertificateByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

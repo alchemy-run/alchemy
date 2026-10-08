@@ -63,9 +63,7 @@ export const blobRandomAccess = (options: {
           Effect.provide(RuntimeContext.phantom),
         );
       if (body === null) {
-        return yield* Effect.fail(
-          StoreError.make({ reason: `incoming pack missing: ${options.key}` }),
-        );
+        return yield* StoreError.make({ reason: `incoming pack missing: ${options.key}` });
       }
       const bytes = yield* body.bytes.pipe(
         Effect.mapError((error) =>

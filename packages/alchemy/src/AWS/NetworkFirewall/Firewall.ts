@@ -196,16 +196,12 @@ export const FirewallProvider = () =>
         return yield* Effect.gen(function* () {
           const response = yield* describe(name);
           if (response?.Firewall === undefined) {
-            return yield* Effect.fail(
-              new FirewallNotReady({ message: `firewall '${name}' not found` }),
-            );
+            return yield* new FirewallNotReady({ message: `firewall '${name}' not found` });
           }
           if (response.FirewallStatus?.Status !== "READY") {
-            return yield* Effect.fail(
-              new FirewallNotReady({
-                message: `firewall '${name}' not ready (status: ${response.FirewallStatus?.Status})`,
-              }),
-            );
+            return yield* new FirewallNotReady({
+              message: `firewall '${name}' not ready (status: ${response.FirewallStatus?.Status})`,
+            });
           }
           return response;
         }).pipe(retryWhileNotReady);
@@ -410,11 +406,9 @@ export const FirewallProvider = () =>
               .describeFirewall({ FirewallName: name })
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
             if (remaining !== undefined) {
-              return yield* Effect.fail(
-                new FirewallNotDeleted({
-                  message: `firewall '${name}' still deleting (status: ${remaining.FirewallStatus?.Status})`,
-                }),
-              );
+              return yield* new FirewallNotDeleted({
+                message: `firewall '${name}' still deleting (status: ${remaining.FirewallStatus?.Status})`,
+              });
             }
           }).pipe(retryWhileNotDeleted);
         }),

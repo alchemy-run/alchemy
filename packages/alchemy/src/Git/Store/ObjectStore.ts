@@ -358,7 +358,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   const requireRow = Effect.fn(function* (oid: Oid, pushId: string | null = null) {
     const row = yield* readRow(oid, pushId);
     if (row === undefined) {
-      return yield* Effect.fail(StoreError.make({ reason: `object not found: ${oid}` }));
+      return yield* StoreError.make({ reason: `object not found: ${oid}` });
     }
     return row;
   });
@@ -366,15 +366,13 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   /** Fetches the R2 body for an `'r2'`-located row. */
   const r2Body = Effect.fn(function* (oid: Oid, r2Key: string | null) {
     if (r2Key === null) {
-      return yield* Effect.fail(
-        StoreError.make({
-          reason: `object ${oid} has location='r2' but no r2_key`,
-        }),
-      );
+      return yield* StoreError.make({
+        reason: `object ${oid} has location='r2' but no r2_key`,
+      });
     }
     const body = yield* runBlob(blobs.get(r2Key), `blob get ${r2Key}`);
     if (body === null) {
-      return yield* Effect.fail(StoreError.make({ reason: `R2 object missing: ${r2Key}` }));
+      return yield* StoreError.make({ reason: `R2 object missing: ${r2Key}` });
     }
     return body;
   });
@@ -410,7 +408,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       `blob window get ${key}`,
     );
     if (body === null) {
-      return yield* Effect.fail(StoreError.make({ reason: `pack missing: ${key}` }));
+      return yield* StoreError.make({ reason: `pack missing: ${key}` });
     }
     const bytes = yield* body.bytes.pipe(
       Effect.mapError((error) => StoreError.make({ reason: `R2 read ${key}: ${error.message}` })),
@@ -431,11 +429,9 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
    */
   const packBytes = Effect.fn(function* (oid: Oid, row: ZDataRow) {
     if (row.pack_id === null || row.pack_offset === null) {
-      return yield* Effect.fail(
-        StoreError.make({
-          reason: `object ${oid} has location='pack' but no pack coordinates`,
-        }),
-      );
+      return yield* StoreError.make({
+        reason: `object ${oid} has location='pack' but no pack coordinates`,
+      });
     }
     const key = packKeyOf(repoId, row.pack_id);
     const offset = row.pack_offset;
@@ -453,7 +449,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       `blob ranged get ${key}`,
     );
     if (body === null) {
-      return yield* Effect.fail(StoreError.make({ reason: `pack missing: ${key}` }));
+      return yield* StoreError.make({ reason: `pack missing: ${key}` });
     }
     return yield* body.bytes.pipe(
       Effect.mapError((error) => StoreError.make({ reason: `R2 read ${key}: ${error.message}` })),
@@ -466,11 +462,9 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     switch (row.location) {
       case "row": {
         if (row.zdata === null) {
-          return yield* Effect.fail(
-            StoreError.make({
-              reason: `object ${oid} has location='row' but NULL zdata`,
-            }),
-          );
+          return yield* StoreError.make({
+            reason: `object ${oid} has location='row' but NULL zdata`,
+          });
         }
         return new Uint8Array(row.zdata);
       }
@@ -487,11 +481,9 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       case "pack":
         return yield* packBytes(oid, row);
       default:
-        return yield* Effect.fail(
-          StoreError.make({
-            reason: `object ${oid} has unknown location '${row.location}'`,
-          }),
-        );
+        return yield* StoreError.make({
+          reason: `object ${oid} has unknown location '${row.location}'`,
+        });
     }
   });
 
@@ -569,11 +561,9 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         switch (row.location) {
           case "row": {
             if (row.zdata === null) {
-              return yield* Effect.fail(
-                StoreError.make({
-                  reason: `object ${oid} has location='row' but NULL zdata`,
-                }),
-              );
+              return yield* StoreError.make({
+                reason: `object ${oid} has location='row' but NULL zdata`,
+              });
             }
             return Stream.succeed(new Uint8Array(row.zdata));
           }
@@ -590,11 +580,9 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
           case "pack":
             return Stream.succeed(yield* packBytes(oid, row));
           default:
-            return yield* Effect.fail(
-              StoreError.make({
-                reason: `object ${oid} has unknown location '${row.location}'`,
-              }),
-            );
+            return yield* StoreError.make({
+              reason: `object ${oid} has unknown location '${row.location}'`,
+            });
         }
       }),
     );
@@ -759,11 +747,9 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
             const runs: Array<Run> = [];
             for (const coord of coords) {
               if (coord.pack_id === null || coord.pack_offset === null) {
-                return yield* Effect.fail(
-                  StoreError.make({
-                    reason: `object ${coord.oid} is location='pack' without coordinates`,
-                  }),
-                );
+                return yield* StoreError.make({
+                  reason: `object ${coord.oid} is location='pack' without coordinates`,
+                });
               }
               const key = packKeyOf(repoId, coord.pack_id);
               const window = Math.floor(coord.pack_offset / WINDOW_BYTES);

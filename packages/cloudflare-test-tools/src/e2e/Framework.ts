@@ -89,7 +89,7 @@ const toFrameworkLayer: (
       specifier,
     );
   }
-  return yield* Effect.fail(invalidExport(specifier));
+  return yield* invalidExport(specifier);
 });
 
 /**
@@ -122,7 +122,7 @@ export const resolve = Effect.fn(function* (options: Options.Options) {
     );
     const candidate = module_.default ?? module_.framework;
     if (candidate === undefined) {
-      return yield* Effect.fail(invalidExport(input));
+      return yield* invalidExport(input);
     }
     return yield* toFrameworkLayer(candidate, options, input);
   }

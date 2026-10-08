@@ -225,15 +225,13 @@ export const ServiceLinkedRoleProvider = () =>
           }
           yield* Effect.sleep("2 seconds");
         }
-        return yield* Effect.fail(
-          new ServiceLinkedRoleDeletionFailed({
-            roleName,
-            status: "TIMED_OUT",
-            reason:
-              lastReason ??
-              `deletion task ${deletionTaskId ?? "not returned"} was ${lastStatus}, but role remained observable after 60s`,
-          }),
-        );
+        return yield* new ServiceLinkedRoleDeletionFailed({
+          roleName,
+          status: "TIMED_OUT",
+          reason:
+            lastReason ??
+            `deletion task ${deletionTaskId ?? "not returned"} was ${lastStatus}, but role remained observable after 60s`,
+        });
       });
 
       return {

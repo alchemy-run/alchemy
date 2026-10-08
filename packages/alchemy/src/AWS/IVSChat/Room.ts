@@ -193,11 +193,9 @@ const resolveMessageReviewHandler = Effect.fn(function* (
   let resolved: RoomMessageReviewHandler | undefined;
   for (const handler of contributions) {
     if (resolved?.uri !== undefined && handler.uri !== undefined && resolved.uri !== handler.uri) {
-      return yield* Effect.fail(
-        new ConflictingRoomMessageReviewHandler({
-          uris: [resolved.uri, handler.uri],
-        }),
-      );
+      return yield* new ConflictingRoomMessageReviewHandler({
+        uris: [resolved.uri, handler.uri],
+      });
     }
     resolved = { ...resolved, ...handler };
   }
@@ -226,11 +224,9 @@ export const RoomProvider = () =>
 
       const toAttrs = Effect.fn(function* (room: RoomState) {
         if (!room.arn || !room.id || !room.name) {
-          return yield* Effect.fail(
-            new IvsChatRoomIncomplete({
-              message: "IVS Chat room is missing its ARN, ID, or name",
-            }),
-          );
+          return yield* new IvsChatRoomIncomplete({
+            message: "IVS Chat room is missing its ARN, ID, or name",
+          });
         }
         return {
           roomName: room.name,
@@ -295,11 +291,9 @@ export const RoomProvider = () =>
           }
           const arn = observed.arn;
           if (arn === undefined) {
-            return yield* Effect.fail(
-              new IvsChatRoomIncomplete({
-                message: "IVS Chat CreateRoom returned no room ARN",
-              }),
-            );
+            return yield* new IvsChatRoomIncomplete({
+              message: "IVS Chat CreateRoom returned no room ARN",
+            });
           }
 
           // 3. Sync — every room setting is mutable via UpdateRoom; apply
@@ -350,11 +344,9 @@ export const RoomProvider = () =>
           // 4. Return fresh attributes.
           const final = yield* getByIdentifier(arn);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new IvsChatRoomIncomplete({
-                message: `IVS Chat room '${arn}' vanished during reconcile`,
-              }),
-            );
+            return yield* new IvsChatRoomIncomplete({
+              message: `IVS Chat room '${arn}' vanished during reconcile`,
+            });
           }
           yield* session.note(arn);
           return yield* toAttrs(final);

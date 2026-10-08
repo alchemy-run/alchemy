@@ -153,28 +153,22 @@ const waitForEndpoint = (name: string, target: "InService" | "Gone") =>
       const described = yield* describeEndpointOrUndefined(name);
       if (target === "Gone") {
         if (described === undefined) return;
-        return yield* Effect.fail(
-          new EndpointNotReady({
-            endpointName: name,
-            status: described.EndpointStatus,
-          }),
-        );
+        return yield* new EndpointNotReady({
+          endpointName: name,
+          status: described.EndpointStatus,
+        });
       }
       if (described?.EndpointStatus === "InService") return;
       if (described?.EndpointStatus === "Failed") {
-        return yield* Effect.fail(
-          new EndpointProvisioningFailed({
-            endpointName: name,
-            message: described.FailureReason,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new EndpointNotReady({
+        return yield* new EndpointProvisioningFailed({
           endpointName: name,
-          status: described?.EndpointStatus,
-        }),
-      );
+          message: described.FailureReason,
+        });
+      }
+      return yield* new EndpointNotReady({
+        endpointName: name,
+        status: described?.EndpointStatus,
+      });
     }),
   );
 

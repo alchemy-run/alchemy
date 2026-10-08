@@ -318,7 +318,7 @@ export const RuleProvider = () =>
                 Effect.gen(function* () {
                   const existing = yield* findRuleByName(accountId, resolvedName);
                   if (existing) return existing;
-                  return yield* Effect.fail(err);
+                  return yield* err;
                 }),
               ),
             );

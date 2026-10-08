@@ -121,12 +121,10 @@ export const toAttributeValue: (
     };
   }
 
-  return yield* Effect.fail(
-    new InvalidAttributeValue({
-      message: `Unknown value type: ${typeof value}`,
-      value,
-    }),
-  );
+  return yield* new InvalidAttributeValue({
+    message: `Unknown value type: ${typeof value}`,
+    value,
+  });
 });
 
 /**

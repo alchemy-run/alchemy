@@ -213,11 +213,9 @@ const resolveDefaultNetwork = Effect.gen(function* () {
     (vpc) => vpc.State === undefined || vpc.State === "available",
   )?.VpcId;
   if (!vpcId) {
-    return yield* Effect.fail(
-      new NoDefaultVpcError({
-        message: "No default VPC found — pass `subnets` and `securityGroupIds` explicitly",
-      }),
-    );
+    return yield* new NoDefaultVpcError({
+      message: "No default VPC found — pass `subnets` and `securityGroupIds` explicitly",
+    });
   }
   const subnets = yield* ec2.describeSubnets
     .items({
@@ -240,12 +238,10 @@ const resolveDefaultNetwork = Effect.gen(function* () {
     securityGroupIds: (groups.SecurityGroups ?? []).flatMap((g) => (g.GroupId ? [g.GroupId] : [])),
   };
   if (network.subnets.length === 0 || network.securityGroupIds.length === 0) {
-    return yield* Effect.fail(
-      new NoDefaultVpcError({
-        message:
-          "Default VPC networking is not ready — pass `subnets` and `securityGroupIds` explicitly",
-      }),
-    );
+    return yield* new NoDefaultVpcError({
+      message:
+        "Default VPC networking is not ready — pass `subnets` and `securityGroupIds` explicitly",
+    });
   }
   return network;
 }).pipe(
@@ -531,7 +527,7 @@ export const ComputeEnvironmentProvider = () =>
                 return settled;
               }
               if (!settled || settled.status === "DELETED" || attempt === 7) {
-                return yield* Effect.fail(invalid(name, settled));
+                return yield* invalid(name, settled);
               }
 
               if (
@@ -584,7 +580,7 @@ export const ComputeEnvironmentProvider = () =>
               // transition becomes visible.
               yield* Effect.sleep("3 seconds");
             }
-            return yield* Effect.fail(invalid(name, undefined));
+            return yield* invalid(name, undefined);
           });
 
           // Observe — cloud state is authoritative.
@@ -658,7 +654,7 @@ export const ComputeEnvironmentProvider = () =>
               final = yield* awaitGone;
             }
             if (final && final.status !== "DELETED") {
-              return yield* Effect.fail(invalid(name, final));
+              return yield* invalid(name, final);
             }
           });
 
@@ -844,7 +840,7 @@ export const ComputeEnvironmentProvider = () =>
           // would then delete the CE's dependencies (service role, subnets)
           // while teardown is still consuming them, wedging the CE for good.
           if (final && final.status !== "DELETED") {
-            return yield* Effect.fail(invalid(name, final));
+            return yield* invalid(name, final);
           }
         }),
       };

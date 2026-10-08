@@ -271,11 +271,9 @@ export const ScheduledActionProvider = () =>
             scalableDimension: news.scalableDimension,
           });
           if (action === undefined) {
-            return yield* Effect.fail(
-              aas.ObjectNotFoundException.make({
-                message: `Scheduled action '${scheduledActionName}' was not readable after PutScheduledAction`,
-              }),
-            );
+            return yield* aas.ObjectNotFoundException.make({
+              message: `Scheduled action '${scheduledActionName}' was not readable after PutScheduledAction`,
+            });
           }
 
           yield* session.note(action.ScheduledActionARN);

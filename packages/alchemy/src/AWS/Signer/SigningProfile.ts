@@ -307,22 +307,18 @@ export const SigningProfileProvider = () =>
           }
           if (live === undefined) {
             // Extremely unlikely read-after-write miss; surface loudly.
-            return yield* Effect.fail(
-              signer.ResourceNotFoundException.make({
-                message: `signing profile ${profileName} not visible after PutSigningProfile`,
-              }),
-            );
+            return yield* signer.ResourceNotFoundException.make({
+              message: `signing profile ${profileName} not visible after PutSigningProfile`,
+            });
           }
           if (live.status !== "Active") {
             // The name is tombstoned by a canceled/revoked profile — Signer
             // reserves canceled names, so the profile cannot be recreated
             // under this name. Only reachable with a user-fixed profileName
             // (generated names get a fresh random suffix per instance).
-            return yield* Effect.fail(
-              signer.SigningProfileAlreadyExists.make({
-                message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved — use a different profileName (or omit it to generate one)`,
-              }),
-            );
+            return yield* signer.SigningProfileAlreadyExists.make({
+              message: `signing profile ${profileName} exists with status ${live.status}; canceled profile names stay reserved — use a different profileName (or omit it to generate one)`,
+            });
           }
 
           // SYNC TAGS — diff against OBSERVED cloud tags (adoption may bring

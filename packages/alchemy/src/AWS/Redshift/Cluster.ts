@@ -444,11 +444,9 @@ export const ClusterProvider = () =>
           // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             if (!news.masterUserPassword && !news.manageMasterPassword) {
-              return yield* Effect.fail(
-                new RedshiftMasterPasswordRequired({
-                  clusterIdentifier: identifier,
-                }),
-              );
+              return yield* new RedshiftMasterPasswordRequired({
+                clusterIdentifier: identifier,
+              });
             }
             yield* redshift
               .createCluster({

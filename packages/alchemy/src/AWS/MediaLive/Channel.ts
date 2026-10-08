@@ -243,18 +243,14 @@ export const ChannelProvider = () =>
               ChannelId: channelId,
             });
             if (channel.State === "CREATE_FAILED" || channel.State === "UPDATE_FAILED") {
-              return yield* Effect.fail(
-                new MediaLiveChannelFailed({
-                  message: `channel ${channelId} is in state ${channel.State}`,
-                }),
-              );
+              return yield* new MediaLiveChannelFailed({
+                message: `channel ${channelId} is in state ${channel.State}`,
+              });
             }
             if (channel.State === "CREATING" || channel.State === "UPDATING") {
-              return yield* Effect.fail(
-                new MediaLiveResourcePending({
-                  message: `channel ${channelId} is still ${channel.State}`,
-                }),
-              );
+              return yield* new MediaLiveResourcePending({
+                message: `channel ${channelId} is still ${channel.State}`,
+              });
             }
             return yield* ensureIdentified(channel, "DescribeChannel Id/Arn");
           }),

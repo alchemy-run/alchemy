@@ -291,11 +291,9 @@ export const VaultProvider = () =>
               .pipe(retryWhileVaultNotFound);
           }
           if (live.VaultARN === undefined || live.CreationDate === undefined) {
-            return yield* Effect.fail(
-              new GlacierVaultIncomplete({
-                message: `DescribeVault for '${vaultName}' returned no VaultARN/CreationDate`,
-              }),
-            );
+            return yield* new GlacierVaultIncomplete({
+              message: `DescribeVault for '${vaultName}' returned no VaultARN/CreationDate`,
+            });
           }
 
           // 3a. SYNC notification configuration — observed vs desired.
@@ -369,11 +367,9 @@ export const VaultProvider = () =>
               !samePolicy(observedLock.Policy, desiredLock)
             ) {
               if (observedLock.State === "Locked") {
-                return yield* Effect.fail(
-                  new GlacierVaultLockImmutable({
-                    message: `Vault '${vaultName}' lock is in the Locked state; its lock policy can never be changed.`,
-                  }),
-                );
+                return yield* new GlacierVaultLockImmutable({
+                  message: `Vault '${vaultName}' lock is in the Locked state; its lock policy can never be changed.`,
+                });
               }
               // InProgress with a different policy: abort and re-initiate.
               yield* glacier
@@ -387,11 +383,9 @@ export const VaultProvider = () =>
             }
           } else if (observedLock !== undefined) {
             if (observedLock.State === "Locked") {
-              return yield* Effect.fail(
-                new GlacierVaultLockImmutable({
-                  message: `Vault '${vaultName}' lock is in the Locked state; it can never be removed.`,
-                }),
-              );
+              return yield* new GlacierVaultLockImmutable({
+                message: `Vault '${vaultName}' lock is in the Locked state; it can never be removed.`,
+              });
             }
             yield* glacier
               .abortVaultLock({ accountId: ACCOUNT, vaultName })

@@ -781,12 +781,10 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         ),
       );
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "vinext build produced no server modules",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "vinext build produced no server modules",
+        });
       }
       const files = output.serverModules.map((file) => ({
         path: file.name.replaceAll("\\", "/"),
@@ -880,12 +878,10 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
       );
       const local = server.resolvedUrls?.local[0];
       if (!local) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "vinext dev server started without a local URL",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "vinext dev server started without a local URL",
+        });
       }
       return { mode: "server", url: new URL(local) } satisfies ServerDevHandle;
     }),

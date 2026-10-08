@@ -161,7 +161,7 @@ export const BookmarkProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* getBookmark(acct, bookmarkId);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

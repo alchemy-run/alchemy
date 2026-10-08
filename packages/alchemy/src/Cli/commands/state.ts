@@ -141,7 +141,7 @@ const deleteCommand = Command.make(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const requested = yield* normalizedPath(path);
       if (requested === "") {
-        return yield* Effect.fail(new UserInputError({ message: "cannot delete the state root" }));
+        return yield* new UserInputError({ message: "cannot delete the state root" });
       }
       const store = yield* AlchemistState.store(source(args));
       yield* usingStore(store)(State.deleteState({ path: requested, recursive }));

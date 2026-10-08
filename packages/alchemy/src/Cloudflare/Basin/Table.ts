@@ -476,12 +476,10 @@ const bearerToken = (override: Redacted.Redacted<string> | undefined) =>
     const creds = yield* yield* CloudflareEnvironment;
     if (creds.type === "apiToken") return creds.apiToken;
     if (creds.type === "oauth") return creds.accessToken;
-    return yield* Effect.fail(
-      new BasinTableCredentialsUnavailable({
-        message:
-          "Cloudflare.Basin.Table: the Iceberg catalog needs a bearer token; global API key credentials cannot be used. Log in with an API token or OAuth, or pass `token`.",
-      }),
-    );
+    return yield* new BasinTableCredentialsUnavailable({
+      message:
+        "Cloudflare.Basin.Table: the Iceberg catalog needs a bearer token; global API key credentials cannot be used. Log in with an API token or OAuth, or pass `token`.",
+    });
   });
 
 /** Scope Iceberg operations to one warehouse of the Basin catalog. */
@@ -599,7 +597,7 @@ const syncTable = (input: {
         `changes the partition spec from [${observedPartition.map(describeTerm).join(", ")}] to [${input.partition.map(describeTerm).join(", ")}] (partition specs are immutable)`,
       );
     }
-    if (reasons.length > 0) return yield* Effect.fail(rejected(identifier, reasons));
+    if (reasons.length > 0) return yield* rejected(identifier, reasons);
 
     const requirements: Iceberg.TableRequirement[] = [
       requirement("assert-table-uuid", { uuid: metadata.table_uuid }),
@@ -819,7 +817,7 @@ export const TableProvider = () =>
           }
         }
       }
-      if (reasons.length > 0) return yield* Effect.fail(rejected(table, reasons));
+      if (reasons.length > 0) return yield* rejected(table, reasons);
       return undefined;
     }),
 
@@ -853,16 +851,14 @@ export const TableProvider = () =>
       const tableName = yield* tableNameFor(id, news.name ?? output?.tableName);
       const identifier = `${namespace}.${tableName}`;
       if (ref === undefined) {
-        return yield* Effect.fail(
-          rejected(identifier, [
-            "has no resolved catalog (pass a Cloudflare.Basin.Catalog or a bucket name)",
-          ]),
-        );
+        return yield* rejected(identifier, [
+          "has no resolved catalog (pass a Cloudflare.Basin.Catalog or a bucket name)",
+        ]);
       }
       if (output !== undefined && output.identifier !== identifier) {
-        return yield* Effect.fail(
-          rejected(output.identifier, [`changes the table identifier to '${identifier}'`]),
-        );
+        return yield* rejected(output.identifier, [
+          `changes the table identifier to '${identifier}'`,
+        ]);
       }
 
       const token = yield* bearerToken(news.token);
@@ -884,11 +880,9 @@ export const TableProvider = () =>
           const ids = fieldIdsByPath(fields);
           const missing = partition.filter((t) => !ids.has(t.column));
           if (missing.length > 0) {
-            return yield* Effect.fail(
-              rejected(
-                identifier,
-                missing.map((t) => `partitions by unknown column '${t.column}'`),
-              ),
+            return yield* rejected(
+              identifier,
+              missing.map((t) => `partitions by unknown column '${t.column}'`),
             );
           }
           yield* Iceberg.createTable({

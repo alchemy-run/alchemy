@@ -240,7 +240,7 @@ export const ServiceTokenProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findTokenByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

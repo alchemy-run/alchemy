@@ -409,11 +409,9 @@ export const ServiceProvider = () =>
               );
           }
           if (service?.Id === undefined || service.Arn === undefined) {
-            return yield* Effect.fail(
-              sd.ServiceNotFound.make({
-                message: `service ${name} not visible after create`,
-              }),
-            );
+            return yield* sd.ServiceNotFound.make({
+              message: `service ${name} not visible after create`,
+            });
           }
 
           // 3. SYNC — description / DNS record TTLs / health check config.

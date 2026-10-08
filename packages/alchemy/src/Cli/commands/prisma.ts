@@ -38,7 +38,7 @@ const generateCommand = Command.make(
         ]),
       );
       if (result.exitCode !== 0)
-        return yield* Effect.fail(new CliError({ message: `${result.stdout}\n${result.stderr}` }));
+        return yield* new CliError({ message: `${result.stdout}\n${result.stderr}` });
       yield* Console.log(result.stdout);
     }).pipe(
       Effect.scoped,

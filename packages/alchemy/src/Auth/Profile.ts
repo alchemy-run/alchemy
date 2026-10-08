@@ -498,11 +498,9 @@ export const ProfileStoreLive = Layer.effect(
         );
         const filenameProvider = file.slice(0, -".json".length);
         if (document.provider.toLowerCase() !== filenameProvider) {
-          return yield* Effect.fail(
-            ProfileError.make({
-              message: `Provider '${document.provider}' in '${fullPath}' does not match lowercase filename '${filenameProvider}'.`,
-            }),
-          );
+          return yield* ProfileError.make({
+            message: `Provider '${document.provider}' in '${fullPath}' does not match lowercase filename '${filenameProvider}'.`,
+          });
         }
         return document;
       });
@@ -560,11 +558,9 @@ export const ProfileStoreLive = Layer.effect(
               Effect.gen(function* () {
                 const existing = (yield* readManifest).profiles[name];
                 if (existing !== undefined) {
-                  return yield* Effect.fail(
-                    ProfileError.make({
-                      message: `Profile '${name}' already exists.`,
-                    }),
-                  );
+                  return yield* ProfileError.make({
+                    message: `Profile '${name}' already exists.`,
+                  });
                 }
                 yield* fs.makeDirectory(profileDirPath(name), {
                   recursive: true,
@@ -579,7 +575,7 @@ export const ProfileStoreLive = Layer.effect(
     const renameProfile = (name: string, newName: string) =>
       Effect.gen(function* () {
         if (name === DEFAULT_PROFILE_NAME) {
-          return yield* Effect.fail(cannotRenameDefaultProfile());
+          return yield* cannotRenameDefaultProfile();
         }
         yield* validateProfileName(name);
         yield* validateProfileName(newName);
@@ -589,18 +585,14 @@ export const ProfileStoreLive = Layer.effect(
             Effect.gen(function* () {
               const manifest = yield* readManifest;
               if (manifest.profiles[name] === undefined) {
-                return yield* Effect.fail(
-                  ProfileError.make({
-                    message: `Profile '${name}' does not exist.`,
-                  }),
-                );
+                return yield* ProfileError.make({
+                  message: `Profile '${name}' does not exist.`,
+                });
               }
               if (manifest.profiles[newName] !== undefined) {
-                return yield* Effect.fail(
-                  ProfileError.make({
-                    message: `Profile '${newName}' already exists.`,
-                  }),
-                );
+                return yield* ProfileError.make({
+                  message: `Profile '${newName}' already exists.`,
+                });
               }
               yield* fs.rename(profileDirPath(name), profileDirPath(newName));
               const oldCredentials = profileCredentialsDirPath(name);
@@ -682,7 +674,7 @@ export const ProfileStoreLive = Layer.effect(
       Effect.gen(function* () {
         yield* validateProfileName(name);
         if (name === DEFAULT_PROFILE_NAME) {
-          return yield* Effect.fail(cannotDeleteDefaultProfile());
+          return yield* cannotDeleteDefaultProfile();
         }
         return yield* provideLockServices(
           withLock(
@@ -712,22 +704,18 @@ export const ProfileStoreLive = Layer.effect(
           return yield* auth.decodeConfig(profileName, stored);
         }
         if (yield* SuppressMissingProviderConfig) {
-          return yield* Effect.fail(
-            MissingProviderConfig.make({
-              provider: auth.name,
-              profileName,
-              message: `Provider '${auth.name}' is not configured in profile '${profileName}'.`,
-            }),
-          );
+          return yield* MissingProviderConfig.make({
+            provider: auth.name,
+            profileName,
+            message: `Provider '${auth.name}' is not configured in profile '${profileName}'.`,
+          });
         }
         const command = yield* profileCommandHint(
           `alchemy profile edit --profile ${profileName} --add ${auth.name}`,
         );
-        return yield* Effect.fail(
-          AuthError.make({
-            message: `Provider '${auth.name}' is not configured in profile '${profileName}'. Run \`${command}\`.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `Provider '${auth.name}' is not configured in profile '${profileName}'. Run \`${command}\`.`,
+        });
       });
 
     return {

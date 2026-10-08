@@ -343,7 +343,7 @@ export const PolicyProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findPolicyByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

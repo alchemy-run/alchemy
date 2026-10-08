@@ -268,10 +268,10 @@ export const TunnelProvider = () =>
           .pipe(
             Effect.catch((err) =>
               Effect.gen(function* () {
-                if (!news.adopt) return yield* Effect.fail(err);
+                if (!news.adopt) return yield* err;
                 const existing = yield* findTunnelByName(name);
                 if (!existing || !existing.id) {
-                  return yield* Effect.fail(err);
+                  return yield* err;
                 }
                 return existing;
               }),

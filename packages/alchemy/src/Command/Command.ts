@@ -357,17 +357,16 @@ export const CommandExecutorLive = () =>
                 Effect.timeoutOption(TERMINATION_GRACE_PERIOD),
                 Effect.ignore,
               );
-              return yield* Effect.fail(
-                makeCommandError(props, new CommandTimedOut({ timeout: Duration.format(timeout) })),
+              return yield* makeCommandError(
+                props,
+                new CommandTimedOut({ timeout: Duration.format(timeout) }),
               );
             });
             const result = yield* runExecution;
             if (result.exitCode !== 0) {
-              return yield* Effect.fail(
-                makeCommandError(
-                  props,
-                  new UnexpectedExit({ exitCode: result.exitCode, stderr: result.stderr }),
-                ),
+              return yield* makeCommandError(
+                props,
+                new UnexpectedExit({ exitCode: result.exitCode, stderr: result.stderr }),
               );
             }
             return result;

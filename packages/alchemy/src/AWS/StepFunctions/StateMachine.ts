@@ -540,17 +540,14 @@ export const StateMachineProvider = () =>
           })
           .pipe(Effect.catch(() => Effect.succeed(undefined)));
         if (report !== undefined && report.result === "FAIL") {
-          return yield* Effect.fail(
-            new InvalidStateMachineDefinition({
-              diagnostics: report.diagnostics.map((diagnostic) => ({
-                severity: diagnostic.severity,
-                code: plain(diagnostic.code),
-                message: plain(diagnostic.message),
-                location:
-                  diagnostic.location === undefined ? undefined : plain(diagnostic.location),
-              })),
-            }),
-          );
+          return yield* new InvalidStateMachineDefinition({
+            diagnostics: report.diagnostics.map((diagnostic) => ({
+              severity: diagnostic.severity,
+              code: plain(diagnostic.code),
+              message: plain(diagnostic.message),
+              location: diagnostic.location === undefined ? undefined : plain(diagnostic.location),
+            })),
+          });
         }
       });
 

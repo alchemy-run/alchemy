@@ -320,14 +320,12 @@ const awaitDeployment = (accountId: string, projectName: string, created: Observ
             }),
           );
     if (observed.latestStage.status !== "success" || observed.latestStage.name !== "deploy") {
-      return yield* Effect.fail(
-        new DeploymentFailed({
-          projectName,
-          deploymentId: observed.id,
-          stageName: observed.latestStage.name,
-          stageStatus: observed.latestStage.status,
-        }),
-      );
+      return yield* new DeploymentFailed({
+        projectName,
+        deploymentId: observed.id,
+        stageName: observed.latestStage.name,
+        stageStatus: observed.latestStage.status,
+      });
     }
     return observed;
   });

@@ -365,7 +365,7 @@ export const CustomHostnameProvider = () =>
                 const existing = yield* findByHostname(zoneId, news.hostname).pipe(
                   Effect.catch(() => Effect.succeed(undefined)),
                 );
-                if (!existing) return yield* Effect.fail(originalError);
+                if (!existing) return yield* originalError;
                 return existing;
               }),
             ),

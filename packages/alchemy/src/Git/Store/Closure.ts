@@ -205,7 +205,7 @@ export const computeClosure = (options: ClosureOptions) =>
     for (const want of wants) {
       const wantMeta = wantMetas.get(want);
       if (wantMeta === undefined) {
-        return yield* Effect.fail(StoreError.make({ reason: `want not found: ${want}` }));
+        return yield* StoreError.make({ reason: `want not found: ${want}` });
       }
       let meta: ObjectMeta = wantMeta;
       let hops = 0;
@@ -227,9 +227,7 @@ export const computeClosure = (options: ClosureOptions) =>
           case 4: {
             hops += 1;
             if (hops > MAX_TAG_CHAIN) {
-              return yield* Effect.fail(
-                StoreError.make({ reason: `tag chain too deep at ${meta.oid}` }),
-              );
+              return yield* StoreError.make({ reason: `tag chain too deep at ${meta.oid}` });
             }
             if (!tagSet.has(meta.oid)) {
               tagSet.add(meta.oid);
@@ -245,11 +243,9 @@ export const computeClosure = (options: ClosureOptions) =>
             );
             const target: ObjectMeta | undefined = yield* objects.getMeta(parsed.object);
             if (target === undefined) {
-              return yield* Effect.fail(
-                StoreError.make({
-                  reason: `tag ${meta.oid} targets missing object ${parsed.object}`,
-                }),
-              );
+              return yield* StoreError.make({
+                reason: `tag ${meta.oid} targets missing object ${parsed.object}`,
+              });
             }
             meta = target;
             break;
@@ -296,9 +292,7 @@ export const computeClosure = (options: ClosureOptions) =>
       for (const oid of frontier) {
         const node = nodes.get(oid);
         if (node === undefined) {
-          return yield* Effect.fail(
-            StoreError.make({ reason: `commit graph missing commit ${oid}` }),
-          );
+          return yield* StoreError.make({ reason: `commit graph missing commit ${oid}` });
         }
         candidateOrder.push(node);
         candidateSet.add(oid);
@@ -328,7 +322,7 @@ export const computeClosure = (options: ClosureOptions) =>
         }
       }
       if (candidateOrder.length > cap) {
-        return yield* Effect.fail(ManifestTooLarge.make({ count: candidateOrder.length, cap }));
+        return yield* ManifestTooLarge.make({ count: candidateOrder.length, cap });
       }
       frontier = next;
     }
@@ -435,9 +429,7 @@ export const computeClosure = (options: ClosureOptions) =>
       for (const tree of batch) {
         const content = contents.get(tree);
         if (content === undefined) {
-          return yield* Effect.fail(
-            StoreError.make({ reason: `tree ${tree} vanished during closure` }),
-          );
+          return yield* StoreError.make({ reason: `tree ${tree} vanished during closure` });
         }
         const entries = yield* parseTree(content).pipe(
           Effect.mapError((error) =>
@@ -480,9 +472,7 @@ export const computeClosure = (options: ClosureOptions) =>
     for (const oid of orderedOids) {
       const meta = metas.get(oid);
       if (meta === undefined) {
-        return yield* Effect.fail(
-          StoreError.make({ reason: `object ${oid} vanished during closure` }),
-        );
+        return yield* StoreError.make({ reason: `object ${oid} vanished during closure` });
       }
       entries.push(meta);
     }

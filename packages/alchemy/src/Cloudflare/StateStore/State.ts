@@ -734,11 +734,9 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           .items({ accountId })
           .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
         if (!store) {
-          return yield* Effect.fail(
-            AuthError.make({
-              message: "No Secrets Store found on this account. Deploy the state store first.",
-            }),
-          );
+          return yield* AuthError.make({
+            message: "No Secrets Store found on this account. Deploy the state store first.",
+          });
         }
 
         // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker.
@@ -989,11 +987,9 @@ const readSecretViaEdge = (scriptName: string, storeId: string, secretName: stri
       yield* Effect.logWarning(
         `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
       );
-      return yield* Effect.fail(
-        new EdgeSessionError({
-          message: `Secret probe returned ${response.status}: ${body.slice(0, 200)}`,
-        }),
-      );
+      return yield* new EdgeSessionError({
+        message: `Secret probe returned ${response.status}: ${body.slice(0, 200)}`,
+      });
     }
     return yield* response.text;
   }).pipe(

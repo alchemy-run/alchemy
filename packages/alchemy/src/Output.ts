@@ -625,14 +625,12 @@ export const evaluate: <A, Req = never>(
           fqn: expr.resourceId,
         });
         if (!resource) {
-          return yield* Effect.fail(
-            new InvalidReferenceError({
-              message: `Reference to '${expr.resourceId}' in stack '${stack}' and stage '${stage}' not found. Have you deployed '${stage}' or '${stack}'?`,
-              stack,
-              stage,
-              resourceId: expr.resourceId,
-            }),
-          );
+          return yield* new InvalidReferenceError({
+            message: `Reference to '${expr.resourceId}' in stack '${stack}' and stage '${stage}' not found. Have you deployed '${stage}' or '${stack}'?`,
+            stack,
+            stage,
+            resourceId: expr.resourceId,
+          });
         }
         // RefExpr targets persisted resources; tasks aren't cross-stack
         // referenceable. Return the resource's output attrs, otherwise the
@@ -644,14 +642,12 @@ export const evaluate: <A, Req = never>(
         const stage = expr.stage ?? (yield* Stage);
         const output = yield* state.getOutput({ stack, stage });
         if (output == null) {
-          return yield* Effect.fail(
-            new InvalidReferenceError({
-              message: `Reference to stack '${stack}' at stage '${stage}' not found. Have you deployed stage '${stage}' of '${stack}'?`,
-              stack,
-              stage,
-              resourceId: stack,
-            }),
-          );
+          return yield* new InvalidReferenceError({
+            message: `Reference to stack '${stack}' at stage '${stage}' not found. Have you deployed stage '${stage}' of '${stack}'?`,
+            stack,
+            stage,
+            resourceId: stack,
+          });
         }
         return output;
       }

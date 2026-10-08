@@ -410,11 +410,9 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             const sessionToken = storedSecret(values.sessionToken);
             const region = storedValueText(values.region) ?? "";
             if (accessKeyId === undefined || secretAccessKey === undefined) {
-              return yield* Effect.fail(
-                AuthError.make({
-                  message: "AWS: required key fields are missing.",
-                }),
-              );
+              return yield* AuthError.make({
+                message: "AWS: required key fields are missing.",
+              });
             }
             const accountId = yield* getAccountId({
               accessKeyId,
@@ -452,11 +450,9 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
               .loadProfile(ssoProfile)
               .pipe(Effect.catch(() => Effect.succeed(undefined)));
             if (profile == null) {
-              return yield* Effect.fail(
-                AuthError.make({
-                  message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then log in. ${refreshHint(AWS_AUTH_PROVIDER_NAME, profileName)}`,
-                }),
-              );
+              return yield* AuthError.make({
+                message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then log in. ${refreshHint(AWS_AUTH_PROVIDER_NAME, profileName)}`,
+              });
             }
             // Nothing is persisted for SSO — credentials come from the AWS
             // SSO cache. `aws sso login` is interactive, so it is NOT run
@@ -528,25 +524,21 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                   .pipe(Effect.catch(() => Effect.succeed(undefined)));
                 if (profile?.sso_account_id == null) {
                   const reconfigure = reconfigureHint(AWS_AUTH_PROVIDER_NAME, profileName);
-                  return yield* Effect.fail(
-                    AuthError.make({
-                      message:
-                        profile == null
-                          ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`. ${reconfigure}`
-                          : `AWS SSO profile '${config.ssoProfile}' has no sso_account_id in ~/.aws/config. Add it. ${reconfigure}`,
-                    }),
-                  );
+                  return yield* AuthError.make({
+                    message:
+                      profile == null
+                        ? `AWS SSO profile '${config.ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\`. ${reconfigure}`
+                        : `AWS SSO profile '${config.ssoProfile}' has no sso_account_id in ~/.aws/config. Add it. ${reconfigure}`,
+                  });
                 }
                 // `applyEnvRegionOverride` below only overrides an existing
                 // region, so an env-provided region must be consulted here for
                 // profiles that don't record one.
                 const region = profile.region ?? (yield* getEnv("AWS_REGION"));
                 if (!region) {
-                  return yield* Effect.fail(
-                    AuthError.make({
-                      message: `AWS SSO profile '${config.ssoProfile}' has no region in ~/.aws/config and AWS_REGION is not set.`,
-                    }),
-                  );
+                  return yield* AuthError.make({
+                    message: `AWS SSO profile '${config.ssoProfile}' has no region in ~/.aws/config and AWS_REGION is not set.`,
+                  });
                 }
                 return {
                   accountId: profile.sso_account_id,
@@ -596,11 +588,9 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                   (yield* getEnv("AWS_REGION")) ??
                   (yield* getEnv("AWS_DEFAULT_REGION"));
                 if (!region) {
-                  return yield* Effect.fail(
-                    AuthError.make({
-                      message: `AWS profile '${config.loginProfile}' has no region. Set one with \`aws configure set region <region> --profile ${config.loginProfile}\` or set AWS_REGION.`,
-                    }),
-                  );
+                  return yield* AuthError.make({
+                    message: `AWS profile '${config.loginProfile}' has no region. Set one with \`aws configure set region <region> --profile ${config.loginProfile}\` or set AWS_REGION.`,
+                  });
                 }
                 // Lazy: distilled reads the token `aws login` cached under
                 // `~/.aws/login/cache` and renews it itself when it nears
@@ -992,11 +982,9 @@ const loginSSO = (
         });
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();
-          return yield* Effect.fail(
-            AuthError.make({
-              message: `aws sso login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
-            }),
-          );
+          return yield* AuthError.make({
+            message: `aws sso login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
+          });
         }
       });
       const processFiber = yield* Effect.forkScoped(process);
@@ -1121,11 +1109,9 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
         });
         if (exitCode !== 0) {
           const detail = (yield* Ref.get(stderr)).trim();
-          return yield* Effect.fail(
-            AuthError.make({
-              message: `aws login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
-            }),
-          );
+          return yield* AuthError.make({
+            message: `aws login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
+          });
         }
       });
       const processFiber = yield* Effect.forkScoped(process);

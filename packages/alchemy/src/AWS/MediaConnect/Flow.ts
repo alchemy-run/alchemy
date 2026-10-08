@@ -309,11 +309,9 @@ export const FlowProvider = () =>
           })[] = [];
           for (const desired of props.outputs ?? []) {
             if (desired.Name === undefined) {
-              return yield* Effect.fail(
-                new FlowOutputNameMissing({
-                  message: `every output of MediaConnect flow '${name}' must set a Name — outputs are converged by name`,
-                }),
-              );
+              return yield* new FlowOutputNameMissing({
+                message: `every output of MediaConnect flow '${name}' must set a Name — outputs are converged by name`,
+              });
             }
             desiredOutputs.push({ ...desired, Name: desired.Name });
           }

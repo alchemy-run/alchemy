@@ -230,11 +230,9 @@ export const DeploymentProvider = () =>
       ) {
         const deploymentId = live.deploymentId;
         if (deploymentId === undefined) {
-          return yield* Effect.fail(
-            new GreengrassDeploymentMissingId({
-              message: "getDeployment returned no deploymentId",
-            }),
-          );
+          return yield* new GreengrassDeploymentMissingId({
+            message: "getDeployment returned no deploymentId",
+          });
         }
         return {
           deploymentId,
@@ -338,11 +336,9 @@ export const DeploymentProvider = () =>
               tags: desiredTags,
             });
             if (created.deploymentId === undefined) {
-              return yield* Effect.fail(
-                new GreengrassDeploymentMissingId({
-                  message: `createDeployment for ${news.targetArn} returned no deploymentId`,
-                }),
-              );
+              return yield* new GreengrassDeploymentMissingId({
+                message: `createDeployment for ${news.targetArn} returned no deploymentId`,
+              });
             }
             // Clean up the revision we previously created, now superseded.
             if (
@@ -353,11 +349,9 @@ export const DeploymentProvider = () =>
             }
             live = yield* observeDeployment(created.deploymentId);
             if (live === undefined) {
-              return yield* Effect.fail(
-                new GreengrassDeploymentMissingId({
-                  message: `deployment ${created.deploymentId} disappeared after creation`,
-                }),
-              );
+              return yield* new GreengrassDeploymentMissingId({
+                message: `deployment ${created.deploymentId} disappeared after creation`,
+              });
             }
           }
 
@@ -365,11 +359,9 @@ export const DeploymentProvider = () =>
           // the !inSync branch re-observed after create, but TS cannot track
           // that through the reassignment — guard with a typed error.
           if (live === undefined) {
-            return yield* Effect.fail(
-              new GreengrassDeploymentMissingId({
-                message: `no deployment observed for target ${news.targetArn} after reconcile`,
-              }),
-            );
+            return yield* new GreengrassDeploymentMissingId({
+              message: `no deployment observed for target ${news.targetArn} after reconcile`,
+            });
           }
 
           const attrs = yield* attributesOf(live, news.targetArn);

@@ -413,13 +413,11 @@ export const CloudflareAuth = AuthProviderLayer<
           Match.when({ method: "oauth" }, (cfg) =>
             Effect.gen(function* () {
               if (!("scopes" in cfg)) {
-                return yield* Effect.fail(
-                  NeedsReauth.make({
-                    provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
-                    profile: profileName,
-                    message: `Cloudflare OAuth scopes need to be selected. ${reauth}`,
-                  }),
-                );
+                return yield* NeedsReauth.make({
+                  provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  message: `Cloudflare OAuth scopes need to be selected. ${reauth}`,
+                });
               }
               const accountId = yield* validateAccountId(
                 cfg.accountId,
@@ -434,13 +432,11 @@ export const CloudflareAuth = AuthProviderLayer<
                 scopes: cfg.scopes,
               };
               if (!OAuthClient.usesCurrentClient(creds)) {
-                return yield* Effect.fail(
-                  NeedsReauth.make({
-                    provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
-                    profile: profileName,
-                    message: `Cloudflare OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
-                  }),
-                );
+                return yield* NeedsReauth.make({
+                  provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  message: `Cloudflare OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
+                });
               }
               // Refresh proactively if the token has expired (or is within
               // 10s of expiring). Persist the refreshed creds so subsequent
@@ -574,13 +570,11 @@ export const CloudflareAuth = AuthProviderLayer<
                   const fullLogin = Effect.gen(function* () {
                     const { valid, dropped } = partitionOAuthScopes(c.scopes);
                     if (valid.length === 0) {
-                      return yield* Effect.fail(
-                        AuthError.make({
-                          message:
-                            `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
-                            `Scopes must be picked again. ${reconfigure}`,
-                        }),
-                      );
+                      return yield* AuthError.make({
+                        message:
+                          `The OAuth scopes stored for profile '${profileName}' are no longer offered by Alchemy's Cloudflare OAuth client. ` +
+                          `Scopes must be picked again. ${reconfigure}`,
+                      });
                     }
                     const refreshed = yield* (
                       dropped.length === 0

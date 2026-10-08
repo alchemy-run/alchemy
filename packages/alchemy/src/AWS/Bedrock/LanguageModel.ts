@@ -766,7 +766,7 @@ const handleStreamEvent = (
   Effect.gen(function* () {
     const exception = streamExceptionOf(event);
     if (exception !== undefined) {
-      return yield* Effect.fail(toAiError(exception, "streamText"));
+      return yield* toAiError(exception, "streamText");
     }
     const parts: StreamParts = [];
     let s = state;

@@ -637,7 +637,7 @@ export const BucketProvider = () =>
         } else {
           current = yield* findByName(name);
           if (current === undefined) {
-            return yield* Effect.fail(created.failure);
+            return yield* created.failure;
           }
         }
         const createdSecrets = current;

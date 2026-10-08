@@ -299,7 +299,7 @@ export const makeOperations = Effect.gen(function* () {
               Effect.catchTag("StoreError", (error) => Effect.die(error)),
             );
             if (existing === undefined) {
-              return yield* Effect.fail(conflict);
+              return yield* conflict;
             }
             const orphaned = yield* repos
               .getByName(existing.repoId)
@@ -310,7 +310,7 @@ export const makeOperations = Effect.gen(function* () {
                 Effect.catchCause(() => Effect.succeed(false)),
               );
             if (!orphaned) {
-              return yield* Effect.fail(conflict);
+              return yield* conflict;
             }
             yield* registryStub()
               .removeRow(existing.repoId)

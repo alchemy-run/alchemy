@@ -248,7 +248,7 @@ export const SearchNamespaceProvider = () =>
             Effect.catchTag("NamespaceAlreadyExists", (originalError) =>
               Effect.gen(function* () {
                 const existing = yield* getNamespace(acct, name);
-                if (!existing) return yield* Effect.fail(originalError);
+                if (!existing) return yield* originalError;
                 return { created: false as const, ns: existing };
               }),
             ),

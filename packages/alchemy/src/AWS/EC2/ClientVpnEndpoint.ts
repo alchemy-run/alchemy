@@ -599,9 +599,7 @@ export const ClientVpnEndpointProvider = () =>
           if (upsert.length) yield* EC2.createTags({ Resources: [endpointId], Tags: upsert });
           const final = yield* describe(endpointId);
           if (!final)
-            return yield* Effect.fail(
-              new ClientVpnEndpointNotReady({ endpointId, status: "missing" }),
-            );
+            return yield* new ClientVpnEndpointNotReady({ endpointId, status: "missing" });
           return yield* toAttrs(final);
         }),
         delete: Effect.fn(function* ({ output }) {

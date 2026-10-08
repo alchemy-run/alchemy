@@ -235,16 +235,14 @@ const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     Effect.catch((e: E) =>
       Effect.gen(function* () {
         const command = yield* profileCommandHint("alchemy profile edit");
-        return yield* Effect.fail(
-          new StateStoreError({
-            message: describeStateStoreFailure(e, command),
-            http: HttpClientError.isHttpClientError(e)
-              ? { status: e.response?.status }
-              : Schema.is(HttpApiError.Unauthorized)(e)
-                ? { status: 401 }
-                : undefined,
-          }),
-        );
+        return yield* new StateStoreError({
+          message: describeStateStoreFailure(e, command),
+          http: HttpClientError.isHttpClientError(e)
+            ? { status: e.response?.status }
+            : Schema.is(HttpApiError.Unauthorized)(e)
+              ? { status: 401 }
+              : undefined,
+        });
       }),
     ),
   ) as Effect.Effect<A, StateStoreError, R>;

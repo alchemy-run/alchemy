@@ -80,10 +80,10 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
     Effect.gen(function* () {
       failure ??= new MachineLeaseLost({ appName, machineId, reason });
       yield* Deferred.fail(lost, failure);
-      return yield* Effect.fail(failure);
+      return yield* failure;
     });
   const check = Effect.gen(function* () {
-    if (failure) return yield* Effect.fail(failure);
+    if (failure) return yield* failure;
     const now = yield* Clock.currentTimeMillis;
     for (const [machineId, lease] of held) {
       if (now >= lease.deadline) return yield* lose(machineId, "lease authority expired");
@@ -243,7 +243,7 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
               if (error._tag === "Forbidden") {
                 return yield* lose(machineId, "removal observation forbidden");
               }
-              return yield* Effect.fail(error);
+              return yield* error;
             }),
           ),
           // Another observer's confirmed removal wins over a late uncertain response.

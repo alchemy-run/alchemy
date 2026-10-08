@@ -302,11 +302,9 @@ export const PostgresRoleProvider = () =>
           branch: branchName,
         });
         if (branchInfo.kind !== "postgresql") {
-          return yield* Effect.fail(
-            new PlanetscaleConflict({
-              message: `Cannot create a Role on MySQL database "${databaseName}". Roles are only supported on PostgreSQL. Use Password for MySQL.`,
-            }),
-          );
+          return yield* new PlanetscaleConflict({
+            message: `Cannot create a Role on MySQL database "${databaseName}". Roles are only supported on PostgreSQL. Use Password for MySQL.`,
+          });
         }
         if (!branchInfo.ready) {
           yield* waitForBranchReady(organization, databaseName, branchName);

@@ -652,7 +652,7 @@ export const ingestPack = <E, R>(
           }
           continue;
         }
-        if (next !== undefined) return yield* Effect.fail(next);
+        if (next !== undefined) return yield* next;
       }
       let window = yield* source.read(offset, probeLength);
       if (window.length === 0) {
@@ -738,7 +738,7 @@ export const ingestPack = <E, R>(
         attempt = yield* Effect.result(inflateEntry(window, pos, inflateOptions));
       }
       if (Result.isFailure(attempt)) {
-        return yield* Effect.fail(attempt.failure);
+        return yield* attempt.failure;
       }
       const { bytesConsumed, content } = attempt.success;
       if (content.length !== header.size) {
@@ -838,7 +838,7 @@ export const ingestPack = <E, R>(
       }
       if (next.length === pending.length) {
         // no progress — the base genuinely does not exist anywhere
-        return yield* Effect.fail(firstMissing!);
+        return yield* firstMissing!;
       }
       pending = next;
     }

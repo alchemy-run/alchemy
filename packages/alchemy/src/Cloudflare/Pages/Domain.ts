@@ -241,7 +241,7 @@ export const DomainProvider = () =>
             Effect.catchTag("PagesDomainAlreadyExists", (originalError) =>
               Effect.gen(function* () {
                 const existing = yield* getDomain(accountId, projectName, news.name);
-                if (!existing) return yield* Effect.fail(originalError);
+                if (!existing) return yield* originalError;
                 return existing;
               }),
             ),

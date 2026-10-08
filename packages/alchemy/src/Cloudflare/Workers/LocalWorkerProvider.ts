@@ -1382,12 +1382,10 @@ export const LocalWorkerProvider = () =>
         };
         const handle = yield* source.dev(devCtx);
         if (handle.mode !== "bundle") {
-          return yield* Effect.fail(
-            new SourceProviderError({
-              provider: worker.source!.provider,
-              message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
-            }),
-          );
+          return yield* new SourceProviderError({
+            provider: worker.source!.provider,
+            message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
+          });
         }
         yield* serveBundleStream(worker, proxy, handle.bundles);
         return proxy.url;

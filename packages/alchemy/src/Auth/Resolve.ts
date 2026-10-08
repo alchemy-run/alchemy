@@ -66,11 +66,9 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
     const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
     if (ci) {
       if (auth.readEnvironment === undefined) {
-        return yield* Effect.fail(
-          AuthError.make({
-            message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `Auth provider '${providerName}' does not support environment credentials in CI.`,
+        });
       }
       return {
         auth,

@@ -172,11 +172,9 @@ export const HttpNamespaceProvider = () =>
             );
           }
           if (namespace?.Id === undefined) {
-            return yield* Effect.fail(
-              sd.NamespaceNotFound.make({
-                message: `namespace ${name} not visible after create`,
-              }),
-            );
+            return yield* sd.NamespaceNotFound.make({
+              message: `namespace ${name} not visible after create`,
+            });
           }
 
           // 3. SYNC — description (updateHttpNamespace requires Description)

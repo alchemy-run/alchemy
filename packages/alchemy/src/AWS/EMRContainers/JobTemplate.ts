@@ -383,22 +383,18 @@ export const JobTemplateProvider = () =>
                     .pipe(Effect.map((r) => r.jobTemplate))
                 : yield* observeByName(name);
             if (jt?.id === undefined) {
-              return yield* Effect.fail(
-                emrc.ResourceNotFoundException.make({
-                  message: `job template ${name} not visible after create`,
-                }),
-              );
+              return yield* emrc.ResourceNotFoundException.make({
+                message: `job template ${name} not visible after create`,
+              });
             }
             const listed = yield* awaitListVisibility(jt.id);
             if (listed?.id !== jt.id) {
-              return yield* Effect.fail(
-                new JobTemplateConsistencyError({
-                  jobTemplateId: jt.id,
-                  jobTemplateName: name,
-                  operation: "create",
-                  message: `job template ${name} (${jt.id}) was not visible in ListJobTemplates after 30 seconds`,
-                }),
-              );
+              return yield* new JobTemplateConsistencyError({
+                jobTemplateId: jt.id,
+                jobTemplateName: name,
+                operation: "create",
+                message: `job template ${name} (${jt.id}) was not visible in ListJobTemplates after 30 seconds`,
+              });
             }
           }
 
@@ -419,14 +415,12 @@ export const JobTemplateProvider = () =>
             .pipe(Effect.catchTag("ValidationException", () => Effect.void));
           const [described, listed] = yield* awaitAbsent(output.jobTemplateId);
           if (described !== undefined || listed !== undefined) {
-            return yield* Effect.fail(
-              new JobTemplateConsistencyError({
-                jobTemplateId: output.jobTemplateId,
-                jobTemplateName: output.jobTemplateName,
-                operation: "delete",
-                message: `job template ${output.jobTemplateName} (${output.jobTemplateId}) remained visible after delete for 30 seconds`,
-              }),
-            );
+            return yield* new JobTemplateConsistencyError({
+              jobTemplateId: output.jobTemplateId,
+              jobTemplateName: output.jobTemplateName,
+              operation: "delete",
+              message: `job template ${output.jobTemplateName} (${output.jobTemplateId}) remained visible after delete for 30 seconds`,
+            });
           }
         }),
       });

@@ -534,7 +534,7 @@ export const reconcileBlueGreen = Effect.fn(function* (
             { concurrency: 4 },
           );
         }
-        return yield* Effect.fail(error);
+        return yield* error;
       }),
     ),
   );

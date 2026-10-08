@@ -418,7 +418,7 @@ export const DynamicRoutingProvider = () =>
               Effect.gen(function* () {
                 const holder = yield* findByName(accountId, gatewayId, name);
                 if (holder === undefined || holder.id === routeId) {
-                  return yield* Effect.fail(error);
+                  return yield* error;
                 }
                 yield* aiGateway
                   .deleteDynamicRouting({

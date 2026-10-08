@@ -226,12 +226,10 @@ export const ThingTypeProvider = () =>
             }
           }
 
-          return yield* Effect.fail(
-            new ThingTypeDeletionTimedOut({
-              thingTypeName,
-              waitedSeconds: (attempts - 1) * intervalSeconds,
-            }),
-          );
+          return yield* new ThingTypeDeletionTimedOut({
+            thingTypeName,
+            waitedSeconds: (attempts - 1) * intervalSeconds,
+          });
         }),
       });
     }),

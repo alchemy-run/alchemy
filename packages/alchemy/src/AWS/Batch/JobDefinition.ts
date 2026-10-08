@@ -559,15 +559,13 @@ export const JobDefinitionProvider = () =>
         Effect.gen(function* () {
           const active = yield* activeRevisions(family);
           if (active.length > 0) {
-            return yield* Effect.fail(
-              new JobDefinitionStillVisible({
-                family,
-                service: "Batch",
-                arns: active.flatMap((revision) =>
-                  revision.jobDefinitionArn ? [revision.jobDefinitionArn] : [],
-                ),
-              }),
-            );
+            return yield* new JobDefinitionStillVisible({
+              family,
+              service: "Batch",
+              arns: active.flatMap((revision) =>
+                revision.jobDefinitionArn ? [revision.jobDefinitionArn] : [],
+              ),
+            });
           }
         }).pipe(
           Effect.retry({
@@ -595,13 +593,11 @@ export const JobDefinitionProvider = () =>
             Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
           );
           if (status !== undefined && status !== "DELETE_IN_PROGRESS") {
-            return yield* Effect.fail(
-              new JobDefinitionStillVisible({
-                family,
-                service: "ECS",
-                arns: [arn],
-              }),
-            );
+            return yield* new JobDefinitionStillVisible({
+              family,
+              service: "ECS",
+              arns: [arn],
+            });
           }
         }).pipe(
           Effect.retry({
@@ -633,13 +629,11 @@ export const JobDefinitionProvider = () =>
           yield* Effect.gen(function* () {
             const remaining = yield* listBackingTaskDefinitions(family, "ACTIVE");
             if (remaining.length > 0) {
-              return yield* Effect.fail(
-                new JobDefinitionStillVisible({
-                  family,
-                  service: "ECS",
-                  arns: remaining,
-                }),
-              );
+              return yield* new JobDefinitionStillVisible({
+                family,
+                service: "ECS",
+                arns: remaining,
+              });
             }
           }).pipe(
             Effect.retry({
@@ -1044,28 +1038,21 @@ await bootstrap(entrypoint);
           const desiredTags = { ...internalTags, ...news.tags };
 
           if (news.main !== undefined && news.image !== undefined) {
-            return yield* Effect.fail(
-              new JobDefinitionConfigError({
-                message:
-                  "`main` (Effect-native form) and `image` (low-level form) are mutually exclusive",
-              }),
-            );
+            return yield* new JobDefinitionConfigError({
+              message:
+                "`main` (Effect-native form) and `image` (low-level form) are mutually exclusive",
+            });
           }
           if (news.main === undefined && news.image === undefined) {
-            return yield* Effect.fail(
-              new JobDefinitionConfigError({
-                message:
-                  "one of `main` (Effect-native form) or `image` (low-level form) is required",
-              }),
-            );
+            return yield* new JobDefinitionConfigError({
+              message: "one of `main` (Effect-native form) or `image` (low-level form) is required",
+            });
           }
           if (news.main === undefined && news.executionRoleArn === undefined) {
-            return yield* Effect.fail(
-              new JobDefinitionConfigError({
-                message:
-                  "`executionRoleArn` is required with `image` (Fargate jobs pull the image and write logs through it)",
-              }),
-            );
+            return yield* new JobDefinitionConfigError({
+              message:
+                "`executionRoleArn` is required with `image` (Fargate jobs pull the image and write logs through it)",
+            });
           }
 
           // Resolve the effective container configuration. The Effect-native

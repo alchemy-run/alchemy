@@ -409,22 +409,20 @@ const waitForFleetActive = (farmId: string, fleetId: string, arnOf: (path: strin
     Effect.gen(function* () {
       const state = yield* readFleetById(farmId, fleetId, arnOf);
       if (state === undefined) {
-        return yield* Effect.fail(new FleetNotReady({ fleetId, status: undefined }));
+        return yield* new FleetNotReady({ fleetId, status: undefined });
       }
       if (
         state.described.status === "CREATE_FAILED" ||
         state.described.status === "UPDATE_FAILED"
       ) {
-        return yield* Effect.fail(
-          new FleetProvisioningFailed({
-            fleetId,
-            status: state.described.status,
-            message: state.described.statusMessage,
-          }),
-        );
+        return yield* new FleetProvisioningFailed({
+          fleetId,
+          status: state.described.status,
+          message: state.described.statusMessage,
+        });
       }
       if (state.described.status !== "ACTIVE" && state.described.status !== "SUSPENDED") {
-        return yield* Effect.fail(new FleetNotReady({ fleetId, status: state.described.status }));
+        return yield* new FleetNotReady({ fleetId, status: state.described.status });
       }
       return state;
     }),
@@ -437,7 +435,7 @@ const waitUntilFleetGone = (farmId: string, fleetId: string) =>
         .getFleet({ farmId, fleetId })
         .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (described !== undefined) {
-        return yield* Effect.fail(new FleetNotReady({ fleetId, status: described.status }));
+        return yield* new FleetNotReady({ fleetId, status: described.status });
       }
     }),
   ).pipe(

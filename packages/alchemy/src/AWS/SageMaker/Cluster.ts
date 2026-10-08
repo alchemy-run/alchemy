@@ -483,35 +483,27 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
           node.InstanceStatus?.Message?.includes("does not have permission to perform"),
         );
         if (blocked !== undefined) {
-          return yield* Effect.fail(
-            new ClusterTeardownBlocked({
-              clusterName: name,
-              message: blocked.InstanceStatus?.Message ?? "",
-            }),
-          );
-        }
-        return yield* Effect.fail(
-          new ClusterNotReady({
+          return yield* new ClusterTeardownBlocked({
             clusterName: name,
-            status: described.ClusterStatus,
-          }),
-        );
+            message: blocked.InstanceStatus?.Message ?? "",
+          });
+        }
+        return yield* new ClusterNotReady({
+          clusterName: name,
+          status: described.ClusterStatus,
+        });
       }
       if (described?.ClusterStatus === "InService") return;
       if (described?.ClusterStatus === "Failed") {
-        return yield* Effect.fail(
-          new ClusterFailed({
-            clusterName: name,
-            message: described.FailureMessage,
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new ClusterNotReady({
+        return yield* new ClusterFailed({
           clusterName: name,
-          status: described?.ClusterStatus,
-        }),
-      );
+          message: described.FailureMessage,
+        });
+      }
+      return yield* new ClusterNotReady({
+        clusterName: name,
+        status: described?.ClusterStatus,
+      });
     }),
   );
 

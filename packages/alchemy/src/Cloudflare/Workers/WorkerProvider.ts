@@ -307,38 +307,30 @@ export const resolveVersionAffinity = (
       ...(affinity.key !== undefined ? ["key"] : []),
     ];
     if (declared.length > 1) {
-      return yield* Effect.fail(
-        new WorkerVersionConfigError({
-          message: `version.affinity accepts exactly one key source, got ${declared.join(" and ")}. Combine sources with a raw \`key\` expression instead.`,
-        }),
-      );
+      return yield* new WorkerVersionConfigError({
+        message: `version.affinity accepts exactly one key source, got ${declared.join(" and ")}. Combine sources with a raw \`key\` expression instead.`,
+      });
     }
     if (declared.length === 0 && affinity.ip !== true) {
-      return yield* Effect.fail(
-        new WorkerVersionConfigError({
-          message:
-            "version.affinity requires a key source: set `cookie`, `header`, `key`, or `ip: true`.",
-        }),
-      );
+      return yield* new WorkerVersionConfigError({
+        message:
+          "version.affinity requires a key source: set `cookie`, `header`, `key`, or `ip: true`.",
+      });
     }
     if (affinity.key !== undefined && affinity.ip === true) {
-      return yield* Effect.fail(
-        new WorkerVersionConfigError({
-          message:
-            "version.affinity: `ip` is the fallback for an absent `cookie`/`header` — a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
-        }),
-      );
+      return yield* new WorkerVersionConfigError({
+        message:
+          "version.affinity: `ip` is the fallback for an absent `cookie`/`header` — a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
+      });
     }
     for (const [prop, name] of [
       ["cookie", affinity.cookie],
       ["header", affinity.header],
     ] as const) {
       if (name !== undefined && !AFFINITY_NAME_PATTERN.test(name)) {
-        return yield* Effect.fail(
-          new WorkerVersionConfigError({
-            message: `version.affinity.${prop} '${name}' is not a valid ${prop} name: expected only letters, digits, '_', '.', and '-'.`,
-          }),
-        );
+        return yield* new WorkerVersionConfigError({
+          message: `version.affinity.${prop} '${name}' is not a valid ${prop} name: expected only letters, digits, '_', '.', and '-'.`,
+        });
       }
     }
     const source: ResolvedVersionAffinity["source"] =
@@ -585,11 +577,9 @@ export const resolveWorkerDomain = (
       ...redirects.filter((h) => h === name || aliases.includes(h)),
     ];
     if (overlap.length > 0) {
-      return yield* Effect.fail(
-        new WorkerDomainConfigError({
-          message: `Each hostname may play only one role in a Worker's domain config; ${[...new Set(overlap)].map((h) => `'${h}'`).join(", ")} appears in more than one of name/aliases/redirects.`,
-        }),
-      );
+      return yield* new WorkerDomainConfigError({
+        message: `Each hostname may play only one role in a Worker's domain config; ${[...new Set(overlap)].map((h) => `'${h}'`).join(", ")} appears in more than one of name/aliases/redirects.`,
+      });
     }
     const zone = resolveWorkerDomainZone(config);
     const previews = "previews" in config && config.previews === true ? true : undefined;
@@ -1924,7 +1914,7 @@ export const LiveWorkerProvider = () =>
                       Effect.catch(() => Effect.succeed(undefined)),
                     );
                     if (!match?.id) {
-                      return yield* Effect.fail(originalError);
+                      return yield* originalError;
                     }
                     return { id: match.id, pattern: match.pattern };
                   }),
@@ -2087,14 +2077,12 @@ export const LiveWorkerProvider = () =>
           }
         }
         if (matched.length > 1) {
-          return yield* Effect.fail(
-            new AmbiguousDurableObjectTransfer({
-              scriptName: params.selfScriptName,
-              logicalId: params.logicalId,
-              className: params.className,
-              sources: matched,
-            }),
-          );
+          return yield* new AmbiguousDurableObjectTransfer({
+            scriptName: params.selfScriptName,
+            logicalId: params.logicalId,
+            className: params.className,
+            sources: matched,
+          });
         }
         return matched[0];
       });
@@ -2567,18 +2555,14 @@ export const LiveWorkerProvider = () =>
         const userAlias = news.version?.alias;
         if (userAlias !== undefined) {
           if (!/^[a-z][a-z0-9-]*$/.test(userAlias)) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `version.alias '${userAlias}' is invalid: aliases must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `version.alias '${userAlias}' is invalid: aliases must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
+            });
           }
           if (userAlias.length > budget) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `version.alias '${userAlias}' is too long: '<alias>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the alias.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `version.alias '${userAlias}' is too long: '<alias>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the alias.`,
+            });
           }
           return userAlias;
         }
@@ -2661,22 +2645,18 @@ export const LiveWorkerProvider = () =>
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
         if (forbidden.length > 0) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message:
-                `version.parent uploads a version of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
-                `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message:
+              `version.parent uploads a version of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+              `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
+          });
         }
         yield* validateTraffic(news.version?.traffic);
         const cronBindings = getCronBindings(bindings);
         if (cronBindings.length > 0) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `Cron Triggers are script-level settings and cannot be registered from a version of '${parentName}'. Configure crons on the parent Worker.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `Cron Triggers are script-level settings and cannot be registered from a version of '${parentName}'. Configure crons on the parent Worker.`,
+          });
         }
         // Any locally-hosted DO class (a durable_object_namespace binding
         // without a foreign scriptName) or DO/Workflow export would require
@@ -2685,15 +2665,13 @@ export const LiveWorkerProvider = () =>
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
         const exportedClasses = Object.keys(news.exports ?? {});
         if (hostedClasses.length > 0 || exportedClasses.length > 0) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `A version of '${parentName}' cannot host Durable Object or Workflow classes (${[
-                ...new Set([...hostedClasses.map((c) => c.className), ...exportedClasses]),
-              ].join(
-                ", ",
-              )}): class migrations apply to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `A version of '${parentName}' cannot host Durable Object or Workflow classes (${[
+              ...new Set([...hostedClasses.map((c) => c.className), ...exportedClasses]),
+            ].join(
+              ", ",
+            )}): class migrations apply to the parent script. Host the classes on the parent Worker and reference them cross-script instead.`,
+          });
         }
       });
 
@@ -2719,11 +2697,9 @@ export const LiveWorkerProvider = () =>
         const version = news.version!;
         const parentName = resolveVersionParentName(version);
         if (parentName === undefined) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `version.parent did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `version.parent did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
+          });
         }
         yield* validateVersionWorkerProps(news, bindings, parentName);
         const traffic = version.traffic ?? 0;
@@ -2744,13 +2720,11 @@ export const LiveWorkerProvider = () =>
             : undefined;
         const selfUrl = hasSelfUrlBinding(bindings) ? aliasedUrl : undefined;
         if (hasSelfUrlBinding(bindings) && selfUrl === undefined) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: previewsEnabled
-                ? `A version of '${parentName}' binds its own URL (Worker.URL), but no preview alias fits: '<alias>-${parentName}' must stay within a 63-character DNS label. Set a short version.alias or shorten the parent's name.`
-                : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled — a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: previewsEnabled
+              ? `A version of '${parentName}' binds its own URL (Worker.URL), but no preview alias fits: '<alias>-${parentName}' must stay within a 63-character DNS label. Set a short version.alias or shorten the parent's name.`
+              : `A version of '${parentName}' binds its own URL (Worker.URL), but the parent's workers.dev previews are disabled — a version's URL is its aliased preview URL. Enable the parent's workers.dev subdomain (url: true, the default).`,
+          });
         }
         yield* Effect.logInfo(
           `Cloudflare Worker version: preparing bundle for ${parentName} (from ${id})`,
@@ -2832,11 +2806,9 @@ export const LiveWorkerProvider = () =>
           );
         const versionId = created.id ?? undefined;
         if (versionId === undefined) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `Cloudflare did not return a version id for the uploaded version of '${parentName}'.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `Cloudflare did not return a version id for the uploaded version of '${parentName}'.`,
+          });
         }
         let deploymentId: string | undefined;
         if (traffic > 0) {
@@ -2894,13 +2866,11 @@ export const LiveWorkerProvider = () =>
               addHost(route.zoneId, { host, wildcard: host.includes("*") });
             }
             if (hostsByZone.size === 0) {
-              return yield* Effect.fail(
-                new WorkerVersionConfigError({
-                  message:
-                    `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
-                    `Give the parent a \`domain\` or zone \`routes\`, or pass the parent as a Worker resource so its routes are visible here.`,
-                }),
-              );
+              return yield* new WorkerVersionConfigError({
+                message:
+                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
+                  `Give the parent a \`domain\` or zone \`routes\`, or pass the parent as a Worker resource so its routes are visible here.`,
+              });
             }
             yield* session.note("Reconciling version-affinity rules ...", { kind: "status" });
           }
@@ -2966,18 +2936,14 @@ export const LiveWorkerProvider = () =>
         const preview = news.preview!;
         const parentName = resolvePreviewParentName(preview);
         if (parentName === undefined) {
-          return yield* Effect.fail(
-            new WorkerPreviewConfigError({
-              message: `preview.of did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
-            }),
-          );
+          return yield* new WorkerPreviewConfigError({
+            message: `preview.of did not resolve to a Worker script name. Pass a Worker (e.g. \`yield* Cloudflare.Worker.ref(id, { stage })\`) or a literal script name.`,
+          });
         }
         if (news.version !== undefined) {
-          return yield* Effect.fail(
-            new WorkerPreviewConfigError({
-              message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
-            }),
-          );
+          return yield* new WorkerPreviewConfigError({
+            message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
+          });
         }
         const forbidden = (
           [
@@ -2993,21 +2959,17 @@ export const LiveWorkerProvider = () =>
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));
         if (forbidden.length > 0) {
-          return yield* Effect.fail(
-            new WorkerPreviewConfigError({
-              message:
-                `preview.of creates a Preview of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
-                `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
-            }),
-          );
+          return yield* new WorkerPreviewConfigError({
+            message:
+              `preview.of creates a Preview of '${parentName}' — script-level settings belong to the parent Worker and cannot be set here: ${forbidden.join(", ")}. ` +
+              `Remove ${forbidden.length === 1 ? "this prop" : "these props"} or configure ${forbidden.length === 1 ? "it" : "them"} on the parent.`,
+          });
         }
         const cronBindings = getCronBindings(bindings);
         if (cronBindings.length > 0) {
-          return yield* Effect.fail(
-            new WorkerPreviewConfigError({
-              message: `Cron Triggers are script-level settings and cannot be registered from a Preview of '${parentName}'. Configure crons on the parent Worker.`,
-            }),
-          );
+          return yield* new WorkerPreviewConfigError({
+            message: `Cron Triggers are script-level settings and cannot be registered from a Preview of '${parentName}'. Configure crons on the parent Worker.`,
+          });
         }
 
         const budget = 63 - parentName.length - 1;
@@ -3015,26 +2977,20 @@ export const LiveWorkerProvider = () =>
         let previewName: string;
         if (userName !== undefined) {
           if (!/^[a-z][a-z0-9-]*$/.test(userName)) {
-            return yield* Effect.fail(
-              new WorkerPreviewConfigError({
-                message: `preview.name '${userName}' is invalid: names must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
-              }),
-            );
+            return yield* new WorkerPreviewConfigError({
+              message: `preview.name '${userName}' is invalid: names must start with a lowercase letter and contain only lowercase letters, digits, and dashes.`,
+            });
           }
           if (userName.length > budget) {
-            return yield* Effect.fail(
-              new WorkerPreviewConfigError({
-                message: `preview.name '${userName}' is too long: '<name>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the name.`,
-              }),
-            );
+            return yield* new WorkerPreviewConfigError({
+              message: `preview.name '${userName}' is too long: '<name>-${parentName}' must fit in a 63-character DNS label, leaving ${Math.max(budget, 0)} characters for the name.`,
+            });
           }
           previewName = userName;
         } else if (budget < 4) {
-          return yield* Effect.fail(
-            new WorkerPreviewConfigError({
-              message: `Cannot derive a Preview name: '<name>-${parentName}' must fit in a 63-character DNS label. Set preview.name to a short value or shorten the parent's name.`,
-            }),
-          );
+          return yield* new WorkerPreviewConfigError({
+            message: `Cannot derive a Preview name: '<name>-${parentName}' must fit in a 63-character DNS label. Set preview.name to a short value or shorten the parent's name.`,
+          });
         } else {
           const readable = stack.stage
             .toLowerCase()
@@ -3264,11 +3220,9 @@ export const LiveWorkerProvider = () =>
         const dispatchNamespace = resolveNamespaceName(news?.namespace);
         yield* validateTraffic(news.version?.traffic);
         if (news.version !== undefined && dispatchNamespace) {
-          return yield* Effect.fail(
-            new WorkerVersionConfigError({
-              message: `Workers for Platforms user workers do not support versions or gradual deployments — remove the version prop from '${name}'.`,
-            }),
-          );
+          return yield* new WorkerVersionConfigError({
+            message: `Workers for Platforms user workers do not support versions or gradual deployments — remove the version prop from '${name}'.`,
+          });
         }
         // Resolve the Worker's own URL up front when a `Worker.URL` binding
         // is present: the value must exist before the bundle is built (Vite
@@ -3592,9 +3546,11 @@ export const LiveWorkerProvider = () =>
           // anyway, and silently deleting would destroy the namespace's
           // data. See the error's docs for the two ways out
           // (`transferredFrom` on the new host, or a two-phase removal).
-          return yield* Effect.fail(
-            new DurableObjectTransferRequired({ scriptName: name, className, targetScriptName }),
-          );
+          return yield* new DurableObjectTransferRequired({
+            scriptName: name,
+            className,
+            targetScriptName,
+          });
         }
 
         // Collect container-backed class names so we can send container metadata
@@ -3774,11 +3730,9 @@ export const LiveWorkerProvider = () =>
             ...migrations.transferredClasses.map((t) => t.to),
           ];
           if (migratedClasses.length > 0) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}), which requires a migration — migrations cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `This deploy of '${name}' changes Durable Object classes (${migratedClasses.join(", ")}), which requires a migration — migrations cannot ride a gradual rollout. Deploy at 100% (remove version.traffic) first, then resume gradual rollouts.`,
+            });
           }
           yield* session.note(`Uploading version of ${name} (${bundleSize}) ...`, {
             kind: "status",
@@ -3816,11 +3770,9 @@ export const LiveWorkerProvider = () =>
             );
           versionId = created.id ?? undefined;
           if (versionId === undefined) {
-            return yield* Effect.fail(
-              new WorkerVersionConfigError({
-                message: `Cloudflare did not return a version id for the uploaded version of '${name}'.`,
-              }),
-            );
+            return yield* new WorkerVersionConfigError({
+              message: `Cloudflare did not return a version id for the uploaded version of '${name}'.`,
+            });
           }
           if (rolloutTraffic > 0) {
             yield* session.note(`Deploying version at ${rolloutTraffic}% of traffic ...`, {
@@ -3900,12 +3852,10 @@ export const LiveWorkerProvider = () =>
             workerId:
               worker.tag ??
               cachedWorkerId(output?.workerId, name) ??
-              (yield* Effect.fail(
-                new WorkerIdNotFound({
-                  scriptName: name,
-                  message: `Cloudflare Worker: the dispatch-namespace upload for '${name}' did not return the script's immutable ID`,
-                }),
-              )),
+              (yield* new WorkerIdNotFound({
+                scriptName: name,
+                message: `Cloudflare Worker: the dispatch-namespace upload for '${name}' did not return the script's immutable ID`,
+              })),
             workerName: name,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
@@ -4140,13 +4090,11 @@ export const LiveWorkerProvider = () =>
               addHost(route.zoneId, { host, wildcard: host.includes("*") });
             }
             if (hostsByZone.size === 0) {
-              return yield* Effect.fail(
-                new WorkerVersionConfigError({
-                  message:
-                    `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
-                    `On the bare workers.dev URL, clients must send the header themselves.`,
-                }),
-              );
+              return yield* new WorkerVersionConfigError({
+                message:
+                  `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
+                  `On the bare workers.dev URL, clients must send the header themselves.`,
+              });
             }
             yield* session.note("Reconciling version-affinity rules ...", { kind: "status" });
           }
@@ -5140,11 +5088,9 @@ export const LiveWorkerProvider = () =>
         reconcile: Effect.fn(function* ({ id, fqn, news, olds, bindings, output, session }) {
           yield* assertCloudflareTelemetryCompatibility(news, bindings);
           if (news.preview?.of != null && news.version?.parent != null) {
-            return yield* Effect.fail(
-              new WorkerPreviewConfigError({
-                message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
-              }),
-            );
+            return yield* new WorkerPreviewConfigError({
+              message: `preview and version cannot be set together. Use preview.of for branch/PR Previews; use version.parent / version.traffic for canaries and gradual rollouts.`,
+            });
           }
           // A version worker uploads an immutable version to its parent's
           // script instead of owning a script of its own — none of the
@@ -5651,34 +5597,28 @@ const validateWorkerTags = (
 ) =>
   Effect.gen(function* () {
     if (tags.length > MAX_TAGS_PER_WORKER) {
-      return yield* Effect.fail(
-        new InvalidWorkerTags({
-          scriptName,
-          reason:
-            `worker "${scriptName}" needs ${tags.length} script tags but Cloudflare allows at most ${MAX_TAGS_PER_WORKER}. ` +
-            `Alchemy reserves ${alchemyTagCount} (ownership, migration and durable-object metadata); ` +
-            `${tags.length - alchemyTagCount} user tags were passed via \`tags\`. Remove ${tags.length - MAX_TAGS_PER_WORKER} tag(s).`,
-        }),
-      );
+      return yield* new InvalidWorkerTags({
+        scriptName,
+        reason:
+          `worker "${scriptName}" needs ${tags.length} script tags but Cloudflare allows at most ${MAX_TAGS_PER_WORKER}. ` +
+          `Alchemy reserves ${alchemyTagCount} (ownership, migration and durable-object metadata); ` +
+          `${tags.length - alchemyTagCount} user tags were passed via \`tags\`. Remove ${tags.length - MAX_TAGS_PER_WORKER} tag(s).`,
+      });
     }
     const encoder = new TextEncoder();
     for (const tag of tags) {
       if (tag.includes(",") || tag.includes("&")) {
-        return yield* Effect.fail(
-          new InvalidWorkerTags({
-            scriptName,
-            reason: `worker "${scriptName}" tag ${JSON.stringify(tag)} contains ',' or '&', which Cloudflare rejects.`,
-          }),
-        );
+        return yield* new InvalidWorkerTags({
+          scriptName,
+          reason: `worker "${scriptName}" tag ${JSON.stringify(tag)} contains ',' or '&', which Cloudflare rejects.`,
+        });
       }
       const bytes = yield* Effect.sync(() => encoder.encode(tag).length);
       if (bytes > MAX_TAG_BYTES) {
-        return yield* Effect.fail(
-          new InvalidWorkerTags({
-            scriptName,
-            reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
-          }),
-        );
+        return yield* new InvalidWorkerTags({
+          scriptName,
+          reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
+        });
       }
     }
   });

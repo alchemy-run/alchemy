@@ -1360,13 +1360,11 @@ const parseListenSpec = (serviceId: string, spec: string, kind: string) =>
       protocol === undefined ||
       !LISTENER_PROTOCOLS.has(protocol)
     ) {
-      return yield* Effect.fail(
-        new UnsupportedListenerProtocol({
-          serviceId,
-          spec,
-          message: `AWS.ECS.Service "${serviceId}": unsupported ${kind} spec '${spec}' — expected "<port>/<protocol>" with protocol one of http, https (ALB) or tcp, udp, tcp_udp, tls (NLB)`,
-        }),
-      );
+      return yield* new UnsupportedListenerProtocol({
+        serviceId,
+        spec,
+        message: `AWS.ECS.Service "${serviceId}": unsupported ${kind} spec '${spec}' — expected "<port>/<protocol>" with protocol one of http, https (ALB) or tcp, udp, tcp_udp, tls (NLB)`,
+      });
     }
     return { port, protocol } as ParsedListen;
   });
@@ -1612,22 +1610,18 @@ const composeManagedIngress = (
       config.listener !== undefined || rules.some((rule) => isELBv2Listener(rule.listen));
     const hasOwnedStrings = rules.some((rule) => typeof rule.listen === "string");
     if (hasSharedRefs && hasOwnedStrings) {
-      return yield* Effect.fail(
-        new MixedListenerOwnership({
-          serviceId: id,
-          message: `AWS.ECS.Service "${id}": rules mix owned "<port>/<protocol>" listen strings with shared ELBv2.Listener references — a service either owns its ALB (strings only) or attaches rules to shared listeners (references only)`,
-        }),
-      );
+      return yield* new MixedListenerOwnership({
+        serviceId: id,
+        message: `AWS.ECS.Service "${id}": rules mix owned "<port>/<protocol>" listen strings with shared ELBv2.Listener references — a service either owns its ALB (strings only) or attaches rules to shared listeners (references only)`,
+      });
     }
     const owned = !hasSharedRefs;
     if (!owned && config.public !== undefined) {
-      return yield* Effect.fail(
-        new OwnedOnlyLoadBalancerOption({
-          serviceId: id,
-          option: "public",
-          message: `AWS.ECS.Service "${id}": \`public\` only applies to an owned load balancer — the shared listener's ALB controls its own scheme`,
-        }),
-      );
+      return yield* new OwnedOnlyLoadBalancerOption({
+        serviceId: id,
+        option: "public",
+        message: `AWS.ECS.Service "${id}": \`public\` only applies to an owned load balancer — the shared listener's ALB controls its own scheme`,
+      });
     }
     // `true`, a bare `{}`, or an owned config with zero rules: single default
     // listener forwarding to the container port.
@@ -1649,12 +1643,10 @@ const composeManagedIngress = (
       }
     }
     if (families.size > 1) {
-      return yield* Effect.fail(
-        new MixedLoadBalancerProtocols({
-          serviceId: id,
-          message: `AWS.ECS.Service "${id}": rules mix application (http/https) and network (tcp/udp/tls/tcp_udp) protocols — one service composes exactly one load balancer type`,
-        }),
-      );
+      return yield* new MixedLoadBalancerProtocols({
+        serviceId: id,
+        message: `AWS.ECS.Service "${id}": rules mix application (http/https) and network (tcp/udp/tls/tcp_udp) protocols — one service composes exactly one load balancer type`,
+      });
     }
     const lbType: "application" | "network" = families.has("network") ? "network" : "application";
     if (lbType === "network") {
@@ -1716,13 +1708,11 @@ const composeManagedIngress = (
           ? { name: config.domain }
           : config.domain;
     if (domain !== undefined && !owned) {
-      return yield* Effect.fail(
-        new OwnedOnlyLoadBalancerOption({
-          serviceId: id,
-          option: "domain",
-          message: `AWS.ECS.Service "${id}": \`domain\` only applies to an owned load balancer — the shared listener's ALB owns its DNS and certificates`,
-        }),
-      );
+      return yield* new OwnedOnlyLoadBalancerOption({
+        serviceId: id,
+        option: "domain",
+        message: `AWS.ECS.Service "${id}": \`domain\` only applies to an owned load balancer — the shared listener's ALB owns its DNS and certificates`,
+      });
     }
     let certificateArn: string | undefined = props.certificateArn;
     const domainNames = domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
@@ -1731,13 +1721,11 @@ const composeManagedIngress = (
       for (const name of domainNames) {
         const zoneId = yield* findPublicHostedZoneId(name);
         if (zoneId === undefined) {
-          return yield* Effect.fail(
-            new ServiceHostedZoneNotFound({
-              serviceId: id,
-              domainName: name,
-              message: `AWS.ECS.Service "${id}": no public Route 53 hosted zone contains '${name}' — create the hosted zone first (alias records land in it)`,
-            }),
-          );
+          return yield* new ServiceHostedZoneNotFound({
+            serviceId: id,
+            domainName: name,
+            message: `AWS.ECS.Service "${id}": no public Route 53 hosted zone contains '${name}' — create the hosted zone first (alias records land in it)`,
+          });
         }
         domainZones.set(name, zoneId);
       }
@@ -1816,26 +1804,22 @@ const composeManagedIngress = (
     const normalized: NormalizedRule[] = [];
     for (const [index, rule] of rules.entries()) {
       if (rule.forward !== undefined && rule.redirect !== undefined) {
-        return yield* Effect.fail(
-          new ServiceRuleActionConflict({
-            serviceId: id,
-            ruleIndex: index,
-            message: `AWS.ECS.Service "${id}": rule ${index} sets both \`forward\` and \`redirect\` — they are mutually exclusive`,
-          }),
-        );
+        return yield* new ServiceRuleActionConflict({
+          serviceId: id,
+          ruleIndex: index,
+          message: `AWS.ECS.Service "${id}": rule ${index} sets both \`forward\` and \`redirect\` — they are mutually exclusive`,
+        });
       }
       const listen =
         typeof rule.listen === "string"
           ? yield* parseListenSpec(id, rule.listen, "listen")
           : rule.listen;
       if (!owned && listen === undefined && config.listener === undefined) {
-        return yield* Effect.fail(
-          new MissingRuleListener({
-            serviceId: id,
-            ruleIndex: index,
-            message: `AWS.ECS.Service "${id}": rule ${index} has no \`listen\` and the config has no default \`listener\``,
-          }),
-        );
+        return yield* new MissingRuleListener({
+          serviceId: id,
+          ruleIndex: index,
+          message: `AWS.ECS.Service "${id}": rule ${index} has no \`listen\` and the config has no default \`listener\``,
+        });
       }
       const action: NormalizedAction =
         rule.redirect !== undefined
@@ -1881,13 +1865,11 @@ const composeManagedIngress = (
           const spec = r.listen as ParsedListen;
           const existing = ownedListenSpecs.get(spec.port);
           if (existing !== undefined && existing.protocol !== spec.protocol) {
-            return yield* Effect.fail(
-              new UnsupportedListenerProtocol({
-                serviceId: id,
-                spec: `${spec.port}/${spec.protocol}`,
-                message: `AWS.ECS.Service "${id}": port ${spec.port} is declared with both "${existing.protocol}" and "${spec.protocol}" — one protocol per listener port`,
-              }),
-            );
+            return yield* new UnsupportedListenerProtocol({
+              serviceId: id,
+              spec: `${spec.port}/${spec.protocol}`,
+              message: `AWS.ECS.Service "${id}": port ${spec.port} is declared with both "${existing.protocol}" and "${spec.protocol}" — one protocol per listener port`,
+            });
           }
           ownedListenSpecs.set(spec.port, spec);
         }
@@ -1897,13 +1879,11 @@ const composeManagedIngress = (
           (spec.protocol === "https" || spec.protocol === "tls") &&
           certificateArn === undefined
         ) {
-          return yield* Effect.fail(
-            new MissingListenerCertificate({
-              serviceId: id,
-              spec: `${spec.port}/${spec.protocol}`,
-              message: `AWS.ECS.Service "${id}": listener "${spec.port}/${spec.protocol}" requires a certificate — pass \`certificateArn\` or a \`domain\``,
-            }),
-          );
+          return yield* new MissingListenerCertificate({
+            serviceId: id,
+            spec: `${spec.port}/${spec.protocol}`,
+            message: `AWS.ECS.Service "${id}": listener "${spec.port}/${spec.protocol}" requires a certificate — pass \`certificateArn\` or a \`domain\``,
+          });
         }
       }
     }
@@ -2011,13 +1991,11 @@ const composeManagedIngress = (
         const validKeys = [...tgSpecs.values()]
           .map(healthKeyOf)
           .filter((candidate): candidate is string => candidate !== undefined);
-        return yield* Effect.fail(
-          new ServiceHealthTargetNotFound({
-            serviceId: id,
-            key,
-            message: `AWS.ECS.Service "${id}": \`health\` key '${key}' matches no target group — valid keys: ${validKeys.length > 0 ? validKeys.join(", ") : "(none statically derivable)"}`,
-          }),
-        );
+        return yield* new ServiceHealthTargetNotFound({
+          serviceId: id,
+          key,
+          message: `AWS.ECS.Service "${id}": \`health\` key '${key}' matches no target group — valid keys: ${validKeys.length > 0 ? validKeys.join(", ") : "(none statically derivable)"}`,
+        });
       }
     }
 
@@ -2232,12 +2210,10 @@ const composeServiceScaling = (
       props?.public === undefined &&
       props?.ingress === undefined
     ) {
-      return yield* Effect.fail(
-        new RequestCountScalingRequiresLoadBalancer({
-          serviceId: id,
-          message: `AWS.ECS.Service "${id}": \`scaling.requestCount\` tracks ALBRequestCountPerTarget, which needs a managed target group — set \`loadBalancer\``,
-        }),
-      );
+      return yield* new RequestCountScalingRequiresLoadBalancer({
+        serviceId: id,
+        message: `AWS.ECS.Service "${id}": \`scaling.requestCount\` tracks ALBRequestCountPerTarget, which needs a managed target group — set \`loadBalancer\``,
+      });
     }
     yield* Effect.gen(function* () {
       const clusterName = Output.map(

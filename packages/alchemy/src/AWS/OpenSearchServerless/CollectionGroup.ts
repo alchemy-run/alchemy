@@ -272,11 +272,9 @@ export const CollectionGroupProvider = () =>
           }
 
           if (detail?.id === undefined || detail.arn === undefined) {
-            return yield* Effect.fail(
-              aoss.ResourceNotFoundException.make({
-                message: `collection group ${name} not visible after reconcile`,
-              }),
-            );
+            return yield* aoss.ResourceNotFoundException.make({
+              message: `collection group ${name} not visible after reconcile`,
+            });
           }
 
           // 3b. SYNC TAGS — diff against observed cloud tags (read via

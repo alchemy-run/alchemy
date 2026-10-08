@@ -608,7 +608,7 @@ export const ApplicationProvider = () =>
                   const existing = yield* findWarpApp(accountId);
                   if (existing) return existing;
                 }
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

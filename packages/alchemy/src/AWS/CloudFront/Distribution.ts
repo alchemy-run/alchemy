@@ -602,11 +602,9 @@ export const DistributionProvider = () =>
                   yield* Effect.logInfo(
                     `CloudFront Distribution wait: ${distributionId} status=${distribution?.Status ?? "unknown"}`,
                   );
-                  return yield* Effect.fail(
-                    new DistributionPendingDeployment({
-                      message: `Distribution ${distributionId} is not yet deployed`,
-                    }),
-                  );
+                  return yield* new DistributionPendingDeployment({
+                    message: `Distribution ${distributionId} is not yet deployed`,
+                  });
                 }),
           ),
           Effect.retry({
@@ -737,11 +735,9 @@ export const DistributionProvider = () =>
                 yield* Effect.logInfo(
                   `CloudFront Distribution delete: ${distributionId} not ready enabled=${current.config.Enabled} status=${current.distribution.Status}`,
                 );
-                return yield* Effect.fail(
-                  new DistributionPendingDeletionReadiness({
-                    message: `Distribution ${distributionId} is not yet ready for deletion`,
-                  }),
-                );
+                return yield* new DistributionPendingDeletionReadiness({
+                  message: `Distribution ${distributionId} is not yet ready for deletion`,
+                });
               }
 
               yield* Effect.logInfo(
@@ -915,7 +911,7 @@ export const DistributionProvider = () =>
                         yield* Effect.logInfo(
                           `CloudFront Distribution reconcile: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
                         );
-                        return yield* Effect.fail(error);
+                        return yield* error;
                       }),
                 ),
               )

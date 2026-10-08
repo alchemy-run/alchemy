@@ -428,9 +428,7 @@ export const make = (
           );
           const url = server.resolvedUrls?.local[0];
           if (url === undefined) {
-            return yield* Effect.fail(
-              fail("Could not determine the URL of the vocs dev server")(undefined),
-            );
+            return yield* fail("Could not determine the URL of the vocs dev server")(undefined);
           }
           return { url };
         }),

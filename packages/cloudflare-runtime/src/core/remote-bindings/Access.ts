@@ -84,18 +84,16 @@ export const layer = Layer.effect(
         }
 
         if (clientId !== undefined || clientSecret !== undefined) {
-          return yield* Effect.fail(
-            ConfigError.make({
-              subtag: "AccessTokenIncomplete",
-              message:
-                "Both CLOUDFLARE_ACCESS_CLIENT_ID and CLOUDFLARE_ACCESS_CLIENT_SECRET must be set to use Access service-token authentication.",
-              hint: `Only ${
-                clientId !== undefined
-                  ? "CLOUDFLARE_ACCESS_CLIENT_ID"
-                  : "CLOUDFLARE_ACCESS_CLIENT_SECRET"
-              } was found. Set the missing variable, unset both to fall back to interactive login, or remove the value to disable service-token auth.`,
-            }),
-          );
+          return yield* ConfigError.make({
+            subtag: "AccessTokenIncomplete",
+            message:
+              "Both CLOUDFLARE_ACCESS_CLIENT_ID and CLOUDFLARE_ACCESS_CLIENT_SECRET must be set to use Access service-token authentication.",
+            hint: `Only ${
+              clientId !== undefined
+                ? "CLOUDFLARE_ACCESS_CLIENT_ID"
+                : "CLOUDFLARE_ACCESS_CLIENT_SECRET"
+            } was found. Set the missing variable, unset both to fall back to interactive login, or remove the value to disable service-token auth.`,
+          });
         }
 
         return yield* login(domain);

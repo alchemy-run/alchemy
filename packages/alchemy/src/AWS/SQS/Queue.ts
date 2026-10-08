@@ -564,12 +564,10 @@ export const QueueProvider = () =>
         precreate: Effect.fn(function* ({ id, fqn, news = {} }) {
           const identity = { queueName: news.queueName, fifo: news.fifo };
           if (!isResolved(identity)) {
-            return yield* Effect.fail(
-              new UnresolvedQueueIdentity({
-                message:
-                  "Queue queueName and fifo must be known before precreation; use literal identity properties and put circular references in bindings.",
-              }),
-            );
+            return yield* new UnresolvedQueueIdentity({
+              message:
+                "Queue queueName and fifo must be known before precreation; use literal identity properties and put circular references in bindings.",
+            });
           }
           if (
             isResolved({
@@ -764,7 +762,7 @@ export const QueueProvider = () =>
               Effect.catchTag("RequestThrottled", () => Effect.succeed(false)),
             );
             if (!attributesAbsent || !absentFromList) {
-              return yield* Effect.fail(new QueueStillExists({ queueUrl }));
+              return yield* new QueueStillExists({ queueUrl });
             }
           }).pipe(
             Effect.retry({

@@ -285,15 +285,13 @@ export const SpaceProvider = () =>
           Effect.gen(function* () {
             const space = yield* repostspace.getSpace({ spaceId });
             if (space.status === "CREATE_FAILED" || space.status.startsWith("DELETE")) {
-              return yield* Effect.fail(
-                new RePostSpaceProvisioningFailed({
-                  spaceId,
-                  status: space.status,
-                }),
-              );
+              return yield* new RePostSpaceProvisioningFailed({
+                spaceId,
+                status: space.status,
+              });
             }
             if (space.status !== "CREATE_COMPLETED") {
-              return yield* Effect.fail(new RePostSpaceNotReady({ spaceId, status: space.status }));
+              return yield* new RePostSpaceNotReady({ spaceId, status: space.status });
             }
             return space;
           }),

@@ -352,7 +352,7 @@ const mutate = (
         ) {
           return;
         }
-        return yield* Effect.fail(error);
+        return yield* error;
       }),
     ),
   );

@@ -184,7 +184,7 @@ export const CustomPageProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findPageByName(acct, name);
                 if (existing && existing.uid) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

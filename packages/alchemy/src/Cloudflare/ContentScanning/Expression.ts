@@ -206,12 +206,10 @@ export const ExpressionProvider = () =>
         });
         observed = created.result.find((e) => e.payload === news.payload);
         if (!observed) {
-          return yield* Effect.fail(
-            new ExpressionCreateAnomaly({
-              zoneId,
-              payload: news.payload,
-            }),
-          );
+          return yield* new ExpressionCreateAnomaly({
+            zoneId,
+            payload: news.payload,
+          });
         }
       }
 

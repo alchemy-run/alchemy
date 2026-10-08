@@ -275,7 +275,7 @@ export const ObservabilityDestinationProvider = () =>
               Effect.gen(function* () {
                 const match = yield* findByName(accountId, name);
                 if (!match) {
-                  return yield* Effect.fail(originalError);
+                  return yield* originalError;
                 }
                 return match;
               }),

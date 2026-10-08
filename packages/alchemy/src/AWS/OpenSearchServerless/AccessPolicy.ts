@@ -210,11 +210,9 @@ export const AccessPolicyProvider = () =>
           }
 
           if (detail?.name === undefined) {
-            return yield* Effect.fail(
-              aoss.ResourceNotFoundException.make({
-                message: `access policy ${name} not visible after reconcile`,
-              }),
-            );
+            return yield* aoss.ResourceNotFoundException.make({
+              message: `access policy ${name} not visible after reconcile`,
+            });
           }
           yield* session.note(name);
           return toAttributes(detail);

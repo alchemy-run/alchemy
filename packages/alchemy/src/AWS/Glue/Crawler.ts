@@ -396,11 +396,9 @@ export const CrawlerProvider = () =>
             times: 15,
           });
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              glue.OperationTimeoutException.make({
-                message: `crawler ${name} remained visible after delete for 30 seconds`,
-              }),
-            );
+            return yield* glue.OperationTimeoutException.make({
+              message: `crawler ${name} remained visible after delete for 30 seconds`,
+            });
           }
         }),
       });

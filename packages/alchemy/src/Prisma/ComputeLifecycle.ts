@@ -150,18 +150,14 @@ export const waitForDeploymentStatus = Effect.fn(function* (
   const timeoutSeconds = options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
   const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* Effect.fail(
-      new PrismaDeploymentWaitInvalidOptions({
-        message: "timeoutSeconds must be a positive finite number.",
-      }),
-    );
+    return yield* new PrismaDeploymentWaitInvalidOptions({
+      message: "timeoutSeconds must be a positive finite number.",
+    });
   }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* Effect.fail(
-      new PrismaDeploymentWaitInvalidOptions({
-        message: "pollIntervalMs must be a positive finite number.",
-      }),
-    );
+    return yield* new PrismaDeploymentWaitInvalidOptions({
+      message: "pollIntervalMs must be a positive finite number.",
+    });
   }
   const timeoutMs = timeoutSeconds * 1_000;
   const startedAt = yield* Effect.sync(() => Date.now());
@@ -171,13 +167,13 @@ export const waitForDeploymentStatus = Effect.fn(function* (
   while (true) {
     const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
     if (remainingBeforeObservation <= 0) {
-      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
+      return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
     const deploymentOption = yield* observeDeployment(deploymentId).pipe(
       Effect.timeoutOption(Duration.millis(remainingBeforeObservation)),
     );
     if (Option.isNone(deploymentOption)) {
-      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
+      return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
     const deployment = deploymentOption.value;
     lastStatus = deployment.status;
@@ -185,16 +181,14 @@ export const waitForDeploymentStatus = Effect.fn(function* (
       return deployment satisfies ObservedDeployment;
     }
     if (deployment.status === "failed") {
-      return yield* Effect.fail(
-        new PrismaDeploymentFailed({
-          message: `Prisma deployment '${deploymentId}' failed`,
-        }),
-      );
+      return yield* new PrismaDeploymentFailed({
+        message: `Prisma deployment '${deploymentId}' failed`,
+      });
     }
 
     const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
     if (elapsed >= timeoutMs) {
-      return yield* Effect.fail(deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus));
+      return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
 
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
@@ -325,12 +319,10 @@ export const destroyProjectApps = Effect.fn(function* (
         const nextCursor = page.pagination.nextCursor;
         if (!page.pagination.hasMore) break;
         if (nextCursor === null) {
-          return yield* Effect.fail(
-            new PrismaPaginationError({
-              message:
-                "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
-            }),
-          );
+          return yield* new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
+          });
         }
         cursor = nextCursor;
       }
@@ -357,7 +349,7 @@ export const destroyProjectApps = Effect.fn(function* (
         Effect.catchTag("Conflict", (error) =>
           Effect.gen(function* () {
             if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
-              return yield* Effect.fail(error);
+              return yield* error;
             }
             yield* cleanupApps();
             yield* deleteRetryDelay(attempt);
@@ -367,7 +359,7 @@ export const destroyProjectApps = Effect.fn(function* (
         Effect.catchTag("BadRequest", (error) =>
           Effect.gen(function* () {
             if (attempt + 1 >= DELETE_CONFLICT_RETRY_ATTEMPTS) {
-              return yield* Effect.fail(error);
+              return yield* error;
             }
             yield* cleanupApps();
             yield* deleteRetryDelay(attempt);

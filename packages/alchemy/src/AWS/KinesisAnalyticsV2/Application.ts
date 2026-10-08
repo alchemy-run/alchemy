@@ -553,14 +553,14 @@ const waitForApplicationStable = (applicationName: string) =>
   Effect.gen(function* () {
     const detail = yield* describeApplicationDetail(applicationName);
     if (!detail) {
-      return yield* Effect.fail(new ApplicationNotStable({ applicationName, status: "MISSING" }));
+      return yield* new ApplicationNotStable({ applicationName, status: "MISSING" });
     }
     if (
       detail.ApplicationStatus !== "READY" &&
       detail.ApplicationStatus !== "RUNNING" &&
       detail.ApplicationStatus !== "ROLLED_BACK"
     ) {
-      return yield* Effect.fail(new ApplicationStatusPending({ status: detail.ApplicationStatus }));
+      return yield* new ApplicationStatusPending({ status: detail.ApplicationStatus });
     }
     return detail;
   }).pipe(
@@ -584,9 +584,9 @@ const waitForApplicationRunning = (applicationName: string) =>
       return detail!;
     }
     if (status === "STARTING" || status === "UPDATING") {
-      return yield* Effect.fail(new ApplicationStatusPending({ status }));
+      return yield* new ApplicationStatusPending({ status });
     }
-    return yield* Effect.fail(new ApplicationStartFailed({ applicationName, status }));
+    return yield* new ApplicationStartFailed({ applicationName, status });
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
@@ -606,7 +606,7 @@ const waitForApplicationStopped = (applicationName: string) =>
     if (status === "READY" || status === "ROLLED_BACK" || status === "MISSING") {
       return;
     }
-    return yield* Effect.fail(new ApplicationStatusPending({ status }));
+    return yield* new ApplicationStatusPending({ status });
   }).pipe(
     Effect.retry({
       while: (e: { _tag: string }) => e._tag === "ApplicationStatusPending",
@@ -623,7 +623,7 @@ const waitForApplicationDeleted = (applicationName: string) =>
   Effect.gen(function* () {
     const detail = yield* describeApplicationDetail(applicationName);
     if (detail !== undefined) {
-      return yield* Effect.fail(new ApplicationStillExists());
+      return yield* new ApplicationStillExists();
     }
   }).pipe(
     Effect.retry({
@@ -927,11 +927,9 @@ export const ApplicationProvider = () =>
           const { accountId } = yield* AWSEnvironment.current;
 
           if (!news?.code?.bucketArn || !news.code.fileKey) {
-            return yield* Effect.fail(
-              new ApplicationValidationError({
-                message: `Application "${id}" requires code.bucketArn and code.fileKey`,
-              }),
-            );
+            return yield* new ApplicationValidationError({
+              message: `Application "${id}" requires code.bucketArn and code.fileKey`,
+            });
           }
 
           const applicationName =
@@ -1244,11 +1242,9 @@ export const ApplicationProvider = () =>
           // 4. RETURN fresh attributes reflecting post-sync cloud state.
           const final = yield* readApplication({ applicationName, roleName });
           if (!final) {
-            return yield* Effect.fail(
-              new ApplicationValidationError({
-                message: `failed to read reconciled application ${applicationName}`,
-              }),
-            );
+            return yield* new ApplicationValidationError({
+              message: `failed to read reconciled application ${applicationName}`,
+            });
           }
           return final;
         }),

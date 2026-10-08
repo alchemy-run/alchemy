@@ -286,11 +286,9 @@ export const makeStreamingSource = (options?: {
     },
     push: (chunk) =>
       Effect.gen(function* () {
-        if (failure !== undefined) return yield* Effect.fail(failure);
+        if (failure !== undefined) return yield* failure;
         if (ended) {
-          return yield* Effect.fail(
-            StoreError.make({ reason: "streaming source: push after end" }),
-          );
+          return yield* StoreError.make({ reason: "streaming source: push after end" });
         }
         append(chunk);
         wake();

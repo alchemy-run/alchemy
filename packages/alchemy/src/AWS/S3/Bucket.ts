@@ -1821,13 +1821,13 @@ export const BucketProvider = () =>
                 // that still has content.
                 Effect.catchTag("BucketNotEmpty", (e) =>
                   Effect.gen(function* () {
-                    if (!mayEmpty) return yield* Effect.fail(e);
+                    if (!mayEmpty) return yield* e;
                     yield* deleteAllObjects(output.bucketName).pipe(
                       Effect.catchTag("NoSuchBucket", () => Effect.void),
                     );
                     // Re-fail with the original error so the retry policy
                     // drives the next DeleteBucket attempt.
-                    return yield* Effect.fail(e);
+                    return yield* e;
                   }),
                 ),
                 Effect.retry({
@@ -1927,7 +1927,7 @@ export const syncBucketEncryption = Effect.fn(function* (
     }),
   );
   if (!matches(observed)) {
-    return yield* Effect.fail(new BucketEncryptionNotConverged({ bucket }));
+    return yield* new BucketEncryptionNotConverged({ bucket });
   }
   return true;
 });

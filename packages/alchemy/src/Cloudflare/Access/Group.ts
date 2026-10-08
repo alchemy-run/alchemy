@@ -233,7 +233,7 @@ export const GroupProvider = () =>
               Effect.gen(function* () {
                 const existing = yield* findGroupByName(acct, name);
                 if (existing && existing.id) return existing;
-                return yield* Effect.fail(err);
+                return yield* err;
               }),
             ),
           );

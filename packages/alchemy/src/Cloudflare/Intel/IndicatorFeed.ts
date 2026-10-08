@@ -268,12 +268,10 @@ export const IndicatorFeedProvider = () =>
         }
       }
       if (!observed || observed.id == null) {
-        return yield* Effect.fail(
-          intel.IndicatorFeedNotFound.make({
-            code: 0,
-            message: `Indicator feed "${name}" was not observable after creation`,
-          }),
-        );
+        return yield* intel.IndicatorFeedNotFound.make({
+          code: 0,
+          message: `Indicator feed "${name}" was not observable after creation`,
+        });
       }
       const feedId = observed.id;
 
@@ -319,12 +317,10 @@ export const IndicatorFeedProvider = () =>
 
       const final = yield* getFeed(accountId, feedId);
       if (!final) {
-        return yield* Effect.fail(
-          intel.IndicatorFeedNotFound.make({
-            code: 0,
-            message: `Indicator feed ${feedId} disappeared during reconcile`,
-          }),
-        );
+        return yield* intel.IndicatorFeedNotFound.make({
+          code: 0,
+          message: `Indicator feed ${feedId} disappeared during reconcile`,
+        });
       }
       return toAttributes(final, accountId, snapshotHash);
     }),

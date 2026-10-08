@@ -296,7 +296,7 @@ export const make: (
 
       const url = server.resolvedUrls?.local[0];
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
 
       // Bounded readiness probe: any HTTP response counts (vite serves
@@ -329,9 +329,7 @@ export const readViteOutput = (options: {
     const fs = yield* FileSystem.FileSystem;
     const exists = yield* Effect.orElseSucceed(fs.exists(options.outDir), () => false);
     if (!exists) {
-      return yield* Effect.fail(
-        fail(`The Vite build produced no output directory at ${options.outDir}`),
-      );
+      return yield* fail(`The Vite build produced no output directory at ${options.outDir}`);
     }
     return {
       distDirectory: options.outDir,

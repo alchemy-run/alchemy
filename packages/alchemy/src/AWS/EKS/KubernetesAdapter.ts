@@ -439,11 +439,9 @@ export const EksKubernetesAdapter = () =>
         );
         const cluster = described?.cluster;
         if (!cluster || cluster.status === "DELETING") {
-          return yield* Effect.fail(
-            new ClusterNotFoundError({
-              message: `EKS cluster '${auth.clusterName}' no longer exists`,
-            }),
-          );
+          return yield* new ClusterNotFoundError({
+            message: `EKS cluster '${auth.clusterName}' no longer exists`,
+          });
         }
         return cluster;
       });

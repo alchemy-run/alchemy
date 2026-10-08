@@ -79,13 +79,11 @@ export const waitForBotSettled = Effect.fn("AWS.LexV2.waitForBotSettled")(functi
     (b) => !transientBotStatuses.has(b.botStatus ?? ""),
   );
   if (bot.botStatus === "Failed" || transientBotStatuses.has(bot.botStatus ?? "")) {
-    return yield* Effect.fail(
-      new LexOperationFailed({
-        resourceId: botId,
-        status: bot.botStatus ?? "unknown",
-        reasons: bot.failureReasons ?? [],
-      }),
-    );
+    return yield* new LexOperationFailed({
+      resourceId: botId,
+      status: bot.botStatus ?? "unknown",
+      reasons: bot.failureReasons ?? [],
+    });
   }
   return bot;
 });
@@ -109,13 +107,11 @@ export const waitForLocaleSettled = Effect.fn("AWS.LexV2.waitForLocaleSettled")(
     locale.botLocaleStatus === "Failed" ||
     transientLocaleStatuses.has(locale.botLocaleStatus ?? "")
   ) {
-    return yield* Effect.fail(
-      new LexOperationFailed({
-        resourceId: `${botId}/${localeId}`,
-        status: locale.botLocaleStatus ?? "unknown",
-        reasons: locale.failureReasons ?? [],
-      }),
-    );
+    return yield* new LexOperationFailed({
+      resourceId: `${botId}/${localeId}`,
+      status: locale.botLocaleStatus ?? "unknown",
+      reasons: locale.failureReasons ?? [],
+    });
   }
   return locale;
 });
@@ -136,13 +132,11 @@ export const waitForLocaleBuilt = Effect.fn("AWS.LexV2.waitForLocaleBuilt")(func
     { intervalSeconds: 5, times: 18 },
   );
   if (locale.botLocaleStatus !== "Built") {
-    return yield* Effect.fail(
-      new LexOperationFailed({
-        resourceId: `${botId}/${localeId}`,
-        status: locale.botLocaleStatus ?? "unknown",
-        reasons: locale.failureReasons ?? [],
-      }),
-    );
+    return yield* new LexOperationFailed({
+      resourceId: `${botId}/${localeId}`,
+      status: locale.botLocaleStatus ?? "unknown",
+      reasons: locale.failureReasons ?? [],
+    });
   }
   return locale;
 });
@@ -160,13 +154,11 @@ export const waitForAliasSettled = Effect.fn("AWS.LexV2.waitForAliasSettled")(fu
     (a) => a.botAliasStatus !== "Creating",
   );
   if (alias.botAliasStatus === "Failed" || alias.botAliasStatus === "Creating") {
-    return yield* Effect.fail(
-      new LexOperationFailed({
-        resourceId: `${botId}/${botAliasId}`,
-        status: alias.botAliasStatus ?? "unknown",
-        reasons: [],
-      }),
-    );
+    return yield* new LexOperationFailed({
+      resourceId: `${botId}/${botAliasId}`,
+      status: alias.botAliasStatus ?? "unknown",
+      reasons: [],
+    });
   }
   return alias;
 });

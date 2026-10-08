@@ -351,13 +351,11 @@ export const PlanetscaleAuth = AuthProviderLayer<
                 scopes: cfg.scopes,
               };
               if (!OAuthClient.usesCurrentClient(creds)) {
-                return yield* Effect.fail(
-                  NeedsReauth.make({
-                    provider: PLANETSCALE_AUTH_PROVIDER_NAME,
-                    profile: profileName,
-                    message: `Planetscale OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
-                  }),
-                );
+                return yield* NeedsReauth.make({
+                  provider: PLANETSCALE_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  message: `Planetscale OAuth credentials for profile '${profileName}' were issued to an incompatible OAuth client and have been removed. ${reauth}`,
+                });
               }
               // Refresh proactively if the token has expired (or is within
               // 10s of expiring). Persist the refreshed creds so subsequent

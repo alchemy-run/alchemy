@@ -86,24 +86,20 @@ export const validateAccountId = (
     const trimmed = accountId?.trim() ?? "";
     const command = yield* profileCommandHint("alchemy profile edit --reconfigure Cloudflare");
     if (trimmed.length === 0) {
-      return yield* Effect.fail(
-        AuthError.make({
-          message:
-            `Cloudflare account ID is missing (${source}). ` +
-            `Re-run \`${command}\` and provide your account ID ` +
-            "(found in the Cloudflare dashboard under Workers & Pages → Account details).",
-        }),
-      );
+      return yield* AuthError.make({
+        message:
+          `Cloudflare account ID is missing (${source}). ` +
+          `Re-run \`${command}\` and provide your account ID ` +
+          "(found in the Cloudflare dashboard under Workers & Pages → Account details).",
+      });
     }
     if (!ACCOUNT_ID_PATTERN.test(trimmed)) {
-      return yield* Effect.fail(
-        AuthError.make({
-          message:
-            `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
-            "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +
-            `and re-run \`${command}\`.`,
-        }),
-      );
+      return yield* AuthError.make({
+        message:
+          `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
+          "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +
+          `and re-run \`${command}\`.`,
+      });
     }
     return trimmed.toLowerCase();
   });
