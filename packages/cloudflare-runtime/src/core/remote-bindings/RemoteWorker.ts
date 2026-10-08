@@ -190,14 +190,15 @@ const sandboxApi = <A, E, R>(
         }),
       );
     }),
-    Effect.timeout(30_000),
-    Effect.catchTag("TimeoutError", () =>
-      Effect.fail(
-        ApiError.make({
-          subtag,
-          message,
-          hint: "The request timed out after 30 seconds.",
-        }),
-      ),
-    ),
+    Effect.timeoutOrElse({
+      duration: 30000,
+      orElse: () =>
+        Effect.fail(
+          ApiError.make({
+            subtag,
+            message,
+            hint: "The request timed out after 30 seconds.",
+          }),
+        ),
+    }),
   );
