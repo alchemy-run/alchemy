@@ -213,19 +213,17 @@ export const DataAutomationLibraryProvider = () =>
                 Effect.catchTag("ConflictException", (conflict) =>
                   Effect.gen(function* () {
                     const arn = yield* findLibraryArn(libraryName);
-                    return arn === undefined ? yield* Effect.fail(conflict) : arn;
+                    return arn === undefined ? yield* conflict : arn;
                   }),
                 ),
               );
             live = createdArn === undefined ? undefined : yield* observeLibrary(createdArn);
           }
           if (live === undefined) {
-            return yield* Effect.fail(
-              new DataAutomationLibraryNotObservable({
-                libraryName,
-                message: `Data Automation library '${libraryName}' was not observable after create`,
-              }),
-            );
+            return yield* new DataAutomationLibraryNotObservable({
+              libraryName,
+              message: `Data Automation library '${libraryName}' was not observable after create`,
+            });
           }
 
           // 3. SYNC — diff the OBSERVED description against the desired one;

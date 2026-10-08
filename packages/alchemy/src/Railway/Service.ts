@@ -316,7 +316,8 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
       inner(
         (options?.shape === undefined
           ? handler
-          : serveRailwayRpc(options.shape, handler as HttpEffect)) as typeof handler,
+          : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the RPC server provides the request service at call time
+            serveRailwayRpc(options.shape, handler as HttpEffect)) as typeof handler,
         options,
       )) as ServiceRuntimeContext["serve"],
   });

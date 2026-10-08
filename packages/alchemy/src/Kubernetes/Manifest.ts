@@ -256,7 +256,7 @@ export const ManifestProvider = () =>
           yield* deleteObject({ transport, object: output.ref }).pipe(
             // Tolerate any residual API failure so delete stays idempotent
             // (e.g. the CRD backing an object was removed before the object).
-            Effect.catch(() => Effect.void),
+            Effect.ignore,
           );
         }),
       };

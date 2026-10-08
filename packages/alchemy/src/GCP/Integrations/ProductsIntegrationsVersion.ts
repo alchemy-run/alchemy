@@ -249,9 +249,11 @@ const deleteIntegration = (name: string) =>
   name.length === 0
     ? Effect.void
     : integrations.deleteProjectsLocationsIntegrations({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-        Effect.catchTag("BadRequest", () => Effect.void),
-        Effect.catchTag("Conflict", () => Effect.void),
+        Effect.catchTags({
+          NotFound: () => Effect.void,
+          BadRequest: () => Effect.void,
+          Conflict: () => Effect.void,
+        }),
       );
 
 export const ProductsIntegrationsVersionProvider = () =>
@@ -415,9 +417,11 @@ export const ProductsIntegrationsVersionProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchTag("BadRequest", () => Effect.void),
-          Effect.catchTag("Conflict", () => Effect.void),
+          Effect.catchTags({
+            NotFound: () => Effect.void,
+            BadRequest: () => Effect.void,
+            Conflict: () => Effect.void,
+          }),
         );
       const stripped = `${locationParent(output.project, output.location)}/integrations/${output.integrationId}`;
       yield* deleteIntegration(output.integration);

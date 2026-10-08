@@ -241,8 +241,10 @@ export const TotalTlsProvider = () =>
           certificateAuthority: initialCertificateAuthority,
         })
         .pipe(
-          Effect.catchTag("InvalidObjectIdentifier", () => Effect.void),
-          Effect.catchTag("NoStateChange", () => Effect.void),
+          Effect.catchTags({
+            InvalidObjectIdentifier: () => Effect.void,
+            NoStateChange: () => Effect.void,
+          }),
           // The zone lost its ACM entitlement since we configured it —
           // Cloudflare already refuses Total TLS writes, so there is
           // nothing left to restore.

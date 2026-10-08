@@ -129,13 +129,11 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
   );
 
   if (result.exitCode !== 0) {
-    return yield* Effect.fail(
-      new HelmError({
-        message:
-          `helm ${args.join(" ")} exited with code ${String(result.exitCode)}: ` +
-          result.stderr.trim(),
-      }),
-    );
+    return yield* new HelmError({
+      message:
+        `helm ${args.join(" ")} exited with code ${String(result.exitCode)}: ` +
+        result.stderr.trim(),
+    });
   }
 
   return yield* parseRenderedManifests(options.chart, result.stdout);
@@ -183,26 +181,20 @@ export const parseRenderedManifests = (
       // (conditionals, whitespace) — skip them.
       if (value === null || value === undefined) continue;
       if (typeof value !== "object" || Array.isArray(value)) {
-        return yield* Effect.fail(
-          new HelmError({
-            message: `Chart '${chart}' rendered a non-object YAML document: ${JSON.stringify(value)}`,
-          }),
-        );
+        return yield* new HelmError({
+          message: `Chart '${chart}' rendered a non-object YAML document: ${JSON.stringify(value)}`,
+        });
       }
       const object = value as Partial<KubernetesObjectDefinition>;
       if (typeof object.apiVersion !== "string" || typeof object.kind !== "string") {
-        return yield* Effect.fail(
-          new HelmError({
-            message: `Chart '${chart}' rendered an object without apiVersion/kind: ${JSON.stringify(value).slice(0, 200)}`,
-          }),
-        );
+        return yield* new HelmError({
+          message: `Chart '${chart}' rendered an object without apiVersion/kind: ${JSON.stringify(value).slice(0, 200)}`,
+        });
       }
       if (typeof object.metadata?.name !== "string") {
-        return yield* Effect.fail(
-          new HelmError({
-            message: `Chart '${chart}' rendered a ${object.apiVersion}/${object.kind} without metadata.name — server-side apply requires a concrete name (generateName is not supported)`,
-          }),
-        );
+        return yield* new HelmError({
+          message: `Chart '${chart}' rendered a ${object.apiVersion}/${object.kind} without metadata.name — server-side apply requires a concrete name (generateName is not supported)`,
+        });
       }
       const definition = object as KubernetesObjectDefinition;
       if (isHelmHook(definition)) continue;

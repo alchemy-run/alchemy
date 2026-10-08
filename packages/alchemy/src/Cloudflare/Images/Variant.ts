@@ -257,12 +257,10 @@ export const VariantProvider = () =>
         // Create succeeded but neither the response body nor a re-read
         // surfaced the variant — eventual-consistency blip; fail typed so
         // the engine can retry the reconcile.
-        return yield* Effect.fail(
-          new images.VariantNotFound({
-            code: 5401,
-            message: `variant ${name} not observable after create`,
-          }),
-        );
+        return yield* images.VariantNotFound.make({
+          code: 5401,
+          message: `variant ${name} not observable after create`,
+        });
       }
 
       // 3. Sync — diff observed options against desired; PATCH requires the

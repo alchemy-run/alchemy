@@ -109,8 +109,10 @@ export const MetricStreamProvider = () =>
             Name: name,
           })
           .pipe(
-            Effect.catchTag("InvalidParameterValueException", () => Effect.succeed(undefined)),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTags({
+              InvalidParameterValueException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.succeed(undefined),
+            }),
           );
 
         if (!output?.Name || !output.Arn) {
@@ -118,8 +120,10 @@ export const MetricStreamProvider = () =>
         }
 
         const tags = yield* readResourceTags(output.Arn).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({})),
-          Effect.catchTag("InvalidParameterValueException", () => Effect.succeed({})),
+          Effect.catchTags({
+            ResourceNotFoundException: () => Effect.succeed({}),
+            InvalidParameterValueException: () => Effect.succeed({}),
+          }),
         );
 
         return {

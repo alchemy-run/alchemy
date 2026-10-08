@@ -215,12 +215,10 @@ export const DataAutomationProjectProvider = () =>
           repeatUntilProjectSettled,
         );
         if (settled !== undefined && settled.status === "FAILED") {
-          return yield* Effect.fail(
-            new DataAutomationProjectFailed({
-              projectArn,
-              message: `Data Automation project '${projectArn}' reached status FAILED`,
-            }),
-          );
+          return yield* new DataAutomationProjectFailed({
+            projectArn,
+            message: `Data Automation project '${projectArn}' reached status FAILED`,
+          });
         }
         return settled;
       });
@@ -303,19 +301,17 @@ export const DataAutomationProjectProvider = () =>
                 Effect.catchTag("ConflictException", (conflict) =>
                   Effect.gen(function* () {
                     const arn = yield* findProjectArn(projectName);
-                    return arn === undefined ? yield* Effect.fail(conflict) : arn;
+                    return arn === undefined ? yield* conflict : arn;
                   }),
                 ),
               );
             live = yield* waitForSettled(projectArn, news.projectStage);
           }
           if (live === undefined) {
-            return yield* Effect.fail(
-              new DataAutomationProjectFailed({
-                projectArn: cachedArn ?? projectName,
-                message: `Data Automation project '${projectName}' was not observable after create`,
-              }),
-            );
+            return yield* new DataAutomationProjectFailed({
+              projectArn: cachedArn ?? projectName,
+              message: `Data Automation project '${projectName}' was not observable after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED configuration against desired; apply the

@@ -92,7 +92,9 @@ export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = n
         db as Effect.Effect<
           EffectPgDatabase<TRelations> & {
             $client: PgClient.PgClient;
-          }
+          },
+          any,
+          any
         >,
       ),
   );

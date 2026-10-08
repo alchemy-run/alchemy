@@ -264,22 +264,19 @@ export const FeatureGroupsFeatureProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const groups = yield* Stream.fromIterable(listLocations(env.region))
-          .pipe(
-            Stream.flatMap((location) =>
-              aiplatform.listProjectsLocationsFeatureGroups.pages({
-                parent: `projects/${env.project}/locations/${location}`,
-                pageSize: 100,
-              }),
-            ),
-          )
-          .pipe(
-            Stream.flatMap((page) => Stream.fromIterable(page.featureGroups ?? [])),
-            Stream.filter((group) => hasAlchemyLabelMap(group.labels)),
-            Stream.runCollect,
-            Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () => Effect.succeed([])),
-          );
+        const groups = yield* Stream.fromIterable(listLocations(env.region)).pipe(
+          Stream.flatMap((location) =>
+            aiplatform.listProjectsLocationsFeatureGroups.pages({
+              parent: `projects/${env.project}/locations/${location}`,
+              pageSize: 100,
+            }),
+          ),
+          Stream.flatMap((page) => Stream.fromIterable(page.featureGroups ?? [])),
+          Stream.filter((group) => hasAlchemyLabelMap(group.labels)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag("NotFound", () => Effect.succeed([])),
+        );
         const nested = yield* Effect.forEach(
           groups,
           (group) => (group.name ? listFeaturesUnder(group.name, env.project) : Effect.succeed([])),

@@ -424,11 +424,9 @@ export const DeviceDefaultProfileProvider = () =>
 // reconciler treats an empty list as "no entries" rather than failing.
 const listOrEmpty = <A, Err, Req>(op: Effect.Effect<{ result?: readonly A[] | null }, Err, Req>) =>
   op.pipe(
-    Effect.catch(() =>
-      Effect.succeed({
-        result: [] as readonly A[],
-      }),
-    ),
+    Effect.orElseSucceed(() => ({
+      result: [] as readonly A[],
+    })),
   );
 
 const observe = Effect.fn(function* () {

@@ -805,7 +805,7 @@ export const Compute: Platform<
               yield* httpServer.serve(
                 handler.pipe(Effect.provideService(RuntimeContext, runtimeContext)),
               );
-              yield* Effect.never;
+              return yield* Effect.never;
             }
           }).pipe(Effect.catch((error: unknown) => Effect.die(error))),
         );
@@ -925,12 +925,10 @@ const listBranches = (projectId: string, gitName?: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -949,12 +947,10 @@ const listApps = (projectId: string) =>
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -1311,7 +1307,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       }),
       Effect.timeoutOption(Duration.millis(requestTimeoutMs)),
       Effect.map(Option.getOrUndefined),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (response) {
       lastStatus = response.status;
@@ -1327,7 +1323,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       if (remainingBeforeBody > 0) {
         const bodyPrefix = yield* readResponseBodyPrefix(response).pipe(
           Effect.timeoutOption(Duration.millis(Math.min(2_000, remainingBeforeBody))),
-          Effect.catch(() => Effect.succeed(Option.none<string>())),
+          Effect.orElseSucceed(() => Option.none<string>()),
         );
         if (Option.isSome(bodyPrefix)) {
           lastBody = bodyPrefix.value;
@@ -1429,7 +1425,7 @@ const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
     return {
       directory,
       entrypoint: normalizedFiles[0].normalizedPath,
-      cleanup: fs.remove(directory, { recursive: true }).pipe(Effect.catch(() => Effect.void)),
+      cleanup: fs.remove(directory, { recursive: true }).pipe(Effect.ignore),
     };
   }).pipe(Effect.onError(() => fs.remove(directory, { recursive: true }).pipe(Effect.ignore)));
 });
@@ -1791,12 +1787,10 @@ const findEnvironmentVariable = (
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
       if (nextCursor === null) {
-        return yield* Effect.fail(
-          new PrismaPaginationError({
-            message:
-              "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
-          }),
-        );
+        return yield* new PrismaPaginationError({
+          message:
+            "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
+        });
       }
       cursor = nextCursor;
     }
@@ -2123,17 +2117,18 @@ const ProviderLive = () =>
         read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.local) return output;
           const appId = output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
+          const findAppInProject = Effect.gen(function* () {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            return projectId
+              ? yield* findApp(projectId, yield* createAppName(id, olds.appName), olds)
+              : undefined;
+          });
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
-                  ? yield* findApp(projectId, yield* createAppName(id, olds.appName), olds)
-                  : undefined;
-              });
+            : yield* findAppInProject;
           if (!app) return undefined;
           const readDeployment = (id: string) =>
             observeDeployment(id).pipe(
@@ -2222,15 +2217,13 @@ const ProviderLive = () =>
           const cleanupCreatedAppOnFailure = (error: unknown) =>
             ensuredApp.created && !preserveCreatedAppOnFailure
               ? destroyApp(app.id).pipe(
-                  Effect.catch((cleanupError) =>
-                    Effect.fail(
-                      aggregateCleanupFailure(
-                        "App",
-                        app.id,
-                        `/v1/services/${app.id}`,
-                        error,
-                        cleanupError,
-                      ),
+                  Effect.mapError((cleanupError) =>
+                    aggregateCleanupFailure(
+                      "App",
+                      app.id,
+                      `/v1/services/${app.id}`,
+                      error,
+                      cleanupError,
                     ),
                   ),
                   Effect.andThen(() => Effect.fail(error)),
@@ -2352,13 +2345,12 @@ const ProviderLive = () =>
 
               app = observedAfterRollback.success;
               yield* destroyDeployment(displacedDeploymentId, effectiveNews).pipe(
-                Effect.catch((cleanupError) =>
-                  Effect.fail(
+                Effect.mapError(
+                  (cleanupError) =>
                     new AggregateError(
                       [...(Result.isFailure(rollback) ? [rollback.failure] : []), cleanupError],
                       `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
                     ),
-                  ),
                 ),
               );
             }
@@ -2441,15 +2433,13 @@ const ProviderLive = () =>
             ) =>
               createdDeploymentId === failedDeploymentId
                 ? destroyDeployment(failedDeploymentId, effectiveNews).pipe(
-                    Effect.catch((cleanupError) =>
-                      Effect.fail(
-                        aggregateCleanupFailure(
-                          "deployment",
-                          failedDeploymentId,
-                          `/v1/deployments/${failedDeploymentId}`,
-                          error,
-                          cleanupError,
-                        ),
+                    Effect.mapError((cleanupError) =>
+                      aggregateCleanupFailure(
+                        "deployment",
+                        failedDeploymentId,
+                        `/v1/deployments/${failedDeploymentId}`,
+                        error,
+                        cleanupError,
                       ),
                     ),
                     Effect.andThen(() => Effect.fail(error)),

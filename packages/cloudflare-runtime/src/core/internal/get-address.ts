@@ -26,7 +26,7 @@ export const getAddress = (server: NodeHttp.Server): Effect.Effect<string, Syste
   const address = server.address();
   if (address === null) {
     return Effect.fail(
-      new SystemError({
+      SystemError.make({
         subtag: "ServerAddressNotAvailable",
         message: "Server address is not available.",
         detail: { server },

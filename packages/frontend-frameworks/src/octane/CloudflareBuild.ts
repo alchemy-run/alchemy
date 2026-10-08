@@ -94,9 +94,7 @@ export const clientPlugins = (
     for (const option of options) yield* visit(option);
     const octane = plugins.filter((plugin) => plugin.name === "@octanejs/vite-plugin");
     if (octane.length !== 1 || octane[0]?.closeBundle === undefined) {
-      return yield* Effect.fail(
-        fail("Expected one native octane() Vite plugin with a server build hook"),
-      );
+      return yield* fail("Expected one native octane() Vite plugin with a server build hook");
     }
     return plugins.map((plugin) =>
       plugin === octane[0] ? { ...plugin, closeBundle: undefined } : plugin,
@@ -153,13 +151,11 @@ export const buildCloudflare = (rootDirectory: string) =>
         catch: (cause) => fail("Failed to load octane.config.ts", cause),
       });
       if (config === null || config.router.routes.length === 0) {
-        return yield* Effect.fail(
-          fail("A fullstack Octane app with octane.config.ts routes is required"),
-        );
+        return yield* fail("A fullstack Octane app with octane.config.ts routes is required");
       }
       if (config.adapter !== undefined && config.adapter.name !== "cloudflare") {
-        return yield* Effect.fail(
-          fail(`The Octane adapter "${config.adapter.name}" is incompatible with Cloudflare`),
+        return yield* fail(
+          `The Octane adapter "${config.adapter.name}" is incompatible with Cloudflare`,
         );
       }
       const entries = yield* Effect.sync(() => [
@@ -188,9 +184,7 @@ export const buildCloudflare = (rootDirectory: string) =>
       const clientConfig = yield* loadConfig(false);
       const plugins = yield* clientPlugins(clientConfig.plugins ?? []);
       if (clientConfig.root !== undefined && path.resolve(root, clientConfig.root) !== root) {
-        return yield* Effect.fail(
-          fail("Set rootDir to the Octane app root instead of overriding Vite root"),
-        );
+        return yield* fail("Set rootDir to the Octane app root instead of overriding Vite root");
       }
       let clientDir = path.resolve(root, config.build.outDir, "client");
       const rpcModules = new Set<string>();

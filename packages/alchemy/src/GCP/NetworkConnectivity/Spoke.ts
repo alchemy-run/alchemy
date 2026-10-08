@@ -772,8 +772,10 @@ const waitUntilHubDropsSpoke = (hub: string, spokeName: string) =>
         times: 8,
         schedule: Schedule.spaced("3 seconds"),
       }),
-      Effect.catchTag("GCP.NetworkConnectivity.SpokeStillExists", () => Effect.void),
-      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.catchTags({
+        "GCP.NetworkConnectivity.SpokeStillExists": () => Effect.void,
+        NotFound: () => Effect.void,
+      }),
     );
 
 const waitUntilHubDropsVpc = (hub: string, networkKey: string) => {
@@ -790,8 +792,10 @@ const waitUntilHubDropsVpc = (hub: string, networkKey: string) => {
       times: 8,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("GCP.NetworkConnectivity.SpokeStillExists", () => Effect.void),
-    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.catchTags({
+      "GCP.NetworkConnectivity.SpokeStillExists": () => Effect.void,
+      NotFound: () => Effect.void,
+    }),
   );
 };
 

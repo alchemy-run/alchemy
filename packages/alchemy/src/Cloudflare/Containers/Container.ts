@@ -674,6 +674,7 @@ export const Container: ResourceClassLike<ContainerApplication> &
         // the unresolved lookup and let `bindContainerClass` await it.
         "~alchemy/Container/ClassName": Effect.isEffect(props)
           ? Effect.map(
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
               props as Effect.Effect<{ className?: string } | undefined>,
               (resolved) => resolved?.className,
             )

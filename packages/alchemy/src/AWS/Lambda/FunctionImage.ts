@@ -54,8 +54,8 @@ export type FunctionImageSource = FunctionDockerImageSource | FunctionEcrImageSo
 // Instruction overrides ride along on the source object; they are function
 // configuration, not image identity, so they never enter the image hash.
 const FunctionImageConfigFields = {
-  command: Schema.optionalKey(Schema.Array(Schema.String)),
-  entryPoint: Schema.optionalKey(Schema.Array(Schema.String)),
+  command: Schema.String.pipe(Schema.Array, Schema.optionalKey),
+  entryPoint: Schema.String.pipe(Schema.Array, Schema.optionalKey),
   workingDirectory: Schema.optionalKey(Schema.String),
 };
 
@@ -130,7 +130,7 @@ export const parseFunctionImageUri = Effect.fn("AWS.Lambda.parseImageUri")(funct
     return yield* Effect.fail(new Error(`Function(${id}): image.uri has no ECR repository name`));
   }
 
-  const imageId = yield* Effect.gen(function* () {
+  const resolveImageId = Effect.gen(function* () {
     if (digestSeparator >= 0) {
       const imageDigest = reference.slice(digestSeparator + 1);
       if (!/^sha256:[0-9a-f]{64}$/.test(imageDigest)) {
@@ -149,6 +149,7 @@ export const parseFunctionImageUri = Effect.fn("AWS.Lambda.parseImageUri")(funct
     }
     return { imageTag: reference.slice(tagSeparator + 1) } as const;
   });
+  const imageId = yield* resolveImageId;
 
   return {
     uri,

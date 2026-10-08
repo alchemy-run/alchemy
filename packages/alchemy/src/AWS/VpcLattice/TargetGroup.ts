@@ -327,9 +327,7 @@ export const TargetGroupProvider = () =>
           );
           const unsuccessful = result.unsuccessful ?? [];
           if (unsuccessful.length > 0) {
-            return yield* Effect.fail(
-              new TargetRegistrationFailed({ targetGroupId, unsuccessful }),
-            );
+            return yield* new TargetRegistrationFailed({ targetGroupId, unsuccessful });
           }
         }
       });

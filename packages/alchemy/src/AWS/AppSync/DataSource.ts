@@ -399,18 +399,16 @@ export const DataSourceProvider = () =>
           // 2. ENSURE — a fresh role can take a few seconds to become
           //    assumable by AppSync.
           if (observed?.name == null) {
-            const created = yield* retryWhileRolePropagates(
-              retryConcurrentModification(
-                appsync.createDataSource({
-                  apiId,
-                  name,
-                  description: news.description,
-                  type: news.type,
-                  serviceRoleArn,
-                  ...configs,
-                }),
-              ),
-            );
+            const created = yield* appsync
+              .createDataSource({
+                apiId,
+                name,
+                description: news.description,
+                type: news.type,
+                serviceRoleArn,
+                ...configs,
+              })
+              .pipe(retryConcurrentModification, retryWhileRolePropagates);
             observed = created.dataSource!;
             yield* session.note(`Created data source ${name}`);
           } else {
@@ -450,18 +448,16 @@ export const DataSourceProvider = () =>
               ...configs,
             });
             if (!deepEqual(surface(observed), desired)) {
-              const updated = yield* retryWhileRolePropagates(
-                retryConcurrentModification(
-                  appsync.updateDataSource({
-                    apiId,
-                    name,
-                    description: news.description,
-                    type: news.type,
-                    serviceRoleArn,
-                    ...configs,
-                  }),
-                ),
-              );
+              const updated = yield* appsync
+                .updateDataSource({
+                  apiId,
+                  name,
+                  description: news.description,
+                  type: news.type,
+                  serviceRoleArn,
+                  ...configs,
+                })
+                .pipe(retryConcurrentModification, retryWhileRolePropagates);
               observed = updated.dataSource ?? observed;
               yield* session.note(`Updated data source ${name}`);
             }

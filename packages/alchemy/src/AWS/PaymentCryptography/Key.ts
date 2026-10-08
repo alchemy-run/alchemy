@@ -253,7 +253,7 @@ const fetchKeyTags = (keyArn: string) =>
   paymentcryptography.listTagsForResource.items({ ResourceArn: keyArn }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => tagsToRecord(Array.from(chunk))),
-    Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+    Effect.orElseSucceed(() => ({}) as Record<string, string>),
   );
 
 export const KeyProvider = () =>
@@ -411,20 +411,21 @@ export const KeyProvider = () =>
               DeleteKeyInDays: toWireDays(olds.deleteWindow) ?? 3,
             })
             .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              // A key already scheduled for deletion rejects a second
-              // DeleteKey with a conflict — that is the desired end state,
-              // so treat it as success. Any other conflict is re-raised.
-              Effect.catchTag("ConflictException", (error) =>
-                paymentcryptography.getKey({ KeyIdentifier: output.keyArn }).pipe(
-                  Effect.flatMap((r) =>
-                    r.Key.KeyState === "DELETE_PENDING" || r.Key.KeyState === "DELETE_COMPLETE"
-                      ? Effect.void
-                      : Effect.fail(error),
+              Effect.catchTags({
+                ResourceNotFoundException: () => Effect.void,
+                // A key already scheduled for deletion rejects a second
+                // DeleteKey with a conflict — that is the desired end state,
+                // so treat it as success. Any other conflict is re-raised.
+                ConflictException: (error) =>
+                  paymentcryptography.getKey({ KeyIdentifier: output.keyArn }).pipe(
+                    Effect.flatMap((r) =>
+                      r.Key.KeyState === "DELETE_PENDING" || r.Key.KeyState === "DELETE_COMPLETE"
+                        ? Effect.void
+                        : Effect.fail(error),
+                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-                ),
-              ),
+              }),
             );
         }),
       });
