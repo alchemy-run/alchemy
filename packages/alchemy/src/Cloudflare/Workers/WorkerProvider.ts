@@ -5284,7 +5284,7 @@ export const LiveWorkerProvider = () =>
                 ),
               ),
               previousRedirects: redirects,
-            }).pipe(Effect.catch(() => Effect.void));
+            }).pipe(Effect.ignore);
           }
           if (liveDomains.length) {
             yield* Effect.all(

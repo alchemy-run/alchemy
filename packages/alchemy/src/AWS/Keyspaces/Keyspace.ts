@@ -213,7 +213,7 @@ export const KeyspaceProvider = () =>
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
-            Effect.catch(() => Effect.void),
+            Effect.ignore,
           );
         }),
 

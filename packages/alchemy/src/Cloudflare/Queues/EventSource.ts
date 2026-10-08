@@ -243,7 +243,7 @@ export const EventSourceLive = Layer.effect(
                 for (const msg of batch.messages) msg.retry();
               }),
             ),
-            Effect.catchCause(() => Effect.void),
+            Effect.ignoreCause,
           );
         });
       });

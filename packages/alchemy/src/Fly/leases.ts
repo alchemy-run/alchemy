@@ -401,11 +401,11 @@ export const makeMachineLeases = Effect.fn(function* (appName: string) {
         yield* Effect.sleep(Math.max(0, lease.renewAt - now));
         lease = yield* refresh(machineId, lease);
       }
-    }).pipe(Effect.catch(() => Effect.void));
+    }).pipe(Effect.ignore);
   yield* Effect.sleep("1 second").pipe(
     Effect.andThen(check),
     Effect.forever,
-    Effect.catch(() => Effect.void),
+    Effect.ignore,
     Effect.forkScoped,
   );
   const checkTarget = (machineId: string) => nonce(machineId).pipe(Effect.asVoid);

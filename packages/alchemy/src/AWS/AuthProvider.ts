@@ -1176,5 +1176,5 @@ const clearDistilledSsoCache = (ssoProfile: string) =>
       "cache",
       `${hash}.credentials.json`,
     );
-    yield* fs.remove(cacheFile).pipe(Effect.catch(() => Effect.void));
-  }).pipe(Effect.catch(() => Effect.void));
+    yield* fs.remove(cacheFile).pipe(Effect.ignore);
+  }).pipe(Effect.ignore);

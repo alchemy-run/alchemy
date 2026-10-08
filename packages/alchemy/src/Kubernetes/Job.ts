@@ -678,7 +678,7 @@ export const JobProvider = () =>
             yield* deleteObjects({
               transport,
               objects: output.kubernetesObjects ?? [],
-            }).pipe(Effect.catch(() => Effect.void));
+            }).pipe(Effect.ignore);
           }
 
           if (adapter.identity) {

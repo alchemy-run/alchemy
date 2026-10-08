@@ -109,7 +109,7 @@ const withPostgresClient = <A, E, R>(
         Effect.tryPromise({
           try: () => client.end(),
           catch: toMigrationError,
-        }).pipe(Effect.catch(() => Effect.void)),
+        }).pipe(Effect.ignore),
     ),
   );
 

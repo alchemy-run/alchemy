@@ -833,7 +833,7 @@ export const DeploymentProvider = () =>
             .pipe(Effect.orElseSucceed(() => undefined));
           if (transport && (output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({ transport, objects: output.kubernetesObjects ?? [] }).pipe(
-              Effect.catch(() => Effect.void),
+              Effect.ignore,
             );
             // A LoadBalancer Service carries the cloud controller's cleanup
             // finalizer; wait for it so the cloud load balancer is gone
@@ -841,8 +841,7 @@ export const DeploymentProvider = () =>
             // deleting the cluster first leaks the load balancer.
             yield* Effect.forEach(
               (output.kubernetesObjects ?? []).filter((object) => object.kind === "Service"),
-              (service) =>
-                waitForServiceGone(transport, service).pipe(Effect.catch(() => Effect.void)),
+              (service) => waitForServiceGone(transport, service).pipe(Effect.ignore),
               { discard: true },
             );
           }

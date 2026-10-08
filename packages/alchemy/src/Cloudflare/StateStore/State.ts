@@ -1087,4 +1087,4 @@ const annotateAccountHash = (noTrack?: boolean) =>
     if (env._tag !== "Some") return;
     const hash = yield* hashAccountId((yield* env.value).accountId);
     yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
-  }).pipe(Effect.catch(() => Effect.void));
+  }).pipe(Effect.ignore);

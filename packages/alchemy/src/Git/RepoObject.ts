@@ -3803,7 +3803,7 @@ export const GitRepoLive = GitRepo.make(
             ? undefined
             : (JSON.parse(pendingRaw) as { keys: Array<string>; at: number });
         if (pending !== undefined && Date.now() - pending.at > 60_000) {
-          yield* blobs.delete(pending.keys).pipe(Effect.catch(() => Effect.void));
+          yield* blobs.delete(pending.keys).pipe(Effect.ignore);
           yield* setConfig("packs_pending_delete", "");
         }
         const outcome = yield* runCompactJob({
@@ -4157,7 +4157,7 @@ export const GitRepoLive = GitRepo.make(
           yield* setConfig("status", "deleting");
           // Kill the DO-less fast path NOW — the prefix drain gets the
           // rest, but anonymous reads must stop serving immediately.
-          yield* blobs.delete(headKey(meta.repoId)).pipe(Effect.catch(() => Effect.void));
+          yield* blobs.delete(headKey(meta.repoId)).pipe(Effect.ignore);
           yield* refreshSummary;
           yield* upsertJob("purge", null);
           yield* armAlarmAt(Date.now());

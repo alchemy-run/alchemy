@@ -1425,7 +1425,7 @@ const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
     return {
       directory,
       entrypoint: normalizedFiles[0].normalizedPath,
-      cleanup: fs.remove(directory, { recursive: true }).pipe(Effect.catch(() => Effect.void)),
+      cleanup: fs.remove(directory, { recursive: true }).pipe(Effect.ignore),
     };
   }).pipe(Effect.onError(() => fs.remove(directory, { recursive: true }).pipe(Effect.ignore)));
 });
