@@ -704,8 +704,8 @@ const hoistBootstrapStack = Effect.fn(function* ({
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
  * `FileSystem`.
  */
-export const loginWithCloudflare = (profileName: string, force: boolean) =>
-  Effect.gen(function* () {
+export const loginWithCloudflare = Effect.fn("state_store.login")(
+  function* (profileName: string, force: boolean) {
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
     const { accountId } = yield* yield* CloudflareEnvironment.CloudflareEnvironment;
@@ -785,22 +785,16 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     );
     if (!isCI) yield* interaction.output.info(`  url:     ${credentials.url}`);
     return credentials;
-  }).pipe(
-    Effect.catchTag("EdgeSessionError", (e) =>
-      Effect.fail(
-        AuthError.make({
-          message: `Edge-preview secret read failed: ${e.message}`,
-          cause: e.cause,
-        }),
-      ),
+  },
+  Effect.catchTag("EdgeSessionError", (e) =>
+    Effect.fail(
+      AuthError.make({
+        message: `Edge-preview secret read failed: ${e.message}`,
+        cause: e.cause,
+      }),
     ),
-    Effect.withSpan("state_store.login", {
-      attributes: {
-        "alchemy.state_store.op": "login",
-        "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
-      },
-    }),
-  );
+  ),
+);
 
 const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
   Effect.gen(function* () {
@@ -889,51 +883,46 @@ const waitForStateStoreVersion = (url: string) =>
     }),
   );
 
-const checkStateStoreVersion = (url: string) =>
-  Effect.gen(function* () {
-    const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
-    const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
-    // The /version route may 404 transiently after a fresh deploy
-    // while Cloudflare propagates the new script to the edge, and may
-    // also surface transport-level blips on cold workers.dev hosts.
-    // Retry the probe itself for ~10s before giving up — only after
-    // exhausting that budget do we collapse to `undefined` and let
-    // the caller treat it as a version mismatch.
-    const result = yield* client.version.getVersion().pipe(
-      Effect.catchTag("HttpClientError", (e) =>
-        // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
-        // we should do a check to see if it does
-        e.response?.status === 404
-          ? isAvailable.pipe(
-              Effect.flatMap((isAvailable) =>
-                // if the worker is available, then we should assume it was recently created and retry by propagating the error
-                // otherwise, return undefined (we don't know the version, there is no worker)
-                isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
-              ),
-            )
-          : Effect.fail(e),
-      ),
-      Effect.retry({
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
-      }),
-      Effect.orElseSucceed(() => undefined),
-    );
-    const matches = result?.version === STATE_STORE_VERSION;
-    yield* Effect.annotateCurrentSpan({
-      "alchemy.state_store.expected_version": STATE_STORE_VERSION,
-      "alchemy.state_store.observed_version": result?.version ?? -1,
-      "alchemy.state_store.version_match": matches,
-    });
-    return {
-      matches,
-      expected: STATE_STORE_VERSION,
-      observed: result?.version,
-    };
-  }).pipe(
-    Effect.withSpan("state_store.check_version", {
-      attributes: { "alchemy.state_store.op": "check_version" },
+const checkStateStoreVersion = Effect.fn("state_store.check_version")(function* (url: string) {
+  const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+  const isAvailable = yield* Effect.cached(isStateStoreAvailable(STATE_STORE_SCRIPT_NAME));
+  // The /version route may 404 transiently after a fresh deploy
+  // while Cloudflare propagates the new script to the edge, and may
+  // also surface transport-level blips on cold workers.dev hosts.
+  // Retry the probe itself for ~10s before giving up — only after
+  // exhausting that budget do we collapse to `undefined` and let
+  // the caller treat it as a version mismatch.
+  const result = yield* client.version.getVersion().pipe(
+    Effect.catchTag("HttpClientError", (e) =>
+      // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
+      // we should do a check to see if it does
+      e.response?.status === 404
+        ? isAvailable.pipe(
+            Effect.flatMap((isAvailable) =>
+              // if the worker is available, then we should assume it was recently created and retry by propagating the error
+              // otherwise, return undefined (we don't know the version, there is no worker)
+              isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
+            ),
+          )
+        : Effect.fail(e),
+    ),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
     }),
+    Effect.orElseSucceed(() => undefined),
   );
+  const matches = result?.version === STATE_STORE_VERSION;
+  yield* Effect.annotateCurrentSpan({
+    "alchemy.state_store.expected_version": STATE_STORE_VERSION,
+    "alchemy.state_store.observed_version": result?.version ?? -1,
+    "alchemy.state_store.version_match": matches,
+  });
+  return {
+    matches,
+    expected: STATE_STORE_VERSION,
+    observed: result?.version,
+  };
+});
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
