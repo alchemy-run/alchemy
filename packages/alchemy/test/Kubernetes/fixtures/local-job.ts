@@ -1,5 +1,5 @@
-import * as Kubernetes from "@/Kubernetes";
 import * as Effect from "effect/Effect";
+import * as Kubernetes from "@/Kubernetes";
 import { TestLocalCluster } from "./local.ts";
 
 /**

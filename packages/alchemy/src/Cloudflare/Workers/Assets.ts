@@ -1,18 +1,18 @@
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
+import { listFileSystemDirectory, parseIgnoreRules, walkIgnoring } from "../../Util/Ignore.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import createIgnore from "@alchemy.run/node-utils/ignore";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -38,11 +38,7 @@ export interface AssetsConfig {
    *
    * @default "auto-trailing-slash"
    */
-  htmlHandling?:
-    | "auto-trailing-slash"
-    | "force-trailing-slash"
-    | "drop-trailing-slash"
-    | "none";
+  htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   /**
    * Determines the response when a request does not match a static asset:
    * `"404-page"` serves the nearest `404.html`, and
@@ -134,9 +130,7 @@ export interface AssetsProps extends AssetsConfig {
  * all mean "no prefix".
  */
 export const getAssetsPathPrefix = (base: string | undefined) =>
-  base?.startsWith("/") && !base.startsWith("//")
-    ? base.replace(/\/+$/, "")
-    : "";
+  base?.startsWith("/") && !base.startsWith("//") ? base.replace(/\/+$/, "") : "";
 
 export type ValidationError =
   | AssetTooLargeError
@@ -161,17 +155,13 @@ export class AssetNotFoundError extends Data.TaggedError("AssetNotFoundError")<{
   hash: string;
 }> {}
 
-export class FailedToReadAssetError extends Data.TaggedError(
-  "FailedToReadAssetError",
-)<{
+export class FailedToReadAssetError extends Data.TaggedError("FailedToReadAssetError")<{
   message: string;
   name: string;
   cause: PlatformError;
 }> {}
 
-export class AssetUploadSessionError extends Data.TaggedError(
-  "AssetUploadSessionError",
-)<{
+export class AssetUploadSessionError extends Data.TaggedError("AssetUploadSessionError")<{
   message: string;
   workerName: string;
 }> {}
@@ -232,17 +222,11 @@ const maybeReadString = Effect.fn(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
-      (error) =>
-        error._tag === "PlatformError" && error.reason._tag === "NotFound",
+      (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
       () => Effect.succeed(undefined),
     ),
   );
 });
-
-const createIgnoreMatcher = (patterns: string[]) => {
-  const matcher = createIgnore().add(patterns);
-  return (file: string) => matcher.ignores(file);
-};
 
 /**
  * Read the special `_headers` / `_redirects` files from an assets
@@ -256,9 +240,7 @@ const createIgnoreMatcher = (patterns: string[]) => {
  * build) has no directory to read, and in `dev` there is no build output at
  * all. That yields no rules rather than an error.
  */
-export const readAssetsConfigFiles = Effect.fn(function* (
-  directory: string | undefined,
-) {
+export const readAssetsConfigFiles = Effect.fn(function* (directory: string | undefined) {
   if (directory === undefined) {
     return { _headers: undefined, _redirects: undefined };
   }
@@ -294,11 +276,7 @@ export const mergeAssetsConfigFiles = (
   };
 };
 
-export const readAssets = Effect.fn(function* ({
-  directory,
-  base,
-  ...config
-}: AssetsProps) {
+export const readAssets = Effect.fn(function* ({ directory, base, ...config }: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   // `base` nests the *manifest* paths (what Cloudflare matches request
@@ -310,29 +288,39 @@ export const readAssets = Effect.fn(function* ({
   // `Command.Build` (relative to the initial cwd), and a live
   // `process.cwd()` read can race a concurrent tool's transient chdir.
   const resolvedDirectory = path.resolve(initialCwd, directory);
-  const [files, ignore, _headers, _redirects] = yield* Effect.all([
-    fs.readDirectory(resolvedDirectory, { recursive: true }),
+  const [ignore, _headers, _redirects] = yield* Effect.all([
     maybeReadString(path.join(resolvedDirectory, ".assetsignore")),
     maybeReadString(path.join(resolvedDirectory, "_headers")),
     maybeReadString(path.join(resolvedDirectory, "_redirects")),
   ]);
-  const ignores = createIgnoreMatcher([
-    ".assetsignore",
-    "_headers",
-    "_redirects",
-    ...(ignore
-      ?.split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
-  ]);
+  // `.assetsignore` uses gitignore semantics (as in wrangler). Excluded
+  // directories are skipped without being read.
+  const files = yield* walkIgnoring({
+    list: yield* listFileSystemDirectory(resolvedDirectory),
+    rules: parseIgnoreRules(
+      [
+        ".assetsignore",
+        "_headers",
+        "_redirects",
+        ...(ignore
+          ?.split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
+      ],
+      "gitignore",
+    ),
+  }).pipe(
+    // Symlinked files are uploaded by their target's content (stat follows
+    // links below); directories only contribute their files.
+    Effect.map((entries) =>
+      entries.flatMap((entry) => (entry.type === "Directory" ? [] : [entry.path])),
+    ),
+  );
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;
   yield* Effect.forEach(
     files,
     Effect.fn(function* (name) {
-      if (ignores(name)) {
-        return;
-      }
       const file = path.join(resolvedDirectory, name);
       const stat = yield* fs.stat(file);
       if (stat.type !== "File") {
@@ -492,10 +480,7 @@ export const uploadAssets = Effect.fn(function* (
   // back to three against a gateway that just told us to back off.
   const semaphore = yield* Semaphore.make(BULK_UPLOAD_CONCURRENCY);
 
-  const uploadBucket = Effect.fn(function* (
-    bucket: readonly string[],
-    uploadJwt: string,
-  ) {
+  const uploadBucket = Effect.fn(function* (bucket: readonly string[], uploadJwt: string) {
     const body: Record<string, File> = {};
     yield* Effect.forEach(
       bucket,
@@ -531,16 +516,13 @@ export const uploadAssets = Effect.fn(function* (
       Retry.policy(surfaceGatewayErrors),
       Effect.tapError((error) =>
         isGatewayError(error)
-          ? semaphore
-              .resize(1)
-              .pipe(
-                Effect.andThen(
-                  note(
-                    "Asset upload hit a gateway error, retrying one bucket at a time...",
-                    { kind: "status" },
-                  ),
-                ),
-              )
+          ? semaphore.resize(1).pipe(
+              Effect.andThen(
+                note("Asset upload hit a gateway error, retrying one bucket at a time...", {
+                  kind: "status",
+                }),
+              ),
+            )
           : Effect.void,
       ),
       Effect.retry({
@@ -600,9 +582,7 @@ export const uploadAssets = Effect.fn(function* (
     yield* Effect.forEach(
       session.buckets,
       Effect.fn(function* (bucket) {
-        const result = yield* uploadBucket(bucket, uploadJwt).pipe(
-          semaphore.withPermits(1),
-        );
+        const result = yield* uploadBucket(bucket, uploadJwt).pipe(semaphore.withPermits(1));
         uploaded += bucket.length;
         yield* note(`Uploaded ${uploaded} of ${total} assets...`);
         if (result.jwt) {
@@ -623,8 +603,7 @@ export const uploadAssets = Effect.fn(function* (
   const jwt = yield* runSession().pipe(
     Effect.retry({
       while: (error): boolean =>
-        error._tag === "Unauthorized" ||
-        error._tag === "AssetUploadSessionError",
+        error._tag === "Unauthorized" || error._tag === "AssetUploadSessionError",
       schedule: Schedule.exponential("1 second"),
       times: 3,
     }),

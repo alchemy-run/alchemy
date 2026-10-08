@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -194,26 +189,19 @@ const toLocations = (
   }));
 
 const toConnected = (
-  groups:
-    | networksecurity.MirroringDeploymentGroupConnectedEndpointGroupList
-    | undefined,
+  groups: networksecurity.MirroringDeploymentGroupConnectedEndpointGroupList | undefined,
 ): MirroringDeploymentGroupConnectedEndpointGroup[] =>
   (groups ?? []).map((item) => ({ name: item.name }));
 
 const toNested = (
-  deployments:
-    | networksecurity.MirroringDeploymentGroupDeploymentList
-    | undefined,
+  deployments: networksecurity.MirroringDeploymentGroupDeploymentList | undefined,
 ): MirroringDeploymentGroupNestedDeployment[] =>
   (deployments ?? []).map((item) => ({
     name: item.name,
     state: item.state,
   }));
 
-const toAttrs = (
-  group: networksecurity.MirroringDeploymentGroup,
-  project: string,
-) => {
+const toAttrs = (group: networksecurity.MirroringDeploymentGroup, project: string) => {
   const name = group.name ?? "";
   const parsed = parseResourceName(name, COLLECTION);
   return {
@@ -243,23 +231,19 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
-      (group): group is networksecurity.MirroringDeploymentGroup =>
-        group !== undefined,
+      (group): group is networksecurity.MirroringDeploymentGroup => group !== undefined,
       () => new MirroringDeploymentGroupNotResolved({ name }),
     ),
     Effect.filterOrFail(
       (group) => group.state !== "DELETE_FAILED",
-      (group) =>
-        new MirroringDeploymentGroupFailed({ name, state: group.state }),
+      (group) => new MirroringDeploymentGroupFailed({ name, state: group.state }),
     ),
     Effect.filterOrFail(
       (group) => !isPendingState(group.state),
       () => new MirroringDeploymentGroupNotResolved({ name }),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.NetworkSecurity.MirroringDeploymentGroupNotResolved",
+      while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentGroupNotResolved",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -273,9 +257,7 @@ const waitUntilGone = (name: string) =>
         : Effect.fail(new MirroringDeploymentGroupStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag ===
-        "GCP.NetworkSecurity.MirroringDeploymentGroupStillExists",
+      while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -288,13 +270,9 @@ const listOwned = (project: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.mirroringDeploymentGroups ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.mirroringDeploymentGroups ?? [])),
       Stream.filter((group) =>
-        Object.keys(group.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(group.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
       Stream.map((group) => toAttrs(group, project)),
       Stream.runCollect,
@@ -304,34 +282,20 @@ const listOwned = (project: string) =>
 
 export const MirroringDeploymentGroupProvider = () =>
   Provider.succeed(MirroringDeploymentGroup, {
-    stables: [
-      "name",
-      "mirroringDeploymentGroupId",
-      "project",
-      "location",
-      "network",
-      "createTime",
-    ],
+    stables: ["name", "mirroringDeploymentGroupId", "project", "location", "network", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousId =
-        olds?.mirroringDeploymentGroupId ?? output?.mirroringDeploymentGroupId;
+      const previousId = olds?.mirroringDeploymentGroupId ?? output?.mirroringDeploymentGroupId;
       const nextId = news.mirroringDeploymentGroupId ?? previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
+      const nextLocation = normalizeLocation(news.location ?? olds?.location ?? output?.location);
       const previousNetwork = lastSegment(
         olds?.network ?? output?.networkName ?? output?.network ?? "",
       );
       const nextNetwork = lastSegment(news.network);
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         (previousNetwork.length > 0 && previousNetwork !== nextNetwork);
       if (!replace) return undefined;
@@ -348,19 +312,11 @@ export const MirroringDeploymentGroupProvider = () =>
       );
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
-        output?.name ??
-        resourceName(
-          env.project,
-          location,
-          COLLECTION,
-          mirroringDeploymentGroupId,
-        );
+        output?.name ?? resourceName(env.project, location, COLLECTION, mirroringDeploymentGroupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -378,12 +334,7 @@ export const MirroringDeploymentGroupProvider = () =>
         "mdg",
       );
       const location = normalizeLocation(news.location ?? output?.location);
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        mirroringDeploymentGroupId,
-      );
+      const name = resourceName(env.project, location, COLLECTION, mirroringDeploymentGroupId);
       const network = toNetworkResource(env.project, news.network);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -424,26 +375,22 @@ export const MirroringDeploymentGroupProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
 
       if (labelsChanged || descriptionChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
-        const operation =
-          yield* networksecurity.patchProjectsLocationsMirroringDeploymentGroups(
-            {
-              name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                labels: desiredLabels,
-                description: news.description,
-              },
-            },
-          );
+        const operation = yield* networksecurity.patchProjectsLocationsMirroringDeploymentGroups({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
+            name: current.name ?? name,
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
       }

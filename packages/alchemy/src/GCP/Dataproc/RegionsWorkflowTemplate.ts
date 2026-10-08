@@ -7,14 +7,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import type { WorkflowTemplateProps } from "./WorkflowTemplate.ts";
 import {
   collectPages,
   LIST_LOCATIONS,
@@ -33,11 +27,9 @@ import {
   userLabels,
   waitUntilGone,
 } from "./internal.ts";
+import type { WorkflowTemplateProps } from "./WorkflowTemplate.ts";
 
-export type RegionsWorkflowTemplateProps = Omit<
-  WorkflowTemplateProps,
-  "location"
-> & {
+export type RegionsWorkflowTemplateProps = Omit<WorkflowTemplateProps, "location"> & {
   /**
    * Region (`us-central1`, …). Immutable — changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
@@ -110,11 +102,7 @@ export class RegionsWorkflowTemplateNotResolved extends Data.TaggedError(
 const resourceName = (project: string, region: string, templateId: string) =>
   `${regionParent(project, region)}/workflowTemplates/${templateId}`;
 
-const toAttrs = (
-  template: dataproc.WorkflowTemplate,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (template: dataproc.WorkflowTemplate, project: string, region: string) => {
   const name = template.name ?? "";
   const parsed = parseResourceName(name, "workflowTemplates", region);
   return {
@@ -174,16 +162,12 @@ const listRegion = (project: string, region: string) =>
     ),
   );
 
-const templateChanged = (
-  current: dataproc.WorkflowTemplate,
-  desired: dataproc.WorkflowTemplate,
-) =>
+const templateChanged = (current: dataproc.WorkflowTemplate, desired: dataproc.WorkflowTemplate) =>
   fingerprint(current.jobs) !== fingerprint(desired.jobs) ||
   fingerprint(current.placement) !== fingerprint(desired.placement) ||
   (current.dagTimeout ?? "") !== (desired.dagTimeout ?? "") ||
   fingerprint(current.parameters) !== fingerprint(desired.parameters) ||
-  (current.encryptionConfig?.kmsKey ?? "") !==
-    (desired.encryptionConfig?.kmsKey ?? "");
+  (current.encryptionConfig?.kmsKey ?? "") !== (desired.encryptionConfig?.kmsKey ?? "");
 
 export const RegionsWorkflowTemplateProvider = () =>
   Provider.succeed(RegionsWorkflowTemplate, {
@@ -194,26 +178,19 @@ export const RegionsWorkflowTemplateProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousId = olds?.templateId ?? output?.templateId;
       const nextId = news.templateId ?? previousId;
-      const previousRegion = normalizeLocation(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeLocation(olds?.region ?? output?.region, env.region);
       const nextRegion = normalizeLocation(
         news.region ?? olds?.region ?? output?.region,
         env.region,
       );
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (output !== undefined && previousRegion !== nextRegion)
       ) {
         return {
           action: "replace" as const,
           deleteFirst:
-            previousRegion === nextRegion &&
-            previousId !== undefined &&
-            nextId === previousId,
+            previousRegion === nextRegion && previousId !== undefined && nextId === previousId,
         };
       }
       return undefined;
@@ -221,10 +198,7 @@ export const RegionsWorkflowTemplateProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeLocation(olds?.region ?? output?.region, env.region);
       const templateId = yield* toPhysicalId(
         id,
         olds?.templateId,
@@ -232,14 +206,11 @@ export const RegionsWorkflowTemplateProvider = () =>
         MAX_POLICY_ID_LENGTH,
         "template",
       );
-      const name =
-        output?.name ?? resourceName(env.project, region, templateId);
+      const name = output?.name ?? resourceName(env.project, region, templateId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -255,10 +226,7 @@ export const RegionsWorkflowTemplateProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const region = normalizeLocation(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const region = normalizeLocation(news.region ?? output?.region, env.region);
       const templateId = yield* toPhysicalId(
         id,
         news.templateId,

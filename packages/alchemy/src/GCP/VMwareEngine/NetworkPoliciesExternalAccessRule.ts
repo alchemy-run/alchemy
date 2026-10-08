@@ -46,9 +46,7 @@ export type IpRange = {
   externalAddress?: string;
 };
 
-export type ExternalAccessRuleAction =
-  | vmwareengine.ExternalAccessRuleActionEnum
-  | (string & {});
+export type ExternalAccessRuleAction = vmwareengine.ExternalAccessRuleActionEnum | (string & {});
 
 export type NetworkPoliciesExternalAccessRuleProps = {
   /**
@@ -185,19 +183,14 @@ export type NetworkPoliciesExternalAccessRule = Resource<
  * @resource
  * @category VMwareEngine
  */
-export const NetworkPoliciesExternalAccessRule =
-  Resource<NetworkPoliciesExternalAccessRule>(
-    "GCP.VMwareEngine.NetworkPoliciesExternalAccessRule",
-  );
+export const NetworkPoliciesExternalAccessRule = Resource<NetworkPoliciesExternalAccessRule>(
+  "GCP.VMwareEngine.NetworkPoliciesExternalAccessRule",
+);
 
-const parentPolicyName = (
-  project: string,
-  location: string,
-  networkPolicy: string,
-) => expandName(networkPolicy, project, location, PARENT_COLLECTION);
+const parentPolicyName = (project: string, location: string, networkPolicy: string) =>
+  expandName(networkPolicy, project, location, PARENT_COLLECTION);
 
-const resourceNameOf = (parent: string, ruleId: string) =>
-  `${parent}/${COLLECTION}/${ruleId}`;
+const resourceNameOf = (parent: string, ruleId: string) => `${parent}/${COLLECTION}/${ruleId}`;
 
 const ipRangesOf = (
   values: readonly vmwareengine.IpRange[] | readonly IpRange[] | undefined,
@@ -208,11 +201,7 @@ const ipRangesOf = (
     externalAddress: range.externalAddress,
   }));
 
-const toAttrs = (
-  item: vmwareengine.ExternalAccessRule,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: vmwareengine.ExternalAccessRule, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.description);
@@ -257,10 +246,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       return replaceOnIdentity({
         previousId: olds?.externalAccessRuleId ?? output?.externalAccessRuleId,
         nextId: news.externalAccessRuleId
@@ -268,8 +254,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
           : (olds?.externalAccessRuleId ?? output?.externalAccessRuleId),
         previousLocation,
         nextLocation: normalizeLocation(
-          news.location ??
-            locationFromName(news.networkPolicy, previousLocation),
+          news.location ?? locationFromName(news.networkPolicy, previousLocation),
           env.region,
         ),
         previousParent: olds?.networkPolicy ?? output?.networkPolicy,
@@ -282,9 +267,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       const location = normalizeLocation(
         olds?.location ??
           output?.location ??
-          (olds?.networkPolicy
-            ? locationFromName(olds.networkPolicy, env.region)
-            : undefined),
+          (olds?.networkPolicy ? locationFromName(olds.networkPolicy, env.region) : undefined),
         env.region,
       );
       const parent = parentPolicyName(
@@ -309,28 +292,23 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const policies = yield* listAcrossLocations(
-          env.project,
-          env.region,
-          (parent) =>
-            collectPages(
-              vmwareengine.listProjectsLocationsNetworkPolicies.pages({
-                parent,
-                pageSize: 1000,
-              }),
-              (page) => page.networkPolicies,
-            ),
+        const policies = yield* listAcrossLocations(env.project, env.region, (parent) =>
+          collectPages(
+            vmwareengine.listProjectsLocationsNetworkPolicies.pages({
+              parent,
+              pageSize: 1000,
+            }),
+            (page) => page.networkPolicies,
+          ),
         );
         const nested = yield* Effect.forEach(
           policies.filter((policy) => (policy.name ?? "").length > 0),
           (policy) =>
             collectPages(
-              vmwareengine.listProjectsLocationsNetworkPoliciesExternalAccessRules.pages(
-                {
-                  parent: policy.name ?? "",
-                  pageSize: 1000,
-                },
-              ),
+              vmwareengine.listProjectsLocationsNetworkPoliciesExternalAccessRules.pages({
+                parent: policy.name ?? "",
+                pageSize: 1000,
+              }),
               (page) => page.externalAccessRules,
             ),
           { concurrency: 4 },
@@ -344,16 +322,10 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(
-        news.location ??
-          output?.location ??
-          locationFromName(news.networkPolicy, env.region),
+        news.location ?? output?.location ?? locationFromName(news.networkPolicy, env.region),
         env.region,
       );
-      const parent = parentPolicyName(
-        env.project,
-        location,
-        news.networkPolicy,
-      );
+      const parent = parentPolicyName(env.project, location, news.networkPolicy);
       const ruleId = yield* toPhysicalId(
         id,
         news.externalAccessRuleId,
@@ -366,12 +338,8 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       const priority = news.priority ?? 1000;
       const action = news.action ?? "ALLOW";
       const ipProtocol = news.ipProtocol ?? "tcp";
-      const sourceIpRanges = news.sourceIpRanges ?? [
-        { ipAddressRange: "0.0.0.0/0" },
-      ];
-      const destinationIpRanges = news.destinationIpRanges ?? [
-        { ipAddressRange: "0.0.0.0/0" },
-      ];
+      const sourceIpRanges = news.sourceIpRanges ?? [{ ipAddressRange: "0.0.0.0/0" }];
+      const destinationIpRanges = news.destinationIpRanges ?? [{ ipAddressRange: "0.0.0.0/0" }];
       const sourcePorts = news.sourcePorts ?? ["0-65535"];
       const destinationPorts = news.destinationPorts ?? ["0-65535"];
 
@@ -417,24 +385,17 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
         (item) => item.state,
       );
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const priorityChanged = (current.priority ?? 0) !== priority;
       const actionChanged = (current.action ?? "") !== action;
       const protocolChanged = (current.ipProtocol ?? "") !== ipProtocol;
-      const sourceRangesChanged = !sameJson(
-        ipRangesOf(current.sourceIpRanges),
-        sourceIpRanges,
-      );
+      const sourceRangesChanged = !sameJson(ipRangesOf(current.sourceIpRanges), sourceIpRanges);
       const destRangesChanged = !sameJson(
         ipRangesOf(current.destinationIpRanges),
         destinationIpRanges,
       );
       const sourcePortsChanged = !sameJson(current.sourcePorts, sourcePorts);
-      const destPortsChanged = !sameJson(
-        current.destinationPorts,
-        destinationPorts,
-      );
+      const destPortsChanged = !sameJson(current.destinationPorts, destinationPorts);
       const updateMask = changedFields([
         ["description", descriptionChanged],
         ["priority", priorityChanged],
@@ -448,23 +409,21 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
 
       if (updateMask.length > 0) {
         const operation =
-          yield* vmwareengine.patchProjectsLocationsNetworkPoliciesExternalAccessRules(
-            {
+          yield* vmwareengine.patchProjectsLocationsNetworkPoliciesExternalAccessRules({
+            name: current.name ?? name,
+            updateMask: updateMask.join(","),
+            body: {
               name: current.name ?? name,
-              updateMask: updateMask.join(","),
-              body: {
-                name: current.name ?? name,
-                description: desiredDescription,
-                priority,
-                action,
-                ipProtocol,
-                sourceIpRanges,
-                destinationIpRanges,
-                sourcePorts,
-                destinationPorts,
-              },
+              description: desiredDescription,
+              priority,
+              action,
+              ipProtocol,
+              sourceIpRanges,
+              destinationIpRanges,
+              sourcePorts,
+              destinationPorts,
             },
-          );
+          });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
           getByName(current.name ?? name),

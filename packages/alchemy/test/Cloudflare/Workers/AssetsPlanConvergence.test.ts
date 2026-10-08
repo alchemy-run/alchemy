@@ -1,19 +1,18 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
-const assetsFixture = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/assets-only",
-);
+const assetsFixture = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
 const actionOf = (plan: any, logicalId: string) =>
   (Object.values(plan.resources) as any[]).find(
@@ -42,12 +41,8 @@ describe.concurrent(
           // feeds the main+assets worker, `dirB` feeds the assets-only and
           // script+assets workers, so editing `dirA` must dirty only the
           // first worker.
-          const dirA = yield* cloneFixture(assetsFixture, {
-            prefix: "alchemy-assets-plan-a-",
-          });
-          const dirB = yield* cloneFixture(assetsFixture, {
-            prefix: "alchemy-assets-plan-b-",
-          });
+          const dirA = yield* cloneFixture(assetsFixture, { prefix: "alchemy-assets-plan-a-" });
+          const dirB = yield* cloneFixture(assetsFixture, { prefix: "alchemy-assets-plan-b-" });
 
           // One worker per `hasChanged` branch that previously returned a
           // conservative "changed" whenever `assets` carried no precomputed
@@ -60,13 +55,10 @@ describe.concurrent(
                 assets: { directory: a },
                 compatibility: { date: "2024-01-01" },
               });
-              const assetsOnly = yield* Cloudflare.Worker(
-                "AssetsPlanAssetsOnly",
-                {
-                  assets: { directory: b, notFoundHandling: "404-page" },
-                  compatibility: { date: "2024-01-01" },
-                },
-              );
+              const assetsOnly = yield* Cloudflare.Worker("AssetsPlanAssetsOnly", {
+                assets: { directory: b, notFoundHandling: "404-page" },
+                compatibility: { date: "2024-01-01" },
+              });
               const withScript = yield* Cloudflare.Worker("AssetsPlanScript", {
                 script: `export default { fetch: () => new Response("assets-plan-script") };`,
                 assets: { directory: b },
@@ -108,23 +100,15 @@ describe.concurrent(
           // (CI runner → laptop, monorepo root → workspace root) converges
           // without spurious updates. The directory path is deliberately
           // excluded from the content hash.
-          const dirB2 = yield* cloneFixture(dirB, {
-            prefix: "alchemy-assets-plan-b2-",
-          });
+          const dirB2 = yield* cloneFixture(dirB, { prefix: "alchemy-assets-plan-b2-" });
           const moved = yield* stack.plan(program(dirA, dirB2));
           expect(actionOf(moved, "AssetsPlanAssetsOnly")).toBe("noop");
           expect(actionOf(moved, "AssetsPlanScript")).toBe("noop");
 
           // `.assetsignore` and the files it excludes participate in neither
           // the manifest nor the hash — adding them must stay a noop.
-          yield* fs.writeFileString(
-            path.join(dirB, ".assetsignore"),
-            "junk.txt",
-          );
-          yield* fs.writeFileString(
-            path.join(dirB, "junk.txt"),
-            "not-an-asset",
-          );
+          yield* fs.writeFileString(path.join(dirB, ".assetsignore"), "junk.txt");
+          yield* fs.writeFileString(path.join(dirB, "junk.txt"), "not-an-asset");
           const ignored = yield* stack.plan(program(dirA, dirB));
           expect(actionOf(ignored, "AssetsPlanAssetsOnly")).toBe("noop");
           expect(actionOf(ignored, "AssetsPlanScript")).toBe("noop");
@@ -132,19 +116,14 @@ describe.concurrent(
           // `_headers` is excluded from the manifest but shipped via the
           // asset config, so editing it must dirty every worker serving the
           // directory.
-          yield* fs.writeFileString(
-            path.join(dirB, "_headers"),
-            "/*\n  X-Assets-Plan: v1\n",
-          );
+          yield* fs.writeFileString(path.join(dirB, "_headers"), "/*\n  X-Assets-Plan: v1\n");
           const headers = yield* stack.plan(program(dirA, dirB));
           expect(actionOf(headers, "AssetsPlanWithMain")).toBe("noop");
           expect(actionOf(headers, "AssetsPlanAssetsOnly")).toBe("update");
           expect(actionOf(headers, "AssetsPlanScript")).toBe("update");
           yield* fs.remove(path.join(dirB, "_headers"));
           const headersReverted = yield* stack.plan(program(dirA, dirB));
-          expect(actionOf(headersReverted, "AssetsPlanAssetsOnly")).toBe(
-            "noop",
-          );
+          expect(actionOf(headersReverted, "AssetsPlanAssetsOnly")).toBe("noop");
           expect(actionOf(headersReverted, "AssetsPlanScript")).toBe("noop");
 
           // A directory that's missing at plan time (e.g. produced by an
@@ -204,14 +183,69 @@ describe.concurrent(
           expect(actionOf(converged, "AssetsHashMigration")).toBe("noop");
 
           // Re-introducing a different supplied hash dirties the plan again.
-          const reintroduced = yield* stack.plan(
-            program("hand-rolled-hash-v2"),
-          );
+          const reintroduced = yield* stack.plan(program("hand-rolled-hash-v2"));
           expect(actionOf(reintroduced, "AssetsHashMigration")).toBe("update");
 
           yield* stack.destroy();
         }),
       { timeout: 360_000 },
+    );
+
+    // `.assetsignore` excludes a folder the deploying user cannot read (e.g.
+    // a root-owned cache). Its files must not be uploaded, and the walk must
+    // not read it at all — reading it used to fail the deploy with EACCES.
+    test.provider(
+      "excludes .assetsignore'd folders without reading them",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const client = yield* HttpClient.HttpClient;
+
+          yield* stack.destroy();
+
+          const dir = yield* cloneFixture(assetsFixture, { prefix: "alchemy-assets-ignore-" });
+          yield* fs.writeFileString(path.join(dir, ".assetsignore"), "private/\n*.map\n");
+          yield* fs.writeFileString(path.join(dir, "app.js.map"), "{}");
+          const locked = path.join(dir, "private", "cache");
+          yield* fs.makeDirectory(locked, { recursive: true });
+          yield* fs.writeFileString(path.join(dir, "private", "secret.txt"), "secret");
+          yield* Effect.acquireRelease(fs.chmod(locked, 0o000), () =>
+            fs.chmod(locked, 0o755).pipe(Effect.ignore),
+          );
+
+          const worker = yield* stack.deploy(
+            Cloudflare.Worker("AssetsIgnoreWorker", {
+              assets: { directory: dir, notFoundHandling: "404-page" },
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
+
+          const status = (pathname: string) =>
+            client.get(new URL(pathname, worker.url).href).pipe(
+              Effect.map((response) => response.status),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (code) => code !== 503 && code !== 522,
+                times: 30,
+              }),
+            );
+          // The served index proves the Worker is live before asserting 404s.
+          expect(
+            yield* status("/index.html").pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (code) => code === 200,
+                times: 30,
+              }),
+            ),
+          ).toBe(200);
+          expect(yield* status("/private/secret.txt")).toBe(404);
+          expect(yield* status("/app.js.map")).toBe(404);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 180_000 },
     );
   },
 );

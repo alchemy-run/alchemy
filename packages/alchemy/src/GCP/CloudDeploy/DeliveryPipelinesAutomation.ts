@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -256,10 +251,9 @@ export type DeliveryPipelinesAutomation = Resource<
  * @resource
  * @category CloudDeploy
  */
-export const DeliveryPipelinesAutomation =
-  Resource<DeliveryPipelinesAutomation>(
-    "GCP.CloudDeploy.DeliveryPipelinesAutomation",
-  );
+export const DeliveryPipelinesAutomation = Resource<DeliveryPipelinesAutomation>(
+  "GCP.CloudDeploy.DeliveryPipelinesAutomation",
+);
 
 const resourceName = (deliveryPipeline: string, automationId: string) =>
   `${deliveryPipeline}/automations/${automationId}`;
@@ -344,9 +338,7 @@ export const DeliveryPipelinesAutomationProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.automationId ?? output?.automationId,
         nextId: news.automationId ?? olds?.automationId ?? output?.automationId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: location,
         previousParent,
         nextParent,
@@ -361,31 +353,20 @@ export const DeliveryPipelinesAutomationProvider = () =>
         output?.automationId,
         "automation",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const deliveryPipeline =
         output?.deliveryPipeline ??
         (olds?.deliveryPipeline
-          ? expandParent(
-              olds.deliveryPipeline,
-              env.project,
-              location,
-              "deliveryPipelines",
-            )
+          ? expandParent(olds.deliveryPipeline, env.project, location, "deliveryPipelines")
           : undefined);
       const name =
         output?.name ??
-        (deliveryPipeline
-          ? resourceName(deliveryPipeline, automationId)
-          : undefined);
+        (deliveryPipeline ? resourceName(deliveryPipeline, automationId) : undefined);
       if (name === undefined) return undefined;
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -403,9 +384,7 @@ export const DeliveryPipelinesAutomationProvider = () =>
         output?.automationId,
         "automation",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const deliveryPipeline = expandParent(
         news.deliveryPipeline,
         env.project,
@@ -454,41 +433,32 @@ export const DeliveryPipelinesAutomationProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
-        fingerprint(stringMap(current.annotations)) !==
-          fingerprint(desiredAnnotations) && "annotations",
+        fingerprint(stringMap(current.annotations)) !== fingerprint(desiredAnnotations) &&
+          "annotations",
         !sameText(current.description, news.description) && "description",
         !sameBool(current.suspended, desiredSuspended) && "suspended",
-        !sameText(current.serviceAccount, news.serviceAccount) &&
-          "serviceAccount",
-        fingerprint(toSelector(current.selector)) !==
-          fingerprint(desiredSelector) && "selector",
-        fingerprint(stripAutomationRules(current.rules)) !==
-          fingerprint(desiredRules) && "rules",
+        !sameText(current.serviceAccount, news.serviceAccount) && "serviceAccount",
+        fingerprint(toSelector(current.selector)) !== fingerprint(desiredSelector) && "selector",
+        fingerprint(stripAutomationRules(current.rules)) !== fingerprint(desiredRules) && "rules",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* clouddeploy.patchProjectsLocationsDeliveryPipelinesAutomations(
-            {
-              name: current.name ?? name,
-              updateMask: mask,
-              body: {
-                etag: current.etag,
-                serviceAccount: news.serviceAccount,
-                selector: desiredSelector,
-                rules: desiredRules,
-                description: news.description,
-                suspended: desiredSuspended,
-                annotations: desiredAnnotations,
-                labels: desiredLabels,
-              },
-            },
-          );
+        const operation = yield* clouddeploy.patchProjectsLocationsDeliveryPipelinesAutomations({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            serviceAccount: news.serviceAccount,
+            selector: desiredSelector,
+            rules: desiredRules,
+            description: news.description,
+            suspended: desiredSuspended,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

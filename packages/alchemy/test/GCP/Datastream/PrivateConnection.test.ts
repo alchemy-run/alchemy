@@ -1,16 +1,10 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as datastream from "@distilled.cloud/gcp/datastream_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import {
-  LOCATION,
-  logLevel,
-  currentProject,
-  runSlowLifecycle,
-  waitUntilGone,
-} from "./common.ts";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { withNetworkSlot } from "../networkQuota.ts";
+import { LOCATION, logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 

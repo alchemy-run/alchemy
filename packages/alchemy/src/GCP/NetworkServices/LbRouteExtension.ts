@@ -7,14 +7,8 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { toChain, type ExtensionChain } from "./LbEdgeExtension.ts";
 import {
   changedFields,
   collectPages,
@@ -32,6 +26,7 @@ import {
   waitUntilGone,
   waitUntilPresent,
 } from "./internal.ts";
+import { toChain, type ExtensionChain } from "./LbEdgeExtension.ts";
 
 const COLLECTION = "lbRouteExtensions";
 const DEFAULT_SCHEME = "INTERNAL_MANAGED";
@@ -160,15 +155,9 @@ export type LbRouteExtension = Resource<
  * @resource
  * @category NetworkServices
  */
-export const LbRouteExtension = Resource<LbRouteExtension>(
-  "GCP.NetworkServices.LbRouteExtension",
-);
+export const LbRouteExtension = Resource<LbRouteExtension>("GCP.NetworkServices.LbRouteExtension");
 
-const toAttrs = (
-  extension: networkservices.LbRouteExtension,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (extension: networkservices.LbRouteExtension, project: string, region: string) => {
   const name = extension.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   return {
@@ -194,13 +183,7 @@ const getByName = (name: string) =>
 
 export const LbRouteExtensionProvider = () =>
   Provider.succeed(LbRouteExtension, {
-    stables: [
-      "name",
-      "lbRouteExtensionId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "lbRouteExtensionId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -209,23 +192,16 @@ export const LbRouteExtensionProvider = () =>
       const nextId = news.lbRouteExtensionId
         ? rfc1035(news.lbRouteExtensionId, "lb-route-extension")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
       );
       const previousScheme =
-        olds?.loadBalancingScheme ??
-        output?.loadBalancingScheme ??
-        DEFAULT_SCHEME;
+        olds?.loadBalancingScheme ?? output?.loadBalancingScheme ?? DEFAULT_SCHEME;
       const nextScheme = news.loadBalancingScheme ?? previousScheme;
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousScheme !== nextScheme
       ) {
@@ -242,19 +218,13 @@ export const LbRouteExtensionProvider = () =>
         output?.lbRouteExtensionId,
         "lb-route-extension",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, lbRouteExtensionId);
+        output?.name ?? resourceName(env.project, location, COLLECTION, lbRouteExtensionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -280,16 +250,8 @@ export const LbRouteExtensionProvider = () =>
         output?.lbRouteExtensionId,
         "lb-route-extension",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const name = resourceName(
-        env.project,
-        location,
-        COLLECTION,
-        lbRouteExtensionId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const name = resourceName(env.project, location, COLLECTION, lbRouteExtensionId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -331,16 +293,9 @@ export const LbRouteExtensionProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const rulesChanged = !sameStringList(
-        current.forwardingRules,
-        desiredRules,
-      );
-      const chainsChanged = !sameJson(
-        (current.extensionChains ?? []).map(toChain),
-        desiredChains,
-      );
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const rulesChanged = !sameStringList(current.forwardingRules, desiredRules);
+      const chainsChanged = !sameJson((current.extensionChains ?? []).map(toChain), desiredChains);
       const metadataChanged = !sameJson(current.metadata, news.metadata);
 
       const updateMask = changedFields([
@@ -352,25 +307,21 @@ export const LbRouteExtensionProvider = () =>
       ]);
 
       if (updateMask.length > 0) {
-        const operation =
-          yield* networkservices.patchProjectsLocationsLbRouteExtensions({
+        const operation = yield* networkservices.patchProjectsLocationsLbRouteExtensions({
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
+          body: {
             name: current.name ?? name,
-            updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              forwardingRules: desiredRules,
-              extensionChains: desiredChains,
-              loadBalancingScheme,
-              metadata: news.metadata,
-            },
-          });
+            labels: desiredLabels,
+            description: news.description,
+            forwardingRules: desiredRules,
+            extensionChains: desiredChains,
+            loadBalancingScheme,
+            metadata: news.metadata,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilPresent(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

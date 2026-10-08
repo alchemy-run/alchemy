@@ -29,12 +29,7 @@ export interface UntagResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: transcribe.UntagResourceRequest,
-    ) => Effect.Effect<
-      transcribe.UntagResourceResponse,
-      transcribe.UntagResourceError
-    >
+    ) => Effect.Effect<transcribe.UntagResourceResponse, transcribe.UntagResourceError>
   >
 > {}
-export const UntagResource = Binding.Service<UntagResource>(
-  "AWS.Transcribe.UntagResource",
-);
+export const UntagResource = Binding.Service<UntagResource>("AWS.Transcribe.UntagResource");

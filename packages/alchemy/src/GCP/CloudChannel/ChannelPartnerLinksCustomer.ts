@@ -100,9 +100,7 @@ export type ChannelPartnerLinksCustomer = Resource<
     /** Organization postal address. */
     orgPostalAddress: cloudchannel.GoogleTypePostalAddress | undefined;
     /** Primary contact. */
-    primaryContactInfo:
-      | cloudchannel.GoogleCloudChannelV1ContactInfo
-      | undefined;
+    primaryContactInfo: cloudchannel.GoogleCloudChannelV1ContactInfo | undefined;
     /** Alternate email. */
     alternateEmail: string | undefined;
     /** BCP-47 language code. */
@@ -165,10 +163,9 @@ export type ChannelPartnerLinksCustomer = Resource<
  * @resource
  * @category CloudChannel
  */
-export const ChannelPartnerLinksCustomer =
-  Resource<ChannelPartnerLinksCustomer>(
-    "GCP.CloudChannel.ChannelPartnerLinksCustomer",
-  );
+export const ChannelPartnerLinksCustomer = Resource<ChannelPartnerLinksCustomer>(
+  "GCP.CloudChannel.ChannelPartnerLinksCustomer",
+);
 
 export class ChannelPartnerLinksCustomerNotResolved extends Data.TaggedError(
   "GCP.CloudChannel.ChannelPartnerLinksCustomerNotResolved",
@@ -200,18 +197,11 @@ export const ChannelPartnerLinksCustomerProvider = () =>
         olds?.parent ?? output?.parent ?? "",
         olds?.account ?? output?.account,
       );
-      const name = toCustomerName(
-        parent,
-        olds?.customerId ?? output?.customerId ?? output?.name,
-      );
+      const name = toCustomerName(parent, olds?.customerId ?? output?.customerId ?? output?.name);
       let existing = yield* getPartnerCustomer(output?.name ?? name);
       if (existing === undefined) {
         const domain = yield* toDomain(id, olds?.domain, output?.domain);
-        existing = yield* findCustomerByDomain(
-          parent,
-          domain,
-          listPartnerCustomers,
-        );
+        existing = yield* findCustomerByDomain(parent, domain, listPartnerCustomers);
       }
       if (existing === undefined) return undefined;
       const attrs = toCustomerAttrs(existing, parent);
@@ -220,10 +210,7 @@ export const ChannelPartnerLinksCustomerProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const parent = resolveParent(
-        news.parent,
-        news.account ?? output?.account,
-      );
+      const parent = resolveParent(news.parent, news.account ?? output?.account);
       const channelPartnerId = lastSegment(parent);
       const orgDisplayName = yield* toOrgDisplayName(
         id,
@@ -235,26 +222,18 @@ export const ChannelPartnerLinksCustomerProvider = () =>
         orgDisplayName,
         domain,
         orgPostalAddress: news.orgPostalAddress ?? output?.orgPostalAddress,
-        primaryContactInfo:
-          news.primaryContactInfo ?? output?.primaryContactInfo,
+        primaryContactInfo: news.primaryContactInfo ?? output?.primaryContactInfo,
         alternateEmail: news.alternateEmail,
         languageCode: news.languageCode ?? output?.languageCode,
         correlationId: news.correlationId,
         customerAttestationState: news.customerAttestationState,
         channelPartnerId,
       });
-      const name = toCustomerName(
-        parent,
-        news.customerId ?? output?.customerId ?? output?.name,
-      );
+      const name = toCustomerName(parent, news.customerId ?? output?.customerId ?? output?.name);
 
       let current = yield* getPartnerCustomer(output?.name ?? name);
       if (current === undefined) {
-        current = yield* findCustomerByDomain(
-          parent,
-          domain,
-          listPartnerCustomers,
-        );
+        current = yield* findCustomerByDomain(parent, domain, listPartnerCustomers);
       }
 
       if (current === undefined) {
@@ -280,10 +259,7 @@ export const ChannelPartnerLinksCustomerProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.orgDisplayName, orgDisplayName);
       const domainChanged = !sameText(current.domain, domain);
-      const addressChanged = !jsonEqual(
-        current.orgPostalAddress,
-        body.orgPostalAddress,
-      );
+      const addressChanged = !jsonEqual(current.orgPostalAddress, body.orgPostalAddress);
       const contactChanged = !jsonEqual(
         {
           firstName: current.primaryContactInfo?.firstName,
@@ -300,24 +276,12 @@ export const ChannelPartnerLinksCustomerProvider = () =>
           title: body.primaryContactInfo?.title,
         },
       );
-      const alternateChanged = !sameText(
-        current.alternateEmail,
-        news.alternateEmail,
-      );
-      const languageChanged = !sameText(
-        current.languageCode,
-        body.languageCode,
-      );
-      const correlationChanged = !sameText(
-        current.correlationId,
-        news.correlationId,
-      );
+      const alternateChanged = !sameText(current.alternateEmail, news.alternateEmail);
+      const languageChanged = !sameText(current.languageCode, body.languageCode);
+      const correlationChanged = !sameText(current.correlationId, news.correlationId);
       const attestationChanged =
         news.customerAttestationState !== undefined &&
-        !sameText(
-          current.customerAttestationState,
-          news.customerAttestationState,
-        );
+        !sameText(current.customerAttestationState, news.customerAttestationState);
 
       const updateMask = updateMaskOf(
         displayChanged ? "org_display_name" : undefined,
@@ -331,13 +295,11 @@ export const ChannelPartnerLinksCustomerProvider = () =>
       );
 
       if (updateMask.length > 0 && currentName.length > 0) {
-        current = yield* cloudchannel.patchAccountsChannelPartnerLinksCustomers(
-          {
-            name: currentName,
-            updateMask,
-            body,
-          },
-        );
+        current = yield* cloudchannel.patchAccountsChannelPartnerLinksCustomers({
+          name: currentName,
+          updateMask,
+          body,
+        });
       }
 
       return toCustomerAttrs(current, parent);

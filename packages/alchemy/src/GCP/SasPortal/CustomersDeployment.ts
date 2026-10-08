@@ -130,11 +130,7 @@ export class CustomersDeploymentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const toAttrs = (
-  deployment: sasportal.SasPortalDeployment,
-  parent: string,
-  project: string,
-) => {
+const toAttrs = (deployment: sasportal.SasPortalDeployment, parent: string, project: string) => {
   const name = deployment.name ?? "";
   return {
     name,
@@ -166,9 +162,7 @@ export const CustomersDeploymentProvider = () =>
       const parent = expandCustomer(olds?.parent ?? output?.parent ?? "");
       const name = olds?.name ?? output?.name ?? "";
       let existing = yield* getCustomerDeployment(name);
-      let locatedParent = existing
-        ? parentOf(existing.name ?? "") || parent
-        : parent;
+      let locatedParent = existing ? parentOf(existing.name ?? "") || parent : parent;
       if (existing === undefined) {
         const found =
           (yield* findOwnedCustomerDeployment(id, parent)) ??
@@ -178,9 +172,7 @@ export const CustomersDeploymentProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, locatedParent, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -195,9 +187,7 @@ export const CustomersDeploymentProvider = () =>
                   Effect.map((rows) =>
                     rows
                       .filter((row) => hasOwnershipMarker(row.displayName))
-                      .map((row) =>
-                        toAttrs(row, customer.name ?? "", env.project),
-                      ),
+                      .map((row) => toAttrs(row, customer.name ?? "", env.project)),
                   ),
                 )
               : Effect.succeed([]),
@@ -220,9 +210,7 @@ export const CustomersDeploymentProvider = () =>
         sasUserIds: news.sasUserIds,
       };
 
-      let current = yield* getCustomerDeployment(
-        news.name ?? output?.name ?? "",
-      );
+      let current = yield* getCustomerDeployment(news.name ?? output?.name ?? "");
       if (current === undefined) {
         const found =
           (yield* findOwnedCustomerDeployment(id, parent)) ??
@@ -238,9 +226,7 @@ export const CustomersDeploymentProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              findOwnedCustomerDeployment(id, parent).pipe(
-                Effect.map((found) => found?.row),
-              ),
+              findOwnedCustomerDeployment(id, parent).pipe(Effect.map((found) => found?.row)),
             ),
           );
         current = created ?? undefined;
@@ -256,8 +242,7 @@ export const CustomersDeploymentProvider = () =>
       const name = current.name ?? news.name ?? output?.name ?? "";
       const nameChanged = !sameText(current.displayName, displayName);
       const usersChanged =
-        news.sasUserIds !== undefined &&
-        !sameStringList(current.sasUserIds, news.sasUserIds);
+        news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchCustomersDeployments({
           name,
@@ -274,9 +259,9 @@ export const CustomersDeploymentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* retryDelete(
-        sasportal.deleteCustomersDeployments({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* retryDelete(sasportal.deleteCustomersDeployments({ name: output.name })).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getCustomerDeployment(output.name));
     }),
   });

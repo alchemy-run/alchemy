@@ -101,9 +101,7 @@ export type Storelayoutpage = Resource<
  * @resource
  * @category AndroidEnterprise
  */
-export const Storelayoutpage = Resource<Storelayoutpage>(
-  "GCP.AndroidEnterprise.Storelayoutpage",
-);
+export const Storelayoutpage = Resource<Storelayoutpage>("GCP.AndroidEnterprise.Storelayoutpage");
 
 export class StorelayoutpageNotResolved extends Data.TaggedError(
   "GCP.AndroidEnterprise.StorelayoutpageNotResolved",
@@ -112,11 +110,7 @@ export class StorelayoutpageNotResolved extends Data.TaggedError(
   pageId: string;
 }> {}
 
-const toAttrs = (
-  page: androidenterprise.StorePage,
-  enterpriseId: string,
-  project: string,
-) => ({
+const toAttrs = (page: androidenterprise.StorePage, enterpriseId: string, project: string) => ({
   pageId: page.id ?? "",
   enterpriseId,
   project,
@@ -135,10 +129,7 @@ const desiredBody = (input: {
   link: input.news.link ?? input.current?.link,
 });
 
-const needsSync = (
-  current: androidenterprise.StorePage,
-  desired: androidenterprise.StorePage,
-) =>
+const needsSync = (current: androidenterprise.StorePage, desired: androidenterprise.StorePage) =>
   !jsonEqual(current.name, desired.name) ||
   (desired.link !== undefined && !sameStringList(current.link, desired.link));
 
@@ -149,18 +140,11 @@ export const StorelayoutpageProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousEnterprise = olds?.enterpriseId ?? output?.enterpriseId;
-      if (
-        previousEnterprise !== undefined &&
-        news.enterpriseId !== previousEnterprise
-      ) {
+      if (previousEnterprise !== undefined && news.enterpriseId !== previousEnterprise) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.pageId ?? output?.pageId;
-      if (
-        previousId !== undefined &&
-        news.pageId !== undefined &&
-        news.pageId !== previousId
-      ) {
+      if (previousId !== undefined && news.pageId !== undefined && news.pageId !== previousId) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -189,28 +173,17 @@ export const StorelayoutpageProvider = () =>
         const env = yield* GcpEnvironment.current;
         const pages = yield* listOwnedPages();
         return pages
-          .filter(({ page }) =>
-            hasOwnershipMarker(ownershipTextFromNames(page.name)),
-          )
-          .map(({ page, enterpriseId }) =>
-            toAttrs(page, enterpriseId, env.project),
-          );
+          .filter(({ page }) => hasOwnershipMarker(ownershipTextFromNames(page.name)))
+          .map(({ page, enterpriseId }) => toAttrs(page, enterpriseId, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const enterpriseId = news.enterpriseId;
-      const displayName = yield* toDisplayName(
-        id,
-        news.name?.[0]?.text,
-        output?.name?.[0]?.text,
-      );
+      const displayName = yield* toDisplayName(id, news.name?.[0]?.text, output?.name?.[0]?.text);
       const name = defaultNames(news.name, displayName);
 
-      let current = yield* getPage(
-        enterpriseId,
-        news.pageId ?? output?.pageId ?? "",
-      );
+      let current = yield* getPage(enterpriseId, news.pageId ?? output?.pageId ?? "");
       if (current === undefined) {
         current = yield* findOwnedPage(id, enterpriseId);
       }
@@ -221,9 +194,7 @@ export const StorelayoutpageProvider = () =>
             enterpriseId,
             body: desiredBody({ name, news }),
           })
-          .pipe(
-            Effect.catchTag("Conflict", () => findOwnedPage(id, enterpriseId)),
-          );
+          .pipe(Effect.catchTag("Conflict", () => findOwnedPage(id, enterpriseId)));
         current = created ?? undefined;
       }
 

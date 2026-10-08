@@ -65,9 +65,7 @@ export type Dataset = Resource<
     /** Number of data items in the dataset. */
     dataItemCount: string | undefined;
     /** Original import configs, if data has been imported. */
-    inputConfigs:
-      | datalabeling.GoogleCloudDatalabelingV1beta1InputConfigList
-      | undefined;
+    inputConfigs: datalabeling.GoogleCloudDatalabelingV1beta1InputConfigList | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
     /** Last migration time to Vertex AI, if any. */
@@ -106,19 +104,14 @@ export type Dataset = Resource<
  */
 export const Dataset = Resource<Dataset>("GCP.DataLabeling.Dataset");
 
-export class DatasetNotResolved extends Data.TaggedError(
-  "GCP.DataLabeling.DatasetNotResolved",
-)<{
+export class DatasetNotResolved extends Data.TaggedError("GCP.DataLabeling.DatasetNotResolved")<{
   name: string;
 }> {}
 
 const resourceName = (project: string, datasetId: string) =>
   `${projectParent(project)}/datasets/${datasetId}`;
 
-const toAttrs = (
-  dataset: datalabeling.GoogleCloudDatalabelingV1beta1Dataset,
-  project: string,
-) => {
+const toAttrs = (dataset: datalabeling.GoogleCloudDatalabelingV1beta1Dataset, project: string) => {
   const name = dataset.name ?? "";
   const parsed = parseResourceName(name, "datasets");
   return {
@@ -160,8 +153,7 @@ export const DatasetProvider = () =>
         (news.displayName !== undefined &&
           output?.displayName !== undefined &&
           !sameText(news.displayName, output.displayName)) ||
-        (olds !== undefined &&
-          !sameText(news.description, output?.description));
+        (olds !== undefined && !sameText(news.description, output?.description));
       return replaceOnIdentity({
         previousId: olds?.datasetId ?? output?.datasetId,
         nextId: news.datasetId,
@@ -176,15 +168,11 @@ export const DatasetProvider = () =>
         output?.datasetId ??
         (output?.name ? parseResourceName(output.name, "datasets").id : "");
       const name =
-        output?.name ??
-        (datasetId.length > 0 ? resourceName(env.project, datasetId) : "");
-      const existing =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+        output?.name ?? (datasetId.length > 0 ? resourceName(env.project, datasetId) : "");
+      const existing = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -200,18 +188,12 @@ export const DatasetProvider = () =>
       const env = yield* GcpEnvironment.current;
       const datasetId = news.datasetId ?? output?.datasetId;
       const name =
-        output?.name ??
-        (datasetId !== undefined ? resourceName(env.project, datasetId) : "");
+        output?.name ?? (datasetId !== undefined ? resourceName(env.project, datasetId) : "");
       const ownership = yield* createInternalLabels(id);
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const description = encodeOwnership(ownership, news.description);
 
-      let current =
-        (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
+      let current = (yield* getByName(name)) ?? (yield* findByOwnership(id, env.project));
 
       if (current === undefined) {
         const created = yield* retryTransient(
@@ -224,9 +206,7 @@ export const DatasetProvider = () =>
               },
             },
           }),
-        ).pipe(
-          Effect.catchTag("Conflict", () => findByOwnership(id, env.project)),
-        );
+        ).pipe(Effect.catchTag("Conflict", () => findByOwnership(id, env.project)));
         current = created ?? undefined;
       }
 
@@ -241,9 +221,7 @@ export const DatasetProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
-      yield* ignoreGone(
-        retryDelete(datalabeling.deleteProjectsDatasets({ name: output.name })),
-      );
+      yield* ignoreGone(retryDelete(datalabeling.deleteProjectsDatasets({ name: output.name })));
       yield* waitUntilGone(getByName(output.name));
     }),
   });

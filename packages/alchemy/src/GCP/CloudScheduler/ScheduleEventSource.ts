@@ -43,9 +43,7 @@ export interface ScheduleEventSourceProps {
   path?: string;
 }
 
-export type ScheduledEventHandler<Req> = (
-  event: ScheduledEvent,
-) => Effect.Effect<void, never, Req>;
+export type ScheduledEventHandler<Req> = (event: ScheduledEvent) => Effect.Effect<void, never, Req>;
 
 export type ScheduleEventSourceService = <Req = never>(
   id: string,

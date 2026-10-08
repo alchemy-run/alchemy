@@ -141,9 +141,7 @@ export type Product = Resource<
  */
 export const Product = Resource<Product>("GCP.Vision.Product");
 
-export class ProductNotResolved extends Data.TaggedError(
-  "GCP.Vision.ProductNotResolved",
-)<{
+export class ProductNotResolved extends Data.TaggedError("GCP.Vision.ProductNotResolved")<{
   name: string;
 }> {}
 
@@ -170,8 +168,7 @@ export const ProductProvider = () =>
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
       const previousCategory = olds?.productCategory ?? output?.productCategory;
-      const nextCategory =
-        news.productCategory ?? previousCategory ?? DEFAULT_PRODUCT_CATEGORY;
+      const nextCategory = news.productCategory ?? previousCategory ?? DEFAULT_PRODUCT_CATEGORY;
       return replaceOnIdentity({
         previousId: olds?.productId ?? output?.productId,
         nextId: news.productId,
@@ -183,8 +180,7 @@ export const ProductProvider = () =>
           env.project,
           normalizeLocation(news.location ?? output?.location),
         ),
-        extra:
-          previousCategory !== undefined && previousCategory !== nextCategory,
+        extra: previousCategory !== undefined && previousCategory !== nextCategory,
       });
     }),
 
@@ -193,11 +189,7 @@ export const ProductProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const name =
         output?.name ??
-        productNameOf(
-          env.project,
-          location,
-          olds?.productId ?? output?.productId ?? "",
-        );
+        productNameOf(env.project, location, olds?.productId ?? output?.productId ?? "");
       const existing = yield* getProduct(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -208,20 +200,13 @@ export const ProductProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(news.location ?? output?.location);
-      const productId = yield* toResourceId(
-        id,
-        news.productId,
-        output?.productId,
-      );
+      const productId = yield* toResourceId(id, news.productId, output?.productId);
       const displayName = news.displayName ?? productId;
       const description = news.description;
       const productCategory =
-        news.productCategory ??
-        output?.productCategory ??
-        DEFAULT_PRODUCT_CATEGORY;
+        news.productCategory ?? output?.productCategory ?? DEFAULT_PRODUCT_CATEGORY;
       const productLabels = productLabelsOf(news.productLabels);
-      const name =
-        output?.name ?? productNameOf(env.project, location, productId);
+      const name = output?.name ?? productNameOf(env.project, location, productId);
 
       let current = yield* getProduct(name);
 
@@ -252,9 +237,7 @@ export const ProductProvider = () =>
       const updateMask = updateMaskOf(
         sameText(current.displayName, displayName) ? undefined : "display_name",
         sameText(current.description, description) ? undefined : "description",
-        sameProductLabels(observedLabels, productLabels)
-          ? undefined
-          : "product_labels",
+        sameProductLabels(observedLabels, productLabels) ? undefined : "product_labels",
       );
 
       if (updateMask.length > 0) {

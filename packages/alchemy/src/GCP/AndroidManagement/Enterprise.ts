@@ -116,9 +116,7 @@ export type Enterprise = Resource<
     /** Managed Google domain type. */
     managedGoogleDomainType: string | undefined;
     /** Google authentication settings. */
-    googleAuthenticationSettings:
-      | androidmanagement.GoogleAuthenticationSettings
-      | undefined;
+    googleAuthenticationSettings: androidmanagement.GoogleAuthenticationSettings | undefined;
   },
   never,
   Providers
@@ -165,9 +163,7 @@ export type Enterprise = Resource<
  * @resource
  * @category AndroidManagement
  */
-export const Enterprise = Resource<Enterprise>(
-  "GCP.AndroidManagement.Enterprise",
-);
+export const Enterprise = Resource<Enterprise>("GCP.AndroidManagement.Enterprise");
 
 export class EnterpriseNotResolved extends Data.TaggedError(
   "GCP.AndroidManagement.EnterpriseNotResolved",
@@ -190,8 +186,7 @@ const toAttrs = (enterprise: androidmanagement.Enterprise, project: string) => {
     signinDetails: enterprise.signinDetails,
     contactInfo: enterprise.contactInfo,
     enterpriseType: enterprise.enterpriseType,
-    managedGooglePlayAccountsEnterpriseType:
-      enterprise.managedGooglePlayAccountsEnterpriseType,
+    managedGooglePlayAccountsEnterpriseType: enterprise.managedGooglePlayAccountsEnterpriseType,
     managedGoogleDomainType: enterprise.managedGoogleDomainType,
     googleAuthenticationSettings: enterprise.googleAuthenticationSettings,
   };
@@ -277,9 +272,7 @@ export const EnterpriseProvider = () =>
             body: desired,
           })
           .pipe(
-            Effect.catchTag("Conflict", () =>
-              findEnterpriseByDisplayName(projectId, displayName),
-            ),
+            Effect.catchTag("Conflict", () => findEnterpriseByDisplayName(projectId, displayName)),
           );
         current = created ?? undefined;
       }
@@ -291,33 +284,22 @@ export const EnterpriseProvider = () =>
       }
 
       const name = current.name ?? output?.name ?? "";
-      const displayChanged = !sameText(
-        current.enterpriseDisplayName,
-        displayName,
-      );
+      const displayChanged = !sameText(current.enterpriseDisplayName, displayName);
       const colorChanged =
-        news.primaryColor !== undefined &&
-        current.primaryColor !== news.primaryColor;
+        news.primaryColor !== undefined && current.primaryColor !== news.primaryColor;
       const topicChanged =
-        news.pubsubTopic !== undefined &&
-        !sameText(current.pubsubTopic, news.pubsubTopic);
+        news.pubsubTopic !== undefined && !sameText(current.pubsubTopic, news.pubsubTopic);
       const notificationsChanged =
         news.enabledNotificationTypes !== undefined &&
-        !sameStringList(
-          current.enabledNotificationTypes,
-          news.enabledNotificationTypes,
-        );
-      const logoChanged =
-        news.logo !== undefined && !jsonEqual(current.logo, news.logo);
+        !sameStringList(current.enabledNotificationTypes, news.enabledNotificationTypes);
+      const logoChanged = news.logo !== undefined && !jsonEqual(current.logo, news.logo);
       const termsChanged =
         news.termsAndConditions !== undefined &&
         !jsonEqual(current.termsAndConditions, news.termsAndConditions);
       const signinChanged =
-        news.signinDetails !== undefined &&
-        !jsonEqual(current.signinDetails, news.signinDetails);
+        news.signinDetails !== undefined && !jsonEqual(current.signinDetails, news.signinDetails);
       const contactChanged =
-        news.contactInfo !== undefined &&
-        !jsonEqual(current.contactInfo, news.contactInfo);
+        news.contactInfo !== undefined && !jsonEqual(current.contactInfo, news.contactInfo);
 
       const updateMask = updateMaskOf(
         displayChanged ? "enterpriseDisplayName" : undefined,

@@ -29,8 +29,7 @@ export default defineConfig([
       "astro/entrypoints/aws-server": "src/astro/entrypoints/aws-server.ts",
       "astro/entrypoints/node-server": "src/astro/entrypoints/node-server.ts",
       "astro/source": "src/astro/source.ts",
-      "astro/runtime/entrypoints/server":
-        "src/astro/runtime/entrypoints/server.ts",
+      "astro/runtime/entrypoints/server": "src/astro/runtime/entrypoints/server.ts",
       "astro/runtime/entrypoints/image-passthrough-endpoint":
         "src/astro/runtime/entrypoints/image-passthrough-endpoint.ts",
       "foldkit/index": "src/foldkit/index.ts",
@@ -108,10 +107,7 @@ export default defineConfig([
         /^@astrojs\/underscore-redirects(?:\/|$)/,
       ],
       // Fail the build if another dependency is bundled accidentally.
-      onlyBundle: [
-        "@astrojs/internal-helpers",
-        "@astrojs/underscore-redirects",
-      ],
+      onlyBundle: ["@astrojs/internal-helpers", "@astrojs/underscore-redirects"],
     },
     inputOptions: {
       external: [

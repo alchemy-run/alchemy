@@ -3,57 +3,60 @@
   "version": "2.0.0-beta.79",
   "private": true,
   "description": "Edit hardcoded copy in the browser during Vite dev and save it back to source.",
-  "homepage": "https://alchemy.run",
-  "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
-    "vite",
-    "vite-plugin",
+    "cms",
     "contenteditable",
     "copy",
-    "cms"
+    "vite",
+    "vite-plugin"
   ],
+  "homepage": "https://alchemy.run",
   "bugs": {
     "url": "https://github.com/alchemy-run/alchemy/issues"
   },
   "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/vite-plugin-copy-editor"
   },
-  "type": "module",
-  "sideEffects": false,
   "files": [
     "src",
     "lib",
     "LICENSE",
     "NOTICE"
   ],
-  "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts vite-plugin-copy-editor",
-    "prepare": "tsc -b",
-    "test": "bun test ./test"
-  },
+  "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "bun": "./src/index.ts",
-      "import": "./lib/index.js"
-    }
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      }
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
+    "test": "bun test ./test"
   },
   "dependencies": {
     "marked": "^17.0.1"
-  },
-  "peerDependencies": {
-    "vite": ">=6"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
+  },
+  "peerDependencies": {
+    "vite": ">=6"
   }
 }

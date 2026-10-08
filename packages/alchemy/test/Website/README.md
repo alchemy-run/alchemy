@@ -70,3 +70,11 @@ own cleanup of these separately prepared deployments.
 The hybrid POST assertion requires the AWS edge router to send non-GET/HEAD
 requests to SSR even when a matching prerendered file exists. It intentionally
 checks this contract rather than accepting an S3 error response.
+
+## GCP deployments
+
+Cloud Run image publication and rollout also exceed the per-test budget. Use
+contributor-prepared `GCP.Website.Foldkit` deployments with the same fixtures,
+and set `FOLDKIT_GCP_SPA_URL`, `FOLDKIT_GCP_SSG_URL`, `FOLDKIT_GCP_SSR_URL` or
+`FOLDKIT_GCP_HYBRID_URL`. The rendering suite checks HTTP and opt-in hydration;
+contributors own cleanup. The existing Cloud Run lifecycle suite remains separate.

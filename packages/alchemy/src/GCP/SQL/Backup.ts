@@ -9,11 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForSqlOperation } from "./operations.ts";
 import {
@@ -146,9 +142,7 @@ export type Backup = Resource<
  */
 export const Backup = Resource<Backup>("GCP.SQL.Backup");
 
-export class BackupNotResolved extends Data.TaggedError(
-  "GCP.SQL.BackupNotResolved",
-)<{
+export class BackupNotResolved extends Data.TaggedError("GCP.SQL.BackupNotResolved")<{
   name: string;
 }> {}
 
@@ -157,9 +151,7 @@ export class BackupNotReady extends Data.TaggedError("GCP.SQL.BackupNotReady")<{
   state: string | undefined;
 }> {}
 
-export class BackupStillExists extends Data.TaggedError(
-  "GCP.SQL.BackupStillExists",
-)<{
+export class BackupStillExists extends Data.TaggedError("GCP.SQL.BackupStillExists")<{
   name: string;
 }> {}
 
@@ -167,18 +159,12 @@ const backupNameOf = (project: string, backupId: string) =>
   backupId.includes("/") ? backupId : `projects/${project}/backups/${backupId}`;
 
 const normalizeLocation = (value: string | undefined) =>
-  value === undefined || value.length === 0
-    ? undefined
-    : lastSegment(value).toLowerCase();
+  value === undefined || value.length === 0 ? undefined : lastSegment(value).toLowerCase();
 
 const ttlDaysOf = (value: number | string | undefined) =>
   value === undefined ? undefined : String(value);
 
-const toUserDescription = (
-  id: string,
-  description: string | undefined,
-  existing?: string,
-) =>
+const toUserDescription = (id: string, description: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (description !== undefined) return description;
     if (existing !== undefined) return existing;
@@ -223,9 +209,7 @@ const recoverIfBackupMissing =
   <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.catchIf(
-        (
-          error,
-        ): error is Extract<E, { readonly _tag: "SqlBackupAccessDenied" }> =>
+        (error): error is Extract<E, { readonly _tag: "SqlBackupAccessDenied" }> =>
           error._tag === "SqlBackupAccessDenied",
         (error) =>
           listBackups(name.split("/")[1] ?? "").pipe(
@@ -260,16 +244,10 @@ const listBackups = (project: string) =>
 
 const findByOwnership = (project: string, labels: Record<string, string>) =>
   listBackups(project).pipe(
-    Effect.map((backups) =>
-      backups.find((backup) => matchesOwnership(backup.description, labels)),
-    ),
+    Effect.map((backups) => backups.find((backup) => matchesOwnership(backup.description, labels))),
   );
 
-const observe = (
-  project: string,
-  name: string | undefined,
-  labels: Record<string, string>,
-) =>
+const observe = (project: string, name: string | undefined, labels: Record<string, string>) =>
   Effect.gen(function* () {
     if (name !== undefined && name.length > 0) {
       const existing = yield* getByName(name);
@@ -291,9 +269,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup
-        ? Effect.succeed(backup)
-        : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.BackupNotResolved",
@@ -324,8 +300,7 @@ const waitUntilReady = (name: string) =>
     ),
     Effect.retry({
       while: (error) =>
-        error._tag === "GCP.SQL.BackupNotReady" ||
-        error._tag === "GCP.SQL.BackupNotResolved",
+        error._tag === "GCP.SQL.BackupNotReady" || error._tag === "GCP.SQL.BackupNotResolved",
       times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
@@ -334,9 +309,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined
-        ? Effect.void
-        : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.BackupStillExists",
@@ -357,22 +330,13 @@ const nameFromOperation = (project: string, operation: sqladmin.Operation) => {
 
 export const BackupProvider = () =>
   Provider.succeed(Backup, {
-    stables: [
-      "name",
-      "backupId",
-      "project",
-      "instance",
-      "selfLink",
-      "backupRun",
-    ],
+    stables: ["name", "backupId", "project", "instance", "selfLink", "backupRun"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previousInstance = olds?.instance ?? output?.instance;
       const nextInstance = news.instance;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location);
       const nextLocation = normalizeLocation(news.location ?? output?.location);
       const instanceChanged =
         previousInstance !== undefined &&
@@ -417,15 +381,10 @@ export const BackupProvider = () =>
       const env = yield* GcpEnvironment.current;
       const instance = instanceIdOf(news.instance);
       const ownership = yield* createInternalLabels(id);
-      const userDescription = yield* toUserDescription(
-        id,
-        news.description,
-        output?.description,
-      );
+      const userDescription = yield* toUserDescription(id, news.description, output?.description);
       const desiredDescription = encodeDescription(ownership, userDescription);
       const name =
-        output?.name ??
-        (news.backupId ? backupNameOf(env.project, news.backupId) : undefined);
+        output?.name ?? (news.backupId ? backupNameOf(env.project, news.backupId) : undefined);
 
       let current = yield* observe(env.project, name, ownership);
 
@@ -458,8 +417,7 @@ export const BackupProvider = () =>
         if (created !== undefined) {
           const done = yield* waitForOperation(env.project, created);
           const createdName =
-            nameFromOperation(env.project, done) ??
-            nameFromOperation(env.project, created);
+            nameFromOperation(env.project, done) ?? nameFromOperation(env.project, created);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(createdName);
           }
@@ -472,8 +430,7 @@ export const BackupProvider = () =>
                 : Effect.fail(
                     new BackupNotResolved({
                       name:
-                        name ??
-                        `projects/${env.project}/backups/${ownership[alchemyLabelKeys.id]}`,
+                        name ?? `projects/${env.project}/backups/${ownership[alchemyLabelKeys.id]}`,
                     }),
                   ),
             ),
@@ -496,11 +453,9 @@ export const BackupProvider = () =>
       }
 
       const isFinal = (current.type ?? "").toUpperCase() === "FINAL";
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const expiryChanged =
-        news.expiryTime !== undefined &&
-        (current.expiryTime ?? "") !== news.expiryTime;
+        news.expiryTime !== undefined && (current.expiryTime ?? "") !== news.expiryTime;
 
       if (isFinal && (descriptionChanged || expiryChanged)) {
         const patched = yield* sqladmin.updateBackupBackups({

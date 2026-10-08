@@ -98,15 +98,11 @@ export type Snapshot = Resource<
  */
 export const Snapshot = Resource<Snapshot>("GCP.PubSub.Snapshot");
 
-export class SnapshotNotResolved extends Data.TaggedError(
-  "GCP.PubSub.SnapshotNotResolved",
-)<{
+export class SnapshotNotResolved extends Data.TaggedError("GCP.PubSub.SnapshotNotResolved")<{
   name: string;
 }> {}
 
-export class SnapshotStillExists extends Data.TaggedError(
-  "GCP.PubSub.SnapshotStillExists",
-)<{
+export class SnapshotStillExists extends Data.TaggedError("GCP.PubSub.SnapshotStillExists")<{
   name: string;
 }> {}
 
@@ -199,9 +195,7 @@ export const SnapshotProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.snapshotId ?? output?.snapshotId;
       const nameChanged =
-        news.snapshotId !== undefined &&
-        previousId !== undefined &&
-        news.snapshotId !== previousId;
+        news.snapshotId !== undefined && previousId !== undefined && news.snapshotId !== previousId;
       const previousSubscription = olds?.subscription;
       const subscriptionChanged =
         previousSubscription !== undefined &&
@@ -225,9 +219,7 @@ export const SnapshotProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -241,9 +233,7 @@ export const SnapshotProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.snapshots ?? [])),
             Stream.filter((snapshot) =>
-              Object.keys(snapshot.labels ?? {}).some((key) =>
-                key.startsWith("alchemy-"),
-              ),
+              Object.keys(snapshot.labels ?? {}).some((key) => key.startsWith("alchemy-")),
             ),
             Stream.map((snapshot) => toAttrs(snapshot, env.project)),
             Stream.runCollect,
@@ -255,10 +245,7 @@ export const SnapshotProvider = () =>
       const env = yield* GcpEnvironment.current;
       const snapshotId = yield* toId(id, news.snapshotId, output?.snapshotId);
       const name = resourceName(env.project, snapshotId);
-      const subscriptionName = subscriptionNameOf(
-        env.project,
-        news.subscription,
-      );
+      const subscriptionName = subscriptionNameOf(env.project, news.subscription);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),

@@ -1,16 +1,12 @@
-import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
+import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const DEFAULT_SERVICE_ID = "oauth2.googleapis.com";
 export const DEFAULT_ENFORCEMENT_MODE = "UNENFORCED";
@@ -41,9 +37,7 @@ export const expandApp = (project: string, value: string) => {
 export const appIdOf = (app: string) => {
   const parts = app.split("/").filter((part) => part.length > 0);
   const appsAt = parts.lastIndexOf("apps");
-  return appsAt >= 0 && parts[appsAt + 1]
-    ? parts[appsAt + 1]!
-    : lastSegment(app);
+  return appsAt >= 0 && parts[appsAt + 1] ? parts[appsAt + 1]! : lastSegment(app);
 };
 
 export const parseDebugTokenName = (name: string) => {
@@ -52,17 +46,10 @@ export const parseDebugTokenName = (name: string) => {
   const appsAt = parts.lastIndexOf("apps");
   const tokensAt = parts.lastIndexOf("debugTokens");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     appId: appsAt >= 0 && parts[appsAt + 1] ? parts[appsAt + 1]! : "",
-    debugTokenId:
-      tokensAt >= 0 && parts[tokensAt + 1]
-        ? parts[tokensAt + 1]!
-        : lastSegment(name),
-    app:
-      appsAt >= 0
-        ? parts.slice(0, tokensAt >= 0 ? tokensAt : parts.length).join("/")
-        : "",
+    debugTokenId: tokensAt >= 0 && parts[tokensAt + 1] ? parts[tokensAt + 1]! : lastSegment(name),
+    app: appsAt >= 0 ? parts.slice(0, tokensAt >= 0 ? tokensAt : parts.length).join("/") : "",
   };
 };
 
@@ -72,18 +59,12 @@ export const parseResourcePolicyName = (name: string) => {
   const servicesAt = parts.lastIndexOf("services");
   const policiesAt = parts.lastIndexOf("resourcePolicies");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    serviceId:
-      servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    serviceId: servicesAt >= 0 && parts[servicesAt + 1] ? parts[servicesAt + 1]! : "",
     resourcePolicyId:
-      policiesAt >= 0 && parts[policiesAt + 1]
-        ? parts[policiesAt + 1]!
-        : lastSegment(name),
+      policiesAt >= 0 && parts[policiesAt + 1] ? parts[policiesAt + 1]! : lastSegment(name),
     parent:
-      servicesAt >= 0
-        ? parts.slice(0, policiesAt >= 0 ? policiesAt : parts.length).join("/")
-        : "",
+      servicesAt >= 0 ? parts.slice(0, policiesAt >= 0 ? policiesAt : parts.length).join("/") : "",
   };
 };
 
@@ -95,8 +76,7 @@ export const encodeDisplayName = (
   displayName: string | undefined,
 ): string => {
   const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  const combined =
-    displayName && displayName.length > 0 ? `${marker} ${displayName}` : marker;
+  const combined = displayName && displayName.length > 0 ? `${marker} ${displayName}` : marker;
   return combined.slice(0, 1024);
 };
 
@@ -123,9 +103,7 @@ export const parseDisplayName = (
 };
 
 export const hasOwnershipMarker = (displayName: string | undefined) =>
-  Object.keys(parseDisplayName(displayName).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDisplayName(displayName).labels).some((key) => key.startsWith("alchemy-"));
 
 export const ownedByAlchemy = (id: string, displayName: string | undefined) =>
   Effect.gen(function* () {
@@ -140,10 +118,7 @@ export const dummyClientId = (labels: Record<string, string>) => {
   return `${DUMMY_CLIENT_PREFIX}${id}`.slice(0, 63);
 };
 
-export const dummyTargetResource = (
-  project: string,
-  labels: Record<string, string>,
-) =>
+export const dummyTargetResource = (project: string, labels: Record<string, string>) =>
   `//oauth2.googleapis.com/projects/${project}/oauthClients/${dummyClientId(labels)}`;
 
 export const hasDummyAlchemyTarget = (targetResource: string | undefined) =>
@@ -154,11 +129,7 @@ export const ownedDummyTarget = (
   labels: Record<string, string>,
 ) => lastSegment(targetResource ?? "") === dummyClientId(labels);
 
-export const toDisplayName = (
-  id: string,
-  explicit: string | undefined,
-  existing?: string,
-) =>
+export const toDisplayName = (id: string, explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
     if (existing !== undefined) return existing;
@@ -181,10 +152,8 @@ export const toToken = (explicit: string | undefined, existing?: string) =>
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
-export const sameTextInsensitive = (
-  left: string | undefined,
-  right: string | undefined,
-) => (left ?? "").toLowerCase() === (right ?? "").toLowerCase();
+export const sameTextInsensitive = (left: string | undefined, right: string | undefined) =>
+  (left ?? "").toLowerCase() === (right ?? "").toLowerCase();
 
 export const normalizeEnforcement = (value: string | undefined) =>
   (value ?? DEFAULT_ENFORCEMENT_MODE).toUpperCase();
@@ -201,11 +170,7 @@ export const replaceOnIdentity = (input: {
       deleteFirst: input.deleteFirst !== false,
     };
   }
-  if (
-    input.previous !== undefined &&
-    input.next !== undefined &&
-    input.previous !== input.next
-  ) {
+  if (input.previous !== undefined && input.next !== undefined && input.previous !== input.next) {
     return {
       action: "replace" as const,
       deleteFirst: input.deleteFirst !== false,
@@ -258,9 +223,7 @@ export const listFirebaseApps = (project: string) =>
       pageSize: 100,
     }),
     (page) => page.apps,
-  ).pipe(
-    Effect.catchTag("NotFound", () => emptyList<firebase.FirebaseAppInfo>()),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => emptyList<firebase.FirebaseAppInfo>()));
 
 export const listDebugTokensForApp = (app: string) =>
   collectPages(
@@ -283,9 +246,7 @@ export const listOwnedDebugTokens = (project: string) =>
       (app) => listDebugTokensForApp(expandApp(project, app.appId ?? "")),
       { concurrency: 5 },
     );
-    return pages
-      .flat()
-      .filter((token) => hasOwnershipMarker(token.displayName));
+    return pages.flat().filter((token) => hasOwnershipMarker(token.displayName));
   });
 
 export const findOwnedDebugToken = (
@@ -324,9 +285,7 @@ export const listOwnedResourcePolicies = (project: string) =>
       (serviceId) => listResourcePolicies(project, serviceId),
       { concurrency: 2 },
     );
-    return pages
-      .flat()
-      .filter((policy) => hasDummyAlchemyTarget(policy.targetResource));
+    return pages.flat().filter((policy) => hasDummyAlchemyTarget(policy.targetResource));
   });
 
 export const findOwnedResourcePolicy = (
@@ -338,7 +297,5 @@ export const findOwnedResourcePolicy = (
     const match = policies.find((policy) => policy.name === name);
     if (match) return match;
   }
-  return policies.find((policy) =>
-    ownedDummyTarget(policy.targetResource, labels),
-  );
+  return policies.find((policy) => ownedDummyTarget(policy.targetResource, labels));
 };

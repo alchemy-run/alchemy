@@ -37,14 +37,8 @@ export interface ResumeJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ResumeJobRequest,
-    ) => Effect.Effect<
-      scheduler.Job,
-      scheduler.ResumeProjectsLocationsJobsError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<scheduler.Job, scheduler.ResumeProjectsLocationsJobsError, RuntimeContext>
   >
 > {}
 
-export const ResumeJob = Binding.Service<ResumeJob>(
-  "GCP.CloudScheduler.ResumeJob",
-);
+export const ResumeJob = Binding.Service<ResumeJob>("GCP.CloudScheduler.ResumeJob");

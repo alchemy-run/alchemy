@@ -68,6 +68,4 @@ export interface SendBulkEmail extends Binding.Service<
     ) => Effect.Effect<sesv2.SendBulkEmailResponse, sesv2.SendBulkEmailError>
   >
 > {}
-export const SendBulkEmail = Binding.Service<SendBulkEmail>(
-  "AWS.SES.SendBulkEmail",
-);
+export const SendBulkEmail = Binding.Service<SendBulkEmail>("AWS.SES.SendBulkEmail");

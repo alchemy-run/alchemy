@@ -1,5 +1,5 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 const location = "us";
@@ -8,9 +8,7 @@ const location = "us";
 export const Note = GCP.ContentWarehouse.DocumentSchema("Note", {
   location,
   displayName: "binding-note",
-  propertyDefinitions: [
-    { name: "title", isSearchable: true, textTypeOptions: {} },
-  ],
+  propertyDefinitions: [{ name: "title", isSearchable: true, textTypeOptions: {} }],
 });
 
 /** Document GetDocument reads. */
@@ -54,8 +52,7 @@ export default class ContentWarehouseBindingsHost extends GCP.Function<ContentWa
   "ContentWarehouseBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const getDocumentSchema =
-      yield* GCP.ContentWarehouse.GetDocumentSchema(Note);
+    const getDocumentSchema = yield* GCP.ContentWarehouse.GetDocumentSchema(Note);
     const getDocument = yield* GCP.ContentWarehouse.GetDocument(Welcome);
     const getRuleSet = yield* GCP.ContentWarehouse.GetRuleSet(Checks);
     const getSynonymSet = yield* GCP.ContentWarehouse.GetSynonymSet(Sales);

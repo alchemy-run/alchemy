@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { deleteRestApiAndWait } from "@/AWS/ApiGateway/common.ts";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { deleteRestApiAndWait } from "@/AWS/ApiGateway/common.ts";
+import * as Provider from "@/Provider";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,8 +26,7 @@ const reapRestApis = (logicalId: string) =>
       Array.from(chunk).flatMap((page) =>
         (page.items ?? []).filter(
           (api): api is ag.RestApi & { id: string } =>
-            api.id != null &&
-            (api.name?.includes(`-${logicalId}-test-`) ?? false),
+            api.id != null && (api.name?.includes(`-${logicalId}-test-`) ?? false),
         ),
       ),
     ),
@@ -153,14 +152,10 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.DeploymentResource,
-      );
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.DeploymentResource);
       const all = yield* provider.list();
 
-      expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(
-        true,
-      );
+      expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(true);
 
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);

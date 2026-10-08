@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -133,22 +128,12 @@ export type RestoreChannel = Resource<
  * @resource
  * @category GKEBackup
  */
-export const RestoreChannel = Resource<RestoreChannel>(
-  "GCP.GKEBackup.RestoreChannel",
-);
+export const RestoreChannel = Resource<RestoreChannel>("GCP.GKEBackup.RestoreChannel");
 
-const resourceName = (
-  project: string,
-  location: string,
-  restoreChannelId: string,
-) =>
+const resourceName = (project: string, location: string, restoreChannelId: string) =>
   `projects/${project}/locations/${location}/restoreChannels/${restoreChannelId}`;
 
-const toAttrs = (
-  item: gkebackup.RestoreChannel,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkebackup.RestoreChannel, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, "restoreChannels", region);
   return {
@@ -185,31 +170,17 @@ const listOwned = (project: string) =>
 
 export const RestoreChannelProvider = () =>
   Provider.succeed(RestoreChannel, {
-    stables: [
-      "name",
-      "restoreChannelId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "restoreChannelId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousDest =
-        olds?.destinationProject ?? output?.destinationProject;
+      const previousDest = olds?.destinationProject ?? output?.destinationProject;
       const nextDest = news.destinationProject;
       return replaceOnIdentity({
         previousId: olds?.restoreChannelId ?? output?.restoreChannelId,
-        nextId:
-          news.restoreChannelId ??
-          olds?.restoreChannelId ??
-          output?.restoreChannelId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.restoreChannelId ?? olds?.restoreChannelId ?? output?.restoreChannelId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -231,18 +202,12 @@ export const RestoreChannelProvider = () =>
         output?.restoreChannelId,
         "restorechannel",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, restoreChannelId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, restoreChannelId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -260,15 +225,9 @@ export const RestoreChannelProvider = () =>
         output?.restoreChannelId,
         "restorechannel",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, restoreChannelId);
-      const destinationProject = projectName(
-        news.destinationProject,
-        env.project,
-      );
+      const destinationProject = projectName(news.destinationProject, env.project);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
@@ -306,21 +265,17 @@ export const RestoreChannelProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* gkebackup.patchProjectsLocationsRestoreChannels({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-            },
-          });
+        const operation = yield* gkebackup.patchProjectsLocationsRestoreChannels({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

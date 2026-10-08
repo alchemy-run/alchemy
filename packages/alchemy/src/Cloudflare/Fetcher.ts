@@ -2,7 +2,6 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
-import * as Schedule from "effect/Schedule";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import { HttpClientError, TransportError } from "effect/http/HttpClientError";
@@ -11,6 +10,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { HttpServerError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 
 export type SocketAddress = cf.SocketAddress;
@@ -25,10 +25,7 @@ export type SocketOptions = cf.SocketOptions;
  * already lowercased and `Headers.get` is case-insensitive, so the
  * comparison needs no normalization.
  */
-const sameHeaders = (
-  web: Headers,
-  eff: Readonly<Record<string, string>>,
-): boolean => {
+const sameHeaders = (web: Headers, eff: Readonly<Record<string, string>>): boolean => {
   const keys = Object.keys(eff);
   let webCount = 0;
   for (const _ of web.keys()) {
@@ -51,10 +48,7 @@ export interface Fetcher {
     request: HttpServerRequest.HttpServerRequest,
   ): Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 
-  connect(
-    address: SocketAddress | string,
-    options?: SocketOptions,
-  ): Socket.Socket;
+  connect(address: SocketAddress | string, options?: SocketOptions): Socket.Socket;
 }
 
 export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
@@ -62,17 +56,10 @@ export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
   return {
     fetch: (input, init) =>
       fetcher
-        .fetch(
-          HttpServerRequest.fromWeb(
-            new Request(input as any, init as any) as any as Request,
-          ),
-        )
+        .fetch(HttpServerRequest.fromWeb(new Request(input as any, init as any) as any as Request))
         .pipe(
           Effect.map(
-            (response) =>
-              HttpServerResponse.toWeb(response, {
-                context,
-              }) as any as cf.Response,
+            (response) => HttpServerResponse.toWeb(response, { context }) as any as cf.Response,
           ),
           Effect.provideContext(context),
           Effect.runPromise,
@@ -84,9 +71,7 @@ export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
   } satisfies cf.Fetcher;
 });
 
-export const fromCloudflareFetcher = (
-  fetcher: cf.Fetcher | globalThis.Fetcher,
-): Fetcher => {
+export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher): Fetcher => {
   const fetch = (request: Request) =>
     Effect.suspend(() => {
       // Clone per attempt, keeping `request` pristine: the HandlerNotReady
@@ -95,9 +80,7 @@ export const fromCloudflareFetcher = (
       // "TypeError: Cannot reconstruct a Request with a used body".
       const attempt = request.clone() as Request;
       return Effect.promise((signal) =>
-        (fetcher as globalThis.Fetcher).fetch(attempt, {
-          signal: signal,
-        }),
+        (fetcher as globalThis.Fetcher).fetch(attempt, { signal: signal }),
       );
     }).pipe(
       // The "Handler does not export a fetch()" window is a property of
@@ -131,18 +114,13 @@ export const fromCloudflareFetcher = (
 
   return {
     raw: fetcher as cf.Fetcher,
-    connect: (address, options) =>
-      fromCloudflareSocket(fetcher.connect(address, options)),
+    connect: (address, options) => fromCloudflareSocket(fetcher.connect(address, options)),
     fetch: (
-      request:
-        | HttpClientRequest.HttpClientRequest
-        | HttpServerRequest.HttpServerRequest,
+      request: HttpClientRequest.HttpClientRequest | HttpServerRequest.HttpServerRequest,
     ): any =>
       HttpClientRequest.isHttpClientRequest(request)
         ? pipe(
-            HttpServerRequest.toWeb(
-              HttpServerRequest.fromClientRequest(request),
-            ),
+            HttpServerRequest.toWeb(HttpServerRequest.fromClientRequest(request)),
             Effect.flatMap(fetch),
             Effect.map((response) =>
               HttpClientResponse.fromWeb(request, response as any as Response),
@@ -180,9 +158,7 @@ export const fromCloudflareFetcher = (
             Effect.map((webRequest) =>
               sameHeaders(webRequest.headers, request.headers)
                 ? webRequest
-                : new Request(webRequest, {
-                    headers: request.headers as Record<string, string>,
-                  }),
+                : new Request(webRequest, { headers: request.headers as Record<string, string> }),
             ),
             Effect.flatMap(fetch),
             Effect.map((response) => {
@@ -240,10 +216,7 @@ export const toHttpClient = (fetcher: {
         .fetch(HttpServerRequest.fromClientRequest(request))
         .pipe(
           Effect.map((response) =>
-            HttpClientResponse.fromWeb(
-              request,
-              HttpServerResponse.toWeb(response),
-            ),
+            HttpClientResponse.fromWeb(request, HttpServerResponse.toWeb(response)),
           ),
         ),
     ).pipe(
@@ -259,9 +232,7 @@ export const toHttpClient = (fetcher: {
           new HttpClientError({
             reason: new TransportError({
               request,
-              cause: isHandlerNotReady(squashed)
-                ? (squashed as { message?: unknown })
-                : squashed,
+              cause: isHandlerNotReady(squashed) ? (squashed as { message?: unknown }) : squashed,
               description: "Fetcher-backed HttpClient request failed",
             }),
           }),
@@ -270,9 +241,7 @@ export const toHttpClient = (fetcher: {
     );
   });
 
-export const fromCloudflareSocket = (
-  cfSocket: globalThis.Socket | cf.Socket,
-): Socket.Socket =>
+export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): Socket.Socket =>
   // `fromTransformStream` snapshots fiber context, then waits to acquire
   // the streams until a consumer opens the reader. `runSync` is only that
   // snapshot — connection still happens on first `socket.reader`.
@@ -289,10 +258,7 @@ export const fromCloudflareSocket = (
           ),
         catch: (cause) =>
           new Socket.SocketError({
-            reason: new Socket.SocketOpenError({
-              kind: "Unknown",
-              cause,
-            }),
+            reason: new Socket.SocketOpenError({ kind: "Unknown", cause }),
           }),
       }),
     ),

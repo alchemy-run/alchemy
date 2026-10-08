@@ -1,23 +1,18 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const currentProject = GcpEnvironment.current.pipe(
-  Effect.map((env) => env.project),
-);
+export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 export const location = "us-central1";
 
 export const missingService = (serviceId = "alchemy-missing-service") =>
   currentProject.pipe(
-    Effect.map(
-      (project) =>
-        `projects/${project}/locations/${location}/services/${serviceId}`,
-    ),
+    Effect.map((project) => `projects/${project}/locations/${location}/services/${serviceId}`),
   );
 
 export const missingSchema = (serviceId = "alchemy-missing-service") =>
@@ -40,16 +35,13 @@ export const schemaSource = (extraField?: string) => ({
   ],
 });
 
-export const unlinkedDatasources = [
-  { postgresql: { unlinked: true as const } },
-];
+export const unlinkedDatasources = [{ postgresql: { unlinked: true as const } }];
 
 export const connectorSource = {
   files: [
     {
       path: "queries.gql",
-      content:
-        "query ListAlchemyNotes @auth(level: PUBLIC) { alchemyNotes { id title } }",
+      content: "query ListAlchemyNotes @auth(level: PUBLIC) { alchemyNotes { id title } }",
     },
   ],
 };

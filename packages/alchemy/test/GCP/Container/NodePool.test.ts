@@ -1,20 +1,18 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { adopt } from "@/AdoptPolicy";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
 import { waitForOperation } from "@/GCP/Operation";
+import * as Test from "@/Test/Alchemy";
 import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // GKE cluster create and delete each take 5-10 minutes.
 const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
@@ -48,8 +46,7 @@ const waitClusterOp = (project: string, operation: container.Operation) => {
       : `projects/${project}/locations/${HOST_LOCATION}/operations/${raw}`;
   return waitForOperation(
     { ...operation, name },
-    (operationName) =>
-      container.getProjectsLocationsOperations({ name: operationName }),
+    (operationName) => container.getProjectsLocationsOperations({ name: operationName }),
     { budget: "20 minutes", interval: "10 seconds" },
   );
 };
@@ -64,9 +61,9 @@ test.provider(
       const page = yield* container.listProjectsLocationsClusters({
         parent: `projects/${project}/locations/-`,
       });
-      expect(
-        (page.clusters ?? []).map((cluster) => cluster.name),
-      ).not.toContain("alchemy-missing-cluster");
+      expect((page.clusters ?? []).map((cluster) => cluster.name)).not.toContain(
+        "alchemy-missing-cluster",
+      );
 
       const missing = yield* container
         .getProjectsLocationsClustersNodePools({
@@ -91,18 +88,13 @@ test.provider(
  */
 const withHostCluster = <A, E, R>(
   project: string,
-  body: (host: {
-    clusterId: string;
-    location: string;
-  }) => Effect.Effect<A, E, R>,
+  body: (host: { clusterId: string; location: string }) => Effect.Effect<A, E, R>,
 ) => {
   const clusterName = `projects/${project}/locations/${HOST_LOCATION}/clusters/${HOST_CLUSTER_ID}`;
-  const deleteHost = container
-    .deleteProjectsLocationsClusters({ name: clusterName })
-    .pipe(
-      Effect.flatMap((operation) => waitClusterOp(project, operation)),
-      Effect.catchTag("NotFound", () => Effect.void),
-    );
+  const deleteHost = container.deleteProjectsLocationsClusters({ name: clusterName }).pipe(
+    Effect.flatMap((operation) => waitClusterOp(project, operation)),
+    Effect.catchTag("NotFound", () => Effect.void),
+  );
   const ensureHost = Effect.gen(function* () {
     const existing = yield* container
       .getProjectsLocationsClusters({ name: clusterName })
@@ -133,9 +125,7 @@ const withHostCluster = <A, E, R>(
     yield* waitClusterOp(project, created);
   });
   return ensureHost.pipe(
-    Effect.andThen(
-      body({ clusterId: HOST_CLUSTER_ID, location: HOST_LOCATION }),
-    ),
+    Effect.andThen(body({ clusterId: HOST_CLUSTER_ID, location: HOST_LOCATION })),
     Effect.ensuring(Effect.ignore(deleteHost)),
   );
 };
@@ -147,80 +137,165 @@ test.provider.skipIf(!runLifecycle)(
       Effect.gen(function* () {
         yield* stack.destroy();
         const { project } = yield* GcpEnvironment.current;
-        yield* withHostCluster(
-          project,
-          ({ clusterId: hostId, location: hostLocation }) =>
-            Effect.gen(function* () {
-              const created = yield* stack.deploy(
-                Effect.gen(function* () {
-                  return yield* GCP.Container.NodePool("Workers", {
-                    cluster: hostId,
-                    location: hostLocation,
-                    nodeCount: POOL_NODE_COUNT,
-                    machineType: "e2-medium",
-                    diskSizeGb: 20,
-                    spot: true,
-                    management: { autoRepair: false, autoUpgrade: true },
-                    labels: { env: "test" },
-                  });
-                }),
-              );
-
-              expect(created.name).toContain("/nodePools/");
-              expect(created.nodePoolId).toEqual(expect.any(String));
-              expect(created.clusterId).toEqual(hostId);
-              expect(created.location).toEqual(hostLocation);
-              expect(created.labels).toMatchObject({ env: "test" });
-              expect(created.spot).toEqual(true);
-              expect(created.nodeCount).toEqual(POOL_NODE_COUNT);
-              expect(["RUNNING", "RUNNING_WITH_ERROR"]).toContain(
-                created.status,
-              );
-
-              const fetched =
-                yield* container.getProjectsLocationsClustersNodePools({
-                  name: created.name,
+        yield* withHostCluster(project, ({ clusterId: hostId, location: hostLocation }) =>
+          Effect.gen(function* () {
+            const created = yield* stack.deploy(
+              Effect.gen(function* () {
+                return yield* GCP.Container.NodePool("Workers", {
+                  cluster: hostId,
+                  location: hostLocation,
+                  nodeCount: POOL_NODE_COUNT,
+                  machineType: "e2-medium",
+                  diskSizeGb: 20,
+                  spot: true,
+                  management: { autoRepair: false, autoUpgrade: true },
+                  labels: { env: "test" },
+                  metadata: { "disable-legacy-endpoints": "true" },
+                  // The host has no Workload Identity, so GKE_METADATA is
+                  // rejected; set the alternative explicitly.
+                  workloadMetadataConfig: { mode: "GCE_METADATA" },
+                  shieldedInstanceConfig: {
+                    enableIntegrityMonitoring: true,
+                    enableSecureBoot: true,
+                  },
+                  advancedMachineFeatures: { enableNestedVirtualization: false },
                 });
-              expect(fetched.name).toEqual(created.nodePoolId);
-              expect(fetched.config?.resourceLabels?.env).toEqual("test");
-              expect(fetched.config?.spot).toEqual(true);
+              }),
+            );
 
-              const updated = yield* stack.deploy(
-                Effect.gen(function* () {
-                  return yield* GCP.Container.NodePool("Workers", {
-                    cluster: hostId,
-                    location: hostLocation,
-                    nodePoolId: created.nodePoolId,
-                    nodeCount: POOL_NODE_COUNT,
-                    machineType: "e2-medium",
-                    diskSizeGb: 20,
-                    spot: true,
-                    management: { autoRepair: true, autoUpgrade: true },
-                    labels: { env: "prod", role: "workers" },
-                  });
-                }),
-              );
+            expect(created.name).toContain("/nodePools/");
+            expect(created.nodePoolId).toEqual(expect.any(String));
+            expect(created.clusterId).toEqual(hostId);
+            expect(created.location).toEqual(hostLocation);
+            expect(created.labels).toMatchObject({ env: "test" });
+            expect(created.spot).toEqual(true);
+            expect(created.nodeCount).toEqual(POOL_NODE_COUNT);
+            expect(created.metadata["disable-legacy-endpoints"]).toEqual("true");
+            expect(created.workloadMetadataConfig?.mode).toEqual("GCE_METADATA");
+            expect(created.shieldedInstanceConfig?.enableSecureBoot).toEqual(true);
+            expect(["RUNNING", "RUNNING_WITH_ERROR"]).toContain(created.status);
 
-              expect(updated.name).toEqual(created.name);
-              expect(updated.labels).toMatchObject({
-                env: "prod",
-                role: "workers",
+            const fetched = yield* container.getProjectsLocationsClustersNodePools({
+              name: created.name,
+            });
+            expect(fetched.name).toEqual(created.nodePoolId);
+            expect(fetched.config?.resourceLabels?.env).toEqual("test");
+            expect(fetched.config?.spot).toEqual(true);
+            expect(fetched.config?.metadata?.["disable-legacy-endpoints"]).toEqual("true");
+            expect(fetched.config?.workloadMetadataConfig?.mode).toEqual("GCE_METADATA");
+            expect(fetched.config?.shieldedInstanceConfig?.enableSecureBoot).toEqual(true);
+
+            const workersProps: GCP.Container.NodePoolProps = {
+              cluster: hostId,
+              location: hostLocation,
+              nodePoolId: created.nodePoolId,
+              nodeCount: POOL_NODE_COUNT,
+              machineType: "e2-medium",
+              diskSizeGb: 20,
+              spot: true,
+              management: { autoRepair: true, autoUpgrade: true },
+              labels: { env: "prod", role: "workers" },
+              metadata: { "disable-legacy-endpoints": "true" },
+              // The host has no Workload Identity, so GKE_METADATA is
+              // rejected; set the alternative explicitly.
+              workloadMetadataConfig: { mode: "GCE_METADATA" },
+              shieldedInstanceConfig: {
+                enableIntegrityMonitoring: true,
+                enableSecureBoot: true,
+              },
+              advancedMachineFeatures: { enableNestedVirtualization: false },
+            };
+            const workers = (props: Partial<GCP.Container.NodePoolProps> = {}) =>
+              GCP.Container.NodePool("Workers", { ...workersProps, ...props });
+
+            const updated = yield* stack.deploy(workers());
+
+            expect(updated.name).toEqual(created.name);
+            expect(updated.labels).toMatchObject({
+              env: "prod",
+              role: "workers",
+            });
+            expect(updated.management?.autoRepair).toEqual(true);
+
+            const refetched = yield* container.getProjectsLocationsClustersNodePools({
+              name: created.name,
+            });
+            expect(refetched.config?.resourceLabels?.env).toEqual("prod");
+            expect(refetched.config?.resourceLabels?.role).toEqual("workers");
+            expect(refetched.management?.autoRepair).toEqual(true);
+
+            // VM settings are fixed when the pool's nodes are created.
+            expect(
+              (yield* stack.plan(
+                workers({ advancedMachineFeatures: { enableNestedVirtualization: true } }),
+              )).resources.Workers,
+            ).toMatchObject({ action: "replace", deleteFirst: true });
+            expect(
+              (yield* stack.plan(workers({ metadata: { "disable-legacy-endpoints": "false" } })))
+                .resources.Workers,
+            ).toMatchObject({ action: "replace", deleteFirst: true });
+
+            yield* stack.destroy();
+
+            const gone = yield* waitUntilGone(created.name);
+            expect(gone).toEqual("gone");
+
+            // Adopting a pool created outside Alchemy: GKE injects metadata and
+            // omits false booleans, which must not count as changes.
+            const foreignId = "alch-np-foreign";
+            const foreignName = `projects/${project}/locations/${hostLocation}/clusters/${hostId}/nodePools/${foreignId}`;
+            const existingForeign = yield* container
+              .getProjectsLocationsClustersNodePools({ name: foreignName })
+              .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            if (existingForeign === undefined) {
+              const op = yield* container.createProjectsLocationsClustersNodePools({
+                parent: `projects/${project}/locations/${hostLocation}/clusters/${hostId}`,
+                body: {
+                  nodePool: {
+                    name: foreignId,
+                    initialNodeCount: POOL_NODE_COUNT,
+                    config: { machineType: "e2-medium", diskSizeGb: 20, spot: true },
+                  },
+                },
               });
-              expect(updated.management?.autoRepair).toEqual(true);
+              yield* waitClusterOp(project, op);
+            }
+            const adopted = (props: Partial<GCP.Container.NodePoolProps>) =>
+              GCP.Container.NodePool("Adopted", {
+                cluster: hostId,
+                location: hostLocation,
+                nodePoolId: foreignId,
+                nodeCount: POOL_NODE_COUNT,
+                machineType: "e2-medium",
+                diskSizeGb: 20,
+                spot: true,
+                ...props,
+              }).pipe(adopt(true));
+            const actionOf = (props: Partial<GCP.Container.NodePoolProps>) =>
+              stack.plan(adopted(props)).pipe(Effect.map((plan) => plan.resources.Adopted));
 
-              const refetched =
-                yield* container.getProjectsLocationsClustersNodePools({
-                  name: created.name,
-                });
-              expect(refetched.config?.resourceLabels?.env).toEqual("prod");
-              expect(refetched.config?.resourceLabels?.role).toEqual("workers");
-              expect(refetched.management?.autoRepair).toEqual(true);
+            expect((yield* actionOf({ metadata: {} })).action).not.toBe("replace");
+            expect(
+              (yield* actionOf({
+                metadata: {},
+                shieldedInstanceConfig: { enableSecureBoot: false },
+              })).action,
+            ).not.toBe("replace");
+            expect(
+              (yield* actionOf({ metadata: { "disable-legacy-endpoints": "true" } })).action,
+            ).not.toBe("replace");
+            expect(yield* actionOf({ metadata: { owner: "team-a" } })).toMatchObject({
+              action: "replace",
+              deleteFirst: true,
+            });
 
-              yield* stack.destroy();
-
-              const gone = yield* waitUntilGone(created.name);
-              expect(gone).toEqual("gone");
-            }),
+            const adoptedPool = yield* stack.deploy(
+              adopted({ metadata: { "disable-legacy-endpoints": "true" } }),
+            );
+            expect(adoptedPool.nodePoolId).toEqual(foreignId);
+            yield* stack.destroy();
+            expect(yield* waitUntilGone(foreignName)).toEqual("gone");
+          }),
         );
       }),
     ).pipe(logLevel),

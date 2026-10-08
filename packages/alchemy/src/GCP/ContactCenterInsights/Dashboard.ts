@@ -27,14 +27,7 @@ export type DateRangeConfig = {
     /** Number of units in the past. */
     quantity?: string;
     /** Calendar unit (`DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`). */
-    unit?:
-      | "TIME_UNIT_UNSPECIFIED"
-      | "DAY"
-      | "WEEK"
-      | "MONTH"
-      | "QUARTER"
-      | "YEAR"
-      | (string & {});
+    unit?: "TIME_UNIT_UNSPECIFIED" | "DAY" | "WEEK" | "MONTH" | "QUARTER" | "YEAR" | (string & {});
   };
   /** Inclusive start/end timestamps. */
   absoluteDateRange?: {
@@ -141,9 +134,7 @@ export type Dashboard = Resource<
  * @resource
  * @category ContactCenterInsights
  */
-export const Dashboard = Resource<Dashboard>(
-  "GCP.ContactCenterInsights.Dashboard",
-);
+export const Dashboard = Resource<Dashboard>("GCP.ContactCenterInsights.Dashboard");
 
 export class DashboardNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DashboardNotResolved",
@@ -151,8 +142,7 @@ export class DashboardNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (parent: string, dashboardId: string) =>
-  `${parent}/dashboards/${dashboardId}`;
+const resourceName = (parent: string, dashboardId: string) => `${parent}/dashboards/${dashboardId}`;
 
 const toDateRangeConfig = (
   config: cci.GoogleCloudContactcenterinsightsV1DateRangeConfig | undefined,
@@ -176,10 +166,7 @@ const toDateRangeConfig = (
   };
 };
 
-const toAttrs = (
-  dashboard: cci.GoogleCloudContactcenterinsightsV1Dashboard,
-  project: string,
-) => {
+const toAttrs = (dashboard: cci.GoogleCloudContactcenterinsightsV1Dashboard, project: string) => {
   const name = dashboard.name ?? "";
   const parsed = parseOwnership(dashboard.description);
   return {
@@ -243,41 +230,26 @@ export const DashboardProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const dashboardId = yield* toResourceId(
-        id,
-        olds?.dashboardId,
-        output?.dashboardId,
-      );
+      const dashboardId = yield* toResourceId(id, olds?.dashboardId, output?.dashboardId);
       const location = olds?.location ?? output?.location ?? env.region;
-      const name =
-        output?.name ??
-        resourceName(locationParent(env.project, location), dashboardId);
+      const name = output?.name ?? resourceName(locationParent(env.project, location), dashboardId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        return yield* listAt(
-          locationParent(env.project, env.region),
-          env.project,
-        );
+        return yield* listAt(locationParent(env.project, env.region), env.project);
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = news.location ?? output?.location ?? env.region;
       const parent = locationParent(env.project, location);
-      const dashboardId = yield* toResourceId(
-        id,
-        news.dashboardId,
-        output?.dashboardId,
-      );
+      const dashboardId = yield* toResourceId(id, news.dashboardId, output?.dashboardId);
       const name = resourceName(parent, dashboardId);
       const ownership = yield* createInternalLabels(id);
       const description = encodeOwnership(ownership, news.description);
@@ -309,10 +281,7 @@ export const DashboardProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
       const descriptionChanged = (current.description ?? "") !== description;
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const dateRangeChanged = !sameJson(
-        current.dateRangeConfig,
-        news.dateRangeConfig,
-      );
+      const dateRangeChanged = !sameJson(current.dateRangeConfig, news.dateRangeConfig);
       const rootChanged = !sameJson(current.rootContainer, news.rootContainer);
 
       if (

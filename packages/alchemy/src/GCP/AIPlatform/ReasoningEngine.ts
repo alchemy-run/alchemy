@@ -28,12 +28,10 @@ import {
 } from "./names.ts";
 import { resourceNameFromOperation, waitForOperation } from "./operations.ts";
 
-export type ReasoningEngineSpec =
-  aiplatform.GoogleCloudAiplatformV1ReasoningEngineSpec;
+export type ReasoningEngineSpec = aiplatform.GoogleCloudAiplatformV1ReasoningEngineSpec;
 export type ReasoningEngineContextSpec =
   aiplatform.GoogleCloudAiplatformV1ReasoningEngineContextSpec;
-export type ReasoningEngineEncryptionSpec =
-  aiplatform.GoogleCloudAiplatformV1EncryptionSpec;
+export type ReasoningEngineEncryptionSpec = aiplatform.GoogleCloudAiplatformV1EncryptionSpec;
 
 export type ReasoningEngineProps = {
   /**
@@ -132,9 +130,7 @@ export type ReasoningEngine = Resource<
  * @resource
  * @category AIPlatform
  */
-export const ReasoningEngine = Resource<ReasoningEngine>(
-  "GCP.AIPlatform.ReasoningEngine",
-);
+export const ReasoningEngine = Resource<ReasoningEngine>("GCP.AIPlatform.ReasoningEngine");
 
 export class ReasoningEngineNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEngineNotResolved",
@@ -148,21 +144,14 @@ export class ReasoningEngineStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  reasoningEngineId: string,
-) =>
+const resourceName = (project: string, location: string, reasoningEngineId: string) =>
   `projects/${project}/locations/${location}/reasoningEngines/${reasoningEngineId}`;
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-const toAttrs = (
-  engine: aiplatform.GoogleCloudAiplatformV1ReasoningEngine,
-  project: string,
-) => {
+const toAttrs = (engine: aiplatform.GoogleCloudAiplatformV1ReasoningEngine, project: string) => {
   const name = engine.name ?? "";
   const parsed = parseName(name, "reasoningEngines");
   return {
@@ -188,28 +177,19 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listAt = (parent: string) =>
-  aiplatform.listProjectsLocationsReasoningEngines
-    .pages({ parent, pageSize: 100 })
-    .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.reasoningEngines ?? []),
-      ),
-      Stream.take(500),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () => Effect.succeed([])),
-    );
+  aiplatform.listProjectsLocationsReasoningEngines.pages({ parent, pageSize: 100 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.reasoningEngines ?? [])),
+    Stream.take(500),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
+  );
 
-export const listAlchemyReasoningEngines = (
-  project: string,
-  location: string,
-) =>
+export const listAlchemyReasoningEngines = (project: string, location: string) =>
   listAt(parentOf(project, location)).pipe(
     Effect.map((engines) =>
       engines.filter((engine) =>
-        Object.keys(engine.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
+        Object.keys(engine.labels ?? {}).some((key) => key.startsWith("alchemy-")),
       ),
     ),
   );
@@ -219,22 +199,17 @@ const findOwned = (id: string, parent: string) =>
     const expected = yield* createInternalLabels(id);
     const engines = yield* listAt(parent);
     return engines.find((engine) =>
-      Object.entries(expected).every(
-        ([key, value]) => (engine.labels ?? {})[key] === value,
-      ),
+      Object.entries(expected).every(([key, value]) => (engine.labels ?? {})[key] === value),
     );
   });
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine === undefined
-        ? Effect.void
-        : Effect.fail(new ReasoningEngineStillExists({ name })),
+      engine === undefined ? Effect.void : Effect.fail(new ReasoningEngineStillExists({ name })),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.AIPlatform.ReasoningEngineStillExists",
+      while: (error) => error._tag === "GCP.AIPlatform.ReasoningEngineStillExists",
       times: 10,
       schedule: Schedule.spaced("2 seconds"),
     }),
@@ -262,21 +237,11 @@ export const ReasoningEngineProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.reasoningEngineId ?? output?.reasoningEngineId;
       const nextId = news.reasoningEngineId ?? previousId;
-      const idChanged =
-        previousId !== undefined &&
-        nextId !== undefined &&
-        nextId !== previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const nextLocation = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const idChanged = previousId !== undefined && nextId !== undefined && nextId !== previousId;
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const nextLocation = normalizeLocation(news.location ?? output?.location, env.region);
       const encryptionChanged =
-        (news.encryptionSpec?.kmsKeyName ?? "") !==
-        (olds?.encryptionSpec?.kmsKeyName ?? "");
+        (news.encryptionSpec?.kmsKeyName ?? "") !== (olds?.encryptionSpec?.kmsKeyName ?? "");
       if (
         idChanged ||
         previousLocation !== nextLocation ||
@@ -289,10 +254,7 @@ export const ReasoningEngineProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name =
         output?.name ??
         (olds?.reasoningEngineId !== undefined
@@ -303,33 +265,25 @@ export const ReasoningEngineProvider = () =>
         (yield* findOwned(id, parentOf(env.project, location)));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const engines = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listAt(parentOf(env.project, location)),
+        const engines = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listAt(parentOf(env.project, location)),
         )).flat();
         return engines
           .filter((engine) =>
-            Object.keys(engine.labels ?? {}).some((key) =>
-              key.startsWith("alchemy-"),
-            ),
+            Object.keys(engine.labels ?? {}).some((key) => key.startsWith("alchemy-")),
           )
           .map((engine) => toAttrs(engine, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const parent = parentOf(env.project, location);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -337,16 +291,11 @@ export const ReasoningEngineProvider = () =>
       };
       const displayName =
         news.displayName ??
-        (yield* toPhysicalId(
-          id,
-          news.reasoningEngineId,
-          output?.reasoningEngineId,
-        ));
+        (yield* toPhysicalId(id, news.reasoningEngineId, output?.reasoningEngineId));
 
       let current =
-        (output?.name !== undefined
-          ? yield* getByName(output.name)
-          : undefined) ?? (yield* findOwned(id, parent));
+        (output?.name !== undefined ? yield* getByName(output.name) : undefined) ??
+        (yield* findOwned(id, parent));
 
       if (current === undefined) {
         const created = yield* retryWriteQuota(
@@ -367,9 +316,7 @@ export const ReasoningEngineProvider = () =>
         }
         const createdName = resourceNameFromOperation(created ?? {});
         current =
-          createdName !== undefined
-            ? yield* getByName(createdName)
-            : yield* findOwned(id, parent);
+          createdName !== undefined ? yield* getByName(createdName) : yield* findOwned(id, parent);
       }
 
       if (current === undefined || current.name === undefined) {
@@ -383,17 +330,10 @@ export const ReasoningEngineProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayChanged = (current.displayName ?? "") !== displayName;
-      const descriptionChanged =
-        (current.description ?? "") !== (news.description ?? "");
-      const specChanged =
-        stableJson(current.spec) !== stableJson(news.spec ?? current.spec);
+      const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
+      const specChanged = stableJson(current.spec) !== stableJson(news.spec ?? current.spec);
 
-      if (
-        labelsChanged ||
-        displayChanged ||
-        descriptionChanged ||
-        specChanged
-      ) {
+      if (labelsChanged || displayChanged || descriptionChanged || specChanged) {
         const updateMask = [
           labelsChanged ? "labels" : undefined,
           displayChanged ? "display_name" : undefined,

@@ -9,10 +9,8 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const rfc1035 = (name: string, maxLength: number): string => {
   let next = name
@@ -49,10 +47,7 @@ export const toPhysicalRfc1035 = (
   Effect.gen(function* () {
     if (explicit !== undefined) return rfc1035(explicit, maxLength);
     if (existing !== undefined) return existing;
-    return rfc1035(
-      yield* createPhysicalName({ id, maxLength, lowercase: true }),
-      maxLength,
-    );
+    return rfc1035(yield* createPhysicalName({ id, maxLength, lowercase: true }), maxLength);
   });
 
 export const toPhysicalSnake = (
@@ -81,14 +76,9 @@ export const parseResourceName = (name: string, collection: string) => {
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -100,9 +90,8 @@ export const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
 
-export const hasAlchemyLabelMap = (
-  labels: Record<string, string | undefined> | null | undefined,
-) => Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
+export const hasAlchemyLabelMap = (labels: Record<string, string | undefined> | null | undefined) =>
+  Object.keys(labels ?? {}).some((key) => key.startsWith("alchemy-"));
 
 export const expandParent = (
   value: string,
@@ -135,13 +124,9 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
-export const specifiedEquals = (
-  desired: unknown,
-  observed: unknown,
-): boolean => {
+export const specifiedEquals = (desired: unknown, observed: unknown): boolean => {
   if (desired === undefined) return true;
   if (
     typeof desired === "boolean" ||
@@ -156,8 +141,8 @@ export const specifiedEquals = (
       observed !== null && typeof observed === "object"
         ? (observed as Record<string, unknown>)
         : {};
-    return Object.entries(desired as Record<string, unknown>).every(
-      ([key, value]) => specifiedEquals(value, obs[key]),
+    return Object.entries(desired as Record<string, unknown>).every(([key, value]) =>
+      specifiedEquals(value, obs[key]),
     );
   }
   return fingerprint(desired) === fingerprint(observed);

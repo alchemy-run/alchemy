@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   connectionProfileOf,
@@ -50,8 +45,7 @@ export type OracleToPostgresConfig = dm.OracleToPostgresConfig;
 export type PostgresToSqlServerConfig = dm.PostgresToSqlServerConfig;
 export type MySqlHomogeneousConfig = dm.MySqlHomogeneousConfig;
 export type PostgresHomogeneousConfig = dm.PostgresHomogeneousConfig;
-export type SqlServerHomogeneousMigrationJobConfig =
-  dm.SqlServerHomogeneousMigrationJobConfig;
+export type SqlServerHomogeneousMigrationJobConfig = dm.SqlServerHomogeneousMigrationJobConfig;
 type Status = dm.Status;
 
 export type MigrationJobProps = {
@@ -236,9 +230,7 @@ export type MigrationJob = Resource<
     /** Homogeneous PostgreSQL config. */
     postgresHomogeneousConfig: PostgresHomogeneousConfig | undefined;
     /** Homogeneous SQL Server config. */
-    sqlserverHomogeneousMigrationJobConfig:
-      | SqlServerHomogeneousMigrationJobConfig
-      | undefined;
+    sqlserverHomogeneousMigrationJobConfig: SqlServerHomogeneousMigrationJobConfig | undefined;
     /** Server-reported state. */
     state: string | undefined;
     /** Current phase. */
@@ -301,18 +293,12 @@ export type MigrationJob = Resource<
  * @resource
  * @category DataMigration
  */
-export const MigrationJob = Resource<MigrationJob>(
-  "GCP.DataMigration.MigrationJob",
-);
+export const MigrationJob = Resource<MigrationJob>("GCP.DataMigration.MigrationJob");
 
-const resourceName = (
-  project: string,
-  location: string,
-  migrationJobId: string,
-) => `${locationParent(project, location)}/migrationJobs/${migrationJobId}`;
+const resourceName = (project: string, location: string, migrationJobId: string) =>
+  `${locationParent(project, location)}/migrationJobs/${migrationJobId}`;
 
-const emptyConnectivity = (value: unknown) =>
-  value === undefined ? undefined : {};
+const emptyConnectivity = (value: unknown) => (value === undefined ? undefined : {});
 
 const publicReverseSsh = (value: ReverseSshConnectivity | undefined) =>
   value === undefined
@@ -355,8 +341,7 @@ const toAttrs = (job: dm.MigrationJob, project: string) => {
     postgresToSqlserverConfig: job.postgresToSqlserverConfig,
     mysqlHomogeneousConfig: job.mysqlHomogeneousConfig,
     postgresHomogeneousConfig: job.postgresHomogeneousConfig,
-    sqlserverHomogeneousMigrationJobConfig:
-      job.sqlserverHomogeneousMigrationJobConfig,
+    sqlserverHomogeneousMigrationJobConfig: job.sqlserverHomogeneousMigrationJobConfig,
     state: job.state,
     phase: job.phase,
     purpose: job.purpose,
@@ -393,15 +378,11 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.migrationJobs ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.migrationJobs ?? [])),
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as dm.MigrationJob[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as dm.MigrationJob[])),
           ),
       ),
     );
@@ -432,18 +413,12 @@ export const MigrationJobProvider = () =>
       const nextCmek = news.cmekKeyName ?? previousCmek;
       const previousSource = lastSegment(olds?.source ?? output?.source ?? "");
       const nextSource = lastSegment(news.source);
-      const previousDestination = lastSegment(
-        olds?.destination ?? output?.destination ?? "",
-      );
+      const previousDestination = lastSegment(olds?.destination ?? output?.destination ?? "");
       const nextDestination = lastSegment(news.destination);
       return replaceOnIdentity({
         previousId: olds?.migrationJobId ?? output?.migrationJobId,
-        nextId:
-          news.migrationJobId ?? olds?.migrationJobId ?? output?.migrationJobId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        nextId: news.migrationJobId ?? olds?.migrationJobId ?? output?.migrationJobId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -451,9 +426,7 @@ export const MigrationJobProvider = () =>
         extra:
           previousType !== nextType ||
           previousCmek !== nextCmek ||
-          (previousSource.length > 0 &&
-            nextSource.length > 0 &&
-            previousSource !== nextSource) ||
+          (previousSource.length > 0 && nextSource.length > 0 && previousSource !== nextSource) ||
           (previousDestination.length > 0 &&
             nextDestination.length > 0 &&
             previousDestination !== nextDestination),
@@ -468,18 +441,12 @@ export const MigrationJobProvider = () =>
         output?.migrationJobId,
         "job",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, migrationJobId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, migrationJobId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -497,10 +464,7 @@ export const MigrationJobProvider = () =>
         output?.migrationJobId,
         "job",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, migrationJobId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -508,15 +472,10 @@ export const MigrationJobProvider = () =>
       };
       const displayName = news.displayName ?? migrationJobId;
       const source = connectionProfileOf(news.source, env.project, location);
-      const destination = connectionProfileOf(
-        news.destination,
-        env.project,
-        location,
-      );
+      const destination = connectionProfileOf(news.destination, env.project, location);
       const staticIpConnectivity =
         news.staticIpConnectivity !== undefined ||
-        (news.vpcPeeringConnectivity === undefined &&
-          news.reverseSshConnectivity === undefined)
+        (news.vpcPeeringConnectivity === undefined && news.reverseSshConnectivity === undefined)
           ? {}
           : undefined;
       const body: dm.MigrationJob = {
@@ -544,8 +503,7 @@ export const MigrationJobProvider = () =>
         postgresToSqlserverConfig: news.postgresToSqlserverConfig,
         mysqlHomogeneousConfig: news.mysqlHomogeneousConfig,
         postgresHomogeneousConfig: news.postgresHomogeneousConfig,
-        sqlserverHomogeneousMigrationJobConfig:
-          news.sqlserverHomogeneousMigrationJobConfig,
+        sqlserverHomogeneousMigrationJobConfig: news.sqlserverHomogeneousMigrationJobConfig,
       };
 
       let current = yield* getByName(output?.name ?? name);
@@ -572,25 +530,18 @@ export const MigrationJobProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
-      const dumpFlagsChanged =
-        fingerprint(current.dumpFlags) !== fingerprint(news.dumpFlags);
-      const dumpPathChanged =
-        (current.dumpPath ?? "") !== (news.dumpPath ?? "");
+      const dumpFlagsChanged = fingerprint(current.dumpFlags) !== fingerprint(news.dumpFlags);
+      const dumpPathChanged = (current.dumpPath ?? "") !== (news.dumpPath ?? "");
       const dumpTypeChanged =
-        news.dumpType !== undefined &&
-        (current.dumpType ?? "") !== news.dumpType;
+        news.dumpType !== undefined && (current.dumpType ?? "") !== news.dumpType;
       const performanceChanged =
-        fingerprint(current.performanceConfig) !==
-        fingerprint(news.performanceConfig);
+        fingerprint(current.performanceConfig) !== fingerprint(news.performanceConfig);
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");
-      const objectsChanged =
-        fingerprint(current.objectsConfig) !== fingerprint(news.objectsConfig);
+      const objectsChanged = fingerprint(current.objectsConfig) !== fingerprint(news.objectsConfig);
       const conversionChanged =
-        fingerprint(current.conversionWorkspace) !==
-        fingerprint(news.conversionWorkspace);
+        fingerprint(current.conversionWorkspace) !== fingerprint(news.conversionWorkspace);
       const vpcChanged =
-        fingerprint(current.vpcPeeringConnectivity) !==
-        fingerprint(news.vpcPeeringConnectivity);
+        fingerprint(current.vpcPeeringConnectivity) !== fingerprint(news.vpcPeeringConnectivity);
       const sshChanged =
         fingerprint(publicReverseSsh(current.reverseSshConnectivity)) !==
         fingerprint(publicReverseSsh(news.reverseSshConnectivity));
@@ -602,16 +553,14 @@ export const MigrationJobProvider = () =>
       const previousKind = connectivityKind(current);
       const staticChanged = nextKind === "static" && previousKind !== "static";
       const homogeneousChanged =
-        fingerprint(current.mysqlHomogeneousConfig) !==
-          fingerprint(news.mysqlHomogeneousConfig) ||
+        fingerprint(current.mysqlHomogeneousConfig) !== fingerprint(news.mysqlHomogeneousConfig) ||
         fingerprint(current.postgresHomogeneousConfig) !==
           fingerprint(news.postgresHomogeneousConfig) ||
         fingerprint(current.sqlserverHomogeneousMigrationJobConfig) !==
           fingerprint(news.sqlserverHomogeneousMigrationJobConfig) ||
         fingerprint(current.sqlserverToPostgresConfig) !==
           fingerprint(news.sqlserverToPostgresConfig) ||
-        fingerprint(current.oracleToPostgresConfig) !==
-          fingerprint(news.oracleToPostgresConfig) ||
+        fingerprint(current.oracleToPostgresConfig) !== fingerprint(news.oracleToPostgresConfig) ||
         fingerprint(current.postgresToSqlserverConfig) !==
           fingerprint(news.postgresToSqlserverConfig);
       const mask = fieldMask([
@@ -645,10 +594,7 @@ export const MigrationJobProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

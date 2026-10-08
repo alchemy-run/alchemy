@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  applyRuns,
-  markdownDialect,
-  markdownRuns,
-} from "../packages/vite-plugin-copy-editor/src/index.ts";
+import { applyRuns, markdownDialect, markdownRuns } from "@alchemy.run/vite-plugin-copy-editor";
 import {
   docBlocks,
   docCommentLines,
@@ -50,8 +46,7 @@ const markdown = {
   ],
 };
 
-const blockText = (b: { start: number; end: number }) =>
-  FILE.slice(b.start, b.end);
+const blockText = (b: { start: number; end: number }) => FILE.slice(b.start, b.end);
 
 describe("docBlocks", () => {
   const blocks = docBlocks(docCommentLines(FILE, START));
@@ -82,8 +77,7 @@ describe("docBlocks", () => {
       " for access.",
     ];
     const after = [...before];
-    after[0] =
-      "A bucket name is generated for you unless you provide one via\n";
+    after[0] = "A bucket name is generated for you unless you provide one via\n";
     after[4] = " for permissions.";
     const out = applyRuns(FILE, runs, markdownDialect(markdown), {
       before,
@@ -94,9 +88,7 @@ describe("docBlocks", () => {
     );
     // The rest of the file is untouched.
     expect(
-      out
-        .replace("generated for you", "auto-generated")
-        .replace("permissions.", "access."),
+      out.replace("generated for you", "auto-generated").replace("permissions.", "access."),
     ).toBe(FILE);
   });
 
@@ -112,9 +104,9 @@ describe("docBlocks", () => {
     ];
     const after = [...before];
     after[3] = "OtherThing";
-    expect(() =>
-      applyRuns(FILE, runs, markdownDialect(markdown), { before, after }),
-    ).toThrow(/generated/);
+    expect(() => applyRuns(FILE, runs, markdownDialect(markdown), { before, after })).toThrow(
+      /generated/,
+    );
   });
 });
 
@@ -140,10 +132,7 @@ describe("docRegions", () => {
         "An S3 bucket for storing objects in AWS.\n\nA bucket name is auto-generated unless you provide one via\n`bucketName`. See {@link BucketPolicy} for access.\n\n- first item\n  continues here\n- second item",
       ],
       ["sectionDescription", "Section prose."],
-      [
-        "exampleBody",
-        '```typescript\nconst bucket = yield* Bucket("b", {});\n```',
-      ],
+      ["exampleBody", '```typescript\nconst bucket = yield* Bucket("b", {});\n```'],
     ]);
   });
 
@@ -152,20 +141,12 @@ describe("docRegions", () => {
     const [, description] = docRegions(empty);
     expect(description?.kind).toBe("sectionDescription");
     expect(description!.lastLine).toBeLessThan(description!.firstLine);
-    const out = replaceRegion(
-      EMPTY_SECTION,
-      empty,
-      description!,
-      "New *prose*.",
-    );
-    expect(out).toContain(
-      " * ### Empty Section\n * New *prose*.\n * **Example:** Only",
-    );
+    const out = replaceRegion(EMPTY_SECTION, empty, description!, "New *prose*.");
+    expect(out).toContain(" * ### Empty Section\n * New *prose*.\n * **Example:** Only");
   });
 
   test("replacing a region writes markdown as JSDoc lines", () => {
-    const next =
-      "A new summary with `code`.\n\n```ts\nconst x = 1;\n```\n\n@mention stays prose";
+    const next = "A new summary with `code`.\n\n```ts\nconst x = 1;\n```\n\n@mention stays prose";
     const out = replaceRegion(FILE, lines, regions[0]!, next);
     expect(out).toContain(
       "/**\n * A new summary with `code`.\n *\n * ```ts\n * const x = 1;\n * ```\n *\n * \\@mention stays prose\n *\n * ### Creating a Bucket",
@@ -178,9 +159,7 @@ describe("docRegions", () => {
   });
 
   test("refuses to close the comment", () => {
-    expect(() => replaceRegion(FILE, lines, regions[0]!, "oops */")).toThrow(
-      /\*\//,
-    );
+    expect(() => replaceRegion(FILE, lines, regions[0]!, "oops */")).toThrow(/\*\//);
   });
 
   test("wraps regions and marks the titles outside them", () => {
@@ -197,13 +176,6 @@ describe("docRegions", () => {
 test("replaceRegion collapses extra blank lines outside code only", () => {
   const lines = docCommentLines(FILE, START);
   const region = docRegions(lines)[0]!;
-  const out = replaceRegion(
-    FILE,
-    lines,
-    region,
-    "One.\n\n\n\nTwo.\n\n```ts\na\n\n\nb\n```",
-  );
-  expect(out).toContain(
-    " * One.\n *\n * Two.\n *\n * ```ts\n * a\n *\n *\n * b\n * ```",
-  );
+  const out = replaceRegion(FILE, lines, region, "One.\n\n\n\nTwo.\n\n```ts\na\n\n\nb\n```");
+  expect(out).toContain(" * One.\n *\n * Two.\n *\n * ```ts\n * a\n *\n *\n * b\n * ```");
 });

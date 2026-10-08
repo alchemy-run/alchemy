@@ -36,10 +36,7 @@ import {
   waitUntilExists,
   waitUntilGone,
 } from "./internal.ts";
-import type {
-  VmwareNodeConfig,
-  VmwareNodePoolAutoscalingConfig,
-} from "./types.ts";
+import type { VmwareNodeConfig, VmwareNodePoolAutoscalingConfig } from "./types.ts";
 
 const COLLECTION = "vmwareNodePools";
 const PARENT_COLLECTION = "vmwareClusters";
@@ -184,19 +181,14 @@ export type VmwareClustersVmwareNodePool = Resource<
  * @resource
  * @category GKEOnPrem
  */
-export const VmwareClustersVmwareNodePool =
-  Resource<VmwareClustersVmwareNodePool>(
-    "GCP.GKEOnPrem.VmwareClustersVmwareNodePool",
-  );
+export const VmwareClustersVmwareNodePool = Resource<VmwareClustersVmwareNodePool>(
+  "GCP.GKEOnPrem.VmwareClustersVmwareNodePool",
+);
 
 const resourceName = (cluster: string, vmwareNodePoolId: string) =>
   `${cluster}/${COLLECTION}/${vmwareNodePoolId}`;
 
-const toAttrs = (
-  item: gkeonprem.VmwareNodePool,
-  project: string,
-  region: string,
-) => {
+const toAttrs = (item: gkeonprem.VmwareNodePool, project: string, region: string) => {
   const name = item.name ?? "";
   const parsed = parseName(name, COLLECTION, region);
   const ownership = parseOwnership(item.displayName);
@@ -239,8 +231,7 @@ const listChildren = (parent: string) =>
       pageSize: 1000,
       view: "FULL",
     }),
-    (page): readonly gkeonprem.VmwareNodePool[] | undefined =>
-      page.vmwareNodePools,
+    (page): readonly gkeonprem.VmwareNodePool[] | undefined => page.vmwareNodePools,
   );
 
 const listOwned = (project: string, region: string) =>
@@ -256,8 +247,7 @@ const listOwned = (project: string, region: string) =>
                   pageSize: 1000,
                   view: "BASIC",
                 }),
-                (page): readonly gkeonprem.VmwareCluster[] | undefined =>
-                  page.vmwareClusters,
+                (page): readonly gkeonprem.VmwareCluster[] | undefined => page.vmwareClusters,
               ),
             ),
             (cluster: gkeonprem.VmwareCluster) => cluster.name,
@@ -265,9 +255,7 @@ const listOwned = (project: string, region: string) =>
           ),
     ),
     Effect.map((items) =>
-      items.filter((item: gkeonprem.VmwareNodePool) =>
-        isOwned(item.annotations, item.displayName),
-      ),
+      items.filter((item: gkeonprem.VmwareNodePool) => isOwned(item.annotations, item.displayName)),
     ),
   );
 
@@ -291,10 +279,7 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
         nextId: news.vmwareNodePoolId
           ? rfc1035(news.vmwareNodePoolId, "vmwarenodepool", VMWARE_NAME_LENGTH)
           : (olds?.vmwareNodePoolId ?? output?.vmwareNodePoolId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -313,10 +298,7 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
         "vmwarenodepool",
         VMWARE_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const cluster = expandParent(
         olds?.vmwareCluster ?? output?.vmwareCluster ?? "",
         env.project,
@@ -352,23 +334,11 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
         "vmwarenodepool",
         VMWARE_NAME_LENGTH,
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const cluster = expandParent(
-        news.vmwareCluster,
-        env.project,
-        location,
-        PARENT_COLLECTION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const cluster = expandParent(news.vmwareCluster, env.project, location, PARENT_COLLECTION);
       const name = resourceName(cluster, vmwareNodePoolId);
       const ownership = yield* createInternalLabels(id);
-      const annotations = desiredAnnotations(
-        ownership,
-        news.labels,
-        news.annotations,
-      );
+      const annotations = desiredAnnotations(ownership, news.labels, news.annotations);
       const displayName = encodeOwnership(ownership, news.displayName);
       const body: gkeonprem.VmwareNodePool = {
         config: news.config,
@@ -400,29 +370,23 @@ export const VmwareClustersVmwareNodePoolProvider = () =>
 
       const mask = fieldMask([
         differs(current.annotations, annotations) && "annotations",
-        !sameText(parseOwnership(current.displayName).text, news.displayName) &&
-          "displayName",
+        !sameText(parseOwnership(current.displayName).text, news.displayName) && "displayName",
         differs(current.config, news.config) && "config",
         differs(current.onPremVersion, news.onPremVersion) && "onPremVersion",
-        differs(current.nodePoolAutoscaling, news.nodePoolAutoscaling) &&
-          "nodePoolAutoscaling",
+        differs(current.nodePoolAutoscaling, news.nodePoolAutoscaling) && "nodePoolAutoscaling",
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* gkeonprem.patchProjectsLocationsVmwareClustersVmwareNodePools({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              ...body,
-              etag: current.etag,
-            },
-          });
+        const operation = yield* gkeonprem.patchProjectsLocationsVmwareClustersVmwareNodePools({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            ...body,
+            etag: current.etag,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       if (current === undefined) {

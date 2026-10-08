@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (project: string, region: string, routerName: string) =>
   compute.getRouters({ project, region, router: routerName }).pipe(
@@ -47,9 +44,7 @@ test.provider(
       expect(created.encryptedInterconnectRouter).toEqual(false);
       expect(created.bgp?.asn).toEqual(65001);
       expect(created.bgp?.advertiseMode).toEqual("DEFAULT");
-      expect(created.network).toEqual(
-        expect.stringContaining("networks/default"),
-      );
+      expect(created.network).toEqual(expect.stringContaining("networks/default"));
 
       const fetched = yield* compute.getRouters({
         project: created.project,
@@ -73,9 +68,7 @@ test.provider(
               asn: 65001,
               advertiseMode: "CUSTOM",
               advertisedGroups: ["ALL_SUBNETS"],
-              advertisedIpRanges: [
-                { range: "10.0.0.0/8", description: "rfc1918" },
-              ],
+              advertisedIpRanges: [{ range: "10.0.0.0/8", description: "rfc1918" }],
               keepaliveInterval: 30,
             },
           });
@@ -114,9 +107,7 @@ test.provider(
               asn: 65001,
               advertiseMode: "CUSTOM",
               advertisedGroups: ["ALL_SUBNETS"],
-              advertisedIpRanges: [
-                { range: "10.0.0.0/8", description: "rfc1918" },
-              ],
+              advertisedIpRanges: [{ range: "10.0.0.0/8", description: "rfc1918" }],
               keepaliveInterval: 30,
             },
           });
@@ -136,11 +127,65 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        created.project,
-        created.region,
-        created.routerName,
-      );
+      const gone = yield* waitUntilGone(created.project, created.region, created.routerName);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "manages Cloud NAT timeouts, address tier, and endpoint types in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const natRouter = (tcpTimeWaitTimeoutSec: number, autoNetworkTier: "PREMIUM" | "STANDARD") =>
+        GCP.Compute.Router("NatEdge", {
+          network: "default",
+          region: "us-central1",
+          nats: [
+            {
+              name: "egress",
+              sourceSubnetworkIpRangesToNat: "ALL_SUBNETWORKS_ALL_IP_RANGES",
+              natIpAllocateOption: "AUTO_ONLY",
+              tcpTimeWaitTimeoutSec,
+              autoNetworkTier,
+              endpointTypes: ["ENDPOINT_TYPE_VM"],
+            },
+          ],
+        });
+
+      const created = yield* stack.deploy(natRouter(90, "PREMIUM"));
+      expect(created.nats).toHaveLength(1);
+      expect(created.nats[0]).toMatchObject({
+        name: "egress",
+        tcpTimeWaitTimeoutSec: 90,
+        autoNetworkTier: "PREMIUM",
+        endpointTypes: ["ENDPOINT_TYPE_VM"],
+      });
+
+      const updated = yield* stack.deploy(natRouter(60, "STANDARD"));
+      expect(updated.routerId).toEqual(created.routerId);
+      expect(updated.nats[0]).toMatchObject({
+        tcpTimeWaitTimeoutSec: 60,
+        autoNetworkTier: "STANDARD",
+      });
+
+      const fetched = yield* compute.getRouters({
+        project: updated.project,
+        region: updated.region,
+        router: updated.routerName,
+      });
+      expect(fetched.nats?.[0]).toMatchObject({
+        name: "egress",
+        tcpTimeWaitTimeoutSec: 60,
+        autoNetworkTier: "STANDARD",
+        endpointTypes: ["ENDPOINT_TYPE_VM"],
+      });
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.project, created.region, created.routerName);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },

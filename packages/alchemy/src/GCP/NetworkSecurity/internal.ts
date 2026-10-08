@@ -22,9 +22,7 @@ export class NetworksecurityStillExists extends Data.TaggedError(
   name: string;
 }> {}
 
-export class NetworksecurityFailed extends Data.TaggedError(
-  "GCP.NetworkSecurity.Failed",
-)<{
+export class NetworksecurityFailed extends Data.TaggedError("GCP.NetworkSecurity.Failed")<{
   name: string;
   state: string | undefined;
 }> {}
@@ -49,34 +47,22 @@ export const rfc1035 = (name: string, fallback = "resource"): string => {
   return next.length > 0 ? next : fallback;
 };
 
-export const normalizeLocation = (
-  location: string | undefined,
-  fallback: string,
-) => lastSegment(location ?? fallback).toLowerCase();
+export const normalizeLocation = (location: string | undefined, fallback: string) =>
+  lastSegment(location ?? fallback).toLowerCase();
 
 export const parentOf = (project: string, location: string) =>
   `projects/${project}/locations/${location}`;
 
-export const parseName = (
-  name: string,
-  collection: string,
-  fallbackLocation: string,
-) => {
+export const parseName = (name: string, collection: string, fallbackLocation: string) => {
   const parts = name.split("/").filter((part) => part.length > 0);
   const collectionAt = parts.lastIndexOf(collection);
   const locationsAt = parts.lastIndexOf("locations");
   const projectsAt = parts.lastIndexOf("projects");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     location:
-      locationsAt >= 0 && parts[locationsAt + 1]
-        ? parts[locationsAt + 1]!
-        : fallbackLocation,
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : fallbackLocation,
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
   };
 };
 
@@ -139,9 +125,7 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 export const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -164,19 +148,13 @@ export const canonicalizeLink = (value: string | undefined) => {
 export const linkKey = (value: string | undefined) =>
   lastSegment(canonicalizeLink(value)).toLowerCase();
 
-export const changedFields = (
-  pairs: ReadonlyArray<readonly [string, boolean]>,
-) => pairs.filter(([, changed]) => changed).map(([field]) => field);
+export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) =>
+  pairs.filter(([, changed]) => changed).map(([field]) => field);
 
-export const waitUntilPresent = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value
-        ? Effect.succeed(value)
-        : Effect.fail(new NetworksecurityNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new NetworksecurityNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworksecurityNotResolved,
@@ -185,15 +163,10 @@ export const waitUntilPresent = <A, E, R>(
     }),
   );
 
-export const waitUntilGone = <A, E, R>(
-  get: Effect.Effect<A | undefined, E, R>,
-  name: string,
-) =>
+export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined
-        ? Effect.void
-        : Effect.fail(new NetworksecurityStillExists({ name })),
+      value === undefined ? Effect.void : Effect.fail(new NetworksecurityStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworksecurityStillExists,
@@ -238,12 +211,7 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   );
 
 /** Collect every page; a missing parent (`NotFound`) lists as empty. */
-export const collectPages = <
-  Page,
-  Item,
-  E extends { readonly _tag: string },
-  R,
->(
+export const collectPages = <Page, Item, E extends { readonly _tag: string }, R>(
   stream: Stream.Stream<Page, E, R>,
   pick: (page: Page) => readonly Item[] | undefined,
 ) =>

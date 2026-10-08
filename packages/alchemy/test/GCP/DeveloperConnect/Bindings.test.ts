@@ -1,15 +1,12 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
-import DeveloperConnectBindingsHost, {
-  linkEnabled,
-  Source,
-} from "./fixtures/bindings-host.ts";
+import DeveloperConnectBindingsHost, { linkEnabled, Source } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -26,9 +23,7 @@ const expectProjectGrants = Effect.gen(function* () {
     body: { options: { requestedPolicyVersion: 3 } },
   });
   const roles = (policy.bindings ?? [])
-    .filter((binding) =>
-      (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
-    )
+    .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => ({ role: binding.role, condition: binding.condition }))
     .sort((a, b) => (a.role ?? "").localeCompare(b.role ?? ""));
   expect(roles).toEqual([
@@ -41,12 +36,7 @@ const expectProjectGrants = Effect.gen(function* () {
 describe.skipIf(!dockerAvailable || !linkEnabled)(
   "DeveloperConnect Bindings",
   {
-    tags: [
-      "provider:gcp",
-      "provider:gcp:developerconnect",
-      "provider:gcp:run",
-      "live",
-    ],
+    tags: ["provider:gcp", "provider:gcp:developerconnect", "provider:gcp:run", "live"],
   },
   () => {
     beforeAll(
@@ -111,11 +101,10 @@ describe.skipIf(!dockerAvailable || !linkEnabled)(
         "lists branches as the host's service account",
         (_stack) =>
           Effect.gen(function* () {
-            const refs =
-              yield* expectProbe<developerconnect.FetchGitRefsResponse>(
-                baseUrl,
-                "fetchGitRefs",
-              );
+            const refs = yield* expectProbe<developerconnect.FetchGitRefsResponse>(
+              baseUrl,
+              "fetchGitRefs",
+            );
             // Every cloneable repository has at least its default branch.
             expect(refs.refNames?.length).toBeGreaterThan(0);
             yield* expectProjectGrants;

@@ -250,9 +250,7 @@ export const CustomersConnectorConfigProvider = () =>
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -268,16 +266,8 @@ export const CustomersConnectorConfigProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = toCustomerName(news.parent);
       const ownership = yield* ownershipLabels(id);
-      const rawName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
-      const displayName = encodeOwnershipLine(
-        ownership,
-        rawName,
-        MAX_DISPLAY_NAME_LENGTH,
-      );
+      const rawName = yield* toDisplayName(id, news.displayName, output?.displayName);
+      const displayName = encodeOwnershipLine(ownership, rawName, MAX_DISPLAY_NAME_LENGTH);
       const connectorConfigId = yield* toConnectorConfigId(
         id,
         news.connectorConfigId,
@@ -324,12 +314,8 @@ export const CustomersConnectorConfigProvider = () =>
 
       const currentName = current.name ?? name;
       const updateMask = updateMaskOf(
-        !sameText(current.displayName, desired.displayName)
-          ? "displayName"
-          : undefined,
-        detailsNeedSync(current.details, desired.details, olds?.details)
-          ? "details"
-          : undefined,
+        !sameText(current.displayName, desired.displayName) ? "displayName" : undefined,
+        detailsNeedSync(current.details, desired.details, olds?.details) ? "details" : undefined,
       );
 
       if (updateMask.length > 0 && currentName.length > 0) {
@@ -340,8 +326,7 @@ export const CustomersConnectorConfigProvider = () =>
         });
       }
 
-      const fresh =
-        (yield* getConnectorConfig(current.name ?? currentName)) ?? current;
+      const fresh = (yield* getConnectorConfig(current.name ?? currentName)) ?? current;
       return toAttrs(fresh, env.project);
     }),
 

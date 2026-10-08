@@ -2,6 +2,11 @@
   "name": "cloudflare-foldkit-ssg",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-foldkit-ssg"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -22,10 +27,5 @@
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-foldkit-ssg"
   }
 }

@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as integrations from "@distilled.cloud/gcp/integrations_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   integrations.getProjectsLocationsIntegrationsVersionsTestCases({ name }).pipe(
@@ -65,22 +62,18 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const version = yield* GCP.Integrations.IntegrationsVersion(
-            "Orders",
-            {
-              location: "us-central1",
-              description: "testcase parent",
-              triggerConfigs: apiTrigger,
-            },
-          );
-          const testCase =
-            yield* GCP.Integrations.IntegrationsVersionsTestCases("HappyPath", {
-              version: version.name,
-              location: "us-central1",
-              displayName: "happy-path",
-              description: "fires the API trigger",
-              triggerId: "api_trigger/alchemy_testcase",
-            });
+          const version = yield* GCP.Integrations.IntegrationsVersion("Orders", {
+            location: "us-central1",
+            description: "testcase parent",
+            triggerConfigs: apiTrigger,
+          });
+          const testCase = yield* GCP.Integrations.IntegrationsVersionsTestCases("HappyPath", {
+            version: version.name,
+            location: "us-central1",
+            displayName: "happy-path",
+            description: "fires the API trigger",
+            triggerId: "api_trigger/alchemy_testcase",
+          });
           return { version, testCase };
         }),
       );
@@ -88,38 +81,31 @@ test.provider(
       expect(created.testCase.name).toContain("/testCases/");
       expect(created.testCase.displayName).toEqual("happy-path");
       expect(created.testCase.description).toEqual("fires the API trigger");
-      expect(created.testCase.triggerId).toEqual(
-        "api_trigger/alchemy_testcase",
-      );
+      expect(created.testCase.triggerId).toEqual("api_trigger/alchemy_testcase");
 
-      const fetched =
-        yield* integrations.getProjectsLocationsIntegrationsVersionsTestCases({
-          name: created.testCase.name,
-        });
+      const fetched = yield* integrations.getProjectsLocationsIntegrationsVersionsTestCases({
+        name: created.testCase.name,
+      });
       expect(fetched.name).toEqual(created.testCase.name);
       expect(fetched.description).toContain("alchemy-id=");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const version = yield* GCP.Integrations.IntegrationsVersion(
-            "Orders",
-            {
-              integrationId: created.version.integrationId,
-              versionId: created.version.versionId,
-              location: "us-central1",
-              description: "testcase parent",
-              triggerConfigs: apiTrigger,
-            },
-          );
-          const testCase =
-            yield* GCP.Integrations.IntegrationsVersionsTestCases("HappyPath", {
-              version: version.name,
-              testCaseId: created.testCase.testCaseId,
-              location: "us-central1",
-              displayName: "happy-path",
-              description: "updated case",
-              triggerId: "api_trigger/alchemy_testcase",
-            });
+          const version = yield* GCP.Integrations.IntegrationsVersion("Orders", {
+            integrationId: created.version.integrationId,
+            versionId: created.version.versionId,
+            location: "us-central1",
+            description: "testcase parent",
+            triggerConfigs: apiTrigger,
+          });
+          const testCase = yield* GCP.Integrations.IntegrationsVersionsTestCases("HappyPath", {
+            version: version.name,
+            testCaseId: created.testCase.testCaseId,
+            location: "us-central1",
+            displayName: "happy-path",
+            description: "updated case",
+            triggerId: "api_trigger/alchemy_testcase",
+          });
           return { version, testCase };
         }),
       );

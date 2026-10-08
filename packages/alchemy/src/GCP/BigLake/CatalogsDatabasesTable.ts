@@ -197,15 +197,10 @@ export const CatalogsDatabasesTable = Resource<CatalogsDatabasesTable>(
   "GCP.BigLake.CatalogsDatabasesTable",
 );
 
-const databaseOf = (
-  database: string,
-  project: string,
-  location: string,
-  catalog?: string,
-) => expandDatabase(database, project, location, catalog);
+const databaseOf = (database: string, project: string, location: string, catalog?: string) =>
+  expandDatabase(database, project, location, catalog);
 
-const resourceName = (database: string, tableId: string) =>
-  `${database}/tables/${tableId}`;
+const resourceName = (database: string, tableId: string) => `${database}/tables/${tableId}`;
 
 const storageDescriptorOf = (
   descriptor: biglake.StorageDescriptor | undefined,
@@ -233,9 +228,7 @@ const toAttrs = (table: biglake.Table, project: string) => {
     type: table.type,
     tableType: table.hiveOptions?.tableType,
     parameters: userLabels(table.hiveOptions?.parameters),
-    storageDescriptor: storageDescriptorOf(
-      table.hiveOptions?.storageDescriptor,
-    ),
+    storageDescriptor: storageDescriptorOf(table.hiveOptions?.storageDescriptor),
     etag: table.etag,
     createTime: table.createTime,
     updateTime: table.updateTime,
@@ -244,9 +237,7 @@ const toAttrs = (table: biglake.Table, project: string) => {
   };
 };
 
-const getByName = missingGet(
-  biglake.getProjectsLocationsCatalogsDatabasesTables,
-);
+const getByName = missingGet(biglake.getProjectsLocationsCatalogsDatabasesTables);
 
 const desiredHiveOptions = (
   news: CatalogsDatabasesTableProps,
@@ -259,15 +250,7 @@ const desiredHiveOptions = (
 
 export const CatalogsDatabasesTableProvider = () =>
   Provider.succeed(CatalogsDatabasesTable, {
-    stables: [
-      "name",
-      "tableId",
-      "database",
-      "catalog",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "tableId", "database", "catalog", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -285,42 +268,26 @@ export const CatalogsDatabasesTableProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.tableId ?? output?.tableId,
         nextId: news.tableId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: location,
         previousParent: olds?.database ?? output?.database,
-        nextParent: databaseOf(
-          news.database,
-          env.project,
-          location,
-          news.catalog,
-        ),
+        nextParent: databaseOf(news.database, env.project, location, news.catalog),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const tableId = yield* toPhysicalId(id, olds?.tableId, output?.tableId);
       const database =
         olds?.database !== undefined
           ? databaseOf(olds.database, env.project, location, olds.catalog)
           : (output?.database ?? "");
-      const name =
-        output?.name ??
-        (database.length > 0 ? resourceName(database, tableId) : "");
+      const name = output?.name ?? (database.length > 0 ? resourceName(database, tableId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        tagRecord(existing.hiveOptions?.parameters),
-      ))
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.hiveOptions?.parameters)))
         ? attrs
         : Unowned(attrs);
     }),
@@ -328,18 +295,11 @@ export const CatalogsDatabasesTableProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const catalogs = (yield* Effect.forEach(
-          listLocations(env.region),
-          (location) => listCatalogs(locationParent(env.project, location)),
+        const catalogs = (yield* Effect.forEach(listLocations(env.region), (location) =>
+          listCatalogs(locationParent(env.project, location)),
         )).flat();
-        const databases = yield* listChildResources(
-          namedOf(catalogs),
-          listDatabases,
-        );
-        const tables = yield* listChildResources(
-          namedOf(databases),
-          listTables,
-        );
+        const databases = yield* listChildResources(namedOf(catalogs), listDatabases);
+        const tables = yield* listChildResources(namedOf(databases), listTables);
         return tables
           .filter((item) => hasAlchemyLabelMap(item.hiveOptions?.parameters))
           .map((item) => toAttrs(item, env.project));
@@ -347,16 +307,8 @@ export const CatalogsDatabasesTableProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const database = databaseOf(
-        news.database,
-        env.project,
-        location,
-        news.catalog,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const database = databaseOf(news.database, env.project, location, news.catalog);
       const tableId = yield* toPhysicalId(id, news.tableId, output?.tableId);
       const name = output?.name ?? resourceName(database, tableId);
       const type = news.type ?? "HIVE";

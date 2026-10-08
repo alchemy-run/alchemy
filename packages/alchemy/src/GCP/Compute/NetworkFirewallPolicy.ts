@@ -1,6 +1,4 @@
-import { ignoredCodes } from "./internal.ts";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitGlobalOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,12 +9,10 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { ignoredCodes } from "./internal.ts";
+import { waitGlobalOperation } from "./operations.ts";
 
 const DEFAULT_POLICY_TYPE = "VPC_POLICY";
 const RESERVED_PRIORITY_MIN = 2147483548;
@@ -24,18 +20,12 @@ const RESERVED_PRIORITY_MAX = 2147483647;
 const MAX_NAME_LENGTH = 63;
 
 const isReservedPriority = (priority: number | undefined) =>
-  priority !== undefined &&
-  priority >= RESERVED_PRIORITY_MIN &&
-  priority <= RESERVED_PRIORITY_MAX;
+  priority !== undefined && priority >= RESERVED_PRIORITY_MIN && priority <= RESERVED_PRIORITY_MAX;
 
-export type NetworkFirewallPolicyType =
-  | compute.FirewallPolicyPolicyTypeEnum
-  | (string & {});
+export type NetworkFirewallPolicyType = compute.FirewallPolicyPolicyTypeEnum | (string & {});
 export type NetworkFirewallPolicyRule = compute.FirewallPolicyRule;
-export type NetworkFirewallPolicyRuleMatcher =
-  compute.FirewallPolicyRuleMatcher;
-export type NetworkFirewallPolicyAssociation =
-  compute.FirewallPolicyAssociation;
+export type NetworkFirewallPolicyRuleMatcher = compute.FirewallPolicyRuleMatcher;
+export type NetworkFirewallPolicyAssociation = compute.FirewallPolicyAssociation;
 
 export type NetworkFirewallPolicyProps = {
   /**
@@ -199,8 +189,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
     );
   });
 
-const typeOf = (value: string | undefined) =>
-  (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
+const typeOf = (value: string | undefined) => (value ?? DEFAULT_POLICY_TYPE).toUpperCase();
 
 const encodeDescription = (
   labels: Record<string, string>,
@@ -231,17 +220,14 @@ const parseDescription = (
 };
 
 const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
 const networkUrl = (project: string, value: string) => {
   if (value.includes("/")) return value;
   return `projects/${project}/global/networks/${value}`;
 };
 
-const sorted = (values: readonly string[] | undefined) =>
-  [...(values ?? [])].slice().sort();
+const sorted = (values: readonly string[] | undefined) => [...(values ?? [])].slice().sort();
 
 const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -272,9 +258,7 @@ const canonMatch = (match: NetworkFirewallPolicyRuleMatcher | undefined) => {
           left.ipProtocol.localeCompare(right.ipProtocol) ||
           JSON.stringify(left.ports).localeCompare(JSON.stringify(right.ports)),
       ),
-    srcSecureTags: [...(match.srcSecureTags ?? [])]
-      .map((tag) => tag.name ?? "")
-      .sort(),
+    srcSecureTags: [...(match.srcSecureTags ?? [])].map((tag) => tag.name ?? "").sort(),
   };
 };
 
@@ -293,19 +277,13 @@ const canonRule = (rule: NetworkFirewallPolicyRule) => ({
   targetResources: sorted(rule.targetResources),
   targetServiceAccounts: sorted(rule.targetServiceAccounts),
   targetForwardingRules: sorted(rule.targetForwardingRules),
-  targetSecureTags: [...(rule.targetSecureTags ?? [])]
-    .map((tag) => tag.name ?? "")
-    .sort(),
+  targetSecureTags: [...(rule.targetSecureTags ?? [])].map((tag) => tag.name ?? "").sort(),
 });
 
-const ruleEquals = (
-  left: NetworkFirewallPolicyRule,
-  right: NetworkFirewallPolicyRule,
-) => sameJson(canonRule(left), canonRule(right));
+const ruleEquals = (left: NetworkFirewallPolicyRule, right: NetworkFirewallPolicyRule) =>
+  sameJson(canonRule(left), canonRule(right));
 
-const toRuleBody = (
-  rule: NetworkFirewallPolicyRule,
-): NetworkFirewallPolicyRule => ({
+const toRuleBody = (rule: NetworkFirewallPolicyRule): NetworkFirewallPolicyRule => ({
   priority: rule.priority,
   action: rule.action,
   description: rule.description,
@@ -338,9 +316,7 @@ const desiredRules = (
   );
 };
 
-const associationNameOf = (
-  association: NetworkFirewallPolicyAssociation,
-): string =>
+const associationNameOf = (association: NetworkFirewallPolicyAssociation): string =>
   association.name && association.name.length > 0
     ? association.name
     : lastSegment(association.attachmentTarget) || "assoc";
@@ -384,8 +360,7 @@ const awaitResource = (project: string, networkFirewallPolicyName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkFirewallPolicyNotResolved",
+      while: (error) => error._tag === "GCP.Compute.NetworkFirewallPolicyNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -403,15 +378,11 @@ const waitUntilGone = (project: string, networkFirewallPolicyName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.NetworkFirewallPolicyStillExists",
+      while: (error) => error._tag === "GCP.Compute.NetworkFirewallPolicyStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.NetworkFirewallPolicyStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.NetworkFirewallPolicyStillExists", () => Effect.void),
   );
 
 const runOp = <E extends { readonly _tag: string }, R>(
@@ -533,10 +504,7 @@ const syncAssociations = (
         );
         continue;
       }
-      if (
-        lastSegment(current.attachmentTarget) !== lastSegment(target) &&
-        target !== undefined
-      ) {
+      if (lastSegment(current.attachmentTarget) !== lastSegment(target) && target !== undefined) {
         yield* runOp(
           project,
           networkFirewallPolicyName,
@@ -582,11 +550,9 @@ export const NetworkFirewallPolicyProvider = () =>
       // Name is immutable on GCP. Resolve the desired name the same way
       // create does — do not fall back to previousName when news omits
       // networkFirewallPolicyName, or a generated-name change looks like a no-op.
-      const previousName =
-        output?.networkFirewallPolicyName ?? olds?.networkFirewallPolicyName;
+      const previousName = output?.networkFirewallPolicyName ?? olds?.networkFirewallPolicyName;
       const nextName = yield* toName(id, news.networkFirewallPolicyName);
-      const nameChanged =
-        previousName !== undefined && previousName !== nextName;
+      const nameChanged = previousName !== undefined && previousName !== nextName;
       const previousType = typeOf(olds?.policyType ?? output?.policyType);
       const nextType = typeOf(news.policyType ?? previousType);
       if (nameChanged) {
@@ -679,20 +645,13 @@ export const NetworkFirewallPolicyProvider = () =>
             },
           }),
         );
-        current =
-          (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;
+        current = (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;
       }
 
       const nextRules = desiredRules(news);
       if (nextRules !== undefined) {
-        yield* syncRules(
-          env.project,
-          networkFirewallPolicyName,
-          current.rules ?? [],
-          nextRules,
-        );
-        current =
-          (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;
+        yield* syncRules(env.project, networkFirewallPolicyName, current.rules ?? [], nextRules);
+        current = (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;
       }
 
       if (news.associations !== undefined) {
@@ -702,8 +661,7 @@ export const NetworkFirewallPolicyProvider = () =>
           current.associations ?? [],
           news.associations,
         );
-        current =
-          (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;
+        current = (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -713,10 +671,7 @@ export const NetworkFirewallPolicyProvider = () =>
       if (!output.networkFirewallPolicyName) return;
       const env = yield* GcpEnvironment.current;
       const project = output.project || env.project;
-      const existing = yield* getByName(
-        project,
-        output.networkFirewallPolicyName,
-      );
+      const existing = yield* getByName(project, output.networkFirewallPolicyName);
       for (const association of existing?.associations ?? []) {
         const name = associationNameOf(association);
         yield* compute

@@ -204,11 +204,7 @@ export const AutomatedDnsRecord = Resource<AutomatedDnsRecord>(
   "GCP.NetworkConnectivity.AutomatedDnsRecord",
 );
 
-const resourceName = (
-  project: string,
-  location: string,
-  automatedDnsRecordId: string,
-) =>
+const resourceName = (project: string, location: string, automatedDnsRecordId: string) =>
   `projects/${project}/locations/${location}/automatedDnsRecords/${automatedDnsRecordId}`;
 
 const toConfig = (
@@ -287,26 +283,16 @@ const getByName = (name: string) =>
 
 export const AutomatedDnsRecordProvider = () =>
   Provider.succeed(AutomatedDnsRecord, {
-    stables: [
-      "name",
-      "automatedDnsRecordId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "automatedDnsRecordId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousId =
-        olds?.automatedDnsRecordId ?? output?.automatedDnsRecordId;
+      const previousId = olds?.automatedDnsRecordId ?? output?.automatedDnsRecordId;
       const nextId = news.automatedDnsRecordId
         ? rfc1035(news.automatedDnsRecordId, "automated-dns-record")
         : previousId;
-      const previousLocation = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
+      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
         env.region,
@@ -330,9 +316,7 @@ export const AutomatedDnsRecordProvider = () =>
         consumerNetwork: news.consumerNetwork,
       });
       if (
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          nextId !== previousId) ||
+        (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
         previousLocation !== nextLocation ||
         previousKey !== nextKey
       ) {
@@ -349,19 +333,12 @@ export const AutomatedDnsRecordProvider = () =>
         output?.automatedDnsRecordId,
         "automated-dns-record",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, automatedDnsRecordId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, automatedDnsRecordId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -387,24 +364,16 @@ export const AutomatedDnsRecordProvider = () =>
         output?.automatedDnsRecordId,
         "automated-dns-record",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, automatedDnsRecordId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const consumerNetwork = toNetworkResource(
-        env.project,
-        news.consumerNetwork,
-      );
+      const consumerNetwork = toNetworkResource(env.project, news.consumerNetwork);
       const originalConfig = {
         ttl: news.originalConfig.ttl ?? DEFAULT_TTL,
-        rrdatas: news.originalConfig.rrdatas
-          ? [...news.originalConfig.rrdatas]
-          : undefined,
+        rrdatas: news.originalConfig.rrdatas ? [...news.originalConfig.rrdatas] : undefined,
       };
 
       let current = yield* getByName(name);

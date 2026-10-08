@@ -2,15 +2,10 @@ import * as cloudidentity from "@distilled.cloud/gcp/cloudidentity_v1";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const DEFAULT_CUSTOMER = "customers/my_customer";
-export const DISCUSSION_FORUM_LABEL =
-  "cloudidentity.googleapis.com/groups.discussion_forum";
+export const DISCUSSION_FORUM_LABEL = "cloudidentity.googleapis.com/groups.discussion_forum";
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 export const MAX_DESCRIPTION_LENGTH = 4096;
 export const MAX_ASSET_TAG_LENGTH = 100;
@@ -36,10 +31,7 @@ export const normalizeCustomer = (value: string | undefined) => {
   if (trimmed === undefined || trimmed.length === 0) {
     return DEFAULT_CUSTOMER;
   }
-  if (
-    trimmed.startsWith("customers/") ||
-    trimmed.startsWith("identitysources/")
-  ) {
+  if (trimmed.startsWith("customers/") || trimmed.startsWith("identitysources/")) {
     return trimmed;
   }
   return `customers/${trimmed}`;
@@ -80,12 +72,7 @@ export const replaceOnIdentity = (input: {
   return undefined;
 };
 
-const markerOf = (
-  _labels: Record<string, string>,
-  stack: string,
-  stage: string,
-  id: string,
-) =>
+const markerOf = (_labels: Record<string, string>, stack: string, stage: string, id: string) =>
   `[alchemy ${alchemyLabelKeys.stack}=${stack} ${alchemyLabelKeys.stage}=${stage} ${alchemyLabelKeys.id}=${id}]`;
 
 const fitMarker = (labels: Record<string, string>, maxLength: number) => {
@@ -93,10 +80,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(labels, stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -115,8 +99,7 @@ export const encodeOwnership = (
 ): string => {
   const marker = fitMarker(labels, Math.min(8000, MAX_DESCRIPTION_LENGTH));
   const trimmed = text?.trim();
-  const combined =
-    trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
+  const combined = trimmed && trimmed.length > 0 ? `${marker}\n${trimmed}` : marker;
   return combined.slice(0, MAX_DESCRIPTION_LENGTH);
 };
 
@@ -128,10 +111,7 @@ export const encodeOwnershipLine = (
   const trimmed = text?.replace(/[\r\n]+/g, " ").trim();
   if (!trimmed) return fitMarker(labels, maxLength);
   const minMarker = 24;
-  const reserved = Math.min(
-    trimmed.length + 1,
-    Math.max(0, maxLength - minMarker),
-  );
+  const reserved = Math.min(trimmed.length + 1, Math.max(0, maxLength - minMarker));
   const marker = fitMarker(labels, maxLength - reserved);
   return `${marker} ${trimmed}`.slice(0, maxLength);
 };
@@ -159,20 +139,14 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) => {
-  if (
-    Object.keys(parseOwnership(text).labels).some((key) =>
-      key.startsWith("alchemy-"),
-    )
-  ) {
+  if (Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"))) {
     return true;
   }
   return (text ?? "").toLowerCase().includes("alchemy-");
 };
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -182,18 +156,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -233,9 +198,7 @@ export const toGroupKeyId = (
     return host && host.length > 0 ? `${local}@${host}` : local;
   });
 
-export const typeLabels = (
-  labels: Record<string, string> | undefined,
-): Record<string, string> => {
+export const typeLabels = (labels: Record<string, string> | undefined): Record<string, string> => {
   const next = { ...(labels ?? {}) };
   if (Object.keys(next).length === 0) {
     next[DISCUSSION_FORUM_LABEL] = "";
@@ -248,8 +211,7 @@ export const compactStringMap = (
 ): Record<string, string> =>
   Object.fromEntries(
     Object.entries(labels ?? {}).filter(
-      (entry): entry is [string, string] =>
-        typeof entry[1] === "string" && entry[1] !== undefined,
+      (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== undefined,
     ),
   );
 
@@ -262,10 +224,7 @@ export const getGroup = (name: string) =>
         .getGroups({ name: expandGroup(name) })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-export const lookupGroupName = (
-  groupKeyId: string,
-  namespace: string | undefined,
-) =>
+export const lookupGroupName = (groupKeyId: string, namespace: string | undefined) =>
   groupKeyId.length === 0
     ? Effect.succeed(undefined)
     : cloudidentity
@@ -278,10 +237,7 @@ export const lookupGroupName = (
           Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
 
-export const getGroupByKey = (
-  groupKeyId: string,
-  namespace: string | undefined,
-) =>
+export const getGroupByKey = (groupKeyId: string, namespace: string | undefined) =>
   Effect.gen(function* () {
     const name = yield* lookupGroupName(groupKeyId, namespace);
     if (name === undefined) return undefined;
@@ -303,8 +259,7 @@ export const listGroups = (parent?: string) =>
     );
 
 export const isOwnedGroup = (group: cloudidentity.Group) =>
-  hasOwnershipMarker(group.description) ||
-  hasOwnershipMarker(group.displayName);
+  hasOwnershipMarker(group.description) || hasOwnershipMarker(group.displayName);
 
 export const listOwnedGroups = (parent?: string) =>
   listGroups(parent).pipe(Effect.map((groups) => groups.filter(isOwnedGroup)));
@@ -372,9 +327,7 @@ export const listMemberships = (parent: string) =>
           Stream.flatMap((page) => Stream.fromIterable(page.memberships ?? [])),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () =>
-            emptyList<cloudidentity.Membership>(),
-          ),
+          Effect.catchTag("NotFound", () => emptyList<cloudidentity.Membership>()),
         );
 
 export const getDevice = (name: string, customer?: string) =>
@@ -403,11 +356,7 @@ export const listDevices = (customer?: string) =>
       ),
     );
 
-export const findOwnedDevice = (
-  id: string,
-  serialNumber: string | undefined,
-  customer?: string,
-) =>
+export const findOwnedDevice = (id: string, serialNumber: string | undefined, customer?: string) =>
   Effect.gen(function* () {
     const devices = yield* listDevices(customer);
     for (const device of devices) {
@@ -436,14 +385,10 @@ export const getOidcProfile = (name: string) =>
 
 export const listOidcProfiles = () =>
   cloudidentity.listInboundOidcSsoProfiles.pages({ pageSize: 100 }).pipe(
-    Stream.flatMap((page) =>
-      Stream.fromIterable(page.inboundOidcSsoProfiles ?? []),
-    ),
+    Stream.flatMap((page) => Stream.fromIterable(page.inboundOidcSsoProfiles ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound", () =>
-      emptyList<cloudidentity.InboundOidcSsoProfile>(),
-    ),
+    Effect.catchTag("NotFound", () => emptyList<cloudidentity.InboundOidcSsoProfile>()),
   );
 
 export const findOwnedOidcProfile = (id: string) =>
@@ -468,14 +413,10 @@ export const getSamlProfile = (name: string) =>
 
 export const listSamlProfiles = () =>
   cloudidentity.listInboundSamlSsoProfiles.pages({ pageSize: 100 }).pipe(
-    Stream.flatMap((page) =>
-      Stream.fromIterable(page.inboundSamlSsoProfiles ?? []),
-    ),
+    Stream.flatMap((page) => Stream.fromIterable(page.inboundSamlSsoProfiles ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound", () =>
-      emptyList<cloudidentity.InboundSamlSsoProfile>(),
-    ),
+    Effect.catchTag("NotFound", () => emptyList<cloudidentity.InboundSamlSsoProfile>()),
   );
 
 export const findOwnedSamlProfile = (id: string) =>
@@ -500,14 +441,10 @@ export const getSsoAssignment = (name: string) =>
 
 export const listSsoAssignments = () =>
   cloudidentity.listInboundSsoAssignments.pages({ pageSize: 100 }).pipe(
-    Stream.flatMap((page) =>
-      Stream.fromIterable(page.inboundSsoAssignments ?? []),
-    ),
+    Stream.flatMap((page) => Stream.fromIterable(page.inboundSsoAssignments ?? [])),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)),
-    Effect.catchTag("NotFound", () =>
-      emptyList<cloudidentity.InboundSsoAssignment>(),
-    ),
+    Effect.catchTag("NotFound", () => emptyList<cloudidentity.InboundSsoAssignment>()),
   );
 
 export const findSsoAssignment = (input: {
@@ -535,14 +472,9 @@ export const findSsoAssignment = (input: {
       ) {
         return false;
       }
-      if (
-        input.ssoMode !== undefined &&
-        !sameText(assignment.ssoMode, input.ssoMode)
-      ) {
+      if (input.ssoMode !== undefined && !sameText(assignment.ssoMode, input.ssoMode)) {
         return false;
       }
-      return (
-        input.targetGroup !== undefined || input.targetOrgUnit !== undefined
-      );
+      return input.targetGroup !== undefined || input.targetOrgUnit !== undefined;
     });
   });

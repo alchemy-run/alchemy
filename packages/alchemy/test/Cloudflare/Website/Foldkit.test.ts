@@ -1,25 +1,19 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Same rationale as Vite.test.ts: Vite's `vite:build-html` plugin expresses
 // emitted asset paths relative to `cwd`, so the temp clone has to live under
@@ -27,10 +21,7 @@ const logLevel = Effect.provideService(
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "foldkit-fixture");
-const workerFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "foldkit-worker-fixture",
-);
+const workerFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-worker-fixture");
 const ssrFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-ssr-fixture");
 
 const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
@@ -42,10 +33,7 @@ const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
 const foldkitProps = (rootDir: string) => ({
   rootDir,
   workersDev: true,
-  compatibility: {
-    date: "2024-09-23",
-    flags: ["nodejs_compat"],
-  },
+  compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   memo: { include: memoInclude },
 });
 
@@ -93,10 +81,7 @@ describe.concurrent(
             Effect.gen(function* () {
               // Deliberately no `assets` — the derived default is what is
               // under test.
-              return yield* Cloudflare.Website.Foldkit(
-                "FixFoldkitDefault",
-                foldkitProps(rootDir),
-              );
+              return yield* Cloudflare.Website.Foldkit("FixFoldkitDefault", foldkitProps(rootDir));
             }),
           );
 
@@ -111,14 +96,10 @@ describe.concurrent(
           // The deep link matches no file; the fallback answers it with the
           // template and the app boots. A declaration still wins over the
           // default; see the next case.
-          yield* expectUrlContains(
-            `${site.url!}/counter/42`,
-            "Foldkit Fixture",
-            {
-              timeout: "15 seconds",
-              label: "foldkit deep link fallback",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+            timeout: "15 seconds",
+            label: "foldkit deep link fallback",
+          });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);
@@ -145,9 +126,7 @@ describe.concurrent(
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Foldkit("FixFoldkitOverride", {
                 ...foldkitProps(rootDir),
-                assets: {
-                  notFoundHandling: "none",
-                },
+                assets: { notFoundHandling: "none" },
               });
             }),
           );
@@ -196,12 +175,8 @@ describe.concurrent(
               return yield* Cloudflare.Website.Foldkit("FixFoldkitWorker", {
                 ...foldkitProps(rootDir),
                 main: "src/worker.ts",
-                assets: {
-                  runWorkerFirst: ["/api/*"],
-                },
-                env: {
-                  GREETING: "foldkit-worker-fixture",
-                },
+                assets: { runWorkerFirst: ["/api/*"] },
+                env: { GREETING: "foldkit-worker-fixture" },
               });
             }),
           );
@@ -210,11 +185,10 @@ describe.concurrent(
           yield* expectWorkerExists(site.workerName, accountId);
 
           // The Worker entry answers its own route from the binding.
-          yield* expectUrlContains(
-            `${site.url!}/api/hello`,
-            "foldkit-worker-fixture",
-            { timeout: "30 seconds", label: "foldkit worker api" },
-          );
+          yield* expectUrlContains(`${site.url!}/api/hello`, "foldkit-worker-fixture", {
+            timeout: "30 seconds",
+            label: "foldkit worker api",
+          });
           // Everything else passes through to the assets binding.
           yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
             timeout: "15 seconds",
@@ -222,14 +196,10 @@ describe.concurrent(
           });
           // The derived fallback still answers the deep link through
           // `env.ASSETS.fetch`.
-          yield* expectUrlContains(
-            `${site.url!}/counter/42`,
-            "Foldkit Fixture",
-            {
-              timeout: "15 seconds",
-              label: "foldkit worker spa fallback",
-            },
-          );
+          yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+            timeout: "15 seconds",
+            label: "foldkit worker spa fallback",
+          });
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);
@@ -262,10 +232,7 @@ describe.concurrent(
             Effect.gen(function* () {
               // No `main`, no `assets`: the handler and the routing both come
               // from the build.
-              return yield* Cloudflare.Website.Foldkit(
-                "FixFoldkitSsr",
-                foldkitProps(rootDir),
-              );
+              return yield* Cloudflare.Website.Foldkit("FixFoldkitSsr", foldkitProps(rootDir));
             }),
           );
 
@@ -378,10 +345,7 @@ describe.concurrent(
 
           const site1 = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Website.Foldkit(
-                "FixFoldkitEdit",
-                foldkitProps(rootDir),
-              );
+              return yield* Cloudflare.Website.Foldkit("FixFoldkitEdit", foldkitProps(rootDir));
             }),
           );
 
@@ -396,10 +360,7 @@ describe.concurrent(
 
           const site2 = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Website.Foldkit(
-                "FixFoldkitEdit",
-                foldkitProps(rootDir),
-              );
+              return yield* Cloudflare.Website.Foldkit("FixFoldkitEdit", foldkitProps(rootDir));
             }),
           );
 

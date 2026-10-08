@@ -1,16 +1,15 @@
-import * as GCP from "@/GCP";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as GCP from "@/GCP";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Secret the per-operation AddSecretVersion / AccessSecretVersion bind. */
 export const OpsSecret = GCP.SecretManager.Secret("OpsSecret", {});
 
 /** Regional secret the per-operation bindings bind. */
-export const RegionalSecret = GCP.SecretManager.LocationsSecret(
-  "RegionalSecret",
-  { location: "us-central1" },
-);
+export const RegionalSecret = GCP.SecretManager.LocationsSecret("RegionalSecret", {
+  location: "us-central1",
+});
 
 /** Secret only {@link GCP.SecretManager.ReadSecret} binds (seeded by the test). */
 export const ReadOnlySecret = GCP.SecretManager.Secret("ReadOnlySecret", {});
@@ -19,10 +18,7 @@ export const ReadOnlySecret = GCP.SecretManager.Secret("ReadOnlySecret", {});
 export const WriteOnlySecret = GCP.SecretManager.Secret("WriteOnlySecret", {});
 
 /** Secret only {@link GCP.SecretManager.ReadWriteSecret} binds. */
-export const ReadWriteOnlySecret = GCP.SecretManager.Secret(
-  "ReadWriteOnlySecret",
-  {},
-);
+export const ReadWriteOnlySecret = GCP.SecretManager.Secret("ReadWriteOnlySecret", {});
 
 /** Payload the test seeds into {@link ReadOnlySecret}. */
 export const SEEDED = "seeded-value";
@@ -37,19 +33,13 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
   Effect.gen(function* () {
     const addVersion = yield* GCP.SecretManager.AddSecretVersion(OpsSecret);
     const access = yield* GCP.SecretManager.AccessSecretVersion(OpsSecret);
-    const addRegional =
-      yield* GCP.SecretManager.AddSecretVersion(RegionalSecret);
-    const accessRegional =
-      yield* GCP.SecretManager.AccessSecretVersion(RegionalSecret);
+    const addRegional = yield* GCP.SecretManager.AddSecretVersion(RegionalSecret);
+    const accessRegional = yield* GCP.SecretManager.AccessSecretVersion(RegionalSecret);
     const reader = yield* GCP.SecretManager.ReadSecret(ReadOnlySecret);
     const writer = yield* GCP.SecretManager.WriteSecret(WriteOnlySecret);
     const both = yield* GCP.SecretManager.ReadWriteSecret(ReadWriteOnlySecret);
 
-    const roundTrip = (
-      add: typeof addVersion,
-      read: typeof access,
-      value: string,
-    ) =>
+    const roundTrip = (add: typeof addVersion, read: typeof access, value: string) =>
       Effect.gen(function* () {
         const payload = btoa(value);
         const version = yield* add({ payload: { data: payload } });
@@ -100,8 +90,7 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
             v2,
             latest,
             first: first && new TextDecoder().decode(first),
-            disabledReadsUndefined:
-              Result.isSuccess(disabled) && disabled.success === undefined,
+            disabledReadsUndefined: Result.isSuccess(disabled) && disabled.success === undefined,
             destroyedReadsUndefined: destroyed === undefined,
           };
         }),

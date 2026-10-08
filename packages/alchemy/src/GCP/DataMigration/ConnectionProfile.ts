@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -31,15 +26,9 @@ import {
   waitUntilGone,
 } from "./internal.ts";
 
-export type ConnectionProfileProvider =
-  | dm.ConnectionProfileProviderEnum
-  | (string & {});
-export type ConnectionProfileState =
-  | dm.ConnectionProfileStateEnum
-  | (string & {});
-export type ConnectionProfileRole =
-  | dm.ConnectionProfileRoleEnum
-  | (string & {});
+export type ConnectionProfileProvider = dm.ConnectionProfileProviderEnum | (string & {});
+export type ConnectionProfileState = dm.ConnectionProfileStateEnum | (string & {});
+export type ConnectionProfileRole = dm.ConnectionProfileRoleEnum | (string & {});
 export type MySqlConnectionProfile = dm.MySqlConnectionProfile;
 export type PostgreSqlConnectionProfile = dm.PostgreSqlConnectionProfile;
 export type OracleConnectionProfile = dm.OracleConnectionProfile;
@@ -210,15 +199,9 @@ export type ConnectionProfile = Resource<
  * @resource
  * @category DataMigration
  */
-export const ConnectionProfile = Resource<ConnectionProfile>(
-  "GCP.DataMigration.ConnectionProfile",
-);
+export const ConnectionProfile = Resource<ConnectionProfile>("GCP.DataMigration.ConnectionProfile");
 
-const resourceName = (
-  project: string,
-  location: string,
-  connectionProfileId: string,
-) =>
+const resourceName = (project: string, location: string, connectionProfileId: string) =>
   `${locationParent(project, location)}/connectionProfiles/${connectionProfileId}`;
 
 const kindOf = (value: {
@@ -263,9 +246,7 @@ const publicMysql = (mysql: MySqlConnectionProfile | undefined) =>
         ssl: publicSsl(mysql.ssl),
       };
 
-const publicPostgresql = (
-  postgresql: PostgreSqlConnectionProfile | undefined,
-) =>
+const publicPostgresql = (postgresql: PostgreSqlConnectionProfile | undefined) =>
   postgresql === undefined
     ? undefined
     : {
@@ -277,8 +258,7 @@ const publicPostgresql = (
         alloydbClusterId: postgresql.alloydbClusterId,
         enableIamAuthentication: postgresql.enableIamAuthentication,
         privateConnectivity: postgresql.privateConnectivity,
-        privateServiceConnectConnectivity:
-          postgresql.privateServiceConnectConnectivity,
+        privateServiceConnectConnectivity: postgresql.privateServiceConnectConnectivity,
         forwardSshConnectivity: postgresql.forwardSshConnectivity
           ? {
               hostname: postgresql.forwardSshConnectivity.hostname,
@@ -332,8 +312,7 @@ const publicSqlserver = (sqlserver: SqlServerConnectionProfile | undefined) =>
         dbmPort: sqlserver.dbmPort,
         backups: sqlserver.backups,
         privateConnectivity: sqlserver.privateConnectivity,
-        privateServiceConnectConnectivity:
-          sqlserver.privateServiceConnectConnectivity,
+        privateServiceConnectConnectivity: sqlserver.privateServiceConnectConnectivity,
         passwordSet: sqlserver.passwordSet,
         ssl: publicSsl(sqlserver.ssl),
       };
@@ -411,9 +390,7 @@ const listOwned = (project: string, region: string) =>
       pageSize: 1000,
     })
     .pipe(
-      Stream.flatMap((page) =>
-        Stream.fromIterable(page.connectionProfiles ?? []),
-      ),
+      Stream.flatMap((page) => Stream.fromIterable(page.connectionProfiles ?? [])),
       Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
@@ -424,34 +401,21 @@ const listOwned = (project: string, region: string) =>
             pageSize: 1000,
           })
           .pipe(
-            Stream.flatMap((page) =>
-              Stream.fromIterable(page.connectionProfiles ?? []),
-            ),
+            Stream.flatMap((page) => Stream.fromIterable(page.connectionProfiles ?? [])),
             Stream.filter((item) => hasAlchemyLabelMap(item.labels)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
-            Effect.catchTag("NotFound", () =>
-              Effect.succeed([] as dm.ConnectionProfile[]),
-            ),
+            Effect.catchTag("NotFound", () => Effect.succeed([] as dm.ConnectionProfile[])),
           ),
       ),
     );
 
-const secretChanged = (
-  newsHasSecret: boolean,
-  publicPrevious: unknown,
-  publicNext: unknown,
-) => newsHasSecret || fingerprint(publicPrevious) !== fingerprint(publicNext);
+const secretChanged = (newsHasSecret: boolean, publicPrevious: unknown, publicNext: unknown) =>
+  newsHasSecret || fingerprint(publicPrevious) !== fingerprint(publicNext);
 
 export const ConnectionProfileProvider = () =>
   Provider.succeed(ConnectionProfile, {
-    stables: [
-      "name",
-      "connectionProfileId",
-      "project",
-      "location",
-      "createTime",
-    ],
+    stables: ["name", "connectionProfileId", "project", "location", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -480,13 +444,8 @@ export const ConnectionProfileProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.connectionProfileId ?? output?.connectionProfileId,
         nextId:
-          news.connectionProfileId ??
-          olds?.connectionProfileId ??
-          output?.connectionProfileId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+          news.connectionProfileId ?? olds?.connectionProfileId ?? output?.connectionProfileId,
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
@@ -496,9 +455,7 @@ export const ConnectionProfileProvider = () =>
           (nextKind === "cloudsql" &&
             news.cloudsql !== undefined &&
             previousCloudsql !== nextCloudsql) ||
-          (nextKind === "alloydb" &&
-            news.alloydb !== undefined &&
-            previousAlloy !== nextAlloy),
+          (nextKind === "alloydb" && news.alloydb !== undefined && previousAlloy !== nextAlloy),
       });
     }),
 
@@ -510,19 +467,12 @@ export const ConnectionProfileProvider = () =>
         output?.connectionProfileId,
         "profile",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, connectionProfileId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, connectionProfileId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -540,10 +490,7 @@ export const ConnectionProfileProvider = () =>
         output?.connectionProfileId,
         "profile",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, connectionProfileId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -590,10 +537,8 @@ export const ConnectionProfileProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const displayNameChanged = (current.displayName ?? "") !== displayName;
       const providerChanged =
-        news.provider !== undefined &&
-        (current.provider ?? "") !== news.provider;
-      const roleChanged =
-        news.role !== undefined && (current.role ?? "") !== news.role;
+        news.provider !== undefined && (current.provider ?? "") !== news.provider;
+      const roleChanged = news.role !== undefined && (current.role ?? "") !== news.role;
       const mysqlChanged =
         news.mysql !== undefined &&
         secretChanged(
@@ -628,8 +573,7 @@ export const ConnectionProfileProvider = () =>
       const sqlserverChanged =
         news.sqlserver !== undefined &&
         secretChanged(
-          news.sqlserver.password !== undefined ||
-            news.sqlserver.ssl?.caCertificate !== undefined,
+          news.sqlserver.password !== undefined || news.sqlserver.ssl?.caCertificate !== undefined,
           publicSqlserver(current.sqlserver),
           publicSqlserver(news.sqlserver),
         );
@@ -663,10 +607,7 @@ export const ConnectionProfileProvider = () =>
           },
         });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project);

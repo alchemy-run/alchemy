@@ -134,16 +134,11 @@ export class OrganizationLogScopeNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  organization: string,
-  location: string,
-  logScopeId: string,
-) => `${organization}/locations/${location}/logScopes/${logScopeId}`;
+const resourceName = (organization: string, location: string, logScopeId: string) =>
+  `${organization}/locations/${location}/logScopes/${logScopeId}`;
 
 const parseScopeName = (name: string) => {
-  const match = name.match(
-    /^(organizations\/[^/]+)\/locations\/([^/]+)\/logScopes\/([^/]+)$/,
-  );
+  const match = name.match(/^(organizations\/[^/]+)\/locations\/([^/]+)\/logScopes\/([^/]+)$/);
   if (!match) return undefined;
   return {
     organization: match[1]!,
@@ -164,11 +159,7 @@ const toAttrs = (
   const resolvedOrg = parsed?.organization ?? organization;
   const resolvedLocation = parsed?.location ?? location;
   return {
-    name:
-      scope.name ??
-      (logScopeId
-        ? resourceName(resolvedOrg, resolvedLocation, logScopeId)
-        : ""),
+    name: scope.name ?? (logScopeId ? resourceName(resolvedOrg, resolvedLocation, logScopeId) : ""),
     logScopeId,
     organization: resolvedOrg,
     organizationId: organizationIdOf(resolvedOrg),
@@ -202,9 +193,7 @@ export const OrganizationLogScopeProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.logScopeId ?? output?.logScopeId;
       const idChanged =
-        previousId !== undefined &&
-        news.logScopeId !== undefined &&
-        news.logScopeId !== previousId;
+        previousId !== undefined && news.logScopeId !== undefined && news.logScopeId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -226,14 +215,8 @@ export const OrganizationLogScopeProvider = () =>
         output?.organization,
       );
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
-      const logScopeId = yield* toPhysicalId(
-        id,
-        olds?.logScopeId,
-        output?.logScopeId,
-        "s",
-      );
-      const name =
-        output?.name ?? resourceName(organization, location, logScopeId);
+      const logScopeId = yield* toPhysicalId(id, olds?.logScopeId, output?.logScopeId, "s");
+      const name = output?.name ?? resourceName(organization, location, logScopeId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization, env.project, location);
@@ -254,9 +237,7 @@ export const OrganizationLogScopeProvider = () =>
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.logScopes ?? [])),
             Stream.filter((scope) => hasOwnershipMarker(scope.description)),
-            Stream.map((scope) =>
-              toAttrs(scope, organization, env.project, DEFAULT_LOCATION),
-            ),
+            Stream.map((scope) => toAttrs(scope, organization, env.project, DEFAULT_LOCATION)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
@@ -265,17 +246,9 @@ export const OrganizationLogScopeProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const organization = yield* resolveOrganization(
-        news.organization,
-        output?.organization,
-      );
+      const organization = yield* resolveOrganization(news.organization, output?.organization);
       const location = news.location ?? output?.location ?? DEFAULT_LOCATION;
-      const logScopeId = yield* toPhysicalId(
-        id,
-        news.logScopeId,
-        output?.logScopeId,
-        "s",
-      );
+      const logScopeId = yield* toPhysicalId(id, news.logScopeId, output?.logScopeId, "s");
       const name = resourceName(organization, location, logScopeId);
       const ownership = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(ownership, news.description);
@@ -302,8 +275,7 @@ export const OrganizationLogScopeProvider = () =>
         return yield* new OrganizationLogScopeNotResolved({ name });
       }
 
-      const descriptionChanged =
-        (current.description ?? "") !== desiredDescription;
+      const descriptionChanged = (current.description ?? "") !== desiredDescription;
       const resourcesChanged =
         news.resourceNames !== undefined &&
         !jsonEqual(sorted(current.resourceNames), sorted(news.resourceNames));

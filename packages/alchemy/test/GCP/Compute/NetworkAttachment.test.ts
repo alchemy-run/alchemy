@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const region = "us-central1";
 
@@ -66,26 +63,19 @@ test.provider(
             region,
             ipCidrRange: "172.20.0.0/24",
           });
-          const attachment = yield* GCP.Compute.NetworkAttachment(
-            "ConsumerAttachment",
-            {
-              region,
-              subnetworks: [subnet.selfLink.as<string>()],
-              connectionPreference: "ACCEPT_AUTOMATIC",
-              description: "psc consumer",
-            },
-          );
+          const attachment = yield* GCP.Compute.NetworkAttachment("ConsumerAttachment", {
+            region,
+            subnetworks: [subnet.selfLink.as<string>()],
+            connectionPreference: "ACCEPT_AUTOMATIC",
+            description: "psc consumer",
+          });
           return { subnet, attachment };
         }),
       );
 
-      expect(created.attachment.networkAttachmentName.length).toBeGreaterThan(
-        0,
-      );
+      expect(created.attachment.networkAttachmentName.length).toBeGreaterThan(0);
       expect(created.attachment.region).toEqual(region);
-      expect(created.attachment.connectionPreference).toEqual(
-        "ACCEPT_AUTOMATIC",
-      );
+      expect(created.attachment.connectionPreference).toEqual("ACCEPT_AUTOMATIC");
       expect(created.attachment.description).toEqual("psc consumer");
       expect(created.attachment.subnetworks.length).toBeGreaterThan(0);
       expect(created.attachment.selfLink).toContain("/networkAttachments/");
@@ -119,9 +109,7 @@ test.provider(
         }),
       );
 
-      expect(updated.networkAttachmentName).toEqual(
-        created.attachment.networkAttachmentName,
-      );
+      expect(updated.networkAttachmentName).toEqual(created.attachment.networkAttachmentName);
       expect(updated.connectionPreference).toEqual("ACCEPT_MANUAL");
       expect(updated.description).toEqual("psc consumer updated");
       expect(updated.producerAcceptLists).toEqual(

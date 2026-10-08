@@ -1,5 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { waitRegionOperation } from "./operations.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,16 +10,13 @@ import { Resource } from "../../Resource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { waitRegionOperation } from "./operations.ts";
 
 const DEFAULT_ADVERTISE_MODE = "DEFAULT";
 const DEFAULT_KEEPALIVE = 20;
 const MAX_NAME_LENGTH = 63;
 
-const OWNERSHIP_KEYS = [
-  "alchemy-stack",
-  "alchemy-stage",
-  "alchemy-id",
-] as const;
+const OWNERSHIP_KEYS = ["alchemy-stack", "alchemy-stage", "alchemy-id"] as const;
 
 export type RouterAdvertisedIpRange = {
   /** CIDR to advertise (for example `10.0.0.0/8`). */
@@ -126,6 +122,23 @@ export type RouterNat = {
   tcpEstablishedIdleTimeoutSec?: number;
   /** TCP transitory-connection idle timeout in seconds. */
   tcpTransitoryIdleTimeoutSec?: number;
+  /**
+   * TCP TIME_WAIT timeout in seconds.
+   * @default 120
+   */
+  tcpTimeWaitTimeoutSec?: number;
+  /**
+   * Network tier for automatically allocated NAT addresses (`PREMIUM` or
+   * `STANDARD`).
+   * @default the project's default network tier
+   */
+  autoNetworkTier?: compute.RouterNatAutoNetworkTierEnum;
+  /**
+   * Endpoint types whose traffic is translated (`ENDPOINT_TYPE_VM`,
+   * `ENDPOINT_TYPE_SWG`, `ENDPOINT_TYPE_MANAGED_PROXY_LB`).
+   * @default ["ENDPOINT_TYPE_VM"]
+   */
+  endpointTypes?: compute.RouterNatEndpointTypesItemEnum[];
   /** NAT logging. */
   logConfig?: RouterNatLogConfig;
 };
@@ -288,16 +301,12 @@ export type Router = Resource<
  */
 export const Router = Resource<Router>("GCP.Compute.Router");
 
-export class RouterNotResolved extends Data.TaggedError(
-  "GCP.Compute.RouterNotResolved",
-)<{
+export class RouterNotResolved extends Data.TaggedError("GCP.Compute.RouterNotResolved")<{
   routerName: string;
   region: string;
 }> {}
 
-export class RouterOperationPending extends Data.TaggedError(
-  "GCP.Compute.RouterOperationPending",
-)<{
+export class RouterOperationPending extends Data.TaggedError("GCP.Compute.RouterOperationPending")<{
   operation: string;
   status: string | undefined;
 }> {}
@@ -323,13 +332,8 @@ const networkRef = (project: string, network: string) => {
   return `projects/${project}/global/networks/${network}`;
 };
 
-const encodeDescription = (
-  internal: Record<string, string>,
-  user?: string,
-): string => {
-  const marker = OWNERSHIP_KEYS.map(
-    (key) => `${key}=${internal[key] ?? ""}`,
-  ).join(" ");
+const encodeDescription = (internal: Record<string, string>, user?: string): string => {
+  const marker = OWNERSHIP_KEYS.map((key) => `${key}=${internal[key] ?? ""}`).join(" ");
   return user && user.length > 0 ? `${marker}\n${user}` : marker;
 };
 
@@ -357,15 +361,9 @@ const parseDescription = (description: string | undefined) => {
 };
 
 const hasAlchemyMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
 
-const toRouterName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const toRouterName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return name;
     if (existing !== undefined) return existing;
@@ -374,9 +372,7 @@ const toRouterName = (
       maxLength: MAX_NAME_LENGTH,
       lowercase: true,
     });
-    return /^[a-z]/.test(generated)
-      ? generated
-      : `r${generated}`.slice(0, MAX_NAME_LENGTH);
+    return /^[a-z]/.test(generated) ? generated : `r${generated}`.slice(0, MAX_NAME_LENGTH);
   });
 
 const groupsKey = (groups: ReadonlyArray<string> | undefined) =>
@@ -385,9 +381,7 @@ const groupsKey = (groups: ReadonlyArray<string> | undefined) =>
     .sort()
     .join("\0");
 
-const rangesKey = (
-  ranges: ReadonlyArray<RouterAdvertisedIpRange> | undefined,
-) =>
+const rangesKey = (ranges: ReadonlyArray<RouterAdvertisedIpRange> | undefined) =>
   JSON.stringify(
     [...(ranges ?? [])]
       .map((range) => ({
@@ -470,10 +464,8 @@ const bgpEqual = (observed: RouterBgp | undefined, desired: RouterBgp) => {
   }
   if (advertiseMode !== "CUSTOM") return true;
   return (
-    groupsKey(observed.advertisedGroups) ===
-      groupsKey(desired.advertisedGroups) &&
-    rangesKey(observed.advertisedIpRanges) ===
-      rangesKey(desired.advertisedIpRanges)
+    groupsKey(observed.advertisedGroups) === groupsKey(desired.advertisedGroups) &&
+    rangesKey(observed.advertisedIpRanges) === rangesKey(desired.advertisedIpRanges)
   );
 };
 
@@ -501,8 +493,7 @@ const toNats = (nats: compute.RouterNat[] | undefined): RouterNat[] =>
         subnetwork.sourceIpRangesToNat as RouterNatSubnetwork["sourceIpRangesToNat"],
       secondaryIpRangeNames: subnetwork.secondaryIpRangeNames,
     })),
-    natIpAllocateOption:
-      nat.natIpAllocateOption as compute.RouterNatNatIpAllocateOptionEnum,
+    natIpAllocateOption: nat.natIpAllocateOption as compute.RouterNatNatIpAllocateOptionEnum,
     natIps: nat.natIps,
     minPortsPerVm: nat.minPortsPerVm,
     maxPortsPerVm: nat.maxPortsPerVm,
@@ -512,13 +503,15 @@ const toNats = (nats: compute.RouterNat[] | undefined): RouterNat[] =>
     icmpIdleTimeoutSec: nat.icmpIdleTimeoutSec,
     tcpEstablishedIdleTimeoutSec: nat.tcpEstablishedIdleTimeoutSec,
     tcpTransitoryIdleTimeoutSec: nat.tcpTransitoryIdleTimeoutSec,
+    tcpTimeWaitTimeoutSec: nat.tcpTimeWaitTimeoutSec,
+    autoNetworkTier: nat.autoNetworkTier as compute.RouterNatAutoNetworkTierEnum | undefined,
+    endpointTypes: nat.endpointTypes as compute.RouterNatEndpointTypesItemEnum[] | undefined,
     logConfig:
       nat.logConfig === undefined
         ? undefined
         : {
             enable: nat.logConfig.enable === true,
-            filter: nat.logConfig
-              .filter as compute.RouterNatLogConfigFilterEnum,
+            filter: nat.logConfig.filter as compute.RouterNatLogConfigFilterEnum,
           },
   }));
 
@@ -531,17 +524,13 @@ const desiredNats = (
     ...nat,
     natIpAllocateOption:
       nat.natIpAllocateOption ??
-      (nat.natIps !== undefined && nat.natIps.length > 0
-        ? "MANUAL_ONLY"
-        : "AUTO_ONLY"),
+      (nat.natIps !== undefined && nat.natIps.length > 0 ? "MANUAL_ONLY" : "AUTO_ONLY"),
     subnetworks: nat.subnetworks?.map((subnetwork) => ({
       ...subnetwork,
       name: regionalRef(project, region, "subnetworks", subnetwork.name),
       sourceIpRangesToNat: subnetwork.sourceIpRangesToNat ?? ["ALL_IP_RANGES"],
     })),
-    natIps: nat.natIps?.map((ip) =>
-      regionalRef(project, region, "addresses", ip),
-    ),
+    natIps: nat.natIps?.map((ip) => regionalRef(project, region, "addresses", ip)),
     logConfig:
       nat.logConfig === undefined
         ? undefined
@@ -556,10 +545,7 @@ const sortedKey = (values: ReadonlyArray<string> | undefined) =>
 
 // Compare only fields the desired NAT specifies: the API fills in defaults
 // (timeouts, endpoint types, tier) that the user never declared.
-const natMatches = (
-  desired: compute.RouterNat,
-  observed: compute.RouterNat,
-) => {
+const natMatches = (desired: compute.RouterNat, observed: compute.RouterNat) => {
   for (const [key, value] of Object.entries(desired)) {
     if (value === undefined) continue;
     const current = observed[key as keyof compute.RouterNat];
@@ -591,6 +577,11 @@ const natMatches = (
         }
         break;
       }
+      case "endpointTypes":
+        if (sortedKey(value as string[]) !== sortedKey(current as string[] | undefined)) {
+          return false;
+        }
+        break;
       case "logConfig": {
         const log = current as compute.RouterNatLogConfig | undefined;
         const want = value as compute.RouterNatLogConfig;
@@ -605,10 +596,7 @@ const natMatches = (
   return true;
 };
 
-const natsEqual = (
-  observed: compute.RouterNat[] | undefined,
-  desired: compute.RouterNat[],
-) => {
+const natsEqual = (observed: compute.RouterNat[] | undefined, desired: compute.RouterNat[]) => {
   const byName = new Map((observed ?? []).map((nat) => [nat.name, nat]));
   if (byName.size !== desired.length) return false;
   return desired.every((nat) => {
@@ -617,10 +605,7 @@ const natsEqual = (
   });
 };
 
-const toAttrs = (
-  router: compute.Router,
-  project: string,
-): Router["Attributes"] => {
+const toAttrs = (router: compute.Router, project: string): Router["Attributes"] => {
   const parsed = parseDescription(router.description);
   return {
     routerName: router.name ?? "",
@@ -646,9 +631,7 @@ const getByName = (project: string, region: string, router: string) =>
 const requireRouter = (project: string, region: string, routerName: string) =>
   getByName(project, region, routerName).pipe(
     Effect.flatMap((router) =>
-      router
-        ? Effect.succeed(router)
-        : Effect.fail(new RouterNotResolved({ routerName, region })),
+      router ? Effect.succeed(router) : Effect.fail(new RouterNotResolved({ routerName, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RouterNotResolved",
@@ -657,11 +640,7 @@ const requireRouter = (project: string, region: string, routerName: string) =>
     }),
   );
 
-const waitUntilRouterGone = (
-  project: string,
-  region: string,
-  routerName: string,
-) =>
+const waitUntilRouterGone = (project: string, region: string, routerName: string) =>
   getByName(project, region, routerName).pipe(
     Effect.flatMap((router) =>
       router === undefined
@@ -702,23 +681,13 @@ export const RouterProvider = () =>
       const env = yield* GcpEnvironment.current;
       const previousName = olds?.routerName ?? output?.routerName;
       const nextName = news.routerName ?? previousName;
-      const previousRegion = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
-      const nextRegion = normalizeRegion(
-        news.region ?? output?.region,
-        env.region,
-      );
+      const previousRegion = normalizeRegion(olds?.region ?? output?.region, env.region);
+      const nextRegion = normalizeRegion(news.region ?? output?.region, env.region);
       const identityChanged =
         previousRegion !== nextRegion ||
-        (previousName !== undefined &&
-          nextName !== undefined &&
-          previousName !== nextName);
+        (previousName !== undefined && nextName !== undefined && previousName !== nextName);
       const previousEncrypted =
-        olds?.encryptedInterconnectRouter ??
-        output?.encryptedInterconnectRouter ??
-        false;
+        olds?.encryptedInterconnectRouter ?? output?.encryptedInterconnectRouter ?? false;
       const nextEncrypted = news.encryptedInterconnectRouter ?? false;
       const previousAsn = olds?.bgp?.asn ?? output?.bgp?.asn;
       const nextAsn = news.bgp?.asn;
@@ -726,12 +695,9 @@ export const RouterProvider = () =>
         identityChanged ||
         linkKey(news.network) !== linkKey(olds?.network ?? output?.network) ||
         previousEncrypted !== nextEncrypted ||
-        (previousAsn !== undefined &&
-          nextAsn !== undefined &&
-          previousAsn !== nextAsn) ||
+        (previousAsn !== undefined && nextAsn !== undefined && previousAsn !== nextAsn) ||
         (news.nccGateway !== undefined &&
-          linkKey(news.nccGateway) !==
-            linkKey(olds?.nccGateway ?? output?.nccGateway));
+          linkKey(news.nccGateway) !== linkKey(olds?.nccGateway ?? output?.nccGateway));
       if (!replace) return undefined;
       return {
         action: "replace" as const,
@@ -745,22 +711,13 @@ export const RouterProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const routerName = yield* toRouterName(
-        id,
-        olds?.routerName,
-        output?.routerName,
-      );
-      const region = normalizeRegion(
-        olds?.region ?? output?.region,
-        env.region,
-      );
+      const routerName = yield* toRouterName(id, olds?.routerName, output?.routerName);
+      const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, routerName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -789,20 +746,14 @@ export const RouterProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const routerName = yield* toRouterName(
-        id,
-        news.routerName,
-        output?.routerName,
-      );
+      const routerName = yield* toRouterName(id, news.routerName, output?.routerName);
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const network = networkRef(env.project, news.network);
       const internal = yield* createInternalLabels(id);
       const desiredDescription = encodeDescription(internal, news.description);
       const encrypted = news.encryptedInterconnectRouter === true;
       const nats =
-        news.nats === undefined
-          ? undefined
-          : desiredNats(env.project, region, news.nats);
+        news.nats === undefined ? undefined : desiredNats(env.project, region, news.nats);
 
       let current = yield* getByName(env.project, region, routerName);
 
@@ -879,8 +830,7 @@ export const RouterProvider = () =>
         })
         .pipe(
           Effect.retry({
-            while: (error) =>
-              error._tag === "Conflict" || error._tag === "BadRequest",
+            while: (error) => error._tag === "Conflict" || error._tag === "BadRequest",
             times: 15,
             schedule: Schedule.spaced("3 seconds"),
           }),

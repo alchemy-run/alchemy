@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 // Live create returns Forbidden: "The caller does not have permission"
 // (resourcemanager.projects.create on the parent organization/folder).
 // Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there.
@@ -21,13 +18,9 @@ const runLifecycle = !!process.env.GOOGLE_ORGANIZATION_ID;
 const waitUntilGone = (name: string) =>
   resourcemanager.getProjects({ name }).pipe(
     Effect.map((resource) =>
-      resource.state === "DELETE_REQUESTED"
-        ? ("gone" as const)
-        : ("found" as const),
+      resource.state === "DELETE_REQUESTED" ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["NotFound", "ProjectNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",

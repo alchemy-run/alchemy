@@ -1,17 +1,14 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import EmrTestFunctionLive, {
-  EmrTestFunction,
-  PROBE_RELEASE_LABEL,
-} from "./handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import EmrTestFunctionLive, { EmrTestFunction, PROBE_RELEASE_LABEL } from "./handler";
 import EmrSlowTestFunctionLive, { EmrSlowTestFunction } from "./slow-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -20,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "EMRBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -43,26 +37,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential(
   "EMR Bindings",
@@ -89,9 +76,7 @@ describe.sequential(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -122,10 +107,7 @@ describe.sequential(
     describe("ListReleaseLabels", () => {
       test.provider("lists the region's release catalog, newest first", () =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/releases")) as {
-            count: number;
-            latest?: string;
-          };
+          const response = (yield* getJson("/releases")) as { count: number; latest?: string };
           expect(response.count).toBeGreaterThan(0);
           expect(response.latest).toMatch(/^emr-/);
         }),
@@ -135,9 +117,7 @@ describe.sequential(
     describe("DescribeReleaseLabel", () => {
       test.provider("reads the applications a release ships", () =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/release")) as {
-            applications: string[];
-          };
+          const response = (yield* getJson("/release")) as { applications: string[] };
           expect(response.applications).toContain("Spark");
         }),
       );
@@ -146,33 +126,25 @@ describe.sequential(
     describe("ListSupportedInstanceTypes", () => {
       test.provider(`lists instance types for ${PROBE_RELEASE_LABEL}`, () =>
         Effect.gen(function* () {
-          const response = (yield* getJson("/instance-types")) as {
-            types: string[];
-          };
+          const response = (yield* getJson("/instance-types")) as { types: string[] };
           expect(response.types.length).toBeGreaterThan(0);
         }),
       );
     });
 
-    describe(
-      "consumeClusterEvents",
-      { tags: ["provider:aws:eventbridge"] },
-      () => {
-        test.provider(
-          "the deploy created an EventBridge rule targeting the function",
-          () =>
-            Effect.gen(function* () {
-              // Out-of-band via distilled: the fixture's consumeClusterEvents
-              // must have materialized as a rule on the default bus with the
-              // Lambda as target.
-              const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-                TargetArn: functionArn,
-              });
-              expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-            }),
-        );
-      },
-    );
+    describe("consumeClusterEvents", { tags: ["provider:aws:eventbridge"] }, () => {
+      test.provider("the deploy created an EventBridge rule targeting the function", () =>
+        Effect.gen(function* () {
+          // Out-of-band via distilled: the fixture's consumeClusterEvents
+          // must have materialized as a rule on the default bus with the
+          // Lambda as target.
+          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+            TargetArn: functionArn,
+          });
+          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+        }),
+      );
+    });
   },
 );
 
@@ -203,10 +175,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
         const get = (path: string) =>
           HttpClient.get(`${slowBaseUrl}${path}`).pipe(
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
             }),
             Effect.flatMap((r) => r.json),
           );
@@ -233,9 +202,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
         // Cancelling an already-terminal step reports a per-step failure
         // status — either status proves the grant.
-        const cancel = (yield* get(`/steps/cancel?id=${added.stepId}`)) as {
-          status?: string;
-        };
+        const cancel = (yield* get(`/steps/cancel?id=${added.stepId}`)) as { status?: string };
         expect(cancel.status).toBeDefined();
 
         // Inspection reads.
@@ -248,11 +215,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
         // Managed scaling put -> get -> remove (or a typed validation tag on
         // a master-only cluster).
-        const scaling = (yield* get("/scaling")) as {
-          ok: boolean;
-          max?: number;
-          tag?: string;
-        };
+        const scaling = (yield* get("/scaling")) as { ok: boolean; max?: number; tag?: string };
         if (scaling.ok) {
           expect(scaling.max).toBe(4);
         } else {
@@ -262,13 +225,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
     }),
   // cluster create (~10-15 min) + step run + probes + termination initiation.
   {
-    tags: [
-      "provider:aws",
-      "provider:aws:emr",
-      "provider:aws:iam",
-      "provider:aws:lambda",
-      "live",
-    ],
+    tags: ["provider:aws", "provider:aws:emr", "provider:aws:iam", "provider:aws:lambda", "live"],
     timeout: 2_700_000,
   },
 );

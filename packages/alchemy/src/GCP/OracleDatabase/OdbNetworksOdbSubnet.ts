@@ -130,8 +130,7 @@ export const OdbNetworksOdbSubnet = Resource<OdbNetworksOdbSubnet>(
   "GCP.OracleDatabase.OdbNetworksOdbSubnet",
 );
 
-const desiredPurpose = (purpose: string | undefined) =>
-  (purpose ?? DEFAULT_PURPOSE).toUpperCase();
+const desiredPurpose = (purpose: string | undefined) => (purpose ?? DEFAULT_PURPOSE).toUpperCase();
 
 const networkOf = (odbNetwork: string, project: string, location: string) =>
   expandParent(odbNetwork, project, location, "odbNetworks");
@@ -164,43 +163,31 @@ const getByName = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const listSubnets = (parent: string) =>
-  oracle.listProjectsLocationsOdbNetworksOdbSubnets
-    .pages({ parent, pageSize: 1000 })
-    .pipe(
-      Stream.flatMap((page) => Stream.fromIterable(page.odbSubnets ?? [])),
-      Stream.runCollect,
-      Effect.map((chunk) => Array.from(chunk)),
-      Effect.catchTag("NotFound", () =>
-        Effect.succeed([] as oracle.OdbSubnet[]),
-      ),
-    );
+  oracle.listProjectsLocationsOdbNetworksOdbSubnets.pages({ parent, pageSize: 1000 }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.odbSubnets ?? [])),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as oracle.OdbSubnet[])),
+  );
 
 const listOwned = (project: string, region: string) =>
   Effect.gen(function* () {
-    const wildcard = yield* listSubnets(
-      `projects/${project}/locations/-/odbNetworks/-`,
-    );
-    const labeledWildcard = wildcard.filter((item) =>
-      hasAlchemyLabelMap(item.labels),
-    );
+    const wildcard = yield* listSubnets(`projects/${project}/locations/-/odbNetworks/-`);
+    const labeledWildcard = wildcard.filter((item) => hasAlchemyLabelMap(item.labels));
     if (labeledWildcard.length > 0) return labeledWildcard;
 
     const networks = yield* listAtLocation(project, region, (parent) =>
-      oracle.listProjectsLocationsOdbNetworks
-        .pages({ parent, pageSize: 1000 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.odbNetworks ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag("NotFound", () => Effect.succeed([])),
-        ),
+      oracle.listProjectsLocationsOdbNetworks.pages({ parent, pageSize: 1000 }).pipe(
+        Stream.flatMap((page) => Stream.fromIterable(page.odbNetworks ?? [])),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
+      ),
     );
     const nested = yield* Effect.forEach(
       networks,
       (network) =>
-        network.name
-          ? listSubnets(network.name)
-          : Effect.succeed([] as oracle.OdbSubnet[]),
+        network.name ? listSubnets(network.name) : Effect.succeed([] as oracle.OdbSubnet[]),
       { concurrency: 4 },
     );
     return nested.flat().filter((item) => hasAlchemyLabelMap(item.labels));
@@ -229,9 +216,7 @@ export const OdbNetworksOdbSubnetProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.odbSubnetId ?? output?.odbSubnetId,
         nextId: news.odbSubnetId ?? olds?.odbSubnetId ?? output?.odbSubnetId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -243,9 +228,7 @@ export const OdbNetworksOdbSubnetProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
       const odbNetwork = networkOf(
         olds?.odbNetwork ?? output?.odbNetwork ?? "",
         env.project,
@@ -261,9 +244,7 @@ export const OdbNetworksOdbSubnetProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -275,9 +256,7 @@ export const OdbNetworksOdbSubnetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const odbNetwork = networkOf(news.odbNetwork, env.project, location);
       const odbSubnetId = yield* toPhysicalId(
         id,

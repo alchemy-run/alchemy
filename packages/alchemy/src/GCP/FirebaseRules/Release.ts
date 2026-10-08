@@ -105,9 +105,7 @@ export type Release = Resource<
  */
 export const Release = Resource<Release>("GCP.FirebaseRules.Release");
 
-export class ReleaseNotResolved extends Data.TaggedError(
-  "GCP.FirebaseRules.ReleaseNotResolved",
-)<{
+export class ReleaseNotResolved extends Data.TaggedError("GCP.FirebaseRules.ReleaseNotResolved")<{
   name: string;
 }> {}
 
@@ -130,11 +128,7 @@ export const ReleaseProvider = () =>
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const previous = olds?.releaseId ?? output?.releaseId;
-      if (
-        news.releaseId !== undefined &&
-        previous !== undefined &&
-        news.releaseId !== previous
-      ) {
+      if (news.releaseId !== undefined && previous !== undefined && news.releaseId !== previous) {
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
@@ -142,19 +136,12 @@ export const ReleaseProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const releaseId = yield* toReleaseId(
-        id,
-        olds?.releaseId,
-        output?.releaseId,
-      );
+      const releaseId = yield* toReleaseId(id, olds?.releaseId, output?.releaseId);
       const name = output?.name ?? releaseResourceName(env.project, releaseId);
       const existing = yield* getRelease(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      if (
-        isGeneratedReleaseId(attrs.releaseId) ||
-        output?.name === attrs.name
-      ) {
+      if (isGeneratedReleaseId(attrs.releaseId) || output?.name === attrs.name) {
         return attrs;
       }
       return Unowned(attrs);
@@ -165,20 +152,14 @@ export const ReleaseProvider = () =>
         const env = yield* GcpEnvironment.current;
         const releases = yield* listReleases(env.project);
         return releases
-          .filter((release) =>
-            isGeneratedReleaseId(releaseIdOf(release.name ?? "")),
-          )
+          .filter((release) => isGeneratedReleaseId(releaseIdOf(release.name ?? "")))
           .map((release) => toAttrs(release, env.project));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const parent = projectParent(env.project);
-      const releaseId = yield* toReleaseId(
-        id,
-        news.releaseId,
-        output?.releaseId,
-      );
+      const releaseId = yield* toReleaseId(id, news.releaseId, output?.releaseId);
       const name = releaseResourceName(env.project, releaseId);
       const desiredRuleset = expandRulesetName(env.project, news.rulesetName);
 

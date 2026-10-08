@@ -1,8 +1,3 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
-import { DestroyError } from "@/Apply";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
@@ -11,8 +6,13 @@ import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
+import { DestroyError } from "@/Apply";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import EgressFunction, {
   APP_CIDR,
   AppSubnet,
@@ -54,8 +54,7 @@ const sharedStack = Core.scratchStack(
 // are released. Only that documented hold is tolerated: it fails the
 // subnet's delete and skips the network's; every other failure surfaces.
 // https://cloud.google.com/run/docs/configuring/vpc-direct-vpc
-const HELD_BY_CLOUD_RUN =
-  /already being used by \S+\/addresses\/serverless-ipv4-/;
+const HELD_BY_CLOUD_RUN = /already being used by \S+\/addresses\/serverless-ipv4-/;
 
 const destroyStack = sharedStack.destroy().pipe(
   Effect.as([] as ReadonlyArray<string>),
@@ -66,9 +65,7 @@ const destroyStack = sharedStack.destroy().pipe(
         failure.resourceType === "GCP.Compute.Subnetwork" &&
         HELD_BY_CLOUD_RUN.test(Cause.pretty(failure.cause)),
     ) &&
-    error.blocked.every(
-      (blocked) => blocked.resourceType === "GCP.Compute.Network",
-    )
+    error.blocked.every((blocked) => blocked.resourceType === "GCP.Compute.Network")
       ? Effect.succeed([
           ...error.failures.map((failure) => failure.logicalId),
           ...error.blocked.map((blocked) => blocked.logicalId),
@@ -111,20 +108,12 @@ class ProbeNotRecorded extends Data.TaggedError("ProbeNotRecorded")<{
 }> {}
 
 // Bounded wait until an out-of-band probe reports the resource gone.
-const waitUntilGone = <E, R>(
-  what: string,
-  probe: Effect.Effect<boolean, E, R>,
-) =>
+const waitUntilGone = <E, R>(what: string, probe: Effect.Effect<boolean, E, R>) =>
   probe.pipe(
-    Effect.flatMap((gone) =>
-      gone ? Effect.void : Effect.fail(new StillExists({ what })),
-    ),
+    Effect.flatMap((gone) => (gone ? Effect.void : Effect.fail(new StillExists({ what })))),
     Effect.retry({
       while: (e) => e instanceof StillExists,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -297,9 +286,7 @@ describe.skipIf(!!process.env.FAST).sequential(
           expect(route.destRange).toBe(PRIVATE_GOOGLE_APIS);
           expect(route.priority).toBe(900);
           expect(lastSegment(route.network)).toBe(outputs.networkName);
-          expect(lastSegment(route.nextHopGateway)).toBe(
-            "default-internet-gateway",
-          );
+          expect(lastSegment(route.nextHopGateway)).toBe("default-internet-gateway");
         }),
       {
         tags: ["provider:gcp", "provider:gcp:compute", "live"],
@@ -312,8 +299,7 @@ describe.skipIf(!!process.env.FAST).sequential(
       (_stack) =>
         Effect.gen(function* () {
           const { project } = yield* GcpEnvironment.current;
-          const get = (firewall: string) =>
-            compute.getFirewalls({ project, firewall });
+          const get = (firewall: string) => compute.getFirewalls({ project, firewall });
 
           const internal = yield* get(outputs.allowInternalName);
           expect(internal.direction).toBe("INGRESS");
@@ -321,9 +307,11 @@ describe.skipIf(!!process.env.FAST).sequential(
           expect([...(internal.sourceRanges ?? [])].sort()).toEqual(
             [APP_CIDR, DATA_CIDR, PODS_CIDR, SERVICES_CIDR].sort(),
           );
-          expect(
-            (internal.allowed ?? []).map((rule) => rule.IPProtocol).sort(),
-          ).toEqual(["icmp", "tcp", "udp"]);
+          expect((internal.allowed ?? []).map((rule) => rule.IPProtocol).sort()).toEqual([
+            "icmp",
+            "tcp",
+            "udp",
+          ]);
 
           const deny = yield* get(outputs.denyEgressName);
           expect(deny.direction).toBe("EGRESS");
@@ -335,9 +323,7 @@ describe.skipIf(!!process.env.FAST).sequential(
           expect(https.direction).toBe("EGRESS");
           expect(https.priority).toBe(1000);
           expect(https.targetTags).toEqual([EGRESS_TAG]);
-          expect(https.allowed).toEqual([
-            { IPProtocol: "tcp", ports: ["443"] },
-          ]);
+          expect(https.allowed).toEqual([{ IPProtocol: "tcp", ports: ["443"] }]);
         }),
       {
         tags: ["provider:gcp", "provider:gcp:compute", "live"],
@@ -361,9 +347,7 @@ describe.skipIf(!!process.env.FAST).sequential(
           const nat = router.nats![0]!;
           expect(nat.name).toBe(outputs.natName);
           expect(nat.sourceSubnetworkIpRangesToNat).toBe("LIST_OF_SUBNETWORKS");
-          expect(nat.subnetworks?.map((s) => lastSegment(s.name))).toEqual([
-            outputs.appSubnetName,
-          ]);
+          expect(nat.subnetworks?.map((s) => lastSegment(s.name))).toEqual([outputs.appSubnetName]);
           expect(nat.natIpAllocateOption).toBe("MANUAL_ONLY");
           expect(nat.natIps?.map(lastSegment)).toEqual([outputs.addressName]);
           expect(nat.logConfig).toEqual({
@@ -395,9 +379,7 @@ describe.skipIf(!!process.env.FAST).sequential(
           });
           expect(fn.state).toBe("ACTIVE");
           expect(fn.serviceConfig?.ingressSettings).toBe("ALLOW_INTERNAL_ONLY");
-          expect(fn.serviceConfig?.directVpcEgress).toBe(
-            "VPC_EGRESS_ALL_TRAFFIC",
-          );
+          expect(fn.serviceConfig?.directVpcEgress).toBe("VPC_EGRESS_ALL_TRAFFIC");
           const nic = fn.serviceConfig?.directVpcNetworkInterface?.[0];
           expect(lastSegment(nic?.network)).toBe(outputs.networkName);
           expect(lastSegment(nic?.subnetwork)).toBe(outputs.appSubnetName);
@@ -432,20 +414,14 @@ describe.skipIf(!!process.env.FAST).sequential(
               Effect.map((found): ProbeResult =>
                 Object.fromEntries(
                   Object.entries(found.metadata ?? {}).filter(
-                    (entry): entry is [string, string] =>
-                      entry[1] !== undefined,
+                    (entry): entry is [string, string] => entry[1] !== undefined,
                   ),
                 ),
               ),
-              Effect.catchTag("NotFound", () =>
-                Effect.fail(new ProbeNotRecorded({ object })),
-              ),
+              Effect.catchTag("NotFound", () => Effect.fail(new ProbeNotRecorded({ object }))),
               Effect.retry({
                 while: (e) => e._tag === "ProbeNotRecorded",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(36),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
               }),
             );
 
@@ -468,9 +444,7 @@ describe.skipIf(!!process.env.FAST).sequential(
           const { project } = yield* GcpEnvironment.current;
           const held = yield* destroyStack;
           // Only the function's egress subnet (and its network) may linger.
-          expect(
-            held.every((id) => id === "AppSubnet" || id === "SmokeNetwork"),
-          ).toBe(true);
+          expect(held.every((id) => id === "AppSubnet" || id === "SmokeNetwork")).toBe(true);
           if (held.includes("AppSubnet")) {
             // Out-of-band: the only users of the subnet are Cloud Run's
             // serverless IP reservations.

@@ -1,19 +1,16 @@
-import * as GCP from "@/GCP";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const runLifecycle = !process.env.FAST;
 
@@ -88,10 +85,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.excludePublicCaSet).toEqual(true);
       expect(created.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networksecurity.getProjectsLocationsTlsInspectionPolicies({
-          name: created.name,
-        });
+      const fetched = yield* networksecurity.getProjectsLocationsTlsInspectionPolicies({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.caPool).toEqual(created.caPool);
       expect(fetched.excludePublicCaSet).toEqual(true);
@@ -128,10 +124,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.description).toContain("inspect b");
       expect(updated.minTlsVersion).toEqual("TLS_1_2");
 
-      const refetched =
-        yield* networksecurity.getProjectsLocationsTlsInspectionPolicies({
-          name: created.name,
-        });
+      const refetched = yield* networksecurity.getProjectsLocationsTlsInspectionPolicies({
+        name: created.name,
+      });
       expect(refetched.description ?? "").toContain("inspect b");
       expect(refetched.minTlsVersion).toEqual("TLS_1_2");
 

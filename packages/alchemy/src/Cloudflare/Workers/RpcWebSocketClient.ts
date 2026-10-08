@@ -13,10 +13,7 @@ export interface LayerOptions {
   /** Options passed to Effect's socket RPC protocol. */
   readonly protocol?: Parameters<typeof RpcClient.layerProtocolSocket>[0];
   /** Options passed to the grouped Effect RPC client. */
-  readonly client?: Omit<
-    NonNullable<Parameters<typeof RpcClient.make>[1]>,
-    "flatten"
-  >;
+  readonly client?: Omit<NonNullable<Parameters<typeof RpcClient.make>[1]>, "flatten">;
   /**
    * Serialization matching the server. Alchemy's RpcDurableObject uses JSON.
    * @default RpcSerialization.json
@@ -75,11 +72,7 @@ export const layer = <I, Rpcs extends Rpc.Any>(
   group: RpcGroup.RpcGroup<Rpcs>,
   url: Parameters<typeof Socket.layerWebSocket>[0],
   options: LayerOptions = {},
-): Layer.Layer<
-  I,
-  never,
-  Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>
-> =>
+): Layer.Layer<I, never, Socket.WebSocketConstructor | Rpc.MiddlewareClient<Rpcs>> =>
   Layer.effect(service, RpcClient.make(group, options.client)).pipe(
     Layer.provide(
       RpcClient.layerProtocolSocket(options.protocol).pipe(

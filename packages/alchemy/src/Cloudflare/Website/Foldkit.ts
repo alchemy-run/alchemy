@@ -12,9 +12,7 @@ import {
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface FoldkitProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "source" | "script" | "bundle"
 > {
@@ -178,9 +176,10 @@ export const Foldkit: {
         | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -191,9 +190,10 @@ export const Foldkit: {
       | Effect.Effect<InputProps<FoldkitProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -213,19 +213,16 @@ export const Foldkit: {
       ) => effectClass(Foldkit(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => {
-            const { main, rootDir, memo, ...workerProps } = props ?? {};
-            return {
-              ...workerProps,
-              vite: {
-                framework: "foldkit" as const,
-                main,
-                rootDir,
-                memo,
-              },
-            };
-          },
-        ),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => {
+          const { main, rootDir, memo, ...workerProps } = props ?? {};
+          return {
+            ...workerProps,
+            vite: {
+              framework: "foldkit" as const,
+              main,
+              rootDir,
+              memo,
+            },
+          };
+        }),
       )) as any;

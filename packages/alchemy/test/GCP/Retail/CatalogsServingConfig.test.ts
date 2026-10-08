@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as retail from "@distilled.cloud/gcp/retail_v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Retail only serves projects that accepted the Retail data use terms (a
 // one-time console step); until then every call fails with
@@ -43,9 +40,7 @@ test.provider(
           name: `projects/${project}/locations/global/catalogs/default_catalog/servingConfigs/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual(
-        runLifecycle ? "NotFound" : "RetailDataUseTermsNotAccepted",
-      );
+      expect(error._tag).toEqual(runLifecycle ? "NotFound" : "RetailDataUseTermsNotAccepted");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -67,9 +62,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.name).toContain("/servingConfigs/");
-      expect(created.solutionTypes).toEqual(
-        expect.arrayContaining(["SOLUTION_TYPE_SEARCH"]),
-      );
+      expect(created.solutionTypes).toEqual(expect.arrayContaining(["SOLUTION_TYPE_SEARCH"]));
 
       const fetched = yield* retail.getProjectsLocationsCatalogsServingConfigs({
         name: created.name,

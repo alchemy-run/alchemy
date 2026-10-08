@@ -112,16 +112,10 @@ export type AdaptiveMtDataset = Resource<
  * @resource
  * @category Translate
  */
-export const AdaptiveMtDataset = Resource<AdaptiveMtDataset>(
-  "GCP.Translate.AdaptiveMtDataset",
-);
+export const AdaptiveMtDataset = Resource<AdaptiveMtDataset>("GCP.Translate.AdaptiveMtDataset");
 
 const resourceName = (project: string, location: string, datasetId: string) =>
-  resourceNameOf(
-    locationParent(project, location),
-    "adaptiveMtDatasets",
-    datasetId,
-  );
+  resourceNameOf(locationParent(project, location), "adaptiveMtDatasets", datasetId);
 
 const toAttrs = (dataset: translate.AdaptiveMtDataset, project: string) => {
   const name = dataset.name ?? "";
@@ -179,8 +173,7 @@ export const AdaptiveMtDatasetProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location);
       const datasetId = olds?.datasetId ?? output?.datasetId;
       const name =
-        output?.name ??
-        (datasetId ? resourceName(env.project, location, datasetId) : "");
+        output?.name ?? (datasetId ? resourceName(env.project, location, datasetId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -190,19 +183,11 @@ export const AdaptiveMtDatasetProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? DEFAULT_LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location ?? DEFAULT_LOCATION);
       const parent = locationParent(env.project, location);
-      const datasetId = yield* toPhysicalId(
-        id,
-        news.datasetId,
-        output?.datasetId,
-      );
+      const datasetId = yield* toPhysicalId(id, news.datasetId, output?.datasetId);
       const name = resourceName(env.project, location, datasetId);
-      const displayName = toRestrictedDisplayName(
-        news.displayName ?? datasetId,
-      );
+      const displayName = toRestrictedDisplayName(news.displayName ?? datasetId);
       const hinted = output?.name ?? name;
 
       let current = yield* getByName(hinted);

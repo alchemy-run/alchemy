@@ -1,4 +1,4 @@
-import { fromApiKey, listSecretRaw } from "@distilled.cloud/infisical";
+import { fromApiKey, getProjectBySlug, listSecretsV4 } from "@distilled.cloud/infisical";
 import * as Retry from "@distilled.cloud/infisical/Retry";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
@@ -8,12 +8,6 @@ import * as Schema from "effect/Schema";
 import { refreshHint } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { resolveProviderConfig } from "../Auth/Resolve.ts";
-import {
-  InfisicalAuth,
-  type InfisicalAuthConfig,
-  type InfisicalResolvedCredentials,
-} from "./AuthProvider.ts";
-import { UserFacingError } from "../UserFacingError.ts";
 import { logLoadedKeys } from "../Secrets/Log.ts";
 import {
   CredentialsConfig,
@@ -21,6 +15,12 @@ import {
   type SecretsLayer,
   type SecretsOption,
 } from "../Secrets/Provider.ts";
+import { UserFacingError } from "../UserFacingError.ts";
+import {
+  InfisicalAuth,
+  type InfisicalAuthConfig,
+  type InfisicalResolvedCredentials,
+} from "./AuthProvider.ts";
 
 export interface InfisicalOptions {
   /**
@@ -64,9 +64,7 @@ const describeSelection = (options: InfisicalOptions) => {
  * "Infisical" up front and names the selection, so a stack trace never has
  * to be read to know which secrets source broke.
  */
-export class InfisicalSecretsError extends Data.TaggedError(
-  "InfisicalSecretsError",
-)<{
+export class InfisicalSecretsError extends Data.TaggedError("InfisicalSecretsError")<{
   readonly selection: InfisicalOptions;
   readonly credentials: InfisicalCredentials;
   /** What the Infisical SDK failed with. */
@@ -96,10 +94,9 @@ export class InfisicalSecretsError extends Data.TaggedError(
  * the stored machine identity).
  */
 const resolveCredentials = Effect.gen(function* () {
-  const resolved = yield* resolveProviderConfig<
-    InfisicalAuthConfig,
-    InfisicalResolvedCredentials
-  >("Infisical").pipe(Effect.provide(InfisicalAuth));
+  const resolved = yield* resolveProviderConfig<InfisicalAuthConfig, InfisicalResolvedCredentials>(
+    "Infisical",
+  ).pipe(Effect.provide(InfisicalAuth));
   const { token, apiBaseUrl } = yield* resolved.resolve;
   const credentials: InfisicalCredentials = {
     token,
@@ -120,28 +117,31 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
   credentials: InfisicalCredentials,
 ) {
   const includeImports = options.includeImports ?? true;
-  const byId = isUUID(options.project);
-  const response = yield* listSecretRaw({
-    workspaceId: byId ? options.project : undefined,
-    workspaceSlug: byId ? undefined : options.project,
-    environment: options.environment,
-    secretPath: options.path,
-    recursive: options.recursive,
-    include_imports: includeImports,
-    viewSecretValue: true,
-    expandSecretReferences: true,
+  const response = yield* Effect.gen(function* () {
+    // The v4 secrets API only accepts project ids, so resolve slugs first.
+    const projectId = isUUID(options.project)
+      ? options.project
+      : (yield* getProjectBySlug({ slug: options.project })).id;
+    return yield* listSecretsV4({
+      projectId,
+      environment: options.environment,
+      secretPath: options.path,
+      recursive: options.recursive,
+      includeImports,
+      viewSecretValue: true,
+      expandSecretReferences: true,
+    });
   }).pipe(
     Retry.none,
     Effect.provide(
       fromApiKey({
-        apiKey: Redacted.value(credentials.token),
+        apiKey: credentials.token,
         apiBaseUrl: credentials.apiBaseUrl,
       }),
     ),
     Effect.timeout("30 seconds"),
     Effect.mapError(
-      (cause) =>
-        new InfisicalSecretsError({ selection: options, credentials, cause }),
+      (cause) => new InfisicalSecretsError({ selection: options, credentials, cause }),
     ),
   );
 
@@ -189,16 +189,12 @@ export const Secrets = (options: SecretsOption<InfisicalOptions>) =>
         // providers are used. It must work offline and with broken
         // credentials, so the user can configure the very identity this
         // layer needs.
-        if (yield* SuppressMissingProviderConfig)
-          return ConfigProvider.fromEnv({ env: {} });
+        if (yield* SuppressMissingProviderConfig) return ConfigProvider.fromEnv({ env: {} });
 
         const resolved = yield* resolveSecretsOption(options);
         const credentials = yield* resolveCredentials;
         const env = yield* downloadSecrets(resolved, credentials);
-        yield* logLoadedKeys(
-          `Infisical (${describeSelection(resolved)})`,
-          Object.keys(env),
-        );
+        yield* logLoadedKeys(`Infisical (${describeSelection(resolved)})`, Object.keys(env));
         return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });
       }),
       { asPrimary: true },

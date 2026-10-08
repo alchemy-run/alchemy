@@ -36,10 +36,7 @@ export interface GetAlarmMuteRule extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetAlarmMuteRuleRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetAlarmMuteRuleOutput,
-      cloudwatch.GetAlarmMuteRuleError
-    >
+    ) => Effect.Effect<cloudwatch.GetAlarmMuteRuleOutput, cloudwatch.GetAlarmMuteRuleError>
   >
 > {}
 

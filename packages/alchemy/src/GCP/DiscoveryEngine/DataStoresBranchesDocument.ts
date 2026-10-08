@@ -159,8 +159,7 @@ export class DataStoresBranchesDocumentNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const branchParent = (dataStore: string, branch: string) =>
-  `${dataStore}/branches/${branch}`;
+const branchParent = (dataStore: string, branch: string) => `${dataStore}/branches/${branch}`;
 
 const resourceName = (dataStore: string, branch: string, documentId: string) =>
   `${branchParent(dataStore, branch)}/documents/${documentId}`;
@@ -203,14 +202,7 @@ const getByName = (name: string) =>
 
 export const DataStoresBranchesDocumentProvider = () =>
   Provider.succeed(DataStoresBranchesDocument, {
-    stables: [
-      "name",
-      "documentId",
-      "dataStore",
-      "branch",
-      "project",
-      "location",
-    ],
+    stables: ["name", "documentId", "dataStore", "branch", "project", "location"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
@@ -245,15 +237,9 @@ export const DataStoresBranchesDocumentProvider = () =>
       );
       const branch = olds?.branch ?? output?.branch ?? DEFAULT_BRANCH;
       const parent = olds?.dataStore
-        ? expandDataStore(
-            olds.dataStore,
-            env.project,
-            output?.location ?? "global",
-          )
+        ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
         : undefined;
-      const name =
-        output?.name ??
-        (parent ? resourceName(parent, branch, documentId) : "");
+      const name = output?.name ?? (parent ? resourceName(parent, branch, documentId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -263,11 +249,7 @@ export const DataStoresBranchesDocumentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const parent = expandDataStore(
-        news.dataStore,
-        env.project,
-        output?.location ?? "global",
-      );
+      const parent = expandDataStore(news.dataStore, env.project, output?.location ?? "global");
       const branch = news.branch ?? output?.branch ?? DEFAULT_BRANCH;
       const documentId = yield* toPhysical(
         id,
@@ -304,44 +286,32 @@ export const DataStoresBranchesDocumentProvider = () =>
         return yield* new DataStoresBranchesDocumentNotResolved({ name });
       }
 
-      const jsonChanged =
-        fingerprint(current.jsonData) !== fingerprint(jsonData);
+      const jsonChanged = fingerprint(current.jsonData) !== fingerprint(jsonData);
       const structChanged =
         news.jsonData === undefined &&
         fingerprint(current.structData) !== fingerprint(news.structData);
-      const contentChanged =
-        fingerprint(current.content) !== fingerprint(news.content);
+      const contentChanged = fingerprint(current.content) !== fingerprint(news.content);
       const parentChanged =
         news.parentDocumentId !== undefined &&
         (current.parentDocumentId ?? "") !== news.parentDocumentId;
       const schemaChanged =
-        news.schemaId !== undefined &&
-        (current.schemaId ?? "") !== news.schemaId;
+        news.schemaId !== undefined && (current.schemaId ?? "") !== news.schemaId;
 
-      if (
-        jsonChanged ||
-        structChanged ||
-        contentChanged ||
-        parentChanged ||
-        schemaChanged
-      ) {
-        current =
-          yield* discoveryengine.patchProjectsLocationsDataStoresBranchesDocuments(
-            {
-              name: current.name ?? name,
-              allowMissing: true,
-              updateMask: [
-                jsonChanged ? "json_data" : undefined,
-                structChanged ? "struct_data" : undefined,
-                contentChanged ? "content" : undefined,
-                parentChanged ? "parent_document_id" : undefined,
-                schemaChanged ? "schema_id" : undefined,
-              ]
-                .filter((field): field is string => field !== undefined)
-                .join(","),
-              body: { ...body, name: current.name ?? name },
-            },
-          );
+      if (jsonChanged || structChanged || contentChanged || parentChanged || schemaChanged) {
+        current = yield* discoveryengine.patchProjectsLocationsDataStoresBranchesDocuments({
+          name: current.name ?? name,
+          allowMissing: true,
+          updateMask: [
+            jsonChanged ? "json_data" : undefined,
+            structChanged ? "struct_data" : undefined,
+            contentChanged ? "content" : undefined,
+            parentChanged ? "parent_document_id" : undefined,
+            schemaChanged ? "schema_id" : undefined,
+          ]
+            .filter((field): field is string => field !== undefined)
+            .join(","),
+          body: { ...body, name: current.name ?? name },
+        });
       }
 
       return toAttrs(current, env.project);

@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_CONNECTION_TYPE,
@@ -92,9 +87,7 @@ export type AppConnectionProps = {
    * connection.
    * @default "TCP_PROXY"
    */
-  type?:
-    | beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionTypeEnum
-    | (string & {});
+  type?: beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionTypeEnum | (string & {});
   /**
    * Remote application endpoint. Host and port are required.
    */
@@ -189,15 +182,9 @@ export type AppConnection = Resource<
  * @resource
  * @category BeyondCorp
  */
-export const AppConnection = Resource<AppConnection>(
-  "GCP.BeyondCorp.AppConnection",
-);
+export const AppConnection = Resource<AppConnection>("GCP.BeyondCorp.AppConnection");
 
-const resourceName = (
-  project: string,
-  location: string,
-  appConnectionId: string,
-) =>
+const resourceName = (project: string, location: string, appConnectionId: string) =>
   `projects/${project}/locations/${location}/appConnections/${appConnectionId}`;
 
 const expandConnectors = (
@@ -205,9 +192,7 @@ const expandConnectors = (
   project: string,
   location: string,
 ) =>
-  (connectors ?? []).map((connector) =>
-    expandName(connector, project, location, "appConnectors"),
-  );
+  (connectors ?? []).map((connector) => expandName(connector, project, location, "appConnectors"));
 
 const expandGateway = (
   gateway: AppConnectionGateway | undefined,
@@ -228,9 +213,7 @@ const expandGateway = (
 };
 
 const toGateway = (
-  gateway:
-    | beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionGateway
-    | undefined,
+  gateway: beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnectionGateway | undefined,
 ): AppConnectionGateway | undefined => {
   if (gateway === undefined) return undefined;
   return {
@@ -286,32 +269,19 @@ const listOwned = (project: string) =>
       }),
       (
         page,
-      ):
-        | readonly beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnection[]
-        | undefined => page.appConnections,
+      ): readonly beyondcorp.GoogleCloudBeyondcorpAppconnectionsV1AppConnection[] | undefined =>
+        page.appConnections,
     ),
-  ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelMap(item.labels)),
-    ),
-  );
+  ).pipe(Effect.map((items) => items.filter((item) => hasAlchemyLabelMap(item.labels))));
 
 export const AppConnectionProvider = () =>
   Provider.succeed(AppConnection, {
-    stables: [
-      "name",
-      "appConnectionId",
-      "project",
-      "location",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "appConnectionId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousType =
-        olds?.type ?? output?.type ?? DEFAULT_CONNECTION_TYPE;
+      const previousType = olds?.type ?? output?.type ?? DEFAULT_CONNECTION_TYPE;
       const nextType = news.type ?? previousType;
       const previousGateway = lastSegment(
         olds?.gateway?.appGateway ?? output?.gateway?.appGateway ?? "",
@@ -322,19 +292,14 @@ export const AppConnectionProvider = () =>
         nextId: news.appConnectionId
           ? rfc1035(news.appConnectionId, "appconnection")
           : (olds?.appConnectionId ?? output?.appConnectionId),
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
           previousType !== nextType ||
-          (previousGateway.length > 0 &&
-            nextGateway.length > 0 &&
-            previousGateway !== nextGateway),
+          (previousGateway.length > 0 && nextGateway.length > 0 && previousGateway !== nextGateway),
       });
     }),
 
@@ -346,18 +311,12 @@ export const AppConnectionProvider = () =>
         output?.appConnectionId,
         "appconnection",
       );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const name =
-        output?.name ?? resourceName(env.project, location, appConnectionId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const name = output?.name ?? resourceName(env.project, location, appConnectionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -375,10 +334,7 @@ export const AppConnectionProvider = () =>
         output?.appConnectionId,
         "appconnection",
       );
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, appConnectionId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -390,11 +346,7 @@ export const AppConnectionProvider = () =>
         port: news.applicationEndpoint.port,
       };
       const gateway = expandGateway(news.gateway, env.project, location);
-      const connectors = expandConnectors(
-        news.connectors,
-        env.project,
-        location,
-      );
+      const connectors = expandConnectors(news.connectors, env.project, location);
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -433,8 +385,7 @@ export const AppConnectionProvider = () =>
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const endpointChanged =
-        fingerprint(current.applicationEndpoint) !==
-        fingerprint(applicationEndpoint);
+        fingerprint(current.applicationEndpoint) !== fingerprint(applicationEndpoint);
       const connectorsChanged = !sameStringList(current.connectors, connectors);
       const mask = fieldMask([
         (upsert.length > 0 || removed.length > 0) && "labels",
@@ -444,22 +395,18 @@ export const AppConnectionProvider = () =>
       ]);
 
       if (mask.length > 0) {
-        const operation =
-          yield* beyondcorp.patchProjectsLocationsAppConnections({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: {
-              displayName: news.displayName,
-              labels: desiredLabels,
-              applicationEndpoint,
-              connectors,
-            },
-          });
+        const operation = yield* beyondcorp.patchProjectsLocationsAppConnections({
+          name: current.name ?? name,
+          updateMask: mask,
+          body: {
+            displayName: news.displayName,
+            labels: desiredLabels,
+            applicationEndpoint,
+            connectors,
+          },
+        });
         yield* waitForOperation(operation);
-        current = yield* waitUntilExists(
-          getByName(current.name ?? name),
-          current.name ?? name,
-        );
+        current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
       }
 
       return toAttrs(current, env.project, env.region);

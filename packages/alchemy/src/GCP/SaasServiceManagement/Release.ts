@@ -7,12 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  createInternalLabels,
-  diffLabels,
-  hasAlchemyLabels,
-  toLabels,
-} from "../Labels.ts";
+import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ResourceNotResolved,
@@ -176,11 +171,8 @@ export type Release = Resource<
  */
 export const Release = Resource<Release>("GCP.SaasServiceManagement.Release");
 
-const expandUpgradeable = (
-  values: string[] | undefined,
-  project: string,
-  location: string,
-) => values?.map((value) => expandName(value, project, location, COLLECTION));
+const expandUpgradeable = (values: string[] | undefined, project: string, location: string) =>
+  values?.map((value) => expandName(value, project, location, COLLECTION));
 
 const toAttrs = (item: saasservicemgmt.Release, project: string) => {
   const name = item.name ?? "";
@@ -202,8 +194,7 @@ const toAttrs = (item: saasservicemgmt.Release, project: string) => {
     inputVariableDefaults: item.inputVariableDefaults ?? [],
     inputVariables: item.inputVariables ?? [],
     outputVariables: item.outputVariables ?? [],
-    upgradeableFromReleases:
-      item.releaseRequirements?.upgradeableFromReleases ?? [],
+    upgradeableFromReleases: item.releaseRequirements?.upgradeableFromReleases ?? [],
     labels: userLabels(item.labels),
     annotations: userAnnotations(item.annotations),
     uid: item.uid,
@@ -228,9 +219,7 @@ const listOwned = (project: string, location: string) =>
     }),
     (page) => page.releases,
   ).pipe(
-    Effect.map((items) =>
-      items.filter((item) => hasAlchemyLabelKeys(item.labels)),
-    ),
+    Effect.map((items) => items.filter((item) => hasAlchemyLabelKeys(item.labels))),
     Effect.flatMap((items) =>
       items.length > 0
         ? Effect.succeed(items)
@@ -241,37 +230,24 @@ const listOwned = (project: string, location: string) =>
             }),
             (page) => page.releases,
           ).pipe(
-            Effect.map((fallback) =>
-              fallback.filter((item) => hasAlchemyLabelKeys(item.labels)),
-            ),
+            Effect.map((fallback) => fallback.filter((item) => hasAlchemyLabelKeys(item.labels))),
           ),
     ),
   );
 
 export const ReleaseProvider = () =>
   Provider.succeed(Release, {
-    stables: [
-      "name",
-      "releaseId",
-      "project",
-      "location",
-      "unitKindId",
-      "uid",
-      "createTime",
-    ],
+    stables: ["name", "releaseId", "project", "location", "unitKindId", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       const env = yield* GcpEnvironment.current;
-      const previousPackage =
-        olds?.blueprint?.package ?? output?.blueprint?.package;
+      const previousPackage = olds?.blueprint?.package ?? output?.blueprint?.package;
       const nextPackage = news.blueprint?.package ?? previousPackage;
       return replaceOnIdentity({
         previousId: olds?.releaseId ?? output?.releaseId,
         nextId: news.releaseId ?? olds?.releaseId ?? output?.releaseId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location ?? env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location ?? env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location ?? env.region,
         ),
@@ -285,24 +261,13 @@ export const ReleaseProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const releaseId = yield* toPhysicalId(
-        id,
-        olds?.releaseId,
-        output?.releaseId,
-        "rel",
-      );
-      const location = normalizeLocation(
-        olds?.location ?? output?.location ?? env.region,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, releaseId);
+      const releaseId = yield* toPhysicalId(id, olds?.releaseId, output?.releaseId, "rel");
+      const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, releaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -314,35 +279,21 @@ export const ReleaseProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const releaseId = yield* toPhysicalId(
-        id,
-        news.releaseId,
-        output?.releaseId,
-        "rel",
-      );
-      const location = normalizeLocation(
-        news.location ?? output?.location ?? env.region,
-      );
+      const releaseId = yield* toPhysicalId(id, news.releaseId, output?.releaseId, "rel");
+      const location = normalizeLocation(news.location ?? output?.location ?? env.region);
       const name = resourceName(env.project, location, COLLECTION, releaseId);
       const desiredLabels = {
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const unitKind = expandName(
-        news.unitKind,
-        env.project,
-        location,
-        "unitKinds",
-      );
+      const unitKind = expandName(news.unitKind, env.project, location, "unitKinds");
       const upgradeableFromReleases = expandUpgradeable(
         news.upgradeableFromReleases,
         env.project,
         location,
       );
       const annotations = news.annotations;
-      const blueprint = news.blueprint
-        ? { package: news.blueprint.package }
-        : undefined;
+      const blueprint = news.blueprint ? { package: news.blueprint.package } : undefined;
 
       let current = yield* getByName(output?.name ?? name);
 
@@ -356,9 +307,7 @@ export const ReleaseProvider = () =>
               blueprint,
               inputVariableDefaults: news.inputVariableDefaults,
               releaseRequirements:
-                upgradeableFromReleases === undefined
-                  ? undefined
-                  : { upgradeableFromReleases },
+                upgradeableFromReleases === undefined ? undefined : { upgradeableFromReleases },
               labels: desiredLabels,
               annotations,
             },
@@ -376,12 +325,10 @@ export const ReleaseProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       const annotationsChanged =
         annotations !== undefined &&
-        fingerprint(userAnnotations(current.annotations)) !==
-          fingerprint(annotations);
+        fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const defaultsChanged =
         news.inputVariableDefaults !== undefined &&
-        fingerprint(current.inputVariableDefaults) !==
-          fingerprint(news.inputVariableDefaults);
+        fingerprint(current.inputVariableDefaults) !== fingerprint(news.inputVariableDefaults);
       const requirementsChanged =
         news.upgradeableFromReleases !== undefined &&
         fingerprint(current.releaseRequirements?.upgradeableFromReleases) !==
@@ -402,9 +349,7 @@ export const ReleaseProvider = () =>
             etag: current.etag,
             inputVariableDefaults: news.inputVariableDefaults,
             releaseRequirements:
-              upgradeableFromReleases === undefined
-                ? undefined
-                : { upgradeableFromReleases },
+              upgradeableFromReleases === undefined ? undefined : { upgradeableFromReleases },
             labels: desiredLabels,
             annotations,
           },
@@ -415,16 +360,14 @@ export const ReleaseProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* saasservicemgmt
-        .deleteProjectsLocationsReleases({ name: output.name })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* saasservicemgmt.deleteProjectsLocationsReleases({ name: output.name }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "Conflict",
+          times: 8,
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
       yield* waitUntilGone(getByName(output.name), output.name);
     }),
   });

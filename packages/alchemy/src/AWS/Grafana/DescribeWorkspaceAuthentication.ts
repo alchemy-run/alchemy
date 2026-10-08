@@ -36,7 +36,6 @@ export interface DescribeWorkspaceAuthentication extends Binding.Service<
     >
   >
 > {}
-export const DescribeWorkspaceAuthentication =
-  Binding.Service<DescribeWorkspaceAuthentication>(
-    "AWS.Grafana.DescribeWorkspaceAuthentication",
-  );
+export const DescribeWorkspaceAuthentication = Binding.Service<DescribeWorkspaceAuthentication>(
+  "AWS.Grafana.DescribeWorkspaceAuthentication",
+);

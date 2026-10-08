@@ -27,10 +27,7 @@ export interface DeclineInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.DeclineInvitationsRequest,
-    ) => Effect.Effect<
-      macie2.DeclineInvitationsResponse,
-      macie2.DeclineInvitationsError
-    >
+    ) => Effect.Effect<macie2.DeclineInvitationsResponse, macie2.DeclineInvitationsError>
   >
 > {}
 export const DeclineInvitations = Binding.Service<DeclineInvitations>(

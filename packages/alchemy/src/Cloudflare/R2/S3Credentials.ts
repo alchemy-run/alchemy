@@ -4,11 +4,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { sanitizeKey } from "../../RuntimeContext.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Bucket } from "./Bucket.ts";
-import {
-  bindS3Credentials,
-  type BucketInput,
-  resolveBucket,
-} from "./S3CredentialsBinding.ts";
+import { bindS3Credentials, type BucketInput, resolveBucket } from "./S3CredentialsBinding.ts";
 
 export { isS3Credentials } from "./S3CredentialsBinding.ts";
 
@@ -18,8 +14,9 @@ export type S3CredentialsAccess = "read" | "write" | "read-write";
 export interface S3CredentialsOptions {
   /**
    * Object operations the credentials may perform. Deployed, this selects
-   * the permission groups of the scoped API token they are derived from
-   * (`Workers R2 Storage Read` and/or `Workers R2 Storage Write`).
+   * the permission groups of the bucket-scoped API token they are derived
+   * from (`Workers R2 Storage Bucket Item Read` and/or
+   * `Workers R2 Storage Bucket Item Write`).
    */
   access: S3CredentialsAccess;
 }
@@ -66,9 +63,10 @@ export interface S3Credentials extends Effect.Effect<
  * credentials and R2's S3 endpoint. `S3Credentials` provides both, resolved
  * per mode:
  *
- * - **Deployed** — Alchemy mints a scoped account API token for the Worker
- *   and derives S3 credentials from it (access key id = token id, secret =
- *   SHA-256 of the token value). The endpoint is
+ * - **Deployed** — Alchemy mints an account API token for the Worker whose
+ *   policy is scoped to this bucket only, and derives S3 credentials from it
+ *   (access key id = token id, secret = SHA-256 of the token value). The
+ *   endpoint is
  *   `https://{accountId}.r2.cloudflarestorage.com` (`.eu.`/`.fedramp.` for
  *   jurisdictional buckets). The value is injected as a secret.
  * - **`alchemy dev`** — a locally-emulated bucket is served on the Worker's
@@ -179,12 +177,7 @@ export const makeS3Credentials = (
       // Deploy-time only; its requirements (CloudflareEnvironment, the
       // token provider) are ambient wherever a Worker is evaluated, so they
       // are erased like `Binding.Host`'s.
-      yield* bindS3Credentials(
-        host,
-        bindingName,
-        bucket,
-        access,
-      ) as Effect.Effect<void>;
+      yield* bindS3Credentials(host, bindingName, bucket, access) as Effect.Effect<void>;
     }
     // Captured at init; read at exec phase, where it is populated.
     return Effect.suspend(() => {

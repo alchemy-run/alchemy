@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import S3TablesBindingsFunctionLive, {
-  S3TablesBindingsFunction,
-} from "./bindings-handler";
+import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import S3TablesBindingsFunctionLive, { S3TablesBindingsFunction } from "./bindings-handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -17,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "S3TablesBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -39,38 +34,24 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 describe.sequential(
   "S3Tables Bindings",
-  {
-    tags: [
-      "provider:aws",
-      "provider:aws:lambda",
-      "provider:aws:s3tables",
-      "live",
-    ],
-  },
+  { tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3tables", "live"] },
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "S3Tables test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("S3Tables test setup: destroying previous resources");
         yield* sharedStack.destroy();
 
         yield* Effect.logInfo("S3Tables test setup: deploying fixture");
@@ -84,21 +65,15 @@ describe.sequential(
         baseUrl = functionUrl!.replace(/\/+$/, "");
 
         const readinessUrl = `${baseUrl}/bindings`;
-        yield* Effect.logInfo(
-          `S3Tables test setup: probing readiness at ${readinessUrl}`,
-        );
+        yield* Effect.logInfo(`S3Tables test setup: probing readiness at ${readinessUrl}`);
         yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
-            Effect.logWarning(
-              `S3Tables test setup: fixture not ready yet (${String(error)})`,
-            ),
+            Effect.logWarning(`S3Tables test setup: fixture not ready yet (${String(error)})`),
           ),
           Effect.retry({ schedule: readinessPolicy }),
         );
@@ -111,9 +86,9 @@ describe.sequential(
     describe("binding registration", () => {
       test.provider("all 6 capabilities initialize in the runtime", (_stack) =>
         Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/bindings`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           expect((response as any).bound).toHaveLength(6);
         }),
       );
@@ -122,9 +97,9 @@ describe.sequential(
     describe("ListNamespaces", () => {
       test.provider("lists the bucket's namespaces", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/namespaces`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/namespaces`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.names).toContain("bindings");
         }),
       );
@@ -133,9 +108,9 @@ describe.sequential(
     describe("ListTables", () => {
       test.provider("lists the namespace's tables", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/tables`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/tables`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.names).toContain("events");
         }),
       );
@@ -144,9 +119,9 @@ describe.sequential(
     describe("GetTable", () => {
       test.provider("reads the bound table's details", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/table`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/table`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.name).toBe("events");
           expect(response.format).toBe("ICEBERG");
           expect(response.versionToken).toBeTruthy();
@@ -158,9 +133,9 @@ describe.sequential(
     describe("GetTableMetadataLocation + UpdateTableMetadataLocation", () => {
       test.provider("round-trips the Iceberg commit protocol", (_stack) =>
         Effect.gen(function* () {
-          const current = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/metadata-location`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const current = (yield* send(HttpClientRequest.get(`${baseUrl}/metadata-location`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(current.versionToken).toBeTruthy();
           expect(current.warehouseLocation).toMatch(/^s3:\/\//);
 
@@ -174,9 +149,7 @@ describe.sequential(
           if (commit.committed) {
             expect(commit.versionTokenChanged).toBe(true);
           } else {
-            expect(["BadRequestException", "ConflictException"]).toContain(
-              commit.errorTag,
-            );
+            expect(["BadRequestException", "ConflictException"]).toContain(commit.errorTag);
           }
         }),
       );
@@ -185,9 +158,9 @@ describe.sequential(
     describe("GetTableMaintenanceJobStatus", () => {
       test.provider("reads the table's maintenance job statuses", (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/maintenance-jobs`),
-          ).pipe(Effect.flatMap((r) => r.json))) as any;
+          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/maintenance-jobs`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as any;
           expect(response.tableArn).toContain("/table/");
           expect(Array.isArray(response.jobs)).toBe(true);
         }),

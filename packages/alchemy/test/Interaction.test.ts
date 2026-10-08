@@ -1,12 +1,12 @@
+import { PassThrough } from "node:stream";
+import { fileURLToPath } from "node:url";
+import { expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
 import { Interaction, layerNonInteractive, accessors } from "@/Interaction.ts";
 import { nodeLoaderArgs } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
-import { PassThrough } from "node:stream";
-import { fileURLToPath } from "node:url";
 import { nodePath, nodeSupportsDevMode } from "./nodeProbe.ts";
 
 class CaptureStream extends PassThrough {
@@ -32,18 +32,11 @@ it(
     const stdout = new CaptureStream();
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
-      yield* interaction.output.info({
-        message: "plain info",
-        detail: "extra",
-      });
+      yield* interaction.output.info({ message: "plain info", detail: "extra" });
       yield* accessors.output.success("plain success");
-      const failure = yield* Effect.flip(
-        interaction.prompt.confirm({ message: "proceed?" }),
-      );
+      const failure = yield* Effect.flip(interaction.prompt.confirm({ message: "proceed?" }));
       expect(failure._tag).toBe("NonInteractiveTerminal");
-      const select = yield* Effect.flip(
-        accessors.prompt.select({ message: "pick", options: [] }),
-      );
+      const select = yield* Effect.flip(accessors.prompt.select({ message: "pick", options: [] }));
       expect(select._tag).toBe("NonInteractiveTerminal");
       const lines = stdout.output.split("\n");
       expect(lines[0]).toContain("plain info");
@@ -60,10 +53,7 @@ it(
     const stdout = new CaptureStream();
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
-      yield* interaction.task(
-        { label: "working", detail: "step" },
-        Effect.void,
-      );
+      yield* interaction.task({ label: "working", detail: "step" }, Effect.void);
       const failed = yield* Effect.result(
         interaction.task({ label: "breaking" }, Effect.fail("boom")),
       );
@@ -89,24 +79,17 @@ it.live.skipIf(!nodeSupportsDevMode)(
   () =>
     Effect.gen(function* () {
       const runner = fileURLToPath(
-        new URL(
-          "../src/Cloudflare/Workers/ViteChildRunner.ts",
-          import.meta.url,
-        ),
+        new URL("../src/Cloudflare/Workers/ViteChildRunner.ts", import.meta.url),
       );
-      const handle = yield* ChildProcess.make(
-        nodePath!,
-        [...nodeLoaderArgs(runner), runner],
-        {
-          cwd: fileURLToPath(new URL("..", import.meta.url)),
-          env: { NO_COLOR: "1" },
-          extendEnv: true,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-          killSignal: "SIGKILL",
-        },
-      );
+      const handle = yield* ChildProcess.make(nodePath!, [...nodeLoaderArgs(runner), runner], {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        env: { NO_COLOR: "1" },
+        extendEnv: true,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        killSignal: "SIGKILL",
+      });
       const [stdout, stderr] = yield* Effect.all(
         [
           handle.stdout.pipe(

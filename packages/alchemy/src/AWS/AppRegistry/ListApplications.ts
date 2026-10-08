@@ -30,10 +30,7 @@ export interface ListApplications extends Binding.Service<
   () => Effect.Effect<
     (
       request?: appregistry.ListApplicationsRequest,
-    ) => Effect.Effect<
-      appregistry.ListApplicationsResponse,
-      appregistry.ListApplicationsError
-    >
+    ) => Effect.Effect<appregistry.ListApplicationsResponse, appregistry.ListApplicationsError>
   >
 > {}
 

@@ -174,9 +174,7 @@ export type Binding = Resource<
  */
 export const Binding = Resource<Binding>("GCP.AgentRegistry.Binding");
 
-export class BindingNotResolved extends Data.TaggedError(
-  "GCP.AgentRegistry.BindingNotResolved",
-)<{
+export class BindingNotResolved extends Data.TaggedError("GCP.AgentRegistry.BindingNotResolved")<{
   name: string;
 }> {}
 
@@ -208,9 +206,7 @@ const desiredAuth = (
   };
 };
 
-const authKey = (
-  binding: AuthProviderBinding | registry.AuthProviderBinding | undefined,
-) =>
+const authKey = (binding: AuthProviderBinding | registry.AuthProviderBinding | undefined) =>
   binding === undefined
     ? undefined
     : {
@@ -260,42 +256,26 @@ export const BindingProvider = () =>
       return replaceOnIdentity({
         previousId: olds?.bindingId ?? output?.bindingId,
         nextId: news.bindingId ?? olds?.bindingId ?? output?.bindingId,
-        previousLocation: normalizeLocation(
-          olds?.location ?? output?.location,
-          env.region,
-        ),
+        previousLocation: normalizeLocation(olds?.location ?? output?.location, env.region),
         nextLocation: normalizeLocation(
           news.location ?? olds?.location ?? output?.location,
           env.region,
         ),
         extra:
-          (previousSource !== undefined &&
-            previousSource !== news.sourceIdentifier) ||
-          (previousTarget !== undefined &&
-            previousTarget !== news.targetIdentifier),
+          (previousSource !== undefined && previousSource !== news.sourceIdentifier) ||
+          (previousTarget !== undefined && previousTarget !== news.targetIdentifier),
       });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        env.region,
-      );
-      const bindingId = yield* toPhysicalId(
-        id,
-        olds?.bindingId,
-        output?.bindingId,
-      );
-      const name =
-        output?.name ??
-        resourceName(env.project, location, COLLECTION, bindingId);
+      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const bindingId = yield* toPhysicalId(id, olds?.bindingId, output?.bindingId);
+      const name = output?.name ?? resourceName(env.project, location, COLLECTION, bindingId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, location);
-      return (yield* ownedByAlchemy(id, existing.description))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -309,15 +289,8 @@ export const BindingProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        env.region,
-      );
-      const bindingId = yield* toPhysicalId(
-        id,
-        news.bindingId,
-        output?.bindingId,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const bindingId = yield* toPhysicalId(id, news.bindingId, output?.bindingId);
       const name = resourceName(env.project, location, COLLECTION, bindingId);
       const parent = locationParent(env.project, location);
       const ownership = yield* createInternalLabels(id);
@@ -347,8 +320,7 @@ export const BindingProvider = () =>
           // ALREADY_EXISTS (code 6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
             Effect.catchIf(
-              (error) =>
-                error._tag === "GCP.OperationFailed" && error.code === 6,
+              (error) => error._tag === "GCP.OperationFailed" && error.code === 6,
               () => Effect.void,
             ),
           );
@@ -363,14 +335,8 @@ export const BindingProvider = () =>
       const currentName = current.name ?? name;
       const displayChanged = !sameText(current.displayName, displayName);
       const descriptionChanged = !sameText(current.description, description);
-      const sourceChanged = !sameText(
-        current.source?.identifier,
-        news.sourceIdentifier,
-      );
-      const targetChanged = !sameText(
-        current.target?.identifier,
-        news.targetIdentifier,
-      );
+      const sourceChanged = !sameText(current.source?.identifier, news.sourceIdentifier);
+      const targetChanged = !sameText(current.target?.identifier, news.targetIdentifier);
       const authChanged = !sameJson(
         authKey(current.authProviderBinding),
         authKey(news.authProviderBinding),

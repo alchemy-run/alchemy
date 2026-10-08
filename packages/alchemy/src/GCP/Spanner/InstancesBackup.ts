@@ -166,26 +166,18 @@ export type InstancesBackup = Resource<
  * @resource
  * @category Spanner
  */
-export const InstancesBackup = Resource<InstancesBackup>(
-  "GCP.Spanner.InstancesBackup",
-);
+export const InstancesBackup = Resource<InstancesBackup>("GCP.Spanner.InstancesBackup");
 
-export class BackupNotResolved extends Data.TaggedError(
-  "GCP.Spanner.BackupNotResolved",
-)<{
+export class BackupNotResolved extends Data.TaggedError("GCP.Spanner.BackupNotResolved")<{
   name: string;
 }> {}
 
-export class BackupNotReady extends Data.TaggedError(
-  "GCP.Spanner.BackupNotReady",
-)<{
+export class BackupNotReady extends Data.TaggedError("GCP.Spanner.BackupNotReady")<{
   name: string;
   state: string;
 }> {}
 
-export class BackupStillExists extends Data.TaggedError(
-  "GCP.Spanner.BackupStillExists",
-)<{
+export class BackupStillExists extends Data.TaggedError("GCP.Spanner.BackupStillExists")<{
   name: string;
 }> {}
 
@@ -202,10 +194,7 @@ const encryptionKey = (config: BackupEncryptionConfig | undefined) =>
     kmsKeyNames: [...(config?.kmsKeyNames ?? [])].sort(),
   });
 
-const toAttrs = (
-  backup: spanner.Backup,
-  project: string,
-): InstancesBackup["Attributes"] => {
+const toAttrs = (backup: spanner.Backup, project: string): InstancesBackup["Attributes"] => {
   const name = backup.name ?? "";
   const parsed = parseResourceName(name);
   return {
@@ -247,9 +236,7 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup
-        ? Effect.succeed(backup)
-        : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.BackupNotResolved",
@@ -284,18 +271,14 @@ const waitUntilReady = (name: string) =>
 const refreshOrFail = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup
-        ? Effect.succeed(backup)
-        : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
     ),
   );
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined
-        ? Effect.void
-        : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.BackupStillExists",
@@ -315,47 +298,30 @@ const expireEquals = (left: string | undefined, right: string | undefined) => {
 
 export const InstancesBackupProvider = () =>
   Provider.succeed(InstancesBackup, {
-    stables: [
-      "name",
-      "backupId",
-      "instanceId",
-      "project",
-      "database",
-      "createTime",
-      "versionTime",
-    ],
+    stables: ["name", "backupId", "instanceId", "project", "database", "createTime", "versionTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
 
       const previousId = olds?.backupId ?? output?.backupId;
       const nextId = news.backupId ?? previousId;
-      const previousInstance = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const previousInstance = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       const nextInstance = instanceIdOf(news.instance);
-      const previousDatabase = databaseIdOf(
-        olds?.database ?? output?.database ?? "",
-      );
+      const previousDatabase = databaseIdOf(olds?.database ?? output?.database ?? "");
       const nextDatabase = databaseIdOf(news.database);
       const previousVersion = olds?.versionTime ?? output?.versionTime ?? "";
       const nextVersion = news.versionTime ?? previousVersion;
       const previousEncryption = encryptionKey(olds?.encryptionConfig);
-      const nextEncryption = encryptionKey(
-        news.encryptionConfig ?? olds?.encryptionConfig,
-      );
+      const nextEncryption = encryptionKey(news.encryptionConfig ?? olds?.encryptionConfig);
 
       const replace =
-        (previousId !== undefined &&
-          nextId !== undefined &&
-          previousId !== nextId) ||
+        (previousId !== undefined && nextId !== undefined && previousId !== nextId) ||
         (previousInstance.length > 0 && previousInstance !== nextInstance) ||
         (previousDatabase.length > 0 && previousDatabase !== nextDatabase) ||
         (news.versionTime !== undefined &&
           previousVersion.length > 0 &&
           previousVersion !== nextVersion) ||
-        (news.encryptionConfig !== undefined &&
-          previousEncryption !== nextEncryption);
+        (news.encryptionConfig !== undefined && previousEncryption !== nextEncryption);
 
       if (!replace) return undefined;
       return { action: "replace" as const };
@@ -364,12 +330,9 @@ export const InstancesBackupProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const backupId = yield* toId(id, olds?.backupId, output?.backupId);
-      const instanceId = instanceIdOf(
-        olds?.instance ?? output?.instanceId ?? "",
-      );
+      const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
       if (instanceId.length === 0) return undefined;
-      const name =
-        output?.name ?? backupName(env.project, instanceId, backupId);
+      const name = output?.name ?? backupName(env.project, instanceId, backupId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
@@ -395,9 +358,7 @@ export const InstancesBackupProvider = () =>
                 pageSize: 1000,
               })
               .pipe(
-                Stream.flatMap((page) =>
-                  Stream.fromIterable(page.backups ?? []),
-                ),
+                Stream.flatMap((page) => Stream.fromIterable(page.backups ?? [])),
                 Stream.map((backup) => toAttrs(backup, env.project)),
                 Stream.runCollect,
                 Effect.map((chunk) => Array.from(chunk)),
@@ -417,11 +378,7 @@ export const InstancesBackupProvider = () =>
       const backupId = yield* toId(id, news.backupId, output?.backupId);
       const name = backupName(env.project, instanceId, backupId);
       const parent = instanceName(env.project, instanceId);
-      const database = databaseNameOf(
-        env.project,
-        news.instance,
-        news.database,
-      );
+      const database = databaseNameOf(env.project, news.instance, news.database);
       const expireTime = news.expireTime ?? (yield* defaultExpireTime());
 
       let current = yield* getByName(output?.name ?? name);
@@ -431,8 +388,7 @@ export const InstancesBackupProvider = () =>
           .createProjectsInstancesBackups({
             parent,
             backupId,
-            "encryptionConfig.encryptionType":
-              news.encryptionConfig?.encryptionType,
+            "encryptionConfig.encryptionType": news.encryptionConfig?.encryptionType,
             "encryptionConfig.kmsKeyName": news.encryptionConfig?.kmsKeyName,
             "encryptionConfig.kmsKeyNames": news.encryptionConfig?.kmsKeyNames,
             body: {
@@ -450,17 +406,13 @@ export const InstancesBackupProvider = () =>
 
       if (isBusy(current.state)) {
         current = yield* waitUntilReady(name).pipe(
-          Effect.catchTag(
-            ["GCP.Spanner.BackupNotReady", "GCP.Spanner.BackupNotResolved"],
-            () => refreshOrFail(name),
+          Effect.catchTag(["GCP.Spanner.BackupNotReady", "GCP.Spanner.BackupNotResolved"], () =>
+            refreshOrFail(name),
           ),
         );
       }
 
-      if (
-        news.expireTime !== undefined &&
-        !expireEquals(current.expireTime, news.expireTime)
-      ) {
+      if (news.expireTime !== undefined && !expireEquals(current.expireTime, news.expireTime)) {
         current = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesBackups({
             name,

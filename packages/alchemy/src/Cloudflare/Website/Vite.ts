@@ -235,9 +235,10 @@ export const Vite: {
         | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -248,9 +249,10 @@ export const Vite: {
       | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -270,17 +272,14 @@ export const Vite: {
       ) => effectClass(Vite(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            main: undefined!,
-            vite: {
-              main: props?.main,
-              rootDir: props?.rootDir,
-              memo: props?.memo,
-              viteEnvironments: props?.viteEnvironments,
-            },
-          }),
-        ),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          main: undefined!,
+          vite: {
+            main: props?.main,
+            rootDir: props?.rootDir,
+            memo: props?.memo,
+            viteEnvironments: props?.viteEnvironments,
+          },
+        })),
       )) as any;

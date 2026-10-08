@@ -31,6 +31,4 @@ export interface DeleteKxVolume extends Binding.Service<
     ) => Effect.Effect<SVC.DeleteKxVolumeResponse, SVC.DeleteKxVolumeError>
   >
 > {}
-export const DeleteKxVolume = Binding.Service<DeleteKxVolume>(
-  "AWS.FinSpace.DeleteKxVolume",
-);
+export const DeleteKxVolume = Binding.Service<DeleteKxVolume>("AWS.FinSpace.DeleteKxVolume");

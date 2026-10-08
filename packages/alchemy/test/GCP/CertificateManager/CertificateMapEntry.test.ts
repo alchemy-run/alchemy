@@ -1,17 +1,14 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Self-signed RSA-2048 fixtures generated once with openssl (not at test time).
 const CERT_A = `-----BEGIN CERTIFICATE-----
@@ -66,26 +63,19 @@ fygch3+OZKV+N0l93MQpSWv4
 
 const certificateIdOf = (name: string) => name.split("/").pop() ?? name;
 
-const hasCertificate = (
-  names: readonly string[] | undefined,
-  certName: string,
-) =>
-  (names ?? []).some(
-    (name) => certificateIdOf(name) === certificateIdOf(certName),
-  );
+const hasCertificate = (names: readonly string[] | undefined, certName: string) =>
+  (names ?? []).some((name) => certificateIdOf(name) === certificateIdOf(certName));
 
 const waitUntilGone = (name: string) =>
-  certificatemanager
-    .getProjectsLocationsCertificateMapsCertificateMapEntries({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  certificatemanager.getProjectsLocationsCertificateMapsCertificateMapEntries({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );
 
 test.provider(
   "create, update, and delete a certificate map entry",
@@ -95,28 +85,22 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const map = yield* GCP.CertificateManager.CertificateMap(
-            "FrontendMap",
-            {
-              location: "global",
-              description: "frontend map for entries",
-            },
-          );
+          const map = yield* GCP.CertificateManager.CertificateMap("FrontendMap", {
+            location: "global",
+            description: "frontend map for entries",
+          });
           const certA = yield* GCP.CertificateManager.Certificate("TlsA", {
             location: "global",
             pemCertificate: CERT_A,
             pemPrivateKey: KEY_A,
           });
-          const entry = yield* GCP.CertificateManager.CertificateMapEntry(
-            "Www",
-            {
-              certificateMap: map.name,
-              description: "entry a",
-              labels: { env: "test" },
-              certificates: [certA.name],
-              hostname: "alchemy-ssl-a.test",
-            },
-          );
+          const entry = yield* GCP.CertificateManager.CertificateMapEntry("Www", {
+            certificateMap: map.name,
+            description: "entry a",
+            labels: { env: "test" },
+            certificates: [certA.name],
+            hostname: "alchemy-ssl-a.test",
+          });
           return { map, certA, entry };
         }),
       );
@@ -132,51 +116,39 @@ test.provider(
       expect(created.entry.createTime).toEqual(expect.any(String));
 
       const fetched =
-        yield* certificatemanager.getProjectsLocationsCertificateMapsCertificateMapEntries(
-          {
-            name: created.entry.name,
-          },
-        );
+        yield* certificatemanager.getProjectsLocationsCertificateMapsCertificateMapEntries({
+          name: created.entry.name,
+        });
       expect(fetched.name).toEqual(created.entry.name);
       expect(fetched.hostname).toEqual("alchemy-ssl-a.test");
       expect(fetched.description).toEqual("entry a");
       expect(fetched.labels?.env).toEqual("test");
-      expect(hasCertificate(fetched.certificates, created.certA.name)).toEqual(
+      expect(hasCertificate(fetched.certificates, created.certA.name)).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
         true,
       );
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const map = yield* GCP.CertificateManager.CertificateMap(
-            "FrontendMap",
-            {
-              certificateMapId: created.map.certificateMapId,
-              location: "global",
-              description: "frontend map for entries",
-            },
-          );
+          const map = yield* GCP.CertificateManager.CertificateMap("FrontendMap", {
+            certificateMapId: created.map.certificateMapId,
+            location: "global",
+            description: "frontend map for entries",
+          });
           const certA = yield* GCP.CertificateManager.Certificate("TlsA", {
             certificateId: created.certA.certificateId,
             location: "global",
             pemCertificate: CERT_A,
             pemPrivateKey: KEY_A,
           });
-          const entry = yield* GCP.CertificateManager.CertificateMapEntry(
-            "Www",
-            {
-              certificateMap: map.name,
-              certificateMapEntryId: created.entry.certificateMapEntryId,
-              description: "entry b",
-              labels: { env: "prod", role: "sni" },
-              certificates: [certA.name],
-              hostname: "alchemy-ssl-a.test",
-            },
-          );
+          const entry = yield* GCP.CertificateManager.CertificateMapEntry("Www", {
+            certificateMap: map.name,
+            certificateMapEntryId: created.entry.certificateMapEntryId,
+            description: "entry b",
+            labels: { env: "prod", role: "sni" },
+            certificates: [certA.name],
+            hostname: "alchemy-ssl-a.test",
+          });
           return { map, certA, entry };
         }),
       );
@@ -188,18 +160,14 @@ test.provider(
       expect(updated.entry.certificates).toContain(created.certA.name);
 
       const refetched =
-        yield* certificatemanager.getProjectsLocationsCertificateMapsCertificateMapEntries(
-          {
-            name: created.entry.name,
-          },
-        );
+        yield* certificatemanager.getProjectsLocationsCertificateMapsCertificateMapEntries({
+          name: created.entry.name,
+        });
       expect(refetched.description).toEqual("entry b");
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("sni");
       expect(refetched.hostname).toEqual("alchemy-ssl-a.test");
-      expect(
-        hasCertificate(refetched.certificates, created.certA.name),
-      ).toEqual(true);
+      expect(hasCertificate(refetched.certificates, created.certA.name)).toEqual(true);
 
       yield* stack.destroy();
 

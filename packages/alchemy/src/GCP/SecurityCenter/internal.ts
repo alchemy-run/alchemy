@@ -4,19 +4,13 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 
 export const MAX_ID_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 
-export class SecuritycenterNotResolved extends Data.TaggedError(
-  "GCP.SecurityCenter.NotResolved",
-)<{
+export class SecuritycenterNotResolved extends Data.TaggedError("GCP.SecurityCenter.NotResolved")<{
   name: string;
 }> {}
 
@@ -26,9 +20,7 @@ export class OrganizationNotResolved extends Data.TaggedError(
   project: string;
 }> {}
 
-export class FolderNotResolved extends Data.TaggedError(
-  "GCP.SecurityCenter.FolderNotResolved",
-)<{
+export class FolderNotResolved extends Data.TaggedError("GCP.SecurityCenter.FolderNotResolved")<{
   project: string;
 }> {}
 
@@ -51,9 +43,7 @@ export const organizationOf = (name: string) => {
 };
 
 export const organizationParent = (value: string) =>
-  value.startsWith("organizations/")
-    ? value
-    : `organizations/${lastSegment(value)}`;
+  value.startsWith("organizations/") ? value : `organizations/${lastSegment(value)}`;
 
 export const organizationIdOf = (value: string) => lastSegment(value);
 
@@ -70,16 +60,11 @@ export const parseName = (name: string, collection: string) => {
   const orgsAt = parts.lastIndexOf("organizations");
   const foldersAt = parts.lastIndexOf("folders");
   return {
-    project:
-      projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
+    project: projectsAt >= 0 && parts[projectsAt + 1] ? parts[projectsAt + 1]! : "",
     organization: orgsAt >= 0 && parts[orgsAt + 1] ? parts[orgsAt + 1]! : "",
     folder: foldersAt >= 0 && parts[foldersAt + 1] ? parts[foldersAt + 1]! : "",
-    location:
-      locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
-    id:
-      collectionAt >= 0 && parts[collectionAt + 1]
-        ? parts[collectionAt + 1]!
-        : lastSegment(name),
+    location: locationsAt >= 0 && parts[locationsAt + 1] ? parts[locationsAt + 1]! : "",
+    id: collectionAt >= 0 && parts[collectionAt + 1] ? parts[collectionAt + 1]! : lastSegment(name),
     parent:
       collectionAt > 0
         ? parts.slice(0, collectionAt).join("/")
@@ -111,18 +96,15 @@ export const defaultShaCustomConfig = {
   recommendation: "n/a",
 };
 
-export const shaSettingsParent = (parent: string) =>
-  `${parent}/securityHealthAnalyticsSettings`;
+export const shaSettingsParent = (parent: string) => `${parent}/securityHealthAnalyticsSettings`;
 
-export const etdSettingsParent = (parent: string) =>
-  `${parent}/eventThreatDetectionSettings`;
+export const etdSettingsParent = (parent: string) => `${parent}/eventThreatDetectionSettings`;
 
 export const sameText = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
 
 export const jsonEqual = (left: unknown, right: unknown) =>
-  JSON.stringify(canonical(left) ?? null) ===
-  JSON.stringify(canonical(right) ?? null);
+  JSON.stringify(canonical(left) ?? null) === JSON.stringify(canonical(right) ?? null);
 
 export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
@@ -157,9 +139,7 @@ export const shaDisplayNameOf = (physical: string) => {
     .replace(/[^a-zA-Z0-9_]/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
-  const withLetter = /^[A-Z]/.test(cleaned)
-    ? cleaned
-    : `A${cleaned}`.replace(/_+/g, "_");
+  const withLetter = /^[A-Z]/.test(cleaned) ? cleaned : `A${cleaned}`.replace(/_+/g, "_");
   return withLetter.slice(0, MAX_DISPLAY_NAME_LENGTH);
 };
 
@@ -196,10 +176,7 @@ const fitMarker = (labels: Record<string, string>, maxLength: number) => {
   let stage = labels[alchemyLabelKeys.stage] ?? "x";
   let id = labels[alchemyLabelKeys.id] ?? "x";
   let marker = markerOf(stack, stage, id);
-  while (
-    marker.length > maxLength &&
-    (stack.length > 1 || stage.length > 1 || id.length > 1)
-  ) {
+  while (marker.length > maxLength && (stack.length > 1 || stage.length > 1 || id.length > 1)) {
     if (stack.length >= stage.length && stack.length >= id.length) {
       stack = stack.slice(0, -1);
     } else if (stage.length >= id.length) {
@@ -248,14 +225,10 @@ export const parseOwnership = (
 };
 
 export const hasOwnershipMarker = (text: string | undefined) =>
-  Object.keys(parseOwnership(text).labels).some((key) =>
-    key.startsWith("alchemy-"),
-  );
+  Object.keys(parseOwnership(text).labels).some((key) => key.startsWith("alchemy-"));
 
 const prefixMatch = (expected: string, observed: string) =>
-  expected === observed ||
-  expected.startsWith(observed) ||
-  observed.startsWith(expected);
+  expected === observed || expected.startsWith(observed) || observed.startsWith(expected);
 
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
@@ -265,18 +238,9 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
     const exact = yield* hasAlchemyLabels(id, labels);
     if (exact) return true;
     return (
-      prefixMatch(
-        expected[alchemyLabelKeys.stack] ?? "",
-        labels[alchemyLabelKeys.stack] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.stage] ?? "",
-        labels[alchemyLabelKeys.stage] ?? "",
-      ) &&
-      prefixMatch(
-        expected[alchemyLabelKeys.id] ?? "",
-        labels[alchemyLabelKeys.id] ?? "",
-      )
+      prefixMatch(expected[alchemyLabelKeys.stack] ?? "", labels[alchemyLabelKeys.stack] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.stage] ?? "", labels[alchemyLabelKeys.stage] ?? "") &&
+      prefixMatch(expected[alchemyLabelKeys.id] ?? "", labels[alchemyLabelKeys.id] ?? "")
     );
   });
 
@@ -323,8 +287,7 @@ export const canonical = (value: unknown): unknown => {
   return undefined;
 };
 
-export const fingerprint = (value: unknown): string =>
-  JSON.stringify(canonical(value) ?? null);
+export const fingerprint = (value: unknown): string => JSON.stringify(canonical(value) ?? null);
 
 const parentOf = (name: string) =>
   name.startsWith("projects/")
@@ -351,10 +314,7 @@ export const tryResolveOrganization = () =>
     return undefined;
   });
 
-export const resolveOrganization = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveOrganization = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return organizationParent(explicit);
     if (existing !== undefined) return organizationParent(existing);
@@ -379,10 +339,7 @@ export const tryResolveFolder = () =>
     return undefined;
   });
 
-export const resolveFolder = (
-  explicit: string | undefined,
-  existing: string | undefined,
-) =>
+export const resolveFolder = (explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return folderParent(explicit);
     if (existing !== undefined) return folderParent(existing);
@@ -395,14 +352,7 @@ export const resolveFolder = (
   });
 
 export const replaceOnIdentity = (changed: boolean) =>
-  changed
-    ? ({ action: "replace" as const, deleteFirst: false } as const)
-    : undefined;
+  changed ? ({ action: "replace" as const, deleteFirst: false } as const) : undefined;
 
-export const replaceOn = (
-  previous: string | undefined,
-  next: string | undefined,
-) =>
-  replaceOnIdentity(
-    previous !== undefined && next !== undefined && previous !== next,
-  );
+export const replaceOn = (previous: string | undefined, next: string | undefined) =>
+  replaceOnIdentity(previous !== undefined && next !== undefined && previous !== next);

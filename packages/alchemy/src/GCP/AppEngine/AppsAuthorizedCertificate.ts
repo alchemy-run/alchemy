@@ -152,8 +152,7 @@ export class AppsAuthorizedCertificateNotResolved extends Data.TaggedError(
 }> {}
 
 const rawDataOf = (props: AppsAuthorizedCertificateProps) => {
-  const publicCertificate =
-    props.publicCertificate ?? props.certificateRawData?.publicCertificate;
+  const publicCertificate = props.publicCertificate ?? props.certificateRawData?.publicCertificate;
   const privateKey = props.privateKey ?? props.certificateRawData?.privateKey;
   if (publicCertificate === undefined && privateKey === undefined) {
     return undefined;
@@ -161,16 +160,10 @@ const rawDataOf = (props: AppsAuthorizedCertificateProps) => {
   return { publicCertificate, privateKey };
 };
 
-const toAttrs = (
-  certificate: appengine.AuthorizedCertificate,
-  appsId: string,
-  project: string,
-) => {
+const toAttrs = (certificate: appengine.AuthorizedCertificate, appsId: string, project: string) => {
   const parsed = parseCertificateName(certificate.name ?? "");
   return {
-    name:
-      certificate.name ??
-      `apps/${appsId}/authorizedCertificates/${certificate.id ?? ""}`,
+    name: certificate.name ?? `apps/${appsId}/authorizedCertificates/${certificate.id ?? ""}`,
     certificateId: certificate.id ?? parsed.certificateId,
     appsId: parsed.appsId ?? appsId,
     project,
@@ -202,11 +195,7 @@ export const AppsAuthorizedCertificateProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousApp = olds?.appsId ?? output?.appsId;
       const nextApp = news.appsId ?? previousApp;
-      if (
-        previousApp !== undefined &&
-        nextApp !== undefined &&
-        nextApp !== previousApp
-      ) {
+      if (previousApp !== undefined && nextApp !== undefined && nextApp !== previousApp) {
         return { action: "replace" as const, deleteFirst: false };
       }
       const previousId = olds?.certificateId ?? output?.certificateId;
@@ -223,21 +212,13 @@ export const AppsAuthorizedCertificateProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const appsId = yield* resolveAppsId(olds?.appsId, output?.appsId);
-      let existing = yield* getById(
-        appsId,
-        olds?.certificateId ?? output?.certificateId ?? "",
-      );
+      let existing = yield* getById(appsId, olds?.certificateId ?? output?.certificateId ?? "");
       if (existing === undefined) {
-        existing = yield* findOwnedCertificate(
-          id,
-          yield* listAuthorizedCertificates(appsId),
-        );
+        existing = yield* findOwnedCertificate(id, yield* listAuthorizedCertificates(appsId));
       }
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, appsId, env.project);
-      return (yield* ownedByAlchemy(id, existing.displayName))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -260,15 +241,9 @@ export const AppsAuthorizedCertificateProvider = () =>
       );
       const certificateRawData = rawDataOf(news);
 
-      let current = yield* getById(
-        appsId,
-        news.certificateId ?? output?.certificateId ?? "",
-      );
+      let current = yield* getById(appsId, news.certificateId ?? output?.certificateId ?? "");
       if (current === undefined) {
-        current = yield* findOwnedCertificate(
-          id,
-          yield* listAuthorizedCertificates(appsId),
-        );
+        current = yield* findOwnedCertificate(id, yield* listAuthorizedCertificates(appsId));
       }
 
       if (current === undefined) {
@@ -283,10 +258,7 @@ export const AppsAuthorizedCertificateProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               Effect.gen(function* () {
-                return yield* findOwnedCertificate(
-                  id,
-                  yield* listAuthorizedCertificates(appsId),
-                );
+                return yield* findOwnedCertificate(id, yield* listAuthorizedCertificates(appsId));
               }),
             ),
           );

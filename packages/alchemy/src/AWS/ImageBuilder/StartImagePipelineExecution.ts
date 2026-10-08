@@ -44,7 +44,6 @@ export interface StartImagePipelineExecution extends Binding.Service<
     >
   >
 > {}
-export const StartImagePipelineExecution =
-  Binding.Service<StartImagePipelineExecution>(
-    "AWS.ImageBuilder.StartImagePipelineExecution",
-  );
+export const StartImagePipelineExecution = Binding.Service<StartImagePipelineExecution>(
+  "AWS.ImageBuilder.StartImagePipelineExecution",
+);

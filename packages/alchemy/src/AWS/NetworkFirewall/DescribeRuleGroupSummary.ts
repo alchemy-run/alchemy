@@ -37,14 +37,10 @@ export interface DescribeRuleGroupSummary extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeRuleGroupSummaryRequest,
-    ) => Effect.Effect<
-      NFW.DescribeRuleGroupSummaryResponse,
-      NFW.DescribeRuleGroupSummaryError
-    >
+    ) => Effect.Effect<NFW.DescribeRuleGroupSummaryResponse, NFW.DescribeRuleGroupSummaryError>
   >
 > {}
 
-export const DescribeRuleGroupSummary =
-  Binding.Service<DescribeRuleGroupSummary>(
-    "AWS.NetworkFirewall.DescribeRuleGroupSummary",
-  );
+export const DescribeRuleGroupSummary = Binding.Service<DescribeRuleGroupSummary>(
+  "AWS.NetworkFirewall.DescribeRuleGroupSummary",
+);

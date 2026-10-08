@@ -9,7 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { fromChatbotTags, toChatbotTags } from "./internal.ts";
+import { fromChatbotTags, inChatbotRegion, toChatbotTags } from "./internal.ts";
 
 /**
  * A criteria block controlling when a custom action button is shown on a
@@ -143,9 +143,7 @@ export interface CustomAction extends Resource<
  */
 export const CustomAction = Resource<CustomAction>("AWS.Chatbot.CustomAction");
 
-const toWireAttachment = (
-  attachment: CustomActionAttachment,
-): chatbot.CustomActionAttachment => ({
+const toWireAttachment = (attachment: CustomActionAttachment): chatbot.CustomActionAttachment => ({
   NotificationType: attachment.notificationType,
   ButtonText: attachment.buttonText,
   Criteria: attachment.criteria?.map((c) => ({
@@ -165,9 +163,7 @@ export const CustomActionProvider = () =>
         props: Pick<CustomActionProps, "actionName">,
       ) {
         // Custom action names are limited to 64 characters of [A-Za-z0-9-_].
-        return (
-          props.actionName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.actionName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const actionArn = Effect.fn(function* (actionName: string) {
@@ -178,14 +174,14 @@ export const CustomActionProvider = () =>
 
       const observeAction = (arn: string) =>
         chatbot.getCustomAction({ CustomActionArn: arn }).pipe(
+          inChatbotRegion,
           Effect.map((r) => r.CustomAction),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const observedTags = (arn: string) =>
         chatbot.listTagsForResource({ ResourceARN: arn }).pipe(
+          inChatbotRegion,
           Effect.map((r) => fromChatbotTags(r.Tags)),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),
@@ -198,15 +194,14 @@ export const CustomActionProvider = () =>
           Effect.gen(function* () {
             const arns = yield* chatbot.listCustomActions
               .items({})
-              .pipe(Stream.runCollect);
+              .pipe(Stream.runCollect, inChatbotRegion);
             return Array.from(arns).map((arn) => ({
               actionName: arn.slice(arn.lastIndexOf("/") + 1),
               customActionArn: arn,
             }));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const actionName =
-            output?.actionName ?? (yield* createActionName(id, olds ?? {}));
+          const actionName = output?.actionName ?? (yield* createActionName(id, olds ?? {}));
           const arn = output?.customActionArn ?? (yield* actionArn(actionName));
           const found = yield* observeAction(arn);
           if (found === undefined) return undefined;
@@ -224,8 +219,7 @@ export const CustomActionProvider = () =>
           // fall through: engine default update logic for mutable fields
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const actionName =
-            output?.actionName ?? (yield* createActionName(id, news));
+          const actionName = output?.actionName ?? (yield* createActionName(id, news));
           const arn = output?.customActionArn ?? (yield* actionArn(actionName));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
@@ -248,6 +242,7 @@ export const CustomActionProvider = () =>
                 Tags: toChatbotTags(desiredTags),
               })
               .pipe(
+                inChatbotRegion,
                 Effect.map((r) => r.CustomActionArn),
                 Effect.catchTag("ConflictException", () => Effect.succeed(arn)),
                 Effect.flatMap(observeAction),
@@ -260,15 +255,16 @@ export const CustomActionProvider = () =>
             live !== undefined &&
             live.Definition.CommandText === news.commandText &&
             live.AliasName === news.aliasName &&
-            JSON.stringify(live.Attachments ?? []) ===
-              JSON.stringify(desiredAttachments ?? []);
+            JSON.stringify(live.Attachments ?? []) === JSON.stringify(desiredAttachments ?? []);
           if (!inSync) {
-            yield* chatbot.updateCustomAction({
-              CustomActionArn: arn,
-              Definition: desiredDefinition,
-              AliasName: news.aliasName,
-              Attachments: desiredAttachments,
-            });
+            yield* chatbot
+              .updateCustomAction({
+                CustomActionArn: arn,
+                Definition: desiredDefinition,
+                AliasName: news.aliasName,
+                Attachments: desiredAttachments,
+              })
+              .pipe(inChatbotRegion);
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
@@ -276,31 +272,34 @@ export const CustomActionProvider = () =>
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {
-            yield* chatbot.tagResource({
-              ResourceARN: arn,
-              Tags: upsert.map(({ Key, Value }) => ({
-                TagKey: Key,
-                TagValue: Value,
-              })),
-            });
+            yield* chatbot
+              .tagResource({
+                ResourceARN: arn,
+                Tags: upsert.map(({ Key, Value }) => ({
+                  TagKey: Key,
+                  TagValue: Value,
+                })),
+              })
+              .pipe(inChatbotRegion);
           }
           if (removed.length > 0) {
-            yield* chatbot.untagResource({
-              ResourceARN: arn,
-              TagKeys: removed,
-            });
+            yield* chatbot
+              .untagResource({
+                ResourceARN: arn,
+                TagKeys: removed,
+              })
+              .pipe(inChatbotRegion);
           }
 
           yield* session.note(actionName);
           return { actionName, customActionArn: arn };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* chatbot
-            .deleteCustomAction({ CustomActionArn: output.customActionArn })
-            .pipe(
-              // Idempotent delete — a missing action is not an error.
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* chatbot.deleteCustomAction({ CustomActionArn: output.customActionArn }).pipe(
+            inChatbotRegion,
+            // Idempotent delete — a missing action is not an error.
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       });
     }),

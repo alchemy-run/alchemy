@@ -14,8 +14,7 @@ export const logLevel = Effect.provideService(
 // GOOGLE_CLOUDCHANNEL_ACCOUNT to the reseller account to run the lifecycles.
 export const runLifecycle = !!process.env.GOOGLE_CLOUDCHANNEL_ACCOUNT?.trim();
 
-export const probeAccount =
-  process.env.GOOGLE_CLOUDCHANNEL_ACCOUNT?.trim() || "C00000000";
+export const probeAccount = process.env.GOOGLE_CLOUDCHANNEL_ACCOUNT?.trim() || "C00000000";
 
 export const probeAccountName = probeAccount.startsWith("accounts/")
   ? probeAccount
@@ -74,14 +73,12 @@ export const waitUntilCustomerRepricingGone = (name: string) =>
   );
 
 export const waitUntilPartnerRepricingGone = (name: string) =>
-  cloudchannel
-    .getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({ name })
-    .pipe(
-      Effect.as("found" as const),
-      Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (status) => status === "gone",
-        times: 10,
-      }),
-    );
+  cloudchannel.getAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({ name }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (status) => status === "gone",
+      times: 10,
+    }),
+  );

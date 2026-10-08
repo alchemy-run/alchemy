@@ -1,6 +1,6 @@
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
+import { GcpEnvironment } from "@/GCP/Environment";
 
 /**
  * The test project's default Compute Engine service account

@@ -1,18 +1,14 @@
 import * as Effect from "effect/Effect";
-import type { Node } from "./Node.ts";
-import type { QueuedResource } from "./QueuedResource.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import type { Node } from "./Node.ts";
+import type { QueuedResource } from "./QueuedResource.ts";
 
 /**
  * Shared HTTP scaffolding for Cloud TPU node bindings.
  * NOT exported from index.ts.
  */
-export const makeTpuNodeHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeTpuNodeHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
@@ -26,9 +22,7 @@ export const makeTpuNodeHttpBinding = <
         iam: [grantFor(options.iam, node.name)],
       });
       const name = yield* node.name;
-      return Effect.fn(`${options.tag}(${node.LogicalId})`)(function* (
-        request?: Omit<I, "name">,
-      ) {
+      return Effect.fn(`${options.tag}(${node.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
           ...(request as I),
           name: yield* name,
@@ -41,11 +35,7 @@ export const makeTpuNodeHttpBinding = <
  * Shared HTTP scaffolding for Cloud TPU queued resource bindings.
  * NOT exported from index.ts.
  */
-export const makeTpuQueuedResourceHttpBinding = <
-  I extends { name?: string },
-  A,
-  E,
->(options: {
+export const makeTpuQueuedResourceHttpBinding = <I extends { name?: string }, A, E>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;

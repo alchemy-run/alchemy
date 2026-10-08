@@ -17,14 +17,10 @@ import { syncAmpTags, toTagRecord } from "./internal.ts";
  * Tolerance band around the expected value inside which deviations are not
  * flagged — either an absolute `amount` or a `ratio` of the expected value.
  */
-export type AnomalyDetectorIgnoreNearExpected =
-  | { amount: number }
-  | { ratio: number };
+export type AnomalyDetectorIgnoreNearExpected = { amount: number } | { ratio: number };
 
 /** What the detector does with evaluation windows that have no data. */
-export type AnomalyDetectorMissingDataAction =
-  | { markAsAnomaly: boolean }
-  | { skip: boolean };
+export type AnomalyDetectorMissingDataAction = { markAsAnomaly: boolean } | { skip: boolean };
 
 export interface AnomalyDetectorProps {
   /**
@@ -119,18 +115,13 @@ export interface AnomalyDetector extends Resource<
  *
  * @resource
  */
-export const AnomalyDetector = Resource<AnomalyDetector>(
-  "AWS.AMP.AnomalyDetector",
-);
+export const AnomalyDetector = Resource<AnomalyDetector>("AWS.AMP.AnomalyDetector");
 
 export const AnomalyDetectorProvider = () =>
   Provider.effect(
     AnomalyDetector,
     Effect.gen(function* () {
-      const toAttrs = (
-        workspaceId: string,
-        detector: amp.AnomalyDetectorDescription,
-      ) => ({
+      const toAttrs = (workspaceId: string, detector: amp.AnomalyDetectorDescription) => ({
         workspaceId,
         anomalyDetectorId: detector.anomalyDetectorId,
         anomalyDetectorArn: detector.arn,
@@ -139,17 +130,10 @@ export const AnomalyDetectorProvider = () =>
       });
 
       /** Describe a detector by id; typed not-found → undefined. */
-      const describe = Effect.fn(function* (
-        workspaceId: string,
-        anomalyDetectorId: string,
-      ) {
+      const describe = Effect.fn(function* (workspaceId: string, anomalyDetectorId: string) {
         const response = yield* amp
           .describeAnomalyDetector({ workspaceId, anomalyDetectorId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.anomalyDetector;
       });
 
@@ -157,20 +141,13 @@ export const AnomalyDetectorProvider = () =>
        * Find a detector by its alias (the deterministic identity within a
        * workspace) — used when no id is cached in `output`.
        */
-      const findByAlias = Effect.fn(function* (
-        workspaceId: string,
-        alias: string,
-      ) {
-        const summary = yield* amp.listAnomalyDetectors
-          .items({ workspaceId, alias })
-          .pipe(
-            Stream.filter((s) => s.alias === alias),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const findByAlias = Effect.fn(function* (workspaceId: string, alias: string) {
+        const summary = yield* amp.listAnomalyDetectors.items({ workspaceId, alias }).pipe(
+          Stream.filter((s) => s.alias === alias),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
         return summary === undefined
           ? undefined
           : yield* describe(workspaceId, summary.anomalyDetectorId);
@@ -181,33 +158,22 @@ export const AnomalyDetectorProvider = () =>
        * outlast the window; the last observed description is returned and
        * a still-training detector converges on a later reconcile.
        */
-      const waitSettled = Effect.fn(function* (
-        workspaceId: string,
-        anomalyDetectorId: string,
-      ) {
-        return yield* amp
-          .describeAnomalyDetector({ workspaceId, anomalyDetectorId })
-          .pipe(
-            Effect.map((r) => r.anomalyDetector),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
-              until: (d): boolean =>
-                d.status.statusCode !== "CREATING" &&
-                d.status.statusCode !== "UPDATING",
-            }),
-          );
+      const waitSettled = Effect.fn(function* (workspaceId: string, anomalyDetectorId: string) {
+        return yield* amp.describeAnomalyDetector({ workspaceId, anomalyDetectorId }).pipe(
+          Effect.map((r) => r.anomalyDetector),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            until: (d): boolean =>
+              d.status.statusCode !== "CREATING" && d.status.statusCode !== "UPDATING",
+          }),
+        );
       });
 
       const canonical = (value: unknown) =>
         JSON.stringify(value, (_, v: unknown) =>
           v !== null && typeof v === "object" && !Array.isArray(v)
             ? Object.fromEntries(
-                Object.entries(v as Record<string, unknown>).sort(([a], [b]) =>
-                  a.localeCompare(b),
-                ),
+                Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
               )
             : v,
         );
@@ -224,10 +190,8 @@ export const AnomalyDetectorProvider = () =>
         const rcf = observed.configuration?.randomCutForest;
         const drift =
           news.query !== rcf?.query ||
-          (news.shingleSize !== undefined &&
-            news.shingleSize !== rcf?.shingleSize) ||
-          (news.sampleSize !== undefined &&
-            news.sampleSize !== rcf?.sampleSize) ||
+          (news.shingleSize !== undefined && news.shingleSize !== rcf?.shingleSize) ||
+          (news.sampleSize !== undefined && news.sampleSize !== rcf?.sampleSize) ||
           (news.ignoreNearExpectedFromAbove !== undefined &&
             canonical(news.ignoreNearExpectedFromAbove) !==
               canonical(rcf?.ignoreNearExpectedFromAbove)) ||
@@ -235,11 +199,9 @@ export const AnomalyDetectorProvider = () =>
             canonical(news.ignoreNearExpectedFromBelow) !==
               canonical(rcf?.ignoreNearExpectedFromBelow)) ||
           (news.evaluationInterval !== undefined &&
-            toWireSeconds(news.evaluationInterval) !==
-              observed.evaluationIntervalInSeconds) ||
+            toWireSeconds(news.evaluationInterval) !== observed.evaluationIntervalInSeconds) ||
           (news.missingDataAction !== undefined &&
-            canonical(news.missingDataAction) !==
-              canonical(observed.missingDataAction)) ||
+            canonical(news.missingDataAction) !== canonical(observed.missingDataAction)) ||
           (news.labels !== undefined &&
             canonical(news.labels) !== canonical(toTagRecord(observed.labels)));
         return drift;
@@ -256,19 +218,11 @@ export const AnomalyDetectorProvider = () =>
       });
 
       return {
-        stables: [
-          "workspaceId",
-          "anomalyDetectorId",
-          "anomalyDetectorArn",
-          "alias",
-        ],
+        stables: ["workspaceId", "anomalyDetectorId", "anomalyDetectorArn", "alias"],
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            olds?.workspaceId !== news.workspaceId ||
-            olds?.alias !== news.alias
-          ) {
+          if (olds?.workspaceId !== news.workspaceId || olds?.alias !== news.alias) {
             return { action: "replace" } as const;
           }
         }),
@@ -305,17 +259,12 @@ export const AnomalyDetectorProvider = () =>
               workspaceId,
               alias: news!.alias,
               configuration: toConfiguration(news!),
-              evaluationIntervalInSeconds: toWireSeconds(
-                news!.evaluationInterval,
-              ),
+              evaluationIntervalInSeconds: toWireSeconds(news!.evaluationInterval),
               missingDataAction: news!.missingDataAction,
               labels: news!.labels,
               tags: desiredTags,
             });
-            detector = yield* waitSettled(
-              workspaceId,
-              created.anomalyDetectorId,
-            );
+            detector = yield* waitSettled(workspaceId, created.anomalyDetectorId);
           } else if (configDrifts(news!, detector)) {
             // 3. Sync — `putAnomalyDetector` triggers a full retrain, so it
             // is only called when an observed aspect actually drifts.
@@ -323,16 +272,11 @@ export const AnomalyDetectorProvider = () =>
               workspaceId,
               anomalyDetectorId: detector.anomalyDetectorId,
               configuration: toConfiguration(news!),
-              evaluationIntervalInSeconds: toWireSeconds(
-                news!.evaluationInterval,
-              ),
+              evaluationIntervalInSeconds: toWireSeconds(news!.evaluationInterval),
               missingDataAction: news!.missingDataAction,
               labels: news!.labels,
             });
-            detector = yield* waitSettled(
-              workspaceId,
-              detector.anomalyDetectorId,
-            );
+            detector = yield* waitSettled(workspaceId, detector.anomalyDetectorId);
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
@@ -353,10 +297,7 @@ export const AnomalyDetectorProvider = () =>
               // A detector mid-training rejects deletion; retry briefly.
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("4 seconds"),
-                  Schedule.recurs(25),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(25)]),
               }),
             );
         }),

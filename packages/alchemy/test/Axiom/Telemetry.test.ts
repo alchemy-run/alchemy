@@ -1,16 +1,18 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Axiom from "@/Axiom";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { expectUrlContains } from "../Cloudflare/Utils/Http.ts";
 import AxiomTracedWorker, {
   Ingest,
   Logs,
+  METRICS_DATASET,
+  Metrics,
   TRACES_DATASET,
   Traces,
 } from "./fixtures/axiom-traced-worker.ts";
@@ -21,25 +23,52 @@ const { test } = Test.make({
 
 const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 
-// Query recent trace data out-of-band with the deployer's org token. The
+// Query a dataset's recent data out-of-band with the deployer's org token. The
 // worker ingests with its own least-privilege token; this read proves the
 // data actually landed in Axiom.
-const queryTraces = Effect.gen(function* () {
-  const response = yield* HttpClient.execute(
-    HttpClientRequest.post(
-      "https://api.axiom.co/v1/datasets/_apl?format=legacy",
-    ).pipe(
-      HttpClientRequest.setHeaders({
-        Authorization: `Bearer ${process.env.AXIOM_TOKEN ?? process.env.AXIOM_API_KEY}`,
-        "Content-Type": "application/json",
-      }),
-      HttpClientRequest.bodyJsonUnsafe({
-        apl: `['${TRACES_DATASET}'] | where _time > ago(10m) | limit 1000`,
-      }),
-    ),
-  );
-  return yield* response.text;
-});
+const queryDataset = (dataset: string) =>
+  Effect.gen(function* () {
+    const response = yield* HttpClient.execute(
+      HttpClientRequest.post("https://api.axiom.co/v1/datasets/_apl?format=legacy").pipe(
+        HttpClientRequest.setHeaders({
+          Authorization: `Bearer ${process.env.AXIOM_TOKEN ?? process.env.AXIOM_API_KEY}`,
+          "Content-Type": "application/json",
+        }),
+        HttpClientRequest.bodyJsonUnsafe({
+          apl: `['${dataset}'] | where _time > ago(10m) | limit 1000`,
+        }),
+      ),
+    );
+    return yield* response.text;
+  });
+
+interface MetricsResult {
+  series?: { metric: string; summary?: number | null }[];
+}
+
+// Metrics datasets are queried with MPL on the dataset's own edge. Returns
+// the counter's total over the window, 0 until a data point has landed.
+const queryWorkCount = (edgeUrl: string) =>
+  Effect.gen(function* () {
+    const response = yield* HttpClient.execute(
+      HttpClientRequest.post(`${edgeUrl.replace(/\/$/, "")}/v1/query/_mpl`).pipe(
+        HttpClientRequest.setHeaders({
+          Authorization: `Bearer ${process.env.AXIOM_TOKEN ?? process.env.AXIOM_API_KEY}`,
+          "Content-Type": "application/json",
+        }),
+        HttpClientRequest.bodyJsonUnsafe({
+          startTime: "now-10m",
+          endTime: "now",
+          mpl: `\`${METRICS_DATASET}\`:\`axiom_e2e_work_total\` | align to 1m using sum`,
+        }),
+      ),
+    );
+    if (response.status !== 200) return 0;
+    const result = (yield* response.json) as MetricsResult;
+    return (result.series ?? [])
+      .filter((series) => series.metric === "axiom_e2e_work_total")
+      .reduce((total, series) => total + (series.summary ?? 0), 0);
+  });
 
 test.provider.skipIf(!hasAxiomCreds)(
   "Worker exports telemetry to Axiom via the Axiom.Telemetry binding layer",
@@ -47,13 +76,14 @@ test.provider.skipIf(!hasAxiomCreds)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { worker } = yield* stack.deploy(
+      const { worker, metrics } = yield* stack.deploy(
         Effect.gen(function* () {
           yield* Traces;
           yield* Logs;
+          const metrics = yield* Metrics;
           yield* Ingest;
           const worker = yield* AxiomTracedWorker;
-          return { worker };
+          return { worker, metrics };
         }),
       );
 
@@ -66,7 +96,7 @@ test.provider.skipIf(!hasAxiomCreds)(
 
       // The request scope's flush ships the trace via ctx.waitUntil; poll
       // Axiom until it is queryable.
-      const body = yield* queryTraces.pipe(
+      const body = yield* queryDataset(TRACES_DATASET).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
           until: (text) => text.includes("otel-axiom-e2e"),
@@ -76,6 +106,18 @@ test.provider.skipIf(!hasAxiomCreds)(
       expect(body).toContain("otel-axiom-e2e");
       expect(body).toContain("axiom.child-span");
       expect(body).toContain("http.server GET");
+
+      // Metrics export as OTLP protobuf (Axiom rejects JSON on /v1/metrics
+      // with 415) and route with X-Axiom-Metrics-Dataset. Metrics datasets
+      // are queried with MPL on the dataset's edge, not APL.
+      const workCount = yield* queryWorkCount(metrics.edgeDeploymentUrl).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (count) => count > 0,
+          times: 36,
+        }),
+      );
+      expect(workCount).toBeGreaterThan(0);
 
       yield* stack.destroy();
     }),

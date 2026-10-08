@@ -29,9 +29,7 @@ export interface GetAppsList extends Binding.Service<
   GetAppsList,
   "AWS.FMS.GetAppsList",
   () => Effect.Effect<
-    (
-      request: GetAppsListRequest,
-    ) => Effect.Effect<fms.GetAppsListResponse, fms.GetAppsListError>
+    (request: GetAppsListRequest) => Effect.Effect<fms.GetAppsListResponse, fms.GetAppsListError>
   >
 > {}
 

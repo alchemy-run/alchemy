@@ -1,9 +1,9 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import type { ConnectionsGitRepositoryLink } from "./ConnectionsGitRepositoryLink.ts";
 import { bindGcpHost } from "../Host.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import type { ConnectionsGitRepositoryLink } from "./ConnectionsGitRepositoryLink.ts";
 
 /**
  * Shared HTTP scaffolding for Developer Connect git repository link
@@ -28,9 +28,7 @@ export const makeGitRepositoryLinkHttpBinding = <
 }) =>
   Effect.gen(function* () {
     const run = yield* options.operation;
-    return Effect.fn(function* <T extends ConnectionsGitRepositoryLink>(
-      link: T,
-    ) {
+    return Effect.fn(function* <T extends ConnectionsGitRepositoryLink>(link: T) {
       yield* bindGcpHost({
         tag: options.tag,
         resource: link,

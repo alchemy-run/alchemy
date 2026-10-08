@@ -34,9 +34,7 @@ export const buildHostRedirectInjection = ({
 }): string => {
   if (!to || (hosts.length === 0 && !cloudfrontDefault)) return "";
   const conditions = [
-    ...(hosts.length > 0
-      ? [`${JSON.stringify(hosts)}.indexOf(redirectHost) !== -1`]
-      : []),
+    ...(hosts.length > 0 ? [`${JSON.stringify(hosts)}.indexOf(redirectHost) !== -1`] : []),
     ...(cloudfrontDefault ? [`redirectHost.endsWith(".cloudfront.net")`] : []),
   ];
   return `

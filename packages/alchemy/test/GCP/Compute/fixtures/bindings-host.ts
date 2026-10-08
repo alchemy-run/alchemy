@@ -1,7 +1,7 @@
-import * as GCP from "@/GCP";
-import { GcpEnvironment } from "@/GCP/Environment";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as GCP from "@/GCP";
+import { GcpEnvironment } from "@/GCP/Environment";
 import { serveProbes } from "../../bindingHost.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../../networkQuota.ts";
 

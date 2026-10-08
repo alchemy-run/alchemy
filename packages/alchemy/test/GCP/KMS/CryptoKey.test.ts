@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
-import { KEY_RING_ID, kmsTestId } from "./common.ts";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
+import { KEY_RING_ID, kmsTestId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloud KMS KeyRings cannot be deleted. Reuse the standing test ring.
 // Encrypt/decrypt needs a version; versions cannot be deleted for ≥24h, so
@@ -109,14 +106,11 @@ test.provider(
 
 const roundTrip = (name: string, text: string) =>
   Effect.gen(function* () {
-    const plaintext = yield* Effect.sync(() =>
-      Buffer.from(text, "utf8").toString("base64"),
-    );
-    const { ciphertext } =
-      yield* kms.encryptProjectsLocationsKeyRingsCryptoKeys({
-        name,
-        body: { plaintext },
-      });
+    const plaintext = yield* Effect.sync(() => Buffer.from(text, "utf8").toString("base64"));
+    const { ciphertext } = yield* kms.encryptProjectsLocationsKeyRingsCryptoKeys({
+      name,
+      body: { plaintext },
+    });
     const decrypted = yield* kms.decryptProjectsLocationsKeyRingsCryptoKeys({
       name,
       body: { ciphertext },
@@ -226,9 +220,7 @@ test.provider(
       expect(yield* roundTrip(second.key.name, "second")).toEqual(true);
 
       // At most the one deterministic ring appeared — no leak per cycle.
-      const created = (yield* generatedRings).filter(
-        (name) => !before.has(name),
-      );
+      const created = (yield* generatedRings).filter((name) => !before.has(name));
       expect(created.filter((name) => name !== first.ring.name)).toEqual([]);
 
       yield* stack.destroy();

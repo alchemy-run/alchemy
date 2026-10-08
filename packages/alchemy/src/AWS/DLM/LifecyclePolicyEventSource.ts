@@ -104,12 +104,8 @@ export const consumePolicyEvents = <StreamReq = never, Req = never>(
     props.id ?? "DLMPolicyEvents",
     {
       source: ["aws.dlm"],
-      "detail-type": (props.kinds ?? (["state-change"] as const)).map(
-        (kind) => DETAIL_TYPES[kind],
-      ),
-      ...(props.policyArns !== undefined
-        ? { resources: [...props.policyArns] }
-        : {}),
+      "detail-type": (props.kinds ?? (["state-change"] as const)).map((kind) => DETAIL_TYPES[kind]),
+      ...(props.policyArns !== undefined ? { resources: [...props.policyArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

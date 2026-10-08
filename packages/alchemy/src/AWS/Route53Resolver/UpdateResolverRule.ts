@@ -41,10 +41,7 @@ export interface UpdateResolverRule extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateResolverRuleRequest,
-    ) => Effect.Effect<
-      r53r.UpdateResolverRuleResponse,
-      r53r.UpdateResolverRuleError
-    >
+    ) => Effect.Effect<r53r.UpdateResolverRuleResponse, r53r.UpdateResolverRuleError>
   >
 > {}
 

@@ -1,9 +1,11 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
-import type * as Cloudflare from "@/Cloudflare/index.ts";
 import { AwsClient } from "aws4fetch";
+import type * as Cloudflare from "@/Cloudflare/index.ts";
 
 interface Env {
   BUCKET: R2Bucket;
+  /** A second bucket the S3 credentials must not reach (deployed test only). */
+  OTHER_BUCKET?: R2Bucket;
   /** `Cloudflare.R2.S3Credentials(bucket, { access: "read-write" })` — a JSON string. */
   BUCKET_S3: string;
 }
@@ -28,11 +30,17 @@ export default {
       case "/presign-get":
         return Response.json({
           url: await presign(env, key, "GET", {
-            query: contentType
-              ? { "response-content-type": contentType }
-              : undefined,
+            query: contentType ? { "response-content-type": contentType } : undefined,
           }),
         });
+      case "/presign-other-bucket": {
+        // Same credentials, a different bucket in the same account: proves
+        // the token is scoped to BUCKET rather than the whole account.
+        const bucket = url.searchParams.get("bucket") ?? "";
+        return Response.json({
+          url: await presign(env, key, "GET", {}, bucket),
+        });
+      }
       case "/read": {
         const object = await env.BUCKET.get(key);
         return Response.json({
@@ -42,6 +50,9 @@ export default {
       }
       case "/write":
         await env.BUCKET.put(key, await request.text());
+        return new Response("ok");
+      case "/write-other":
+        await env.OTHER_BUCKET?.put(key, await request.text());
         return new Response("ok");
       default:
         return new Response("ok");
@@ -57,11 +68,12 @@ const presign = async (
     headers?: Record<string, string>;
     query?: Record<string, string>;
   },
+  bucketName?: string,
 ) => {
   const s3: Cloudflare.R2.S3CredentialsValue = JSON.parse(env.BUCKET_S3);
   const client = new AwsClient({ ...s3, service: "s3" });
   const url = new URL(
-    `${s3.endpoint}/${encodeURIComponent(s3.bucketName)}/${key
+    `${s3.endpoint}/${encodeURIComponent(bucketName ?? s3.bucketName)}/${key
       .split("/")
       .map(encodeURIComponent)
       .join("/")}`,

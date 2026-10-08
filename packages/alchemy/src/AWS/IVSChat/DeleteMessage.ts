@@ -55,12 +55,7 @@ export interface DeleteMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteMessageRequest,
-    ) => Effect.Effect<
-      ivschat.DeleteMessageResponse,
-      ivschat.DeleteMessageError
-    >
+    ) => Effect.Effect<ivschat.DeleteMessageResponse, ivschat.DeleteMessageError>
   >
 > {}
-export const DeleteMessage = Binding.Service<DeleteMessage>(
-  "AWS.IVSChat.DeleteMessage",
-);
+export const DeleteMessage = Binding.Service<DeleteMessage>("AWS.IVSChat.DeleteMessage");

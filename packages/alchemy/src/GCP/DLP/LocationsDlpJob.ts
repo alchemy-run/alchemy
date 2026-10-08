@@ -4,13 +4,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import {
   collectPages,
   encodeOwnership,
@@ -39,11 +39,7 @@ const prefixedJobId = (jobId: string, risk: boolean) => {
   return `${risk ? "r" : "i"}-${bare}`;
 };
 
-const toJobId = (
-  id: string,
-  requested: string | undefined,
-  existing: string | undefined,
-) =>
+const toJobId = (id: string, requested: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
     if (requested !== undefined) {
       return stripJobPrefix(requested).slice(0, MAX_JOB_ID_LENGTH);
@@ -148,9 +144,7 @@ export type LocationsDlpJob = Resource<
  * @resource
  * @category DLP
  */
-export const LocationsDlpJob = Resource<LocationsDlpJob>(
-  "GCP.DLP.LocationsDlpJob",
-);
+export const LocationsDlpJob = Resource<LocationsDlpJob>("GCP.DLP.LocationsDlpJob");
 
 export class LocationsDlpJobNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDlpJobNotResolved",
@@ -158,12 +152,7 @@ export class LocationsDlpJobNotResolved extends Data.TaggedError(
   name: string;
 }> {}
 
-const resourceName = (
-  project: string,
-  location: string,
-  jobId: string,
-  risk = false,
-) =>
+const resourceName = (project: string, location: string, jobId: string, risk = false) =>
   `${locationParent(project, location)}/dlpJobs/${prefixedJobId(jobId, risk)}`;
 
 const stampInspectJob = (
@@ -196,9 +185,7 @@ const stampInspectJob = (
   };
 };
 
-const userInspectJob = (
-  inspectJob: InspectJobConfig | undefined,
-): InspectJobConfig | undefined => {
+const userInspectJob = (inspectJob: InspectJobConfig | undefined): InspectJobConfig | undefined => {
   if (inspectJob === undefined) return undefined;
   const hybrid = inspectJob.storageConfig?.hybridOptions;
   if (hybrid === undefined) return inspectJob;
@@ -221,10 +208,7 @@ const hybridOf = (job: dlp.GooglePrivacyDlpV2DlpJob) =>
 
 const jobOwned = (job: dlp.GooglePrivacyDlpV2DlpJob) => {
   const hybrid = hybridOf(job);
-  return (
-    hasOwnershipMarker(hybrid?.description) ||
-    hasHybridOwnership(hybrid?.labels)
-  );
+  return hasOwnershipMarker(hybrid?.description) || hasHybridOwnership(hybrid?.labels);
 };
 
 const toAttrs = (job: dlp.GooglePrivacyDlpV2DlpJob, project: string) => {
@@ -260,11 +244,7 @@ const listType = (parent: string, type: "INSPECT_JOB" | "RISK_ANALYSIS_JOB") =>
       type,
     }),
     (page) => page.jobs,
-  ).pipe(
-    Effect.catchTag("NotFound", () =>
-      Effect.succeed([] as dlp.GooglePrivacyDlpV2DlpJob[]),
-    ),
-  );
+  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([] as dlp.GooglePrivacyDlpV2DlpJob[])));
 
 export const LocationsDlpJobProvider = () =>
   Provider.succeed(LocationsDlpJob, {
@@ -274,9 +254,7 @@ export const LocationsDlpJobProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.jobId ?? output?.jobId;
       const idChanged =
-        previousId !== undefined &&
-        news.jobId !== undefined &&
-        news.jobId !== previousId;
+        previousId !== undefined && news.jobId !== undefined && news.jobId !== previousId;
       const previousLocation = olds?.location ?? output?.location;
       const locationChanged =
         previousLocation !== undefined &&
@@ -301,10 +279,7 @@ export const LocationsDlpJobProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        olds?.location ?? output?.location,
-        LOCATION,
-      );
+      const location = normalizeLocation(olds?.location ?? output?.location, LOCATION);
       const jobId = yield* toJobId(id, olds?.jobId, output?.jobId);
       const name =
         output?.name ??
@@ -319,9 +294,7 @@ export const LocationsDlpJobProvider = () =>
       const attrs = toAttrs(existing, env.project);
       const hybrid = hybridOf(existing);
       const owned = yield* ownedByAlchemy(id, hybrid?.description);
-      return owned || hasHybridOwnership(hybrid?.labels)
-        ? attrs
-        : Unowned(attrs);
+      return owned || hasHybridOwnership(hybrid?.labels) ? attrs : Unowned(attrs);
     }),
 
     list: () =>
@@ -352,22 +325,12 @@ export const LocationsDlpJobProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(
-        news.location ?? output?.location,
-        LOCATION,
-      );
+      const location = normalizeLocation(news.location ?? output?.location, LOCATION);
       const jobId = yield* toJobId(id, news.jobId, output?.jobId);
-      const name = resourceName(
-        env.project,
-        location,
-        jobId,
-        news.riskJob !== undefined,
-      );
+      const name = resourceName(env.project, location, jobId, news.riskJob !== undefined);
       const ownership = yield* createInternalLabels(id);
       const inspectJob = stampInspectJob(
-        news.riskJob === undefined
-          ? (news.inspectJob ?? DEFAULT_INSPECT_JOB)
-          : news.inspectJob,
+        news.riskJob === undefined ? (news.inspectJob ?? DEFAULT_INSPECT_JOB) : news.inspectJob,
         ownership,
       );
 
@@ -397,12 +360,7 @@ export const LocationsDlpJobProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* dlp
         .cancelProjectsLocationsDlpJobs({ name: output.name, body: {} })
-        .pipe(
-          Effect.catchTag(
-            ["NotFound", "BadRequest", "Conflict"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["NotFound", "BadRequest", "Conflict"], () => Effect.void));
       yield* dlp.deleteProjectsLocationsDlpJobs({ name: output.name }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({

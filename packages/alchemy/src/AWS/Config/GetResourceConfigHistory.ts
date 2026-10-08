@@ -39,7 +39,6 @@ export interface GetResourceConfigHistory extends Binding.Service<
   >
 > {}
 
-export const GetResourceConfigHistory =
-  Binding.Service<GetResourceConfigHistory>(
-    "AWS.Config.GetResourceConfigHistory",
-  );
+export const GetResourceConfigHistory = Binding.Service<GetResourceConfigHistory>(
+  "AWS.Config.GetResourceConfigHistory",
+);

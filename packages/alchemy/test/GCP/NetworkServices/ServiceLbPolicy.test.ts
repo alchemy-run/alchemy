@@ -1,18 +1,15 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
 import { GcpEnvironment } from "@/GCP/Environment";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   networkservices.getProjectsLocationsServiceLbPolicies({ name }).pipe(
@@ -74,19 +71,16 @@ test.provider(
       expect(created.labels).toMatchObject({ env: "test" });
       expect(created.createTime).toEqual(expect.any(String));
 
-      const fetched =
-        yield* networkservices.getProjectsLocationsServiceLbPolicies({
-          name: created.name,
-        });
+      const fetched = yield* networkservices.getProjectsLocationsServiceLbPolicies({
+        name: created.name,
+      });
       expect(fetched.name).toEqual(created.name);
       expect(fetched.description).toEqual("lb policy a");
       expect(fetched.loadBalancingAlgorithm).toEqual("SPRAY_TO_REGION");
       expect(fetched.labels?.env).toEqual("test");
-      expect(
-        Object.keys(fetched.labels ?? {}).some((key) =>
-          key.startsWith("alchemy-"),
-        ),
-      ).toEqual(true);
+      expect(Object.keys(fetched.labels ?? {}).some((key) => key.startsWith("alchemy-"))).toEqual(
+        true,
+      );
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -108,10 +102,9 @@ test.provider(
       expect(updated.failoverConfig?.failoverHealthThreshold).toEqual(70);
       expect(updated.labels).toMatchObject({ env: "prod", role: "lb" });
 
-      const refetched =
-        yield* networkservices.getProjectsLocationsServiceLbPolicies({
-          name: created.name,
-        });
+      const refetched = yield* networkservices.getProjectsLocationsServiceLbPolicies({
+        name: created.name,
+      });
       expect(refetched.description).toEqual("lb policy b");
       expect(refetched.loadBalancingAlgorithm).toEqual("WATERFALL_BY_REGION");
       expect(refetched.labels?.env).toEqual("prod");

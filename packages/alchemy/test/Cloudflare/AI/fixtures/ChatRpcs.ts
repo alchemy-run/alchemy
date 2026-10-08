@@ -1,8 +1,8 @@
-import * as Schema from "effect/Schema";
 import { Response, Toolkit } from "effect/ai";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
+import * as Schema from "effect/Schema";
 
 // `effect/ai` ships a `Schema` for every streaming response part.
 // `Response.StreamPart(toolkit)` builds the union codec; with the empty

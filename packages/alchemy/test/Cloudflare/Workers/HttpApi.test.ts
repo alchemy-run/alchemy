@@ -1,13 +1,13 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
-import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import { TaskApi } from "./fixtures/http-api/api.ts";
 import Stack from "./fixtures/http-api/stack.ts";
 
@@ -15,10 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const testTimeout = 60_000;
 const burstTimeout = 90_000;
@@ -38,25 +35,20 @@ const readinessRetry = {
   times: 40,
 } as const;
 
-const makeClient = (url: string) =>
-  HttpApiClient.make(TaskApi, { baseUrl: url });
+const makeClient = (url: string) => HttpApiClient.make(TaskApi, { baseUrl: url });
 
 // The raw `HttpClient` (used for transport-level CORS checks) does not fail on
 // a non-2xx status, so `Effect.retry` won't fire on the freshly-deployed edge
 // 404/500 window. Explicitly `Effect.fail` non-2xx responses to force the
 // retry (unlike the typed `HttpApiClient`, which already fails on them).
-const requestUntilReady = (
-  effect: Effect.Effect<HttpClientResponse, unknown, never>,
-) =>
+const requestUntilReady = (effect: Effect.Effect<HttpClientResponse, unknown, never>) =>
   effect.pipe(
     Effect.timeout(requestTimeout),
     Effect.flatMap(
       Effect.fn(function* (res) {
         return res.status >= 200 && res.status < 300
           ? res
-          : yield* Effect.fail(
-              new Error(`Worker not ready: ${res.status} ${yield* res.text}`),
-            );
+          : yield* Effect.fail(new Error(`Worker not ready: ${res.status} ${yield* res.text}`));
       }),
     ),
     Effect.retry(readinessRetry),
@@ -129,14 +121,29 @@ test(
     if (missing._tag === "TaskNotFound") {
       expect(missing.id).toBe("does-not-exist");
     }
+
+    // The Durable Object-backed route must surface the same domain 404:
+    // the DO's `getTask` fails with `TaskNotFound` for a missing key (it
+    // used to fail schema decoding and die with a 500), and the Worker
+    // forwards it.
+    const missingDO = yield* client.Tasks.getTaskDO({
+      params: { id: "does-not-exist" },
+    }).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.retry({
+        while: (e) => e._tag !== "TaskNotFound",
+        schedule: readinessRetry.schedule,
+        times: readinessRetry.times,
+      }),
+      Effect.flip,
+    );
+    expect(missingDO._tag).toBe("TaskNotFound");
+    if (missingDO._tag === "TaskNotFound") {
+      expect(missingDO.id).toBe("does-not-exist");
+    }
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -163,12 +170,7 @@ test(
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -191,12 +193,7 @@ test(
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: testTimeout,
   },
 );
@@ -216,9 +213,7 @@ test(
             payload: { title: `task-${i}` },
           }).pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
           if (created.title !== `task-${i}`) {
-            return yield* Effect.fail(
-              new Error(`create ${i} title mismatch: ${created.title}`),
-            );
+            return yield* Effect.fail(new Error(`create ${i} title mismatch: ${created.title}`));
           }
           return created.id;
         }),
@@ -229,12 +224,7 @@ test(
     expect(new Set(results).size).toBe(N);
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: burstTimeout,
   },
 );
@@ -268,12 +258,7 @@ test(
     );
   }).pipe(logLevel),
   {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:r2",
-      "provider:cloudflare:worker",
-      "live",
-    ],
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
     timeout: burstTimeout,
   },
 );

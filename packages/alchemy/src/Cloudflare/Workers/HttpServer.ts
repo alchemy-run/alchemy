@@ -1,11 +1,11 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as EffectHttp from "effect/http/HttpEffect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Http from "../../Http.ts";
 import { Request } from "./Request.ts";
 import type { WorkerServices } from "./Worker.ts";
@@ -14,9 +14,7 @@ import { isWorkerEvent } from "./WorkerRuntime.ts";
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
 export const makeRequestHandler =
-  <Req = never>(
-    handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
-  ) =>
+  <Req = never>(handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>) =>
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
       ? makeRequestEffect(event.input, handler)
@@ -28,9 +26,7 @@ export const makeRequestEffect = <Req = never>(
 ) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return Effect.gen(function* () {
-    const request = HttpServerRequest.fromWeb(
-      webRequest as any as globalThis.Request,
-    ).modify({
+    const request = HttpServerRequest.fromWeb(webRequest as any as globalThis.Request).modify({
       remoteAddress: Option.fromUndefinedOr(
         webRequest.headers.get("cf-connecting-ip") ?? undefined,
       ),
@@ -61,16 +57,16 @@ const toHandledWebResponse = <Req>(
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
 
-    yield* EffectHttp.toHandled(handler, (request, response) =>
-      Deferred.succeed(
+    yield* EffectHttp.toHandled(handler, (request, response) => {
+      const withoutBody = request.method === "HEAD";
+      if (!HttpServerResponse.omitsBody(response, withoutBody)) {
+        response = EffectHttp.scopeTransferToStream(response);
+      }
+      return Deferred.succeed(
         webResponse,
-        // Conversion to web response with options matches `EffectHttp.toWebHandler`'s callback.
-        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
-          withoutBody: request.method === "HEAD",
-          context,
-        }),
-      ),
-    );
+        HttpServerResponse.toWeb(response, { withoutBody, context }),
+      );
+    });
     return yield* Deferred.await(webResponse);
   });
 

@@ -1,12 +1,4 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import {
-  encodeDescription,
-  hasOwnershipMarker,
-  lastSegment,
-  parseDescription,
-  runGlobalOp,
-  toPhysicalName,
-} from "./internal.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,13 +11,18 @@ import { tagRecord } from "../../Tags.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  encodeDescription,
+  hasOwnershipMarker,
+  lastSegment,
+  parseDescription,
+  runGlobalOp,
+  toPhysicalName,
+} from "./internal.ts";
 
 const DEFAULT_NETWORK_ENDPOINT_TYPE = "INTERNET_FQDN_PORT";
 
-export type GlobalNetworkEndpointType =
-  | "INTERNET_FQDN_PORT"
-  | "INTERNET_IP_PORT"
-  | (string & {});
+export type GlobalNetworkEndpointType = "INTERNET_FQDN_PORT" | "INTERNET_IP_PORT" | (string & {});
 
 export type GlobalNetworkEndpointSpec = {
   /** Fully qualified domain name. Required for `INTERNET_FQDN_PORT`. */
@@ -223,9 +220,7 @@ const toBody = (
       : undefined,
 });
 
-const toApiEndpoint = (
-  endpoint: GlobalNetworkEndpointSpec,
-): compute.NetworkEndpoint => ({
+const toApiEndpoint = (endpoint: GlobalNetworkEndpointSpec): compute.NetworkEndpoint => ({
   fqdn: endpoint.fqdn,
   ipAddress: endpoint.ipAddress,
   ipv6Address: endpoint.ipv6Address,
@@ -262,8 +257,7 @@ const awaitResource = (project: string, networkEndpointGroupName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.GlobalNetworkEndpointGroupNotResolved",
+      while: (error) => error._tag === "GCP.Compute.GlobalNetworkEndpointGroupNotResolved",
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
@@ -281,15 +275,11 @@ const waitUntilGone = (project: string, networkEndpointGroupName: string) =>
           ),
     ),
     Effect.retry({
-      while: (error) =>
-        error._tag === "GCP.Compute.GlobalNetworkEndpointGroupStillExists",
+      while: (error) => error._tag === "GCP.Compute.GlobalNetworkEndpointGroupStillExists",
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag(
-      "GCP.Compute.GlobalNetworkEndpointGroupStillExists",
-      () => Effect.void,
-    ),
+    Effect.catchTag("GCP.Compute.GlobalNetworkEndpointGroupStillExists", () => Effect.void),
   );
 
 const listEndpoints = (project: string, networkEndpointGroup: string) =>
@@ -304,10 +294,7 @@ const listEndpoints = (project: string, networkEndpointGroup: string) =>
       Effect.map((chunk) =>
         Array.from(chunk)
           .map((item) => item.networkEndpoint)
-          .filter(
-            (endpoint): endpoint is compute.NetworkEndpoint =>
-              endpoint !== undefined,
-          ),
+          .filter((endpoint): endpoint is compute.NetworkEndpoint => endpoint !== undefined),
       ),
       Effect.catchTag(["NotFound", "BadRequest"], () =>
         Effect.succeed([] as compute.NetworkEndpoint[]),
@@ -319,9 +306,7 @@ const immutableChanged = (
   olds: Partial<GlobalNetworkEndpointGroupProps> | undefined,
   output: GlobalNetworkEndpointGroup["Attributes"] | undefined,
 ) => {
-  const previousType = asType(
-    olds?.networkEndpointType ?? output?.networkEndpointType,
-  );
+  const previousType = asType(olds?.networkEndpointType ?? output?.networkEndpointType);
   if (asType(news.networkEndpointType) !== previousType) return true;
 
   const previousDescription = olds?.description ?? output?.description ?? "";
@@ -356,13 +341,10 @@ export const GlobalNetworkEndpointGroupProvider = () =>
 
     diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
-      const previousName =
-        olds.networkEndpointGroupName ?? output?.networkEndpointGroupName;
+      const previousName = olds.networkEndpointGroupName ?? output?.networkEndpointGroupName;
       const nextName = news.networkEndpointGroupName ?? previousName;
       const nameChanged =
-        previousName !== undefined &&
-        nextName !== undefined &&
-        nextName !== previousName;
+        previousName !== undefined && nextName !== undefined && nextName !== previousName;
       if (nameChanged) {
         return { action: "replace" as const, deleteFirst: false };
       }
@@ -439,19 +421,12 @@ export const GlobalNetworkEndpointGroupProvider = () =>
       }
 
       if (news.networkEndpoints !== undefined) {
-        const observed = yield* listEndpoints(
-          env.project,
-          networkEndpointGroupName,
-        );
+        const observed = yield* listEndpoints(env.project, networkEndpointGroupName);
         const wanted = news.networkEndpoints.map(toApiEndpoint);
         const observedKeys = new Set(observed.map(endpointKey));
         const wantedKeys = new Set(wanted.map(endpointKey));
-        const toAdd = wanted.filter(
-          (endpoint) => !observedKeys.has(endpointKey(endpoint)),
-        );
-        const toRemove = observed.filter(
-          (endpoint) => !wantedKeys.has(endpointKey(endpoint)),
-        );
+        const toAdd = wanted.filter((endpoint) => !observedKeys.has(endpointKey(endpoint)));
+        const toRemove = observed.filter((endpoint) => !wantedKeys.has(endpointKey(endpoint)));
         if (toAdd.length > 0) {
           yield* runGlobalOp(
             env.project,
@@ -474,8 +449,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
             { ignoreNotFound: true },
           ).pipe(Effect.catchTag(["Conflict", "NotFound"], () => Effect.void));
         }
-        current =
-          (yield* getByName(env.project, networkEndpointGroupName)) ?? current;
+        current = (yield* getByName(env.project, networkEndpointGroupName)) ?? current;
       }
 
       return toAttrs(current, env.project);
@@ -492,11 +466,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
           networkEndpointGroup: output.networkEndpointGroupName,
         }),
         { ignoreNotFound: true },
-      ).pipe(
-        Effect.catchTag(["NotFound", "Conflict"], () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)));
       yield* waitUntilGone(project, output.networkEndpointGroupName);
     }),
   });

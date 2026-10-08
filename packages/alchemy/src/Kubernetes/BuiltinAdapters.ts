@@ -27,9 +27,7 @@ import {
   type MintedCredentials,
 } from "./internal/kubeconfig.ts";
 
-const toAuthHeaders = (
-  credentials: MintedCredentials,
-): Record<string, string> =>
+const toAuthHeaders = (credentials: MintedCredentials): Record<string, string> =>
   credentials.token ? { Authorization: `Bearer ${credentials.token}` } : {};
 
 const requireEndpoint = (connection: Connection) =>
@@ -58,9 +56,7 @@ export const KubeConfigAdapter: Layer.Layer<
     // Capture the platform services at layer build so per-request minting
     // (exec plugins can re-run on token expiry) needs no ambient context.
     const context = yield* Effect.context<
-      | FileSystem.FileSystem
-      | Path.Path
-      | ChildProcessSpawner.ChildProcessSpawner
+      FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
     >();
 
     return {
@@ -68,9 +64,7 @@ export const KubeConfigAdapter: Layer.Layer<
       connect: Effect.fn(function* (connection: Connection) {
         if (connection.auth.kind !== "kubeconfig") {
           return yield* Effect.die(
-            new Error(
-              `kubeconfig adapter received auth kind '${connection.auth.kind}'`,
-            ),
+            new Error(`kubeconfig adapter received auth kind '${connection.auth.kind}'`),
           );
         }
         const resolved = yield* resolveKubeContext({
@@ -97,10 +91,8 @@ export const KubeConfigAdapter: Layer.Layer<
         return {
           endpoint: connection.endpoint ?? resolved.endpoint,
           certificateAuthorityData:
-            connection.certificateAuthorityData ??
-            resolved.certificateAuthorityData,
-          insecureSkipTlsVerify:
-            connection.insecureSkipTlsVerify ?? resolved.insecureSkipTlsVerify,
+            connection.certificateAuthorityData ?? resolved.certificateAuthorityData,
+          insecureSkipTlsVerify: connection.insecureSkipTlsVerify ?? resolved.insecureSkipTlsVerify,
           headers,
           clientCert: initial.clientCert,
         } satisfies ClusterTransport;
@@ -117,9 +109,7 @@ export const TokenAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
     connect: Effect.fn(function* (connection: Connection) {
       if (connection.auth.kind !== "token") {
         return yield* Effect.die(
-          new Error(
-            `token adapter received auth kind '${connection.auth.kind}'`,
-          ),
+          new Error(`token adapter received auth kind '${connection.auth.kind}'`),
         );
       }
       const token = connection.auth.token;
@@ -134,15 +124,14 @@ export const TokenAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
 );
 
 /** `client-cert` — mutual TLS against an explicit endpoint. */
-export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> =
-  Layer.succeed(ClusterAdapter("client-cert"), {
+export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> = Layer.succeed(
+  ClusterAdapter("client-cert"),
+  {
     kind: "Kubernetes.ClusterAdapter" as const,
     connect: Effect.fn(function* (connection: Connection) {
       if (connection.auth.kind !== "client-cert") {
         return yield* Effect.die(
-          new Error(
-            `client-cert adapter received auth kind '${connection.auth.kind}'`,
-          ),
+          new Error(`client-cert adapter received auth kind '${connection.auth.kind}'`),
         );
       }
       return {
@@ -156,7 +145,8 @@ export const ClientCertAdapter: Layer.Layer<ClusterAdapterService> =
         },
       } satisfies ClusterTransport;
     }),
-  });
+  },
+);
 
 /**
  * `exec` — mint credentials with a kubeconfig-style exec credential plugin
@@ -169,23 +159,18 @@ export const ExecAdapter: Layer.Layer<
 > = Layer.effect(
   ClusterAdapter("exec"),
   Effect.gen(function* () {
-    const context =
-      yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
+    const context = yield* Effect.context<ChildProcessSpawner.ChildProcessSpawner>();
 
     return {
       kind: "Kubernetes.ClusterAdapter" as const,
       connect: Effect.fn(function* (connection: Connection) {
         if (connection.auth.kind !== "exec") {
           return yield* Effect.die(
-            new Error(
-              `exec adapter received auth kind '${connection.auth.kind}'`,
-            ),
+            new Error(`exec adapter received auth kind '${connection.auth.kind}'`),
           );
         }
         const exec = connection.auth;
-        const initial = yield* runExecCredential(exec).pipe(
-          Effect.provideContext(context),
-        );
+        const initial = yield* runExecCredential(exec).pipe(Effect.provideContext(context));
         return {
           endpoint: yield* requireEndpoint(connection),
           certificateAuthorityData: connection.certificateAuthorityData,
@@ -206,10 +191,4 @@ export const builtinAdapters = (): Layer.Layer<
   ClusterAdapterService,
   never,
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  Layer.mergeAll(
-    KubeConfigAdapter,
-    TokenAdapter,
-    ClientCertAdapter,
-    ExecAdapter,
-  );
+> => Layer.mergeAll(KubeConfigAdapter, TokenAdapter, ClientCertAdapter, ExecAdapter);

@@ -1,9 +1,9 @@
-import * as GCP from "@/GCP";
-import * as Test from "@/Test/Alchemy";
 import * as acm from "@distilled.cloud/gcp/accesscontextmanager_v1";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as GCP from "@/GCP";
+import * as Test from "@/Test/Alchemy";
 import { logLevel, projectContext, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -47,32 +47,25 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       const ctx = yield* projectContext();
-      const scopes =
-        ctx.projectNumber.length > 0
-          ? [`projects/${ctx.projectNumber}`]
-          : undefined;
+      const scopes = ctx.projectNumber.length > 0 ? [`projects/${ctx.projectNumber}`] : undefined;
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const policy = yield* GCP.AccessContextManager.AccessPolicy(
-            "PerimeterPolicy",
+          const policy = yield* GCP.AccessContextManager.AccessPolicy("PerimeterPolicy", {
+            title: "perimeter policy",
+            scopes,
+          });
+          const perimeter = yield* GCP.AccessContextManager.AccessPoliciesServicePerimeter(
+            "Storage",
             {
-              title: "perimeter policy",
-              scopes,
+              policy: policy.name,
+              title: "storage perimeter",
+              description: "storage only",
+              status: {
+                restrictedServices: ["storage.googleapis.com"],
+              },
             },
           );
-          const perimeter =
-            yield* GCP.AccessContextManager.AccessPoliciesServicePerimeter(
-              "Storage",
-              {
-                policy: policy.name,
-                title: "storage perimeter",
-                description: "storage only",
-                status: {
-                  restrictedServices: ["storage.googleapis.com"],
-                },
-              },
-            );
           return { policy, perimeter };
         }),
       );
@@ -81,9 +74,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.perimeter.policy).toEqual(created.policy.name);
       expect(created.perimeter.title).toEqual("storage perimeter");
       expect(created.perimeter.description).toEqual("storage only");
-      expect(created.perimeter.status?.restrictedServices).toContain(
-        "storage.googleapis.com",
-      );
+      expect(created.perimeter.status?.restrictedServices).toContain("storage.googleapis.com");
 
       const fetched = yield* acm.getAccessPoliciesServicePerimeters({
         name: created.perimeter.name,
@@ -94,29 +85,22 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const policy = yield* GCP.AccessContextManager.AccessPolicy(
-            "PerimeterPolicy",
+          const policy = yield* GCP.AccessContextManager.AccessPolicy("PerimeterPolicy", {
+            title: "perimeter policy",
+            scopes,
+          });
+          const perimeter = yield* GCP.AccessContextManager.AccessPoliciesServicePerimeter(
+            "Storage",
             {
-              title: "perimeter policy",
-              scopes,
+              policy: policy.name,
+              servicePerimeterId: created.perimeter.servicePerimeterId,
+              title: "data perimeter",
+              description: "storage and bigquery",
+              status: {
+                restrictedServices: ["storage.googleapis.com", "bigquery.googleapis.com"],
+              },
             },
           );
-          const perimeter =
-            yield* GCP.AccessContextManager.AccessPoliciesServicePerimeter(
-              "Storage",
-              {
-                policy: policy.name,
-                servicePerimeterId: created.perimeter.servicePerimeterId,
-                title: "data perimeter",
-                description: "storage and bigquery",
-                status: {
-                  restrictedServices: [
-                    "storage.googleapis.com",
-                    "bigquery.googleapis.com",
-                  ],
-                },
-              },
-            );
           return { policy, perimeter };
         }),
       );
@@ -125,10 +109,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.perimeter.title).toEqual("data perimeter");
       expect(updated.perimeter.description).toEqual("storage and bigquery");
       expect(updated.perimeter.status?.restrictedServices).toEqual(
-        expect.arrayContaining([
-          "storage.googleapis.com",
-          "bigquery.googleapis.com",
-        ]),
+        expect.arrayContaining(["storage.googleapis.com", "bigquery.googleapis.com"]),
       );
 
       yield* stack.destroy();

@@ -25,11 +25,8 @@ import * as Binding from "../../Binding.ts";
 export interface GetDefaultScraperConfiguration extends Binding.Service<
   GetDefaultScraperConfiguration,
   "AWS.AMP.GetDefaultScraperConfiguration",
-  () => Effect.Effect<
-    () => Effect.Effect<string, amp.GetDefaultScraperConfigurationError>
-  >
+  () => Effect.Effect<() => Effect.Effect<string, amp.GetDefaultScraperConfigurationError>>
 > {}
-export const GetDefaultScraperConfiguration =
-  Binding.Service<GetDefaultScraperConfiguration>(
-    "AWS.AMP.GetDefaultScraperConfiguration",
-  );
+export const GetDefaultScraperConfiguration = Binding.Service<GetDefaultScraperConfiguration>(
+  "AWS.AMP.GetDefaultScraperConfiguration",
+);

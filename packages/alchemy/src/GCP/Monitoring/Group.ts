@@ -112,17 +112,11 @@ export type Group = Resource<
  */
 export const Group = Resource<Group>("GCP.Monitoring.Group");
 
-export class GroupNotResolved extends Data.TaggedError(
-  "GCP.Monitoring.GroupNotResolved",
-)<{
+export class GroupNotResolved extends Data.TaggedError("GCP.Monitoring.GroupNotResolved")<{
   name: string;
 }> {}
 
-const toDisplayName = (
-  id: string,
-  displayName: string | undefined,
-  existing?: string,
-) =>
+const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       displayName ??
@@ -220,10 +214,7 @@ export const GroupProvider = () =>
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(
-        id,
-        parseMarker(existing.displayName).labels,
-      ))
+      return (yield* hasAlchemyLabels(id, parseMarker(existing.displayName).labels))
         ? attrs
         : Unowned(attrs);
     }),
@@ -236,11 +227,7 @@ export const GroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const displayName = yield* toDisplayName(
-        id,
-        news.displayName,
-        output?.displayName,
-      );
+      const displayName = yield* toDisplayName(id, news.displayName, output?.displayName);
       const ownership = yield* createInternalLabels(id);
       const encodedDisplayName = encodeDisplayName(ownership, displayName);
       const desiredParent = news.parentName ?? "";
@@ -295,11 +282,9 @@ export const GroupProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* monitoring
-        .deleteProjectsGroups({ name: output.name, recursive: true })
-        .pipe(
-          retryConcurrentEdits,
-          Effect.catchTag("NotFound", () => Effect.void),
-        );
+      yield* monitoring.deleteProjectsGroups({ name: output.name, recursive: true }).pipe(
+        retryConcurrentEdits,
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

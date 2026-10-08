@@ -1,16 +1,13 @@
+import * as NodeV8 from "node:v8";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as NodeV8 from "node:v8";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { viteBuildInProcess } from "./Sources/Vite.ts";
-import type {
-  ViteBuildChildConfig,
-  ViteBuildChildResult,
-} from "./ViteChild.shared.ts";
+import type { ViteBuildChildConfig, ViteBuildChildResult } from "./ViteChild.shared.ts";
 
 /**
  * Entry point of the one-shot Vite *build* child spawned by
@@ -44,10 +41,7 @@ const program = Effect.gen(function* () {
       compatibilityFlags: config.compatibilityFlags,
       viteEnvironments: config.viteEnvironments,
     });
-  const [bundle, workspaces] = yield* Effect.all([
-    serverBundle,
-    externalWorkspaces,
-  ]);
+  const [bundle, workspaces] = yield* Effect.all([serverBundle, externalWorkspaces]);
   const result: ViteBuildChildResult = {
     clientDirectory,
     foldkit,
@@ -58,17 +52,15 @@ const program = Effect.gen(function* () {
   yield* fs.writeFile(config.outputPath, NodeV8.serialize(result));
 });
 
-// The parent streams this child's output and turns its exit code into the
-// resource-scoped build error. Do not print a second Effect failure report
-// (the extra `✖` block) from the child itself.
+// The parent streams this child's output and turns its exit code + stderr
+// into the resource-scoped build error. Skip runMain's own `✖` report, but
+// print the cause: vite only logs `✗ Build failed in …`, so this is the only
+// place the actual error (a rolldown diagnostic, a plugin throwing during
+// config resolution) reaches the parent.
 runMain(
   program.pipe(
-    // Vite can reject without logging the underlying plugin error. Preserve
-    // it in the stderr tail that the parent includes in BundleError.
     Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
     Effect.provide(PlatformServices),
   ),
-  {
-    disableErrorReporting: true,
-  },
+  { disableErrorReporting: true },
 );
