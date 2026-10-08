@@ -1403,12 +1403,11 @@ const wrapInstance = <Result>(raw: any): WorkflowInstance<Result> => ({
   delete: () => Effect.tryPromise(() => raw.delete()).pipe(Effect.orDie),
   subscribe: (options) =>
     Stream.unwrap(
-      Effect.acquireRelease(
+      Effect.acquireDisposable(
         Effect.tryPromise(
           () =>
             raw.subscribe(options) as Promise<runtime.WorkflowInstanceSubscription & Disposable>,
         ).pipe(Effect.orDie),
-        (subscription) => Effect.sync(() => subscription[Symbol.dispose]()),
       ).pipe(
         Effect.map((subscription) =>
           Stream.fromAsyncIterable(
