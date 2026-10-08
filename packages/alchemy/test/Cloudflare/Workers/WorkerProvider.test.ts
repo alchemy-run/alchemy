@@ -523,16 +523,16 @@ describe(
         });
       });
 
-      test("passes service props and secret_key JWKs through verbatim", () => {
+      test("passes service props, secret_key algorithms and JWKs through verbatim", () => {
         const props = { tenantId: "t-1", Flags: { betaUI: true } };
-        const keyJwk = { kty: "oct", keyOps: ["sign"], K: "secret" };
+        const keyJwk = { kty: "EC", crv: "P-256", keyOps: ["sign"], D: "secret" };
         expect(
           bindingsToPreviewEnv([
             { type: "service", name: "API", service: "api", props },
             {
               type: "secret_key",
               name: "SIGNING_KEY",
-              algorithm: { name: "HMAC", hash: "SHA-256" },
+              algorithm: { name: "ECDSA", namedCurve: "P-256" },
               format: "jwk",
               usages: ["sign"],
               keyJwk,
@@ -542,7 +542,7 @@ describe(
           API: { type: "service", service: "api", props },
           SIGNING_KEY: {
             type: "secret_key",
-            algorithm: { name: "HMAC", hash: "SHA-256" },
+            algorithm: { name: "ECDSA", namedCurve: "P-256" },
             format: "jwk",
             usages: ["sign"],
             key_jwk: keyJwk,
