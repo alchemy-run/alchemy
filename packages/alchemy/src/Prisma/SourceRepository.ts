@@ -16,6 +16,7 @@ import {
   getSourceRepository,
   createSourceRepository,
 } from "@distilled.cloud/prisma/management";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
@@ -230,7 +231,9 @@ const attrsFrom = (repo: ObservedSourceRepository): SourceRepository["Attributes
   updatedAt: repo.updatedAt,
 });
 
-class SourceRepositoryLinkNotReady extends Error {}
+class SourceRepositoryLinkNotReady extends Data.TaggedError("SourceRepositoryLinkNotReady")<{
+  readonly message: string;
+}> {}
 
 const sourceRepositoryConsistencySchedule = Schedule.max([
   Schedule.exponential("250 millis"),
@@ -251,9 +254,9 @@ const verifyRepositoryLink = Effect.fn(function* (
     observed.installationId !== repo.installationId
   ) {
     return yield* Effect.fail(
-      new SourceRepositoryLinkNotReady(
-        `Prisma source repository link '${repo.id}' has not converged to its requested immutable identity.`,
-      ),
+      new SourceRepositoryLinkNotReady({
+        message: `Prisma source repository link '${repo.id}' has not converged to its requested immutable identity.`,
+      }),
     );
   }
   const listDefaultBranches = Effect.gen(function* () {
@@ -293,9 +296,9 @@ const verifyRepositoryLink = Effect.fn(function* (
   );
   if (defaults.length !== 1) {
     return yield* Effect.fail(
-      new SourceRepositoryLinkNotReady(
-        `Prisma source repository link '${repo.id}' did not produce exactly one default branch named '${observed.defaultBranch}'.`,
-      ),
+      new SourceRepositoryLinkNotReady({
+        message: `Prisma source repository link '${repo.id}' did not produce exactly one default branch named '${observed.defaultBranch}'.`,
+      }),
     );
   }
   const branchId = defaults[0]!.id;
@@ -308,9 +311,9 @@ const verifyRepositoryLink = Effect.fn(function* (
           app.branchId === branchId
             ? Effect.void
             : Effect.fail(
-                new SourceRepositoryLinkNotReady(
-                  `Prisma App '${appId}' was not attached to repository branch '${branchId}'.`,
-                ),
+                new SourceRepositoryLinkNotReady({
+                  message: `Prisma App '${appId}' was not attached to repository branch '${branchId}'.`,
+                }),
               ),
         ),
       ),
@@ -325,9 +328,9 @@ const verifyRepositoryLink = Effect.fn(function* (
           database.branchId === branchId
             ? Effect.void
             : Effect.fail(
-                new SourceRepositoryLinkNotReady(
-                  `Prisma database '${databaseId}' was not attached to repository branch '${branchId}'.`,
-                ),
+                new SourceRepositoryLinkNotReady({
+                  message: `Prisma database '${databaseId}' was not attached to repository branch '${branchId}'.`,
+                }),
               ),
         ),
       ),

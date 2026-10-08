@@ -270,6 +270,7 @@ function isRequestExportTypes(data: string | ArrayBuffer): boolean {
   }
 }
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd script (no Effect); thrown to the Vite module runner
 class NotInitializedError extends Error {
   constructor(environmentName: string) {
     super(

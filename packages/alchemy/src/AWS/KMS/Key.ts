@@ -1,4 +1,5 @@
 import * as kms from "@distilled.cloud/aws/kms";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -482,36 +483,36 @@ const readConvergedKey = Effect.fn(function* ({
   const observeConverged = Effect.gen(function* () {
     const key = yield* readKey({ keyId, deletionWindowInDays });
     if (!key) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if ((key.description ?? "") !== desiredDescription) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (key.enabled !== desiredEnabled) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (
       !Object.entries(desiredTags).every(([name, value]) => key.tags[name] === value) ||
       !Object.keys(key.tags).every((name) => desiredTags[name] === key.tags[name])
     ) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (desiredPolicy !== undefined && !samePolicy(key.policy, desiredPolicy)) {
-      return yield* Effect.fail(new KmsKeyNotConverged());
+      return yield* new KmsKeyNotConverged();
     }
     if (desiredEnabled) {
       if (desiredKeyRotationEnabled && key.keyRotationEnabled !== true) {
-        return yield* Effect.fail(new KmsKeyNotConverged());
+        return yield* new KmsKeyNotConverged();
       }
       if (!desiredKeyRotationEnabled && key.keyRotationEnabled === true) {
-        return yield* Effect.fail(new KmsKeyNotConverged());
+        return yield* new KmsKeyNotConverged();
       }
       if (
         desiredKeyRotationEnabled &&
         desiredRotationPeriodInDays !== undefined &&
         key.rotationPeriodInDays !== desiredRotationPeriodInDays
       ) {
-        return yield* Effect.fail(new KmsKeyNotConverged());
+        return yield* new KmsKeyNotConverged();
       }
     }
     return key;
@@ -624,8 +625,6 @@ const isKmsEventuallyConsistent = (error: { _tag: string }) =>
   error._tag === "KMSInternalException" ||
   error._tag === "KMSInvalidStateException";
 
-class KmsKeyNotConverged extends Error {
-  readonly _tag = "KmsKeyNotConverged";
-}
+class KmsKeyNotConverged extends Data.TaggedError("KmsKeyNotConverged") {}
 
 const kmsRetrySchedule = Schedule.max([Schedule.exponential(250), Schedule.recurs(7)]);

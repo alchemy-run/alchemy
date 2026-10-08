@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import * as SecretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -848,15 +849,12 @@ const makeCloudflareStateStore = Effect.fn(function* ({
   });
 });
 
-class StateStoreVersionNotReady extends Error {
-  readonly _tag = "StateStoreVersionNotReady";
-  constructor(
-    readonly expected: number,
-    readonly observed: number | undefined,
-  ) {
-    super(
-      `Cloudflare State Store version not ready (expected v${expected}, observed v${observed ?? "unknown"}).`,
-    );
+class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersionNotReady")<{
+  readonly expected: number;
+  readonly observed: number | undefined;
+}> {
+  override get message() {
+    return `Cloudflare State Store version not ready (expected v${this.expected}, observed v${this.observed ?? "unknown"}).`;
   }
 }
 
@@ -864,7 +862,7 @@ const waitForStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const { matches, expected, observed } = yield* checkStateStoreVersion(url);
     if (!matches) {
-      return yield* Effect.fail(new StateStoreVersionNotReady(expected, observed));
+      return yield* Effect.fail(new StateStoreVersionNotReady({ expected, observed }));
     }
   }).pipe(
     Effect.retry({

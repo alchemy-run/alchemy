@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -69,9 +70,9 @@ export interface GitHubResolvedCredentials {
 
 export const GITHUB_AUTH_PROVIDER_NAME = "GitHub";
 
-class GhCliError extends Error {
-  readonly _tag = "GhCliError";
-}
+class GhCliError extends Data.TaggedError("GhCliError")<{
+  readonly message: string;
+}> {}
 
 const readEnvTokenFor = (
   baseUrl: string | undefined,
@@ -189,15 +190,13 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             { concurrency: 3 },
           );
           if (exitCode !== 0) {
-            return yield* Effect.fail(
-              new GhCliError(
-                `gh auth token exited with ${exitCode}: ${stderr.trim() || stdout.trim()}`,
-              ),
-            );
+            return yield* new GhCliError({
+              message: `gh auth token exited with ${exitCode}: ${stderr.trim() || stdout.trim()}`,
+            });
           }
           const token = stdout.trim();
           if (!token) {
-            return yield* Effect.fail(new GhCliError("gh auth token returned empty output"));
+            return yield* new GhCliError({ message: "gh auth token returned empty output" });
           }
           return token;
         }).pipe(
