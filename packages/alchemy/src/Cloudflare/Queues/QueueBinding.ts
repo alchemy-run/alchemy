@@ -34,6 +34,7 @@ export const makeQueueBinding = <Client>(options: {
         // remote-producer shim (see `QueueShim.ts`) — registered here as
         // ordinary engine-managed resources, like the `AccountApiToken`
         // the HTTP capability layers mint.
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- deploy-time only; remaining requirements are ambient where the Worker is evaluated
         const shim = yield* maybeQueueShim(queue, host).pipe(
           Effect.provideContext(context),
         ) as Effect.Effect<Effect.Success<ReturnType<typeof maybeQueueShim>>>;

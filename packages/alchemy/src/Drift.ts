@@ -422,6 +422,7 @@ const instrumentLifecycle =
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- generic Exclude on R can't be proven statically
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>

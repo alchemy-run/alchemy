@@ -411,7 +411,8 @@ export const Table: typeof TableResource = Object.assign(
     }
     const [id, props] = args as [string, unknown];
     const resolved = Effect.isEffect(props)
-      ? Effect.flatMap(props as Effect.Effect<unknown>, toProps)
+      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
+        Effect.flatMap(props as Effect.Effect<unknown>, toProps)
       : Effect.suspend(() => toProps(props));
     return TableResource(id, resolved as Effect.Effect<any>);
   },

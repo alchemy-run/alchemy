@@ -40,6 +40,7 @@ const _resolveName = (redis: Redis) =>
       return asPlain(yield* accessor) ?? "";
     }
     if (Effect.isEffect(value)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource attribute Effects resolve without requirements
       return asPlain(yield* value as Effect.Effect<unknown>) ?? "";
     }
     return redis.LogicalId;

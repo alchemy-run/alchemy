@@ -124,6 +124,7 @@ export const getPlatformProxy = async <
       ((await Effect.runPromise(
         Layer.build(makeLayer(options.persist)).pipe(Scope.provide(scope)),
       )) as Context.Context<RuntimeServices.RuntimeServices>);
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- services context is built from the layer above
     const effect = open<B, Env>(options).pipe(
       Effect.provideContext(context),
       Scope.provide(scope),

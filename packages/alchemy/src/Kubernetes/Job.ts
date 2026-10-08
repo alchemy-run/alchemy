@@ -383,6 +383,7 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
           Effect.sync(() => {
             const run = options?.shape?.run;
             if (Effect.isEffect(run)) {
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
               runners.push(run as Effect.Effect<void, never, any>);
             }
           })) as HostRuntimeContext["serve"],

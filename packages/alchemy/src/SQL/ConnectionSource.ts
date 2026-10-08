@@ -53,6 +53,7 @@ export const resolveConnectionSource = (
       return Effect.map(accessor as Effect.Effect<string | Redacted.Redacted<string>>, toRedacted);
     }
     if (Effect.isEffect(source)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RuntimeContext is satisfied by the host at runtime
       return source as Effect.Effect<Redacted.Redacted<string>>;
     }
     return Effect.succeed(toRedacted(source));

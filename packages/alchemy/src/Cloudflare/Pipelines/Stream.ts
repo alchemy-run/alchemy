@@ -216,7 +216,8 @@ const constructStream = (id: string, props: unknown) =>
       return n.props;
     };
     const normalized = Effect.isEffect(props)
-      ? (props as Effect.Effect<unknown>).pipe(
+      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
+        (props as Effect.Effect<unknown>).pipe(
           Effect.flatMap(normalizeStreamProps),
           Effect.map(capture),
         )

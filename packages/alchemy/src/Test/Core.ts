@@ -420,6 +420,7 @@ export const withProviders = <A, E, R, ROut>(
       ? Effect.provide(effect, flociServices())
       : effect;
   const stage = resolveStage(options);
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- providers layer is typed `any`; requirements are satisfied by it
   return body.pipe(
     Effect.provide(
       (options.providers as Layer.Layer<any, never, any>).pipe(
@@ -628,7 +629,8 @@ export const scratchStack = <ROut>(
   // Effect's closest-layer precedence selects Floci for Action data-plane calls.
   const pinToFloci = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
-      ? (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
+      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- flociServices overrides services already present in R
+        (Effect.provide(effect, flociServices()) as Effect.Effect<A, E, R>)
       : effect;
 
   const buildAndApply = (

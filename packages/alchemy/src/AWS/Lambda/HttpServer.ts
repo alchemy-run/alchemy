@@ -77,6 +77,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toLambdaFunctionURLResult),
@@ -91,6 +92,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         // The ALB result shape is the API Gateway v1 result shape (statusCode,
@@ -110,6 +112,7 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         url: webRequest.url,
         remoteAddress: Option.fromNullishOr(event.requestContext?.identity?.sourceIp),
       });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toApiGatewayProxyResult),

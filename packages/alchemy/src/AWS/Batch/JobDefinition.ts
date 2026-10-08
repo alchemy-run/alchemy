@@ -249,6 +249,7 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
     // generated container entrypoint) instead of booting an HTTP server.
     serve: ((_handler, options) => {
       const run = (options?.shape as { run?: unknown } | undefined)?.run;
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped impl shape; runner is a host-provided Effect
       return Effect.isEffect(run) ? base.run(run as Effect.Effect<void, never, any>) : Effect.void;
     }) as HostRuntimeContext["serve"],
   } as JobDefinitionRuntimeContext;

@@ -572,6 +572,7 @@ export const evaluate: <A, Req = never>(
   InvalidReferenceError | MissingSourceError | Config.ConfigError,
   State.State | Req
 > = (expr, upstream, ancestors = new Set()) =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the declared signature above carries the real error/requirement types
   Effect.gen(function* () {
     if (isResource(expr)) {
       const srcId = expr.FQN;

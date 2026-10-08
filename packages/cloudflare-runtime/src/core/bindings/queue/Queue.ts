@@ -229,6 +229,7 @@ export const QueueLive = Layer.effect(
           pull: { queueId: string; accountId: string },
           port: number,
         ) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- requirements come from the ambient context, see comment at the cast below
           Effect.gen(function* () {
             const endpoint = `http://127.0.0.1:${port}/message`;
 

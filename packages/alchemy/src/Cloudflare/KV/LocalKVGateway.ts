@@ -53,6 +53,7 @@ export const makeProxyKVNamespaceHelpers = (
   const use = <T>(
     fn: (raw: runtime.KVNamespace<string>) => Promise<T>,
   ): Effect.Effect<T, NamespaceError> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- remaining requirements are satisfied by the captured ambient context
     Effect.scoped(
       Effect.gen(function* () {
         const proxy = yield* open({

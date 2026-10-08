@@ -78,6 +78,7 @@ export const makeWorkflowBridge =
         // Step attempts and rollback handlers use separate scopes.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- run outcome is inspected via the Exit; user fn's E/R are erased at the bridge
           fn(event.payload).pipe(
             Effect.provide(
               Layer.mergeAll(

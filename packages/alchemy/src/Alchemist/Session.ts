@@ -82,6 +82,7 @@ export const importStack = Effect.fn(function* (main: string) {
       }),
     );
   }
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- default export shape validated at runtime above
   return module.default as StackModule;
 });
 

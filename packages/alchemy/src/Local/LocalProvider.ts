@@ -266,6 +266,7 @@ export const make = <
   RpcProvider.effect(
     cls,
     providersUrl,
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- StartR is re-provided by the RpcProvider wrapper, see comment at the cast below
     Effect.gen(function* () {
       const {
         resolveConfig = defaultResolveConfig<R, Config>,
