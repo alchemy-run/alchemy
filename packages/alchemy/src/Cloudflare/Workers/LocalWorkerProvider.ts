@@ -1407,7 +1407,10 @@ export const LocalWorkerProvider = () =>
           const durableObjectNamespaces: Record<string, string> = {};
           for (const { data } of bindings) {
             for (const binding of data?.bindings ?? []) {
-              if (binding.type === "durable_object_namespace") {
+              if (
+                binding.type === "durable_object_namespace" &&
+                (!binding.scriptName || binding.scriptName === name)
+              ) {
                 durableObjectNamespaces[binding.className] =
                   binding.namespaceId ??
                   encodeURIComponent(`${binding.scriptName!}-${binding.className}`);
