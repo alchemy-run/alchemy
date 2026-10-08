@@ -2,7 +2,7 @@ import * as GitHub from "@alchemy.run/github";
 import { GitHubCredentials } from "@alchemy.run/github/Credentials";
 import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "alchemy-test";
-import { adopt } from "alchemy/AdoptPolicy";
+import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
@@ -147,7 +147,7 @@ test.provider(
 );
 
 test.provider(
-  "adopts an existing ruleset by name and target",
+  "adopts an existing ruleset by name",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -159,28 +159,46 @@ test.provider(
           owner,
           repo,
           name: "adopted protection",
-          target: "branch",
+          target: "tag",
           enforcement: "active",
-          conditions: {
-            ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] },
-          },
           rules: [{ type: "deletion" }],
         }),
       );
-
-      const adopted = yield* stack.deploy(
-        Effect.gen(function* () {
-          const fixture = yield* repository(repo);
-          return yield* GitHub.Ruleset("AdoptedRuleset", {
-            owner,
-            repository: repoName(fixture),
-            name: "adopted protection",
-            conditions: { include: ["~DEFAULT_BRANCH"] },
-            rules: { deletion: true },
-          }).pipe(adopt(), destroy());
-        }),
+      yield* Effect.addFinalizer(() =>
+        Effect.tryPromise(() =>
+          octokit.rest.repos.deleteRepoRuleset({ owner, repo, ruleset_id: existing.data.id }),
+        ).pipe(Effect.ignore),
       );
+
+      const deploy = (enabled: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fixture = yield* repository(repo);
+            return yield* GitHub.Ruleset("AdoptedRuleset", {
+              owner,
+              repository: repoName(fixture),
+              name: "adopted protection",
+              conditions: { include: ["~DEFAULT_BRANCH"] },
+              rules: { deletion: true, nonFastForward: true },
+            }).pipe(adopt(enabled), destroy());
+          }),
+        );
+
+      const refused = yield* deploy(false).pipe(Effect.flip);
+      expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const adopted = yield* deploy(true);
       expect(adopted.rulesetId).toBe(existing.data.id);
+      const observed = yield* getRuleset(repo, existing.data.id);
+      expect(observed?.target).toBe("branch");
+      expect(observed?.conditions?.ref_name).toEqual({
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      });
+      expect(observed?.rules?.map((rule) => rule.type).sort()).toEqual([
+        "deletion",
+        "non_fast_forward",
+      ]);
       expect((yield* getRulesets(repo)).map((ruleset) => ruleset.id)).toEqual([existing.data.id]);
 
       yield* stack.deploy(repository(repo));
