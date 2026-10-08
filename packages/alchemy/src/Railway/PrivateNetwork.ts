@@ -108,9 +108,17 @@ export class PrivateNetworkConfigPending extends Data.TaggedError(
   "Railway.PrivateNetworkConfigPending",
 )<{ environmentId: string; message: string }> {}
 
+/**
+ * Railway applies environment patches serially. A patch that triggers a
+ * deployment stays `APPLYING` until that deployment settles (~15-20s observed),
+ * and later patches queue behind it, so allow ~40s for a commit to land.
+ */
+const PATCH_APPLY_RETRY = { schedule: Schedule.spaced("2 seconds"), times: 20 } as const;
+
 const waitForNetworkConfig = (
   environmentId: string,
   ready: (config: typeof NetworkConfig.Type) => boolean,
+  retry: { schedule: Schedule.Schedule<unknown>; times: number } = PATCH_APPLY_RETRY,
 ) =>
   readNetworkConfig(environmentId).pipe(
     Effect.flatMap((config) =>
@@ -125,8 +133,7 @@ const waitForNetworkConfig = (
     ),
     Effect.retry({
       while: (error) => error._tag === "Railway.PrivateNetworkConfigPending",
-      schedule: Schedule.spaced("1 second"),
-      times: 8,
+      ...retry,
     }),
   );
 
@@ -208,9 +215,10 @@ const PrivateNetworkResource = Resource<PrivateNetwork>("Railway.PrivateNetwork"
  * This resource manages the environment's networking setting, not a separately
  * created network. Use one PrivateNetwork resource per environment.
  *
- * Destroy restores the setting captured before reconciliation. A network that
- * was already enabled stays enabled; one enabled by this resource is disabled.
- * Platform network objects follow the environment's lifecycle.
+ * Destroy leaves an already-enabled network enabled. For an environment this
+ * resource enabled, destroy requests the previous disabled setting, but
+ * Railway now keeps private networking on, so the environment usually stays
+ * enabled. Platform network objects follow the environment's lifecycle.
  *
  * :::caution[Named networks are no longer supported]
  * Railway removed named-network creation. Remove legacy named-network
@@ -465,7 +473,7 @@ export const PrivateNetworkProvider = () =>
       };
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, session }) {
       // Legacy named-network state has no environment setting to restore.
       if (output.previousPrivateNetworkDisabled !== true) return;
       yield* withEnvironmentConfigLock(
@@ -478,9 +486,19 @@ export const PrivateNetworkProvider = () =>
             commitMessage: "Restore private networking setting",
             patch: { privateNetworkDisabled: true },
           });
+          // Railway now keeps private networking on: it commits the patch but
+          // ignores `privateNetworkDisabled: true`. The restore is best effort,
+          // so an environment that stays enabled must not block deletion.
           yield* waitForNetworkConfig(
             output.environmentId,
             (observed) => observed.privateNetworkDisabled === true,
+            { schedule: Schedule.spaced("1 second"), times: 3 },
+          ).pipe(
+            Effect.catchTag("Railway.PrivateNetworkConfigPending", () =>
+              (session?.note ?? ((_message: string) => Effect.void))(
+                "Railway kept private networking enabled; the previous disabled setting cannot be restored",
+              ),
+            ),
           );
         }),
       ).pipe(Effect.catchTag("RailwayNotFound", () => Effect.void));
@@ -756,8 +774,7 @@ const waitUntilEndpointNamed = (input: {
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.PrivateNetworkEndpointNotCreated",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      ...PATCH_APPLY_RETRY,
     }),
   );
 

@@ -66,12 +66,14 @@ test.provider(
       );
       expect(verifiedAfter).toBe(false);
 
+      // Railway reports a cancelled session as missing on consume.
       const consumedAfter = yield* Railway.provideAnonymousRailway(
-        consumeLoginSession(code).pipe(
-          Effect.catchTag("RailwayNotFound", () => Effect.succeed(null)),
-        ),
+        consumeLoginSession(code).pipe(Effect.result),
       );
-      expect(consumedAfter).toBeNull();
+      expect(consumedAfter).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "RailwayLoginSessionNotFound" },
+      });
 
       yield* stack.destroy();
     }).pipe(logLevel),

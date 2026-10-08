@@ -80,7 +80,9 @@ const consumeLoginSession = Query.fn((code: string) => Railway.loginSessionConsu
  * cancel on timeout or interrupt.
  *
  * Exhaustion returns `undefined` (not a failure) so the AuthProvider can
- * surface a timeout rather than a poll error.
+ * surface a timeout rather than a poll error. A session that no longer exists
+ * (cancelled or expired) fails with `RailwayLoginSessionNotFound`, since
+ * further polling can never yield a token.
  */
 export const pollLoginSessionToken = (code: string) =>
   verifyLoginSession(code).pipe(
