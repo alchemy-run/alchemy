@@ -308,7 +308,7 @@ export const AuroraDataApi = (
               const secretArn = yield* secret.secretArn;
               if (composite !== undefined) {
                 // capture-only: the migration must wait for the writer
-                yield* composite.writer.dbInstanceArn;
+                yield* composite.writer.dbInstanceArn.asEffect().pipe(Effect.asVoid);
               }
               const ambient = yield* Effect.context<never>();
               // Apply half — Data API dialect over distilled.
