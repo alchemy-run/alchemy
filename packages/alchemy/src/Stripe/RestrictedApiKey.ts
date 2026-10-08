@@ -186,14 +186,14 @@ export const RestrictedApiKeyProvider = () =>
       // key's scopes, persist the returned `rk_…` as `value`, and teach
       // list/delete to enumerate/revoke it. Until then this is a logical
       // token: Dashboard `news.value` or the account secret.
-      const value =
-        props.value !== undefined
-          ? Redacted.make(props.value)
-          : yield* Effect.gen(function* () {
-              const resolve = yield* Credentials;
-              const cfg = yield* resolve;
-              return Redacted.make(Redacted.value(cfg.apiKey));
-            });
+      let value;
+      if (props.value !== undefined) {
+        value = Redacted.make(props.value);
+      } else {
+        const resolve = yield* Credentials;
+        const cfg = yield* resolve;
+        value = Redacted.make(Redacted.value(cfg.apiKey));
+      }
       return {
         id: output?.id ?? name,
         name,

@@ -326,19 +326,20 @@ const ProviderLive = () =>
           const variableId = isPrismaDevId(output?.environmentVariableId)
             ? undefined
             : output?.environmentVariableId;
-          const variable = variableId
-            ? yield* getEnvironmentVariable({
-                envVarId: variableId,
-              }).pipe(
-                Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
-                  ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
-                  : undefined;
-              });
+          let variable;
+          if (variableId) {
+            variable = yield* getEnvironmentVariable({
+              envVarId: variableId,
+            }).pipe(
+              Effect.map((response) => response.data),
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            );
+          } else {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            variable = projectId
+              ? yield* findVariable(projectId, olds.class, olds.key, olds.branchId)
+              : undefined;
+          }
           if (!variable) return undefined;
           const attrs = attrsFrom(
             variable,

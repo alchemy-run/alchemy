@@ -2679,34 +2679,35 @@ export const ingestPack = (
           return { content: inflated.content, type: entry.type! };
         }
         // delta — resolve the base first
-        const base = yield* Effect.gen(function* () {
-          if (entry.kind === "ofs") {
-            const baseEntry = byOffset.get(entry.baseOffset!);
-            if (baseEntry === undefined) {
-              return yield* new PackIngestError({
-                reason: "ofs-delta base is not an entry boundary",
-              });
-            }
-            return yield* contentOf(baseEntry, depth + 1);
-          }
-          const inPack = byOid.get(entry.baseOid!);
-          if (inPack !== undefined) {
-            return yield* contentOf(inPack, depth + 1);
-          }
-          // Thin base: must exist in the live store.
-          const meta = yield* store.getMeta(entry.baseOid!);
-          if (meta === undefined) {
+        let base: { readonly content: Uint8Array; readonly type: ObjectType };
+        if (entry.kind === "ofs") {
+          const baseEntry = byOffset.get(entry.baseOffset!);
+          if (baseEntry === undefined) {
             return yield* new PackIngestError({
-              reason: `missing thin-pack base ${entry.baseOid}`,
+              reason: "ofs-delta base is not an entry boundary",
             });
           }
-          if (meta.size > MAX_OBJECT_SIZE) {
-            return yield* new PackIngestError({ reason: "object too large" });
+          base = yield* contentOf(baseEntry, depth + 1);
+        } else {
+          const inPack = byOid.get(entry.baseOid!);
+          if (inPack !== undefined) {
+            base = yield* contentOf(inPack, depth + 1);
+          } else {
+            // Thin base: must exist in the live store.
+            const meta = yield* store.getMeta(entry.baseOid!);
+            if (meta === undefined) {
+              return yield* new PackIngestError({
+                reason: `missing thin-pack base ${entry.baseOid}`,
+              });
+            }
+            if (meta.size > MAX_OBJECT_SIZE) {
+              return yield* new PackIngestError({ reason: "object too large" });
+            }
+            const baseContent = yield* store.readContent(entry.baseOid!);
+            cache.set(entry.baseOid!, baseContent);
+            base = { content: baseContent, type: meta.type };
           }
-          const content = yield* store.readContent(entry.baseOid!);
-          cache.set(entry.baseOid!, content);
-          return { content, type: meta.type };
-        });
+        }
         const delta = yield* Zlib.inflateEntry(pack, entry.zstart, {
           maxOutput: entry.declaredSize,
         }).pipe(Effect.mapError(zlibToIngest));
@@ -4787,32 +4788,37 @@ export const GitRepoLive = GitRepo.make(
           const startOid = yield* resolveRevision(meta.defaultBranch, input.ref);
 
           // Resolve start → commit → root tree (peel tags on the way).
-          const rootTree = yield* Effect.gen(function* () {
-            let current = startOid;
-            for (let hops = 0; hops < 16; hops++) {
-              const objectMeta = yield* objects.getMeta(current);
-              if (objectMeta === undefined) {
-                return yield* new ObjectNotFound({ oid: current });
-              }
-              if (objectMeta.type === ObjectType.tree) return current;
-              const content = yield* objects.readContent(current);
-              if (objectMeta.type === ObjectType.commit) {
-                const parsed = yield* parseCommit(content).pipe(
-                  Effect.mapError((error) => new StoreError({ reason: error.reason })),
-                );
-                return parsed.tree;
-              }
-              if (objectMeta.type === ObjectType.tag) {
-                const parsed = yield* parseTag(content).pipe(
-                  Effect.mapError((error) => new StoreError({ reason: error.reason })),
-                );
-                current = parsed.object;
-                continue;
-              }
+          let rootTree: string | undefined;
+          let current = startOid;
+          for (let hops = 0; hops < 16; hops++) {
+            const objectMeta = yield* objects.getMeta(current);
+            if (objectMeta === undefined) {
               return yield* new ObjectNotFound({ oid: current });
             }
+            if (objectMeta.type === ObjectType.tree) {
+              rootTree = current;
+              break;
+            }
+            const content = yield* objects.readContent(current);
+            if (objectMeta.type === ObjectType.commit) {
+              const parsed = yield* parseCommit(content).pipe(
+                Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              );
+              rootTree = parsed.tree;
+              break;
+            }
+            if (objectMeta.type === ObjectType.tag) {
+              const parsed = yield* parseTag(content).pipe(
+                Effect.mapError((error) => new StoreError({ reason: error.reason })),
+              );
+              current = parsed.object;
+              continue;
+            }
             return yield* new ObjectNotFound({ oid: current });
-          });
+          }
+          if (rootTree === undefined) {
+            return yield* new ObjectNotFound({ oid: current });
+          }
 
           const segments = input.path.split("/").filter(Boolean);
           if (segments.length === 0) {

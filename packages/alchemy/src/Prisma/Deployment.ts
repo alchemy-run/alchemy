@@ -688,13 +688,11 @@ const ProviderLive = () =>
             );
           }
           if (news.promote ?? false) {
-            appEndpointDomain = yield* Effect.gen(function* () {
-              // Promotion is deliberately replayed even when the control-plane
-              // record already names this deployment. The endpoint operation also
-              // repairs provider routing and custom-domain assignment drift.
-              const promoted = yield* promoteAppObserved(appId, deployment.id);
-              return promoted.appEndpointDomain;
-            });
+            // Promotion is deliberately replayed even when the control-plane
+            // record already names this deployment. The endpoint operation also
+            // repairs provider routing and custom-domain assignment drift.
+            const promoted = yield* promoteAppObserved(appId, deployment.id);
+            appEndpointDomain = promoted.appEndpointDomain;
           }
 
           return attrsFrom(deployment, appId, {

@@ -605,45 +605,41 @@ export const CloudflareAuth = AuthProviderLayer<
                   // lock — a concurrent `read` refreshing the same token would
                   // double-spend it. The lock is held only for this API
                   // round-trip, never across the browser wait below.
-                  const outcome =
-                    creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
-                      ? yield* withProfileCredentialsLock(
-                          profileName,
-                          interaction.output
-                            .info("Cloudflare: refreshing OAuth credentials...")
-                            .pipe(
-                              Effect.andThen(OAuthClient.refresh(creds)),
-                              Effect.flatMap((credentials) => {
-                                const config = {
-                                  ...c,
-                                  clientId: credentials.clientId,
-                                  access: Redacted.value(credentials.access),
-                                  refresh: Redacted.value(credentials.refresh),
-                                  expires: credentials.expires,
-                                  scopes: credentials.scopes,
-                                };
-                                return (updateConfig?.(config) ?? Effect.void).pipe(
-                                  Effect.as({ type: "refreshed" as const, config }),
-                                );
-                              }),
-                              Effect.tap(() =>
-                                interaction.output.success(
-                                  "Cloudflare: OAuth credentials refreshed.",
-                                ),
-                              ),
-                              Effect.catchTag("OAuthError", () =>
-                                Effect.succeed({ type: "browser" as const }),
-                              ),
-                            ),
-                        )
-                      : yield* Effect.gen(function* () {
-                          if (creds.type === "oauth") {
-                            yield* interaction.output.warning(
-                              "Cloudflare: removed OAuth credentials issued to the previous client.",
-                            );
-                          }
-                          return { type: "browser" as const };
-                        });
+                  let outcome;
+                  if (creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)) {
+                    outcome = yield* withProfileCredentialsLock(
+                      profileName,
+                      interaction.output.info("Cloudflare: refreshing OAuth credentials...").pipe(
+                        Effect.andThen(OAuthClient.refresh(creds)),
+                        Effect.flatMap((credentials) => {
+                          const config = {
+                            ...c,
+                            clientId: credentials.clientId,
+                            access: Redacted.value(credentials.access),
+                            refresh: Redacted.value(credentials.refresh),
+                            expires: credentials.expires,
+                            scopes: credentials.scopes,
+                          };
+                          return (updateConfig?.(config) ?? Effect.void).pipe(
+                            Effect.as({ type: "refreshed" as const, config }),
+                          );
+                        }),
+                        Effect.tap(() =>
+                          interaction.output.success("Cloudflare: OAuth credentials refreshed."),
+                        ),
+                        Effect.catchTag("OAuthError", () =>
+                          Effect.succeed({ type: "browser" as const }),
+                        ),
+                      ),
+                    );
+                  } else {
+                    if (creds.type === "oauth") {
+                      yield* interaction.output.warning(
+                        "Cloudflare: removed OAuth credentials issued to the previous client.",
+                      );
+                    }
+                    outcome = { type: "browser" as const };
+                  }
                   if (outcome.type === "browser") {
                     return yield* fullLogin;
                   }

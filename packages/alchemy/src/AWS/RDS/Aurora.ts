@@ -533,89 +533,87 @@ export const Aurora = (id: string, props: AuroraProps) =>
         { concurrency: "unbounded" },
       );
 
-      const proxy =
-        proxyConfig === undefined
-          ? undefined
-          : yield* Effect.gen(function* () {
-              const role = yield* IAM.Role("ProxyRole", {
-                assumeRolePolicyDocument: {
-                  Version: "2012-10-17",
-                  Statement: [
-                    {
-                      Effect: "Allow",
-                      Principal: {
-                        Service: "rds.amazonaws.com",
-                      },
-                      Action: ["sts:AssumeRole"],
-                      Resource: ["*"],
-                    },
-                  ],
+      let proxy: AuroraDatabase["proxy"];
+      if (proxyConfig !== undefined) {
+        const proxyRole = yield* IAM.Role("ProxyRole", {
+          assumeRolePolicyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: {
+                  Service: "rds.amazonaws.com",
                 },
-                inlinePolicies: {
-                  ReadSecret: {
-                    Version: "2012-10-17",
-                    Statement: [
-                      {
-                        Effect: "Allow",
-                        Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                        Resource: [secret.secretArn],
-                      },
-                    ],
-                  },
+                Action: ["sts:AssumeRole"],
+                Resource: ["*"],
+              },
+            ],
+          },
+          inlinePolicies: {
+            ReadSecret: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+                  Resource: [secret.secretArn],
                 },
-                tags: mergeTags(commonTags, undefined),
-              });
+              ],
+            },
+          },
+          tags: mergeTags(commonTags, undefined),
+        });
 
-              const proxy = yield* DBProxy("Proxy", {
-                dbProxyName: proxyConfig.dbProxyName,
-                engineFamily: inferProxyEngineFamily(engine),
-                auth: proxyConfig.auth ?? [
-                  {
-                    AuthScheme: "SECRETS",
-                    SecretArn: secret.secretArn,
-                    IAMAuth: "DISABLED",
-                  },
-                ],
-                roleArn: role.roleArn,
+        const dbProxy = yield* DBProxy("Proxy", {
+          dbProxyName: proxyConfig.dbProxyName,
+          engineFamily: inferProxyEngineFamily(engine),
+          auth: proxyConfig.auth ?? [
+            {
+              AuthScheme: "SECRETS",
+              SecretArn: secret.secretArn,
+              IAMAuth: "DISABLED",
+            },
+          ],
+          roleArn: proxyRole.roleArn,
+          vpcSubnetIds: subnetIds,
+          vpcSecurityGroupIds: securityGroupIds,
+          requireTLS: proxyConfig.requireTLS ?? true,
+          idleClientTimeout: proxyConfig.idleClientTimeout,
+          debugLogging: proxyConfig.debugLogging,
+          endpointNetworkType: proxyConfig.endpointNetworkType,
+          targetConnectionNetworkType: proxyConfig.targetConnectionNetworkType,
+          tags: mergeTags(commonTags, proxyConfig.tags),
+        });
+
+        const proxyTargetGroup = yield* DBProxyTargetGroup("ProxyTargetGroup", {
+          targetGroupName: proxyConfig.targetGroup?.targetGroupName,
+          dbProxyName: dbProxy.dbProxyName,
+          dbClusterIdentifiers: [cluster.dbClusterIdentifier],
+          dbInstanceIdentifiers: proxyConfig.targetGroup?.dbInstanceIdentifiers,
+          connectionPoolConfig: proxyConfig.targetGroup?.connectionPoolConfig,
+        });
+
+        const proxyEndpoint =
+          proxyConfig.endpoint === undefined
+            ? undefined
+            : yield* DBProxyEndpoint("ProxyEndpoint", {
+                dbProxyName: dbProxy.dbProxyName,
                 vpcSubnetIds: subnetIds,
                 vpcSecurityGroupIds: securityGroupIds,
-                requireTLS: proxyConfig.requireTLS ?? true,
-                idleClientTimeout: proxyConfig.idleClientTimeout,
-                debugLogging: proxyConfig.debugLogging,
-                endpointNetworkType: proxyConfig.endpointNetworkType,
-                targetConnectionNetworkType: proxyConfig.targetConnectionNetworkType,
-                tags: mergeTags(commonTags, proxyConfig.tags),
+                ...(proxyConfig.endpoint === true ? {} : proxyConfig.endpoint),
+                tags: mergeTags(
+                  commonTags,
+                  proxyConfig.endpoint === true ? undefined : proxyConfig.endpoint.tags,
+                ),
               });
 
-              const targetGroup = yield* DBProxyTargetGroup("ProxyTargetGroup", {
-                targetGroupName: proxyConfig.targetGroup?.targetGroupName,
-                dbProxyName: proxy.dbProxyName,
-                dbClusterIdentifiers: [cluster.dbClusterIdentifier],
-                dbInstanceIdentifiers: proxyConfig.targetGroup?.dbInstanceIdentifiers,
-                connectionPoolConfig: proxyConfig.targetGroup?.connectionPoolConfig,
-              });
-
-              const endpoint =
-                proxyConfig.endpoint === undefined
-                  ? undefined
-                  : yield* DBProxyEndpoint("ProxyEndpoint", {
-                      dbProxyName: proxy.dbProxyName,
-                      vpcSubnetIds: subnetIds,
-                      vpcSecurityGroupIds: securityGroupIds,
-                      ...(proxyConfig.endpoint === true ? {} : proxyConfig.endpoint),
-                      tags: mergeTags(
-                        commonTags,
-                        proxyConfig.endpoint === true ? undefined : proxyConfig.endpoint.tags,
-                      ),
-                    });
-
-              return {
-                role,
-                proxy,
-                targetGroup,
-                endpoint,
-              };
-            });
+        proxy = {
+          role: proxyRole,
+          proxy: dbProxy,
+          targetGroup: proxyTargetGroup,
+          endpoint: proxyEndpoint,
+        };
+      }
 
       return {
         secret,

@@ -130,25 +130,25 @@ export const parseFunctionImageUri = Effect.fn("AWS.Lambda.parseImageUri")(funct
     return yield* Effect.fail(new Error(`Function(${id}): image.uri has no ECR repository name`));
   }
 
-  const imageId = yield* Effect.gen(function* () {
-    if (digestSeparator >= 0) {
-      const imageDigest = reference.slice(digestSeparator + 1);
-      if (!/^sha256:[0-9a-f]{64}$/.test(imageDigest)) {
-        return yield* Effect.fail(
-          new Error(
-            `Function(${id}): image.uri digest must be sha256 followed by 64 lowercase hexadecimal characters`,
-          ),
-        );
-      }
-      return { imageDigest } as const;
+  let imageId: ParsedFunctionImageUri["imageId"];
+  if (digestSeparator >= 0) {
+    const imageDigest = reference.slice(digestSeparator + 1);
+    if (!/^sha256:[0-9a-f]{64}$/.test(imageDigest)) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): image.uri digest must be sha256 followed by 64 lowercase hexadecimal characters`,
+        ),
+      );
     }
+    imageId = { imageDigest };
+  } else {
     if (tagSeparator <= 0 || tagSeparator === reference.length - 1) {
       return yield* Effect.fail(
         new Error(`Function(${id}): image.uri must include an explicit ECR tag or digest`),
       );
     }
-    return { imageTag: reference.slice(tagSeparator + 1) } as const;
-  });
+    imageId = { imageTag: reference.slice(tagSeparator + 1) };
+  }
 
   return {
     uri,

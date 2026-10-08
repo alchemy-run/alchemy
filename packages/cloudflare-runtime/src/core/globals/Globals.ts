@@ -84,31 +84,29 @@ export const GlobalsLive = Layer.effect(
     // logged file paths point at real files. Miniflare persists replies via
     // its loopback `store-temp-file` endpoint instead.
     const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
-    const email =
-      storageDiskPath === undefined
-        ? undefined
-        : yield* Effect.gen(function* () {
-            const persistPath = path.join(storageDiskPath, "email");
-            yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new ConfigError({
-                    subtag: "Globals",
-                    message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
-                    hint: "Ensure the storage directory is writable.",
-                    detail: { persistPath },
-                    cause,
-                  }),
-              ),
-            );
-            return {
-              persistPath,
-              service: {
-                name: SERVICE_EMAIL_STORAGE,
-                disk: { path: persistPath, writable: true },
-              } satisfies WorkerdConfig.Service,
-            };
-          });
+    let email: { persistPath: string; service: WorkerdConfig.Service } | undefined;
+    if (storageDiskPath !== undefined) {
+      const persistPath = path.join(storageDiskPath, "email");
+      yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ConfigError({
+              subtag: "Globals",
+              message: `Failed to create email persistence directory "${persistPath}": ${cause.message}`,
+              hint: "Ensure the storage directory is writable.",
+              detail: { persistPath },
+              cause,
+            }),
+        ),
+      );
+      email = {
+        persistPath,
+        service: {
+          name: SERVICE_EMAIL_STORAGE,
+          disk: { path: persistPath, writable: true },
+        } satisfies WorkerdConfig.Service,
+      };
+    }
     return Globals.of(
       Effect.gen(function* () {
         const { worker } = yield* PluginContext;

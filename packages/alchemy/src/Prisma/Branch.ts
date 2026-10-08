@@ -275,17 +275,18 @@ const ProviderLive = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           const branchId = isPrismaDevId(output?.branchId) ? undefined : output?.branchId;
-          const branch = branchId
-            ? yield* getBranch({ branchId }).pipe(
-                Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-              )
-            : yield* Effect.gen(function* () {
-                const projectId = unresolvedProjectIdOf(olds.project);
-                return projectId
-                  ? yield* findBranch(projectId, yield* createGitName(id, olds.gitName))
-                  : undefined;
-              });
+          let branch;
+          if (branchId) {
+            branch = yield* getBranch({ branchId }).pipe(
+              Effect.map((response) => response.data),
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            );
+          } else {
+            const projectId = unresolvedProjectIdOf(olds.project);
+            branch = projectId
+              ? yield* findBranch(projectId, yield* createGitName(id, olds.gitName))
+              : undefined;
+          }
           if (!branch) return undefined;
           const attrs = attrsFrom(branch, output?.previousDefaultBranchId);
           return branchId === undefined ? Unowned(attrs) : attrs;

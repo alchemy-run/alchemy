@@ -91,15 +91,16 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   const { resolveVinextPrerenderDecision, formatVinextPrerenderLabel } = yield* importVinextDist(
     "dist/config/prerender.js",
   );
-  const config =
-    buildConfig ??
-    (yield* Effect.gen(function* () {
-      const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
-      const loaded = yield* Effect.tryPromise(() =>
-        vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
-      );
-      return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
-    }));
+  let config: VinextBuildConfig;
+  if (buildConfig !== undefined) {
+    config = buildConfig;
+  } else {
+    const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
+    const loaded = yield* Effect.tryPromise(() =>
+      vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
+    );
+    config = yield* loadVinextBuildConfig(root, loaded?.config.plugins);
+  }
   const decision = resolveVinextPrerenderDecision({
     vinextPrerenderConfig: config.prerenderConfig,
     nextOutput: config.nextConfig.output,

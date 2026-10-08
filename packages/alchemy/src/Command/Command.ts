@@ -344,26 +344,28 @@ export const CommandExecutorLive = () =>
               { concurrency: "unbounded" },
             ).pipe(mapError(props));
 
-            const result =
-              timeout === undefined
-                ? yield* execution
-                : yield* Effect.gen(function* () {
-                    const fiber = yield* Effect.forkScoped(execution);
-                    const completed = yield* Fiber.join(fiber).pipe(Effect.timeoutOption(timeout));
-                    if (Option.isSome(completed)) return completed.value;
-
-                    yield* terminateProcessGroup(child);
-                    yield* Fiber.interrupt(fiber).pipe(
-                      Effect.timeoutOption(TERMINATION_GRACE_PERIOD),
-                      Effect.ignore,
-                    );
-                    return yield* Effect.fail(
-                      makeCommandError(
-                        props,
-                        new CommandTimedOut({ timeout: Duration.format(timeout) }),
-                      ),
-                    );
-                  });
+            let result;
+            if (timeout === undefined) {
+              result = yield* execution;
+            } else {
+              const fiber = yield* Effect.forkScoped(execution);
+              const completed = yield* Fiber.join(fiber).pipe(Effect.timeoutOption(timeout));
+              if (Option.isSome(completed)) {
+                result = completed.value;
+              } else {
+                yield* terminateProcessGroup(child);
+                yield* Fiber.interrupt(fiber).pipe(
+                  Effect.timeoutOption(TERMINATION_GRACE_PERIOD),
+                  Effect.ignore,
+                );
+                return yield* Effect.fail(
+                  makeCommandError(
+                    props,
+                    new CommandTimedOut({ timeout: Duration.format(timeout) }),
+                  ),
+                );
+              }
+            }
 
             if (result.exitCode !== 0) {
               return yield* Effect.fail(
