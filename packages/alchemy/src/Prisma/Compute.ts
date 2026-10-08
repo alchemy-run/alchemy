@@ -2217,15 +2217,13 @@ const ProviderLive = () =>
           const cleanupCreatedAppOnFailure = (error: unknown) =>
             ensuredApp.created && !preserveCreatedAppOnFailure
               ? destroyApp(app.id).pipe(
-                  Effect.catch((cleanupError) =>
-                    Effect.fail(
-                      aggregateCleanupFailure(
-                        "App",
-                        app.id,
-                        `/v1/services/${app.id}`,
-                        error,
-                        cleanupError,
-                      ),
+                  Effect.mapError((cleanupError) =>
+                    aggregateCleanupFailure(
+                      "App",
+                      app.id,
+                      `/v1/services/${app.id}`,
+                      error,
+                      cleanupError,
                     ),
                   ),
                   Effect.andThen(() => Effect.fail(error)),
@@ -2347,13 +2345,12 @@ const ProviderLive = () =>
 
               app = observedAfterRollback.success;
               yield* destroyDeployment(displacedDeploymentId, effectiveNews).pipe(
-                Effect.catch((cleanupError) =>
-                  Effect.fail(
+                Effect.mapError(
+                  (cleanupError) =>
                     new AggregateError(
                       [...(Result.isFailure(rollback) ? [rollback.failure] : []), cleanupError],
                       `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
                     ),
-                  ),
                 ),
               );
             }
@@ -2436,15 +2433,13 @@ const ProviderLive = () =>
             ) =>
               createdDeploymentId === failedDeploymentId
                 ? destroyDeployment(failedDeploymentId, effectiveNews).pipe(
-                    Effect.catch((cleanupError) =>
-                      Effect.fail(
-                        aggregateCleanupFailure(
-                          "deployment",
-                          failedDeploymentId,
-                          `/v1/deployments/${failedDeploymentId}`,
-                          error,
-                          cleanupError,
-                        ),
+                    Effect.mapError((cleanupError) =>
+                      aggregateCleanupFailure(
+                        "deployment",
+                        failedDeploymentId,
+                        `/v1/deployments/${failedDeploymentId}`,
+                        error,
+                        cleanupError,
                       ),
                     ),
                     Effect.andThen(() => Effect.fail(error)),

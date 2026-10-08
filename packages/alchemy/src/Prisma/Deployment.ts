@@ -599,15 +599,13 @@ const ProviderLive = () =>
           const cleanupCreatedDeploymentOnFailure = (failedDeploymentId: string, error: unknown) =>
             createdDeploymentId === failedDeploymentId
               ? destroyDeployment(failedDeploymentId).pipe(
-                  Effect.catch((cleanupError) =>
-                    Effect.fail(
-                      aggregateCleanupFailure(
-                        "deployment",
-                        failedDeploymentId,
-                        `/v1/deployments/${failedDeploymentId}`,
-                        error,
-                        cleanupError,
-                      ),
+                  Effect.mapError((cleanupError) =>
+                    aggregateCleanupFailure(
+                      "deployment",
+                      failedDeploymentId,
+                      `/v1/deployments/${failedDeploymentId}`,
+                      error,
+                      cleanupError,
                     ),
                   ),
                   Effect.andThen(() => Effect.fail(error)),

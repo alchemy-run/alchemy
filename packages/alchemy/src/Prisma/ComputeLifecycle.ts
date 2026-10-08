@@ -243,9 +243,7 @@ export const destroyDeployment = Effect.fn(function* (
 
   yield* deleteDeployment({ deploymentId }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
-    Effect.catch((error) =>
-      Effect.fail(deploymentDeleteFailed(deploymentId, statusAtDelete, error)),
-    ),
+    Effect.mapError((error) => deploymentDeleteFailed(deploymentId, statusAtDelete, error)),
   );
 
   return {
