@@ -1,3 +1,9 @@
+// TODO: stopgap. Node 26's fetch (undici 8) negotiates HTTP/2 and the engine's
+// unbounded fan-out onto one session got streams reset by Cloudflare. This
+// copies the dispatcher wrap from huggingface.js (#2495) and OriginTrail/dkg
+// (#2830). Revisit once undici's HTTP/2 path settles: either drop this, or
+// replace it with request pacing driven by Cloudflare's `ratelimit` headers so
+// the engine stops leaning on transport quirks to stay under the API limits.
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -15,12 +21,6 @@ interface Dispatcher {
  * dispatcher (the npm `undici` package would mismatch the bundled major)
  * so each request carries `allowH2: false`. `undefined` on Bun, on older
  * Node, or if the slot can't be found — plain `fetch` as before.
- *
- * TODO: this is a stopgap copied from huggingface.js (#2495) and
- * OriginTrail/dkg (#2830). Revisit once undici's HTTP/2 path settles —
- * either drop it, or replace it with real request pacing driven by
- * Cloudflare's `ratelimit` headers so the engine stops relying on
- * transport quirks to avoid 429s.
  */
 const resolveHttp1Dispatcher = async () => {
   if ("Bun" in globalThis || Number.parseInt(process.versions.undici ?? "0", 10) < 8) return;
