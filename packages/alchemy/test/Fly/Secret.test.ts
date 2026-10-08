@@ -1,12 +1,14 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import TokenReader, { VAULT_SECRET_NAME, Vault, VaultSecret } from "./fixtures/token-reader.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -223,5 +225,64 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+test.provider(
+  "a Service in its own App keeps the org token in an App secret",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const vault = yield* Vault;
+          const secret = yield* VaultSecret;
+          const reader = yield* TokenReader;
+          return { vault, secret, reader };
+        }),
+      );
+      const { reader } = deployed;
+
+      // The token is an App secret on the reader's App, not Machine env.
+      expect(Object.keys(reader.secrets ?? {})).toContain("FLY_API_TOKEN");
+      const listed = yield* machines.listSecrets({
+        app_name: reader.appName,
+        show_secrets: false,
+      });
+      expect((listed.secrets ?? []).map((secret) => secret.name)).toContain("FLY_API_TOKEN");
+      const machine = yield* machines.getMachine({
+        app_name: reader.appName,
+        machine_id: reader.machineId,
+      });
+      expect(machine.config?.env?.FLY_API_TOKEN).toBeUndefined();
+
+      // The Machine still authenticates with it: it lists the Vault's secrets.
+      const client = yield* HttpClient.HttpClient;
+      const body = yield* client.get(`${reader.url}/secret`).pipe(
+        Effect.flatMap((response) => response.json),
+        // Fresh fly.dev hosts answer 502 or non-JSON while the Machine boots.
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (json) => ((json as { names?: string[] }).names ?? []).includes(VAULT_SECRET_NAME),
+          times: 15,
+        }),
+      );
+      expect((body as { names: string[] }).names).toContain(VAULT_SECRET_NAME);
+
+      yield* stack.destroy();
+      const gone = yield* waitUntilGone(deployed.secret.appName, deployed.secret.name);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:fly",
+      "provider:fly:app",
+      "provider:fly:secret",
+      "provider:fly:service",
+      "live",
+    ],
+    timeout: 300_000,
   },
 );
