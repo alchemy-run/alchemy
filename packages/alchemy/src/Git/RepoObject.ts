@@ -3588,7 +3588,7 @@ export const GitRepoLive = GitRepo.make(
 
           const parsed = yield* decodePktLines(body).pipe(
             Effect.flatMap(parseUploadPackRequest),
-            Effect.map(Option.some),
+            Effect.asSome,
             Effect.catchTags({
               PktLineError: (e) =>
                 Effect.succeed(Option.none<UploadPackRequest>()).pipe(
