@@ -845,7 +845,11 @@ const makePlan = <A>(
             // keep the stale attrs even though the upstream just
             // re-reconciled. Expose only the stable attributes and let
             // apply re-evaluate the rest against the forced reconcile's
-            // fresh output.
+            // fresh output. A noop diff may carry `stables` for exactly this
+            // case (conditional stables such as a rename-mutable `name`);
+            // without them the forced upstream would only expose
+            // `provider.stables` and identity-sensitive consumers would
+            // falsely plan a replacement (#1832).
             if (options.force) {
               return withStables(oldState?.attr);
             }

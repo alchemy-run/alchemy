@@ -11,7 +11,15 @@ export type Diff = NoopDiff | UpdateDiff | ReplaceDiff;
 
 export interface NoopDiff {
   action: "noop";
-  stables?: undefined;
+  /**
+   * Properties that stay stable if `--force` upgrades this noop to an
+   * update. A plain noop exposes every persisted attribute downstream, so
+   * this only matters under `--force`, where the engine otherwise falls back
+   * to `provider.stables` and drops conditional stables (e.g. a
+   * rename-mutable `name` that is stable because the `name` prop is
+   * unchanged).
+   */
+  stables?: string[];
 }
 
 export interface UpdateDiff {

@@ -1015,6 +1015,12 @@ pnpm exec tsc -b
 
 This runs the TypeScript compiler in build mode, which checks all projects in the workspace (including the distilled packages, which are project references). This is critical because CI will fail if there are type errors.
 
+```bash
+pnpm typecheck      # rebuild stale dist packages, then tsc -b
+pnpm ensure:built   # rebuild cloudflare-runtime / frontend-frameworks if stale
+pnpm build          # in a package: builds it and its workspace dependencies
+```
+
 ## Running tests
 
 `packages/alchemy/test` runs on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.

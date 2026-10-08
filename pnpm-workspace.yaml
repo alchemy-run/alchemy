@@ -13,6 +13,21 @@ allowBuilds:
   vue-demi: false
   workerd: true
 
+# Recursive `pnpm -r run` task graph. Builds are never triggered by install.
+# Each package's `build` runs `build:package` (its own compile step) over
+# itself and its workspace dependencies, so `pnpm build` in any package
+# builds what it needs first.
+tasks:
+  build:package:
+    dependsOn:
+      - ^build:package
+  # Callers build first (see `typecheck:cloudflare-packages` and
+  # `test:cloudflare-packages`), so these don't re-run builds.
+  typecheck:
+    dependsOn: []
+  test:
+    dependsOn: []
+
 packages:
   - website
   - packages/*
@@ -193,7 +208,6 @@ catalog:
   toucan-js: "4.0.0"
   tsdown: "^0.22.4"
   tsx: "^4.20.6"
-  turbo: "^2.9.16"
   typescript: "^7.0.2"
   typescript-api: "npm:typescript@7.1.0-dev.20260905.1"
   unenv: "^2.0.0-rc.24"
@@ -261,6 +275,7 @@ overrides:
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
+  typescript@7.1.0-dev.20260905.1: patches/typescript@7.1.0-dev.20260905.1.patch
 
 minimumReleaseAgeExclude:
   - typescript@7.1.0-dev.20260905.1 || 7.1.0-dev.20260923.1

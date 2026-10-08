@@ -627,9 +627,6 @@ catalogs:
     tsx:
       specifier: ^4.20.6
       version: 4.23.12
-    turbo:
-      specifier: ^2.9.16
-      version: 2.10.9
     typescript:
       specifier: ^7.0.2
       version: 7.0.2
@@ -732,11 +729,12 @@ overrides:
   zod: 4.5.4
   rolldown: 1.2.5
 
-pnpmfileChecksum: sha256-elTHWproOlNxhpfqxI523wQRI4DQEVcmXXl5vhr4xWU=
+pnpmfileChecksum: sha256-ZR+EePdNPtPmfrxwBEFhocmgEqPh5QhSV2MMQstzKHQ=
 
 patchedDependencies:
   '@astrojs/starlight@0.42.0': 3ea8686c3055e8d097b5afa93dcf9e16ebfbebbf006e7493ad5df38e6edbfd19
   starlight-blog@0.29.0: 7b6e57367fab3517e0cfd5e4d0da3459ac1430bf4b6036cf03002c978602c23b
+  typescript@7.1.0-dev.20260905.1: ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7
 
 importers:
 
@@ -745,6 +743,9 @@ importers:
       '@alchemy.run/pkg':
         specifier: workspace:*
         version: link:packages/pkg
+      '@alchemy.run/vite-plugin-copy-editor':
+        specifier: workspace:*
+        version: link:packages/vite-plugin-copy-editor
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:submodules/distilled/packages/aws
@@ -766,6 +767,9 @@ importers:
       alchemy:
         specifier: workspace:*
         version: link:packages/alchemy
+      alchemy-test:
+        specifier: workspace:*
+        version: link:packages/alchemy-test
       changelogithub:
         specifier: 'catalog:'
         version: 13.16.1
@@ -784,15 +788,12 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2003
-      turbo:
-        specifier: 'catalog:'
-        version: 2.10.9
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
       typescript-api:
         specifier: 'catalog:'
-        version: typescript@7.1.0-dev.20260905.1
+        version: typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7)
 
   benchmark/container:
     dependencies:
@@ -1867,6 +1868,19 @@ importers:
         specifier: 4.0.0
         version: 4.0.0
 
+  examples/cloudflare-federated-api:
+    dependencies:
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
+    devDependencies:
+      alchemy-test:
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/cloudflare-foldkit:
     dependencies:
       effect:
@@ -2103,7 +2117,7 @@ importers:
     devDependencies:
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(a81586d5fb22dcbd508951824fb50e4d)
+        version: 8.0.0-rc.15(7a4d27bd99bbffe1e250da2a0de1478d)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -5657,7 +5671,7 @@ importers:
         version: 17.4.2
       prisma:
         specifier: 'catalog:'
-        version: 8.0.0-rc.15(a81586d5fb22dcbd508951824fb50e4d)
+        version: 8.0.0-rc.15(7a4d27bd99bbffe1e250da2a0de1478d)
       tsx:
         specifier: 'catalog:'
         version: 4.23.12
@@ -7269,7 +7283,7 @@ importers:
         version: 7.0.2
       typescript-api:
         specifier: 'catalog:'
-        version: typescript@7.1.0-dev.20260905.1
+        version: typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7)
       unenv:
         specifier: 'catalog:'
         version: 2.0.0-rc.24
@@ -16594,36 +16608,6 @@ packages:
   '@tsrx/core@0.1.56':
     resolution: {integrity: sha512-SZ+lani1n0yR4pFqOxclfWvU4Pvd3i9d6aptShicAzC3IYW2yQrsNJoG5ZqoVai9A3ZRikkO4CY8/HK+ksNp1Q==}
 
-  '@turbo/darwin-64@2.10.9':
-    resolution: {integrity: sha512-Jh+pTGXLNz8+1tkUU13TI/f+ZOI+OvC4YbHi1H+57iSpLt5DR3xgptd+4sA07RdjdRR/RX/01uQQu2OkbzIefA==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@turbo/darwin-arm64@2.10.9':
-    resolution: {integrity: sha512-aqtpPkiIC4IUas8Vv27oJ3aDfTuP1d5wofd01dZ7gfhHRrIKuFdqQb4imvNnVFahcOViF9Jh8Oi7feDoz8/ciA==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@turbo/linux-64@2.10.9':
-    resolution: {integrity: sha512-XyAneUBsS5uNOUOjBSs81zyigMVwwhVUd3u7F2JFMKGQk6F7eNAiOEBASJ+aHLldjYsOEjhfW+5gWIqwziyFFw==}
-    cpu: [x64]
-    os: [android, linux]
-
-  '@turbo/linux-arm64@2.10.9':
-    resolution: {integrity: sha512-5jAcldLnkuWIjujGhCn2MGIeUwW8IVNOq9Sce4EEzzgLcxmhTasbV0RiW6ZkaRdOjmOCGzeNXPLkDJEOIucOLw==}
-    cpu: [arm64]
-    os: [android, linux]
-
-  '@turbo/windows-64@2.10.9':
-    resolution: {integrity: sha512-u1xGpGlefzuhBedbt/VR2nWdftfFVZwPeDg9e5uZl68sV1fL3HNYTNr5VyHkzgtPK2VTYg1x4OKZuGrh1Gvhtg==}
-    cpu: [x64]
-    os: [win32]
-
-  '@turbo/windows-arm64@2.10.9':
-    resolution: {integrity: sha512-W2Ub165Qv0iMFljbYKxxbZN+2dVSngnzEjQNEFXtnz5oJVx9XSypmNmUvMtuYMeZ3kdVC1zI7yd/rtuX+SDnbg==}
-    cpu: [arm64]
-    os: [win32]
-
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
 
@@ -23328,10 +23312,6 @@ packages:
 
   turbo-stream@3.2.0:
     resolution: {integrity: sha512-EK+bZ9UVrVh7JLslVFOV0GEMsociOqVOvEMTAd4ixMyffN5YNIEdLZWXUx5PJqDbTxSIBWw04HS9gCY4frYQDQ==}
-
-  turbo@2.10.9:
-    resolution: {integrity: sha512-Yl9+ukxH+UmPtKidpDkjn82tvPoEvFNb9UACd9vUomN1Ft0cwl3rx0P8yC1D93W9EOsWRMjllvIDG8y25sFOog==}
-    hasBin: true
 
   tw-animate-css@1.4.0:
     resolution: {integrity: sha512-7bziOlRqH0hJx80h/3mbicLW7o8qLsH5+RaLR2t+OHM3D0JlWGODQKQ4cxbK7WlvmUxpcj6Kgu6EKqjrGFe3QQ==}
@@ -30498,11 +30478,11 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer-cli@0.20.0(25101a364380bac22de98f08f942d367)':
+  '@prisma/composer-cli@0.20.0(7d0073e65db52600bd3bf5c101578546)':
     dependencies:
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.4)
-      '@prisma/composer': 0.20.0(d5a125140cff24cb1932a090f5e6f09b)
-      alchemy: 2.0.0-beta.74(b50e0abcc776e99a941f1fac433fc4d0)
+      '@prisma/composer': 0.20.0(721d9b52bd64b4bc42305cb806399661)
+      alchemy: 2.0.0-beta.74(c239be5cc6766aba2fa3996f297d9953)
       c12: 3.3.4(magicast@0.5.4)
       cross-spawn: 7.0.6
       effect: 4.0.0
@@ -30604,14 +30584,14 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer@0.20.0(8074b3e1ef63f5f2277ebc6151c99765)':
+  '@prisma/composer@0.20.0(721d9b52bd64b4bc42305cb806399661)':
     dependencies:
       '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.0)
       '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.0)
       '@effect/vitest': 4.0.0-rc.112(effect@4.0.0)(vitest@5.0.3(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@prisma/management-api-sdk': 1.69.0
       '@standard-schema/spec': 1.1.0
-      alchemy: 2.0.0-beta.74(89aebfa01b75756e4425a71763d372be)
+      alchemy: 2.0.0-beta.74(c239be5cc6766aba2fa3996f297d9953)
       arktype: 2.2.3
       c12: 3.3.4(magicast@0.5.4)
       cross-spawn: 7.0.6
@@ -30642,14 +30622,14 @@ snapshots:
       - vitest
       - ws
 
-  '@prisma/composer@0.20.0(d5a125140cff24cb1932a090f5e6f09b)':
+  '@prisma/composer@0.20.0(8074b3e1ef63f5f2277ebc6151c99765)':
     dependencies:
       '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.0)
       '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.0)
       '@effect/vitest': 4.0.0-rc.112(effect@4.0.0)(vitest@5.0.3(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@prisma/management-api-sdk': 1.69.0
       '@standard-schema/spec': 1.1.0
-      alchemy: 2.0.0-beta.74(b50e0abcc776e99a941f1fac433fc4d0)
+      alchemy: 2.0.0-beta.74(89aebfa01b75756e4425a71763d372be)
       arktype: 2.2.3
       c12: 3.3.4(magicast@0.5.4)
       cross-spawn: 7.0.6
@@ -34284,24 +34264,6 @@ snapshots:
     transitivePeerDependencies:
       - '@typescript-eslint/types'
 
-  '@turbo/darwin-64@2.10.9':
-    optional: true
-
-  '@turbo/darwin-arm64@2.10.9':
-    optional: true
-
-  '@turbo/linux-64@2.10.9':
-    optional: true
-
-  '@turbo/linux-arm64@2.10.9':
-    optional: true
-
-  '@turbo/windows-64@2.10.9':
-    optional: true
-
-  '@turbo/windows-arm64@2.10.9':
-    optional: true
-
   '@tybys/wasm-util@0.10.3':
     dependencies:
       tslib: 2.8.1
@@ -35644,7 +35606,7 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  alchemy@2.0.0-beta.74(b50e0abcc776e99a941f1fac433fc4d0):
+  alchemy@2.0.0-beta.74(c239be5cc6766aba2fa3996f297d9953):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.0))(@effect/platform-bun@4.0.0(effect@4.0.0))(@effect/platform-node@4.0.0(effect@4.0.0)(redis@6.2.1))(@types/node@26.2.0)(effect@4.0.0)(rolldown@1.2.5)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.0)
@@ -41465,11 +41427,11 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  prisma@8.0.0-rc.15(80bc071e98d758a11a24c1ff712bfbf2):
+  prisma@8.0.0-rc.15(7a4d27bd99bbffe1e250da2a0de1478d):
     dependencies:
       '@manypkg/tools': 2.1.2
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.4)
-      '@prisma/composer-cli': 0.20.0(0d1b88465c5d4bc00bc45c7482ecc773)
+      '@prisma/composer-cli': 0.20.0(7d0073e65db52600bd3bf5c101578546)
       '@prisma/compute-sdk': 0.42.0(@prisma/management-api-sdk@1.69.0)(rollup@4.62.4)(supports-color@10.2.2)
       '@prisma/management-api-sdk': 1.69.0
       '@prisma/orm-toolchain': 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.4))(magicast@0.5.4)(typanion@3.14.0)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -41511,11 +41473,11 @@ snapshots:
       - vitest
       - ws
 
-  prisma@8.0.0-rc.15(a81586d5fb22dcbd508951824fb50e4d):
+  prisma@8.0.0-rc.15(80bc071e98d758a11a24c1ff712bfbf2):
     dependencies:
       '@manypkg/tools': 2.1.2
       '@prisma/cli-engine': 0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.4)
-      '@prisma/composer-cli': 0.20.0(25101a364380bac22de98f08f942d367)
+      '@prisma/composer-cli': 0.20.0(0d1b88465c5d4bc00bc45c7482ecc773)
       '@prisma/compute-sdk': 0.42.0(@prisma/management-api-sdk@1.69.0)(rollup@4.62.4)(supports-color@10.2.2)
       '@prisma/management-api-sdk': 1.69.0
       '@prisma/orm-toolchain': 8.0.0-rc.11(@prisma/cli-engine@0.4.0(@prisma/management-api-sdk@1.69.0)(magicast@0.5.4))(magicast@0.5.4)(typanion@3.14.0)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -43187,15 +43149,6 @@ snapshots:
 
   turbo-stream@3.2.0: {}
 
-  turbo@2.10.9:
-    optionalDependencies:
-      '@turbo/darwin-64': 2.10.9
-      '@turbo/darwin-arm64': 2.10.9
-      '@turbo/linux-64': 2.10.9
-      '@turbo/linux-arm64': 2.10.9
-      '@turbo/windows-64': 2.10.9
-      '@turbo/windows-arm64': 2.10.9
-
   tw-animate-css@1.4.0: {}
 
   twoslash-protocol@0.3.9: {}
@@ -43257,7 +43210,7 @@ snapshots:
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
 
-  typescript@7.1.0-dev.20260905.1:
+  typescript@7.1.0-dev.20260905.1(patch_hash=ed13690efac6337cfbdd058866fcc3bac76fb9afaf90d700200bbe40f7e4baf7):
     optionalDependencies:
       '@typescript/typescript-darwin-arm64': 7.1.0-dev.20260905.1
       '@typescript/typescript-darwin-x64': 7.1.0-dev.20260905.1

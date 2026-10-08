@@ -27,6 +27,7 @@ import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isStream as isK2Stream } from "../K2/Stream.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isMtlsCertificate } from "../MtlsCertificate/MtlsCertificate.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
@@ -524,6 +525,13 @@ const toBinding = (
       type: "vpc_service",
       name: bindingName,
       serviceId: binding.serviceId,
+    };
+  } else if (isMtlsCertificate(binding)) {
+    // `env.NAME` is a Fetcher whose subrequests present the certificate.
+    return {
+      type: "mtls_certificate",
+      name: bindingName,
+      certificateId: binding.mtlsCertificateId,
     };
   } else if (isDatabase(binding)) {
     return {

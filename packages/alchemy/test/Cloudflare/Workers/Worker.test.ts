@@ -4,6 +4,7 @@ import { describe, expect } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -37,6 +38,58 @@ import InternalWorker from "./fixtures/internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: true });
+
+// #1296: after precreate registers a Worker's Durable Object classes,
+// reconcile's script-settings read can 404 "has no versions" under load, and
+// migration planning then re-sends `new_sqlite_classes`, which Cloudflare
+// rejects. The race isn't reproducible on demand, so this file-scoped
+// provider stack forwards every call to the real API except the two
+// settings reads after the precreated class is first observed.
+const precreateRace = { hostPath: undefined as string | undefined, injected: 0 };
+const settingsPath = /\/workers\/scripts\/[^/]+\/settings$/;
+const precreateRaceFetch = async (
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) => {
+  const request = input instanceof Request ? input : new Request(input, init);
+  const path = new URL(request.url).pathname;
+  if (request.method !== "GET" || !settingsPath.test(path)) {
+    return fetch(input, init);
+  }
+  // Only the Durable Object host's own settings reads race.
+  if (path === precreateRace.hostPath && precreateRace.injected < 2) {
+    precreateRace.injected++;
+    return new Response(
+      JSON.stringify({
+        success: false,
+        errors: [{ code: 10007, message: "Worker has no versions" }],
+        messages: [],
+        result: null,
+      }),
+      { status: 404, headers: { "content-type": "application/json" } },
+    );
+  }
+  const response = await fetch(input, init);
+  if (
+    precreateRace.hostPath === undefined &&
+    response.status === 200 &&
+    (await response.clone().text()).includes('"namespace_id"')
+  ) {
+    precreateRace.hostPath = path;
+  }
+  return response;
+};
+const { test: precreateRaceTest } = Test.make({
+  providers: Cloudflare.providers().pipe(
+    Layer.provideMerge(
+      Layer.fresh(FetchHttpClient.layer).pipe(
+        Layer.provide(
+          Layer.succeed(FetchHttpClient.Fetch, precreateRaceFetch as typeof globalThis.fetch),
+        ),
+      ),
+    ),
+  ),
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -743,6 +796,72 @@ describe.concurrent(
           expect(newTags).toContain("alchemy:id:Different");
           expect(newTags).not.toContain("alchemy:id:Original");
 
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(physicalName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"] },
+    );
+
+    // #1299: a binding to a resource created in the same deploy leaves the
+    // Worker's props unresolved at plan time. The ownership check must still
+    // run (at apply time, once props resolve) and refuse the foreign worker.
+    test.provider(
+      "refuses a foreign worker when its bindings are unresolved at plan time",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const original = yield* stack.deploy(
+            Cloudflare.Worker("UnresolvedOriginal", {
+              main,
+              workersDev: false,
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
+          const physicalName = original.workerName;
+
+          yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            yield* state.delete({
+              stack: stack.name,
+              stage: stack.stage,
+              fqn: "UnresolvedOriginal",
+            });
+          }).pipe(Effect.provide(stack.state));
+
+          const refused = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const kv = yield* Cloudflare.KV.Namespace("UnresolvedKv");
+                return yield* Cloudflare.Worker("UnresolvedDifferent", {
+                  main,
+                  name: physicalName,
+                  workersDev: false,
+                  compatibility: { date: "2024-01-01" },
+                  env: { KV: kv },
+                });
+              }),
+            )
+            .pipe(Effect.flip);
+          expect(refused._tag).toEqual("OwnedBySomeoneElse");
+
+          // The refused deploy left the foreign worker's ownership untouched.
+          const tags = yield* getWorkerTags(physicalName, accountId);
+          expect(tags).toContain("alchemy:id:UnresolvedOriginal");
+          expect(tags).not.toContain("alchemy:id:UnresolvedDifferent");
+
+          // Its tags still name `UnresolvedOriginal`, so redeploying that id
+          // adopts it back into state and the destroy below deletes it.
+          yield* stack.deploy(
+            Cloudflare.Worker("UnresolvedOriginal", {
+              main,
+              name: physicalName,
+              workersDev: false,
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(physicalName, accountId);
         }).pipe(logLevel),
@@ -2006,6 +2125,59 @@ describe.concurrent(
           yield* stack.destroy();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:alerting", "live"], timeout: 180_000 },
+    );
+
+    precreateRaceTest.provider(
+      "deploy survives a settings read that races the precreated durable object",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          precreateRace.hostPath = undefined;
+          precreateRace.injected = 0;
+          yield* stack.destroy();
+
+          // Only Workers in a dependency cycle are precreated, so the Durable
+          // Object host and a second Worker bind each other's URL.
+          const { worker, peer } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const worker = yield* Cloudflare.Worker("PrecreateRaceWorker", {
+                script: `import { DurableObject } from "cloudflare:workers";
+export class Counter extends DurableObject {
+  async increment() {
+    const next = ((await this.ctx.storage.get("count")) ?? 0) + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+}
+export default {
+  async fetch(request, env) {
+    const value = await env.Counter.getByName("shared").increment();
+    return new Response("count=" + value);
+  },
+};`,
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              });
+              const peer = yield* Cloudflare.Worker("PrecreateRacePeer", { main });
+              yield* worker.bind`PEER_URL`({
+                bindings: [{ type: "plain_text", name: "PEER_URL", text: peer.url.as<string>() }],
+              });
+              yield* peer.bind`HOST_URL`({
+                bindings: [{ type: "plain_text", name: "HOST_URL", text: worker.url.as<string>() }],
+              });
+              return { worker, peer };
+            }),
+          );
+
+          // Both racing reads were injected and the deploy still converged.
+          expect(precreateRace.injected).toBe(2);
+          expect(Object.keys(worker.durableObjectNamespaces)).toEqual(["Counter"]);
+          yield* expectUrlContains(worker.url!, "count=");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+          yield* waitForWorkerToBeDeleted(peer.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
     );
 
     test.provider(

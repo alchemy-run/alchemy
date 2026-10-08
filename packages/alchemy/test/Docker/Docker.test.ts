@@ -9,7 +9,7 @@ import * as Path from "effect/Path";
 import { PlatformError, SystemError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
-import { Docker, DockerLive } from "@/Docker";
+import { Docker, DockerLive, dockerLive } from "@/Docker";
 import type { RegistryCredentials } from "@/Docker/Docker.ts";
 import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
 import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
@@ -17,6 +17,43 @@ import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
 const describe = layer(
   Layer.provideMerge(DockerLive, Layer.merge(NodeServices.layer, FetchHttpClient.layer)),
 );
+
+// Which CLI the client runs: declared in code, overridable by DOCKER_BIN.
+describe("Docker CLI binary", (it) => {
+  const version = (layer: Layer.Layer<Docker, never, any>) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      return (yield* docker.run(["--version"])).stdout;
+    }).pipe(Effect.provide(layer));
+
+  it.effect(
+    "runs the bin declared in code",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* version(dockerLive({ bin: "alchemy-test-no-such-cli" })).pipe(
+          Effect.flip,
+        );
+        expect(String(error)).toContain("alchemy-test-no-such-cli");
+        expect(yield* version(dockerLive({ bin: "docker" }))).toMatch(/^Docker version/);
+      }).pipe(
+        // Ignore any DOCKER_BIN in the host environment for this case.
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+      ),
+    { tags: ["provider:docker", "local"] },
+  );
+
+  it.effect(
+    "lets DOCKER_BIN override the bin declared in code",
+    () =>
+      Effect.gen(function* () {
+        const output = yield* version(dockerLive({ bin: "alchemy-test-no-such-cli" }));
+        expect(output).toMatch(/^Docker version/);
+      }).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ DOCKER_BIN: "docker" }))),
+      ),
+    { tags: ["provider:docker", "local"] },
+  );
+});
 
 describe("Docker.materialize", (it) => {
   it.effect(
@@ -215,6 +252,62 @@ describe("Docker.image publication", (it) => {
       { tags: ["provider:docker", "local"], exclusive: true, timeout: 180_000 },
     );
   }
+});
+
+// How a failing `docker` command is reported, against the real CLI.
+describe("Docker.run failure output", (it) => {
+  it.effect(
+    "says so when a failing command wrote nothing",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run(["run", "--rm", "alpine:3.19", "sh", "-c", "exit 3"])
+          .pipe(Effect.flip);
+        expect(error.reason._tag).toBe("Unknown");
+        expect(error.reason.description).toContain("exited with code 3");
+        expect(error.reason.description).toContain("wrote no output");
+      }),
+    { tags: ["provider:docker", "local"], timeout: 60_000 },
+  );
+
+  it.effect(
+    "keeps stdout and stderr from a failing command",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run([
+            "run",
+            "--rm",
+            "alpine:3.19",
+            "sh",
+            "-c",
+            "echo step-log-on-stdout; echo reason-on-stderr >&2; exit 1",
+          ])
+          .pipe(Effect.flip);
+        expect(error.reason.description).toContain("step-log-on-stdout");
+        expect(error.reason.description).toContain("reason-on-stderr");
+        // The reason (stderr) comes first.
+        expect(error.reason.description!.indexOf("reason-on-stderr")).toBeLessThan(
+          error.reason.description!.indexOf("step-log-on-stdout"),
+        );
+      }),
+    { tags: ["provider:docker", "local"], timeout: 60_000 },
+  );
+
+  it.effect(
+    "still classifies a daemon NotFound from stderr",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const error = yield* docker
+          .run(["image", "inspect", "alchemy-test-no-such-image:missing"])
+          .pipe(Effect.flip);
+        expect(error.reason._tag).toBe("NotFound");
+      }),
+    { tags: ["provider:docker", "local"] },
+  );
 });
 
 describe("Docker.image", (it) => {

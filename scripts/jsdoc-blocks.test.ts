@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  applyRuns,
-  markdownDialect,
-  markdownRuns,
-} from "../packages/vite-plugin-copy-editor/src/index.ts";
+import { applyRuns, markdownDialect, markdownRuns } from "@alchemy.run/vite-plugin-copy-editor";
 import {
   docBlocks,
   docCommentLines,

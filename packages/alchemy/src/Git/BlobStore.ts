@@ -30,6 +30,15 @@ import * as Stream from "effect/Stream";
  *   Layer.provide(Git.BlobStoreR2(MyBucket)),
  *   // ...
  * );
+ *
+ * // The Worker picks the ReadWriteBucket implementation.
+ * export default class GitHost extends Cloudflare.Worker<GitHost>()(
+ *   "GitHost",
+ *   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+ *   Effect.gen(function* () {
+ *     return { fetch: yield* HttpRouter.toHttpEffect(GitLive) };
+ *   }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
+ * ) {}
  * ```
  */
 import * as Cloudflare from "../Cloudflare/index.ts";
@@ -223,19 +232,22 @@ export const makeBlobStoreR2 = (bucket: ReadWriteBucketClient): BlobStoreShape =
 
 /**
  * R2-backed {@link BlobStore}: packs, bundles, oversize objects, and
- * push spill live in the given bucket. Registers the bucket binding on
- * the host Worker.
+ * push spill live in the given bucket. Requires the
+ * `Cloudflare.R2.ReadWriteBucket` capability; provide an implementation
+ * (`Cloudflare.R2.ReadWriteBucketBinding` or `ReadWriteBucketHttp`) on the
+ * Worker.
  *
  * @layer
  * @provides Git.BlobStore
  */
 export const BlobStoreR2 = (
   bucket: Parameters<typeof Cloudflare.R2.ReadWriteBucket>[0],
-): Layer.Layer<BlobStore> =>
+): Layer.Layer<BlobStore, never, Cloudflare.R2.ReadWriteBucket> =>
   Layer.effect(
     BlobStore,
     Effect.gen(function* () {
       const client = yield* Cloudflare.R2.ReadWriteBucket(bucket);
       return makeBlobStoreR2(client);
     }),
-  ).pipe(Layer.provide(Cloudflare.R2.ReadWriteBucketBinding)) as never;
+    // `bucket` may be a declaration Effect, which widens the inferred requirement.
+  ) as Layer.Layer<BlobStore, never, Cloudflare.R2.ReadWriteBucket>;
